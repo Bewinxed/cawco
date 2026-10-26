@@ -65,7 +65,7 @@ const AGENT_BACK_MS = 45_000;
 /** The hub's relay of the ping waits 5 s on the listener (hub preview.ts `PING_RELAY_MS`); slack for the page's open. */
 const LISTENER_SAID_MS = 20_000;
 /** A next step in the line: the pane's "Trying again on its own.", or a "Try again …" the hub's words once carried. */
-const NEXT_STEP = /\btry(?:ing)? again\b/gi;
+const NEXT_STEP = /\btry(?:ing)? again\b/giu;
 
 const pageOf = (heading: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${heading}</title></head><body><h1>${heading}</h1></body></html>`;
@@ -97,7 +97,7 @@ const paneNow = (page: Page, id: string) =>
     );
     const down = root?.querySelector('[data-slot="down"]');
     const words = (node: Element | null | undefined) =>
-      node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      node?.textContent?.replace(/\s+/gu, " ").trim() ?? "";
     return {
       down: words(down),
       // The empty state's line alone, without its buttons' labels.
@@ -252,7 +252,7 @@ const previewNow = async (page: Page, id: string): Promise<PreviewSaid> => {
       cause:
         document
           .querySelector('[data-slot="embed-cause"]')
-          ?.textContent?.replace(/\s+/g, " ")
+          ?.textContent?.replace(/\s+/gu, " ")
           .trim() ?? "",
       seen: (window as unknown as { previewSeen?: string[] }).previewSeen ?? [],
     }))
@@ -317,7 +317,7 @@ live = Preview("${site.id}", "The site as it runs")`,
 };
 
 /** The embed's address in a decision page's `cawco-media`. */
-const EMBED_PORT = /"embed":"http:\/\/127\.0\.0\.1:(\d+)\//;
+const EMBED_PORT = /"embed":"http:\/\/127\.0\.0\.1:(\d+)\//u;
 
 /**
  * Every ping of `page` to `port` meets `cause`: its route, or the browser's
@@ -488,7 +488,7 @@ const previewCause = async (legs: Legs, cause: Cause) => {
 const pageWords = (page: Page) =>
   page
     .evaluate(() =>
-      (document.body?.innerText ?? "").replace(/\s+/g, " ").slice(0, 240)
+      (document.body?.innerText ?? "").replace(/\s+/gu, " ").slice(0, 240)
     )
     .catch((error: unknown) => String(error));
 
@@ -498,7 +498,7 @@ const pageWords = (page: Page) =>
  * allows as a host (vite.config.ts `allowedHosts`); no tailnet holds it.
  */
 const ONLY_HERE = "cawco-probe-unheld.ts.net";
-const HUB_AWAY = /The hub can't reach it either \((.+?)\)\. Previews need/;
+const HUB_AWAY = /The hub can't reach it either \((.+?)\)\. Previews need/u;
 /** The hub's own words for why it can't reach the origin, as the line says them. */
 const hubWhy = (line: string) => HUB_AWAY.exec(line)?.[1] ?? "";
 const refusedBoth = (why: string): PreviewUnreached => ({

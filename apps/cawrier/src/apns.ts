@@ -43,9 +43,9 @@ const HOSTS: Record<ApnsEnvironment, string> = {
 /** APNs refuses a provider token older than an hour; a new one every 50 minutes stays clear. */
 const TOKEN_LIFE_S = 50 * 60;
 
-const PEM_ARMOUR = /-----(BEGIN|END)[^-]+-----/g;
+const PEM_ARMOUR = /-----(BEGIN|END)[^-]+-----/gu;
 /** A device token inside an error message. */
-const DEVICE_TOKEN = /[0-9a-f]{64,}/g;
+const DEVICE_TOKEN = /[0-9a-f]{64,}/gu;
 
 /** Base64 decoding skips the line breaks. */
 const pemToDer = (pem: string): Uint8Array =>

@@ -116,10 +116,10 @@ const HANDLERS = BROWSER.includes(".app/")
 /** Chromium headless for {@link BROWSER_HOLD_S} s, its crash handlers counted while it runs and once it ended (`| wc -l`: BSD pgrep has no -c). */
 const BROWSE = (executable: string) =>
   `D=$(mktemp -d); H=${JSON.stringify(HANDLERS)}; ${JSON.stringify(executable)} --headless --disable-gpu --no-sandbox --user-data-dir="$D" about:blank > /dev/null 2>&1 & P=$!; sleep ${BROWSER_HOLD_S}; echo "HANDLERS-RUNNING=$(pgrep -f "$H" | wc -l | tr -d ' ')"; kill $P; wait $P; sleep 3; echo "HANDLERS-AFTER=$(pgrep -f "$H" | wc -l | tr -d ' ')"; rm -rf "$D"; echo BROWSER-DONE`;
-const HANDLERS_RUNNING = /HANDLERS-RUNNING=(\d+)/;
-const HANDLERS_AFTER = /HANDLERS-AFTER=(\d+)/;
+const HANDLERS_RUNNING = /HANDLERS-RUNNING=(\d+)/u;
+const HANDLERS_AFTER = /HANDLERS-AFTER=(\d+)/u;
 /** Where Claude Code writes a background command's output, as its tool result says. */
-const OUTPUT_FILE = /Output is being written to: (\S+?\.output)/g;
+const OUTPUT_FILE = /Output is being written to: (\S+?\.output)/gu;
 /** How long the browser's output is waited on once the other legs are read. */
 const BROWSER_WAIT_MS = 120_000;
 const GROW = `exec -a ${LEAKER} perl -e 'my @k; for (1 .. 192) { push @k, "x" x (8 * 1024 * 1024); select(undef, undef, undef, 1); } sleep 900;'`;

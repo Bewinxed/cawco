@@ -100,7 +100,7 @@ const EDGE_RUN = 0.06;
 const SAME_PX = 0.01;
 /** A computed value with every number in it to a hundredth. */
 const hundredths = (value: string) =>
-  value.replace(/\d+\.\d+/g, (n) => Number.parseFloat(n).toFixed(2));
+  value.replace(/\d+\.\d+/gu, (n) => Number.parseFloat(n).toFixed(2));
 const PANE = '[data-slot="pane"]';
 /** The box that scrolls the list, as `markScroller` found it. */
 const SCROLLER = "[data-probe-scroller]";

@@ -31,7 +31,7 @@ const ALLOWED = new Set([
   "scripts/machine-paths-check.ts",
 ]);
 
-const EXTENSIONS = /\.(?:ts|tsx|mts|cts|svelte)$/;
+const EXTENSIONS = /\.(?:ts|tsx|mts|cts|svelte)$/u;
 const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 
 /**
@@ -40,7 +40,7 @@ const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
  * `$type<MachinePath>()`), or a guard that answers it.
  */
 const MINTS =
-  /\bas\s+MachinePath\b|(?<![\w$])<MachinePath>|\bis\s+MachinePath\b/;
+  /\bas\s+MachinePath\b|(?<![\w$])<MachinePath>|\bis\s+MachinePath\b/u;
 
 const walk = (dir: string, out: string[]): void => {
   let names: string[];

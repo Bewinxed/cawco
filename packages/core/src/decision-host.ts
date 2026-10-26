@@ -52,8 +52,8 @@ const ICON = new URL(
 /** Where the page loads the bundle's chunks and files from, on any preview origin. */
 const PUBLIC_PATH = "/__cawco/decision/";
 
-const RAW = /\?raw$/;
-const ANY = /.*/;
+const RAW = /\?raw$/u;
+const ANY = /.*/u;
 
 /**
  * Vite's `?raw` import, which the kit's class merging reads the token theme
@@ -75,7 +75,7 @@ const rawImports: Bun.BunPlugin = {
 };
 
 /** A compiled component's import of the Svelte runtime: `import 'svelte/…'` or `from 'svelte/…'`, either quote. */
-const SVELTE_IMPORT = /(\bfrom |\bimport )["'](svelte\/[^"']+)["']/g;
+const SVELTE_IMPORT = /(\bfrom |\bimport )["'](svelte\/[^"']+)["']/gu;
 
 /** The core package's own folder: unplugin-icons finds its icon sets (`@iconify-json/*`) from it. */
 const CORE_DIR = new URL("../", import.meta.url).pathname;
@@ -187,7 +187,7 @@ function svelteStylesApart(styles: string[]): Bun.BunPlugin {
 }
 
 /** The module ids unplugin-icons answers: `~icons/<set>/<name>` (and its `virtual:` form). */
-const ICON_ID = /^(?:~|virtual:)icons\//;
+const ICON_ID = /^(?:~|virtual:)icons\//u;
 
 /**
  * unplugin's Bun adapter (3.4.0, `getBunPlugin`) hears every module: it
@@ -348,7 +348,7 @@ export async function decisionHostAssets(
   return filesUnder(outdir, "decision");
 }
 
-const LEADING_SLASHES = /^\/+/;
+const LEADING_SLASHES = /^\/+/u;
 
 /** The host's files and DialKit's, the faces and the icon, by name: what a source checkout serves (host-build.ts builds them on a thread of its own). */
 export async function buildHostFiles(): Promise<Map<string, Blob>> {
@@ -378,7 +378,7 @@ const typeOf = (name: string) =>
   TYPES[name.slice(name.lastIndexOf(".") + 1)] ?? "application/octet-stream";
 
 /** Names that are their content's hash, kept for good: chunks, files and faces. */
-const HASHED = /^(chunk|asset|face)-/;
+const HASHED = /^(chunk|asset|face)-/u;
 
 /**
  * One of the host's files, by its path under `/__cawco/decision/`; null

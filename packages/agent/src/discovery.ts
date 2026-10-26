@@ -29,9 +29,9 @@ import { readConfig, writeConfig } from "./config";
 export const MDNS_BROWSE_MS = 2000;
 export const PROBE_TIMEOUT_MS = 1500;
 
-const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
-const SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:\/\//i;
-const HTTP_PREFIX = /^http/;
+const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/u;
+const SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:\/\//iu;
+const HTTP_PREFIX = /^http/u;
 
 /**
  * Accepts either end of the pair — a daemon's `ws://host:port/ws`, a plain

@@ -102,7 +102,7 @@ interface Emitted extends Blob {
   path: string;
 }
 
-const DOT_SLASH = /^\.\//;
+const DOT_SLASH = /^\.\//u;
 
 /**
  * A page's files by name: what Bun emitted (its JS, chunks and files) and

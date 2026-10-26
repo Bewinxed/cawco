@@ -36,15 +36,15 @@ const DOOR_OWNERS = new Set([
 
 const DOOR = "/api/delegation/call";
 const MCP_ENDPOINT = "/mcp/cawco";
-const RPC_CALL = /["']tools\/call["']/;
+const RPC_CALL = /["']tools\/call["']/u;
 const OBSERVER = "tool-answer-check: observer";
-const COMMENT = /^\s*(\*|\/\/|\/\*)/;
-const SHELL_CALL = /\bcawco"?\s+tool\s+[a-z_]/;
+const COMMENT = /^\s*(\*|\/\/|\/\*)/u;
+const SHELL_CALL = /\bcawco"?\s+tool\s+[a-z_]/u;
 /** A TypeScript command that runs the CLI's `tool`: Bun's shell on `cawco tool …`, or the cawco binary as `${process.execPath} tool …`. */
-const TS_SHELL_CALL = /(\$`\s*cawco|execPath\})\s+tool\s+(\$\{|[a-z_])/;
+const TS_SHELL_CALL = /(\$`\s*cawco|execPath\})\s+tool\s+(\$\{|[a-z_])/u;
 /** An argv list's `"tool",` element: the CLI's tool command, its name and arguments after it. */
-const ARGV_TOOL = /^\s*["']tool["'],\s*$/;
-const WORDS_MARK = /(#|\/\/)\s*tool answer:\s*words/;
+const ARGV_TOOL = /^\s*["']tool["'],\s*$/u;
+const WORDS_MARK = /(#|\/\/)\s*tool answer:\s*words/u;
 /** How far a mark above, or a `--record` below, may stand from the call it names. */
 const MARK_REACH = 8;
 

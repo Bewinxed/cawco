@@ -464,7 +464,7 @@ export interface WorkspaceArea {
 
 /** Its scratch dir `.cawco/tmp/<id8>` (paths.ts `workspaceScratchDir`) and its clone `.worktrees/<repo>-<id8>` (agent workspace.ts), under home. */
 const AREA =
-  /^(?:\.cawco\/tmp\/([0-9a-f]{8})|\.worktrees\/[^/]+-([0-9a-f]{8}))(?:\/|$)/;
+  /^(?:\.cawco\/tmp\/([0-9a-f]{8})|\.worktrees\/[^/]+-([0-9a-f]{8}))(?:\/|$)/u;
 
 /**
  * The workspace area `path` lies in, read from the path as written under
@@ -540,10 +540,10 @@ const cawcoTool = (call: Call): string | undefined => {
 const PATH_PARAMS = new Set(["filePaths"]);
 
 /** A parameter named as a path: one ending in path, file, dir, directory or filename. */
-const PATH_KEY = /(path|file|dir|directory|filename)$/i;
+const PATH_KEY = /(path|file|dir|directory|filename)$/iu;
 
 /** A parameter named as a URL, which a `file://` value makes a path. */
-const URL_KEY = /(url|urls|uri)$/i;
+const URL_KEY = /(url|urls|uri)$/iu;
 
 const strings = (value: unknown): string[] => {
   if (typeof value === "string") {
@@ -594,11 +594,11 @@ const argumentPaths = (input: unknown): string[] => {
 
 /** OpenCode's patch headers: each file a patch adds, deletes, updates or moves to (packages/opencode/src/patch). */
 const PATCH_HEADER =
-  /^\*\*\* (?:Add File|Delete File|Update File|Move to):(.*)$/;
+  /^\*\*\* (?:Add File|Delete File|Update File|Move to):(.*)$/u;
 
 const patchPaths = (text: string): string[] =>
   text
-    .replace(/\r\n?/g, "\n")
+    .replace(/\r\n?/gu, "\n")
     .split("\n")
     .flatMap((line) => {
       const path = PATCH_HEADER.exec(line)?.[1]?.trim();
@@ -622,7 +622,7 @@ const globRoot = (pattern: string): string => {
   return pattern.startsWith("/") ? "/" : ".";
 };
 
-const WILDCARD = /[*?[\]{}]/;
+const WILDCARD = /[*?[\]{}]/u;
 
 /**
  * `~` and `~/…` name the home dir, as several tools expand them. Joined as

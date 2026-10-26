@@ -1225,7 +1225,7 @@ export const domainOf = (
   } catch {
     return null;
   }
-  const bare = host.replace(/^\[|\]$/g, "");
+  const bare = host.replace(/^\[|\]$/gu, "");
   if (!bare || isIP(bare) !== 0 || own.includes(bare)) {
     return null;
   }

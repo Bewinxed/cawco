@@ -339,7 +339,7 @@ const failedPlaced = (report: FleetSyncReport): string[] =>
 /** The words of whatever was thrown. */
 const errorText = (problem: unknown): string =>
   (problem instanceof Error ? problem.message : String(problem))
-    .replace(/\s+/g, " ")
+    .replace(/\s+/gu, " ")
     .trim();
 
 /**
@@ -711,12 +711,12 @@ const GIT_CHANGES_TIMEOUT_MS = 30_000;
 
 /** A `<scheme>://` git URL's host and path, past any login and port. */
 const SCHEME_URL_PARTS =
-  /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]*)(?::\d*)?(\/.*)?$/i;
+  /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]*)(?::\d*)?(\/.*)?$/iu;
 /** An scp-like git URL's host and path, past any login. */
-const SCP_URL_PARTS = /^(?:[^@/:]*@)?([^/:]+):\/?(.*)$/;
-const TRAILING_SLASHES = /\/+$/;
-const DOT_GIT = /\.git$/;
-const LEADING_SLASHES = /^\/+/;
+const SCP_URL_PARTS = /^(?:[^@/:]*@)?([^/:]+):\/?(.*)$/u;
+const TRAILING_SLASHES = /\/+$/u;
+const DOT_GIT = /\.git$/u;
+const LEADING_SLASHES = /^\/+/u;
 
 /**
  * A git URL as `host/path`, lowercased, without its login, port, `.git` or
@@ -736,7 +736,7 @@ const repoLeaf = (repo: string): string =>
   repoPath(repo).split("/").pop() ?? "";
 
 /** A reason's own full stop, dropped where a sentence carries on after it. */
-const FINAL_STOP = /\.$/;
+const FINAL_STOP = /\.$/u;
 
 /** The machine-scoped session-catalog controls, routed to a harness. */
 const CATALOG_METHODS = new Set([

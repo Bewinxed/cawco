@@ -333,33 +333,33 @@ const CHECKED_WEB = [
 
 // ── Patterns ────────────────────────────────────────────────────────────
 
-const SEPARATED = /[-_ ]+([a-zA-Z0-9])/g;
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const ES_PLURAL = /(ch|sh|x)es$/;
-const WHITESPACE = /\s+/g;
-const SPACES = /\s+/;
-const LETTER = /[A-Za-z]/;
-const TWO_LETTERS = /[A-Za-z]{2}/;
-const HEADER_NAME = /^[A-Z][a-z]+(-[A-Z][a-z]+)+$/;
-const TYPOGRAPHY = /[…’“”→·]/;
-const CAPITALISED = /^[A-Z][a-z]/;
+const SEPARATED = /[-_ ]+([a-zA-Z0-9])/gu;
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+const ES_PLURAL = /(ch|sh|x)es$/u;
+const WHITESPACE = /\s+/gu;
+const SPACES = /\s+/u;
+const LETTER = /[A-Za-z]/u;
+const TWO_LETTERS = /[A-Za-z]{2}/u;
+const HEADER_NAME = /^[A-Z][a-z]+(-[A-Z][a-z]+)+$/u;
+const TYPOGRAPHY = /[…’“”→·]/u;
+const CAPITALISED = /^[A-Z][a-z]/u;
 /** A record field every value of which is a lowercase id (a slug, a hue, a Solar name) holds no words. */
-const RECORD_ID = /^[a-z0-9][a-z0-9-]*$/;
+const RECORD_ID = /^[a-z0-9][a-z0-9-]*$/u;
 /** A bare lowercase token: a word that is also how code names a state ("waiting"). */
-const ID_LIKE = /^[a-z][a-z-]*$/;
+const ID_LIKE = /^[a-z][a-z-]*$/u;
 /** A trap's message is for whoever reads the crash, not for a person using the app. */
-const TRAP = /(fatalError|preconditionFailure|assertionFailure)\(\s*$/;
-const GLYPH_CASE = /case \w+ = "([^"]+)"/g;
-const SCRIPT = /<script[^>]*>([\s\S]*?)<\/script>/g;
-const STYLE = /<style[^>]*>[\s\S]*?<\/style>/g;
-const COMMENT = /<!--[\s\S]*?-->/g;
-const BRACES = /\{([^{}]*)\}/g;
-const TAG = /<[^>]*>/g;
-const TEXT_RUN = /[^\s][^\n]*/g;
-const NOT_NEWLINE = /[^\n]/g;
+const TRAP = /(fatalError|preconditionFailure|assertionFailure)\(\s*$/u;
+const GLYPH_CASE = /case \w+ = "([^"]+)"/gu;
+const SCRIPT = /<script[^>]*>([\s\S]*?)<\/script>/gu;
+const STYLE = /<style[^>]*>[\s\S]*?<\/style>/gu;
+const COMMENT = /<!--[\s\S]*?-->/gu;
+const BRACES = /\{([^{}]*)\}/gu;
+const TAG = /<[^>]*>/gu;
+const TEXT_RUN = /[^\s][^\n]*/gu;
+const NOT_NEWLINE = /[^\n]/gu;
 /** Markup attributes whose values a person reads. */
 const WORD_ATTRS =
-  /\s(label|title|placeholder|aria-label|aria-roledescription|pendingLabel|saveLabel|deleteLabel|confirmLabel|line|what|text)="([^"]*)"/g;
+  /\s(label|title|placeholder|aria-label|aria-roledescription|pendingLabel|saveLabel|deleteLabel|confirmLabel|line|what|text)="([^"]*)"/gu;
 
 /** Where a template's values go, in a shape: not a space, so a path's slots don't read as words between them. */
 const HOLE = "\u0000";

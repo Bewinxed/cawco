@@ -160,7 +160,7 @@ export interface StepOptions {
 
 /** The browser's own line for a request the hub answered with a refusal. */
 const REFUSED_LINE =
-  /Failed to load resource: the server responded with a status of 4\d\d/;
+  /Failed to load resource: the server responded with a status of 4\d\d/u;
 
 /** One leg: a journey on one engine, at one size, with one data set. */
 export interface Leg {
@@ -382,7 +382,7 @@ function measuredBy(error: unknown): string {
 
 /** The browser's own line for a request it could not make while the hub is down. */
 const NETWORK_LINE =
-  /Failed to load resource|WebSocket connection to .* failed|NetworkError when attempting to fetch|Firefox can.t establish a connection|Could not connect to the server|WebSocket is closed before the connection is established|The network connection was lost|Load failed/i;
+  /Failed to load resource|WebSocket connection to .* failed|NetworkError when attempting to fetch|Firefox can.t establish a connection|Could not connect to the server|WebSocket is closed before the connection is established|The network connection was lost|Load failed/iu;
 
 /** Which legs to run: every engine, size and data set unless narrowed. */
 export interface Narrow {

@@ -157,12 +157,12 @@ const MANIFEST_MS = 60 * 60_000;
 /** A gh token read this long ago is read from its machine again. Our choice: a re-login there is found within it. */
 const GH_FRESH_MS = 60_000;
 /** A GitHub organization's login: letters, digits and single hyphens, up to 39 characters. */
-const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 /** A GitHub App's name, as GitHub caps it. */
 const APP_NAME_MAX = 34;
-const DIGITS = /^\d{1,20}$/;
-const NOT_NAME = /[^a-z0-9]+/g;
-const TRAILING_HYPHENS = /-+$/;
+const DIGITS = /^\d{1,20}$/u;
+const NOT_NAME = /[^a-z0-9]+/gu;
+const TRAILING_HYPHENS = /-+$/u;
 
 /**
  * What a Linear app asks for: "`read` … This scope will always be present";
@@ -194,10 +194,10 @@ const LINEAR_REFRESH_EARLY_MS = 5 * 60_000;
 /** An app connection's MCP client is let go this long before its token runs out. Our choice. */
 const APP_TOKEN_EARLY_MS = 60_000;
 const PEM_BLOCK =
-  /-----BEGIN ([A-Z ]*PRIVATE KEY)-----([\s\S]*?)-----END \1-----/;
-const BASE64 = /^[A-Za-z0-9+/=]+$/;
-const WHITESPACE = /\s+/g;
-const PEM_LINE = /.{1,64}/g;
+  /-----BEGIN ([A-Z ]*PRIVATE KEY)-----([\s\S]*?)-----END \1-----/u;
+const BASE64 = /^[A-Za-z0-9+/=]+$/u;
+const WHITESPACE = /\s+/gu;
+const PEM_LINE = /.{1,64}/gu;
 
 /**
  * A private key as PKCS#8 PEM, its body on 64-character lines. GitHub hands
@@ -236,8 +236,8 @@ const CALL_MS = 5 * 60_000;
  */
 const SDK_CLOCK_OFF = 2 ** 31 - 1;
 
-const HEADER_NAME = /^[A-Za-z0-9-]+$/;
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const HEADER_NAME = /^[A-Za-z0-9-]+$/u;
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 /** Headers the transport owns, which a key may not take the place of. */
 const RESERVED_HEADERS = new Set([
   "accept",
@@ -588,8 +588,8 @@ const sessionGone = (error: unknown): boolean =>
  */
 const TOOL_NAME_MAX = 64;
 const HARNESS_PREFIX = "mcp__cawco__";
-const TOOL_NAME_SAFE = /^[A-Za-z0-9_-]+$/;
-const TOOL_NAME_UNSAFE = /[^A-Za-z0-9_-]/g;
+const TOOL_NAME_SAFE = /^[A-Za-z0-9_-]+$/u;
+const TOOL_NAME_UNSAFE = /[^A-Za-z0-9_-]/gu;
 /** Hex characters of the real name's hash an alias ends with. */
 const ALIAS_HASH = 6;
 

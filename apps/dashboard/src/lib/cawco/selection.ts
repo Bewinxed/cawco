@@ -20,7 +20,7 @@ const QUOTE_MAX = 2000;
  * which is where the reply gets written.
  */
 export function quoteBlock(text: string, existingDraft: string): string {
-  const quoted = capped(text.replace(/\r\n?/g, "\n").trim())
+  const quoted = capped(text.replace(/\r\n?/gu, "\n").trim())
     .split("\n")
     // A bare `>` rather than `"> "`: an empty quoted line is trailing whitespace.
     .map((line) => (line.trim() ? `> ${line}` : ">"))
@@ -30,7 +30,7 @@ export function quoteBlock(text: string, existingDraft: string): string {
 }
 
 /** The last whitespace in a run — greedy, so it finds the latest boundary. */
-const LAST_WHITESPACE = /^[\s\S]*\s/;
+const LAST_WHITESPACE = /^[\s\S]*\s/u;
 
 /** Cut at the last word boundary that fits, and say that it was cut. */
 function capped(text: string): string {

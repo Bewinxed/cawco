@@ -29,7 +29,7 @@ const MCP_CONFIG_FLAG = "--mcp-config";
 const INLINE_FLAG = `${MCP_CONFIG_FLAG}=`;
 
 /** An instance id as a file name can carry it: a UUID's characters, no path. */
-const FILE_SAFE_ID = /^[A-Za-z0-9-]+$/;
+const FILE_SAFE_ID = /^[A-Za-z0-9-]+$/u;
 
 /** Where Claude sessions' MCP configs are kept: owner-only, hidden from every workspace. */
 export const claudeMcpConfigDir = (): string =>

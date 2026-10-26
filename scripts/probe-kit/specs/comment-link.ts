@@ -112,12 +112,12 @@ const SILENT_SAID_MS = 30_000;
 const DOWN = `${PANE} button[data-slot="comments"][data-link-down]`;
 /** The comments notice (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
-  /\[CawCo\] The person commented on the page "comment-link" \(artifact [0-9a-f-]{36}\)\./;
+  /\[CawCo\] The person commented on the page "comment-link" \(artifact [0-9a-f-]{36}\)\./u;
 /** How long a Send's delivery may take to reach the model, and how long after it no second one may come. */
 const DELIVERY_MS = 12_000;
 const STILL_MS = 12_000;
-const PANE_PATH = /^\/ws\/artifact\//;
-const OVERLAY_PATH = /\/__cawco\/artifact\/[0-9a-f-]{36}$/;
+const PANE_PATH = /^\/ws\/artifact\//u;
+const OVERLAY_PATH = /\/__cawco\/artifact\/[0-9a-f-]{36}$/u;
 /** The control's path on the silent server. */
 const CONTROL = "/quiet";
 
@@ -180,7 +180,7 @@ const recorder = () => {
   const faults: { at: number; text: string }[] = [];
   const look = () => {
     const fault = document.querySelector("[data-pin-list-failed]");
-    const text = fault?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    const text = fault?.textContent?.replace(/\s+/gu, " ").trim() ?? "";
     if (fault && faults.at(-1)?.text !== text) {
       faults.push({ at: performance.now(), text });
     }

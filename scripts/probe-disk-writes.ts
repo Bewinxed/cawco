@@ -231,7 +231,7 @@ const session = (seed: number, project: string, base: number) => {
 const ioOf = async (pid: number) => {
   const text = await Bun.file(`/proc/${pid}/io`).text();
   const field = (name: string) =>
-    Number(new RegExp(`^${name}: (\\d+)$`, "m").exec(text)?.[1] ?? Number.NaN);
+    Number(new RegExp(`^${name}: (\\d+)$`, "mu").exec(text)?.[1] ?? Number.NaN);
   return { writeBytes: field("write_bytes"), wchar: field("wchar") };
 };
 
@@ -266,11 +266,11 @@ const straceWrap = (prefix: string) => [
 ];
 
 /** `<epoch> pwrite64(12</path>, ""..., 4096, 8192) = 4096` */
-const WRITE_CALL = /^(\d+\.\d+) \w+\(\d+<(.+?)>, .* = (\d+)$/;
+const WRITE_CALL = /^(\d+\.\d+) \w+\(\d+<(.+?)>, .* = (\d+)$/u;
 /** What strace appends to an unlinked file's path. */
-const DELETED = / \(deleted\)$/;
+const DELETED = / \(deleted\)$/u;
 /** A uuid, a run of eight or more hex characters, or of digits. */
-const ID = /[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{8,}|\d+/g;
+const ID = /[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{8,}|\d+/gu;
 
 /**
  * What the agent wrote to files between two epoch seconds, by file class:

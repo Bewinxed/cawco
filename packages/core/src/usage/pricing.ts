@@ -83,7 +83,7 @@ const MODEL_ALIASES: Record<string, string> = {
 };
 
 /** Claude Code's context-window suffix on a model id: `[1m]`. */
-const CONTEXT_SUFFIX = /\[[^\]]*\]$/;
+const CONTEXT_SUFFIX = /\[[^\]]*\]$/u;
 
 /**
  * DeepSeek's clock. Its models cost twice as much at peak, on DeepSeek's own
@@ -101,7 +101,7 @@ const PEAK = {
   providers: new Set(["deepseek", "opencode-go"]),
   /** The providers whose peak skips Chinese public holidays. */
   holidaysOff: new Set(["deepseek"]),
-  model: /^deepseek-/,
+  model: /^deepseek-/u,
   /** UTC hours, start inclusive, end exclusive. */
   hours: [
     [1, 4],
@@ -262,7 +262,7 @@ const listed = (provider: string, model: string): ModelRates | undefined => {
   if (aliased) {
     return aliased;
   }
-  const normalized = model.replace(/[.@]/g, "-");
+  const normalized = model.replace(/[.@]/gu, "-");
   return normalized === model
     ? undefined
     : RATES.get(`${provider}/${normalized}`);

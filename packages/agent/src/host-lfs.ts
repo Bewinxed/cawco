@@ -216,7 +216,7 @@ export const hostSigns = async (endpoint: string): Promise<boolean> => {
   return read.kind === "answered" && read.value;
 };
 
-const PASSWORD = /^password=./m;
+const PASSWORD = /^password=./mu;
 
 /**
  * The project's thread told that the `.lfsconfig` in `root` named

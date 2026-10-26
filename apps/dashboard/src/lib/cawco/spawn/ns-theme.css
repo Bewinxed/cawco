@@ -75,6 +75,7 @@
    harness tab not installed) at full opacity. */
 @utility ns-in {
   @variant motion-safe {
+    /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
       animation: --theme(--animate-ns-in inline);
       animation-delay: var(--delay, 0ms);
@@ -84,6 +85,7 @@
 
 @utility ns-check {
   @variant motion-safe {
+    /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
       animation: --theme(--animate-ns-check inline);
     }
@@ -92,6 +94,7 @@
 
 @utility ns-panel {
   @variant motion-safe {
+    /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
       animation: --theme(--animate-ns-panel inline);
     }

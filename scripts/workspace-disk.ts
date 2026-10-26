@@ -111,8 +111,8 @@ interface Found {
   why: string;
 }
 
-const ID8 = /^[0-9a-f]{8}$/;
-const CLONE = /-([0-9a-f]{8})$/;
+const ID8 = /^[0-9a-f]{8}$/u;
+const CLONE = /-([0-9a-f]{8})$/u;
 
 const orphans: Found[] = [];
 

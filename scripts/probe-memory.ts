@@ -149,8 +149,8 @@ const NET_CASES: Record<string, { call: NetCall; web: boolean }> = {
     web: true,
   },
 };
-const NET_CASE = /PROBE-MEMORY-NET (\S+)(?: (\S+))?/;
-const TAINT_LINE = /taint: (.*)/;
+const NET_CASE = /PROBE-MEMORY-NET (\S+)(?: (\S+))?/u;
+const TAINT_LINE = /taint: (.*)/u;
 /** The prompt the timer session's CronCreate fires with: a turn no hub send started. */
 const TIMED = "PROBE-MEMORY-TIMED";
 /** The person's later asks to note, in order: each one more note. */
@@ -164,13 +164,13 @@ const once: Record<"agent" | "cron" | "delegate", boolean> = {
 };
 const CURATOR = "You are this project's memory curator";
 const CAW = "You are Caw, the lead of the project";
-const NOTE_ID = /^(n-\d{8}-\d{6}-[0-9a-f]{6})/;
+const NOTE_ID = /^(n-\d{8}-\d{6}-[0-9a-f]{6})/u;
 /** The day a fact line the mock writes became true: the note's own. */
 const TODAY = new Date().toISOString().slice(0, 10);
-const CAW_ASK = /PROBE-MEMORY-CAW-PROPOSE (n-\d{8}-\d{6}-[0-9a-f]{6})/;
-const OUTCOME = /outcome: (.*)/;
+const CAW_ASK = /PROBE-MEMORY-CAW-PROPOSE (n-\d{8}-\d{6}-[0-9a-f]{6})/u;
+const OUTCOME = /outcome: (.*)/u;
 /** The hub's log lines a failure prints. */
-const LOGGED = /memory|routines|caw|boundary|error/i;
+const LOGGED = /memory|routines|caw|boundary|error/iu;
 
 const results: Record<string, string> = {};
 let failed = false;

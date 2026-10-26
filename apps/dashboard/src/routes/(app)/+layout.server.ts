@@ -37,7 +37,7 @@ const WORKSPACE_KEY = "cawco-workspace";
 /** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
 const WORKSPACE_CTX_KEY = "cawco-workspace-ctx";
 
-const SESSION_PATH = /^\/session\/([^/]+)/;
+const SESSION_PATH = /^\/session\/([^/]+)/u;
 
 /**
  * Whether this browser is a phone, for the session surface's first paint.
@@ -50,7 +50,7 @@ const SESSION_PATH = /^\/session\/([^/]+)/;
  * takes over a frame later (lib/cawco/first-render.svelte.ts).
  */
 const NARROW_KEY = "cawco-narrow";
-const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/i;
+const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/iu;
 
 function narrowOf(cookie: string | undefined, headers: Headers): boolean {
   if (cookie === "1") {

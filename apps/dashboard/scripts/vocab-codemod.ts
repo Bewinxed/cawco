@@ -55,13 +55,13 @@ const DUMP = process.argv.indexOf("--tokens");
 const TOKENS = join(DASHBOARD, "src/lib/tokens/tokens.css");
 const THEME = join(DASHBOARD, "src/lib/tokens/theme.css");
 
-const DECLARATION = /--([a-z0-9-]+):\s*([^;]+);/g;
-const SPACES = /\s+/g;
-const VAR = /var\(--([a-z0-9-]+)\)/g;
-const CONTAINER_VARIANT = /^@(max-)?([\w-]+)\/([\w-]+)$/;
-const MAX = /^max-/;
-const OPACITY = /\/[\w.]+$/;
-const DEFAULT_WIDTH = /^(w|min-w|max-w)-(3xs|2xs|xs|sm|md|lg|xl|[2-7]xl)$/;
+const DECLARATION = /--([a-z0-9-]+):\s*([^;]+);/gu;
+const SPACES = /\s+/gu;
+const VAR = /var\(--([a-z0-9-]+)\)/gu;
+const CONTAINER_VARIANT = /^@(max-)?([\w-]+)\/([\w-]+)$/u;
+const MAX = /^max-/u;
+const OPACITY = /\/[\w.]+$/u;
+const DEFAULT_WIDTH = /^(w|min-w|max-w)-(3xs|2xs|xs|sm|md|lg|xl|[2-7]xl)$/u;
 
 // MARK: - Tokens and the theme
 
@@ -136,7 +136,7 @@ async function themeKeys(): Promise<(ns: string) => Map<string, string>> {
     new Map(
       [
         ...css.matchAll(
-          new RegExp(`^\\s*--${ns}-([a-z0-9-]+):\\s*([^;]+);`, "gm")
+          new RegExp(`^\\s*--${ns}-([a-z0-9-]+):\\s*([^;]+);`, "gmu")
         ),
       ].map(([, key, value]) => [key, value.trim()])
     );
@@ -161,7 +161,7 @@ const COLOURS: Record<string, string> = {
 /** Old keys that read a token of another name: app.css's `--color-link: var(--link-ink)`. */
 const RENAMED: Record<string, string> = { link: "link-ink" };
 const COLOUR_UTILITY =
-  /^(bg|text|border|border-[xytrblse]|ring|ring-offset|outline|fill|stroke|divide|placeholder|caret|accent|decoration|shadow|inset-shadow|inset-ring|from|via|to)-(.+)$/;
+  /^(bg|text|border|border-[xytrblse]|ring|ring-offset|outline|fill|stroke|divide|placeholder|caret|accent|decoration|shadow|inset-shadow|inset-ring|from|via|to)-(.+)$/u;
 
 /** Refuses a bridge colour whose house token differs from it in either scheme, or that the theme does not make. */
 function checkColours(
@@ -234,22 +234,22 @@ const LOST_BREAKPOINTS: Record<string, string> = {
  * decision (left as written and reported).
  */
 const DEFAULT_SCALES: [RegExp, string][] = [
-  [/^leading-(tight|snug|normal|relaxed|loose)$/, "leading"],
-  [/^tracking-(tighter|tight|normal|wide|wider|widest)$/, "tracking"],
+  [/^leading-(tight|snug|normal|relaxed|loose)$/u, "leading"],
+  [/^tracking-(tighter|tight|normal|wide|wider|widest)$/u, "tracking"],
   [
-    /^font-(thin|extralight|light|semibold|bold|extrabold|black)$/,
+    /^font-(thin|extralight|light|semibold|bold|extrabold|black)$/u,
     "font-weight",
   ],
-  [/^shadow-(2xs|xs|sm|md|lg|xl|2xl)$/, "shadow"],
-  [/^rounded-(xs|sm|md|lg|[2-4]?xl)$/, "radius"],
-  [/^text-(xs|sm|base|lg|[2-9]?xl)$/, "text"],
+  [/^shadow-(2xs|xs|sm|md|lg|xl|2xl)$/u, "shadow"],
+  [/^rounded-(xs|sm|md|lg|[2-4]?xl)$/u, "radius"],
+  [/^text-(xs|sm|base|lg|[2-9]?xl)$/u, "text"],
 ];
 /** Defaults no theme key can give: bare scale steps and Tailwind's in curves. */
 const NO_VALUE =
-  /^(rounded|blur|blur-(xs|sm|md|lg|[2-3]?xl)|container|ease-(in|linear)|animate-bounce)$/;
+  /^(rounded|blur|blur-(xs|sm|md|lg|[2-3]?xl)|container|ease-(in|linear)|animate-bounce)$/u;
 /** Tailwind's palette, which has a value only where a token of the same name does (the house's own `neutral-*` ramp). */
 const PALETTE =
-  /^(?:bg|text|border|ring|fill|stroke|outline|from|via|to|divide|placeholder|caret|accent|decoration|shadow)-(black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+)(?:\/\d+)?$/;
+  /^(?:bg|text|border|ring|fill|stroke|outline|from|via|to|divide|placeholder|caret|accent|decoration|shadow)-(black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+)(?:\/\d+)?$/u;
 
 // MARK: - Rewriting
 
@@ -531,11 +531,11 @@ function editsOf(
  * by goes through the same utility rename. Only the selector's class name
  * changes; no declaration does.
  */
-const SELECTOR_CLASS = /(?<=\.)-?[_a-zA-Z][\w-]*(?![\w\\-])/g;
-const RULE_PRELUDE = /(?<=^|[{};])([^{};]*)\{/g;
-const COMMENT = /\/\*[\s\S]*?\*\//g;
+const SELECTOR_CLASS = /(?<=\.)-?[_a-zA-Z][\w-]*(?![\w\\-])/gu;
+const RULE_PRELUDE = /(?<=^|[{};])([^{};]*)\{/gu;
+const COMMENT = /\/\*[\s\S]*?\*\//gu;
 /** The generated token stylesheets (`bun run tokens`, `bun run variants`): never edited by hand. */
-const GENERATED_CSS = /^src\/lib\/tokens\//;
+const GENERATED_CSS = /^src\/lib\/tokens\//u;
 
 /** The selector edits a stylesheet takes, at offsets in `css`: a rule's prelude, never an at-rule's or a comment. */
 function renameSelectors(

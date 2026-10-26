@@ -13,19 +13,19 @@
 export const WIDTH_CONTAINER = "cawco-width";
 
 /** The words of a condition: its features and keyword values, not a number's unit (`640px`, `40em`). */
-const WORD = /(?<![\w.-])[a-z][a-z-]*/gi;
+const WORD = /(?<![\w.-])[a-z][a-z-]*/giu;
 /** A feature on the viewport's width: `width`, `min-width`, `max-width` (range syntax names `width`; `device-width` is the screen's). */
-const WIDTH = /^(?:min-|max-)?width$/i;
+const WIDTH = /^(?:min-|max-)?width$/iu;
 /** The words that join conditions. */
 const JOINS = new Set(["and", "or", "not"]);
 /** A length in em or rem: in a media query both are the initial font size, 16px (Media Queries 4, "Relative lengths"). */
-const RELATIVE = /(-?\d*\.?\d+)r?em\b/g;
-const PREFIX = /^(?:only\s+)?([a-z]+)\s+and\s+/i;
-const MEDIA_TYPE = /^(?:only\s+)?(?:all|screen|print)$/i;
-const NOT = /^not\b/i;
-const ALL = /^(?:only\s+)?all$/i;
-const AND = /^\s+and\s+/i;
-const COMMA = /^,/;
+const RELATIVE = /(-?\d*\.?\d+)r?em\b/gu;
+const PREFIX = /^(?:only\s+)?([a-z]+)\s+and\s+/iu;
+const MEDIA_TYPE = /^(?:only\s+)?(?:all|screen|print)$/iu;
+const NOT = /^not\b/iu;
+const ALL = /^(?:only\s+)?all$/iu;
+const AND = /^\s+and\s+/iu;
+const COMMA = /^,/u;
 
 /** `text` split at its top-level `sep`, outside parentheses, each part trimmed. */
 function partsOf(text: string, sep: RegExp): string[] {

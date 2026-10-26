@@ -52,7 +52,7 @@ const FOREGROUND = [
   `sh -c 'sleep ${FG_SECONDS}; exit 7'`,
   `echo "FG-""STATUS-$?"`,
 ].join("; ");
-const FG_STATUS = /FG-STATUS-(\d+)/;
+const FG_STATUS = /FG-STATUS-(\d+)/u;
 const TAG = "PROBE-QUIET-D:";
 /** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
 const CUT_OFF = "boundary stopped while this command ran";
@@ -61,7 +61,7 @@ const SETTLE_MS = 15_000;
 /** How long after D's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
 const HANDOVER_BOUND_MS = 30_000;
 /** The agent's line for each delta it takes (agent session.ts `FLEET_DELTA`). */
-const SYNC_LINE = /\[fleet\] sync from the hub: rev (\d+)/g;
+const SYNC_LINE = /\[fleet\] sync from the hub: rev (\d+)/gu;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const tool = (name: string, input: object): Reply => ({
@@ -182,16 +182,16 @@ const decisionSaid = (
 
 /** The agent's line for a form move a sync made (agent boundary.ts `rearmMoved`): the workspace, and what moved. */
 const MOVED_LINE =
-  /\[workspace\] ([0-9a-f-]+): its boundary's form moved \(([^)]*)\)/;
+  /\[workspace\] ([0-9a-f-]+): its boundary's form moved \(([^)]*)\)/u;
 /** The agent's line for a hand-over (agent boundary.ts `handOver`): the workspace, the older boundary and the new one. */
 const HANDOVER_LINE =
-  /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(form \w+\) is handed over to (\d+)/;
+  /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(form \w+\) is handed over to (\d+)/u;
 /** The host's line for a sandbox that ended unasked (agent boundary-host.ts), as the agent says it: the workspace, its boundary, the sandbox, its status. */
 const UNASKED_LINE =
-  /\[workspace\] ([0-9a-f-]+): its boundary (\d+) says: cawco: the sandbox (\d+) ended with status (\d+)/;
+  /\[workspace\] ([0-9a-f-]+): its boundary (\d+) says: cawco: the sandbox (\d+) ended with status (\d+)/u;
 /** The agent's line for a boundary's exit (agent boundary.ts `watchHost`): the workspace, its boundary, how it exited. */
 const EXIT_LINE =
-  /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(\S+\) exited, (status \S+|killed by \S+)/;
+  /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(\S+\) exited, (status \S+|killed by \S+)/u;
 
 /** The lines of `log` that `pattern` matches with workspace `id` as its first group, each as matched. */
 const linesOf = (log: string, pattern: RegExp, id: string): RegExpExecArray[] =>

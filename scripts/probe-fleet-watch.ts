@@ -39,16 +39,16 @@ const DECIDE = "mcp__cawco__triage_decide";
 const MISSING = "/nonexistent-probe/loop.txt";
 /** Claude Code's words for a Read of a missing file, in each failed result. */
 const READ_FAILED = "File does not exist";
-const LOOP = /PROBE-LOOP-([A-Z])/;
-const SESSION_ID = /\(([0-9a-f-]{36})\)/;
+const LOOP = /PROBE-LOOP-([A-Z])/u;
+const SESSION_ID = /\(([0-9a-f-]{36})\)/u;
 /** How long the idle fleet is watched for spending (c). */
 const IDLE_MS = 10 * 60_000;
 /** A hub log line for fleet watch asking Jev, opening a signal or starting triage. */
-const SPENDS = /\[fleet-watch\].*(asked Jev|triage started|signal:)/;
+const SPENDS = /\[fleet-watch\].*(asked Jev|triage started|signal:)/u;
 /** A hub log line for a Caw session started. */
-const CAW_STARTED = /\[caw\].*started Caw/;
+const CAW_STARTED = /\[caw\].*started Caw/u;
 /** A hub log line for any placement ask of Jev (jev-placement.ts `askRow`) or a starters write. */
-const PLACEMENT = /\[(jev|starters)\] /;
+const PLACEMENT = /\[(jev|starters)\] /u;
 
 const results: Record<string, string> = {};
 let failed = false;
@@ -426,7 +426,8 @@ try {
       // `[starters] project=<id>` once written, else askRow's
       // `[jev] Starters project=<id>` line when Jev failed or went unanswered.
       const asked = new RegExp(
-        `(\\[starters\\]|\\[jev\\] Starters) project=${cawOff}`
+        `(\\[starters\\]|\\[jev\\] Starters) project=${cawOff}`,
+        "u"
       );
       await until(
         "the Caw-off project's starters asked",

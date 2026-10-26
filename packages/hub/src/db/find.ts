@@ -157,7 +157,7 @@ const findable = () =>
   );
 
 /** What a session id's prefix may hold: hex and dashes. */
-const ID_PREFIX = /^[0-9a-f-]+$/;
+const ID_PREFIX = /^[0-9a-f-]+$/u;
 
 export const findDb = (db: BunSQLiteDatabase): FindDb => ({
   purge: (machineId, sessionIds) => {

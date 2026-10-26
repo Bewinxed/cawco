@@ -33,7 +33,7 @@ import { elementName } from "@cawco/core/pin-name";
 const UNSEEN = new Set(["script", "style", "template", "noscript", "head"]);
 /** Words a label keeps. Our call. */
 const LABEL_CHARS = 60;
-const SPACES = /\s+/g;
+const SPACES = /\s+/gu;
 
 /** One element of a page, as the diff reads it. */
 interface Node {
@@ -670,9 +670,9 @@ export function pictureChanges(
 }
 
 /** What would end a CSS string early. */
-const CSS_STRING = /["\\]/g;
+const CSS_STRING = /["\\]/gu;
 /** A file's place in its page (`<n>-`), before its name. */
-const INDEXED = /^\d+-/;
+const INDEXED = /^\d+-/u;
 
 /** What a decision page's revision changed: each card put in or rewritten, by its `#decision-<id>`, and each taken out. */
 export function cardChanges(

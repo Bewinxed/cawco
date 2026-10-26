@@ -37,7 +37,7 @@ interface ChatgptAuth {
 /** Codex's image backend: CHATGPT_CODEX_BASE_URL + images/{generations,edits} (openai/codex codex-api). */
 const codexImages = (): string => `${chatgptBaseUrl()}/codex/images`;
 const SIGN_IN = `Run \`opencode auth login\` and choose OpenAI → ChatGPT (CawCo moves that login into a ChatGPT account), or add a ChatGPT account in ${configurePage("accounts")}.`;
-const SIZE = /^(\d+)x(\d+)$/;
+const SIZE = /^(\d+)x(\d+)$/u;
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const activeOutputs = new Set<string>();
 

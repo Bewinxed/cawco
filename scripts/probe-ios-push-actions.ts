@@ -96,17 +96,17 @@ const home = process.env.HOME ?? "";
 const onMac = process.platform === "darwin";
 const SSH = ["ssh", "-F", join(home, ".ssh", "config"), "-o", "BatchMode=yes"];
 const BUNDLE = "dev.cawco.app";
-const BUILT_IOS = /^BUILT iOS$/m;
-const BUILT_IOS_18 = /^BUILT iOS 18\.5$/m;
+const BUILT_IOS = /^BUILT iOS$/mu;
+const BUILT_IOS_18 = /^BUILT iOS 18\.5$/mu;
 /** The simulator the probe runs on: build-both.sh's 'iOS 18.5' pair. */
 const SIM_RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 const SIM_TYPE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro";
 /** A thread's head in `sample`'s call graph, which names its dispatch queue. */
-const SAMPLE_THREAD = /\n(?=\s+\d+\s+Thread_)/;
+const SAMPLE_THREAD = /\n(?=\s+\d+\s+Thread_)/u;
 /** The notification centre's queues, and the app's own (NotificationCentre). */
-const CENTRE_QUEUE = /usernotifications|notification-centre/i;
+const CENTRE_QUEUE = /usernotifications|notification-centre/iu;
 /** A notification framework line worth printing: the app's, or a failure. */
-const CENTRE_LINE = /CawCo|dev\.cawco\.app|error|fail|invalid|timed? ?out/i;
+const CENTRE_LINE = /CawCo|dev\.cawco\.app|error|fail|invalid|timed? ?out/iu;
 // Inside the checkout it runs from (git-ignored), so whoever reads the run
 // reads the captures beside it.
 const out = join(root, ".probe", `ios-push-actions-${Date.now()}`);
@@ -232,7 +232,7 @@ const appLog: string[] = [];
 let logStream: ReturnType<typeof Bun.spawn> | undefined;
 let logStreamEnded: string | undefined;
 /** What `log stream` prints first: its filter line, or compact style's column heads. */
-const LOG_HEADER = /Filtering the log data|^Timestamp/;
+const LOG_HEADER = /Filtering the log data|^Timestamp/u;
 /** Where the app's log stands now: what was logged after this is `logSince(it)`. */
 const mark = () => appLog.length;
 const logSince = (from: number) => appLog.slice(from).join("\n");
@@ -485,9 +485,9 @@ rm -f "$F"`);
  * from its own process. No such line means the simulator never handed the
  * push to it, which is not the code failing.
  */
-const EXTENSION_RAN = /push \S+ (?:opened|not opened):/;
+const EXTENSION_RAN = /push \S+ (?:opened|not opened):/u;
 /** That line whole: what `PushOpening.open` said of a push. */
-const OPENING_LINE = /push \S+ (?:opened|not opened):.*/;
+const OPENING_LINE = /push \S+ (?:opened|not opened):.*/u;
 /**
  * Why no such line comes on a simulator: Apple's word that a `simctl push`
  * never reaches the extension, never lifted in a later Xcode.
@@ -504,8 +504,8 @@ interface Listed {
   title: string;
 }
 const LISTED =
-  /probe listed (\S+) category=(\S*) actions=\[([^\]]*)\] kind=(\S*) request=(\S*) title=(.*?) body=/g;
-const LISTED_DONE = /probe listed done:/;
+  /probe listed (\S+) category=(\S*) actions=\[([^\]]*)\] kind=(\S*) request=(\S*) title=(.*?) body=/gu;
+const LISTED_DONE = /probe listed done:/u;
 /**
  * Launches the app with `args`, a hook that ends by listing what the
  * notification centre shows; its log from the launch, and that list.
@@ -538,7 +538,8 @@ const openInApp = async (id: string) => {
   const { log, shows } = await listedAfter(`-push-probe-open ${id}`);
   return {
     verdict:
-      log.match(new RegExp(`probe opened ${id}: (.*)`))?.[1] ?? "no verdict",
+      log.match(new RegExp(`probe opened ${id}: (.*)`, "u"))?.[1] ??
+      "no verdict",
     line: log.match(OPENING_LINE)?.[0],
     shows,
   };
@@ -554,7 +555,7 @@ const act = async (id: string, action: string, text?: string) => {
   );
   const ran = await awaitLine(
     from,
-    new RegExp(`probe acted ${id} ${action}: handled`),
+    new RegExp(`probe acted ${id} ${action}: handled`, "u"),
     60_000
   );
   const done = await awaitLine(from, AFTER_DONE, 30_000);
@@ -566,8 +567,8 @@ const act = async (id: string, action: string, text?: string) => {
   return { ...ran, after };
 };
 const AFTER =
-  /probe after (\S+) category=(\S*) actions=\[[^\]]*\] kind=\S* request=\S* title=.*? body=(.*)/g;
-const AFTER_DONE = /probe after done:/;
+  /probe after (\S+) category=(\S*) actions=\[[^\]]*\] kind=\S* request=\S* title=.*? body=(.*)/gu;
+const AFTER_DONE = /probe after done:/u;
 
 const pendingHas = async (requestId: string) =>
   JSON.stringify(await fleet.api<unknown[]>("/api/pending")).includes(
@@ -759,11 +760,11 @@ try {
   // Maestro's first flow on a fresh simulator installs and starts its runner first.
   const started = await awaitLine(
     registerFrom,
-    /probe register: started.*/,
+    /probe register: started.*/u,
     240_000,
     flowFailed
   );
-  const front = started.log.match(/probe register: in front .*/)?.[0];
+  const front = started.log.match(/probe register: in front .*/u)?.[0];
   check(
     "the app's register hook runs",
     started.match !== null,
@@ -775,7 +776,7 @@ try {
   const asking = started.match
     ? await awaitLine(
         registerFrom,
-        /probe register: asking for notifications(.*)/,
+        /probe register: asking for notifications(.*)/u,
         60_000
       )
     : started;
@@ -792,13 +793,13 @@ try {
   const authorized = started.match
     ? await awaitLine(
         registerFrom,
-        /probe authorization: (.*)/,
+        /probe authorization: (.*)/u,
         75_000,
         flowFailed
       )
     : started;
   const unanswered = authorized.log.match(
-    /probe register: no answer 45 s after asking.*/
+    /probe register: no answer 45 s after asking.*/u
   )?.[0];
   const allowed = authorized.match?.[1]?.trim() === "allowed";
   // The flow ends once Allow is tapped and gone, or when a step fails.
@@ -807,7 +808,7 @@ try {
     // What Maestro read there: whether the prompt's buttons were in its tree.
     const tree = await hierarchy();
     const labels = [
-      ...tree.matchAll(/"(?:accessibilityText|text|title)"\s*:\s*"([^"]+)"/g),
+      ...tree.matchAll(/"(?:accessibilityText|text|title)"\s*:\s*"([^"]+)"/gu),
     ]
       .map((m) => m[1])
       .slice(0, 30);
@@ -847,8 +848,8 @@ try {
     // whose; no thread on it, with the app's own `dev.cawco.notification-centre`
     // queue idle too, is a daemon that never replied. A simulator app is a
     // Mac process, so the Mac's `sample` reads it.
-    const pid = running.trim().split(/\s+/)[0] ?? "";
-    if (/^\d+$/.test(pid)) {
+    const pid = running.trim().split(/\s+/u)[0] ?? "";
+    if (/^\d+$/u.test(pid)) {
       const sampled = await mac(`F=$(mktemp -t cawco-sample)
 /usr/bin/sample ${pid} 2 -mayDie -file "$F" >/dev/null 2>&1 || true
 cat "$F"
@@ -896,10 +897,10 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
   }
   const registered = await awaitLine(
     registerFrom,
-    /probe registered: (.*)/,
+    /probe registered: (.*)/u,
     60_000
   );
-  const token = registered.log.match(/probe token: (\S+)/)?.[1];
+  const token = registered.log.match(/probe token: (\S+)/u)?.[1];
   check(
     "APNs gives the simulator a token",
     token !== undefined,
@@ -957,7 +958,7 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
       check(
         "the extension's opening opens the hub's sealed push with this device's key (run from the app)",
         opening.verdict.startsWith("opened, category CAWCO_QUESTION.") &&
-          /push \S+ opened:/.test(opening.line ?? ""),
+          /push \S+ opened:/u.test(opening.line ?? ""),
         `verdict: ${opening.verdict}; ${opening.line ?? "no opened line"}`
       );
     }
@@ -994,7 +995,7 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
       check(
         `option "${THREE[1]}" answers the question`,
         gone && said,
-        `${ran.match ? "action ran" : "no action line"}; pending cleared ${gone}; transcript has the label ${said}; ${ran.log.match(/answer \S+: \S+/)?.[0] ?? "no answer line"}`
+        `${ran.match ? "action ran" : "no action line"}; pending cleared ${gone}; transcript has the label ${said}; ${ran.log.match(/answer \S+: \S+/u)?.[0] ?? "no answer line"}`
       );
     }
   }
@@ -1164,7 +1165,7 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
     check(
       "Reply arrives as the operator's message",
       arrived,
-      `${ran.match ? "action ran" : "no action line"}; transcript has "${reply}" ${arrived}; ${ran.log.match(/reply to \S+: .*/)?.[0] ?? "no reply line"}`
+      `${ran.match ? "action ran" : "no action line"}; transcript has "${reply}" ${arrived}; ${ran.log.match(/reply to \S+: .*/u)?.[0] ?? "no reply line"}`
     );
   }
 
@@ -1332,7 +1333,7 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
         "a turn that ends with its session in front in the app pushes nothing",
         pushed.length === 0,
         `${pushed.length} turn pushes; the hub's seen_at ${seen?.seen_at ?? "null"} (${seen?.seen_at && seen.seen_at >= sent ? "marked after the send" : "not marked since the send"}); the app's looks: ${
-          [...logSince(lookFrom).matchAll(/seen look \S+: .*/g)]
+          [...logSince(lookFrom).matchAll(/seen look \S+: .*/gu)]
             .map((m) => m[0])
             .join(" / ") || "none"
         }`
@@ -1437,7 +1438,7 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
       check(
         "Deny resolves the ask and the session hears it",
         gone && heard,
-        `${ran.match ? "action ran" : "no action line"}; pending cleared ${gone}; transcript has "User denied permission" ${heard}; ${ran.log.match(/deny \S+: \S+/)?.[0] ?? "no deny line"}`
+        `${ran.match ? "action ran" : "no action line"}; pending cleared ${gone}; transcript has "User denied permission" ${heard}; ${ran.log.match(/deny \S+: \S+/u)?.[0] ?? "no deny line"}`
       );
     }
   }

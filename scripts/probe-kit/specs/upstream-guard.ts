@@ -147,7 +147,7 @@ const FORGE_TOKENS =
   "GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN|GITLAB_TOKEN|OAUTH_TOKEN|CI_JOB_TOKEN|GITEA_TOKEN";
 const TOKEN_VARS = (id: string) =>
   `echo "TOKENVARS-${id}=$(env | grep -cE '^(${FORGE_TOKENS})=')"`;
-const TOKEN_COUNT = (id: string) => new RegExp(`TOKENVARS-${id}=(\\d+)`);
+const TOKEN_COUNT = (id: string) => new RegExp(`TOKENVARS-${id}=(\\d+)`, "u");
 const MUTATION_NO_REPO = `${REAL_GH} api graphql -f 'query=mutation { addComment(input: {subjectId: "X", body: "hi"}) { clientMutationId } }' 2>&1`;
 /** A post to someone else's repository on GitHub, by the real gh through whatever its config names. */
 const ELSEWHERE = `${REAL_GH} api repos/someone/else/issues -f title=t 2>&1`;
@@ -219,17 +219,17 @@ type StepId = (typeof STEPS)[number]["id"];
 const WAITS: readonly StepId[] = ["W", "V", "Y", "Q", "R"];
 const released = new Set<StepId>();
 const marker = (id: StepId) => `STEP-${id}-END`;
-const EXIT = /STEP-([A-Z0-9])-END exit=(\d+)/g;
+const EXIT = /STEP-([A-Z0-9])-END exit=(\d+)/gu;
 /** The transcript as the model last read it, whatever it was answering: the hub's word on an answered post lands after the last step. */
 let seen = "";
 /** Where step `id`'s marker came back, its exit with it. */
 const endOf = (text: string, id: StepId) =>
-  text.search(new RegExp(`STEP-${id}-END exit=\\d`));
+  text.search(new RegExp(`STEP-${id}-END exit=\\d`, "u"));
 /** What each step's output read, once its marker came back. */
 const outputs: Partial<Record<StepId, string>> = {};
 /** What step P's push said, each line marked, and the line that says it landed. */
-const PUSH_LINES = /^PUSH-OUT .*$/gm;
-const PUSHED = /^PUSH-OUT .*\[new branch\]\s+HEAD -> probe-push$/m;
+const PUSH_LINES = /^PUSH-OUT .*$/gmu;
+const PUSHED = /^PUSH-OUT .*\[new branch\]\s+HEAD -> probe-push$/mu;
 
 const respond = (request: Seen): Reply => {
   if (!(request.tools && request.all.includes(TAG))) {
@@ -305,7 +305,7 @@ echo "FAKE-GH-RAN $*"
 `;
 
 /** A forced ref's mark before its commit, on a held push's card. */
-const FORCED = /^\+/;
+const FORCED = /^\+/u;
 /** The other host's repository, under the http-backend's root. */
 const ELSE_REPO = "someone/else.git";
 
@@ -365,7 +365,7 @@ const readChoiceRow = (selector: string) => {
         words += run.textContent ?? "";
       }
     }
-    return words.replace(/\s+/g, " ").trim();
+    return words.replace(/\s+/gu, " ").trim();
   };
   const row = document.querySelector(selector);
   if (!row) {
@@ -1022,7 +1022,7 @@ const run = async (kit: Kit) => {
   const heldRows = await pages.desk.evaluate((selector) => {
     const line = (row: Element, slot: string) =>
       (row.querySelector(`[data-slot="${slot}"]`)?.textContent ?? "")
-        .replace(/\s+/g, " ")
+        .replace(/\s+/gu, " ")
         .trim();
     return [...document.querySelectorAll(selector)].map((row) => ({
       name: line(row, "name"),
@@ -1055,7 +1055,7 @@ const run = async (kit: Kit) => {
     await row.first().waitFor({ timeout: 30_000 });
     await row
       .first()
-      .getByRole("button", { name: new RegExp(`^${name} `) })
+      .getByRole("button", { name: new RegExp(`^${name} `, "u") })
       .evaluate((button) => button.setAttribute("data-probe-pick", ""));
     await press(page, view, "[data-probe-pick]");
     await settle(page, 300);

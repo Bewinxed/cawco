@@ -29,9 +29,9 @@ interface GithubRelease {
   tag_name: string;
 }
 
-const NIGHTLY_VERSION = /-nightly\.(\d+)\+([0-9a-f]+)$/;
-const NIGHTLY_TAG = /^nightly-(\d+)-[0-9a-f]+$/;
-const TRAILING_SLASH = /\/$/;
+const NIGHTLY_VERSION = /-nightly\.(\d+)\+([0-9a-f]+)$/u;
+const NIGHTLY_TAG = /^nightly-(\d+)-[0-9a-f]+$/u;
+const TRAILING_SLASH = /\/$/u;
 
 export const RELEASE_REPOSITORY = "Bewinxed/cawco";
 export const NIGHTLY_TAG_PREFIX = "nightly-";

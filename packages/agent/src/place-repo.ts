@@ -102,8 +102,8 @@ const MB = 1024 * 1024;
 const mb = (bytes: number): string => `${(bytes / MB).toFixed(1)} MB`;
 
 /** What a `.gitignore` pattern reads as a glob or a comment, escaped to name a path exactly. */
-const IGNORE_SPECIAL = /[\\*?[\]!#]/g;
-const TRAILING_SPACE = / $/;
+const IGNORE_SPECIAL = /[\\*?[\]!#]/gu;
+const TRAILING_SPACE = / $/u;
 
 /** How many of a place's heaviest folders a refusal names. */
 const HEAVIEST = 3;

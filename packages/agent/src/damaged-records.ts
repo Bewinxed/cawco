@@ -172,9 +172,9 @@ const withoutTemporaries = async (dir: string): Promise<string[]> => {
 
 /** A workspace's records: what it was cut as, its cut under way, its boundary, its accounts, its policy, each older boundary still recorded, and a place's folder. */
 const WORKSPACE_RECORD =
-  /^(create|cut|boundary|accounts|policy|place|retiring-[^/]+)\.json$/;
+  /^(create|cut|boundary|accounts|policy|place|retiring-[^/]+)\.json$/u;
 /** A workspace's text records: the gate an executor waits at. */
-const WORKSPACE_TEXT = /^gate$/;
+const WORKSPACE_TEXT = /^gate$/u;
 
 /**
  * Reads every record this agent keeps once, as it starts, and reports each

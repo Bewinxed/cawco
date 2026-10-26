@@ -11,7 +11,7 @@ import { isTag, readerFor, sitesOf, tagSites } from "./classes.mjs";
 import { eachNode, parentOf } from "./model.mjs";
 import { ds } from "./tailwind.mjs";
 
-const NOT_RELATION = /^(group|peer)-not-.*?(?:\/([\w-]+))?$/;
+const NOT_RELATION = /^(group|peer)-not-.*?(?:\/([\w-]+))?$/u;
 const MAX_HOPS = 8;
 
 const relations = new Map();

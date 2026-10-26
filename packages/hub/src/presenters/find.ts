@@ -7,14 +7,14 @@
 import { ago, count, handle, lines, quote } from "./words";
 
 /** A task hit's id, `<project>:tsk-1`. */
-const TASK_HIT = /:(tsk-\d+)$/;
+const TASK_HIT = /:(tsk-\d+)$/u;
 /** A whole id. */
-const WHOLE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/;
+const WHOLE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/u;
 /** A whole id in brackets, as find's `where` names a project or session. */
-const BRACKETED_ID = /\(([0-9a-f]{8})-[0-9a-f-]{27}\)/g;
+const BRACKETED_ID = /\(([0-9a-f]{8})-[0-9a-f-]{27}\)/gu;
 /** A whole id anywhere in words find quotes (a delivery header's `id=<uuid>` in a conversation's line). */
 const ID_IN_WORDS =
-  /\b([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+  /\b([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu;
 
 /** A hit's id as its tools take it back: a full id's handle; a task's (`<project>:tsk-1`) its task id. */
 const idWords = (id: string): string => {

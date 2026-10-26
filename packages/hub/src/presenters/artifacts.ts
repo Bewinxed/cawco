@@ -652,7 +652,7 @@ const threadLines = (thread: ThreadEntry[], now: number): string[] =>
   });
 
 /** A whole id in a line of words. */
-const WHOLE_ID = /[0-9a-f]{8}-[0-9a-f-]{27}/;
+const WHOLE_ID = /[0-9a-f]{8}-[0-9a-f-]{27}/u;
 
 /** Whether a pin is open or resolved, in words. */
 const pinState = (pin: Pin, now: number): string => {

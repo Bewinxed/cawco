@@ -380,7 +380,7 @@
   );
 
   /** The hub's word for a key or login the provider turned away. */
-  const KEY_REFUSED = /^HTTP 40[13]\b/;
+  const KEY_REFUSED = /^HTTP 40[13]\b/u;
 
   /**
    * What the list says of a provider with nothing to draw: no machine is

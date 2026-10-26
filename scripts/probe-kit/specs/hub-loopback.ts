@@ -36,11 +36,11 @@ import { type Reply, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { freePort, publishBuild, serveUnder } from "../socket-served";
 
-const SPACES = /\s+/;
-const NOT_WORD = /\W/g;
-const LISTEN_STREAM = /^ListenStream=(.+)$/gm;
-const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/g;
-const SOCKET_KEY = /<key>(dashboard[a-z-]*)<\/key>\s*<array>/g;
+const SPACES = /\s+/u;
+const NOT_WORD = /\W/gu;
+const LISTEN_STREAM = /^ListenStream=(.+)$/gmu;
+const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/gu;
+const SOCKET_KEY = /<key>(dashboard[a-z-]*)<\/key>\s*<array>/gu;
 /** Another origin, for the `/ws` gate to refuse. */
 const FOREIGN = "http://localhost:9";
 

@@ -453,9 +453,9 @@ export class MachinePaused extends WorkItemRefusal {
 /** Globs one work item may own, and how long one may run. */
 const OWNS_LIMIT = 50;
 const GLOB_LIMIT = 200;
-const GLOB_WILD = /[*?[{]/;
-const LEADING_DOT_SLASH = /^(\.\/)+/;
-const TRAILING_SLASH = /\/+$/;
+const GLOB_WILD = /[*?[{]/u;
+const LEADING_DOT_SLASH = /^(\.\/)+/u;
+const TRAILING_SLASH = /\/+$/u;
 
 /** A glob as ownership compares it: no leading `./`, no trailing `/`. */
 const globOf = (raw: string): string =>
@@ -672,7 +672,7 @@ const NO_INPUTS: Inputs = {
 };
 
 /** A sentence's closing stops and space, which an inputs refusal ends once. */
-const CLOSED = /[.\s]+$/;
+const CLOSED = /[.\s]+$/u;
 
 /** A refusal of a delegation's inputs, in `words` closed by one full stop. */
 const inputsRefused = (words: string, options?: ErrorOptions) =>
@@ -1125,10 +1125,10 @@ export interface WorkItemDeps {
 }
 
 /** A plan step that stands for one of its task's to-dos: its `id` is that to-do's, `td-3`. */
-const PLAN_TODO = /^td-\d{1,6}$/;
+const PLAN_TODO = /^td-\d{1,6}$/u;
 /** Plan items one attempt may leave behind as proposed to-dos. */
 const PROPOSALS_LIMIT = 20;
-const RUNS_OF_SPACE = /\s+/g;
+const RUNS_OF_SPACE = /\s+/gu;
 /** A plan item's or to-do's words as they are matched: spaces folded, lowercase. */
 const planWords = (text: string): string =>
   text.replace(RUNS_OF_SPACE, " ").trim().toLowerCase();
@@ -1444,13 +1444,13 @@ const QUIET_TURNS = 3;
 const QUIET_ERROR = "ended three turns in a row without finish_item";
 
 /** Runs of whitespace between the counts a git read prints. */
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 
 /** A full commit id, as a machine names one: never an option or a ref. */
-const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
 
 /** A CawCo read by its name, the harness's prefix off: `list_*`, `*_list`, `*_read`. */
-const CAWCO_READ = /^list_|_list$|_read$/;
+const CAWCO_READ = /^list_|_list$|_read$/u;
 /** The CawCo tools that say themselves what becomes of a wait. */
 const WAIT_TOOLS: ReadonlySet<string> = new Set(["wait_item", "finish_item"]);
 
@@ -1866,7 +1866,7 @@ const passKey = (
 };
 
 /** A git tree's name, as `git rev-parse <commit>^{tree}` prints it. */
-const TREE_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+const TREE_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
 
 /**
  * Why `step` need not run where `passed` passed (all kept under its
@@ -9281,7 +9281,7 @@ export const createWorkItems = ({
           `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "its merge checks run" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
         );
       }
-      const waitReason = reason.trim().replace(/\s+/g, " ");
+      const waitReason = reason.trim().replace(/\s+/gu, " ");
       const waiting = declareWait(item, minutes, waitReason);
       const clock = waitClock(waiting.waitUntil as Date);
       const line = `${item.title} is waiting until ${clock}: ${waitReason}`;

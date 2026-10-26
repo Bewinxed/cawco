@@ -131,8 +131,8 @@ const WHO: Record<MomentAuthor, string> = {
   injected: "handed in",
 };
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-const SPACES = /\s+/g;
+const DAY = /^\d{4}-\d{2}-\d{2}$/u;
+const SPACES = /\s+/gu;
 /** A moment's ref: its hit's id, then the record it is. */
 const REF_MARK = "#";
 /** Then, after this, when it was said: seconds since the epoch, base 36, where its machine's index seeks it. */

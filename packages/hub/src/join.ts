@@ -100,7 +100,7 @@ const output = async (
   }
 };
 
-const TRAILING_DOT = /\.$/;
+const TRAILING_DOT = /\.$/u;
 
 /**
  * Every address a machine could reach this hub on: Tailscale first, because a
@@ -182,7 +182,7 @@ export const sshPublicKey = (): string | null => {
  * A `Host` header that can be pasted into the script as-is: a name or an
  * address and a port. Anything else is refused before a script is written.
  */
-const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/;
+const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/u;
 
 /**
  * The hub and the public site render the same installer body. Every way a
@@ -223,7 +223,7 @@ exit 1
  * A target `ssh` reads as a destination and nothing else: no leading dash (an
  * option), no whitespace (a second argument once a shell splits it).
  */
-export const TARGET = /^[^-\s][^\s]*$/;
+export const TARGET = /^[^-\s][^\s]*$/u;
 
 /**
  * A line of the report Bun prints for an error a build left uncaught: its
@@ -233,13 +233,13 @@ export const TARGET = /^[^-\s][^\s]*$/;
  * reads a build's source.
  */
 export const STACK_LINE =
-  /^(?:\d+ \| |\s*\^+\s*$|\s+at \S.*:\d+:\d+\)?$|Bun v\d+\.\d+\.\d+ \()/;
+  /^(?:\d+ \| |\s*\^+\s*$|\s+at \S.*:\d+:\d+\)?$|Bun v\d+\.\d+\.\d+ \()/u;
 
 /** What starts the line an add's failure says the hub's own words on. */
 export const HUB_SAID = "this hub: ";
 
 /** A password `ssh` could not be handed on askpass's one line. */
-export const LINE_BREAK = /[\r\n]/;
+export const LINE_BREAK = /[\r\n]/u;
 
 /**
  * The askpass program a password add runs `ssh` with. `ssh` runs it once
@@ -274,8 +274,8 @@ const askpass = (): string => {
  * quotes: no quote, `$`, backtick, backslash or `!` for any login shell
  * (sh, bash, zsh, fish, csh) to read.
  */
-const PUBLIC_KEY = /^(\S+ [A-Za-z0-9+/]+=*)(?: (.*))?$/;
-const PLAIN_COMMENT = /^[\w@.:,+=/ -]*$/;
+const PUBLIC_KEY = /^(\S+ [A-Za-z0-9+/]+=*)(?: (.*))?$/u;
+const PLAIN_COMMENT = /^[\w@.:,+=/ -]*$/u;
 
 /**
  * The environment a password add's `ssh` runs with: {@link ASKPASS} answers
@@ -609,7 +609,7 @@ const knownKeysOf = (said: string): Set<string> | null => {
   return keys;
 };
 
-const WHITESPACE = /\s+/;
+const WHITESPACE = /\s+/u;
 
 /**
  * `ssh-keyscan -t`'s name for a key type as known-hosts lines write it, in

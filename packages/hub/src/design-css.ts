@@ -17,16 +17,16 @@
 import Color from "colorjs.io";
 
 const REM = 16;
-const WHITESPACE = /\s/;
-const CALL = /^([a-z-]+)\((.*)\)$/s;
-const ARITH_TOKENS = /\d*\.?\d+(?:e[+-]?\d+)?[a-z%]*|[a-z]+|[-+*/()]/gi;
-const NUMBER = /^(\d*\.?\d+(?:e[+-]?\d+)?)([a-z%]*)$/i;
-const NAME = /^[a-z]+$/i;
-const REF = /^\{([^}]+)\}$/;
-const VIEWPORT_TERM = /^(-?\d*\.?\d+)(?:vi|vw)$/;
-const REFS = /\{([^}]+)\}/g;
-const MIX_SPACE = /^in\s+([a-z0-9-]+)$/;
-const MINUS_TERM = /\s*-\s*/g;
+const WHITESPACE = /\s/u;
+const CALL = /^([a-z-]+)\((.*)\)$/su;
+const ARITH_TOKENS = /\d*\.?\d+(?:e[+-]?\d+)?[a-z%]*|[a-z]+|[-+*/()]/giu;
+const NUMBER = /^(\d*\.?\d+(?:e[+-]?\d+)?)([a-z%]*)$/iu;
+const NAME = /^[a-z]+$/iu;
+const REF = /^\{([^}]+)\}$/u;
+const VIEWPORT_TERM = /^(-?\d*\.?\d+)(?:vi|vw)$/u;
+const REFS = /\{([^}]+)\}/gu;
+const MIX_SPACE = /^in\s+([a-z0-9-]+)$/u;
+const MINUS_TERM = /\s*-\s*/gu;
 /**
  * The direction a DTCG gradient's evenly spaced stops are read in, CSS's own
  * default. A gradient's CSS may say it first; any other direction has no

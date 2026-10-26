@@ -50,11 +50,11 @@ export default { component: Probe, args: {} };
 
 export const Says = { args: {}, parameters: { viewport: 400 } };
 `;
-const KEYED = /^\/@cawco\/m\/([^/]+)\//;
+const KEYED = /^\/@cawco\/m\/([^/]+)\//u;
 const KEPT = "private, max-age=31536000, immutable";
 /** A round trip through the hub's preview proxy, as the trace read it. */
 const LATENCY_MS = 350;
-const PRELOAD = /<link rel="modulepreload" href="[^"]*">/g;
+const PRELOAD = /<link rel="modulepreload" href="[^"]*">/gu;
 
 /** A port nothing holds now. */
 const freePort = async (): Promise<number> => {

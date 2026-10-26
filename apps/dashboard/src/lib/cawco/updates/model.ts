@@ -28,9 +28,9 @@ export interface UpdateMachine {
 export const isOnline = (machine: { status: string }): boolean =>
   machine.status === "online";
 
-const NIGHTLY_SUFFIX = /-nightly\.(\d+)$/;
-const LIST_MARK = /^(?:[-*+]|\d+\.)\s+/;
-const HEADING = /^#{1,6}\s+(.+?)\s*#*$/;
+const NIGHTLY_SUFFIX = /-nightly\.(\d+)$/u;
+const LIST_MARK = /^(?:[-*+]|\d+\.)\s+/u;
+const HEADING = /^#{1,6}\s+(.+?)\s*#*$/u;
 
 /** A version as people read it: no build suffix, and a nightly as `nightly 412`. */
 export function displayVersion(version: string): string {

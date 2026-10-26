@@ -143,21 +143,21 @@ const requestWithin = async (
   }
 };
 
-const TAG = /PROBE-RETIRE-([LKMQOPBHGS])/;
+const TAG = /PROBE-RETIRE-([LKMQOPBHGS])/u;
 /** A size in words (core `sizeWords`), alone and as the 409 places it before the clone's path. */
-const SIZE = /^\d+(\.\d)? (GB|MB|KB)$/;
-const SIZE_AT = /\(\d+(\.\d)? (GB|MB|KB) at /;
+const SIZE = /^\d+(\.\d)? (GB|MB|KB)$/u;
+const SIZE_AT = /\(\d+(\.\d)? (GB|MB|KB) at /u;
 const FINISH = "mcp__cawco__finish_item";
 /** The parent's handoff to M once its workspace retired. */
 const RECUT = "PROBE-RECUT-M";
 /** What M's shell prints in the clone cut again: its folder, its landed file, and a mark the command's own text never holds. */
-const RECUT_PWD = /RECUT-PWD=([^\s\\"]+)/;
-const RECUT_FILE = /RECUT-FILE:([^\n\\"]*)/;
+const RECUT_PWD = /RECUT-PWD=([^\s\\"]+)/u;
+const RECUT_FILE = /RECUT-FILE:([^\n\\"]*)/u;
 const RECUT_RAN = "RECUT-42";
 /** Stand-ins for the commit (9 characters, as the line cuts it) and the branch in {@link RECUT_LINE}'s template. */
 const AT_COMMIT = "COMMIT___";
 const ON_BRANCH = "BRANCH___";
-const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
+const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/gu;
 /**
  * The hub's line that a folder is a clone cut again, with the commit and
  * branch it names: core injected.ts `movedLine` itself, its words never
@@ -168,24 +168,26 @@ const RECUT_LINE = new RegExp(
   movedLine({ kind: "recut", commit: AT_COMMIT, branch: ON_BRANCH })
     .replaceAll(REGEX_SPECIAL, "\\$&")
     .replace(AT_COMMIT, "([0-9a-f]{9})")
-    .replace(ON_BRANCH, "([^\\s:]+?)")
+    .replace(ON_BRANCH, "([^\\s:]+?)"),
+  "u"
 );
 /** The parent's handoff to Q once its stopped landing's workspace retired, and what Q's shell prints there. */
 const RECUT_Q = "PROBE-RECUT-Q";
-const Q_PWD = /Q-PWD=([^\s\\"]+)/;
-const Q_HEAD = /Q-HEAD=([0-9a-f]{40})/;
-const Q_FILE = /Q-FILE:([^\n\\"]*)/;
+const Q_PWD = /Q-PWD=([^\s\\"]+)/u;
+const Q_HEAD = /Q-HEAD=([0-9a-f]{40})/u;
+const Q_FILE = /Q-FILE:([^\n\\"]*)/u;
 const Q_RAN = "Q-RECUT-42";
 /** The branch of origin Q pushes its commit to, and the gate its commit carries: it sleeps, then passes, so only the stop keeps it off main. */
 const Q_KEEP = "probe-keep-Q";
 const Q_GATE = '{"scripts":{"typecheck":"sleep 30"}}';
-const Q_ON_MAIN = /Q-ON-MAIN=(yes|no)/;
+const Q_ON_MAIN = /Q-ON-MAIN=(yes|no)/u;
 /** What finish_item answers an item that landed and is done. */
 const ITEM_DONE = "The item is done";
 /** A free-space threshold no disk meets. */
 const UNREACHABLE_GB = "100000";
 const REFUSAL = new RegExp(
-  `did not start: \\S+ has [0-9.]+ GB free, under the ${UNREACHABLE_GB} GB .*; the biggest folders under CawCo's workspace roots here are .+\\.$`
+  `did not start: \\S+ has [0-9.]+ GB free, under the ${UNREACHABLE_GB} GB .*; the biggest folders under CawCo's workspace roots here are .+\\.$`,
+  "u"
 );
 /** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;

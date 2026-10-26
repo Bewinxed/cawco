@@ -221,7 +221,7 @@ export const DECIDED_FIELD = "decided";
 export const decidedRef = (page: string, card: string): string =>
   `${page}#${card}`;
 
-const DECIDED = /^([a-z0-9][a-z0-9-]{0,62})#(.+)$/;
+const DECIDED = /^([a-z0-9][a-z0-9-]{0,62})#(.+)$/u;
 
 /** A task's `decided` field read back; null when it names no card. */
 export const decidedOf = (
@@ -251,8 +251,8 @@ export interface ProgramRead {
   title: string;
 }
 
-const SLUG = /[^a-z0-9]+/g;
-const SLUG_ENDS = /^-+|-+$/g;
+const SLUG = /[^a-z0-9]+/gu;
+const SLUG_ENDS = /^-+|-+$/gu;
 
 const isElement = (value: unknown): value is ElementNode =>
   typeof value === "object" &&
@@ -390,9 +390,9 @@ const labelOf = (card: RecordCard, id: string): string =>
   card.options.find((option) => option.id === id)?.label ?? id;
 
 /** One period at a line's end, which a list in `log.md` drops where it joins it to the next. */
-const LAST_PERIOD = /\.$/;
+const LAST_PERIOD = /\.$/u;
 /** A sentence's own ending: one when it has none. */
-const ENDED = /[.!?…]$/;
+const ENDED = /[.!?…]$/u;
 const sentence = (said: string): string =>
   ENDED.test(said) ? said : `${said}.`;
 

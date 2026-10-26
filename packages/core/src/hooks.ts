@@ -325,8 +325,8 @@ export type HookMatcherKind = "all" | "exact" | "regex";
  * meaning "a literal dot" has written a regular expression and needs to be
  * told so before they save.
  */
-const PLAIN_MATCHER_NARROW = /^[A-Za-z0-9_|]+$/;
-const PLAIN_MATCHER_WIDE = /^[A-Za-z0-9_\-, |]+$/;
+const PLAIN_MATCHER_NARROW = /^[A-Za-z0-9_|]+$/u;
+const PLAIN_MATCHER_WIDE = /^[A-Za-z0-9_\-, |]+$/u;
 
 export function hookMatcherKind(
   matcher: string | undefined,
@@ -347,8 +347,8 @@ export function hookMatcherKind(
  * Whether `value` matches, by the same branch Claude Code takes. The editor's
  * test box calls this so what it shows is what the fleet will do.
  */
-const SEPARATOR_NARROW = /\|/;
-const SEPARATOR_WIDE = /[|,]/;
+const SEPARATOR_NARROW = /\|/u;
+const SEPARATOR_WIDE = /[|,]/u;
 
 /**
  * A matcher as a test with no rule left to apply: every value, one of a list
@@ -392,6 +392,7 @@ export function hookTestPasses(test: HookMatchTest, value: string): boolean {
   try {
     // Unanchored, exactly as Claude Code tests it — `Edit.*` really does match
     // `NotebookEdit`, and the test box has to reproduce that, not correct it.
+    // biome-ignore lint/style/useUnicodeRegex: Claude Code compiles the owner's matcher without a flag; u would reject patterns it runs.
     return new RegExp(test.regex).test(value);
   } catch {
     return false;
@@ -791,9 +792,9 @@ export interface FleetHook extends FleetPlacement {
 /** A hook as the editor holds it, before the hub assigns identity and hash. */
 export type HookDraft = Omit<FleetHook, "id" | "hash">;
 
-const NAME_SHAPE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
-const INVALID_REGEX_PREFIX = /^Invalid regular expression:\s*/;
-const SENTENCE_SEPARATOR = /[|,]/;
+const NAME_SHAPE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/u;
+const INVALID_REGEX_PREFIX = /^Invalid regular expression:\s*/u;
+const SENTENCE_SEPARATOR = /[|,]/u;
 
 /**
  * Everything wrong with a draft, as whole sentences the form prints under the
@@ -826,6 +827,7 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
   if (matcher !== "" && hookMatcherKind(matcher, draft.event) === "regex") {
     try {
       // biome-ignore lint/correctness/noUnusedInstantiation: constructed only to let an invalid pattern throw here, before it is ever stored — the instance itself is unused by design.
+      // biome-ignore lint/style/useUnicodeRegex: compiled as Claude Code compiles a matcher, without a flag.
       new RegExp(matcher);
     } catch (error) {
       wrong.matcher = `That is not a valid regular expression — ${

@@ -369,7 +369,7 @@ const tapNode = async (node: Node | undefined) => {
 };
 
 /** A log line's stamp, process and category, up to what it says. */
-const LOG_PREFIX = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
+const LOG_PREFIX = /^.*?\[dev\.cawco\.app:[^\]]*\] /u;
 /** Every line the app logged that this probe reads, with when it heard it. */
 const heard: { at: number; line: string }[] = [];
 let stream: Subprocess | undefined;
@@ -409,7 +409,7 @@ const listen = () => {
 };
 
 /** The reader's message's place in a `probe sends` line, by the first 8 of its id. */
-const SEND = /(\w{8})=(\w+)(?::(\S+?)x(\d+))?(?=\s|$)/g;
+const SEND = /(\w{8})=(\w+)(?::(\S+?)x(\d+))?(?=\s|$)/gu;
 interface Place {
   place: string;
   rows: number;
@@ -579,8 +579,8 @@ const listingText = async (): Promise<string> =>
     .textContent({ timeout: 2000 })
     .catch(() => "")) ?? "";
 
-const STEP = /step (\d+)\./g;
-const LAST_STEP = /step (\d+)\.\s*$/;
+const STEP = /step (\d+)\./gu;
+const LAST_STEP = /step (\d+)\.\s*$/u;
 
 /**
  * Whether the web reply, as drawn, reads step 1 onward, one at a time, none
@@ -605,7 +605,7 @@ const webStepsInOrder = async (label: string) => {
 
 /** The app's `probe reply` line: its newest assistant row and its live tail, each as length, head and end. */
 const REPLY =
-  /probe reply \w+: row (\d+) "(.*?)…(.*?)" stream (\d+) "(.*?)…(.*?)"$/;
+  /probe reply \w+: row (\d+) "(.*?)…(.*?)" stream (\d+) "(.*?)…(.*?)"$/u;
 
 /** How long `step 1. step 2. … step N. ` is: "step " and ". " around each number. */
 const stepsLength = (last: number): number => {
@@ -677,8 +677,8 @@ const webRejoined = (label: string, since: number) => {
 };
 
 /** The `seq` a `page adopted` line read at, and the `afterSeq` of a `stream: subscribe` line. */
-const PAGE_SEQ = /at seq (-?[\d.]+)/;
-const SUBSCRIBE_AFTER = / after (-?[\d.]+)/;
+const PAGE_SEQ = /at seq (-?[\d.]+)/u;
+const SUBSCRIBE_AFTER = / after (-?[\d.]+)/u;
 
 /**
  * The app's new connection since `from` (an index into `heard`) subscribed
@@ -913,7 +913,7 @@ try {
             ...document.querySelectorAll(
               '[data-slot="layer"][data-behind], [data-sonner-toast]'
             ),
-          ].map((node) => node.textContent?.trim().replace(/\s+/g, " ") ?? "")
+          ].map((node) => node.textContent?.trim().replace(/\s+/gu, " ") ?? "")
         )
         .catch(() => [])) ?? [];
     for (const text of said) {
@@ -1037,7 +1037,7 @@ try {
     check(
       "(b) web: the reconnecting state is shown",
       lost?.includes("Hub connection lost") === true,
-      lost?.trim().replace(/\s+/g, " ") ?? "no banner"
+      lost?.trim().replace(/\s+/gu, " ") ?? "no banner"
     );
   } finally {
     fleet.freeze("hub", false);

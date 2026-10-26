@@ -249,7 +249,7 @@ const DEFINED = ":is(:defined, [data-cawco-defined])";
 const DEFINED_MARK = "data-cawco-defined";
 
 /** A `prefers-color-scheme` feature in a media query. */
-const PREFERS = /\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)/gi;
+const PREFERS = /\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)/giu;
 /** Media features that always hold, and never do (range syntax: a width is never negative). */
 const ALWAYS = "(width >= 0px)";
 const NEVER = "(width < 0px)";

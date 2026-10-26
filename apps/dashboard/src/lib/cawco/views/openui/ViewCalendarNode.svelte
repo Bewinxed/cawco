@@ -9,7 +9,7 @@
   }: OpenUIRenderProps<{ rows: unknown; date: unknown; range?: unknown }> =
     $props();
   const view = viewContext();
-  const field = $derived(String(props.date ?? "").replace(/^dates\./, ""));
+  const field = $derived(String(props.date ?? "").replace(/^dates\./u, ""));
 </script>
 
 <ViewCalendar

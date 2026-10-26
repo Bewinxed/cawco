@@ -119,7 +119,7 @@ if (!args.includes("--built")) {
   const text = await sh(
     "bash apps/apple/scripts/build-both.sh ios --compile-only"
   );
-  check("compile", /^BUILT iOS 18\.5$/m.test(text), "BUILT iOS 18.5");
+  check("compile", /^BUILT iOS 18\.5$/mu.test(text), "BUILT iOS 18.5");
 }
 
 // ── The fleet: three sessions mid-turn for the whole run, one asking ─────
@@ -175,9 +175,9 @@ interface Sample {
 }
 
 const LINE =
-  /tabs (\S+) t=(\S+) f=(\S+) front=(\S+) toward=(\S+) seams=\S* scroll=(\S+) \|\| (.*)$/;
+  /tabs (\S+) t=(\S+) f=(\S+) front=(\S+) toward=(\S+) seams=\S* scroll=(\S+) \|\| (.*)$/u;
 const TAB =
-  /^(\S+) pick=(\S+) sheet=(\S+)\/(\S+) tint=\S+ rim=(\S+) chev=(\S+) moved=(\d) tx=(.+?) keys=(\S+) fill=(\S+) under=\S+ top=(\S+) lead=(\S+) trail=(\S+) sides=([\d.]+),([\d.]+)/;
+  /^(\S+) pick=(\S+) sheet=(\S+)\/(\S+) tint=\S+ rim=(\S+) chev=(\S+) moved=(\d) tx=(.+?) keys=(\S+) fill=(\S+) under=\S+ top=(\S+) lead=(\S+) trail=(\S+) sides=([\d.]+),([\d.]+)/u;
 function parse(log: string): Sample[] {
   return log.split("\n").flatMap((line) => {
     const m = LINE.exec(line);
@@ -497,19 +497,19 @@ interface Rim {
 }
 /** A tab whole in view at a held stop (one out of view logs no measures). */
 const RIM =
-  /tabs rim (\S+) (\S+) tone=(\S+) pick=(\S+) strength=(\S+) px=(-?\d+) mid=(\S+) taper=(\S+) length=(\S+) shoulder=(\S+)/;
+  /tabs rim (\S+) (\S+) tone=(\S+) pick=(\S+) strength=(\S+) px=(-?\d+) mid=(\S+) taper=(\S+) length=(\S+) shoulder=(\S+)/u;
 const SEAM =
-  /tabs seam (\S+) (\S+) front=(\S+) strength=(\S+) strokes=(\d+) runs=(\S+)/;
+  /tabs seam (\S+) (\S+) front=(\S+) strength=(\S+) strokes=(\d+) runs=(\S+)/u;
 /**
  * The phone's row: a tucked side's square shoulder against the front's round
  * one, how far down its side shows before it runs under the front card.
  */
 const CORNER =
-  /tabs corner (\S+) (\S+) front=(\S+) inside=(\S+) radius=(\S+) shows=(\S+)/;
+  /tabs corner (\S+) (\S+) front=(\S+) inside=(\S+) radius=(\S+) shows=(\S+)/u;
 /** At rest the tucked corner meets the front's arc within a point of the top. */
 const CORNER_SHOWS = 1.5;
 /** A held stop at rest: before the switch moves anything, and once it has landed. */
-const REST_STOP = /-(t0|t100)$/;
+const REST_STOP = /-(t0|t100)$/u;
 
 /**
  * The rims as each held stop drew them (PaneTabsView `probeRims`): at
@@ -676,7 +676,7 @@ type Foot =
   | { kind: "under"; path: boolean; px: number }
   | { kind: "out" };
 const FEET =
-  /tabs feet (\S+) (\S+) sheet=(\S+) glide=([\d.]+),([\d.]+) lead=(\S+) trail=(\S+)/;
+  /tabs feet (\S+) (\S+) sheet=(\S+) glide=([\d.]+),([\d.]+) lead=(\S+) trail=(\S+)/u;
 /** How far a foot's ink may stand off 1 - its seam's glide at any held stop. */
 const FOOT_TOLERANCE = 0.03;
 /**
@@ -776,7 +776,7 @@ interface GeomSide {
   under: boolean;
 }
 const GEOM =
-  /tabs geom (\S+) (\d+) (\S+) chosen=(\d) flush=(\d) lead=(\S+) trail=(\S+) card=([-\d.]+),([-\d.]+) sheet=([-\d.]+),([-\d.]+)/;
+  /tabs geom (\S+) (\d+) (\S+) chosen=(\d) flush=(\d) lead=(\S+) trail=(\S+) card=([-\d.]+),([-\d.]+) sheet=([-\d.]+),([-\d.]+)/u;
 function parseSide(text: string): GeomSide {
   const [u, foot, ...rest] = text.split(":");
   const field = (name: string) =>
@@ -827,7 +827,7 @@ const sameFoot = (a: number[] | null, b: number[] | null) =>
  * side, under its neighbour, draws no foot, its card square there.
  */
 type Geom = ReturnType<typeof parseGeom>[number];
-const REST_FIRST_CHOSEN = /^rest\d+-0$/;
+const REST_FIRST_CHOSEN = /^rest\d+-0$/u;
 
 /** What an inactive tab's feet get wrong against the chosen tab's, at rest. */
 function geomFaults(tab: Geom, chosen: Geom): string[] {
@@ -879,10 +879,10 @@ function judgeGeometry(run: string, log: string) {
   );
 }
 
-const FT = /tabs ft (\S+) t=(\S+) seams=(\S*) \|\| (.*)$/;
+const FT = /tabs ft (\S+) t=(\S+) seams=(\S*) \|\| (.*)$/u;
 const FT_TAB =
-  /^(\S+) u=(\d)(\d) lead=(-?[\d.]+)\/([\d.]+) trail=(-?[\d.]+)\/([\d.]+)/;
-const WHOLE = /[=]1\.000$/;
+  /^(\S+) u=(\d)(\d) lead=(-?[\d.]+)\/([\d.]+) trail=(-?[\d.]+)\/([\d.]+)/u;
+const WHOLE = /[=]1\.000$/u;
 
 /**
  * One logged frame's feet: each side's plain share against its seam's glide
@@ -1183,7 +1183,7 @@ try {
         `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${ids.join(",")} -tabs-probe`
       );
       // This launch's lines only.
-      const pid = /dev\.cawco\.app: (\d+)/.exec(launched)?.[1];
+      const pid = /dev\.cawco\.app: (\d+)/u.exec(launched)?.[1];
       if (!pid) {
         stream.kill();
         throw new Error(`no pid in the launch's answer: ${launched}`);
@@ -1217,7 +1217,8 @@ try {
           30_000
         ).catch(async () => read());
         const tap = new RegExp(
-          `armed takeover attempt=${attempt} .* tap=(\\d+),(\\d+)`
+          `armed takeover attempt=${attempt} .* tap=(\\d+),(\\d+)`,
+          "u"
         ).exec(armed);
         if (!tap) {
           break;
@@ -1264,7 +1265,8 @@ try {
         30_000
       ).catch(async () => read());
       const holdTap = new RegExp(
-        `armed takeover attempt=${hold} .* tap=(\\d+),(\\d+)`
+        `armed takeover attempt=${hold} .* tap=(\\d+),(\\d+)`,
+        "u"
       ).exec(armedHold);
       const rest = `-x ${Math.round(width * 0.5)} -y ${y}`;
       if (holdTap) {
@@ -1279,7 +1281,8 @@ try {
         30_000
       ).catch(async () => read());
       const outcome = new RegExp(
-        `after tap attempt=${hold} active=(\\S+) tapped=(\\S+)`
+        `after tap attempt=${hold} active=(\\S+) tapped=(\\S+)`,
+        "u"
       ).exec(log);
       check(
         `${run} two-finger tap holds`,
@@ -1291,7 +1294,7 @@ try {
       stream.kill();
       await writeFile(join(out, `${kind}-${style}.log`), log);
       const begins = [
-        ...log.matchAll(/tabs probe begin (\S+) from=(\S+) to=(\S+)/g),
+        ...log.matchAll(/tabs probe begin (\S+) from=(\S+) to=(\S+)/gu),
       ];
       const samples = parse(log);
       for (const label of [

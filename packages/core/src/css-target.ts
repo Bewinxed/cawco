@@ -22,7 +22,7 @@ export const CSS_TARGET = [
   "ios18",
 ];
 
-const NAMED_VERSION = /^([a-z]+)(\d[\d.]*)$/;
+const NAMED_VERSION = /^([a-z]+)(\d[\d.]*)$/u;
 
 /**
  * The same floor as browserslist queries, for Lightning CSS's

@@ -39,7 +39,7 @@ const DOWN_MS = 90_000;
 const REFUSING_MS = 60_000;
 /** The knocks' window (daemon.ts `RESTART_KNOCK` × `RESTART_KNOCKS`, 2 s), and a second of slack. */
 const KNOCKS_MS = 3000;
-const UPGRADE = /^upgrade:\s*websocket/im;
+const UPGRADE = /^upgrade:\s*websocket/imu;
 
 interface Knocked {
   health: number;

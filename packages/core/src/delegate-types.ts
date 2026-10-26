@@ -57,7 +57,7 @@ export interface DelegateType {
 }
 
 /** What a name may be. Mirrors a subagent's own `AGENT_NAME` — no reason to invent a second rule. */
-export const DELEGATE_TYPE_NAME = /^[a-z][a-z0-9-]*$/;
+export const DELEGATE_TYPE_NAME = /^[a-z][a-z0-9-]*$/u;
 
 /**
  * What a connection's name may be (`github-petra`, `x-brand`): no `_`, so a
@@ -65,13 +65,13 @@ export const DELEGATE_TYPE_NAME = /^[a-z][a-z0-9-]*$/;
  * characters, so its tools' names keep room under a harness's tool-name
  * limit (connections.ts `sessionToolName`).
  */
-export const CONNECTION_NAME = /^(?=.{1,24}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const CONNECTION_NAME = /^(?=.{1,24}$)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 /** The tool name a session calls a connection's `tool` by. */
 export const connectionToolName = (connection: string, tool: string): string =>
   `conn__${connection}__${tool}`;
 
-const CONNECTION_TOOL = /^conn__([a-z0-9]+(?:-[a-z0-9]+)*)__(.+)$/;
+const CONNECTION_TOOL = /^conn__([a-z0-9]+(?:-[a-z0-9]+)*)__(.+)$/u;
 
 /** A session's connection tool name, split; undefined for any other tool. */
 export const parseConnectionTool = (
@@ -292,9 +292,9 @@ const OPENCODE_EQUIVALENTS: Record<string, readonly string[]> = {
   Skill: ["skill"],
 };
 
-const CLAUDE_MCP_TOOL = /^mcp__([^_]+(?:_[^_]+)*?)(?:__(.+))?$/;
-const OPENCODE_UNSAFE = /[^A-Za-z0-9_-]/g;
-const LOWERCASE_START = /^[a-z]/;
+const CLAUDE_MCP_TOOL = /^mcp__([^_]+(?:_[^_]+)*?)(?:__(.+))?$/u;
+const OPENCODE_UNSAFE = /[^A-Za-z0-9_-]/gu;
+const LOWERCASE_START = /^[a-z]/u;
 
 /**
  * OpenCode's tool ids for a denied-tool list. A Claude name with an OpenCode
@@ -364,7 +364,7 @@ const PI_EQUIVALENTS: Record<string, readonly string[]> = {
 };
 
 /** What pi turns into `_` in an MCP tool's name: "every character other than letters, digits, and `_`" (pi docs/mcp.md). */
-const PI_MCP_UNSAFE = /[^A-Za-z0-9_]/g;
+const PI_MCP_UNSAFE = /[^A-Za-z0-9_]/gu;
 
 /**
  * pi's tool names (or `*` patterns, which pi's `excludeTools` matches) for a

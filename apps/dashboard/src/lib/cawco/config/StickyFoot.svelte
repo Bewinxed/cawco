@@ -30,7 +30,7 @@
   } = $props();
 
   /** An overflow that scrolls. */
-  const SCROLLS = /(auto|scroll)/;
+  const SCROLLS = /(auto|scroll)/u;
   /** The nearest ancestor that scrolls up and down: the page. */
   const scrollerOf = (node: HTMLElement): HTMLElement | null => {
     let at = node.parentElement;

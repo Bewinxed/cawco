@@ -177,7 +177,7 @@ export const CLAUDE_VERSION_FLOOR = "2.1.301";
  */
 export const PI_VERSION_FLOOR = "1.3.0";
 
-const VERSION_PARTS = /^(\d+)\.(\d+)\.(\d+)/;
+const VERSION_PARTS = /^(\d+)\.(\d+)\.(\d+)/u;
 
 /** Whether `version` (`x.y.z`, anything after it ignored) is older than `than`. */
 export const olderThan = (version: string, than: string): boolean => {

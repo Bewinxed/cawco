@@ -109,10 +109,10 @@ export interface ItemChanges {
 }
 
 /** A report's commits and diffstat, read back (work-items.ts `changesSince`). */
-const COMMITS_BLOCK = /Commits:\n```\n([\s\S]*?)\n```/;
-const DIFFSTAT_BLOCK = /Diffstat:\n```\n([\s\S]*?)\n```/;
-const COMMIT_LINE = /^([0-9a-f]{7,40}) (.+)$/;
-const DIFFSTAT_LINE = /^\s*(\S.*?)\s+\|\s+/;
+const COMMITS_BLOCK = /Commits:\n```\n([\s\S]*?)\n```/u;
+const DIFFSTAT_BLOCK = /Diffstat:\n```\n([\s\S]*?)\n```/u;
+const COMMIT_LINE = /^([0-9a-f]{7,40}) (.+)$/u;
+const DIFFSTAT_LINE = /^\s*(\S.*?)\s+\|\s+/u;
 
 export const changesOf = (result: string | null): ItemChanges => {
   const commits = (COMMITS_BLOCK.exec(result ?? "")?.[1] ?? "")

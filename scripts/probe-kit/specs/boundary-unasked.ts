@@ -53,7 +53,7 @@ const RAN = "RAN-ok";
 /** The executor's refusal when no boundary runs (agent boundary.ts `stoppedLine`). */
 const STOPPED = "boundary is not running";
 /** A process's entry in `/proc` (Linux) — macOS is read with `ps`. */
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 /** How long an ended boundary's processes get to be gone. */
 const GONE_MS = 10_000;
 

@@ -80,8 +80,8 @@ const WHEEL_STEP = 53;
 const WHEEL_LINE = 19;
 const WHEEL_GESTURE_MS = 250;
 /** An answer whose video section this browser rejected (port 0), and the offer's first video codec. */
-const VIDEO_REJECTED = /^m=video 0 /m;
-const VIDEO_CODEC = /^m=video[\s\S]*?a=rtpmap:\d+ ([\w-]+)/m;
+const VIDEO_REJECTED = /^m=video 0 /mu;
+const VIDEO_CODEC = /^m=video[\s\S]*?a=rtpmap:\d+ ([\w-]+)/mu;
 
 /** The hub's socket for a view: `kind` is neko's signaling or the local browser's frames. */
 export const streamUrl = (

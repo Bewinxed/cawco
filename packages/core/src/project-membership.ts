@@ -28,7 +28,7 @@ export interface MemberProject {
   primaryPlaceId: string | null;
 }
 
-const TRAILING_SLASH = /\/+$/;
+const TRAILING_SLASH = /\/+$/u;
 const folder = (cwd: string): string => cwd.replace(TRAILING_SLASH, "") || "/";
 const contains = (root: string, path: string): boolean =>
   root === path || path.startsWith(root === "/" ? "/" : `${root}/`);

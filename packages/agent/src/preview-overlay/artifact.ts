@@ -61,7 +61,7 @@ const KINDS = new Set(["page", "canvas", "preview", "component"]);
 
 /** Where an artifact's doc is synced: the listener's path, under the dashboard's preview prefix in its frame. */
 const SYNC_PATH =
-  /^\/(?:preview\/[^/]+\/[^/]+\/)?__cawco\/artifact\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+  /^\/(?:preview\/[^/]+\/[^/]+\/)?__cawco\/artifact\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/u;
 
 export const NO_ARTIFACT = "This page has no artifact to keep its state in.";
 

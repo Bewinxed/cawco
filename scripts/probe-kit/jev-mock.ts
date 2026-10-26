@@ -82,7 +82,7 @@ export const firstAsk = (call: JevCall): Record<string, StarterPick> =>
   );
 
 /** A description's closing stop, which a prompt saying the same task leaves off. */
-const CLOSING_STOP = /[.!]\s*$/;
+const CLOSING_STOP = /[.!]\s*$/u;
 
 /**
  * A noul's answer: yes (0.9) when it asks whether a candidate (a composer

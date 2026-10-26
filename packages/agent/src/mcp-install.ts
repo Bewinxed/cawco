@@ -45,10 +45,10 @@ export interface NpxRun {
 }
 
 /** A registry package as npx takes one, `@scope/name@spec` with an optional spec. */
-const PACKAGE = /^((?:@[^/@\s]+\/)?[^/@\s:]+)(?:@([^/\s:]+))?$/;
+const PACKAGE = /^((?:@[^/@\s]+\/)?[^/@\s:]+)(?:@([^/\s:]+))?$/u;
 
 /** A version npm installs as written, with no registry read: `x.y.z`, a prerelease or build after it. */
-const EXACT = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const EXACT = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
 
 /** The options npx takes that CawCo can install from: its yes, and the package it names. */
 const YES = new Set(["-y", "--yes"]);
@@ -143,8 +143,8 @@ export const readNpx = (
 };
 
 /** What npm says went wrong: its first `npm error` line that is a sentence, not a field (`code E404`) or where its log is. */
-const NPM_FIELD = /^(?:code|errno|syscall|path|dest|signal|command|cwd)\s/;
-const NPM_ERROR = /^npm (?:error|ERR!)\s*/;
+const NPM_FIELD = /^(?:code|errno|syscall|path|dest|signal|command|cwd)\s/u;
+const NPM_ERROR = /^npm (?:error|ERR!)\s*/u;
 const npmSaid = (stderr: string, exitCode: number): string =>
   stderr
     .split("\n")
@@ -266,7 +266,7 @@ const readOrNone = async <T>(file: string): Promise<T | undefined> => {
   }
 };
 
-const SCOPE = /^@[^/]+\//;
+const SCOPE = /^@[^/]+\//u;
 
 /** The bin file npx runs of `bins`: `command`'s when named; else the one file they all are, else the one named as the package's unscoped name. */
 const pickBin = (
@@ -429,7 +429,7 @@ const RETIRE_AGAIN_MS = 60_000;
 const HELD = ".cawco-held.cjs";
 const HELD_SOURCE = `// Preloaded into every fleet MCP server CawCo launches from this install, and held open while it runs, so CawCo retires the install only once none does (agent mcp-install.ts).\nrequire("node:fs").openSync(__filename, "r");\n`;
 /** A process's dir under `/proc`. */
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 
 /** node's arguments for a server launched from install `dir`: its held file preloaded, then the bin and the row's arguments. */
 export const launchArgs = (

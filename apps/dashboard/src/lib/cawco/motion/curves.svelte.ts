@@ -274,7 +274,7 @@ export function glide(distance: number, speed: number) {
   return { covered, duration, frames, reached };
 }
 
-const NUMBER = /-?\d*\.?\d+(?:e[-+]?\d+)?/gi;
+const NUMBER = /-?\d*\.?\d+(?:e[-+]?\d+)?/giu;
 const TIMING_KEYS = new Set([
   "offset",
   "easing",

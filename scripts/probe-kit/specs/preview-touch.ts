@@ -35,7 +35,7 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { COMPOSER, type Kit, open, pressAt, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 const FRAME = '[data-preview-sheet] iframe[title="Preview"]';
 const SHEET = "[data-preview-sheet]";
 

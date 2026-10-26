@@ -43,7 +43,7 @@ const HOST_TOKEN = "probe-host-gh-token";
 const CALLER_TOKEN = "probe-caller-gh-token";
 /** Every forge's token variable a command could carry (boundary.ts `FORGE_TOKEN_ENV`). */
 const FORGE_VARS =
-  /^(GH_[A-Z_]*TOKEN|GITHUB_[A-Z_]*TOKEN|GITLAB_[A-Z_]*TOKEN|OAUTH_TOKEN|CI_JOB_TOKEN|GITEA_[A-Z_]*TOKEN|FORGEJO_[A-Z_]*TOKEN|CODEBERG_[A-Z_]*TOKEN|BITBUCKET_[A-Z_]*)=/m;
+  /^(GH_[A-Z_]*TOKEN|GITHUB_[A-Z_]*TOKEN|GITLAB_[A-Z_]*TOKEN|OAUTH_TOKEN|CI_JOB_TOKEN|GITEA_[A-Z_]*TOKEN|FORGEJO_[A-Z_]*TOKEN|CODEBERG_[A-Z_]*TOKEN|BITBUCKET_[A-Z_]*)=/mu;
 
 /** Every file under `dir`, through no link; none when it is not there. */
 const filesUnder = async (dir: string): Promise<string[]> => {

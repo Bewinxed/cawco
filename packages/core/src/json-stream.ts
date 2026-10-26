@@ -275,8 +275,8 @@ interface Container {
   value: Record<string, unknown> | unknown[];
 }
 
-const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
-const TOKEN_CHAR = /[-+.0-9a-zA-Z]/;
+const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/u;
+const TOKEN_CHAR = /[-+.0-9a-zA-Z]/u;
 const WHITESPACE = new Set([0x20, 0x0a, 0x0d, 0x09]);
 const QUOTE = 0x22;
 

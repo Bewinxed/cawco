@@ -37,9 +37,9 @@ import type { Kit, Spec } from "../kit";
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
 const DELETE = "mcp__cawco__artifact_delete";
-const COMMAND = /PROBE-CALL:(\d+)/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
-const ANSWERED_SHOWING = /"showing":(null|\{"id":"([0-9a-f-]{36})")/;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
+const ANSWERED_SHOWING = /"showing":(null|\{"id":"([0-9a-f-]{36})")/u;
 
 const pageOf = (heading: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${heading}</title></head><body><h1>${heading}</h1></body></html>`;

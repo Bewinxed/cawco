@@ -42,11 +42,11 @@ import {
 } from "./suite";
 
 const SPAWN = "JOURNEY-SPAWN";
-const START = /^Start/;
+const START = /^Start/u;
 /** The fleet board's ways into the New Session dialog: the tab strip's and the rail's. */
-const NEW_SESSION = /^(New session|Start session)$/;
-const MACHINES_CHIP = /^Machines:/;
-const PROJECT_CHIP = /^Project:/;
+const NEW_SESSION = /^(New session|Start session)$/u;
+const MACHINES_CHIP = /^Machines:/u;
+const PROJECT_CHIP = /^Project:/u;
 const SESSION_TABS = transcriptWords.openSessions;
 const MODE_FLAG = "--permission-mode";
 const PERMISSION_MODE = startsWith(spawnWords.permissionModeHead);
@@ -58,8 +58,8 @@ const ASK_FIRST = startsWith(spawnWords.modes.default);
 const IN_ASK_FIRST = startsWith(
   spawnWords.permissionMode(spawnWords.modes.default)
 );
-const SPACES = /\s+/;
-const REGEX_SIGNS = /[.*+?^${}()|[\]\\]/g;
+const SPACES = /\s+/u;
+const REGEX_SIGNS = /[.*+?^${}()|[\]\\]/gu;
 /** What the new session says to its first message. */
 const READING = "Reading the README now, then I'll summarise it.";
 /** The words that have the session start one of its own (`start_session`). */
@@ -67,7 +67,7 @@ const CHILD = "JOURNEY-CHILD";
 /** The started session's first message, which its page shows. */
 const CHILD_BRIEF = "Draft the release checklist.";
 /** The composer's field, named by its hint. */
-const COMPOSER = /^Message/;
+const COMPOSER = /^Message/u;
 
 /**
  * The session the leg's session starts with `start_session`: where and
@@ -195,7 +195,7 @@ async function walk(leg: Leg): Promise<void> {
     async () => {
       await machines.click();
       await page
-        .getByRole("button", { name: new RegExp(`^${literal(hostname)}`) })
+        .getByRole("button", { name: new RegExp(`^${literal(hostname)}`, "u") })
         .click();
       await machines.click();
     },
@@ -214,7 +214,8 @@ async function walk(leg: Leg): Promise<void> {
       await page
         .getByRole("button", {
           name: new RegExp(
-            `^${literal(project.name)}\\s*${literal(project.dir)}`
+            `^${literal(project.name)}\\s*${literal(project.dir)}`,
+            "u"
           ),
         })
         .click();
@@ -425,7 +426,7 @@ async function walk(leg: Leg): Promise<void> {
   };
   const childTab = page
     .getByRole("tablist", { name: SESSION_TABS })
-    .getByRole("tab", { name: new RegExp(literal(childTitle)) })
+    .getByRole("tab", { name: new RegExp(literal(childTitle), "u") })
     .filter({ visible: true })
     .first();
   const toB = `${leg.id} First to the checklist.`;

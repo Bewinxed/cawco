@@ -578,7 +578,7 @@ function subagentLaunch(result: string): boolean {
  * only mentions the tag is left as written.
  */
 const TASK_RESULT =
-  /^\s*<task id="[^"]*" state="[^"]*">\s*<task_result>\n?([\s\S]*?)\n?<\/task_result>\s*<\/task>\s*$/;
+  /^\s*<task id="[^"]*" state="[^"]*">\s*<task_result>\n?([\s\S]*?)\n?<\/task_result>\s*<\/task>\s*$/u;
 
 /** A subagent's answer, out of the wrapper its harness hands the model. */
 const subagentAnswer = (text: string): string =>
@@ -826,7 +826,7 @@ export function mapFrame(
         break;
       }
       mapping.blocks.push(
-        systemLine(base, "result.error", sdk.subtype.replace(/_/g, " "), {
+        systemLine(base, "result.error", sdk.subtype.replace(/_/gu, " "), {
           resultSubtype: sdk.subtype,
           resultErrors: "errors" in sdk ? sdk.errors : undefined,
           totalCost: sdk.total_cost_usd,
@@ -1178,7 +1178,7 @@ export function mapFrame(
             systemLine(
               base,
               `system.${sdk.subtype}`,
-              sdk.content ?? sdk.subtype.replace(/_/g, " "),
+              sdk.content ?? sdk.subtype.replace(/_/gu, " "),
               { subtype: sdk.subtype }
             )
           );
@@ -1207,7 +1207,7 @@ export function mapFrame(
       unnamedLine(mapping, innerType, () =>
         systemLine(base, "ui.system_note", text ?? "", {
           noteKind: "Unrecognised frame",
-          noteTitle: (innerType || "unrecognised frame").replace(/_/g, " "),
+          noteTitle: (innerType || "unrecognised frame").replace(/_/gu, " "),
         })
       );
       break;
@@ -1217,7 +1217,7 @@ export function mapFrame(
     default: {
       const { type } = sdk as { type: string };
       unnamedLine(mapping, type, () =>
-        systemLine(base, `system.${type}`, type.replace(/_/g, " "))
+        systemLine(base, `system.${type}`, type.replace(/_/gu, " "))
       );
     }
   }
@@ -1365,7 +1365,7 @@ export function suppressesTaskLine(
  * this machine (CLI 2.1.280): a turn stopped while the model wrote, and one
  * stopped while a tool ran.
  */
-const INTERRUPTED = /^\[Request interrupted by user(?: for tool use)?\]$/;
+const INTERRUPTED = /^\[Request interrupted by user(?: for tool use)?\]$/u;
 
 /** Whether a user-role text is that line ({@link INTERRUPTED}). */
 export function interruptLine(text: string | null): boolean {
@@ -1484,7 +1484,7 @@ function userBody(
  * back on a newline, so any run of newlines before it belongs to it.
  */
 const PASTED_TEXT =
-  /\n*<pasted-text name="([^"\n]*)">\n([\s\S]*?)\n<\/pasted-text>/g;
+  /\n*<pasted-text name="([^"\n]*)">\n([\s\S]*?)\n<\/pasted-text>/gu;
 
 /**
  * A user turn split back into what the reader typed and the files they
@@ -1506,7 +1506,7 @@ function pastedText(text: string): {
   return attachments.length ? { typed, attachments } : { typed };
 }
 
-const LOCAL_COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/;
+const LOCAL_COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/u;
 
 /** The note kind a {@link HarnessNote} keeps for the readers that still name it so. */
 const HARNESS_NOTE_KIND: Record<HarnessNote["kind"], string> = {
@@ -1588,7 +1588,7 @@ function compactSummaryNote(content: string, base: BlockBase): TranscriptBlock {
 
 /** A note's opening line, with the markup that wraps it taken back out. */
 function firstPlainLine(text: string): string {
-  const plain = text.replace(/<[^>]+>/g, "");
+  const plain = text.replace(/<[^>]+>/gu, "");
   const line = plain
     .split("\n")
     .map((each) => each.trim())
@@ -1843,8 +1843,8 @@ export function askedWords(
 }
 
 /** A session's link in a spawn's words, `[title](cawco:session/<id>)`, its label's escapes kept. */
-const SESSION_LINK = /\[((?:[^\]\\]|\\.)*)\]\((cawco:session\/[^)\s]+)\)/;
-const ESCAPED = /\\(.)/g;
+const SESSION_LINK = /\[((?:[^\]\\]|\\.)*)\]\((cawco:session\/[^)\s]+)\)/u;
+const ESCAPED = /\\(.)/gu;
 
 /**
  * The session a `delegate` or `start_session` call started, off its result:

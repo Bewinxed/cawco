@@ -54,7 +54,7 @@ export function reachOf(): string {
       (el instanceof HTMLElement ? el.innerText : el.textContent) ??
       ""
     )
-      .replace(/\s+/g, " ")
+      .replace(/\s+/gu, " ")
       .trim()
       .slice(0, 48);
   /**

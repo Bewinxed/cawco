@@ -64,8 +64,8 @@ const chosen = new Set<Leg>(
 /** A 1×1 PNG: the page's picture of its pin. */
 const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-const IMAGE_BLOCK = /"type":"image"/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const IMAGE_BLOCK = /"type":"image"/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 /** What the hub tells a session whose move ended its work (server.ts `endedByMoveWords`). */
 const MOVED = "You were moved to another account.";
 /** What every cut's words say of each task (server.ts `cutTasksWords`, `endedByMoveWords`). */
@@ -128,8 +128,8 @@ const stepsOf = (tag: string): Steps => {
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
-const CALL = /PROBE-RH-CALL:(\d+)/g;
-const TAG = /PROBE-RH-([A-Z0-9]+)\b/g;
+const CALL = /PROBE-RH-CALL:(\d+)/gu;
+const TAG = /PROBE-RH-([A-Z0-9]+)\b/gu;
 /** Every request the model was asked with a tool list, in order. */
 const heard: Seen[] = [];
 /** (f) ran its command. */

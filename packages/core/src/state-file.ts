@@ -69,7 +69,7 @@ const temporaryFor = (path: string, scratchDir?: string): string =>
     `.${basename(path)}.cawco-${process.pid}-${randomUUID().slice(0, 8)}.tmp`
   );
 
-const TEMPORARY = /^\.(.+)\.cawco-(\d+)-[0-9a-f]{8}\.tmp$/;
+const TEMPORARY = /^\.(.+)\.cawco-(\d+)-[0-9a-f]{8}\.tmp$/u;
 
 /** The name of the file a temporary one of this module's is becoming; undefined for any other name. */
 export const stateTemporaryTarget = (name: string): string | undefined =>

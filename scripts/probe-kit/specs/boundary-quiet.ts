@@ -105,9 +105,9 @@ const RE_FORMED = 5;
 const FINISH = "mcp__cawco__finish_item";
 const CREATE = "mcp__cawco__artifact_create";
 const WAIT = "mcp__cawco__wait_item";
-const TAG = /PROBE-QUIET-(?:AGAIN-|SERVE-|CHECK-|FINISH-)?(I\d+|P|W|R):/g;
-const PID_NS = /pid:\[\d+\]/;
-const WHITESPACE = /\s+/g;
+const TAG = /PROBE-QUIET-(?:AGAIN-|SERVE-|CHECK-|FINISH-)?(I\d+|P|W|R):/gu;
+const PID_NS = /pid:\[\d+\]/u;
+const WHITESPACE = /\s+/gu;
 /** P's server port, I1's and W's, each in its own boundary's network. */
 const PORT: Record<string, number> = { P: 47_611, I1: 47_612, W: 47_613 };
 /** W's wait: past the quiet time and a sweep. */

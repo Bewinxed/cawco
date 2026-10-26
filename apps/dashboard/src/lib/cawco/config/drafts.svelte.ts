@@ -264,7 +264,7 @@ export function keepDraft<T>(
   };
 }
 
-const SECTION = /^\/config\/([^/]+)\/(.+)$/;
+const SECTION = /^\/config\/([^/]+)\/(.+)$/u;
 
 /** The editor at `path` is for a row that still exists, or for a new one. */
 function live(store: ConfigStore, slug: string, key: string): boolean {

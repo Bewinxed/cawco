@@ -217,19 +217,19 @@ const noClone = async (ref: WorkspaceRef): Promise<string | undefined> =>
 const LINE_END = 10;
 
 /** A command after which the helper protocol carries git's own packets, not lines. */
-const CONNECT = /^(stateless-)?connect /;
+const CONNECT = /^(stateless-)?connect /u;
 /** git's ask for a dry run of the push that follows (gitremote-helpers(7), "option dry-run"). */
 const DRY_RUN = "option dry-run true";
 /** `option dry-run true|false`, either way. */
-const DRY_RUN_OPTION = /^option dry-run (true|false)$/;
+const DRY_RUN_OPTION = /^option dry-run (true|false)$/u;
 /**
  * git's lease for the push that follows (gitremote-helpers(7), "option cas
  * {name}:{value}": "Request the helper to perform a force-with-lease push"),
  * the value C-quoted when it needs quoting (transport-helper.c
  * `set_helper_option`).
  */
-const CAS_OPTION = /^option cas (.+)$/;
-const FORCED = /^\+/;
+const CAS_OPTION = /^option cas (.+)$/u;
+const FORCED = /^\+/u;
 
 /** A push command's refspec (`push [+]<src>:<dst>`), its source and destination. */
 const refspecOf = (line: string): { dst: string; src: string } => {
@@ -258,7 +258,7 @@ const withGitConfig = (
   };
 };
 
-const TRAILING_SLASHES = /\/+$/;
+const TRAILING_SLASHES = /\/+$/u;
 
 /**
  * git-lfs's config for a push to the repository at `url` that is not the
@@ -693,12 +693,12 @@ const unquoted = (value: string): string => {
 };
 
 /** A reason on one line, as git's helper protocol carries it. */
-const oneLine = (text: string): string => text.replace(/\s*\n\s*/g, " ");
+const oneLine = (text: string): string => text.replace(/\s*\n\s*/gu, " ");
 
 /** A URL with a scheme, `<scheme>://`. */
-const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\//i;
+const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\//iu;
 /** git's scp-like ssh form, `[<user>@]<host>:<path>`: "only recognized if there are no slashes before the first colon" (git-scm.com/docs/git-clone, "GIT URLS"). */
-const SCP_LIKE = /^(?:[^@/\s]+@)?[^/:\s]+:\S/;
+const SCP_LIKE = /^(?:[^@/\s]+@)?[^/:\s]+:\S/u;
 /** The schemes git takes for ssh (git's connect.c `url_is_local_not_ssh` and `parse_connect_url`). */
 const SSH_SCHEMES: ReadonlySet<string> = new Set([
   "ssh:",
@@ -956,14 +956,14 @@ const lastSaid = (err: string, fallback: string): string =>
     .filter(Boolean)
     .at(-1) ?? fallback;
 
-const LINE_BREAKS = /[\r\n]+/;
+const LINE_BREAKS = /[\r\n]+/u;
 
 /** `git ls-remote --symref`'s `ref: <target>\tHEAD`. */
-const SYMREF = /^ref: (\S+)\t(\S+)$/;
+const SYMREF = /^ref: (\S+)\t(\S+)$/u;
 /** `git ls-remote`'s `<sha>\t<ref>`. */
-const LISTED_REF = /^([0-9a-f]{40}(?:[0-9a-f]{24})?)\t(\S+)$/;
+const LISTED_REF = /^([0-9a-f]{40}(?:[0-9a-f]{24})?)\t(\S+)$/u;
 /** `git push --porcelain`'s ref line: `<flag>\t<from>:<to>\t<summary>` (git-push(1), "OUTPUT"). */
-const PORCELAIN_REF = /^([ +\-*=!])\t[^\t]*:([^\t]+)\t(.*)$/;
+const PORCELAIN_REF = /^([ +\-*=!])\t[^\t]*:([^\t]+)\t(.*)$/u;
 
 /**
  * A remote outside the hub, as the host's own git reaches it with the host's

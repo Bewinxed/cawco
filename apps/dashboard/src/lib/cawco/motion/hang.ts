@@ -60,7 +60,7 @@ import type { Attachment } from "svelte/attachments";
 import { dur, ease, motionOk } from "./curves.svelte";
 
 /** The x of a floating wrapper's `translate(Xpx, Ypx)`. */
-const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/;
+const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/u;
 /** The event a card fires once it stands open. */
 export const GROWN = "grown";
 

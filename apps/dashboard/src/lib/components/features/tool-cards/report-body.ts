@@ -15,9 +15,9 @@ export const REPORT_PREVIEW_BYTES = 1500;
 // fold into an unreadable wall as markdown, so a log-shaped body goes to a
 // mono `<pre>` instead. Majority-of-lines log shapes, and no markdown tokens.
 const MARKDOWN_SIGNAL =
-  /(^|\n)\s{0,3}#{1,6}\s|```|\*\*|__|\[[^\]]+\]\([^)]*\)|(^|\n)\s*[-*+]\s+/;
+  /(^|\n)\s{0,3}#{1,6}\s|```|\*\*|__|\[[^\]]+\]\([^)]*\)|(^|\n)\s*[-*+]\s+/u;
 const LOG_LINE =
-  /^\S+=\S+(\s+\S+=\S+)*$|^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|^\d{2}:\d{2}:\d{2}|^[[(]\d{4}-\d{2}-\d{2}|^[$>→]\s|^\[?(INFO|WARN|WARNING|ERROR|DEBUG|FATAL)\]?\b/i;
+  /^\S+=\S+(\s+\S+=\S+)*$|^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|^\d{2}:\d{2}:\d{2}|^[[(]\d{4}-\d{2}-\d{2}|^[$>→]\s|^\[?(INFO|WARN|WARNING|ERROR|DEBUG|FATAL)\]?\b/iu;
 
 /** Whether a report body reads as raw log output rather than markdown prose. */
 export function isLogReport(text: string): boolean {

@@ -29,7 +29,7 @@ import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 /** The targets a step's command builds: what the hub put in `{targets}`. */
-const TARGETS = /--targets (\S+)/;
+const TARGETS = /--targets (\S+)/u;
 const MAP = "apps/apple/targets.json";
 
 /** CawCo's iOS build step, as its gate.md declares it with a target map. */

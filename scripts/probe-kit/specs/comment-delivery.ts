@@ -93,8 +93,8 @@ import {
 } from "./ink";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const NAME = "comment-delivery";
 /**
  * The tool's result a request answers, whole, as the harness sent it: its
@@ -128,8 +128,8 @@ const toolResultOf = (request: Seen): string => {
 };
 /** The comments notice (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
-  /\[CawCo\] The person commented on the page "comment-delivery" \(artifact [0-9a-f-]{36}\)\./;
-const IMAGE_BLOCK = /"type":"image"/g;
+  /\[CawCo\] The person commented on the page "comment-delivery" \(artifact [0-9a-f-]{36}\)\./u;
+const IMAGE_BLOCK = /"type":"image"/gu;
 /** The hub's quiet after the person's last mark before it delivers them (artifacts/service.ts `COMMENTS_QUIET_MS`). */
 const QUIET_MS = 3000;
 /** How long a delivery may take to reach the model once it goes: the hub's send, the agent, Claude Code's request. */
@@ -179,7 +179,7 @@ const DOWN_WORDS = "Written while the link was down.";
 /** Step 11's pins, kept on the page-sized container. */
 const OLD_PINS = [8, 9] as const;
 /** The page's own doc socket (overlay artifact.ts), never the pane's `/ws/artifact/`. */
-const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/;
+const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/u;
 /** How long a lost link stands before the pane says it (artifact-doc.ts `LINK_DOWN_MS`). */
 const LINK_DOWN_MS = 15_000;
 /** …and room for it to. */
@@ -212,15 +212,15 @@ const routePageLink = (page: Page) =>
     });
   });
 /** The mode menu's Comment, its shortcut after it. */
-const COMMENT_ITEM = /^Comment/;
+const COMMENT_ITEM = /^Comment/u;
 const LATER_WORDS = "And one more word after you read it.";
 /** The delivery routed to Caw: the writer's page, a pin's id, and that it comes to him. */
 const ROUTED =
-  /The person commented on the page "ended-writer"[\s\S]*?- Pin: ([0-9a-f-]{36})[\s\S]*?so these come to you/;
+  /The person commented on the page "ended-writer"[\s\S]*?- Pin: ([0-9a-f-]{36})[\s\S]*?so these come to you/u;
 /** The hub's log lines step 7 reads. */
-const HUB_LINE = /caw|artifacts|marks|lead/i;
+const HUB_LINE = /caw|artifacts|marks|lead/iu;
 /** The host's refusal of a sandbox inside another (core boundary-nesting.ts). */
-const NESTED = /inside another (bwrap|macOS) sandbox|unpriv_bwrap/;
+const NESTED = /inside another (bwrap|macOS) sandbox|unpriv_bwrap/u;
 /** The project's lead's reply in 7b. */
 const LEAD_WORDS = "The project's lead: I'll take this one.";
 const CAW_WORDS = "Caw here: its writer has ended, so I'll take this one.";
@@ -272,12 +272,12 @@ const BUSY_SLEEPS = [45, 30] as const;
 const sleptLine = (seconds: number) => `PROBE-SLEPT-${seconds}`;
 /** What would name the person for something they did not do. */
 const BLAME =
-  /backgrounded by user|manually backgrounded|doesn't want to proceed|Request interrupted/;
+  /backgrounded by user|manually backgrounded|doesn't want to proceed|Request interrupted/u;
 /** Claude Code's own words for a command it moved aside so a message could reach the model (2.1.309). */
 const MOVED_FOR_MESSAGE =
   "so that a message that arrived while it was running can reach you; it was not interrupted";
 /** Where a moved command's output goes, as its moved result names it. */
-const OUTPUT_FILE = /Output is being written to: (\S+?)\.(?:\s|$)/;
+const OUTPUT_FILE = /Output is being written to: (\S+?)\.(?:\s|$)/u;
 /** The request a delivery joined came within the comments' reach of `sentAt`, the running command moved aside in Claude Code's own words, naming no one. */
 const joinedEarly = (request: Seen, sentAt: number): boolean =>
   request.afterTool &&
@@ -303,7 +303,7 @@ const BUSY_PIN_WORDS = "how does this even work";
 const BUSY_REPLY_WORDS = "and what's the best practice?";
 const BUSY_NOTICE = `The person commented on the page "${BUSY_PAGE}"`;
 /** A reason's own full stop, which the line that quotes it puts back. */
-const REASON_STOP = /\.$/;
+const REASON_STOP = /\.$/u;
 /** The picks' notice (core injected.ts `artifactResponsesNotice`) for the busy page. */
 const PICKS_NOTICE = `The page "${BUSY_PAGE}" has new responses`;
 /** The page's own Send with one pick standing (decisions/host Decisions.svelte `sendLabel`). */
@@ -479,7 +479,7 @@ const pageSendSays = async (frame: Frame) =>
       .textContent({ timeout: 1000 })
       .catch(() => null)
   )
-    ?.replace(/\s+/g, " ")
+    ?.replace(/\s+/gu, " ")
     .trim() ?? null;
 /** The person's press on a decision page's own Send: when it was pressed. */
 const pageSendNow = async (frame: Frame) => {
@@ -1537,7 +1537,7 @@ const endedWriterChecks = async (
       .waitFor({ timeout: 15_000 })
       .catch(() => undefined);
     const drawn = (await line.allInnerTexts()).map((words) =>
-      words.replace(/\s+/g, " ").trim()
+      words.replace(/\s+/gu, " ").trim()
     );
     const failed = writerRows.find((row) => row.state === "failed");
     kit.check(
@@ -1808,7 +1808,7 @@ const run = async (kit: Kit) => {
   const drawn = await page.evaluate(() => ({
     lines: Array.from(
       document.querySelectorAll<HTMLElement>("[data-artifact-responses]")
-    ).map((row) => row.innerText.replace(/\s+/g, " ").trim()),
+    ).map((row) => row.innerText.replace(/\s+/gu, " ").trim()),
     person: Array.from(
       document.querySelectorAll<HTMLElement>('[data-slot="turn"][data-you]')
     )

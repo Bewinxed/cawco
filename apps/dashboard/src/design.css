@@ -181,30 +181,9 @@
     &.dark {
       color-scheme: dark;
     }
-  }
 
-  * {
-    @apply border-border;
-    /* The ring's colour at rest, so focus only switches the outline on: a
-       control with transition-colors would otherwise fade its ring in from
-       its text colour. */
-    outline-color: var(--focus-ring);
-    scrollbar-width: thin;
-  }
-
-  /* An enabled button takes the pointer hand; a disabled or pending one
-     (aria-disabled, its press swallowed) the arrow
-     (tailwindcss.com/docs/upgrade-guide, "Buttons use the default cursor"). */
-  button,
-  [role="button"] {
-    &:not(:disabled, [aria-disabled="true"]) {
-      cursor: pointer;
-    }
-  }
-
-  /* Inherited, so it is set once here rather than worked out on every
-     element. */
-  :root {
+    /* Inherited, so it is set once here rather than worked out on every
+       element. */
     scrollbar-color: var(--scrollbar-thumb) transparent;
     /* The seam's inset (the home's seam between one machine's rows and the
        next, and the transcript's user-message hairline): the text column's
@@ -252,6 +231,31 @@
     --diffs-bg-deletion-emphasis-override: var(--diff-del-emphasis);
     --diffs-fg-number-addition-override: var(--success-11);
     --diffs-fg-number-deletion-override: var(--error-11);
+
+    /* A native checkbox, radio, range or progress takes the act colour, never
+       the browser's blue (DESIGN.md, Coral Action: "checked checkboxes and
+       switches"; blue is a status hue). Inherited, so every native control in
+       the page takes it. */
+    accent-color: var(--action-solid);
+  }
+
+  * {
+    @apply border-border;
+    /* The ring's colour at rest, so focus only switches the outline on: a
+       control with transition-colors would otherwise fade its ring in from
+       its text colour. */
+    outline-color: var(--focus-ring);
+    scrollbar-width: thin;
+  }
+
+  /* An enabled button takes the pointer hand; a disabled or pending one
+     (aria-disabled, its press swallowed) the arrow
+     (tailwindcss.com/docs/upgrade-guide, "Buttons use the default cursor"). */
+  button,
+  [role="button"] {
+    &:not(:disabled, [aria-disabled="true"]) {
+      cursor: pointer;
+    }
   }
 
   html {
@@ -304,14 +308,6 @@
   input,
   textarea {
     caret-color: var(--brand-solid);
-  }
-
-  /* A native checkbox, radio, range or progress takes the act colour, never
-     the browser's blue (DESIGN.md, Coral Action: "checked checkboxes and
-     switches"; blue is a status hue). Inherited, so every native control in
-     the page takes it. */
-  :root {
-    accent-color: var(--action-solid);
   }
 
   /* A native range is a groove with the act's thumb: its track sits below
@@ -437,6 +433,7 @@
   /* A held press summons our menu; the platform's callout would fight it. */
   [data-slot="context-menu-trigger"] {
     -webkit-touch-callout: none;
+    -webkit-user-select: none;
     user-select: none;
   }
 }
@@ -664,10 +661,12 @@
 @utility text-size-inherit {
   font-size: inherit;
 }
-/* `word-break: break-word` (Tailwind's `wrap-break-word` is overflow-wrap,
-   another property). */
+/* Breaks a long word anywhere, its min-content width counting the breaks:
+   what the deprecated `word-break: break-word` is defined as (css-text-3),
+   written in its standard properties. */
 @utility break-word {
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 /* A running animation held where it stands. */
 @utility animation-paused {
@@ -1890,6 +1889,7 @@
    25px title line) grows the cell's row past the cell, and that row, at the
    cell's start, stood the mark at the line's top. */
 @utility mark-cell {
+  /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
   :where(&) {
     display: grid;
     flex: none;
@@ -1905,6 +1905,7 @@
    shrinks by it to a quarter (DESIGN.md, Tree mark: "scale 0.25 to 1, blur
    4px to 0"). */
 @utility icon-swap {
+  /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
   :where(&) {
     display: inline-grid;
     place-items: center;

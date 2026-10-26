@@ -55,7 +55,7 @@ export function sentByReader(messages: readonly Message[]): Sent[] {
 
 /** A message's words on one line, its line breaks shown as ⏎. */
 export const oneLine = (text: string): string =>
-  text.trim().replace(/\s*\n\s*/g, " ⏎ ");
+  text.trim().replace(/\s*\n\s*/gu, " ⏎ ");
 
 /**
  * MiniSearch's own word boundary (its default tokenizer), with the

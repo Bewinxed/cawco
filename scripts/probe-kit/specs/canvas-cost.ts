@@ -138,7 +138,7 @@ interface Stage {
 }
 
 const DEBUG_LINE =
-  /^(\d{4}-\d\d-\d\dT[\d:.]+Z) vite:(time|transform) ([\d.]+)ms\s+(?:\[skipped\] )?(\S+)/;
+  /^(\d{4}-\d\d-\d\dT[\d:.]+Z) vite:(time|transform) ([\d.]+)ms\s+(?:\[skipped\] )?(\S+)/u;
 
 let hostBuilt: Promise<string> | undefined;
 
@@ -288,12 +288,12 @@ const embedUrl = (base: string, file: string, story?: string): string => {
 /* --- Processes: the browser's CPU and memory ---------------------------- */
 
 const TICK_MS = 1000 / 100;
-const PID = /^\d+$/;
-const PSS = /^Pss:\s+(\d+) kB/m;
+const PID = /^\d+$/u;
+const PSS = /^Pss:\s+(\d+) kB/mu;
 /** A keyed module's address, its key taken off: the module's own address. */
-const KEYED_PREFIX = /^\/@cawco\/m\/[^/]+/;
+const KEYED_PREFIX = /^\/@cawco\/m\/[^/]+/u;
 /** A line of the stage's own words that says something went wrong. */
-const STAGE_TROUBLE = /error|fatal|warn/i;
+const STAGE_TROUBLE = /error|fatal|warn/iu;
 const PAGE_BYTES = 4096;
 
 /** Every process under `roots` (and the roots), read from /proc. */
@@ -439,8 +439,8 @@ function namedMb(pids: number[], name: string): number {
   return Math.round(kb / 1024);
 }
 /** A mapping's head line in smaps: its address range first. */
-const SMAPS_HEAD = /^[0-9a-f]+-[0-9a-f]+ /;
-const SPACES = /\s+/;
+const SMAPS_HEAD = /^[0-9a-f]+-[0-9a-f]+ /u;
+const SPACES = /\s+/u;
 
 /** The processes that run pages: Chromium's renderers, WebKit's web processes. */
 const pageProcesses = (pids: number[]): number[] =>
@@ -488,7 +488,7 @@ function idleCensus(): void {
       .split("\n")
       .slice(1, 6)
       // biome-ignore lint/performance/useTopLevelRegex: this function runs in the page, where none of this module's scope is
-      .map((line) => line.trim().replace(/\/@cawco\/m\/[^/]+/, ""))
+      .map((line) => line.trim().replace(/\/@cawco\/m\/[^/]+/u, ""))
       .join(" < ");
     sites[site] = (sites[site] ?? 0) + 1;
     return raf((time) => {
@@ -686,7 +686,7 @@ function installCounters(): void {
         .split("\n")
         .slice(1, 7)
         // biome-ignore lint/performance/useTopLevelRegex: this function runs in the page, where none of this module's scope is
-        .map((line) => line.trim().replace(/\/@cawco\/m\/[^/]+/, ""))
+        .map((line) => line.trim().replace(/\/@cawco\/m\/[^/]+/u, ""))
         .join(" < ");
       sites[site] = (sites[site] ?? 0) + 1;
     }
@@ -700,7 +700,7 @@ function installCounters(): void {
 /** What the frame's own timeline says: its resources, their bytes by kind, the moments. */
 function timeline() {
   // biome-ignore lint/performance/useTopLevelRegex: this function runs in the page, where none of this module's scope is
-  const style = /\.(css|scss|pcss|postcss)(\?|$)|[?&]type=style|lang\.css/;
+  const style = /\.(css|scss|pcss|postcss)(\?|$)|[?&]type=style|lang\.css/u;
   const nav = performance.getEntriesByType("navigation")[0] as
     PerformanceNavigationTiming | undefined;
   const resources = performance.getEntriesByType(
@@ -789,23 +789,23 @@ interface TraceEvent {
 /** A main-thread event's group, as DevTools' summary counts them. */
 const GROUPS: [RegExp, string][] = [
   [
-    /^(v8\.compile|V8\.Compile|v8\.parseOnBackground|CompileScript|v8\.compileModule)/,
+    /^(v8\.compile|V8\.Compile|v8\.parseOnBackground|CompileScript|v8\.compileModule)/u,
     "compile",
   ],
-  [/^v8\.evaluateModule$/, "evaluate modules"],
-  [/^(ParseHTML|HTMLDocumentParser)/, "parse HTML"],
+  [/^v8\.evaluateModule$/u, "evaluate modules"],
+  [/^(ParseHTML|HTMLDocumentParser)/u, "parse HTML"],
   [
-    /^(UpdateLayoutTree|RecalculateStyles|ParseAuthorStyleSheet|ScheduleStyleRecalculation|Document::updateStyle)/,
+    /^(UpdateLayoutTree|RecalculateStyles|ParseAuthorStyleSheet|ScheduleStyleRecalculation|Document::updateStyle)/u,
     "style",
   ],
-  [/^(Layout|UpdateLayerTree|LayoutShift)/, "layout"],
+  [/^(Layout|UpdateLayerTree|LayoutShift)/u, "layout"],
   [
-    /^(Paint|PrePaint|Commit|CompositeLayers|RasterTask|PaintImage|Layerize|UpdateLayer)/,
+    /^(Paint|PrePaint|Commit|CompositeLayers|RasterTask|PaintImage|Layerize|UpdateLayer)/u,
     "paint",
   ],
-  [/(GC|Gc|gc\b|MinorGC|MajorGC|BlinkGC)/, "GC"],
+  [/(GC|Gc|gc\b|MinorGC|MajorGC|BlinkGC)/u, "GC"],
   [
-    /^(FunctionCall|EvaluateScript|v8\.run|v8\.callFunction|RunMicrotasks|EventDispatch|TimerFire|FireAnimationFrame|v8\.execute|V8\.Execute|XHRReadyStateChange|FireIdleCallback)/,
+    /^(FunctionCall|EvaluateScript|v8\.run|v8\.callFunction|RunMicrotasks|EventDispatch|TimerFire|FireAnimationFrame|v8\.execute|V8\.Execute|XHRReadyStateChange|FireIdleCallback)/u,
     "script",
   ],
 ];
@@ -1231,11 +1231,11 @@ async function latencyLeg(kit: Kit, stages: Stage[]): Promise<void> {
  * written again, as kit.ts `safariParity` reaches them.
  */
 function fullMotion(): void {
-  const REDUCE = /\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)/gi;
+  const REDUCE = /\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)/giu;
   const NO_PREFERENCE =
-    /\(\s*prefers-reduced-motion\s*:\s*no-preference\s*\)/gi;
+    /\(\s*prefers-reduced-motion\s*:\s*no-preference\s*\)/giu;
   // In a boolean context it holds for any value but `no-preference`.
-  const BARE = /\(\s*prefers-reduced-motion\s*\)/gi;
+  const BARE = /\(\s*prefers-reduced-motion\s*\)/giu;
   const NEVER = "(width < 0px)";
   const ALWAYS = "(width >= 0px)";
   const answered = (query: string): string =>
@@ -1574,7 +1574,7 @@ async function frameLeg(
           (one) =>
             [
               // biome-ignore lint/performance/useTopLevelRegex: this function runs in the page, where none of this module's scope is
-              new URL(one.name).pathname.replace(/^\/@cawco\/m\/[^/]+/, ""),
+              new URL(one.name).pathname.replace(/^\/@cawco\/m\/[^/]+/u, ""),
               one.decodedBodySize,
             ] as [string, number]
         )
@@ -2247,7 +2247,7 @@ async function rekeyLeg(
 const BUILT_SRC = `${LOOP_DIR}/built`;
 const BUILT_OUT = join(process.env.TMPDIR ?? "/tmp", "canvas-cost-built");
 /** SvelteKit's `$lib`, which Kit's own plugin aliases: the built canvases have none of Kit's plugins. */
-const LIB_ALIAS = /^\$lib\//;
+const LIB_ALIAS = /^\$lib\//u;
 
 /** The stage's Svelte adapter (host.ts `ADAPTERS.svelte`), its props holder a `.svelte.js` module the project's Svelte compiles. */
 const BUILT_ADAPTER = `import { createRawSnippet, flushSync, getAllContexts, mount, unmount } from "svelte";
@@ -3722,11 +3722,11 @@ const entryPartsOf = (source: string, src: string): EntryParts => {
   };
 };
 /** The entry's own address under the page's key. */
-const ENTRY_PATH = /\/@id\/__x00__cawco:stage\/entry\.js$/;
+const ENTRY_PATH = /\/@id\/__x00__cawco:stage\/entry\.js$/u;
 /** The entry's `BASE` (stage-host host.ts `entryModule`), read off its address, which an inline copy of it doesn't have. */
-const ENTRY_BASE = /const BASE = [^\n]*\n/;
+const ENTRY_BASE = /const BASE = [^\n]*\n/u;
 /** The entry's `load` of a section's module. */
-const ENTRY_LOAD = /load: \(file, fresh\) => import\([^\n]*\n/;
+const ENTRY_LOAD = /load: \(file, fresh\) => import\([^\n]*\n/u;
 /** The control's objects, as a script line. */
 const HELD_LINE =
   'window.held = Array.from({ length: 400000 }, (_, i) => ({ i, s: String(i).padEnd(40, "x") }));';
@@ -3742,9 +3742,9 @@ const bootOf = (
     `<script type="module">${edit(entry.source.replace(ENTRY_BASE, `const BASE = ${JSON.stringify(entry.base)};\n`))}\n${HELD_LINE}parent.postMessage({ type: "cawco:embed-size", height: 1 }, "*");</script>`
   );
 /** A static import's address in a module's source. */
-const IMPORTED = /^import\s(?:[^"';]*\sfrom\s)?"([^"]+)";/gm;
+const IMPORTED = /^import\s(?:[^"';]*\sfrom\s)?"([^"]+)";/gmu;
 /** A stylesheet's address, a query after it or not. */
-const CSS_ADDRESS = /\.css(?:\?|$)/;
+const CSS_ADDRESS = /\.css(?:\?|$)/u;
 
 /** The entry's place taken by an inline module importing `addresses`, which says the frame's shape once they have run. */
 const entryOf = (html: string, addresses: string[]): string =>
@@ -3805,22 +3805,22 @@ const CUTS = {
     ),
 } as const;
 /** The entry's house faces, a JSON string (stage-host host.ts `entryModule`). */
-const ENTRY_FACES = /faces: "(?:[^"\\]|\\.)*",\n/;
+const ENTRY_FACES = /faces: "(?:[^"\\]|\\.)*",\n/u;
 /** A source line's trailing comma and newline. */
-const TRAILING_COMMA = /,\n$/;
+const TRAILING_COMMA = /,\n$/u;
 /** The entry's adapter option, by its shape (stage-host host.ts `entryModule`). */
-const ENTRY_ADAPTER = /adapter: \{[^}\n]*\},/;
+const ENTRY_ADAPTER = /adapter: \{[^}\n]*\},/u;
 /** A canvas page's preload of its graph (stage-host host.ts `graphPreloads`). */
-const PRELOAD_LINK = /<link rel="modulepreload" href="[^"]*">/g;
+const PRELOAD_LINK = /<link rel="modulepreload" href="[^"]*">/gu;
 /** The script counting them (`__cawcoGraph`). */
 const PRELOAD_COUNTER =
-  /<script>\(function\(\)\{var g=window\.__cawcoGraph[\s\S]*?<\/script>/;
+  /<script>\(function\(\)\{var g=window\.__cawcoGraph[\s\S]*?<\/script>/u;
 /** The canvas page's entry module (stage-host host.ts `CANVAS_ENTRY`, keyed). */
-const ENTRY_TAG = /<script type="module" src="[^"]*entry\.js"><\/script>/;
+const ENTRY_TAG = /<script type="module" src="[^"]*entry\.js"><\/script>/u;
 /** Its address. */
-const ENTRY_SRC = /<script type="module" src="([^"]*entry\.js)"><\/script>/;
+const ENTRY_SRC = /<script type="module" src="([^"]*entry\.js)"><\/script>/u;
 /** The stage's module key in a page it served. */
-const STAGE_KEY = /\/@cawco\/m\/([^/"]+)\//;
+const STAGE_KEY = /\/@cawco\/m\/([^/"]+)\//u;
 
 /** The control's frame with Vite's client from `stage` beside its objects: it says so once the client has run. */
 const VITE_CHILD = (stage: string) =>
@@ -4005,7 +4005,7 @@ async function uninspectedWebKit(
  * among them): that round read `460 → null` once and `460 → 359` another
  * time, a collection from before the page went.
  */
-const GC_LEFT = /^\[GC<(0x[0-9a-f]+)>: .* => (\d+)kb, p=/;
+const GC_LEFT = /^\[GC<(0x[0-9a-f]+)>: .* => (\d+)kb, p=/u;
 
 /** The JS heap the latest collection since collection `since` of each of the process's heaps left, MB; null where none has run since. */
 const jsHeapOf = (

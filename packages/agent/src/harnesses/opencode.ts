@@ -642,7 +642,7 @@ const writeOpencodeConfig = async (
   );
 };
 
-const OPENCODE_SESSION_ID = /^ses_/;
+const OPENCODE_SESSION_ID = /^ses_/u;
 
 /**
  * Every server call keyed by a caller-supplied session key is guarded here, so
@@ -663,7 +663,7 @@ const assertOpencodeKey = (key: string, what: string): void => {
  * stdout lines opaque. 2.0.28 prints `server listening on
  * http://127.0.0.1:<port>` on stdout (settled #5), once, at boot.
  */
-const SERVER_ANNOUNCEMENT_URL_PATTERN = /on\s+(https?:\/\/[^\s]+)/;
+const SERVER_ANNOUNCEMENT_URL_PATTERN = /on\s+(https?:\/\/[^\s]+)/u;
 
 export const parseServerAnnouncement = (line: string): string | undefined =>
   line.startsWith("server listening")
@@ -1091,7 +1091,7 @@ const dropPlanAgentEntry = async (ours: boolean): Promise<void> => {
 };
 
 /** A line CawCo's `excludeFromCheckout` added for an `opencode.jsonc` it wrote into a clone, at its root or in a directory inside it. */
-const CAWCO_CONFIG_LINE = /^\/(?:.+\/)?opencode\.jsonc$/;
+const CAWCO_CONFIG_LINE = /^\/(?:.+\/)?opencode\.jsonc$/u;
 
 /**
  * Every `opencode.jsonc` CawCo's earlier writers could have left in a
@@ -1863,7 +1863,7 @@ const keyCheckRequest = (
   }
 };
 
-const TRAILING_SLASH = /\/+$/;
+const TRAILING_SLASH = /\/+$/u;
 
 /** OpenCode's own list of its integrations (`GET /api/integration`), as far as CawCo reads it. */
 const integrationsOf = (listed: {

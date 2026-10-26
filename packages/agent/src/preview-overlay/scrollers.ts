@@ -24,7 +24,7 @@ export interface ViewBox {
 /** Room kept between a mark and what covers the page, or the viewport's edge, px. Our call. */
 const CLEAR_GAP = 8;
 /** Overflows a container scrolls by. */
-const SCROLLS = /^(auto|scroll|overlay)$/;
+const SCROLLS = /^(auto|scroll|overlay)$/u;
 
 /** A stretch of the viewport's height a mark may stand in. */
 interface Band {
@@ -78,7 +78,7 @@ export function liftUnder(x: number, covered: ViewBox[], r: number): number {
 }
 
 /** Overflows that keep the person from scrolling a box (a script still can). */
-const HELD = /^(hidden|clip)$/;
+const HELD = /^(hidden|clip)$/u;
 
 /**
  * Whether the person scrolls the top page: its root's overflow, or the

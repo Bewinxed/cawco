@@ -69,7 +69,7 @@ const TOOLS = {
 } as const;
 type Command = keyof typeof TOOLS;
 /** A delegate's brief carries its tag: SLEEP runs a long command, HELLO says ok, FINISH-C finishes once B is paused. */
-const SLEEP = /PROBE-SLEEP-([A-Z])/;
+const SLEEP = /PROBE-SLEEP-([A-Z])/u;
 const HELLO = "PROBE-HELLO-Q";
 const FINISH_C = "PROBE-FINISH-C";
 const FINISH_D = "PROBE-FINISH-D";
@@ -96,7 +96,7 @@ const commitCommand = (tag: string, file: string) =>
     `echo DONE-COMMIT-${tag}`,
   ].join(" && ");
 const P7_PAUSE_MS = 60_000;
-const CMD = /PROBE-CMD (\d+) (interrupt|handoff) (\S+)(?: (.*))?/g;
+const CMD = /PROBE-CMD (\d+) (interrupt|handoff) (\S+)(?: (.*))?/gu;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({

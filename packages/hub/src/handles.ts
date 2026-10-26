@@ -14,13 +14,13 @@ export const HANDLE_MIN = 6;
 const NAMED_AT_MOST = 12;
 
 /** A handle: hex and dashes, at least {@link HANDLE_MIN} of them. */
-const HANDLE = /^[0-9a-f-]+$/;
+const HANDLE = /^[0-9a-f-]+$/u;
 
 /** A mention chip as a composer writes it: `Fix the tray <cockpit#5a167bde>`, its handle in angle brackets. */
-const CHIP = /<([^<>]+)>\s*$/;
+const CHIP = /<([^<>]+)>\s*$/u;
 
 /** An `@` a mention begins with. */
-const AT = /^@/;
+const AT = /^@/u;
 
 /** What `asked` says, trimmed: a mention chip's handle when it is one, else the words. */
 const said = (asked: string): string =>

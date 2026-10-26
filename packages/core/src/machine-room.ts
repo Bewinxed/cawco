@@ -129,9 +129,9 @@ const roomOf = (readings: Reading[]): Room => ({
   words: `this machine's measured room: ${readings.map((reading) => `${reading.words}${reading.ok ? "" : " ✗"}`).join(", ")}`,
 });
 
-const SOME_AVG10 = /^some avg10=([\d.]+)/m;
-const MEM_AVAILABLE = /^MemAvailable:\s+(\d+) kB$/m;
-const MEM_TOTAL = /^MemTotal:\s+(\d+) kB$/m;
+const SOME_AVG10 = /^some avg10=([\d.]+)/mu;
+const MEM_AVAILABLE = /^MemAvailable:\s+(\d+) kB$/mu;
+const MEM_TOTAL = /^MemTotal:\s+(\d+) kB$/mu;
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
 

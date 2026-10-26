@@ -426,8 +426,8 @@ export const slotLabel = (slot: string, timeZone: string): string => {
 };
 
 /** A cron field that repeats (`*`, `*\/15`, `0-30/5`) rather than naming fixed values. */
-const REPEATS = /[*/]/;
-const CRON_FIELDS = /\s+/;
+const REPEATS = /[*/]/u;
+const CRON_FIELDS = /\s+/u;
 
 /**
  * Whether a schedule runs at fixed times of day: its minute and hour fields
@@ -510,22 +510,23 @@ const ANSWERS = `say exactly ${NO_REPLY} when there is nothing worth telling the
 
 /** A failing answer and its reason: `AUTOMATION_FAILED`, then the why after a colon, dash or space. */
 const FAILED_ANSWER = new RegExp(
-  `^${AUTOMATION_FAILED}(?:\\s*[:\\-—–]\\s*|\\s+|$)([\\s\\S]*)$`
+  `^${AUTOMATION_FAILED}(?:\\s*[:\\-—–]\\s*|\\s+|$)([\\s\\S]*)$`,
+  "u"
 );
 
 /** A call of `routine_result`, `finish_item` or `routine_create`, under any harness's MCP prefix. */
-const ROUTINE_RESULT_CALL = /(?:^|__|_)routine_result$/;
-const ROUTINE_CREATE_CALL = /(?:^|__|_)routine_create$/;
+const ROUTINE_RESULT_CALL = /(?:^|__|_)routine_result$/u;
+const ROUTINE_CREATE_CALL = /(?:^|__|_)routine_create$/u;
 /** Paragraphs in what a turn said: the last one before a `routine_create` call is why it was made. */
-const PARAGRAPHS = /\n\s*\n/;
-const FINISH_CALL = /(?:^|__|_)finish_item$/;
+const PARAGRAPHS = /\n\s*\n/u;
+const FINISH_CALL = /(?:^|__|_)finish_item$/u;
 
 /** The longest reason a run keeps: the owner's "Failed: …" line, not a transcript. */
 const REASON_MAX = 500;
 
 /** A reason clipped to {@link REASON_MAX}, on its word. */
 const clipReason = (words: string): string => {
-  const said = words.trim().replace(/\s+/g, " ");
+  const said = words.trim().replace(/\s+/gu, " ");
   if (said.length <= REASON_MAX) {
     return said;
   }

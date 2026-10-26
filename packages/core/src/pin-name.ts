@@ -41,11 +41,11 @@ const TAG_WORDS: Record<string, string> = {
   video: "Video",
 };
 
-const CASE_BREAK = /([a-z0-9])([A-Z])/g;
-const SEPARATORS = /[-_.]+/g;
-const SPACES = /\s+/g;
+const CASE_BREAK = /([a-z0-9])([A-Z])/gu;
+const SEPARATORS = /[-_.]+/gu;
+const SPACES = /\s+/gu;
 /** A component's file: its name, when it is a component's. */
-const COMPONENT_FILE = /^(.+)\.(svelte|vue|[jt]sx)$/;
+const COMPONENT_FILE = /^(.+)\.(svelte|vue|[jt]sx)$/u;
 
 /** `SubagentCard`, `subagent-card`, `subagent_card` → "Subagent card". */
 function words(name: string): string {

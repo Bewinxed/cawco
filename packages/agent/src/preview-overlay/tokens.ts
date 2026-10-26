@@ -8,13 +8,13 @@
  */
 import { readFileSync } from "node:fs";
 
-const COMMENTS = /\/\*[\s\S]*?\*\//g;
-const SPACES = /\s+/g;
+const COMMENTS = /\/\*[\s\S]*?\*\//gu;
+const SPACES = /\s+/gu;
 /** Spacing a stylesheet does not need: round braces, semicolons and commas. A colon can be a descendant combinator's, so it keeps its. */
-const AROUND = /\s*([{};,])\s*/g;
-const ROOT = /:root/g;
+const AROUND = /\s*([{};,])\s*/gu;
+const ROOT = /:root/gu;
 /** The dark scheme's own values (a number no `light-dark()` carries: the breath's floor): on the host while the host's theme is dark (page.ts `takeTheme`). */
-const ROOT_DARK = /:root\.dark/g;
+const ROOT_DARK = /:root\.dark/gu;
 
 export function hostTokens(): string {
   const css = readFileSync(

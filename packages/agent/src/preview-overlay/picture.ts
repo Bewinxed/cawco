@@ -168,7 +168,7 @@ const breather = () => {
 const familyKey = (name: string) =>
   name
     .trim()
-    .replace(/^["']|["']$/g, "")
+    .replace(/^["']|["']$/gu, "")
     .toLowerCase();
 
 /** The families only `doc`'s own font faces give (its `@font-face`), by {@link familyKey}. */
@@ -433,8 +433,8 @@ function silent(names: string[], says: (name: string) => unknown) {
  * page and, on WebKit, the dashboard beside it for 40 s.
  */
 const PSEUDO_RULE =
-  /^(\.u[\da-z]+::?[-\w]+(?:,\n\.u[\da-z]+::?[-\w]+)* )\{\n {2}([^{}]*)\n\}\n/gm;
-const DECLARATION = /^([-\w]+): (.*?)( !important)?;$/s;
+  /^(\.u[\da-z]+::?[-\w]+(?:,\n\.u[\da-z]+::?[-\w]+)* )\{\n {2}([^{}]*)\n\}\n/gmu;
+const DECLARATION = /^([-\w]+): (.*?)( !important)?;$/su;
 
 /**
  * A copied pseudo-element's rule without what restates its default, by
@@ -564,11 +564,11 @@ const SVG_STYLES = [
  * rather than drawing it as it stands: one naming a resource to embed
  * (dom-to-foreign-object-svg.ts `SVG_EXTERNAL_RESOURCE_REGEX`, 4.7.0).
  */
-const SVG_EMBEDS = /\bx?link:?href\s*=\s*["'](?!data:)[^"']+["']/i;
+const SVG_EMBEDS = /\bx?link:?href\s*=\s*["'](?!data:)[^"']+["']/iu;
 
 /** A face's `font-weight` descriptor as the weights it covers: `100 900`, `500`, `bold`; NaN for any other word. */
 const WEIGHT_WORDS: Record<string, number> = { normal: 400, bold: 700 };
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 const weightsOf = (descriptor: string): [number, number] => {
   const [from = 400, to = from] = descriptor
     .trim()
@@ -579,8 +579,8 @@ const weightsOf = (descriptor: string): [number, number] => {
 };
 
 /** A face's `unicode-range` descriptor as code point ranges (`U+0000-00FF, U+4??`); none for an empty one. */
-const CODE_POINT_PREFIX = /^u\+/i;
-const WILDCARD = /\?/g;
+const CODE_POINT_PREFIX = /^u\+/iu;
+const WILDCARD = /\?/gu;
 const rangesOf = (descriptor: string) =>
   descriptor
     .split(",")
@@ -663,7 +663,7 @@ async function dataUrlOf(url: string): Promise<string | null> {
   });
 }
 
-const CSS_URL = /url\((["']?)([^"')]+)\1\)/g;
+const CSS_URL = /url\((["']?)([^"')]+)\1\)/gu;
 
 /** Of `faces`, those a use of their family draws with: its style, then its weights, then its code points; a style or weight none covers keeps them all, as the browser's match falls to the nearest. */
 function facesFor(faces: CSSFontFaceRule[], use: FamilyUse) {
@@ -865,7 +865,7 @@ async function partRoot(
   return copy;
 }
 
-const PNG_PREFIX = /^data:image\/png;base64,/;
+const PNG_PREFIX = /^data:image\/png;base64,/u;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
 export const SKIPPED =
   "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], [data-cawco-stand-ins], script, style, template, noscript, link, meta";

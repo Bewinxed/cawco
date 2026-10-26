@@ -208,7 +208,7 @@ export interface KeeperDial {
   welcomed: boolean;
 }
 
-const WELCOME_LINE = /"type"\s*:\s*"welcome"/;
+const WELCOME_LINE = /"type"\s*:\s*"welcome"/u;
 
 /**
  * One dial of the keeper, waiting `timeoutMs` for its welcome: what it

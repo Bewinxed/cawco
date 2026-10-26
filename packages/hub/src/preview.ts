@@ -507,7 +507,7 @@ const joinArtifact = (
  * canvas stands outside the panel, at `/__cawco/canvas/<id>/` on its
  * session's preview origin, its bundle and fonts under that.
  */
-const CANVAS_PATH = /^\/__cawco\/canvas\/([0-9a-f-]{36})(\/.*)$/;
+const CANVAS_PATH = /^\/__cawco\/canvas\/([0-9a-f-]{36})(\/.*)$/u;
 
 /**
  * A page by its id, whichever artifact the panel shows: the project page's
@@ -515,14 +515,14 @@ const CANVAS_PATH = /^\/__cawco\/canvas\/([0-9a-f-]{36})(\/.*)$/;
  * `/__cawco/page/<id>/` on its session's preview origin, beside the doc's
  * socket the page joins there.
  */
-const PAGE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})(\/.*)$/;
+const PAGE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})(\/.*)$/u;
 
 /**
  * Where a decision page's Preview tells the shape its component canvas
  * said, relative to the page (`shape` beside `/__cawco/page/<id>/`): a POST
  * of the canvas's id, its stories and the shape ({@link PreviewListenerDeps.keepShape}).
  */
-const PAGE_SHAPE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})\/shape$/;
+const PAGE_SHAPE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})\/shape$/u;
 
 /** Everything under it is the hub's own on a preview origin; a previewed app never sees it. */
 const RESERVED = "/__cawco/";
@@ -978,7 +978,7 @@ const ownerGone = (key: string): PreviewRefusal =>
  * around the placeholder hold no brace, so a second one never fits.
  */
 const PATTERN_SHAPE =
-  /^https:\/\/([a-z0-9-]*)\{(session|port)\}([a-z0-9-]*\.([a-z0-9.-]+?))(:\d{1,5})?$/;
+  /^https:\/\/([a-z0-9-]*)\{(session|port)\}([a-z0-9-]*\.([a-z0-9.-]+?))(:\d{1,5})?$/u;
 const PATTERN_REFUSAL =
   "A host pattern is https:// and a host name whose first label holds one of {session} or {port}, like https://p-{session}.example.com or https://p-{port}.example.com, and a port after it or not.";
 
@@ -998,10 +998,10 @@ interface HostPattern {
 }
 
 /** The port a host pattern's name ends in (`HostPattern.after`), when it names one. */
-const PATTERN_PORT = /:(\d+)$/;
+const PATTERN_PORT = /:(\d+)$/u;
 
 /** One DNS label: what a `{session}` name's placeholder holds ({@link labelOf}). */
-const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 
 const VALUE_OF = {
   // Any origin's label (labelOf): a session's, a project's, an embed's.
@@ -1064,7 +1064,7 @@ const parsePattern = (pattern: string): HostPattern => {
     domain,
     shape: new RegExp(
       `^${literal(before)}(${VALUE_OF[key]})(?:${literal(after)}|${literal(name)})$`,
-      "i"
+      "iu"
     ),
   };
 };
@@ -1077,8 +1077,8 @@ const hostFor = (pattern: HostPattern, value: string | number): string =>
 const originFor = (pattern: HostPattern, value: string | number): string =>
   `https://${hostFor(pattern, value)}`;
 
-const PORT_SUFFIX = /:\d+$/;
-const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
+const PORT_SUFFIX = /:\d+$/u;
+const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/gu;
 /** `text` as a regular expression that matches it alone. */
 const literal = (text: string): string =>
   text.replaceAll(REGEX_SPECIAL, "\\$&");

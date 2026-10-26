@@ -62,13 +62,13 @@ const MAX_PROBLEMS = 8;
 const parser = createParser(spec.schema as LibraryJSONSchema, spec.root);
 
 const URL_LIKE =
-  /[a-z][a-z0-9+.-]*:\/\/|(?:^|[\s"'(])(?:data|javascript|vbscript|mailto|blob|file|tel):|(?:^|[\s"'(/])www\.[a-z0-9-]+\./i;
-const MARKUP = /<\s*\/?\s*[a-z!][^>]*>/i;
+  /[a-z][a-z0-9+.-]*:\/\/|(?:^|[\s"'(])(?:data|javascript|vbscript|mailto|blob|file|tel):|(?:^|[\s"'(/])www\.[a-z0-9-]+\./iu;
+const MARKUP = /<\s*\/?\s*[a-z!][^>]*>/iu;
 const CLOUD_MARKER = "]]>openui:";
 const ACTIONS = new Set(["OpenUrl", "ToAssistant", "Run", "Set", "Reset"]);
 /** lang-core's token kinds this reads (tokens.ts `T`, a const enum). */
 const TOKEN = { Type: 17, BuiltinCall: 35 } as const;
-const STATEMENT = /^([A-Za-z_$][\w$]*)\s*=/;
+const STATEMENT = /^([A-Za-z_$][\w$]*)\s*=/u;
 
 /** What a program is once checked: its text, what it says, and the components it drops. */
 export interface CheckedProgram {
@@ -612,7 +612,7 @@ const ESCAPES: Record<string, string> = {
   '"': "&quot;",
 };
 const escaped = (value: string): string =>
-  value.replaceAll(/[&<>"]/g, (char) => ESCAPES[char] ?? char);
+  value.replaceAll(/[&<>"]/gu, (char) => ESCAPES[char] ?? char);
 
 /** A file an Image names, as the page keeps it: its address beside the page, and its bytes. */
 export interface ProgramFile {
@@ -630,7 +630,7 @@ export interface BuiltProgram extends CheckedProgram {
 /** What an Image's file reads as: its bytes, or why it can't be read, in a sentence. */
 export type ImageRead = { bytes: Uint8Array } | { problem: string };
 
-const FILE_NAME = /[^A-Za-z0-9._-]+/g;
+const FILE_NAME = /[^A-Za-z0-9._-]+/gu;
 
 /**
  * `raw` checked and built: each Canvas's and Preview's artifact resolved

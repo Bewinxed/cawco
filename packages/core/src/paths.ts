@@ -309,7 +309,7 @@ const SLUG_MAX = 200;
  * the whole path after it. The SDK's own `Tc` and `iS` (sdk.mjs 0.3.289).
  */
 export const projectSlug = (path: string): string => {
-  const slug = path.replace(/[^a-zA-Z0-9]/g, "-");
+  const slug = path.replace(/[^a-zA-Z0-9]/gu, "-");
   if (slug.length <= SLUG_MAX) {
     return slug;
   }
@@ -992,10 +992,10 @@ export const pairingOffAnswerPath = (db: string, id: string): string =>
   join(dirname(db), `pairing-off.${id}.answer`);
 
 /** A request's file name; its one group is the request's id. */
-export const PAIRING_OFF_REQUEST = /^pairing-off\.([0-9a-f-]{36})\.request$/;
+export const PAIRING_OFF_REQUEST = /^pairing-off\.([0-9a-f-]{36})\.request$/u;
 
 /** An answer's file name, which a hub at its start clears. */
-export const PAIRING_OFF_ANSWER = /^pairing-off\.[0-9a-f-]{36}\.answer$/;
+export const PAIRING_OFF_ANSWER = /^pairing-off\.[0-9a-f-]{36}\.answer$/u;
 
 /** What the hub answers a pairing-off request: done, or why not. */
 export type PairingOffAnswer = { ok: true } | { error: string };
@@ -1291,7 +1291,7 @@ export const SECRET_FILE_NAME = String.raw`\.env[^/]*|[^/]*\.env(\.[^/]*)?`;
 
 /** {@link SECRET_FILE_NAME} as a test on one file's name. */
 export const isSecretFileName = (name: string): boolean =>
-  new RegExp(`^(${SECRET_FILE_NAME})$`).test(name);
+  new RegExp(`^(${SECRET_FILE_NAME})$`, "u").test(name);
 
 /**
  * The variables that name a key agent's socket: ssh-agent's, GPG's, the

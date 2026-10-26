@@ -14,9 +14,9 @@ import { hubGitEnv, hubRepo, isHubRemote } from "./move";
 import { publishCheck } from "./place-repo";
 import { gitUntil } from "./workspace";
 
-const LINE = /\r?\n/;
+const LINE = /\r?\n/u;
 /** `git ls-tree -r -l` line: mode, type, object, size, then a tab and the path. */
-const TREE_SIZE = /^\S+ blob \S+\s+(\d+)\t/;
+const TREE_SIZE = /^\S+ blob \S+\s+(\d+)\t/u;
 
 export const placePush = async (
   path: unknown,

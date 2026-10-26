@@ -62,8 +62,8 @@ import { PASS_DOMAIN, PASS_HOSTS, storeHostMode } from "../pass-legs";
 import { passedFetch, passInto, previewPass } from "../preview-pass";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const TITLE = "Socket probe page";
 /** How long a socket has to echo after a load or a restart. Our call: the page retries every 300 ms, a register takes a few seconds. */
 const ECHO_MS = 30_000;
@@ -219,7 +219,7 @@ const listeningOnAll = async (): Promise<Set<string>> =>
       .split("\n")
       .flatMap((line) => line.match(WILDCARD_PORT)?.slice(1, 2) ?? [])
   );
-const WILDCARD_PORT = /\s0\.0\.0\.0:(\d+)\s/;
+const WILDCARD_PORT = /\s0\.0\.0\.0:(\d+)\s/u;
 /** A request straight to a listener: with no relay token, and with one that isn't its start's. */
 const STRAIGHT_HEADERS: Record<string, string>[] = [
   {},

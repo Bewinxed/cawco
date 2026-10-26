@@ -55,7 +55,7 @@ const PER_PAGE = 50;
 /** Pages one list reads at most in a poll. Our choice. */
 const MAX_PAGES = 10;
 const ISSUE_URL =
-  /^https:\/\/linear\.app\/[^/]+\/issue\/([A-Z0-9]+-\d+)(?:\/|$)/i;
+  /^https:\/\/linear\.app\/[^/]+\/issue\/([A-Z0-9]+-\d+)(?:\/|$)/iu;
 
 /**
  * One request within {@link REQUEST_MS}, through a client made for it with

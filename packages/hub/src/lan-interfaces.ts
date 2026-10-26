@@ -40,8 +40,8 @@
 import { networkInterfaces } from "node:os";
 import { reachableLinks } from "@cawco/core/reachable-links";
 
-const LINK_LOCAL_V4 = /^169\.254\./;
-const LINK_LOCAL_V6 = /^fe[89ab]/i;
+const LINK_LOCAL_V4 = /^169\.254\./u;
+const LINK_LOCAL_V6 = /^fe[89ab]/iu;
 
 /** Whether `name` holds an address another device can reach: an IPv4 one outside 169.254/16, or an IPv6 one outside fe80::/10. */
 const reachablyAddressed = (name: string): boolean =>

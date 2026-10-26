@@ -260,36 +260,36 @@ const answer = (
   });
 };
 /** The page new_page selected, in its answer as JSON (a line ends at a JSON-escaped newline). */
-const SELECTED_PAGE = /(\d+): [^\\"]*\[selected\]/;
+const SELECTED_PAGE = /(\d+): [^\\"]*\[selected\]/u;
 /** take_screenshot's namespace path as code mode writes it: `tools["x"]` or `tools.x`, nested or not, then the tool. */
 const SCREENSHOT_PATH =
-  /(tools(?:\["[^"]+"\]|\.[A-Za-z_$][\w$]*)*?)(?:\.take_screenshot|\["take_screenshot"\])/;
+  /(tools(?:\["[^"]+"\]|\.[A-Za-z_$][\w$]*)*?)(?:\.take_screenshot|\["take_screenshot"\])/u;
 const SCREENSHOT_NAME = "take_screenshot";
 /** The page new_page selected, in its answer as text. */
-const SELECTED_LINE = /(\d+):[^\n]*\[selected\]/;
+const SELECTED_LINE = /(\d+):[^\n]*\[selected\]/u;
 /** Where 2.0.29's Code Mode catalog (`Xl`/`Yi`) starts listing. */
 const CATALOG = "## Available tools";
 /** A Code Mode `search` call, as 2.0.29 names its input (`search({ query })`, synchronous). */
 const SEARCH_CALL = "search({ query: ";
-const HOLD = /HOLD (\S+)/;
-const PI_LINE = /\[pi\] .* relaunched between turns/;
-const GATE_LINE = /\[opencode\] gate: .* relaunched from gate form/;
-const READ = /READ (\S+)/;
-const SHOT = /SHOT (\S+)/;
-const LONG = /\bLONG\b/;
+const HOLD = /HOLD (\S+)/u;
+const PI_LINE = /\[pi\] .* relaunched between turns/u;
+const GATE_LINE = /\[opencode\] gate: .* relaunched from gate form/u;
+const READ = /READ (\S+)/u;
+const SHOT = /SHOT (\S+)/u;
+const LONG = /\bLONG\b/u;
 /**
  * OpenCode's hint naming the file it saved a cut output to, as a tool
  * result's JSON text carries it. 2.0.29 (the installed binary's ToolOutput:
  * `maxLines:2000, maxBytes:51200`) writes `[showing lines 1-N of M; full
  * output saved to <path>]`; 1.18.34 wrote `Full output saved to: <path>`.
  */
-const SAVED = /full output saved to:? ([^\s"\\\]]+)/i;
+const SAVED = /full output saved to:? ([^\s"\\\]]+)/iu;
 /** 5000 lines: past OpenCode's 2000-line cut, under CawCo's shell's own 30000 characters. */
 const LONG_COMMAND = "seq 1 5000";
-const BOUNDED = /\bBOUNDED\b/;
+const BOUNDED = /\bBOUNDED\b/u;
 /** What the probe's boundary runner sets; OpenCode's own bash never has it. */
 const BOUNDED_COMMAND = 'echo "boundary=$CAWCO_PROBE_BOUNDARY pwd=$PWD"';
-const PATH_PARAM = /path/i;
+const PATH_PARAM = /path/iu;
 /** A tool's parameter names: required first, then the rest. */
 const paramsOf = (tool: Tool): string[] => {
   const required = tool.function?.parameters?.required ?? [];
@@ -1174,7 +1174,7 @@ try {
     180_000,
     "OpenCode's server replacement"
   );
-  const handoff = new RegExp(`\\[opencode\\] handoff ${OC}:`);
+  const handoff = new RegExp(`\\[opencode\\] handoff ${OC}:`, "u");
   await Bun.sleep(NOT_BEFORE_MS);
   const movedMidTurn = saidLine(handoff);
   const oldAliveMidTurn = (await keeper.list()).procs.some(

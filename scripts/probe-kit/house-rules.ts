@@ -160,16 +160,16 @@ const TOKEN_VALUES = (() => {
     "utf8"
   );
   const raw = new Map<string, string>();
-  for (const m of css.matchAll(/--([\w-]+):\s*([^;]+);/g)) {
+  for (const m of css.matchAll(/--([\w-]+):\s*([^;]+);/gu)) {
     const [, name, value] = m;
     if (name && value && !raw.has(name)) {
-      raw.set(name, value.replace(/\s+/g, " ").trim());
+      raw.set(name, value.replace(/\s+/gu, " ").trim());
     }
   }
   const out = (value: string, depth = 0): string =>
     depth > 8
       ? value
-      : value.replace(/var\(--([\w-]+)\)/g, (whole, name: string) => {
+      : value.replace(/var\(--([\w-]+)\)/gu, (whole, name: string) => {
           const known = raw.get(name);
           return known ? out(known, depth + 1) : whole;
         });
@@ -267,10 +267,10 @@ function houseRead(args: InPageArgs): InPageRead {
     return r.width > 1 && r.height > 1;
   };
   const words = (text: string) => {
-    const one = text.replace(/\s+/g, " ").trim();
+    const one = text.replace(/\s+/gu, " ").trim();
     return one.length > 48 ? `${one.slice(0, 45)}…` : one;
   };
-  const HASH = /^(svelte-|s-)[\w-]{5,}$/;
+  const HASH = /^(svelte-|s-)[\w-]{5,}$/u;
   const selectorOf = (el: Element): string => {
     const part = (e: Element) => {
       const slot = e.getAttribute("data-slot");
@@ -290,7 +290,7 @@ function houseRead(args: InPageArgs): InPageRead {
     const by = el.getAttribute("aria-labelledby");
     if (by) {
       const text = by
-        .split(/\s+/)
+        .split(/\s+/u)
         .map((id) => document.getElementById(id)?.textContent ?? "")
         .join(" ");
       if (text.trim()) {
@@ -380,7 +380,7 @@ function houseRead(args: InPageArgs): InPageRead {
     ];
   };
   const COLOR_FN =
-    /(?:rgba?|oklch|oklab|lab|lch|color|hsla?)\((?:[^()]|\([^()]*\))*\)|#[0-9a-f]{3,8}\b/gi;
+    /(?:rgba?|oklch|oklab|lab|lch|color|hsla?)\((?:[^()]|\([^()]*\))*\)|#[0-9a-f]{3,8}\b/giu;
   /** The background's layers, top first, split at its top-level commas. */
   const layersOf = (image: string): string[] => {
     const out: string[] = [];
@@ -452,15 +452,15 @@ function houseRead(args: InPageArgs): InPageRead {
         return null;
       }
       const n = Number.parseFloat(value);
-      if (/^-?[\d.]+px$/.test(value)) {
+      if (/^-?[\d.]+px$/u.test(value)) {
         return n;
       }
-      if (/^-?[\d.]+%$/.test(value)) {
+      if (/^-?[\d.]+%$/u.test(value)) {
         return (n / 100) * whole;
       }
       return null;
     };
-    const [sw, sh = "auto"] = nth(s.backgroundSize).split(/\s+/);
+    const [sw, sh = "auto"] = nth(s.backgroundSize).split(/\s+/u);
     const w = length(sw, box.width);
     const h = sh === "auto" ? box.height : length(sh, box.height);
     if (w === null || h === null) {
@@ -471,12 +471,12 @@ function houseRead(args: InPageArgs): InPageRead {
       if (value === undefined) {
         return null;
       }
-      if (/^-?[\d.]+%$/.test(value)) {
+      if (/^-?[\d.]+%$/u.test(value)) {
         return (Number.parseFloat(value) / 100) * (whole - size);
       }
       return length(value, whole);
     };
-    const [px0, py0] = nth(s.backgroundPosition).split(/\s+/);
+    const [px0, py0] = nth(s.backgroundPosition).split(/\s+/u);
     const x = place(px0, box.width, w);
     const y = place(py0, box.height, h);
     if (x === null || y === null) {
@@ -628,7 +628,7 @@ function houseRead(args: InPageArgs): InPageRead {
       .filter((t) => el.contains(t.node))
       .map((t) => t.node.data)
       .join(" ")
-      .replace(/\s+/g, " ")
+      .replace(/\s+/gu, " ")
       .trim();
 
   // ---- 2. one coral per view ----
@@ -915,7 +915,7 @@ function houseRead(args: InPageArgs): InPageRead {
             f && n < 4;
             f = f.parentElement, n += 1
           ) {
-            if (/fixed|absolute|sticky/.test(style(f).position)) {
+            if (/fixed|absolute|sticky/u.test(style(f).position)) {
               floats = true;
               break;
             }
@@ -1009,7 +1009,7 @@ function houseRead(args: InPageArgs): InPageRead {
       }
       if (
         bar.matches('[role="toolbar"]') &&
-        /fixed|absolute/.test(s.position)
+        /fixed|absolute/u.test(s.position)
       ) {
         named.push(
           `a floating toolbar, a surface of its own: ${describe(bar)}`
@@ -1095,7 +1095,7 @@ function houseRead(args: InPageArgs): InPageRead {
   if (!skip.has("back-close")) {
     // The whole of its words: Back, Close, "Back to Board", "← Runs".
     const SAYS =
-      /^(?:[←‹<]\s*)?(?:go\s+)?(?:back|close)(?:\s+to\s+.{1,40})?$|^[←‹]\s*\S.{0,40}$/i;
+      /^(?:[←‹<]\s*)?(?:go\s+)?(?:back|close)(?:\s+to\s+.{1,40})?$|^[←‹]\s*\S.{0,40}$/iu;
     for (const c of controls) {
       const said = visibleWords(c);
       if (SAYS.test(said)) {
@@ -1117,15 +1117,15 @@ function houseRead(args: InPageArgs): InPageRead {
       }
       const s = style(el);
       const y =
-        /auto|scroll/.test(s.overflowY) &&
+        /auto|scroll/u.test(s.overflowY) &&
         el.scrollHeight > el.clientHeight + 1;
       const x =
-        /auto|scroll/.test(s.overflowX) && el.scrollWidth > el.clientWidth + 1;
+        /auto|scroll/u.test(s.overflowX) && el.scrollWidth > el.clientWidth + 1;
       return x || y;
     });
     if (
       scope !== document.body &&
-      /auto|scroll/.test(style(scope).overflowY) &&
+      /auto|scroll/u.test(style(scope).overflowY) &&
       scope.scrollHeight > scope.clientHeight + 1
     ) {
       scrollers.unshift(scope);
@@ -1168,8 +1168,8 @@ function houseRead(args: InPageArgs): InPageRead {
       const cs = style(el) as CSSStyleDeclaration & {
         webkitLineClamp?: string;
       };
-      const clipsY = /hidden|clip/.test(cs.overflowY);
-      const clipsX = /hidden|clip/.test(cs.overflowX);
+      const clipsY = /hidden|clip/u.test(cs.overflowY);
+      const clipsX = /hidden|clip/u.test(cs.overflowX);
       if (
         !(clipsY || clipsX) ||
         scrollers.includes(el) ||
@@ -1238,7 +1238,7 @@ function houseRead(args: InPageArgs): InPageRead {
         cuts.push("right");
       }
       if (
-        /auto|scroll/.test(s.overflowY) &&
+        /auto|scroll/u.test(s.overflowY) &&
         sc.scrollHeight > sc.clientHeight + 1
       ) {
         if (sc.scrollTop > 1) {
@@ -1249,7 +1249,7 @@ function houseRead(args: InPageArgs): InPageRead {
         }
       }
       if (
-        /auto|scroll/.test(s.overflowX) &&
+        /auto|scroll/u.test(s.overflowX) &&
         sc.scrollWidth > sc.clientWidth + 1
       ) {
         const x = Math.abs(sc.scrollLeft);
@@ -1519,13 +1519,13 @@ function houseRead(args: InPageArgs): InPageRead {
   // ---- 10. nothing made up ----
   if (!skip.has("made-up")) {
     const DENY = [
-      /PROBE-/,
-      /JOURNEY-/,
-      /\/tmp\//,
-      /\.cawco\/tmp/,
-      /probe-kit/,
-      /\bLorem\b/i,
-      /\bTest item\b/i,
+      /PROBE-/u,
+      /JOURNEY-/u,
+      /\/tmp\//u,
+      /\.cawco\/tmp/u,
+      /probe-kit/u,
+      /\bLorem\b/iu,
+      /\bTest item\b/iu,
     ];
     const flagged = new Set<Element>();
     for (const t of texts) {
@@ -1572,7 +1572,7 @@ function houseRead(args: InPageArgs): InPageRead {
         if (!shown(el)) {
           continue;
         }
-        const text = el.textContent?.replace(/\s+/g, " ").trim() ?? "";
+        const text = el.textContent?.replace(/\s+/gu, " ").trim() ?? "";
         if (!slot.texts.includes(text)) {
           say("made-up", el, `“${words(text)}” is not in ${slot.source}`);
         }

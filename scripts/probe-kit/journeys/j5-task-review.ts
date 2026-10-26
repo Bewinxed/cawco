@@ -49,14 +49,14 @@ const STAGES =
 const STUB = `#!/usr/bin/env bash
 echo "STUB-MAC-BUILD $*"
 `;
-const FILE_TASK = /JOURNEY-TASK (\S+) (ios|notes)/;
-const START_TASK = /JOURNEY-START (tsk-\d+)/;
+const FILE_TASK = /JOURNEY-TASK (\S+) (ios|notes)/u;
+const START_TASK = /JOURNEY-START (tsk-\d+)/u;
 /** Only an attempt's brief opens this way (work-items.ts). */
-const ATTEMPT = /attempt at (tsk-\d+), “([^”]+)”/;
+const ATTEMPT = /attempt at (tsk-\d+), “([^”]+)”/u;
 const GATE_CHECK = "iOS build compiles";
 /** The review's actions (TaskReview.svelte): Approve → its next stage, Send back → its stage. */
-const APPROVE = /^Approve →/;
-const SEND_BACK_TO = /^Send back →/;
+const APPROVE = /^Approve →/u;
+const SEND_BACK_TO = /^Send back →/u;
 /** The hub's end of a wait it declared (work-items.ts `endWait`). */
 const WAIT_OVER = "Your wait is over";
 const IOS = "Ship the iOS widget";

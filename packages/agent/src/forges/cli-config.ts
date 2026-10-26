@@ -28,7 +28,7 @@ export const readYamlConfig = async (
   }
 };
 
-const PORT = /:\d+$/;
+const PORT = /:\d+$/u;
 
 /**
  * Whether a CLI's login for `configured` (`gitea.local:3000`) is the one for

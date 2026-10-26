@@ -580,7 +580,7 @@ const CLAUDE_ELSEWHERE = [
 const VERSION_TIMEOUT_MS = 5000;
 
 /** The first `x.y.z` a version command prints, the same rule tools.ts uses. */
-const VERSION_PATTERN = /\d+\.\d+\.\d+/;
+const VERSION_PATTERN = /\d+\.\d+\.\d+/u;
 
 /** An install's version, or undefined when it is not known (it printed none, could not run, or did not answer in time, which is logged). */
 const askVersion = async (path: string): Promise<string | undefined> => {
@@ -778,11 +778,11 @@ const linkedEntry = async (
  * can all name the same link. Compared on the part that identifies it, so the
  * spelling cawco stores still matches whatever the CLI wrote down.
  */
-const GIT_PLUS_PREFIX = /^git\+/;
-const GIT_SSH_HOST = /^git@github\.com:/;
-const GIT_URL_HOST = /^(https?|ssh):\/\/([^@]*@)?(www\.)?github\.com\//;
-const GIT_SUFFIX = /\.git$/;
-const TRAILING_SLASHES = /\/+$/;
+const GIT_PLUS_PREFIX = /^git\+/u;
+const GIT_SSH_HOST = /^git@github\.com:/u;
+const GIT_URL_HOST = /^(https?|ssh):\/\/([^@]*@)?(www\.)?github\.com\//u;
+const GIT_SUFFIX = /\.git$/u;
+const TRAILING_SLASHES = /\/+$/u;
 
 const sourceKey = (source: string): string =>
   source
@@ -2425,7 +2425,7 @@ const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
  * milliseconds, and one that hangs is not a script worth registering. */
 const PARSE_TIMEOUT_MS = 5000;
 
-const WHITESPACE = /\s+/;
+const WHITESPACE = /\s+/u;
 
 /**
  * The shell a script's shebang runs it with, when that shell is one `-n` can
@@ -3502,10 +3502,10 @@ export function mergeMcp(
  * marker instead of a sentence.
  */
 /** A YAML block-scalar marker (`>`, `|`, with an optional `-`/`+` chomp indicator). */
-const YAML_BLOCK_SCALAR = /^[|>][-+]?$/;
+const YAML_BLOCK_SCALAR = /^[|>][-+]?$/u;
 
 /** A line that continues a YAML block scalar: indented, or blank. */
-const YAML_CONTINUATION = /^\s/;
+const YAML_CONTINUATION = /^\s/u;
 
 export function skillDescription(source: string): string | undefined {
   if (!source.startsWith("---")) {
@@ -3520,7 +3520,7 @@ export function skillDescription(source: string): string | undefined {
 
   const value = front[at].slice("description:".length).trim();
   if (!YAML_BLOCK_SCALAR.test(value)) {
-    return value.replace(/^["']|["']$/g, "") || undefined;
+    return value.replace(/^["']|["']$/gu, "") || undefined;
   }
 
   const block: string[] = [];

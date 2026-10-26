@@ -83,10 +83,10 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 /** The largest one asset file handed (the inputs' own limit holds the whole). */
 const ASSET_LIMIT = INPUTS_LIMIT_BYTES;
 
-const FILES_PREFIX = /^\/api\/files\//;
-const MEDIA_PREFIX = /^\/api\/media\//;
-const BASE64_PADDING = /[=]+$/;
-const SPACE = /\s+/g;
+const FILES_PREFIX = /^\/api\/files\//u;
+const MEDIA_PREFIX = /^\/api\/media\//u;
+const BASE64_PADDING = /[=]+$/u;
+const SPACE = /\s+/gu;
 
 /** A file's bytes, or null when it can't be read. */
 const readOrNull = (path: string): Buffer | null => {

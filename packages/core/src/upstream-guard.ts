@@ -104,15 +104,15 @@ export const hubRemoteIdentity = (projectId: string): string =>
   `cawco/${projectId.toLowerCase()}`;
 
 /** A scheme URL: `https://`, `ssh://`, `git://`, `file://`. */
-const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//iu;
 /** git's scp-like form, `[user@]host:path`. */
-const SCP = /^(?:[^@/]+@)?([^:/]+):(.+)$/;
-const EDGE_SLASHES = /^\/+|\/+$/g;
-const DOT_GIT = /\.git$/i;
-const TRAILING_SLASHES = /\/+$/;
+const SCP = /^(?:[^@/]+@)?([^:/]+):(.+)$/u;
+const EDGE_SLASHES = /^\/+|\/+$/gu;
+const DOT_GIT = /\.git$/iu;
+const TRAILING_SLASHES = /\/+$/u;
 /** The hub's own git remote for a project (git-remote.ts): `/git/<project uuid>.git`. */
 const HUB_REMOTE_PATH =
-  /^\/git\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\.git)?\/?$/i;
+  /^\/git\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\.git)?\/?$/iu;
 
 /**
  * A remote URL as `host/owner/repo`: the host lowercased, credentials, port
@@ -168,9 +168,9 @@ const WRITE_METHODS: ReadonlySet<string> = new Set([
   "DELETE",
 ]);
 
-const REPOS_PATH = /^repos\/([^/?#]+)\/([^/?#]+)/;
+const REPOS_PATH = /^repos\/([^/?#]+)\/([^/?#]+)/u;
 /** GitHub Enterprise's API prefix, `api/v3/`, before an API path. */
-const GHE_API_PREFIX = /^api\/v3\//;
+const GHE_API_PREFIX = /^api\/v3\//u;
 
 /** The repository a GitHub API path names, as `github.com/owner/repo`: its `repos/<owner>/<repo>`, GitHub Enterprise's `api/v3/` dropped. */
 const githubApiRepo = (path: string): string | undefined => {
@@ -181,10 +181,10 @@ const githubApiRepo = (path: string): string | undefined => {
 };
 
 /** A GraphQL document that changes something: an operation of type `mutation` (the GraphQL spec's OperationType). */
-const MUTATION = /(^|[^A-Za-z0-9_])mutation\b/;
+const MUTATION = /(^|[^A-Za-z0-9_])mutation\b/u;
 /** `repository(owner: "O", name: "R")`, in either order, with a literal or a `$variable` for each. */
 const REPOSITORY_ARGS =
-  /repository\s*\(\s*(owner|name)\s*:\s*("[^"]*"|\$[A-Za-z_][A-Za-z0-9_]*)\s*,?\s*(owner|name)\s*:\s*("[^"]*"|\$[A-Za-z_][A-Za-z0-9_]*)/;
+  /repository\s*\(\s*(owner|name)\s*:\s*("[^"]*"|\$[A-Za-z_][A-Za-z0-9_]*)\s*,?\s*(owner|name)\s*:\s*("[^"]*"|\$[A-Za-z_][A-Za-z0-9_]*)/u;
 
 /** A GraphQL request as an API call sends it: its query, and its variables; `unread` when part of it came from where the guard reads nothing. */
 interface GraphqlBody {
@@ -377,11 +377,11 @@ export interface HttpWrite extends UpstreamWrite {
 export const GITHUB_API: ReadonlySet<string> = GITHUB_API_HOSTS;
 
 /** A GitHub node id in its current form: a type prefix, `_`, then the encoded id (`R_kgDOQx0ZnQ`, `I_kwDO…`, `PR_kwDO…`). */
-const NEXT_ID = /^[A-Z][A-Za-z]{0,7}_[A-Za-z0-9_-]{6,}$/;
+const NEXT_ID = /^[A-Z][A-Za-z]{0,7}_[A-Za-z0-9_-]{6,}$/u;
 /** A legacy node id: base64 of `NN:Type…` (`MDU6SXNzdWU1MDM1OTgxOTI=`, "05:Issue503598192"). */
-const LEGACY_ID = /^[A-Za-z0-9+/]{8,}={0,2}$/;
-const LEGACY_DECODED = /^\d{2}:[A-Za-z]+/;
-const QUOTED = /"((?:[^"\\]|\\.)*)"/g;
+const LEGACY_ID = /^[A-Za-z0-9+/]{8,}={0,2}$/u;
+const LEGACY_DECODED = /^\d{2}:[A-Za-z]+/u;
+const QUOTED = /"((?:[^"\\]|\\.)*)"/gu;
 /** The most ids one `nodes(ids:)` read takes. */
 const MOST_IDS = 100;
 

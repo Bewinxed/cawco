@@ -166,7 +166,7 @@ export async function foreignIn(
     unit,
   ]);
   const property = (name: string): string =>
-    new RegExp(`^${name}=(.*)$`, "m").exec(shown.stdout)?.[1]?.trim() ?? "";
+    new RegExp(`^${name}=(.*)$`, "mu").exec(shown.stdout)?.[1]?.trim() ?? "";
   const group = property("ControlGroup");
   if (group === "") {
     return [];
@@ -209,9 +209,9 @@ const launchAgentsDir = (): string =>
   join(homedir(), "Library", "LaunchAgents");
 
 /** A keeper's unit and its launchd label, and the service name each carries (core keepers.ts `keeperService`). */
-const KEEPER_UNIT = /^cawco-(sessiond(?:-.+)?)\.service$/;
-const KEEPER_PLIST = /^dev\.cawco\.(sessiond(?:-.+)?)\.plist$/;
-const KEEPER_LABEL = /^dev\.cawco\.(sessiond(?:-.+)?)$/;
+const KEEPER_UNIT = /^cawco-(sessiond(?:-.+)?)\.service$/u;
+const KEEPER_PLIST = /^dev\.cawco\.(sessiond(?:-.+)?)\.plist$/u;
+const KEEPER_LABEL = /^dev\.cawco\.(sessiond(?:-.+)?)$/u;
 
 /** One keeper's job, as the service manager runs it. */
 export interface KeeperJob {
@@ -289,7 +289,7 @@ const systemdJob = (service: string): KeeperJob => {
         unit,
       ]);
       const property = (name: string): string | undefined =>
-        new RegExp(`^${name}=(.*)$`, "m").exec(shown.stdout)?.[1];
+        new RegExp(`^${name}=(.*)$`, "mu").exec(shown.stdout)?.[1];
       const active = property("ActiveState");
       // `failed`, or waiting out RestartSec= to start again (`activating
       // (auto-restart)`), or `inactive`: it exited, by itself, since it

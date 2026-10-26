@@ -149,6 +149,7 @@
 
 {#if phoneFrame}
   <div class="grid place-items-center p-space-4">
+    <!-- biome-ignore lint/security/useIframeSandbox: a /motion bench framing the dashboard's own route; it needs scripts and its origin, and with both a sandbox holds nothing back. -->
     <iframe
       class="rounded-lg border border-border-control bg-surface-recess"
       height="844"

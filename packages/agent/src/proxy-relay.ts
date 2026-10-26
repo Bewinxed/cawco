@@ -156,14 +156,14 @@ const EMPTY = Buffer.alloc(0);
 const MAX_HEAD = 64 * 1024;
 /** The most a chunk's size line or a trailer line may hold. */
 const MAX_LINE = 4096;
-const CHUNKED = /(?:^|,)\s*chunked\s*$/i;
-const DECIMAL = /^\d+$/;
-const HEX = /^[0-9a-f]+$/i;
-const PROXY_AUTHORIZATION = /^proxy-authorization\s*:/i;
+const CHUNKED = /(?:^|,)\s*chunked\s*$/iu;
+const DECIMAL = /^\d+$/u;
+const HEX = /^[0-9a-f]+$/iu;
+const PROXY_AUTHORIZATION = /^proxy-authorization\s*:/iu;
 /** A request target in absolute form, as a client asks a proxy for a plain HTTP origin. */
-const ABSOLUTE_FORM = /^https?:\/\//i;
+const ABSOLUTE_FORM = /^https?:\/\//iu;
 /** A head's proxy-only fields, which a request dialed straight to its origin leaves out. */
-const PROXY_ONLY = /^proxy-(?:authorization|connection)\s*:/i;
+const PROXY_ONLY = /^proxy-(?:authorization|connection)\s*:/iu;
 
 /** Where the relay stands in the client's stream of requests. */
 type Phase =

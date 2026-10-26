@@ -64,9 +64,9 @@ const HEADER_KEY = token("hdr-probe");
 const CLIENT_SECRET = token("cs-probe");
 const CLI_KEYS = { piped: token("cli-piped"), typed: token("cli-typed") };
 const PAIRING = crypto.randomUUID();
-const BEARER = /^Bearer /;
-const TRAILING = /\r?\n$/;
-const LOGGED = /seal|secret|error|push|fleet-mcp/i;
+const BEARER = /^Bearer /u;
+const TRAILING = /\r?\n$/u;
+const LOGGED = /seal|secret|error|push|fleet-mcp/iu;
 
 // ── A stand-in for Cawrier, and an MCP server with its OAuth server ────────
 const pushes: { secret: string; alert: string }[] = [];

@@ -60,7 +60,7 @@ const INPUT_BYTES = Math.floor((48 * 1024 * 1024) / INPUTS / 4) * 3;
 /** How long the second machine's link stays cut. */
 const CUT_MS = 3000;
 /** How each lane's brief names it, and nothing else does. */
-const LANE = new RegExp(`${TAG} lane-(\\d+): count your inputs`);
+const LANE = new RegExp(`${TAG} lane-(\\d+): count your inputs`, "u");
 /** What a dropped link leaves in an agent's log. */
 const DROPS = ["hub link silent", "fell behind", "not reading"];
 /** What a request failed for its machine being away says (hub server.ts `MACHINE_DISCONNECTED`), then and before. */
@@ -322,7 +322,7 @@ const spec: Spec = {
           (one) =>
             one.afterTool &&
             LANE.test(one.all) &&
-            new RegExp(`\\b${INPUTS}\\b`).test(one.last)
+            new RegExp(`\\b${INPUTS}\\b`, "u").test(one.last)
         )
         .map((one) => LANE.exec(one.all)?.[1])
     );

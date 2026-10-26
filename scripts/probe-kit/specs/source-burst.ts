@@ -157,7 +157,7 @@ const once = (request: Seen): Reply => {
 
 /** How a leg-6 session's prompt names it: the tag and its location's number. */
 const OPENCODE_TAG = "PROBE-SOURCE-BURST-OPENCODE";
-const OPENCODE_LANE = new RegExp(`${OPENCODE_TAG}-(\\d+)`);
+const OPENCODE_LANE = new RegExp(`${OPENCODE_TAG}-(\\d+)`, "u");
 /**
  * Fresh OpenCode locations leg 6 starts a session in. Ours: each first step
  * races OpenCode's catalog refresh once (anomalyco/opencode#54794); one
@@ -166,7 +166,7 @@ const OPENCODE_LANE = new RegExp(`${OPENCODE_TAG}-(\\d+)`);
 const OPENCODE_LOCATIONS = 4;
 /** OpenCode's log line for CawCo's server connected in a location: its time and the location. */
 const CAWCO_CONNECTED =
-  /^timestamp=(\S+) .*message="mcp connected" server=cawco .*directory=(\S+)/;
+  /^timestamp=(\S+) .*message="mcp connected" server=cawco .*directory=(\S+)/u;
 /** OpenCode's Code Mode tool, which runs MCP tools from a script. */
 const CODE_MODE = "execute";
 /** Leg 6, per location: the tool its first step called, and the request after it. */

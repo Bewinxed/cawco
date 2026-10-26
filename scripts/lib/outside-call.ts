@@ -172,7 +172,7 @@ export const ask = (
 ): Promise<Answer> => persist(what, () => exchange(what, url, init, timeoutMs));
 
 /** The status line `gh api --include` prints first: "HTTP/2.0 201 Created". */
-const STATUS_LINE = /^HTTP\/[\d.]+ (\d{3})/;
+const STATUS_LINE = /^HTTP\/[\d.]+ (\d{3})/u;
 
 /**
  * The HTTP answer a command printed in front of its output (`gh api

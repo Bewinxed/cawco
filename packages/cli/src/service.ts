@@ -277,10 +277,10 @@ const here = (): Layout => {
 const HERE = here();
 const ROOT = HERE.root;
 
-const LISTEN_STREAM = /^ListenStream=(.+):\d+$/m;
+const LISTEN_STREAM = /^ListenStream=(.+):\d+$/mu;
 /** An IPv6 host as `ListenStream=` writes it, in brackets (`listenAddress`). */
-const BRACKETED = /^\[(.*)\]$/;
-const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/;
+const BRACKETED = /^\[(.*)\]$/u;
+const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/u;
 
 /**
  * The host the installed dashboard socket already listens on, read back out
@@ -1228,7 +1228,7 @@ const environment = (spec: ServiceSpec): [string, string][] =>
   });
 
 const xml = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 
 /**
  * launchd has no ordering: each service is bootstrapped on its own, and the hub
@@ -1243,7 +1243,7 @@ const xml = (value: string): string =>
  * before sessiond finds the answer written down where they are already looking.
  * It is documentation in the artefact, never enforcement.
  */
-const CAWCO_SIBLING_SERVICE = /^cawco-(.+)\.service$/;
+const CAWCO_SIBLING_SERVICE = /^cawco-(.+)\.service$/u;
 
 const orderingComment = (spec: ServiceSpec): string => {
   // Only sibling cawco services mean anything under launchd; systemd targets
@@ -2447,10 +2447,10 @@ export const refreshUnits = async (
   return changed;
 };
 
-const UNIT_ENVIRONMENT = /^Environment=([^=\n]+)=(.*)$/gm;
+const UNIT_ENVIRONMENT = /^Environment=([^=\n]+)=(.*)$/gmu;
 const PLIST_ENVIRONMENT =
-  /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/;
-const PLIST_PAIR = /<key>([^<]*)<\/key>\s*<string>([^<]*)<\/string>/g;
+  /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/u;
+const PLIST_PAIR = /<key>([^<]*)<\/key>\s*<string>([^<]*)<\/string>/gu;
 
 /** What `xml` escaped, as it was. */
 const unxml = (value: string): string =>

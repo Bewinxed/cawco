@@ -51,8 +51,8 @@ export const markerTag = (
  * line break as written, a space where a harness catalog folded a first
  * prompt onto one line).
  */
-const TAG = /^\[cawco:([a-z-]+)((?: [a-z]+=[^\s\]]*)*)\]\s/;
-const FIELD = / ([a-z]+)=([^\s\]]*)/g;
+const TAG = /^\[cawco:([a-z-]+)((?: [a-z]+=[^\s\]]*)*)\]\s/u;
+const FIELD = / ([a-z]+)=([^\s\]]*)/gu;
 
 /** The tag `text` opens with, read; null when it opens with none, or one that does not decode. */
 export function readMarkerTag(text: string): MarkerTag | null {
@@ -118,7 +118,7 @@ const handoffEnd = (text: string): number => {
 };
 
 /** The whitespace a text opens with. */
-const LEADING_SPACE = /^\s*/;
+const LEADING_SPACE = /^\s*/u;
 
 /** `text` with `line` right after any hand-off marker it opens with. */
 const afterMarker = (text: string, line: string): string => {
@@ -458,7 +458,7 @@ export const awayNotesOf = (
   return notes ? { since, notes } : undefined;
 };
 
-const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/;
+const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/u;
 
 /** What a session reads of the person, at the head of its turn ({@link PresenceSaid}). */
 export const presenceLine = (said: PresenceSaid): string => {
@@ -823,7 +823,7 @@ export const reportMarker = (
   notice = false,
   headline?: string
 ): string => {
-  const said = headline?.replace(/\s+/g, " ").trim() || undefined;
+  const said = headline?.replace(/\s+/gu, " ").trim() || undefined;
   let outcome: ReportOutcome = failed ? "failed" : "complete";
   if (notice) {
     outcome = "notice";

@@ -22,13 +22,13 @@ import { type CssEvaluator, call, GRADIENT_DOWN, splitTop } from "./design-css";
 /** The `$extensions` key CawCo keeps a token's recipe under (reverse domain, as the spec recommends). */
 export const TOKENS_EXTENSION = "dev.cawco";
 
-const REF = /^\{([^}]+)\}$/;
-const LENGTH = /^(-?\d*\.?\d+)(px|rem)$/;
-const TIME = /^(-?\d*\.?\d+)(ms|s)$/;
-const PLAIN_NUMBER = /^-?\d*\.?\d+$/;
+const REF = /^\{([^}]+)\}$/u;
+const LENGTH = /^(-?\d*\.?\d+)(px|rem)$/u;
+const TIME = /^(-?\d*\.?\d+)(ms|s)$/u;
+const PLAIN_NUMBER = /^-?\d*\.?\d+$/u;
 const OKLCH =
-  /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+|none)\s*(?:\/\s*([\d.]+))?\s*\)$/;
-const HEX = /^#([0-9a-f]{6})$/i;
+  /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+|none)\s*(?:\/\s*([\d.]+))?\s*\)$/u;
+const HEX = /^#([0-9a-f]{6})$/iu;
 /**
  * The family keywords CSS never quotes: "<generic-font-family> keywords
  * cannot be quoted (otherwise they are interpreted as a <font-family-name>)"
@@ -37,11 +37,11 @@ const HEX = /^#([0-9a-f]{6})$/i;
  * earlier drafts' `emoji` and `fangsong`, and WebKit's `-apple-system`.
  */
 const GENERIC_FAMILY =
-  /^(-apple-system|ui-(?:serif|sans-serif|monospace|rounded)|generic\([a-z-]+\)|system-ui|sans-serif|serif|monospace|cursive|fantasy|emoji|math|fangsong)$/;
-const QUOTES = /^["']|["']$/g;
-const ZERO = /^0$/;
+  /^(-apple-system|ui-(?:serif|sans-serif|monospace|rounded)|generic\([a-z-]+\)|system-ui|sans-serif|serif|monospace|cursive|fantasy|emoji|math|fangsong)$/u;
+const QUOTES = /^["']|["']$/gu;
+const ZERO = /^0$/u;
 /** A `linear-gradient()` direction given as an angle. */
-const DIRECTION_ANGLE = /^-?\d*\.?\d+(deg|grad|rad|turn)$/;
+const DIRECTION_ANGLE = /^-?\d*\.?\d+(deg|grad|rad|turn)$/u;
 
 /** A DTCG colour value (Color Module 2025.10 §4.1). */
 export interface DtcgColour {

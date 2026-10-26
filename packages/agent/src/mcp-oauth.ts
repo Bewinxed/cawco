@@ -17,12 +17,12 @@ import {
   restartReadiness,
 } from "./restart";
 
-const MCP_RELAY_PATH = /^\/mcp\/(?:cawco|fleet\/[^/]+)$/;
-const TOOL_READ_PATH = /^\/api\/(?:instances|delegation\/tools)$/;
-const TOOL_WRITE_PATH = /^\/api\/delegation\/call\/[^/]+$/;
+const MCP_RELAY_PATH = /^\/mcp\/(?:cawco|fleet\/[^/]+)$/u;
+const TOOL_READ_PATH = /^\/api\/(?:instances|delegation\/tools)$/u;
+const TOOL_WRITE_PATH = /^\/api\/delegation\/call\/[^/]+$/u;
 
 /** A shared fleet server's route on the hub, whose 502, 503 and 504 are the hub's own answers about that server. */
-const FLEET_PATH = /^\/mcp\/fleet\//;
+const FLEET_PATH = /^\/mcp\/fleet\//u;
 
 /**
  * A keyed call's answer, carried through its link dropping partway: the
@@ -371,7 +371,7 @@ export const setAccountFreshener = (
  * its expiry and asks the agent, its only writer, to refresh it. Answers once
  * it has, with nothing secret: the asker reads the store again.
  */
-const ACCOUNT_FRESH_PATH = /^\/accounts\/([^/]+)\/fresh$/;
+const ACCOUNT_FRESH_PATH = /^\/accounts\/([^/]+)\/fresh$/u;
 
 const freshRoute = async (accountId: string): Promise<Response> => {
   if (!freshener) {

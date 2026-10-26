@@ -111,7 +111,7 @@ export const bunOnlyNpm = (): string | undefined => {
 };
 
 /** The first `x.y.z` a version command says is the version. */
-const VERSION_PATTERN = /\d+\.\d+\.\d+/;
+const VERSION_PATTERN = /\d+\.\d+\.\d+/u;
 
 /** The end of an installer's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
@@ -121,7 +121,7 @@ const tail = (output: string): string =>
 
 /** An installer's tail, as one line for a sentence. */
 const oneLine = (said: string | undefined): string =>
-  (said ?? "").trim().replaceAll(/\s*\n\s*/g, "; ");
+  (said ?? "").trim().replaceAll(/\s*\n\s*/gu, "; ");
 
 /**
  * Installs that did not land since this daemon started. Reported in place of

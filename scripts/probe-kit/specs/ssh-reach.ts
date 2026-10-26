@@ -168,13 +168,13 @@ const MOCK_SOCKET = "mock.sock";
 /** The session keeper's entry (scratch-fleet.ts `ENTRY`), which the box runs as its own. */
 const SESSIOND_ENTRY = "packages/sessiond/src/main.ts";
 
-const PROCESS_ID = /^\d+$/;
+const PROCESS_ID = /^\d+$/u;
 /** The hub's connection to a machine: the master of its control socket (ssh-tunnels.ts `master`). */
-const MASTER = / -N .* -M -S /;
-const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1)$/;
-const WHITESPACE = /\s+/;
+const MASTER = / -N .* -M -S /u;
+const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1)$/u;
+const WHITESPACE = /\s+/u;
 /** A line of Bun's source frame for an error it printed itself: `312 |   throw …`. */
-const SOURCE_FRAME = /^\s*\d+ \| /;
+const SOURCE_FRAME = /^\s*\d+ \| /u;
 
 /** Whether the hub's log says `machineId` was held for the person (hub-auth.ts `hold`). */
 const heldIn = (log: string, machineId: string): boolean =>
@@ -1612,7 +1612,7 @@ async function refusals(
 }
 
 /** A line of a stack trace in any runtime's print: Bun's source excerpt, a frame, the runtime line. */
-const STACK_TRACE = /^(?:\s*\d+ \| |\s+at \S.*:\d+:\d+\)?$|Bun v\d)/;
+const STACK_TRACE = /^(?:\s*\d+ \| |\s+at \S.*:\d+:\d+\)?$|Bun v\d)/u;
 
 /** No line of `job`'s output is one of a stack trace. */
 const stackless = (job: SshJoinJob): boolean =>

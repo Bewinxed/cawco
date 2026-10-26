@@ -39,9 +39,9 @@ const BLOB_BYTES = 8_463_330_762;
 const BLOB_SHA =
   "5099fd6dce1ae79e9db655c4fb0146de7f575255a6fe4a2507f32884c2e05fbb";
 /** The host's refusal of a sandbox inside another (core boundary-nesting.ts). */
-const NESTED = /inside another (bwrap|macOS) sandbox|unpriv_bwrap/;
+const NESTED = /inside another (bwrap|macOS) sandbox|unpriv_bwrap/u;
 /** What a first commit that read the blob whole said (agent place-repo.ts on main). */
-const READ_WHOLE = /couldn't read .* to make it a git repository/;
+const READ_WHOLE = /couldn't read .* to make it a git repository/u;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 

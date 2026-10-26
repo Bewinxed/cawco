@@ -35,7 +35,7 @@ const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");
-const DELEGATE_TAG = /PROBE-DELEGATE-(\w+)/;
+const DELEGATE_TAG = /PROBE-DELEGATE-(\w+)/u;
 const FINISH = "mcp__cawco__finish_item";
 
 /** How many of each item's gate runs move main: a's first two, every one of b's. */
@@ -167,7 +167,7 @@ const firstLine = (text: string | null) =>
     .find(Boolean) ?? "";
 
 /** The log lines a failure prints: workspaces, boundaries, items, landings. */
-const LOGGED = /boundary|workspace|work-items|landing|cut off|\[git\]/i;
+const LOGGED = /boundary|workspace|work-items|landing|cut off|\[git\]/iu;
 
 /**
  * Someone else, outside the boundary: each run item `id`'s gate asked to

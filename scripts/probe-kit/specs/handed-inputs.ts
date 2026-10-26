@@ -145,13 +145,13 @@ const FORMS: Record<string, (id: string, folder: string) => string> = {
 const TAG_FORM = `PROBE-HANDED-FORM-${RUN}`;
 /** Claude Code's question tool: a delegate's ask its parent answers. */
 const ASK_TOOL = "AskUserQuestion";
-const LAN_CODE = /lan:\d+/;
-const LAN_DIRECT_CODE = /lan-direct:\d+/;
+const LAN_CODE = /lan:\d+/u;
+const LAN_DIRECT_CODE = /lan-direct:\d+/u;
 /** artifact_browse's answer: the address its browser loads. */
-const BROWSE_ADDRESS = /Load https?:\/\/\S+ once in your browser tool/;
-const HUB_API_CODE = /hub-api:\d+/;
+const BROWSE_ADDRESS = /Load https?:\/\/\S+ once in your browser tool/u;
+const HUB_API_CODE = /hub-api:\d+/u;
 /** An entry's one value, as its JSON quotes it: `{"report":"x"}` → `x`. */
-const QUOTED_VALUE = /:"([^"]*)"/;
+const QUOTED_VALUE = /:"([^"]*)"/u;
 
 interface Block {
   content?: unknown;
@@ -1213,7 +1213,7 @@ const answered = async (
 };
 
 /** Every whole id an answer names, in order. */
-const UUIDS = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+const UUIDS = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gu;
 
 /** A handoff of fresh words to `target`, and whether they reached a request of `tag`'s; the answer as said. */
 const handedTo = async (

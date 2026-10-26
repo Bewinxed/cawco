@@ -79,7 +79,7 @@ import {
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** A step, in the person's words, so the mock plays the right tool calls for it. */
-const STEP_TAG = /PROBE-SKILL-([a-z]+)/g;
+const STEP_TAG = /PROBE-SKILL-([a-z]+)/gu;
 /** A short id, so one run's markers never read as another's. */
 const RUN = crypto.randomUUID().slice(0, 8);
 

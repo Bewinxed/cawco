@@ -24,7 +24,7 @@ export type MachinePath = string & { readonly [MACHINE_PATH]: true };
 export class MachinePathRefused extends Error {}
 
 /** `~` or `~/…`: under the machine's home. `~user` is not this. */
-const UNDER_HOME = /^~(?=\/|$)/;
+const UNDER_HOME = /^~(?=\/|$)/u;
 
 /**
  * `raw` as a path on `machine`: a leading `~` expanded against `home`, the

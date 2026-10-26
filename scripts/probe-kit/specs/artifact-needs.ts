@@ -126,11 +126,11 @@ const CREATE = "artifact_create";
 const TODO = "todo_write";
 /** OpenCode's code mode: its one tool runs code that calls the MCP servers' tools. */
 const CODE_MODE = "execute";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
 /** The bar's Files item, by its name ("Files, 20"). */
-const FILES_ITEM = /^Files/;
+const FILES_ITEM = /^Files/u;
 /** How long a lane change is waited for. */
 const LANE_MS = 20_000;
 /** How long the turn's push is waited for: the look grace, the burst's quiet, the stand-in. */
@@ -142,7 +142,7 @@ const LONG_ASK =
 
 /** The kit page's example card, which each page's own cards replace. */
 const EXAMPLE_CARD =
-  /<article class="dp-card" id="example">[\s\S]*?<\/article>/;
+  /<article class="dp-card" id="example">[\s\S]*?<\/article>/u;
 
 /** The decision kit's page with one card per id, two options each. */
 const kitPage = (title: string, cards: string[]): string =>
@@ -1642,8 +1642,8 @@ flatPic = Canvas("${flat}", "The flat tray")`,
 };
 
 /** An fd's link to a socket, its inode captured. */
-const SOCKET_LINK = /^socket:\[(\d+)\]$/;
-const SPACES = /\s+/;
+const SOCKET_LINK = /^socket:\[(\d+)\]$/u;
+const SPACES = /\s+/u;
 
 /** The listening TCP sockets process `pid` holds, as `address:port` in /proc's hex, and every process under it (Linux /proc). */
 const heldBy = async (

@@ -55,7 +55,7 @@ const REFUSED_TYPES: ReadonlySet<string> = new Set([
   "FORBIDDEN",
   "INSUFFICIENT_SCOPES",
 ]);
-const OWNER_REPO = /^([^/]+)\/([^/]+)$/;
+const OWNER_REPO = /^([^/]+)\/([^/]+)$/u;
 
 /** GitHub's GraphQL error as Octokit's GraphqlResponseError carries it. */
 interface GraphqlFailure {

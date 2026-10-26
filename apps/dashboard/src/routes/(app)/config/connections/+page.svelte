@@ -57,9 +57,9 @@
   /** Services ProviderLogo draws a mark for. */
   const MARKED = new Set(["github", "linear", "slack", "gmail"]);
 
-  const NOT_NAME = /[^a-z0-9]+/g;
-  const EDGE_HYPHENS = /^-+|-+$/g;
-  const TRAILING_HYPHENS = /-+$/;
+  const NOT_NAME = /[^a-z0-9]+/gu;
+  const EDGE_HYPHENS = /^-+|-+$/gu;
+  const TRAILING_HYPHENS = /-+$/u;
 
   /** A connection's name from its service and the account's words: `github-brand`. */
   export const nameFor = (service: string, account: string): string => {

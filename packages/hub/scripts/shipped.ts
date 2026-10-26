@@ -36,9 +36,9 @@ const UNSERVED_TESTFLIGHT = new Set([
   "ios 20261015.3",
   "ios 20261017",
 ]);
-const NIGHTLY = /^nightly-(\d+)-[0-9a-f]+$/;
+const NIGHTLY = /^nightly-(\d+)-[0-9a-f]+$/u;
 /** A build number is its upload day, `yyyymmdd`, then `.2`, `.3` (testflight.py `next_number`). */
-const TESTFLIGHT = /^testflight-(ios|mac)-((\d{4})(\d{2})(\d{2})(?:\.\d+)?)$/;
+const TESTFLIGHT = /^testflight-(ios|mac)-((\d{4})(\d{2})(\d{2})(?:\.\d+)?)$/u;
 
 export interface Baseline {
   /**

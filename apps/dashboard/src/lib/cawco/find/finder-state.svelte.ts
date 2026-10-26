@@ -92,7 +92,7 @@ export interface Parsed {
   words: string[];
 }
 
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 
 export function parse(text: string): Parsed {
   const words = text.trim().split(SPACES).filter(Boolean);

@@ -31,7 +31,7 @@ import { delegateTypesWords } from "./sessions";
 import { ago, count, lasted, lines, listed, quote, valueWords } from "./words";
 
 /** The catalog's first line, which a saved type's answer says otherwise. */
-const CATALOG_HEAD = /^1 delegate type;[^\n]*\n/;
+const CATALOG_HEAD = /^1 delegate type;[^\n]*\n/u;
 
 /** What every removal answers: how long the dashboard can still bring it back. */
 interface Deleted {

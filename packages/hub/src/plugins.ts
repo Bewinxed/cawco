@@ -34,10 +34,10 @@ import { pluginVersion } from "./fleet-versions";
 import { downloadRepo, get, readTree, unpack } from "./skills";
 
 /** `owner/repo` as a marketplace source names it, with an optional `@ref`. */
-const GITHUB_SLUG = /^([\w.-]+)\/([\w.-]+?)(?:@([\w./-]+))?$/;
-const HTTP_URL_PREFIX = /^https?:\/\//;
-const LEADING_SLASHES = /^\/+/;
-const DOT_GIT_SUFFIX = /\.git$/;
+const GITHUB_SLUG = /^([\w.-]+)\/([\w.-]+?)(?:@([\w./-]+))?$/u;
+const HTTP_URL_PREFIX = /^https?:\/\//u;
+const LEADING_SLASHES = /^\/+/u;
+const DOT_GIT_SUFFIX = /\.git$/u;
 
 /** A plugin id is `name@marketplace`; the name is what the manifest lists. */
 export const pluginName = (id: string): string => id.split("@")[0] ?? id;

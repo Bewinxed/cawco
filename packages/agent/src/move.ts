@@ -203,7 +203,7 @@ const holdingRemote = async <T>(
   }
 };
 
-const AUTHORIZATION_VALUE = /(authorization:\s*\w+\s+)\S+/gi;
+const AUTHORIZATION_VALUE = /(authorization:\s*\w+\s+)\S+/giu;
 
 /** `text` with the credential and any `Authorization` value taken out. */
 export const withoutCredential = (text: string): string => {
@@ -259,7 +259,7 @@ export const lfsEndpointOf = (repo: string): string => {
   return url.endsWith(".git") ? `${url}/info/lfs` : `${url}.git/info/lfs`;
 };
 
-const TRAILING_SLASH = /\/+$/;
+const TRAILING_SLASH = /\/+$/u;
 
 /** An LFS endpoint as two of them are compared: no trailing slash. */
 export const sameEndpoint = (a: string, b: string): boolean =>
@@ -343,8 +343,8 @@ export const urlOrigin = (url: string): string | undefined => {
 };
 
 /** An scp-like remote (`git@host:owner/repo.git`): user, host and path. */
-const SCP_LIKE = /^(?:[^@/]+@)?([^:/]+):(.+)$/;
-const LEADING_SLASHES = /^\/+/;
+const SCP_LIKE = /^(?:[^@/]+@)?([^:/]+):(.+)$/u;
+const LEADING_SLASHES = /^\/+/u;
 
 /**
  * The LFS endpoint git-lfs derives from `origin`: `<url>/info/lfs` for an
@@ -574,7 +574,7 @@ interface Ran {
   stdout: string;
 }
 
-const LINE_BREAKS = /[\r\n]+/;
+const LINE_BREAKS = /[\r\n]+/u;
 
 const lastLine = (text: string): string =>
   text
@@ -722,10 +722,10 @@ const throttled = (send: (frame: MoveProgressFrame) => void) => {
 const entries = (text: string): string[] => text.split("\0").filter(Boolean);
 
 const POINTER =
-  /^version https:\/\/git-lfs\.github\.com\/spec\/v1\n(?:.*\n)*?oid sha256:([0-9a-f]{64})\n(?:.*\n)*?size (\d+)\n?/;
+  /^version https:\/\/git-lfs\.github\.com\/spec\/v1\n(?:.*\n)*?oid sha256:([0-9a-f]{64})\n(?:.*\n)*?size (\d+)\n?/u;
 /** A pointer file is about 130 bytes; nothing past this is one. */
 const POINTER_MAX = 1024;
-const WHITESPACE = /\s+/;
+const WHITESPACE = /\s+/u;
 
 /**
  * The contents of `shas`, read in one `git cat-file --batch`. Its output is
@@ -1365,7 +1365,7 @@ export const moveSnapshot = (
 
 // ── Clone ──────────────────────────────────────────────────────────────────
 
-const PROGRESS_BYTES = /(\d+(?:\.\d+)?)\s*(bytes|KiB|MiB|GiB)/g;
+const PROGRESS_BYTES = /(\d+(?:\.\d+)?)\s*(bytes|KiB|MiB|GiB)/gu;
 const UNIT: Record<string, number> = {
   bytes: 1,
   KiB: 1024,
@@ -1638,7 +1638,7 @@ const fetchedBytes = async (
 };
 
 /** One `GIT_LFS_PROGRESS` line: `<direction> <current>/<total files> <downloaded>/<total> <name>`. */
-const LFS_PROGRESS_LINE = /^\w+ \d+\/\d+ (\d+)\/(\d+) (.+)$/;
+const LFS_PROGRESS_LINE = /^\w+ \d+\/\d+ (\d+)\/(\d+) (.+)$/u;
 
 /**
  * Follows git-lfs's progress file from where it was last read: each file's

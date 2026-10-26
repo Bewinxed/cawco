@@ -981,12 +981,12 @@ const HARNESS_CONFIG_BODY = t.Object({
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
 /** A project's page source in its folder (`decisions/<name>/page.oui` or its built `index.html`), its name at 1. */
 const PAGE_SOURCE =
-  /^decisions\/([a-z0-9][a-z0-9-]{0,62})\/(?:page\.oui|index\.html)$/;
-const NOT_NAME = /[^a-z0-9]+/g;
-const NAME_ENDS = /^-+|-+$/g;
-const NAME_TAIL = /-+$/;
+  /^decisions\/([a-z0-9][a-z0-9-]{0,62})\/(?:page\.oui|index\.html)$/u;
+const NOT_NAME = /[^a-z0-9]+/gu;
+const NAME_ENDS = /^-+|-+$/gu;
+const NAME_TAIL = /-+$/u;
 /** A URL's IPv6 host in its brackets, as `URL.hostname` keeps it. */
-const IPV6_BRACKETS = /^\[|\]$/g;
+const IPV6_BRACKETS = /^\[|\]$/gu;
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
@@ -1082,12 +1082,12 @@ const UPDATE_CHECK_MS = 6 * 60 * 60_000;
 const BUSY_TIMEOUT_MS = 5000;
 
 /** A `Range: bytes=a-b` header (one range, either end open). */
-const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/;
+const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/u;
 
 /** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
-const MODEL_ID_WORD = /[-.]/;
+const MODEL_ID_WORD = /[-.]/u;
 /** A picture's number in a comments delivery's words (core comments.ts `attachedLine`). */
-const PICTURE_NUMBER = /\(picture (\d+) of this message/g;
+const PICTURE_NUMBER = /\(picture (\d+) of this message/gu;
 
 /** How many offered models a refused model's refusal names. Ours: enough to choose from, short enough to read. */
 const MODELS_NAMED = 12;
@@ -1184,7 +1184,7 @@ const RESTORE_MAX = 20;
  * hubs stored, so a reason in the limit's words is the one reading of them.
  * A live turn's limit is never read from words (`atLimit`).
  */
-const FORMER_LIMIT_WORDS = /usage limit|hit your limit|rate[ _-]?limit/i;
+const FORMER_LIMIT_WORDS = /usage limit|hit your limit|rate[ _-]?limit/iu;
 const failedOnlyForAProcess = (reason: string): boolean =>
   (Object.values(UNREAD) as string[]).includes(reason) ||
   FORMER_LIMIT_WORDS.test(reason);
@@ -1364,7 +1364,7 @@ const restartedWords = (restartedAt: Date): string =>
 
 /** What a session whose process a signal killed is told of the turn that kill cut. */
 /** A sentence's closing full stop, taken off to set it inside another. */
-const CLOSING_STOP = /\.$/;
+const CLOSING_STOP = /\.$/u;
 
 /**
  * Each shell command a death or a server's stop cut, said interrupted: with
@@ -2175,7 +2175,7 @@ const credentialHashesOf = (payload: unknown): string[] => {
       )
     : [];
 };
-const CREDENTIAL_HASH = /^[0-9a-f]{64}$/;
+const CREDENTIAL_HASH = /^[0-9a-f]{64}$/u;
 
 interface ServingPreview {
   instanceId: string;
@@ -2599,7 +2599,7 @@ const isFleetReport = (value: unknown): value is FleetSyncReport =>
   isRecord((value as FleetSyncReport).plugins);
 
 /** What the CLI will take as an MCP server name — it keys `~/.claude.json` by it. */
-const MCP_NAME = /^[A-Za-z0-9_-]+$/;
+const MCP_NAME = /^[A-Za-z0-9_-]+$/u;
 
 /** And the names Claude Code keeps for its own servers, which are not the user's to take. */
 const RESERVED_MCP_NAMES = [
@@ -2636,7 +2636,7 @@ const mcpProblem = (
 };
 
 /** What a skill may be called: it names a directory under `~/.claude/skills`. */
-const SKILL_NAME = /^[A-Za-z0-9._-]+$/;
+const SKILL_NAME = /^[A-Za-z0-9._-]+$/u;
 
 /** What a machine answered `readMemoryFile` with: its own memory set, or nothing. */
 type MachineMemory = MachineMemorySet | null;
@@ -3085,7 +3085,7 @@ export interface ServerOptions {
 }
 
 /** A brief that says it works from a decision page (server `unlinkedWarning`). */
-const DECISION_PAGE_WORDS = /decision[ -]page/i;
+const DECISION_PAGE_WORDS = /decision[ -]page/iu;
 
 /** What `POST /api/work-items` answers: the item started, its session and workspace; or queued for owned files, with neither yet. */
 const delegated = (

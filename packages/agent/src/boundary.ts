@@ -384,7 +384,7 @@ const gitSystemConfigOf = (id: string): string => join(roOf(id), "gitconfig");
 const gitSystemConfig = (id: string): string =>
   `# CawCo workspace ${id}: the system gitconfig git reads inside the boundary.\n`;
 
-const WHITESPACE = /\s+/;
+const WHITESPACE = /\s+/u;
 
 /** The line the runner prints once a command can be handed to it. */
 const READY = "cawco-boundary-ready";
@@ -610,7 +610,7 @@ const claudePrefixScript = (id: string, exec: string): string => `#!/bin/bash
 exec ${shellQuote(exec)} --claude "$1"
 `;
 
-const HEX = /^[0-9a-f]+$/;
+const HEX = /^[0-9a-f]+$/u;
 
 /**
  * `socket`'s address as perl's `Socket` packs it on this machine, in hex: the
@@ -2217,7 +2217,7 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
 const GATING_MATCHERS = new Set(["*", HOOKED_TOOLS]);
 
 const escapeRegExp = (text: string): string =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 /** A JSON string, as it stands in the `--settings` JSON. */
 const JSON_STRING = String.raw`"(?:[^"\\]|\\.)*"`;
@@ -2229,14 +2229,15 @@ const JSON_STRING = String.raw`"(?:[^"\\]|\\.)*"`;
  * exec form's `args`, when it has them.
  */
 const LAUNCHED_HOOK = new RegExp(
-  `"matcher":"(${escapeRegExp(HOOKED_TOOLS)}|\\*|Bash\\|Monitor)","hooks":\\[\\{"type":"command","command":(${JSON_STRING})(?:,"args":(\\[(?:${JSON_STRING}(?:,${JSON_STRING})*)?\\]))?`
+  `"matcher":"(${escapeRegExp(HOOKED_TOOLS)}|\\*|Bash\\|Monitor)","hooks":\\[\\{"type":"command","command":(${JSON_STRING})(?:,"args":(\\[(?:${JSON_STRING}(?:,${JSON_STRING})*)?\\]))?`,
+  "u"
 );
 /** The shell form before the exec form: `'<hook>' || exit 2`. */
-const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/;
+const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/u;
 /** One word of a command {@link shellQuote} built: `'…'`, with `'\''` for a quote. */
-const QUOTED_WORD = /'((?:[^']|'\\'')*)'/g;
-const HOOK_EVENTS_FLAG = /(^| )--include-hook-events( |$)/;
-const QUOTED_WORDS = /^(?:'(?:[^']|'\\'')*' ?)+$/;
+const QUOTED_WORD = /'((?:[^']|'\\'')*)'/gu;
+const HOOK_EVENTS_FLAG = /(^| )--include-hook-events( |$)/u;
+const QUOTED_WORDS = /^(?:'(?:[^']|'\\'')*' ?)+$/u;
 
 /** A boundary hook a claude CLI was launched with ({@link launchedHook}). */
 export interface LaunchedHook {
@@ -5265,7 +5266,7 @@ const letThrough = (
 };
 
 /** A policy field's `allow` or `deny` head, before what it is for (`Read`, `Write`). */
-const ALLOW_OR_DENY = /^(allow|deny)/;
+const ALLOW_OR_DENY = /^(allow|deny)/u;
 
 /** A list of a policy's as paths; undefined when it is no list of strings. */
 const pathsOf = (value: unknown): string[] | undefined =>
@@ -5374,7 +5375,7 @@ interface WorkProcess {
 /** How much of a stopped process's command line is said. Ours: a line's worth. */
 const COMMAND_SAID = 160;
 
-const NS_PIDS = /^NSpid:\s+(.+)$/m;
+const NS_PIDS = /^NSpid:\s+(.+)$/mu;
 
 /** Linux: process `pid`'s pid in each pid namespace it is in, outermost first (`/proc/<pid>/status`'s `NSpid`); none once it is gone. */
 const nsPids = async (pid: number): Promise<number[]> =>
@@ -5856,13 +5857,13 @@ const socketsOf = async (pid: number): Promise<string[]> => {
   });
 };
 
-const SOCKET_LINK = /^socket:\[(\d+)\]$/;
+const SOCKET_LINK = /^socket:\[(\d+)\]$/u;
 
 /** Where an older boundary still running beside the current one is recorded ({@link Retiring}). */
 const retiringFileOf = (id: string, old: Pick<Held, "gen">): string =>
   join(stateDir(id), `retiring-${old.gen}.json`);
 
-const RETIRING_FILE = /^retiring-[^/]+\.json$/;
+const RETIRING_FILE = /^retiring-[^/]+\.json$/u;
 
 /** Every older boundary of workspace `id` recorded as still running beside the current one. */
 const readRetiring = async (id: string): Promise<Retiring[]> => {
@@ -6807,7 +6808,7 @@ const sweepQuiet = async (): Promise<void> => {
 };
 
 /** The judge socket a workspace's hook names ({@link hookScript}'s `$judge`). */
-const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/m;
+const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/mu;
 
 /**
  * What the judge at `socket` answers to {@link JUDGE_BUILD_QUESTION}, word
@@ -6937,7 +6938,7 @@ const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
 };
 
 /** A judge's socket file name (`judgeFor`): its form. */
-const JUDGE_SOCKET = /^judge-([0-9a-f]+)\.sock$/;
+const JUDGE_SOCKET = /^judge-([0-9a-f]+)\.sock$/u;
 
 /** What workspace `id`'s hook's judge answers now. */
 interface JudgeAnswer {
@@ -7075,7 +7076,7 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
 };
 
 /** A line that names an error, as a runtime prints one it was not handed: `LinuxSandboxProfileError: …`, `error: …`. */
-const ERROR_LINE = /^(?:[A-Za-z]*Error|error)\b[^:\n]{0,40}:\s/;
+const ERROR_LINE = /^(?:[A-Za-z]*Error|error)\b[^:\n]{0,40}:\s/u;
 
 /**
  * The line of a process's stderr tail that says why it died: the last that
@@ -7343,7 +7344,7 @@ if [ "$guarded" = 3 ]; then status=1; elif [ "$guarded" != 0 ]; then echo "cawco
 
 /** `text` with every character a POSIX extended regular expression reads as an operator escaped. */
 const ereLiteral = (text: string): string =>
-  text.replace(/[.[\]()*+?{}|^$\\]/g, "\\$&");
+  text.replace(/[.[\]()*+?{}|^$\\]/gu, "\\$&");
 
 /**
  * The end Claude Code puts on every Bash and Monitor command it hands its
@@ -7865,7 +7866,7 @@ const linkGitConfig = async (configHome: string): Promise<void> => {
 const OWN_INODE_BATCH = 64;
 
 /** A multi-linked file as `find -printf '%D %i %p\0'` names it: its device, inode and path. */
-const LINKED_FILE = /^(\d+) (\d+) (.*)$/s;
+const LINKED_FILE = /^(\d+) (\d+) (.*)$/su;
 
 /**
  * The files under `root` with more than one link, each with its inode as

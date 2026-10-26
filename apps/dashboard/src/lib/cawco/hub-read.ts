@@ -190,17 +190,17 @@ function parsed(text: string): {
 }
 
 /** A sentence's closing stop, dropped so the hub's words sit inside ours. */
-const FINAL_STOP = /\.$/;
+const FINAL_STOP = /\.$/u;
 
 /** Markup or a JSON dump, not prose: a reason never starts so. */
-const NOT_PROSE = /^[<{[]/;
+const NOT_PROSE = /^[<{[]/u;
 
 /**
  * A thrown error's label ("Error:", "TypeError:"): the runtime's name for the
  * throw, not a word of the reason (WORDS.md, "Error formula": a technical code
  * is never the what-happened).
  */
-const ERROR_LABEL = /^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/;
+const ERROR_LABEL = /^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/u;
 
 /**
  * The hub's words as a reason a person reads, without its closing stop:
@@ -229,7 +229,7 @@ function sentenceOf(said: string | undefined): string | null {
  * failed" or "The network connection was lost.").
  */
 const NO_ANSWER =
-  /^(?:Failed to fetch|NetworkError when attempting to fetch resource\.?|Load failed|The network connection was lost\.?)$/;
+  /^(?:Failed to fetch|NetworkError when attempting to fetch resource\.?|Load failed|The network connection was lost\.?)$/u;
 
 /**
  * The header the dashboard's `/api` proxy sets on its own 502 when the hub

@@ -40,7 +40,7 @@ export const CHOICE_LIMITS = {
 } as const;
 /** An id or option: no control characters, no spaces at either end. */
 export const CHOICE_ID = /^[^\s\p{Cc}](?:[^\p{Cc}]*[^\s\p{Cc}])?$/u;
-export const PAGE_HASH = /^[0-9a-f]{64}$/;
+export const PAGE_HASH = /^[0-9a-f]{64}$/u;
 
 /** One change the page asks for: exactly one of options, note or value. */
 export type ChoiceChange = { choice: string; pageHash: string } & (

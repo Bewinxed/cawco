@@ -29,11 +29,11 @@ interface SvelteCall {
 type DevElement = Element & { __svelte_meta?: SvelteMeta };
 
 /** A stamped element's place (`data-insp-path="<file>:<line>:<column>:<tag>"`, stage-host `stamp`). */
-const STAMPED = /^(.*):(\d+):(\d+):([\w.$-]+)$/;
-const EXTENSION = /\.[^./]+$/;
-const CAPITALISED = /^[A-Z]/;
-const DIR = /^.*\//;
-const HASH_CLASS = /^(?:svelte-|s-)[\w-]+$/;
+const STAMPED = /^(.*):(\d+):(\d+):([\w.$-]+)$/u;
+const EXTENSION = /\.[^./]+$/u;
+const CAPITALISED = /^[A-Z]/u;
+const DIR = /^.*\//u;
+const HASH_CLASS = /^(?:svelte-|s-)[\w-]+$/u;
 
 /** A file from the toolchain root: a dev path made relative, its query dropped. */
 export const fromRoot = (file: string, root: string): string => {
@@ -155,7 +155,7 @@ export function drew(body: HTMLElement): boolean {
 
 /** A body's first words, at most 80 characters, on one line. */
 export const firstWords = (body: HTMLElement): string =>
-  (body.innerText ?? "").replaceAll(/\s+/g, " ").trim().slice(0, 80);
+  (body.innerText ?? "").replaceAll(/\s+/gu, " ").trim().slice(0, 80);
 
 /** The properties a forced state's delta reads. Ours: what a hover, ring or press changes. */
 const WATCHED = [
@@ -474,9 +474,9 @@ export function pageError(
   }
   return { message, file: null, line: null, column: null };
 }
-const STACK_PLACE = /(https?:\/\/[^\s)]+?):(\d+):(\d+)\)?\s*$/;
+const STACK_PLACE = /(https?:\/\/[^\s)]+?):(\d+):(\d+)\)?\s*$/u;
 /** A keyed module's prefix in a message: `/@cawco/m/<key>`, before the module's own address. */
-const KEYED_PREFIX = new RegExp(`${MODULES_PATH}[^/\\s'"]+`, "g");
+const KEYED_PREFIX = new RegExp(`${MODULES_PATH}[^/\\s'"]+`, "gu");
 /** Vite's stamp on a quoted module address, closing it: an HMR update's `?t=<ms>`, a pre-bundle's `?v=<its hash>`. */
-const VITE_STAMP = /\?[tv]=[\w-]+(?=['"])/g;
-const LEADING_SLASH = /^\//;
+const VITE_STAMP = /\?[tv]=[\w-]+(?=['"])/gu;
+const LEADING_SLASH = /^\//u;

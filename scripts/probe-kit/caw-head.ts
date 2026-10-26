@@ -25,7 +25,8 @@ const QUIET = [words.caughtUp, words.reading, words.waiting];
 
 /** Every word the head says of what needs you, at the start of its label. */
 export const CAW_SAYS = new RegExp(
-  `^(?:${[needsPattern("\\d+"), ...QUIET.map(literal)].join("|")})`
+  `^(?:${[needsPattern("\\d+"), ...QUIET.map(literal)].join("|")})`,
+  "u"
 );
 
 /** The one empty answer: nothing needs you, known over a live hub. */
@@ -33,7 +34,7 @@ export const ZERO = words.caughtUp;
 
 /** The head saying exactly `count` need you (a notice may follow). */
 export const needsCount = (count: number) =>
-  new RegExp(`^${needsPattern(String(count))}(?:\\D|$)`);
+  new RegExp(`^${needsPattern(String(count))}(?:\\D|$)`, "u");
 
 /** How long a reading waits for a head saying a known word. */
 const READ_MS = 5000;

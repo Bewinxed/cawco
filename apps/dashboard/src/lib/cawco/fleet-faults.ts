@@ -213,19 +213,19 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
 
 /** What git says when an ssh clone had nothing to authenticate with. */
 const SSH_REFUSED =
-  /Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/i;
-const CLI_TOO_OLD = /unknown option|unknown argument|unknown command/i;
-const CLI_MISSING = /claude CLI not found/i;
-const MARKETPLACE_UNLINKED = /marketplace .+ is not linked/i;
-const HUB_ONLY = /is a directory on the hub's machine/i;
-const DRIFTED = /edited on this machine/i;
-const MISSING_BYTES = /the hub sent no files/i;
-const UNSAFE_PATH = /^unsafe path/i;
-const NO_CHECKOUT = /no checkout|has no checkout for/i;
-const TIMED_OUT = /timed out after|request timed out|had not settled/i;
-const UNPARSABLE = /could not parse/i;
-const UNWRITABLE = /could not write/i;
-const ABSENT = /^not in |^not on disk|is not in known_marketplaces/i;
+  /Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/iu;
+const CLI_TOO_OLD = /unknown option|unknown argument|unknown command/iu;
+const CLI_MISSING = /claude CLI not found/iu;
+const MARKETPLACE_UNLINKED = /marketplace .+ is not linked/iu;
+const HUB_ONLY = /is a directory on the hub's machine/iu;
+const DRIFTED = /edited on this machine/iu;
+const MISSING_BYTES = /the hub sent no files/iu;
+const UNSAFE_PATH = /^unsafe path/iu;
+const NO_CHECKOUT = /no checkout|has no checkout for/iu;
+const TIMED_OUT = /timed out after|request timed out|had not settled/iu;
+const UNPARSABLE = /could not parse/iu;
+const UNWRITABLE = /could not write/iu;
+const ABSENT = /^not in |^not on disk|is not in known_marketplaces/iu;
 
 /** What a machine or the hub said, read as a cause. Order matters: the specific first. */
 export function causeOf(
@@ -527,7 +527,7 @@ export interface ToolchainReading {
   used?: { path: string; version?: string };
 }
 
-const SEMVER = /(\d+)\.(\d+)\.(\d+)/;
+const SEMVER = /(\d+)\.(\d+)\.(\d+)/u;
 
 /** `1.2.3` as comparable numbers; anything unparsable sorts as nothing at all. */
 const parts = (version: string | undefined): number[] | undefined => {

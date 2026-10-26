@@ -40,7 +40,7 @@
   /** The code as it is read out: in fours. */
   const phase = $derived(flow?.phase ?? "idle");
   const groups = $derived(
-    (flow?.code ?? "").replace(/[^\da-z]/gi, "").match(/.{1,4}/g) ?? []
+    (flow?.code ?? "").replace(/[^\da-z]/giu, "").match(/.{1,4}/gu) ?? []
   );
   const left = $derived(flow ? Math.max(0, flow.expiresAt - flow.now) : 0);
   const clock = $derived(

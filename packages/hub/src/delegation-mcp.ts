@@ -105,7 +105,7 @@ export const REDACTED_CREDENTIAL = "[cawco credential]";
  * session-identity.ts), standing on its own in the text around it.
  */
 const CREDENTIAL_TOKEN =
-  /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g;
+  /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/gu;
 
 /**
  * Where Claude Code names a call's tool_use id in `tools/call`'s `_meta`

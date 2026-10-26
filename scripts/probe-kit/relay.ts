@@ -37,7 +37,7 @@
 import type { ServerWebSocket } from "bun";
 import { Outbox, serverTransport } from "../../packages/core/src/wire";
 
-const HTTP = /^http/;
+const HTTP = /^http/u;
 
 /**
  * Bun.serve's default idle timeout, what such a server cuts: "By default,

@@ -150,7 +150,7 @@ export const trialUnits = (
  * of that build runs in a job of its own, from its build ({@link versionExecutable}), and the
  * machine's endpoint names it (keepers.ts).
  */
-const VERSIONS_PREFIX = /^versions\//;
+const VERSIONS_PREFIX = /^versions\//u;
 export const keeperPath = (): string => join(binaryRoot(), "keeper");
 export const readKeeperVersion = async (): Promise<string | undefined> => {
   try {

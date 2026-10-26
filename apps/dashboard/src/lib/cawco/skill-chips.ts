@@ -36,7 +36,7 @@ export const skillsOf = (
       ])
   );
 
-const SPECIAL = /[.*+?^${}()|[\]\\/]/g;
+const SPECIAL = /[.*+?^${}()|[\]\\/]/gu;
 
 /**
  * Every `/name` of these skills, whole, in a text: the name is the match's
@@ -55,7 +55,7 @@ export function skillWords(
     return null;
   }
   const after = ends === "end" ? "(?=\\s|$)" : "(?=\\s)";
-  return new RegExp(`(?<=^|\\s)/(${list.join("|")})${after}`, "g");
+  return new RegExp(`(?<=^|\\s)/(${list.join("|")})${after}`, "gu");
 }
 
 /**

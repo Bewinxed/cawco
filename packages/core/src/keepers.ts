@@ -58,10 +58,10 @@ export interface KeeperName {
   version: string;
 }
 
-const BUILD_ENDPOINT = /^sessiond-(.+)\.sock$/;
-const CHECKOUT_ENDPOINT = /^checkout-sessiond-(.+)\.sock$/;
+const BUILD_ENDPOINT = /^sessiond-(.+)\.sock$/u;
+const CHECKOUT_ENDPOINT = /^checkout-sessiond-(.+)\.sock$/u;
 /** What a service manager's job name may carry of a build's version. */
-const NOT_IN_A_JOB_NAME = /[^A-Za-z0-9._-]/g;
+const NOT_IN_A_JOB_NAME = /[^A-Za-z0-9._-]/gu;
 
 /** A keeper's own endpoint file name. */
 export const endpointName = (keeper: KeeperName): string =>

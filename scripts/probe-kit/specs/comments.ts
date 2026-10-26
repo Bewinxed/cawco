@@ -327,14 +327,14 @@ const READ = "mcp__cawco__comment_read";
 const REPLY = "mcp__cawco__comment_reply";
 const RESOLVE = "mcp__cawco__comment_resolve";
 const SHOW = "mcp__cawco__artifact_show";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** A message the model answers with the words kept under its number: an agent's line, written as the probe needs it. */
-const SAY = /PROBE-SAY:(\d+)/;
+const SAY = /PROBE-SAY:(\d+)/u;
 const says = new Map<string, string>();
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 /** The person's comments, delivered by themselves (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
-  /\[CawCo\] The person commented on the page "[a-z0-9-]+" \(artifact [0-9a-f-]{36}\)\./;
+  /\[CawCo\] The person commented on the page "[a-z0-9-]+" \(artifact [0-9a-f-]{36}\)\./u;
 /** How long a delivery may take: the hub's send and the way to the model. */
 const DELIVERY_MS = 30_000;
 /** The hub's quiet after the person's last mark before it delivers them (artifacts/service.ts `COMMENTS_QUIET_MS`). */
@@ -342,11 +342,11 @@ const QUIET_MS = 3000;
 /** How long the probe watches for a delivery that should not come. Our call. */
 const STILL_MS = 14_000;
 /** An image block in a request's body. */
-const IMAGE_BLOCK = /"type":"image"/g;
+const IMAGE_BLOCK = /"type":"image"/gu;
 /** An attachment's reference: the hub's file by its hash (core `FILE_REF`). */
-const FILE_REF_PATH = /^\/api\/files\/[0-9a-f]{64}$/;
-const RESOLVED_TAB = /^Resolved/;
-const OPEN_TAB = /^Open/;
+const FILE_REF_PATH = /^\/api\/files\/[0-9a-f]{64}$/u;
+const RESOLVED_TAB = /^Resolved/u;
+const OPEN_TAB = /^Open/u;
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
 const MOVED_TEXT = "The paragraph, moved down and reworded.";
@@ -705,7 +705,7 @@ const near = (
   Math.abs(a.h - b.h) <= slack;
 
 /** What Yjs logs when a second copy of it loads into a realm (yjs src/index.js). */
-const YJS_TWICE = /Yjs was already imported/;
+const YJS_TWICE = /Yjs was already imported/u;
 /** `--leg yjs`: y1 and y2 alone; `--leg sizing`: the sizing, switch and edges legs; `--leg switch`: the switch and edges legs; `--leg changed`: the changed page's and canvas's legs. */
 const ONLY_LEG = process.argv.includes("--leg")
   ? process.argv[process.argv.indexOf("--leg") + 1]
@@ -2704,7 +2704,7 @@ live = Preview("${canvas}", "The toggle, off and on")`;
 /** A pin's crop round its element, px each side (agent preview-overlay pins.ts `CROP_PAD`). */
 const PIN_CROP_PAD = 24;
 /** The channels of a computed `rgb()` or `rgba()` colour. */
-const RGB_PARTS = /\d+(?:\.\d+)?/g;
+const RGB_PARTS = /\d+(?:\.\d+)?/gu;
 
 /**
  * What a pin's picture (base64 PNG) draws inside its element's box `box`,
@@ -2745,7 +2745,7 @@ const elementInPicture = (png: string, box: { h: number; w: number }) => {
 };
 
 /** The On story, as comment_read writes a pin's sheet. */
-const STORY_ON = /"story":\s*"On"/;
+const STORY_ON = /"story":\s*"On"/u;
 
 /** A card's Preview of another origin's canvas, on the decision page. */
 const EMBED_FRAME = "iframe[data-slot=embed]";
@@ -3049,7 +3049,7 @@ const embedChecks = async (on: On) => {
     on.kit.check(
       "l: comment_read of the decision page answers the pin with the canvas's id, its story and the button",
       read.includes(pin.id) &&
-        new RegExp(`"embed":\\s*\\{\\s*"artifact":\\s*"${canvas}"`).test(
+        new RegExp(`"embed":\\s*\\{\\s*"artifact":\\s*"${canvas}"`, "u").test(
           read
         ) &&
         STORY_ON.test(read) &&
@@ -5543,7 +5543,7 @@ const coralMarks = (frame: Frame) =>
     ];
     const marks: { el: string; kind: string; width: number }[] = [];
     const COLOR =
-      /(rgba?\([^)]*\)|oklch\([^)]*\)|oklab\([^)]*\)|color\([^)]*\)|#[0-9a-f]{3,8})/gi;
+      /(rgba?\([^)]*\)|oklch\([^)]*\)|oklab\([^)]*\)|color\([^)]*\)|#[0-9a-f]{3,8})/giu;
     const nameOf = (el: Element) =>
       [
         el.localName,
@@ -10377,7 +10377,7 @@ const pinSendChecks = async (on: On) => {
 };
 
 /** The page's doc socket on its preview origin (overlay artifact.ts): what a dropped link closes. */
-const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/;
+const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/u;
 
 /**
  * A comment the hub never got (the owner's two "Unsent" pins with no record
@@ -10807,7 +10807,7 @@ const restartChecks = async (on: On) => {
 
 /** What a page says while the hub is down for a restart: a failed request or socket to it. */
 const HUB_DOWN =
-  /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established/;
+  /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established/u;
 
 /** The thread head's controls by their names, and each one's top. */
 const threadHead = (card: Locator) =>
@@ -10945,7 +10945,7 @@ const deleteHeadChecks = async (on: On) => {
 };
 
 /** The pane's own doc socket on the dashboard's origin (dashboard artifact-doc.ts `joinArtifact`): its other link to the hub. */
-const PANE_SOCKET = /\/ws\/artifact\//;
+const PANE_SOCKET = /\/ws\/artifact\//u;
 
 /** The send page revised: its first paragraph under another id, its words kept, so a load finds it by its text and writes its pin again. */
 const REVISED_SEND_PAGE = SEND_PAGE.replace('id="one"', 'id="first"');
@@ -11694,7 +11694,7 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
  */
 
 /** The long card's link in a create's answer. */
-const LONG_CARD_LINK = /\[[^\]]*\]\(cawco:decision\/[0-9a-f-]+\/long\)/;
+const LONG_CARD_LINK = /\[[^\]]*\]\(cawco:decision\/[0-9a-f-]+\/long\)/u;
 /** Forty words, as a long name runs. */
 const FORTY_WORDS = Array.from(
   { length: 40 },
@@ -12199,7 +12199,7 @@ const footSheetChecks = async (on: On) => {
 };
 
 /** The phone's head's Comment: its segment where the head has room for the three, else the mode's one button, else More. */
-const COMMENT_ITEM = /Comment/;
+const COMMENT_ITEM = /Comment/u;
 const commentOnPhone = async (phone: Page) => {
   const tab = phone.locator(`${PANE} [role='tab'][aria-keyshortcuts='C']`);
   if (await tab.isVisible()) {

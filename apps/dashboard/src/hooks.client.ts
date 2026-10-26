@@ -7,14 +7,14 @@ import { claimRegionDrop } from "#lib/cawco/region-held.js";
 import { version } from "$app/env";
 
 const WINDOW_MS = 60_000;
-const FIRST_FRAME = /^\s*at\s|@/;
+const FIRST_FRAME = /^\s*at\s|@/u;
 /**
  * The conversation on screen, as the URL names it: the workspace writes the
  * focused pane's session there (`/session/<id>`). Read off the URL rather
  * than the workspace store, so this hook, which runs on every route, loads
  * no store: an artifact's own tab loads nothing of the app.
  */
-const SESSION_PATH = /^\/session\/([^/]+)/;
+const SESSION_PATH = /^\/session\/([^/]+)/u;
 const seen = new Map<string, number>();
 let windowStart = 0;
 let windowCount = 0;

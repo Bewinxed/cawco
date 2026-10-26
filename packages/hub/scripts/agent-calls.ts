@@ -20,9 +20,9 @@ import { ts } from "typescript-json-schema";
 
 /** The agent's source, from the repository's root. */
 export const AGENT_SOURCE = "packages/agent/src";
-const TEST_FILE = /\.(test|spec)\.ts$|\/__tests__\//;
+const TEST_FILE = /\.(test|spec)\.ts$|\/__tests__\//u;
 /** Where a hub path starts in a built string: at its start, or right after a piece (`${hub}`). */
-const HUB_PATH = /(?:^|\0)(\/(?:api|ws|mcp|health)(?=[/?#\0]|$)[^\s"'`?#]*)/g;
+const HUB_PATH = /(?:^|\0)(\/(?:api|ws|mcp|health)(?=[/?#\0]|$)[^\s"'`?#]*)/gu;
 /** A piece of a path that is not a known string. */
 const PIECE = "\0";
 /** No string folds to more paths than this: past it, the piece is any value. */
@@ -197,7 +197,7 @@ function render(
  * plugin's source, which the agent writes out and OpenCode runs
  * (`cawcoBase + "/api/instances"`).
  */
-const EMBEDDED = /["'](\/(?:api|ws|mcp|health)(?=[/?#"']|$)[^\s"'`?#]*)/g;
+const EMBEDDED = /["'](\/(?:api|ws|mcp|health)(?=[/?#"']|$)[^\s"'`?#]*)/gu;
 
 /**
  * A built path as a pattern: each segment a piece touches is `*`; a path

@@ -59,14 +59,15 @@ import { parse } from "svelte/compiler";
 const ROOT = join(import.meta.dir, "..");
 const SOURCE = join(ROOT, "src");
 const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
-const SVELTE_FILE = /\.svelte$/;
-const ALLOW = /^\s*mark-line:\s*\S/;
-const SPLIT = /[^\w-]+/;
-const CLASS_PREFIX = /^class=/;
+const SVELTE_FILE = /\.svelte$/u;
+const ALLOW = /^\s*mark-line:\s*\S/u;
+const SPLIT = /[^\w-]+/u;
+const CLASS_PREFIX = /^class=/u;
 /** The recipe's utilities (app.css, the mark line). */
-const RECIPE = /(?:^|[\s"'`{[,])(?:mark-line|rail-line)(?=$|[\s"'`},\]])/;
+const RECIPE = /(?:^|[\s"'`{[,])(?:mark-line|rail-line)(?=$|[\s"'`},\]])/u;
 /** Kit recipes whose base draws the mark line (ui/chip, ui/menu-item, ui/section-header). */
-const RECIPE_CALL = /\b(?:chipVariants|menuItemVariants|sectionHeadVariants)\(/;
+const RECIPE_CALL =
+  /\b(?:chipVariants|menuItemVariants|sectionHeadVariants)\(/u;
 /**
  * Kit parts that draw the mark line for some of their looks: the prop and
  * the values that do (`true`: any value).
@@ -102,9 +103,10 @@ const PRIMITIVES = new Set([
 ]);
 /** A declaration that makes a scroll container, which Gecko does not trim. */
 const SCROLLS =
-  /(?:^|[;{\s])overflow(?:-x|-y|-inline|-block)?\s*:\s*(?:hidden|auto|scroll)\b/;
+  /(?:^|[;{\s])overflow(?:-x|-y|-inline|-block)?\s*:\s*(?:hidden|auto|scroll)\b/u;
 /** Tailwind utilities that make one. */
-const SCROLL_TOKEN = /^(?:truncate|overflow(?:-[xy])?-(?:hidden|auto|scroll))$/;
+const SCROLL_TOKEN =
+  /^(?:truncate|overflow(?:-[xy])?-(?:hidden|auto|scroll))$/u;
 /**
  * A declaration that makes an element a flex, grid or table container,
  * which text-box-trim does not reach (CSS Inline 3: "this property does
@@ -112,17 +114,17 @@ const SCROLL_TOKEN = /^(?:truncate|overflow(?:-[xy])?-(?:hidden|auto|scroll))$/;
  * contexts").
  */
 const LAYS_OUT =
-  /(?:^|[;{\s])display\s*:\s*(?:(?:block|inline)\s+)?(?:inline-)?(?:flex|grid|table)\b/;
+  /(?:^|[;{\s])display\s*:\s*(?:(?:block|inline)\s+)?(?:inline-)?(?:flex|grid|table)\b/u;
 /** Tailwind utilities that make one, in any variant (`has-data-reason:inline-flex` splits to `inline-flex`). */
-const LAYS_OUT_TOKEN = /^(?:inline-)?(?:flex|grid|table)$/;
+const LAYS_OUT_TOKEN = /^(?:inline-)?(?:flex|grid|table)$/u;
 /**
  * The files of the components that draw words into a mark line
  * (WORDS_COMPONENT): each element at their top is a run the recipe trims.
  */
 const WORDS_FILE =
-  /(?:^|\/)(?:pending-content|morph-text|JumpMatch|dropdown-menu-shortcut|context-menu-shortcut)\.svelte$/;
-const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style>/;
-const RULE = /([^{}]*)\{([^{}]*)\}/g;
+  /(?:^|\/)(?:pending-content|morph-text|JumpMatch|dropdown-menu-shortcut|context-menu-shortcut)\.svelte$/u;
+const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style>/u;
+const RULE = /([^{}]*)\{([^{}]*)\}/gu;
 /**
  * Kit boxes whose words are always an element, mark or none: the box
  * centres its words' x-height only when the recipe can reach them.
@@ -130,23 +132,24 @@ const RULE = /([^{}]*)\{([^{}]*)\}/g;
 const BOXES = new Set(["Badge"]);
 /** Components that draw a mark: icons, glyphs, avatars, rings, dots. */
 const MARK_COMPONENT =
-  /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|Sprite|TaskRing|ProviderLogo|Glyph|action\.icon|\w*(?:Mark|Face|Glyph|Avatar|Dot))$/;
+  /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|Sprite|TaskRing|ProviderLogo|Glyph|action\.icon|\w*(?:Mark|Face|Glyph|Avatar|Dot))$/u;
 /** Elements the kit and its rows use as a mark's cell. A button's icon slot
     is an `.icon-swap`; a keycap is a Kbd that says `data-box`. */
-const MARK_CLASS = /^(?:rail-cell|icon-swap|mark-cell|dot|mark|glyph|icon|ic)$/;
+const MARK_CLASS =
+  /^(?:rail-cell|icon-swap|mark-cell|dot|mark|glyph|icon|ic)$/u;
 /** What the recipe leaves alone by class (app.css). */
-const LEFT_ALONE_CLASS = /^(?:rail-cell|icon-swap|mark-cell)$/;
+const LEFT_ALONE_CLASS = /^(?:rail-cell|icon-swap|mark-cell)$/u;
 /** Components whose root is an svg, which the recipe leaves alone. */
 const SVG_COMPONENT =
-  /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|TaskRing|ProviderLogo|Glyph|Check|action\.icon)$/;
+  /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|TaskRing|ProviderLogo|Glyph|Check|action\.icon)$/u;
 /** Components that say data-box on their own root (a mark line of their own). */
-const BOX_COMPONENT = /^(?:AccountName)$/;
+const BOX_COMPONENT = /^(?:AccountName)$/u;
 /** Components that draw only the child they are given. */
 const WRAPPER_COMPONENT =
-  /^(?:Tip|Tooltip\.Root|Tooltip\.Trigger|Popover\.Root|Popover\.Trigger)$/;
+  /^(?:Tip|Tooltip\.Root|Tooltip\.Trigger|Popover\.Root|Popover\.Trigger)$/u;
 /** Components that draw words, which the recipe trims. */
 const WORDS_COMPONENT =
-  /^(?:MorphText|JumpMatch|PendingContent|DropdownMenu\.Shortcut|ContextMenu\.Shortcut)$/;
+  /^(?:MorphText|JumpMatch|PendingContent|DropdownMenu\.Shortcut|ContextMenu\.Shortcut)$/u;
 
 interface Node {
   alternate?: { nodes: Node[] } | null;
@@ -318,7 +321,7 @@ function told(node: Node, source: string): boolean {
 
 /** The declarations of every rule in a stylesheet whose selector names `.name`. */
 function rulesFor(css: string, name: string): string[] {
-  const named = new RegExp(`\\.${name.replace(/[^\w-]/g, "\\$&")}(?![\\w-])`);
+  const named = new RegExp(`\\.${RegExp.escape(name)}(?![\\w-])`, "u");
   return [...css.matchAll(RULE)]
     .filter((m) => named.test(m[1] ?? ""))
     .map((m) => m[2] ?? "");
@@ -373,9 +376,9 @@ interface Reading {
 
 /** An import from the icon barrel or the icon package: its specifiers. */
 const ICON_IMPORT =
-  /import\s*\{([^}]*)\}\s*from\s*["'](?:#lib\/icons(?:\.js)?|\$lib\/icons(?:\.js)?|@cawco\/icons(?:\/marks)?)["']/g;
+  /import\s*\{([^}]*)\}\s*from\s*["'](?:#lib\/icons(?:\.js)?|\$lib\/icons(?:\.js)?|@cawco\/icons(?:\/marks)?)["']/gu;
 /** One specifier's local name: `A as B` is `B`. */
-const LOCAL_NAME = /(?:\w+\s+as\s+)?(\w+)\s*$/;
+const LOCAL_NAME = /(?:\w+\s+as\s+)?(\w+)\s*$/u;
 
 /** The local names `source` imports from the icon barrel or the icon package. */
 const iconNames = (source: string): Set<string> =>
@@ -405,7 +408,7 @@ function attributeText(
   return source
     .slice(found.start, found.end)
     .replace(`${name}=`, "")
-    .replace(/^["'{]|["'}]$/g, "");
+    .replace(/^["'{]|["'}]$/gu, "");
 }
 
 /** Whether a kit part is given a look that draws the mark line. */

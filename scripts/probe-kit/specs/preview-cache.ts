@@ -40,13 +40,13 @@ import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
 import { passInto, previewPass } from "../preview-pass";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const VITE = join(ROOT, "apps/dashboard/node_modules/vite/bin/vite.js");
 /** Vite's own words for a prebundled dep (vite.dev/guide/dep-pre-bundling#browser-cache). */
 const DEP_CACHE = "max-age=31536000,immutable";
 /** The dep's address as Vite writes it into the module that imports it. */
-const DEP_URL = /"(\/node_modules\/\.vite\/deps\/probe-dep\.js\?v=[0-9a-z]+)"/;
+const DEP_URL = /"(\/node_modules\/\.vite\/deps\/probe-dep\.js\?v=[0-9a-z]+)"/u;
 /** `(module (func (export "add") (param i32 i32) (result i32) local.get 0 local.get 1 i32.add))` */
 const ADD_WASM = new Uint8Array([
   0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02,

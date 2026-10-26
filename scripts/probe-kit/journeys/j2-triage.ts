@@ -38,7 +38,7 @@ import {
 } from "./suite";
 
 /** The page saying an ask was approved: the answer that won. */
-const APPROVED = /approved|allowed/i;
+const APPROVED = /approved|allowed/iu;
 
 /** Opens the dashboard, what needs you, and the session's ask: Flow 1's exit into triage. */
 async function openTheAsk(

@@ -204,8 +204,8 @@ export const stageFor = (
   );
 };
 
-const FENCE = /^\s*(```|~~~)/;
-const HEADING = /^(#{2,})(?=\s|$)/;
+const FENCE = /^\s*(```|~~~)/u;
+const HEADING = /^(#{2,})(?=\s|$)/u;
 
 /** Each heading line outside a code fence, its #s counted and changed by `change`. */
 const headings = (text: string, change: (level: number) => number): string => {

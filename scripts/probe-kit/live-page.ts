@@ -492,7 +492,7 @@ export function installPerf(takeMeasure: string): string {
   // frame each time.
   const askFrame = window.requestAnimationFrame.bind(window);
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, which has none of this module's scope
-  const FRAME = /at (?:(\S+) \()?(?:.*\/)?([^/\s]+):(\d+):(\d+)\)?$/;
+  const FRAME = /at (?:(\S+) \()?(?:.*\/)?([^/\s]+):(\d+):(\d+)\)?$/u;
   const said = (line: string) => {
     const at = FRAME.exec(line.trim());
     return at ? `${at[1] ?? "(anonymous)"}@${at[2]}:${at[3]}:${at[4]}` : "?";
@@ -544,7 +544,7 @@ export function installPerf(takeMeasure: string): string {
   // Every message off the page's sockets, by kind (the hub's `payload.kind`
   // or `type`, read off the text without parsing it).
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, which has none of this module's scope
-  const KIND = /"(?:kind|type)":"([^"]{1,40})"/;
+  const KIND = /"(?:kind|type)":"([^"]{1,40})"/u;
   const kindOf = (data: unknown): [string, number] => {
     const text = typeof data === "string" ? data : "";
     return [KIND.exec(text.slice(0, 400))?.[1] ?? "?", text.length];

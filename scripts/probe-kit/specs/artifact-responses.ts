@@ -41,15 +41,15 @@ import { type Kit, open, pressIn, ROOT, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const READ = "mcp__cawco__artifact_read";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 const BUSY = "PROBE-BUSY answer slowly";
 /** How long the busy turn's answer streams, s: every step of 1–4 happens inside it. */
 const BUSY_S = 60;
 /** The responses notice (core injected.ts `artifactResponsesNotice`): its id and since. */
 const NOTICE =
-  /\[CawCo\] The page "([a-z0-9-]+)" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: (\d+) \}\)/;
+  /\[CawCo\] The page "([a-z0-9-]+)" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: (\d+) \}\)/u;
 /** The id in artifact_create's answer, as the tool result carries it. */
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const NAME = "coconut-song";
 /** The note as the person leaves it: two lines, the last Return still in the box. */
 const FINAL_NOTE =
@@ -57,7 +57,7 @@ const FINAL_NOTE =
 
 /** The kit page's example card, which the probe's own card replaces. */
 const EXAMPLE_CARD =
-  /<article class="dp-card" id="example">[\s\S]*?<\/article>/;
+  /<article class="dp-card" id="example">[\s\S]*?<\/article>/u;
 
 /** The kit's page with one card: the song, cover or original, and its note. */
 const kitPage = (): string =>
@@ -385,7 +385,7 @@ const run = async (kit: Kit) => {
     return {
       lines: rows.map((row) => ({
         artifact: row.dataset.artifactResponses,
-        text: row.innerText.replace(/\s+/g, " ").trim(),
+        text: row.innerText.replace(/\s+/gu, " ").trim(),
         name: row.querySelector("button")?.textContent ?? null,
       })),
       instruction: document.body.innerText.includes("artifact_read"),

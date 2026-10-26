@@ -16,12 +16,12 @@ import { parse } from "svelte/compiler";
 export const DASHBOARD = join(import.meta.dir, "..");
 const SOURCES = new Glob("src/**/*.{svelte,ts}");
 /** Off limits to the class-string scripts (the landing's frozen route). */
-const SKIP = /states\/caw-design\//;
+const SKIP = /states\/caw-design\//u;
 
-const SPACES = /\s+/g;
-const WORD = /\S+/g;
-const UTILITY_WORD = /[a-z0-9]-[a-z0-9]|:/;
-const PROSE_WORD = /['’"]|[a-z][.,;!?]$/i;
+const SPACES = /\s+/gu;
+const WORD = /\S+/gu;
+const UTILITY_WORD = /[a-z0-9]-[a-z0-9]|:/u;
+const PROSE_WORD = /['’"]|[a-z][.,;!?]$/iu;
 
 /**
  * A spacing or sizing utility on Tailwind's numeric step (`p-2`, `-mt-0.5`,
@@ -29,7 +29,7 @@ const PROSE_WORD = /['’"]|[a-z][.,;!?]$/i;
  * keyword (`m-0`, `w-1/2`, `w-full`) is not one.
  */
 export const SPACING_UTILITY =
-  /^(-?)(p|px|py|ps|pe|pt|pb|pl|pr|m|mx|my|ms|me|mt|mb|ml|mr|gap|gap-x|gap-y|w|h|size|min-w|min-h|max-w|max-h|inset|inset-x|inset-y|top|right|bottom|left|start|end|space-x|space-y|translate-x|translate-y|scroll-mx?|scroll-m[ysetblr]|scroll-px?|scroll-p[ysetblr])-(\d+(?:\.\d+)?)$/;
+  /^(-?)(p|px|py|ps|pe|pt|pb|pl|pr|m|mx|my|ms|me|mt|mb|ml|mr|gap|gap-x|gap-y|w|h|size|min-w|min-h|max-w|max-h|inset|inset-x|inset-y|top|right|bottom|left|start|end|space-x|space-y|translate-x|translate-y|scroll-mx?|scroll-m[ysetblr]|scroll-px?|scroll-p[ysetblr])-(\d+(?:\.\d+)?)$/u;
 
 // MARK: - A class
 
@@ -137,7 +137,7 @@ const TEMPLATE = new Set([
 const SKIPPED_KEYS = new Set(["attributes", "metadata", "parent"]);
 /** Calls whose strings are classes; tv's object keys are variant names, the others' are classes. */
 const CLASS_CALLS = new Set(["cn", "clsx", "twMerge", "twJoin", "tv"]);
-const CLASS_ATTRIBUTE = /^class$|Class(es|Name)?$/;
+const CLASS_ATTRIBUTE = /^class$|Class(es|Name)?$/u;
 
 const isNode = (value: unknown): value is Node =>
   Boolean(value) &&

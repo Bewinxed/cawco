@@ -295,7 +295,7 @@ const resumeSessions = async (
     home,
     CLAUDE_DIR_NAME,
     "projects",
-    fleet.repo.replace(/[^a-zA-Z0-9]/g, "-")
+    fleet.repo.replace(/[^a-zA-Z0-9]/gu, "-")
   );
   mkdirSync(dir, { recursive: true });
   const ids: string[] = [];

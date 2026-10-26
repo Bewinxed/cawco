@@ -141,8 +141,8 @@ const MAIN_ARGUMENTS = [
   "prompt",
 ];
 /** The files an apply-patch body names (`*** Update File: path`). */
-const PATCH_FILE = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm;
-const WHITESPACE = /\s+/g;
+const PATCH_FILE = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gmu;
+const WHITESPACE = /\s+/gu;
 
 interface StoredMessage {
   content: string | NeutralContentBlock[];

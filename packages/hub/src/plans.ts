@@ -90,7 +90,7 @@ export const receiverKey = (to: PlanReceiver): string =>
   to.kind === "session" ? `session:${to.instanceId}` : `caw:${to.projectId}`;
 
 /** A receiver key's kind, and the id after its first colon. */
-const KEY_PARTS = /:(.*)/s;
+const KEY_PARTS = /:(.*)/su;
 
 /** The receiver a key names. */
 export const receiverOfKey = (key: string): PlanReceiver => {

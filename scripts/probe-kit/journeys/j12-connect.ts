@@ -83,22 +83,27 @@ let legs = 0;
  * calls `connect_ask` for the server; `use`, the server's own tool. `key`
  * is the message's own, so each is called once.
  */
-const TAG = /PROBE-CONNECT (\S+) (ask|use) (\S+)/g;
+const TAG = /PROBE-CONNECT (\S+) (ask|use) (\S+)/gu;
 /** OpenCode's Code Mode tool, which runs MCP tools from a script. */
 const CODE_MODE = "execute";
 /** What the agent heard: a connect ask's answer, as connect-ask.ts words it. */
 const ANSWERED =
-  /(\S+ not connected\.(?: They said: [^"\\\n]*| They said not now\.)|Connected \S+(?: as \S+)?(?:, read-only|, read and write)?\.)/;
+  /(\S+ not connected\.(?: They said: [^"\\\n]*| They said not now\.)|Connected \S+(?: as \S+)?(?:, read-only|, read and write)?\.)/u;
 
 const steps = new Map<string, { called?: boolean; searched?: boolean }>();
 
 /** A word as a pattern's own text. */
-const literal = (words: string) => words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const literal = (words: string) =>
+  words.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 /** The ask's card, by its name: first asked, or asked again. */
 const ASK_NAME = new RegExp(
-  `^(${literal(askWords.connectAskFrom(""))}|${literal(askWords.reconnectAskFrom(""))})`
+  `^(${literal(askWords.connectAskFrom(""))}|${literal(askWords.reconnectAskFrom(""))})`,
+  "u"
 );
-const RECONNECT_NAME = new RegExp(`^${literal(askWords.reconnectAskFrom(""))}`);
+const RECONNECT_NAME = new RegExp(
+  `^${literal(askWords.reconnectAskFrom(""))}`,
+  "u"
+);
 
 /** A message part's words: a string, or the text of its blocks. */
 const wordsOf = (content: unknown): string => {
@@ -214,7 +219,7 @@ const card = (page: Page): Locator =>
 
 /** `words`, each `\u0000` in it any run of words: a sentence with a name in it. */
 const sentence = (words: string): RegExp =>
-  new RegExp(words.split("\u0000").map(literal).join(".+"));
+  new RegExp(words.split("\u0000").map(literal).join(".+"), "u");
 
 /**
  * Where the card stands: its transcript row's key (the call's row, rows.ts),
@@ -359,7 +364,7 @@ async function walkOne(
   const needsYou = () =>
     page
       .getByRole("button", {
-        name: new RegExp(`^${literal(askWords.connectNeedsYou(1))}`),
+        name: new RegExp(`^${literal(askWords.connectNeedsYou(1))}`, "u"),
       })
       .filter({ visible: true });
   /** The card stands in the transcript under the message that asked, and nothing of it on the message box. */

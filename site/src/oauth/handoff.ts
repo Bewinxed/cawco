@@ -42,7 +42,7 @@ const fromBase64Url = (text: string): string =>
 
 /** Reads the start link's fragment. It throws on anything but a hub and a provider over https. */
 export function readStart(hash: string): Start {
-  const body: unknown = JSON.parse(fromBase64Url(hash.replace(/^#/, '')));
+  const body: unknown = JSON.parse(fromBase64Url(hash.replace(/^#/u, '')));
   if (typeof body !== 'object' || body === null) throw new Error('The start link is empty.');
   const { origin, auth } = body as { origin?: unknown; auth?: unknown };
   const url = new URL(typeof auth === 'string' ? auth : '');

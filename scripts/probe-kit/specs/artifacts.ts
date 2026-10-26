@@ -170,11 +170,11 @@ const TOKENS = join(
 const UPDATE = "mcp__cawco__artifact_update";
 const PROMOTE = "mcp__cawco__artifact_promote";
 /** The commit in artifact_promote's answer. */
-const ANSWERED_COMMIT = /"commit":"([0-9a-f]{40})"/;
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const ANSWERED_COMMIT = /"commit":"([0-9a-f]{40})"/u;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** Anything the hub would tell the session of the person's responses, or the person's picks as words. */
 const TOLD =
-  /\[CawCo\] The (?:page|canvas|preview) "|changed my picks|sent my picks/;
+  /\[CawCo\] The (?:page|canvas|preview) "|changed my picks|sent my picks/u;
 /** The tools the artifact tools replaced (a4f208b90, Artifacts slice 1), by name. */
 const REPLACED = [
   "show_preview",
@@ -184,16 +184,16 @@ const REPLACED = [
   "read_choices",
 ].map((tool) => `mcp__cawco__${tool}`);
 /** A replaced tool's name, whole: `admin_previews_read` and the like are other tools. */
-const PREVIEW_TOOL = new RegExp(`\\b(?:${REPLACED.join("|")})\\b`, "g");
+const PREVIEW_TOOL = new RegExp(`\\b(?:${REPLACED.join("|")})\\b`, "gu");
 /** The id in artifact_create's answer, as the tool result carries it. */
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 /** How long a probe listens for a word the session must not hear. Our call: past any debounce the hub could have. */
 const LISTEN_MS = 6000;
 /** How long a show waits for a view's word (artifacts/service.ts `SHOWN_WAIT_MS`). */
 const SHOWN_WAIT_MS = 10_000;
 /** A pane's word to the hub: `POST /api/instances/:id/artifacts/:artifact/shown`. */
 const SHOWN_PATH =
-  /^\/api\/instances\/[^/]+\/artifacts\/([0-9a-f-]{36})\/shown$/;
+  /^\/api\/instances\/[^/]+\/artifacts\/([0-9a-f-]{36})\/shown$/u;
 /** The no-view sentence (artifacts/service.ts `NO_VIEW`). */
 const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
@@ -1142,7 +1142,7 @@ const treeChecks = async ({
 };
 
 /** The next version a held change answers (artifacts/service.ts `heldId`). */
-const HELD_ID = /"held":"([0-9a-f-]{36})"/;
+const HELD_ID = /"held":"([0-9a-f-]{36})"/u;
 
 /** What the hub reads of an artifact: its revision, page hash and outline (artifacts/service.ts `ArtifactRead`). */
 interface HeldRead {

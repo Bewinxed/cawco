@@ -69,8 +69,8 @@ import { emulateMotion } from "../motion";
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
-const COMMAND = /PROBE-CALL:(\d+)/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const NO_SCREEN =
   "No screen is showing this canvas. Open it on a dashboard (artifact_show), then try again.";
 /** The panel's canvas: its one iframe, on the stage over the panel's well (dashboard canvas/). */
@@ -79,11 +79,11 @@ const PANEL_CANVAS =
 /** A path of Solar's pen-new-square, the canvas's glyph in the menu. */
 const CANVAS_GLYPH = "M1 12C1 6.81455";
 
-const RECT = /^(\S+) rectangle "([^"]*)" at (-?\d+),(-?\d+) (\d+)×(\d+)$/gm;
-const ARROW = /^arrow (\S+)(?: "[^"]*")?: (\S+) → (\S+)$/m;
-const INK = /^ink (\S+): (\d+) points, .*, over (.*)$/gm;
+const RECT = /^(\S+) rectangle "([^"]*)" at (-?\d+),(-?\d+) (\d+)×(\d+)$/gmu;
+const ARROW = /^arrow (\S+)(?: "[^"]*")?: (\S+) → (\S+)$/mu;
+const INK = /^ink (\S+): (\d+) points, .*, over (.*)$/gmu;
 /** One of check 13's 29 cells in the outline. */
-const CELL = /^cell-\d+ rectangle at /;
+const CELL = /^cell-\d+ rectangle at /u;
 
 interface Read {
   changed?: string[];
@@ -582,7 +582,7 @@ const imageChecks = async (on: OnCanvas) => {
   kit.check(
     "26: the outline reads the image as `image <id> at x,y 32×32`",
     !!image &&
-      new RegExp(`^image ${image.id} at -?\\d+,-?\\d+ 32×32$`, "m").test(
+      new RegExp(`^image ${image.id} at -?\\d+,-?\\d+ 32×32$`, "mu").test(
         outline
       ),
     outline
@@ -1151,7 +1151,7 @@ const bindChecks = async (on: OnCanvas) => {
   const hubCount = await cells();
 
   // The sync held back 1.5 s, so the page binds before the hub's doc arrives.
-  const socket = new RegExp(`__cawco/artifact/${id}`);
+  const socket = new RegExp(`__cawco/artifact/${id}`, "u");
   await on.page.context().routeWebSocket(socket, (ws) => {
     const server = ws.connectToServer();
     ws.onMessage((message) => server.send(message));

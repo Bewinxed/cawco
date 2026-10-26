@@ -36,14 +36,14 @@ const SHARED = join(PREVIEWS, "state-switcher.js");
 const BUILT_FROM = [join(ROOT, "apps/dashboard/src/lib/cawco/address/flow")];
 /** The pages under review a preview holds, as they were captured. */
 const UNDER_REVIEW = [join(PREVIEWS, "tablet-comments/page")];
-const SOURCE = /\.(?:[cm]?js|ts|svelte|html|css)$/;
-const READER = /__state\b/;
+const SOURCE = /\.(?:[cm]?js|ts|svelte|html|css)$/u;
+const READER = /__state\b/u;
 const LOOK =
-  /\.state-switcher\b|state-switcher-(?:group|heading|select)|class=["'][^"']*\bstate-switcher\b/;
-const SWITCH = /type=["']radio["']|role=["']radiogroup["']|aria-pressed/;
+  /\.state-switcher\b|state-switcher-(?:group|heading|select)|class=["'][^"']*\bstate-switcher\b/u;
+const SWITCH = /type=["']radio["']|role=["']radiogroup["']|aria-pressed/u;
 /** A page's own module, and its import of the switcher beside it. */
-const MODULE = /\.m?js$/;
-const IMPORTS = /from\s+["']\.\/state-switcher\.js["']/;
+const MODULE = /\.m?js$/u;
+const IMPORTS = /from\s+["']\.\/state-switcher\.js["']/u;
 /** What only the shared switcher's code holds: its CSS, as any bundle of it carries it. */
 const MARK = ".state-switcher-selects";
 
@@ -70,7 +70,7 @@ function walk(dir: string, out: string[] = []): string[] {
 /** A built page: its index.html loads a bundle from assets/. */
 const builtBundles = (dir: string): string[] => {
   const page = readFileSync(join(dir, "index.html"), "utf8");
-  return [...page.matchAll(/src=["']\.\/(assets\/[^"']+\.js)["']/g)].map((m) =>
+  return [...page.matchAll(/src=["']\.\/(assets\/[^"']+\.js)["']/gu)].map((m) =>
     join(dir, m[1] ?? "")
   );
 };
@@ -122,7 +122,7 @@ for (const path of [
   ...BUILT_FROM.flatMap((dir) => walk(dir)),
 ]) {
   const name = relative(PREVIEWS, path);
-  const built = /(^|\/)assets\//.test(name) && !name.startsWith("..");
+  const built = /(^|\/)assets\//u.test(name) && !name.startsWith("..");
   if (
     !SOURCE.test(path) ||
     built ||

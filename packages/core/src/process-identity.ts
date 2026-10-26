@@ -657,8 +657,8 @@ const linuxStartTicks = async (pid: number): Promise<string | undefined> =>
 /** Linux's `USER_HZ`, the unit of /proc's tick counts: 100 on every architecture CawCo runs on (`getconf CLK_TCK`). */
 const LINUX_TICKS_PER_SECOND = 100;
 /** `/proc/stat`'s boot time, in epoch seconds. */
-const BTIME = /^btime (\d+)$/m;
-const NUMERIC = /^\d+$/;
+const BTIME = /^btime (\d+)$/mu;
+const NUMERIC = /^\d+$/u;
 
 /** Linux: the boot time in epoch seconds, as procps reads it for `lstart`. */
 const linuxBootSeconds = async (): Promise<number | undefined> => {
@@ -679,7 +679,7 @@ const linuxStartSeconds = (boot: number, ticks: string): number =>
  */
 const nulStrings = (text: string): string[] =>
   text === "" ? [] : text.replace(TRAILING_NUL, "").split("\0");
-const TRAILING_NUL = /\0$/;
+const TRAILING_NUL = /\0$/u;
 
 /** Linux: a process's arguments and environment, from `/proc/<pid>/cmdline` and `environ`. */
 const linuxArgs = async (
@@ -734,7 +734,7 @@ const NEWLINE = 10;
 const DEL = 127;
 /** Matches the ASCII control characters a command line may carry. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is this pattern's whole job: `ps` escapes exactly these
-const CONTROL = /[\x00-\x1f\x7f]/g;
+const CONTROL = /[\x00-\x1f\x7f]/gu;
 
 /**
  * One argument as macOS `ps` prints it: through `vis(3)` with `VIS_TAB |
@@ -780,7 +780,7 @@ const darwinCommand = (info: Kinfo): string =>
   info.stat === SZOMB ? " " : shownCommand(darwinArgs(info.pid), info.comm);
 
 /** procps's `VmLck` line in `/proc/<pid>/status`: locked memory, in kB. */
-const VM_LOCKED = /^VmLck:\s+(\d+)/m;
+const VM_LOCKED = /^VmLck:\s+(\d+)/mu;
 
 /**
  * Linux: a process's state as procps prints `stat` (ps/output.c `pr_stat`):
@@ -1130,13 +1130,13 @@ export async function ownIdentity(): Promise<{
 }
 
 /** A socket a process holds, as `/proc/<pid>/fd` links name it. */
-const SOCKET_LINK = /^socket:\[(\d+)\]$/;
+const SOCKET_LINK = /^socket:\[(\d+)\]$/u;
 
 /** A `lsof -Fn` line naming a listening TCP address: `n127.0.0.1:43663`. */
-const LSOF_LISTEN = /^n.*:(\d+)$/;
+const LSOF_LISTEN = /^n.*:(\d+)$/u;
 
 /** `/proc/<pid>/status`'s resident set, in kB. */
-const VM_RSS = /^VmRSS:\s+(\d+) kB$/m;
+const VM_RSS = /^VmRSS:\s+(\d+) kB$/mu;
 
 /**
  * The memory `pid` holds now, in bytes: Linux's `VmRSS` in
@@ -1177,7 +1177,7 @@ export async function cpuTimeUsed(pid: number): Promise<number | undefined> {
 }
 
 /** The whitespace between a `/proc/net/tcp` row's fields. */
-const PROC_NET_FIELDS = /\s+/;
+const PROC_NET_FIELDS = /\s+/u;
 
 /**
  * The TCP ports `pid` listens on: on Linux the LISTEN rows (`st` 0A) of its

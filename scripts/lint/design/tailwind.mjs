@@ -60,11 +60,11 @@ export function splitVariants(token) {
   return { variants: segments.slice(0, -1), base: segments.at(-1) };
 }
 
-const LEADING_BANG = /^!/;
-const TRAILING_BANG = /!$/;
-const LEADING_MINUS = /^-/;
-const BRACKET_VALUE = /-\[[^\]]*\]/;
-const ARBITRARY_PROPERTY = /^\[[^\]]+:[^\]]+\]$/;
+const LEADING_BANG = /^!/u;
+const TRAILING_BANG = /!$/u;
+const LEADING_MINUS = /^-/u;
+const BRACKET_VALUE = /-\[[^\]]*\]/u;
+const ARBITRARY_PROPERTY = /^\[[^\]]+:[^\]]+\]$/u;
 
 /** The base without `!` or a leading `-`. */
 export function normalizeClass(token) {
@@ -129,10 +129,10 @@ export function declarationsOf(token) {
 
 /* ---------------------------------------------------- the project's CSS */
 
-const COMMENTS = /\/\*[\s\S]*?\*\//g;
-const STRINGS = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g;
-const CLASS_SELECTOR = /\.(-?[_a-zA-Z][\w-]*)/g;
-const IMPORT = /@import\s+["']([^"']+)["']/g;
+const COMMENTS = /\/\*[\s\S]*?\*\//gu;
+const STRINGS = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu;
+const CLASS_SELECTOR = /\.(-?[_a-zA-Z][\w-]*)/gu;
+const IMPORT = /@import\s+["']([^"']+)["']/gu;
 
 /** The plain class names a stylesheet's selectors name. */
 export function classSelectors(css) {

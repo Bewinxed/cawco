@@ -194,13 +194,13 @@ const PROJECT_LCP_MS = 1000;
 /** The engine the run's pages open on (kit.ts `RUN_ENGINE`): only Chromium traces. */
 const TRACES = (process.env.PROBE_ENGINE ?? "chromium") === "chromium";
 /** A long frame's script the hub socket's message ran (live-page.ts keeps the page's handler a listener). */
-const SOCKET = /WebSocket/;
+const SOCKET = /WebSocket/u;
 /** A long frame's script a person's press ran: a pointer, a click, a key. */
-const PRESS = /click|pointer|mouse|key/i;
+const PRESS = /click|pointer|mouse|key/iu;
 /** The store's take of what its socket said, a message of its own channel (client.svelte.ts `takeHeld`). */
-const TAKE = /MessagePort/;
+const TAKE = /MessagePort/u;
 /** The module the store's take runs in, as a source map names it. */
-const CLIENT = /client\.svelte\.ts/;
+const CLIENT = /client\.svelte\.ts/u;
 
 /** Whether a long frame's script is the hub's messages being handled: the socket's own handler, or the store's take of them. */
 const handlesHub = (script: LoafScript, maps: string | undefined): boolean =>
@@ -209,9 +209,9 @@ const handlesHub = (script: LoafScript, maps: string | undefined): boolean =>
     maps !== undefined &&
     CLIENT.test((script.url && sourceAt(maps, script.url, script.pos)) || ""));
 /** A sampled frame of the dashboard's own source, as a source map names it. */
-const OWN_SOURCE = /@src\/lib\//;
+const OWN_SOURCE = /@src\/lib\//u;
 /** The held lists' module, as a source map names it. */
-const HELD_ORDER = /held-order\.svelte\.ts/;
+const HELD_ORDER = /held-order\.svelte\.ts/u;
 /** How long a page is left to stand after it opens before it is read. */
 const SETTLE_MS = 12_000;
 /** How long after a press its frames and tasks are its own. */
@@ -305,7 +305,7 @@ interface Row {
 }
 
 /** A sampled function of a trace (`name@file:line:column`) at its source line. */
-const SAMPLED = /^(.*)@([^@:]+):(\d+):(\d+)$/;
+const SAMPLED = /^(.*)@([^@:]+):(\d+):(\d+)$/u;
 const atSource = (maps: string | undefined, sampled: string): string => {
   const match = SAMPLED.exec(sampled);
   if (!(maps && match)) {
@@ -415,11 +415,11 @@ const round = (value: number, places = 1): number =>
   Math.round(value * 10 ** places) / 10 ** places;
 
 /** A trailing slash, off the base address. */
-const TRAILING_SLASH = /\/$/;
+const TRAILING_SLASH = /\/$/u;
 /** A box that scrolls its own content. */
-const SCROLLS = /(auto|scroll)/;
+const SCROLLS = /(auto|scroll)/u;
 /** The home's Recent disclosure, by its name and count. */
-const RECENT = /^Recent/;
+const RECENT = /^Recent/u;
 
 /** What every leg is given: the run's page, how to open more, and where its numbers go. */
 interface Live {
@@ -577,7 +577,7 @@ async function pageOpen(live: Live, host: string) {
       .filter(
         (el) =>
           el.scrollHeight > el.clientHeight + 50 &&
-          new RegExp(scrolls).test(getComputedStyle(el).overflowY)
+          new RegExp(scrolls, "u").test(getComputedStyle(el).overflowY)
       )
       .sort((a, b) => b.scrollHeight - a.scrollHeight);
     window.__pf.perfReset(true, false);
@@ -1301,7 +1301,7 @@ function watchNewestRow() {
       .map((row) => {
         const box = row.getBoundingClientRect();
         return {
-          words: (row.textContent ?? "").replace(/\s+/g, " ").trim(),
+          words: (row.textContent ?? "").replace(/\s+/gu, " ").trim(),
           top: box.top,
           height: box.height,
         };
@@ -1488,10 +1488,10 @@ const htmlParts = (html: string) => {
   const sum = (pattern: RegExp) =>
     [...html.matchAll(pattern)].reduce((total, [one]) => total + one.length, 0);
   const fetched = sum(
-    /<script type="application\/json" data-sveltekit-fetched[^>]*>[\s\S]*?<\/script>/g
+    /<script type="application\/json" data-sveltekit-fetched[^>]*>[\s\S]*?<\/script>/gu
   );
-  const scripts = sum(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g);
-  const styles = sum(/<style[^>]*>[\s\S]*?<\/style>/g);
+  const scripts = sum(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gu);
+  const styles = sum(/<style[^>]*>[\s\S]*?<\/style>/gu);
   const kb = (chars: number) => Math.round(chars / 1024);
   return {
     totalKB: kb(html.length),
@@ -1510,7 +1510,7 @@ const htmlParts = (html: string) => {
  */
 const homeSays = () => {
   const words = (el: Element | null | undefined) =>
-    el?.textContent?.replace(/\s+/g, " ").trim() ?? null;
+    el?.textContent?.replace(/\s+/gu, " ").trim() ?? null;
   const rail = document.querySelector("aside");
   return {
     tabs: [...(rail?.querySelectorAll("[role=tab]") ?? [])].map(words),

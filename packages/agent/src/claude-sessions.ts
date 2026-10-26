@@ -26,10 +26,10 @@ import {
 
 /** Claude Code names every session by a UUID; a name that starts with one is that session's. */
 const SESSION_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu;
 
 /** A session or account id as a path segment: a plain token, never `..`. */
-const TOKEN = /^(?!\.{1,2}$)[A-Za-z0-9._-]{1,128}$/;
+const TOKEN = /^(?!\.{1,2}$)[A-Za-z0-9._-]{1,128}$/u;
 
 /** What Claude Code puts before an orphaned transcript's session id. */
 const ORPHANED = ".orphaned-";

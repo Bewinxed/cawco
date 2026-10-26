@@ -164,7 +164,7 @@
   /** A desk: the page's pane scrolls, and a filling block takes its height. */
   const desk = new MediaQuery("(min-width: 640px)");
   /** An overflow that scrolls: the page's scroller is the nearest with one. */
-  const SCROLLS = /(auto|scroll)/;
+  const SCROLLS = /(auto|scroll)/u;
   let fill = $state<number | null>(null);
   $effect(() => {
     const node = grid;

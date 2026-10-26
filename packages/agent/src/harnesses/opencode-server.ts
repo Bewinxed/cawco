@@ -240,9 +240,9 @@ export interface ServerStart {
 }
 
 /** The log tag a start's error leads with. */
-const LOG_TAG = /^\[opencode\]\s*/;
+const LOG_TAG = /^\[opencode\]\s*/u;
 /** The process each try was given; the reason is the same without it. */
-const TRY_PROC = / from opencode-server-[\w-]+/;
+const TRY_PROC = / from opencode-server-[\w-]+/u;
 
 /**
  * A failed start, said once for every caller that meets it, in the person's
@@ -298,17 +298,17 @@ const recordStem = (): string =>
     .slice(0, 16)}`;
 
 /** What an account's own server is recorded under: its account id, as a file name. */
-const ACCOUNT_ID = /^[A-Za-z0-9_-]+$/;
+const ACCOUNT_ID = /^[A-Za-z0-9_-]+$/u;
 const ACCOUNT_RECORD =
-  /^(opencode-server-[0-9a-f]{16})-account-([A-Za-z0-9_-]+)\.json$/;
+  /^(opencode-server-[0-9a-f]{16})-account-([A-Za-z0-9_-]+)\.json$/u;
 /** A workspace id as a view's server's record names it. */
-const VIEW_ID = /^[0-9a-f-]{36}$/;
+const VIEW_ID = /^[0-9a-f-]{36}$/u;
 /** What a workspace's view's own server is recorded under: its workspace id, its account's after a dot. */
 const VIEW_RECORD =
-  /^(opencode-server-[0-9a-f]{16})-view-([0-9a-f-]{36})(?:\.([A-Za-z0-9_-]+))?\.json$/;
+  /^(opencode-server-[0-9a-f]{16})-view-([0-9a-f-]{36})(?:\.([A-Za-z0-9_-]+))?\.json$/u;
 /** Every record file, of any keeper of this home: the machine's server's, an account's or a view's. */
 const ANY_RECORD =
-  /^opencode-server-[0-9a-f]{16}(-account-[A-Za-z0-9_-]+|-view-[0-9a-f-]{36}(\.[A-Za-z0-9_-]+)?)?\.json$/;
+  /^opencode-server-[0-9a-f]{16}(-account-[A-Za-z0-9_-]+|-view-[0-9a-f-]{36}(\.[A-Za-z0-9_-]+)?)?\.json$/u;
 
 /**
  * A server of a workspace's Linux view (layer.ts): the workspace, and how a

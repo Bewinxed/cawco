@@ -79,9 +79,12 @@ const FIXTURE = join(
   "scripts/probe-kit/fixtures/component-canvas/svelte"
 );
 const BRIDGE_FILE = join(ROOT, "packages/agent/src/preview-bridge.ts");
-const BRIDGE_MODULE = /packages\/agent\/src\/preview-bridge\.ts$/;
+const BRIDGE_MODULE = /packages\/agent\/src\/preview-bridge\.ts$/u;
 const STORIES = "src/Icons.stories.js";
-const WHY = new RegExp(`<meta name="${PREVIEW_WHY_META}" content="([^"]*)">`);
+const WHY = new RegExp(
+  `<meta name="${PREVIEW_WHY_META}" content="([^"]*)">`,
+  "u"
+);
 
 /** The dashboard, staged as its own canvases are (sheet-weight's stage). */
 const APP = join(ROOT, "apps/dashboard");
@@ -663,7 +666,7 @@ async function dashboardIcons(
 }
 
 /** A stage module's keyed address's prefix (stage-host `MODULES_PATH`). */
-const KEYED_AT = /^\/@cawco\/m\/[^/]+/;
+const KEYED_AT = /^\/@cawco\/m\/[^/]+/u;
 /** How many GETs leg 4 sends, and how many at once. */
 const COST_GETS = 300;
 const COST_AT_ONCE = 50;
@@ -800,8 +803,8 @@ const PLACE_STORY = "src/Card.stories.js";
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\w+)/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const COMMAND = /PROBE-CALL:(\w+)/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 
 /** Leg 5's mock model: the call a `PROBE-CALL:<n>` names, then "done"; every other turn a word. */
 const respond = (request: Seen): Reply => {
@@ -966,7 +969,7 @@ async function realJoin(kit: Kit): Promise<void> {
       !!target &&
       statuses.get(200) === COST_GETS &&
       seen.size === 0,
-    `artifact_create: ${created.replaceAll(/\s+/g, " ").slice(0, 300)}`
+    `artifact_create: ${created.replaceAll(/\s+/gu, " ").slice(0, 300)}`
   );
 }
 

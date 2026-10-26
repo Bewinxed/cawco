@@ -140,7 +140,9 @@ const run = async (kit: Kit) => {
       const html = await page.content();
       // The layout's data as the server rendered it: a failed name read for
       // the tab stands as `"<tab>":{ok:false,…}`.
-      const failedRead = new RegExp(`"?${tab}"?:\\{ok:false[^}]*`).exec(html);
+      const failedRead = new RegExp(`"?${tab}"?:\\{ok:false[^}]*`, "u").exec(
+        html
+      );
       const refused = await refusedSince(logs, from);
       kit.check(
         `1 (${engine}): a session page loaded through tailscale serve's https name makes its layout's POST /api/instances/titles for a tab the listing does not name, and serve.js refuses nothing`,

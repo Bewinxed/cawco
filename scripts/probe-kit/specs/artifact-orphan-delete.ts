@@ -45,9 +45,9 @@ const FINISH = "mcp__cawco__finish_item";
 const BLOCKED = "The item failed as blocked";
 /** artifact_create's answer in its words (hub presenters/artifacts.ts `artifactCreatedWords`): the page made, and its link. */
 const MADE_PAGE =
-  /Made orphan-page \(page [0-9a-f]{8}\)[\s\S]*?cawco:artifact\/[0-9a-f-]{36}/;
+  /Made orphan-page \(page [0-9a-f]{8}\)[\s\S]*?cawco:artifact\/[0-9a-f-]{36}/u;
 const MADE_SECOND =
-  /Made orphan-second \(page [0-9a-f]{8}\)[\s\S]*?cawco:artifact\/[0-9a-f-]{36}/;
+  /Made orphan-second \(page [0-9a-f]{8}\)[\s\S]*?cawco:artifact\/[0-9a-f-]{36}/u;
 
 /** The outsider's refusal: who deletes it (artifacts/service.ts `deletable`). */
 const WHO_DELETES = shaped(artifactToolWords.notInTree);

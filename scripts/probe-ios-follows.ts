@@ -92,10 +92,10 @@ if (!args.includes("--built")) {
   const text = await sh(
     "bash apps/apple/scripts/build-both.sh ios --compile-only"
   );
-  check("compile", /^BUILT iOS/m.test(text), "BUILT iOS");
+  check("compile", /^BUILT iOS/mu.test(text), "BUILT iOS");
 }
 
-const TAG = /PROBE-[A-Z0-9-]+/;
+const TAG = /PROBE-[A-Z0-9-]+/u;
 /** A turn's words name the prompt they answer, so each reply is findable. */
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
@@ -179,7 +179,7 @@ try {
   const launched = await sh(
     `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${a},${b}`
   );
-  const pid = /dev\.cawco\.app: (\d+)/.exec(launched)?.[1];
+  const pid = /dev\.cawco\.app: (\d+)/u.exec(launched)?.[1];
   if (!pid) {
     throw new Error(`no pid in the launch's answer: ${launched}`);
   }

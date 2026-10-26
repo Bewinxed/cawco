@@ -658,10 +658,10 @@ export const TOOL_KINDS: ToolKind[] = [
 // ── The dashboard's reading of the rules. The native app's is generated
 //    (scripts/tool-presentation.ts) and implements the same steps in Swift.
 
-const LEADING_WWW = /^www\./;
-const TRAILING_SLASH = /\/$/;
-const PATCH_NEW_SIDE = /^b\//;
-const SERVER_SEPARATORS = /[_\-.]+/;
+const LEADING_WWW = /^www\./u;
+const TRAILING_SLASH = /\/$/u;
+const PATCH_NEW_SIDE = /^b\//u;
+const SERVER_SEPARATORS = /[_\-.]+/u;
 
 // The shapes a call's output and its names are read by, as scans: the
 // native app reads them by the same steps (ToolDescriptor), where a Regex
@@ -755,7 +755,7 @@ export function mcpParts(
   if (readParts.has(name)) {
     return readParts.get(name);
   }
-  const match = new RegExp(MCP_NAME).exec(name);
+  const match = new RegExp(MCP_NAME, "u").exec(name);
   const parts = match ? { server: match[1], tool: match[2] } : undefined;
   remember(readParts, name, parts);
   return parts;
@@ -775,7 +775,7 @@ export function toolKind(toolName: string | undefined): ToolKind {
         (kind) =>
           kind.names.includes(own) ||
           (kind.namePattern !== undefined &&
-            new RegExp(kind.namePattern).test(own))
+            new RegExp(kind.namePattern, "u").test(own))
       )
     : undefined;
   const fallback = mcp ? "mcp" : "other";
@@ -844,7 +844,7 @@ const pathDir = (path: string): string | undefined => {
   return at > 0 ? path.slice(0, at) : undefined;
 };
 const oneLine = (text: string): string =>
-  text.replace(/\s+/g, " ").trim().slice(0, LINE_CAP);
+  text.replace(/\s+/gu, " ").trim().slice(0, LINE_CAP);
 
 /** The first non-blank line, cut to a sentence's length. */
 export function firstLine(text: string | undefined): string | undefined {
@@ -989,7 +989,7 @@ export function humanize(name: string): string {
     spaced += character;
     last = character;
   }
-  const words = spaced.replace(/\s+/g, " ").trim().toLowerCase();
+  const words = spaced.replace(/\s+/gu, " ").trim().toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
@@ -1179,12 +1179,12 @@ export const memoryListWords = (
       ].join("\n");
 
 const MEMORY_READ =
-  /^The fleet's CLAUDE\.md, \d+ linked documents?; a write's expectedHash takes ([0-9a-f]+):(?:\n([\s\S]*))?$/;
+  /^The fleet's CLAUDE\.md, \d+ linked documents?; a write's expectedHash takes ([0-9a-f]+):(?:\n([\s\S]*))?$/u;
 const MEMORY_KEPT =
-  /^Kept [^\n]+: \d+ lines?, \d+ bytes; the next write's expectedHash takes ([0-9a-f]+)\.$/;
+  /^Kept [^\n]+: \d+ lines?, \d+ bytes; the next write's expectedHash takes ([0-9a-f]+)\.$/u;
 const MEMORY_LISTED =
-  /^\d+ documents?; set_doc and remove_doc take the path:((?:\n- [^\n]+)+)$/;
-const LISTED_LINE = /^- (.+?)(?: · |$)/;
+  /^\d+ documents?; set_doc and remove_doc take the path:((?:\n- [^\n]+)+)$/u;
+const LISTED_LINE = /^- (.+?)(?: · |$)/u;
 
 /** A memory call's answer in the words its agent read (`memoryReadHead`, `memoryListWords`, `memoryKeptWords`). */
 function memoryWords(text: string): MemoryResult {
@@ -1586,7 +1586,7 @@ export function refusalOf(
   result: { text: string } | undefined
 ): string | undefined {
   return (
-    result?.text.replace(new RegExp(REFUSAL_TAGS, "g"), "").trim() || undefined
+    result?.text.replace(new RegExp(REFUSAL_TAGS, "gu"), "").trim() || undefined
   );
 }
 

@@ -594,7 +594,7 @@
     return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
   };
   /** An age that is a span ("2h"), not a date ("Oct 3"). */
-  const SPAN = /^\d/;
+  const SPAN = /^\d/u;
   /** When it failed, as a failure row says it: "failed 2h ago". */
   const failedWhen = (item: TrayChild): string => {
     const at = age(item.endedAt ?? item.createdAt, minute);

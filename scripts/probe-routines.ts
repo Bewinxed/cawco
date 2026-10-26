@@ -43,10 +43,10 @@ const { routinesDb } = await import("../packages/hub/src/db/routines");
 const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
-const TAG = /PROBE-ROUTINE-(\w+)/;
-const SKIP_REASON = /^the \d\d:\d\d run is still going$/;
+const TAG = /PROBE-ROUTINE-(\w+)/u;
+const SKIP_REASON = /^the \d\d:\d\d run is still going$/u;
 /** The log lines a failure prints. */
-const LOGGED = /routines|work-items|workspace|error/i;
+const LOGGED = /routines|work-items|workspace|error/iu;
 const FINISH = "mcp__cawco__finish_item";
 const CREATE = "mcp__cawco__routine_create";
 

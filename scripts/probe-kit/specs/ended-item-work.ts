@@ -67,7 +67,7 @@ const THRESHOLD_GIB = 0.25;
 const FINISH = "mcp__cawco__finish_item";
 const CREATE = "mcp__cawco__artifact_create";
 const WAIT = "mcp__cawco__wait_item";
-const TAG = /PROBE-ENDED-([AB]):/;
+const TAG = /PROBE-ENDED-([AB]):/u;
 const PORT_A = 47_631;
 const PORT_B = 47_632;
 /** What A's server is found by: its command line, and the leak notice that names it. */

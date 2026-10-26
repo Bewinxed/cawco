@@ -82,9 +82,9 @@ const SETTLE_MS = 3000;
 /** A conversation stored on the machine that the hub never started (leg e). */
 const STORED = "00000000-0000-4000-8000-00000000c0de";
 /** The page's own line for each newest page it read, and why (client.svelte.ts `readNewestPage`). */
-const READ_LINE = /^\[cawco\] read (\w+) because (\w+)/;
+const READ_LINE = /^\[cawco\] read (\w+) because (\w+)/u;
 /** The pane's title for a transcript whose machine is away (SessionPane.svelte `faultTitle`). */
-const AWAY_TITLE = /This machine is (offline|reconnecting)/;
+const AWAY_TITLE = /This machine is (offline|reconnecting)/u;
 /** A 1×1 PNG: the picture e's stored conversation carries. */
 const PIXEL =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -92,9 +92,9 @@ const PIXEL =
 const ATTACHMENTS = '[data-files-region="attachments"]';
 const ATTACHMENTS_FAULT = `${ATTACHMENTS} [data-files-failed]`;
 /** The hub's answer to a stream's resume (hub stream.ts `subscribe`). */
-const STREAM_ANSWER = /"type":"stream\.(backlog|reset)"/;
+const STREAM_ANSWER = /"type":"stream\.(backlog|reset)"/u;
 /** Any session's newest transcript page. */
-const TRANSCRIPT_PATH = /^\/api\/instances\/[^/]+\/transcript$/;
+const TRANSCRIPT_PATH = /^\/api\/instances\/[^/]+\/transcript$/u;
 
 /** What a page said and failed, from the moment it is watched. */
 interface Heard {
@@ -544,7 +544,7 @@ const run = async (kit: Kit): Promise<void> => {
   );
   const faultSaid = (
     (await page.locator(ATTACHMENTS_FAULT).textContent()) ?? ""
-  ).replaceAll(/\s+/g, " ");
+  ).replaceAll(/\s+/gu, " ");
   const clipped = await page.evaluate(scan);
   kit.check(
     "e. Files opened while the machine is away: its attachments stand as the fault row, the reason and, under Show details, the machine's words, and the overflow sweep finds nothing clipped",
@@ -608,7 +608,7 @@ const run = async (kit: Kit): Promise<void> => {
       open: !!document.querySelector("[data-glass-card-frame='files-pop']"),
       fault: document.querySelectorAll(fault).length,
       rows: [...document.querySelectorAll(`${region} [data-files-row]`)].map(
-        (row) => row.textContent?.replaceAll(/\s+/g, " ").trim() ?? ""
+        (row) => row.textContent?.replaceAll(/\s+/gu, " ").trim() ?? ""
       ),
     }),
     { region: ATTACHMENTS, fault: ATTACHMENTS_FAULT }

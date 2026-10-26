@@ -59,7 +59,7 @@ export const plainReferenceOf = (href: string): Drawn =>
   href.startsWith("cawco:") ? { draw: "label" } : { draw: "link" };
 
 /** A backslash escape in a link's label (core `referenceLink` writes them). */
-const ESCAPED = /\\([\\[\]])/g;
+const ESCAPED = /\\([\\[\]])/gu;
 
 /** A link's label as written, its escapes read: what an element falls back to. */
 export const writtenLabel = (text: string | undefined): string =>

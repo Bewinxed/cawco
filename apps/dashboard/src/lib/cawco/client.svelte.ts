@@ -1440,13 +1440,19 @@ if (import.meta.env.DEV) {
 
 // HMR-persistent socket references, so a module reload never leaves an orphan.
 declare global {
+  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
   var __cawcoSocket: WebSocket | null;
+  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
   var __cawcoReconnectTimeout: ReturnType<typeof setTimeout> | null;
+  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
   var __cawcoReconnectAttempts: number;
+  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
   var __cawcoDisposing: boolean;
   /** The wake listeners are document-wide; bind them once across HMR reloads. */
+  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
   var __cawcoWakeBound: boolean;
   /** This document asked for the hub (`ensureConnected`): only then does a wake reconnect. */
+  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
   var __cawcoHubAsked: boolean;
 }
 globalThis.__cawcoSocket ??= null;
@@ -4023,7 +4029,7 @@ export function holdDetails(sessionId: string): () => void {
 }
 
 /** A reason's closing stop, dropped so it sits inside the sentence. */
-const REASON_STOP = /\.$/;
+const REASON_STOP = /\.$/u;
 
 /**
  * A failed command in the error formula (WORDS.md): what did not happen, the

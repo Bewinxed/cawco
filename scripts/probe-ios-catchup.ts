@@ -127,7 +127,7 @@ if (!app) {
   );
   const text = await new Response(build.stdout).text();
   process.stdout.write(text);
-  if ((await build.exited) !== 0 || !/^BUILT iOS 18\.5$/m.test(text)) {
+  if ((await build.exited) !== 0 || !/^BUILT iOS 18\.5$/mu.test(text)) {
     console.log("FAIL compile");
     process.exit(1);
   }
@@ -155,17 +155,17 @@ if (!app) {
 // with its status line alone saying so beside Open Settings, toasts nothing,
 // and reconnects at once when activated with access allowed.
 const LIVE = option("--live");
-const BACK_LINES = /app active|status line|shell shows|hub socket open/;
-const TRAILING_SLASH = /\/$/;
+const BACK_LINES = /app active|status line|shell shows|hub socket open/u;
+const TRAILING_SLASH = /\/$/u;
 /** A log line up to what it says: its stamp, process and category. */
-const LIVE_LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
+const LIVE_LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /u;
 const SHOWN =
-  / because |catch-up |stream: (reset|resync|backlog)|transcript read for|page adopted|toast/;
-const BECAUSE = / because /;
-const HUB_ASKED = /because (streamReset|backlogBroken)/;
-const APPLIED = / applied/;
-const SHOWN_FAILING = / because |toast:|transcript read for|catch-up /;
-const TOAST_HEAD = /^.*toast: /;
+  / because |catch-up |stream: (reset|resync|backlog)|transcript read for|page adopted|toast/u;
+const BECAUSE = / because /u;
+const HUB_ASKED = /because (streamReset|backlogBroken)/u;
+const APPLIED = / applied/u;
+const SHOWN_FAILING = / because |toast:|transcript read for|catch-up /u;
+const TOAST_HEAD = /^.*toast: /u;
 /** The local-network pass is through: the rest of the live pass is not run. */
 const LOCAL_DONE = "local network pass done";
 if (LIVE) {
@@ -750,7 +750,7 @@ async function tree(): Promise<Node[]> {
   walkTree(lastTree);
   return nodes;
 }
-const ROW = /row-(\d{4})/;
+const ROW = /row-(\d{4})/u;
 interface Place {
   area: { bottom: number; top: number };
   first?: { row: string; y: number };
@@ -832,9 +832,9 @@ const launch = (id?: string) =>
     `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port}${id ? ` -open-session ${id}` : ""} >/dev/null`
   );
 /** The pill's transitions in the app's log from line `from` on: when (ms of the log's clock) and which way. */
-const DOCK = /^(\S+ \S+).*dock (.+) (shown|hidden) (\S+)/;
+const DOCK = /^(\S+ \S+).*dock (.+) (shown|hidden) (\S+)/u;
 /** A log line's stamp, process and category, up to what it says. */
-const LOG_PREFIX = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
+const LOG_PREFIX = /^.*?\[dev\.cawco\.app:[^\]]*\] /u;
 /** Panes side by side each float their own pill: only the long session's (its id's first 8) counts. */
 const transitions = (title: string, from = 0) =>
   // The log stream can hand a line over twice: each line once.

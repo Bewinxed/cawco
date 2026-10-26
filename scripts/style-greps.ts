@@ -80,9 +80,9 @@ const outs = await Promise.all(
   )
 );
 /** Each @keyframes in `text` that cuts and moves: its line and its head. */
-const KEYFRAMES = /@(?:-webkit-)?keyframes\s+[^{]+\{/g;
-const CUT = /(?<![\w-])clip-path\s*:/;
-const MOVE = /(?<![\w-])(?:transform|translate|scale|rotate)\s*:/;
+const KEYFRAMES = /@(?:-webkit-)?keyframes\s+[^{]+\{/gu;
+const CUT = /(?<![\w-])clip-path\s*:/u;
+const MOVE = /(?<![\w-])(?:transform|translate|scale|rotate)\s*:/u;
 function cutsAndMoves(text: string): { head: string; line: number }[] {
   const hits: { head: string; line: number }[] = [];
   for (const head of text.matchAll(KEYFRAMES)) {

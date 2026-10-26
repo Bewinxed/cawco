@@ -236,7 +236,7 @@ const parse = (text: string): Message | Message[] | undefined => {
   }
 };
 
-const CARRIAGE_RETURN = /\r$/;
+const CARRIAGE_RETURN = /\r$/u;
 
 /** An upstream answer that is not a JSON-RPC message: relayed as it came. */
 const refused = async (response: Response) =>

@@ -250,7 +250,7 @@ export const previewEnterUrl = (
  * passes ({@link PREVIEW_PASS_COOKIE}, {@link PREVIEW_PORT_PASS_COOKIE}) are
  * among them.
  */
-export const DASHBOARD_COOKIE = /^(?:__Host-|__Secure-)?cawco-/;
+export const DASHBOARD_COOKIE = /^(?:__Host-|__Secure-)?cawco-/u;
 
 /**
  * How previews are reached, fleet-wide (Settings › Previews, Caw's

@@ -118,7 +118,7 @@ export interface ArtifactDoc {
 }
 
 /** A sentence's last mark. */
-const ENDS_SENTENCE = /[.!?]$/;
+const ENDS_SENTENCE = /[.!?]$/u;
 
 /** Why the hub refused the link for good (y-websocket's `closed`), as its own sentence: its reason when it gave one. */
 const refusedWhy = ({ code, reason }: { code: number; reason: string }) => {

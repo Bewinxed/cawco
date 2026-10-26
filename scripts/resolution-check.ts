@@ -55,8 +55,8 @@ const GOLAR = join(ROOT, "node_modules/.bin/golar");
 const SHARED = ["tsconfig.base.json", "tsconfig.paths.json"];
 
 const HEADER =
-  /^======== Resolving (?:module '(?<module>[^']+)' from|type reference directive '(?<type>[^']+)', containing file) '(?<from>[^']+)'/;
-const RESOLVED = /successfully resolved to '(?<path>[^']+)'/;
+  /^======== Resolving (?:module '(?<module>[^']+)' from|type reference directive '(?<type>[^']+)', containing file) '(?<from>[^']+)'/u;
+const RESOLVED = /successfully resolved to '(?<path>[^']+)'/u;
 
 interface Leak {
   from: string;

@@ -30,7 +30,7 @@ import type {
   SourceFacts,
 } from "@cawco/core";
 
-const ADMIN_WRITE = /^admin_[a-z_]+_write$/;
+const ADMIN_WRITE = /^admin_[a-z_]+_write$/u;
 
 /** The mode that approves every ask for its session (core `PermissionMode`). */
 const FULL_SEND: PermissionMode = "fullSend";

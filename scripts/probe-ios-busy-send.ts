@@ -46,9 +46,9 @@ const root = resolve(import.meta.dir, "..");
 const DEVICE = "iPhone 16 Pro";
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 /** What `log stream --style compact` puts before a Probe line's own words. */
-const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
+const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/u;
 /** One of the app's checks. */
-const CHECK_LINE = /^send (PASS|FAIL) /;
+const CHECK_LINE = /^send (PASS|FAIL) /u;
 const HOLD = "HOLD";
 console.log(
   `  at ${(await Bun.$`git -C ${root} log -1 --format=%h\ %s`.text()).trim()}`
@@ -90,7 +90,7 @@ if (build) {
   );
   const text = await new Response(child.stdout).text();
   process.stdout.write(text);
-  if ((await child.exited) !== 0 || !/^BUILT iOS$/m.test(text)) {
+  if ((await child.exited) !== 0 || !/^BUILT iOS$/mu.test(text)) {
     fail("compile: build-both.sh did not print BUILT iOS");
     process.exit(1);
   }

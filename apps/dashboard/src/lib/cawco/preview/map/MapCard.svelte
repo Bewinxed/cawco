@@ -106,6 +106,7 @@
     {@attach measureView}
   >
     {#if chosen && live}
+      <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
       <iframe
         class="absolute top-0 start-0 w-(--live-w) h-(--live-h) scale-(--live-scale) origin-top-left border-none border-current pointer-events-none bg-surface-well"
         style:--live-h={`${LIVE.h}px`}

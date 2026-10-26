@@ -84,7 +84,7 @@ export const isView = (fleet: CopyFleet, ws: CopyRef): boolean => {
 };
 
 /** A mountinfo path's octal escapes (`\040` for a space). */
-const OCTAL_ESCAPE = /\\([0-7]{3})/g;
+const OCTAL_ESCAPE = /\\([0-7]{3})/gu;
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);

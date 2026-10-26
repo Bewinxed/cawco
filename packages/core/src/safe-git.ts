@@ -108,15 +108,15 @@ export const safeGitArgv = (args: readonly string[]): string[] => [
  * write. Each is a pattern on the whole lower-cased key.
  */
 const ALLOWED_KEYS: readonly RegExp[] = [
-  /^core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks|autocrlf|eol|safecrlf|quotepath)$/,
-  /^extensions\.(objectformat|refstorage)$/,
+  /^core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks|autocrlf|eol|safecrlf|quotepath)$/u,
+  /^extensions\.(objectformat|refstorage)$/u,
   // git-lfs writes its format marker into any repository it runs in (a
   // checkout that smudges a large file); it names no program.
-  /^lfs\.repositoryformatversion$/,
-  /^remote\.[^\n]+\.(url|pushurl|fetch|push|tagopt|prune|mirror|skipdefaultupdate)$/,
-  /^branch\.[^\n]+\.(remote|merge|rebase|pushremote|description)$/,
-  /^(user|author|committer)\.(name|email)$/,
-  /^(pull\.(rebase|ff)|push\.(default|autosetupremote)|rebase\.(autosquash|autostash|updaterefs)|merge\.(ff|conflictstyle)|fetch\.prune|init\.defaultbranch|color\.ui|gc\.auto)$/,
+  /^lfs\.repositoryformatversion$/u,
+  /^remote\.[^\n]+\.(url|pushurl|fetch|push|tagopt|prune|mirror|skipdefaultupdate)$/u,
+  /^branch\.[^\n]+\.(remote|merge|rebase|pushremote|description)$/u,
+  /^(user|author|committer)\.(name|email)$/u,
+  /^(pull\.(rebase|ff)|push\.(default|autosetupremote)|rebase\.(autosquash|autostash|updaterefs)|merge\.(ff|conflictstyle)|fetch\.prune|init\.defaultbranch|color\.ui|gc\.auto)$/u,
 ];
 
 /** Whether git may run under a repository config holding `key` ({@link ALLOWED_KEYS}). */

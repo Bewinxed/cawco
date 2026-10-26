@@ -14,13 +14,13 @@
  * the error's line is the one answered, without Bun's `error: ` label.
  * Nightly 2ebcc2a04 recorded a binary-pins crash as "Bun v1.4.2 (Linux x64)".
  */
-const BUN_FOOTER = /^Bun v\d+\.\d+\.\d+\S* \(.+\)$/;
+const BUN_FOOTER = /^Bun v\d+\.\d+\.\d+\S* \(.+\)$/u;
 /** A line of Bun's source excerpt: `12 | code`, or the caret under it. */
-const EXCERPT = /^\s*\d+ \| |^\s*\^\s*$/;
+const EXCERPT = /^\s*\d+ \| |^\s*\^\s*$/u;
 /** An error's own line when no excerpt came before it. */
-const ERROR_LINE = /^error: |^[A-Za-z]*(Error|Exception)\b|^E[A-Z]+: /;
+const ERROR_LINE = /^error: |^[A-Za-z]*(Error|Exception)\b|^E[A-Z]+: /u;
 /** Bun's label on a thrown Error's or value's line. */
-const BUN_LABEL = /^error: /;
+const BUN_LABEL = /^error: /u;
 
 /** The sentence a failed CLI step's stderr says; undefined when it said nothing. */
 export const failureSentence = (stderr: string): string | undefined => {

@@ -112,7 +112,7 @@ const DASHBOARDS = 3;
 const RECONNECT_MS = 60_000;
 /** The longest a driven read or a socket's first frame is waited for. Our choice: far past any hold the bound allows. */
 const READ_BOUND_MS = 60_000;
-const HTTP_SCHEME = /^http/;
+const HTTP_SCHEME = /^http/u;
 /** (e)'s conversation: how many pictures, and the bytes of each. Our choice: past a hundred MB of base64, as the live orchestrator's transcripts carry. */
 const HEAVY_PICTURES = 160;
 const PICTURE_BYTES = 768 * 1024;
@@ -258,7 +258,7 @@ async function run(kit: Kit): Promise<void> {
       fleet.home,
       CLAUDE_DIR_NAME,
       "projects",
-      cwd.replace(/[^a-zA-Z0-9]/g, "-")
+      cwd.replace(/[^a-zA-Z0-9]/gu, "-")
     );
     mkdirSync(dir, { recursive: true });
     const file = join(dir, `${sessionId}.jsonl`);
@@ -501,7 +501,7 @@ const writeHeavy = async (home: string, heavy: Heavy | null): Promise<void> => {
     home,
     CLAUDE_DIR_NAME,
     "projects",
-    heavy.cwd.replace(/[^a-zA-Z0-9]/g, "-"),
+    heavy.cwd.replace(/[^a-zA-Z0-9]/gu, "-"),
     `${heavy.sessionId}.jsonl`
   );
   const writer = Bun.file(file).writer();

@@ -515,7 +515,7 @@ export const startBrowser = (
 };
 
 /** A runtime's or a process's refusal to bind a port another socket holds. */
-const BIND_REFUSED = /address already in use|EADDRINUSE/i;
+const BIND_REFUSED = /address already in use|EADDRINUSE/iu;
 
 /** `record` on a slot whose ports are free now, none of `held` nor its own; said in the log with `why`. */
 const moveSlot = async (

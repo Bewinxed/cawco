@@ -94,7 +94,7 @@ const FOREGROUND = [
   `sh -c 'sleep ${FG_SECONDS}; exit 7'`,
   `echo "FG-""STATUS-$?"`,
 ].join("; ");
-const FG_STATUS = /FG-STATUS-(\d+)/;
+const FG_STATUS = /FG-STATUS-(\d+)/u;
 /** F's brief: round 0's delegate, apart from H. */
 const FG_TAG = "PROBE-FG-F:";
 /** The account round 0's restart adds to F's policy: a form change of F's boundary alone. */
@@ -103,16 +103,16 @@ const FG_ACCOUNT = "acct-probe-older-form-fg";
 const CUT_OFF = "boundary stopped while this command ran";
 /** How long after F's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
 const HANDOVER_BOUND_MS = 30_000;
-const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/;
+const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/u;
 /** The loop's beat, `sleep 2`: a read of the heartbeat that must see it grow waits more than one. */
 const BEAT_GAP_MS = 5000;
-const PID_NS = /pid:\[\d+\]/g;
-const STARTED = /BEAT-STARTED-(\d+):/;
-const ALIVE = /BEAT-ALIVE-(\d+):/;
-const BEATS = /BEAT-COUNT-(\d+):/;
+const PID_NS = /pid:\[\d+\]/gu;
+const STARTED = /BEAT-STARTED-(\d+):/u;
+const ALIVE = /BEAT-ALIVE-(\d+):/u;
+const BEATS = /BEAT-COUNT-(\d+):/u;
 const ACCOUNT_ADDED = "acct-probe-older-form";
 /** The line a session's command shows once its access narrowed (agent boundary.ts `narrowedLine`). */
-const NARROWED_LINE = /^cawco: this workspace's access was narrowed /;
+const NARROWED_LINE = /^cawco: this workspace's access was narrowed /u;
 /** H's rest after each command: longer than the spec, so its item stays live. */
 const REST = { minutes: 60, reason: "its parent's word on the heartbeat" };
 

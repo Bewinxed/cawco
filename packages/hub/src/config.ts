@@ -21,7 +21,7 @@ export const HUB_DEBUG = readEnv(CAWCO_ENV.debug) === "1";
 /** The address the hub and its preview listeners bind (`HOST`): every interface unless set. */
 export const BIND_HOST = process.env.HOST ?? "0.0.0.0";
 
-const PORT_RANGE = /^(\d+)-(\d+)$/;
+const PORT_RANGE = /^(\d+)-(\d+)$/u;
 
 /**
  * The ports preview listeners take (`CAWCO_PREVIEW_PORTS`, `first-last`):

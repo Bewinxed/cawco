@@ -50,8 +50,8 @@ const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
 const keep = process.argv.includes("--keep");
 const PROPOSE = "mcp__cawco__action_propose";
 const MOVE = "mcp__cawco__task_update";
-const LOGGED = /actions|tasks|push|caw|error/i;
-const STAGE_LINE = /^stage: .*$/m;
+const LOGGED = /actions|tasks|push|caw|error/iu;
+const STAGE_LINE = /^stage: .*$/mu;
 /** The scheduler wakes at an action's time; this is the slack a busy machine gets. */
 const WAKE_SLACK_MS = 3000;
 
@@ -168,7 +168,7 @@ const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 /** What each numbered message's tool answered: the next request's last user text. */
 const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {

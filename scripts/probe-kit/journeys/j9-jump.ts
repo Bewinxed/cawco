@@ -114,7 +114,7 @@ async function walk(leg: Leg): Promise<void> {
     60_000
   );
   const finder = page.getByRole("combobox", { name: FIND });
-  const moment = page.getByRole("option", { name: new RegExp(nonce) });
+  const moment = page.getByRole("option", { name: new RegExp(nonce, "u") });
   const openJump = async () => {
     // The bar's Jump on a wide screen; a phone keeps it in its sheet,
     // as the sheet's search (Shell, Sidebar `onsearch`).

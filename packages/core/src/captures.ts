@@ -72,8 +72,8 @@ const webpWidth = (bytes: Uint8Array): number | null => {
 export const imageWidth = (bytes: Uint8Array): number | null =>
   pngWidth(bytes) ?? jpegWidth(bytes) ?? webpWidth(bytes);
 
-const IMG_SOURCE = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
-const DATA_URL = /^data:[^;,]*;base64,(.*)$/s;
+const IMG_SOURCE = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/giu;
+const DATA_URL = /^data:[^;,]*;base64,(.*)$/su;
 
 /** Each `<img>` source on a page, in order. */
 export const imageSources = (html: string): string[] =>

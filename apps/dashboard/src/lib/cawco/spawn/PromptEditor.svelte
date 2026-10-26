@@ -40,8 +40,8 @@
     start: number;
     type: "@" | "/";
   }
-  const TRIGGER = /(^|[\s ])([@/])([\w./-]*)$/;
-  const LEADING_SPACE = /^[\s\u00a0]+/;
+  const TRIGGER = /(^|[\s ])([@/])([\w./-]*)$/u;
+  const LEADING_SPACE = /^[\s\u00a0]+/u;
   const NAV = ["ArrowUp", "ArrowDown", "Enter", "Tab", "Escape"];
   let menu = $state.raw<Menu | null>(null);
   let menuIdx = $state(0);
@@ -130,7 +130,7 @@
   }
   const text = () =>
     serialize(element as Node)
-      .replace(/ /g, " ")
+      .replace(/ /gu, " ")
       .trim();
 
   function closeMenu() {

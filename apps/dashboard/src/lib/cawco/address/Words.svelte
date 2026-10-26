@@ -6,10 +6,10 @@
    * bracket and any closing punctuation kept on it.
    */
   const ADDRESS =
-    /^\(?(?:https?:\/\/\S+|[a-z0-9-]+(?:\.[a-z0-9-]+)+\/?|cawco(?:-\d+)*\/?)[.,:;)]*$/;
+    /^\(?(?:https?:\/\/\S+|[a-z0-9-]+(?:\.[a-z0-9-]+)+\/?|cawco(?:-\d+)*\/?)[.,:;)]*$/u;
 
   /** Where a line splits into runs: between its words, the spaces kept as runs of their own. */
-  const SPACES = /(\s+)/;
+  const SPACES = /(\s+)/u;
 
   /** `text` in runs, each address marked so it is kept whole on one line. */
   export function runsOf(text: string): { text: string; address: boolean }[] {

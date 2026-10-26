@@ -12,10 +12,10 @@ import type {
 } from "../../../packages/hub/src/design-tokens";
 
 const VARIANTS = "src/lib/tokens/variants.css";
-const REFERENCE = /^\{([^}]+)\}$/;
-const VAR = /var\(--([a-z0-9-]+)\)/g;
-const TOKEN_REFERENCE = /\{([a-z0-9.-]+)\}/g;
-const CUSTOM_VARIANT = /@custom-variant ([a-z0-9-]+)/g;
+const REFERENCE = /^\{([^}]+)\}$/u;
+const VAR = /var\(--([a-z0-9-]+)\)/gu;
+const TOKEN_REFERENCE = /\{([a-z0-9.-]+)\}/gu;
+const CUSTOM_VARIANT = /@custom-variant ([a-z0-9-]+)/gu;
 
 /** A token's value at rest: its DTCG value, references followed to the value they name. */
 function restingValue(token: ViewToken, view: TokenView): string {

@@ -18,7 +18,7 @@ import {
 } from "@cawco/core";
 
 /** An IPv4 or IPv6 address, which has no first label to name a machine by. */
-const ADDRESS = /^[\d.]+$|:/;
+const ADDRESS = /^[\d.]+$|:/u;
 
 /** The machine as a sentence names it: its fleet name, else its address's first label, else "the machine". */
 export const machineWord = (install: Install): string => {
@@ -61,7 +61,7 @@ export interface ProblemWords {
 }
 
 /** The command an installer's refusal names ("run: sudo …, then"), if it names one. */
-const RUN_SAID = /[Rr]un:? (sudo [^,]+?|[a-z-]+ [^,]+?)(?:, then|\.|$)/;
+const RUN_SAID = /[Rr]un:? (sudo [^,]+?|[a-z-]+ [^,]+?)(?:, then|\.|$)/u;
 
 /**
  * The keys an SSH add wrote that stay on the machine (hub installs.ts

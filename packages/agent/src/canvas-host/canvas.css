@@ -38,6 +38,17 @@ body {
     linear-gradient(to bottom, var(--code-bg) 1px, transparent 1px);
   background-position: var(--grid-x) var(--grid-y);
   background-size: var(--grid) var(--grid);
+
+  /* A group's height in one row: its box, its inset each side, its edge.
+     The tools' group as drawn, rows and all, is `--rail-tools-h` (rail.tsx
+     measures it); until it is measured, one row. */
+  --rail-box: 34px;
+  --rail-h: calc(var(--rail-box) + 2 * var(--space-2) + 2px);
+  --rail-tools-row: var(--rail-tools-h, var(--rail-h));
+
+  @media (pointer: coarse) {
+    --rail-box: var(--c-btn-h-lg);
+  }
 }
 
 .canvas-host .excalidraw {
@@ -103,19 +114,6 @@ body {
    unseen: that host's bug, shown, not covered. */
 :root:not([data-canvas-inset]) .rail {
   visibility: hidden;
-}
-
-/* A group's height in one row: its box, its inset each side, its edge.
-   The tools' group as drawn, rows and all, is `--rail-tools-h` (rail.tsx
-   measures it); until it is measured, one row. */
-.canvas-host {
-  --rail-box: 34px;
-  --rail-h: calc(var(--rail-box) + 2 * var(--space-2) + 2px);
-  --rail-tools-row: var(--rail-tools-h, var(--rail-h));
-
-  @media (pointer: coarse) {
-    --rail-box: var(--c-btn-h-lg);
-  }
 }
 
 /* Too narrow for the two groups side by side (under 560px, or under 640px

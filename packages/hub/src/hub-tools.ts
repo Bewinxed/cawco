@@ -29,12 +29,14 @@ import {
   type DesignWritten,
 } from "./design-system";
 import { FIND_TOOL, type FindTool, findToolDefinition } from "./find-tool";
+import { hubHttpUrl, selfFetch } from "./hub-self";
 import { tool } from "./mcp-tool";
 import {
   designVerdictWords,
   designWrittenWords,
   machinesUpdatedWords,
 } from "./presenters/hub";
+import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
 
 /** One `find` for a session: its input, and the form it asked. */
 type FindCall = (
@@ -43,9 +45,6 @@ type FindCall = (
     ? Rest
     : never
 ) => ReturnType<FindTool["call"]>;
-
-import { hubHttpUrl, selfFetch } from "./hub-self";
-import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
 
 /** The hub's own session tools, by name: what a call is routed by (delegation-mcp.ts). */
 /** A design check's verifier's verdict: listed to verifier sessions alone (delegation-mcp.ts). */

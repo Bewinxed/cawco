@@ -109,10 +109,10 @@ const KEYBOARD_KEY = "cawco:keyboard:";
 const EDITABLE = "input, textarea, [contenteditable]";
 /** Inputs that raise no keyboard. */
 const KEYLESS =
-  /^(button|checkbox|color|file|hidden|image|radio|range|reset|submit)$/;
-const SCROLLS = /(auto|scroll)/;
+  /^(button|checkbox|color|file|hidden|image|radio|range|reset|submit)$/u;
+const SCROLLS = /(auto|scroll)/u;
 /** Inputs whose caret a script may place. */
-const SELECTS = /^(password|search|tel|text|url)$/;
+const SELECTS = /^(password|search|tel|text|url)$/u;
 
 const isField = (node: Element | null): node is HTMLElement =>
   node instanceof HTMLElement &&

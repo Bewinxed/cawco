@@ -113,7 +113,7 @@ if (build) {
   );
   const text = await new Response(child.stdout).text();
   process.stdout.write(text);
-  if ((await child.exited) !== 0 || !/^BUILT iOS$/m.test(text)) {
+  if ((await child.exited) !== 0 || !/^BUILT iOS$/mu.test(text)) {
     console.log("FAIL compile: build-both.sh did not print BUILT iOS");
     process.exit(1);
   }
@@ -176,28 +176,28 @@ setInterval(report, 700);
 
 // ── 3. The app's Probe log ───────────────────────────────────────────────
 /** What `log stream --style compact` puts before a Probe line's own words. */
-const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
+const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/u;
 /** PreviewController's `preview page …` and `preview head …` lines. */
-const PAGE_LINE = /^preview page view=(\S+) selected=(\S+) count=(\d+)(.*)$/;
+const PAGE_LINE = /^preview page view=(\S+) selected=(\S+) count=(\d+)(.*)$/u;
 const HEAD_LINE =
-  /^preview head comment=(.+)@(-?\d+),(-?\d+) mode=(interact|comment|draw) draw=(none|-?\d+,-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
+  /^preview head comment=(.+)@(-?\d+),(-?\d+) mode=(interact|comment|draw) draw=(none|-?\d+,-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) web=(-?\d+),(-?\d+),(\d+),(\d+)$/u;
 /** Pins.swift's `preview card …` line: the open pin's number, where its controls stand, whether it wears the live dot. */
 const CARD_LINE =
-  /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) delete=(?:none|-?\d+,-?\d+) writing=(?:true|false) asking=(?:true|false) problem=(.*)$/;
+  /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) delete=(?:none|-?\d+,-?\d+) writing=(?:true|false) asking=(?:true|false) problem=(.*)$/u;
 /** Pins.swift's `preview list …` line, logged once the sheet is in its window: the counts (open and resolved each counting moved pins), the filter, each row's number and centre, the live rows; then the moved rows under the filter and the read's hold. */
 const LIST_LINE =
-  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(\S*) live=(\S*) scrim=(none|-?\d+,-?\d+)(?: movedRows=\S* hold=\S+)?$/;
+  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(\S*) live=(\S*) scrim=(none|-?\d+,-?\d+)(?: movedRows=\S* hold=\S+)?$/u;
 /** The overlay's answer to the app's reply or resolve, as the app logs it. */
 const RESULT_LINE =
-  /^preview (reply|resolve)-result (?:pin=(\d+) (ok|refused: .*)|none)$/;
-const POINT = /^(-?\d+),(-?\d+)$/;
+  /^preview (reply|resolve)-result (?:pin=(\d+) (ok|refused: .*)|none)$/u;
+const POINT = /^(-?\d+),(-?\d+)$/u;
 /** PreviewController's `preview card-geometry card=x,y,w,h …` line: the open card's frame in the window. */
 const CARD_GEOMETRY =
-  /^preview card-geometry card=(-?\d+),(-?\d+),(\d+),(\d+) /;
+  /^preview card-geometry card=(-?\d+),(-?\d+),(\d+),(\d+) /u;
 /** The thread room's content and height on that line (`room=content/height`). */
-const CARD_ROOM = / room=(\d+)\/(\d+)@(-?\d+)/;
+const CARD_ROOM = / room=(\d+)\/(\d+)@(-?\d+)/u;
 /** The app's lines a failure keeps on their own: the card's, the mode's, the pins'. */
-const CARD_STORY = /^preview (card|comment|pins |read |escape|list )/;
+const CARD_STORY = /^preview (card|comment|pins |read |escape|list )/u;
 /** "x,y" as a point; "none" (hidden, or not in a window) as none. */
 const pointOf = (text: string | undefined): Point | undefined => {
   const m = text?.match(POINT);
@@ -219,7 +219,7 @@ const pageOf = (line: string): Page | undefined => {
     return;
   }
   const at: Page["at"] = {};
-  for (const [, name, x, y] of words[4].matchAll(/(\S+)=(-?\d+),(-?\d+)/g)) {
+  for (const [, name, x, y] of words[4].matchAll(/(\S+)=(-?\d+),(-?\d+)/gu)) {
     at[name] = { x: Number(x), y: Number(y) };
   }
   return { view: words[1], selected: words[2], count: Number(words[3]), at };
@@ -412,7 +412,7 @@ const listOf = (line: string): List | undefined => {
     return;
   }
   const rows: List["rows"] = {};
-  for (const [, n, at] of m[6].matchAll(/(\d+)@(none|-?\d+,-?\d+)/g)) {
+  for (const [, n, at] of m[6].matchAll(/(\d+)@(none|-?\d+,-?\d+)/gu)) {
     rows[n] = pointOf(at);
   }
   return {

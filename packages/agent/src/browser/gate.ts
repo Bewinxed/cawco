@@ -127,7 +127,7 @@ const TARGET_METHODS = new Set([
 ]);
 /** URL schemes of the browser's own pages and the machine's files. */
 const OWN_PAGE =
-  /^\s*(?:view-source:)?(?:chrome|chrome-untrusted|devtools|file):/i;
+  /^\s*(?:view-source:)?(?:chrome|chrome-untrusted|devtools|file):/iu;
 
 /** The ids the gate gives its own calls on a connection: far above any agent's. */
 const GATE_IDS = 2_000_000_000;
@@ -217,8 +217,8 @@ const parse = (data: string): Cdp | undefined => {
 const filterOf = (given: unknown): Filter[] =>
   isFilter(given) ? given : DEFAULT_FILTER;
 
-const CUT_CHARACTER = /�+$/;
-const BEARER = /^Bearer (\S+)$/;
+const CUT_CHARACTER = /�+$/u;
+const BEARER = /^Bearer (\S+)$/u;
 
 /** A close reason as a WebSocket carries it: 123 bytes at most. */
 const reason = (why: string): string => {
@@ -278,7 +278,7 @@ export const keyOfWorkspace = async (
     : `machine:${machine}`;
 };
 
-const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
 // ---------------------------------------------------------------------------
 // One CDP connection to Chromium

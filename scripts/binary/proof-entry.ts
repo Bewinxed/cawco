@@ -23,7 +23,7 @@ if (Bun.argv[2] === "search-host") {
     );
   }
   for (const key of Object.keys(process.env)) {
-    if (/TOKEN|SECRET|API_KEY/.test(key)) {
+    if (/TOKEN|SECRET|API_KEY/u.test(key)) {
       throw new Error("Proof may not receive credentials");
     }
   }

@@ -811,7 +811,7 @@ async function pushOwnBranch(
 }
 
 /** Whitespace between `git ls-remote`'s sha and its ref. */
-const SPACE = /\s+/;
+const SPACE = /\s+/u;
 
 /**
  * HEAD (`sha`) pushed to `branch`, replacing it only while it is missing or

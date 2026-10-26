@@ -3,7 +3,7 @@
  * `… (project)` or `… (user)`: where it is defined, which the row's section
  * already says, and which would spend the one line it has.
  */
-const SCOPE_SUFFIX = /\s*\((?:project|user)\)$/;
+const SCOPE_SUFFIX = /\s*\((?:project|user)\)$/u;
 
 /**
  * A command's description as a reader wants it: the `(plugin-name)` prefix

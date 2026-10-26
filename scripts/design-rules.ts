@@ -11,9 +11,9 @@ const ROOT = join(import.meta.dir, "..");
 const SOURCE = join(ROOT, "DESIGN.md");
 const TARGET = join(ROOT, "design", "RULES.md");
 
-const RULE = /^(- )?\*\*(The [^*]+? Rule)\.\*\*/;
-const HEADING = /^#{1,6} /;
-const LIST_ITEM = /^\s*- /;
+const RULE = /^(- )?\*\*(The [^*]+? Rule)\.\*\*/u;
+const HEADING = /^#{1,6} /u;
+const LIST_ITEM = /^\s*- /u;
 
 /** A paragraph from `start`: its lines, then the list it introduces with a colon. */
 const paragraph = (lines: string[], start: number): string[] => {

@@ -1,3 +1,4 @@
+import { commonWords } from "@cawco/core/words/common";
 /**
  * What a session needs from you right now — the fleet view's whole vocabulary
  * (NEW.md §8 Phase 3). Kept out of the runes module so it stays a plain rule
@@ -107,5 +108,3 @@ export const UNKNOWN_HINT =
  */
 export const MACHINE_UNREACHABLE_HINT =
   "The hub can't currently reach this machine.";
-
-import { commonWords } from "@cawco/core/words/common";

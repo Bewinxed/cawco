@@ -28,14 +28,14 @@ export type WaitTarget =
   | { kind: "session"; dir: string; instanceId: string };
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const TASK = /^(?:tsk-|#)?(\d{1,9})$/i;
-const CARD = new RegExp(`^(${UUID})#([^#\\s]+)$`, "i");
-const SESSION = new RegExp(`^([^#\\s]*)#(${UUID})$`, "i");
-const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "i");
+const TASK = /^(?:tsk-|#)?(\d{1,9})$/iu;
+const CARD = new RegExp(`^(${UUID})#([^#\\s]+)$`, "iu");
+const SESSION = new RegExp(`^([^#\\s]*)#(${UUID})$`, "iu");
+const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "iu");
 const PR =
-  /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d{1,9})(?:[/?#].*)?$/i;
+  /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d{1,9})(?:[/?#].*)?$/iu;
 const RUN =
-  /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/actions\/runs\/(\d{1,15})(?:[/?#].*)?$/i;
+  /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/actions\/runs\/(\d{1,15})(?:[/?#].*)?$/iu;
 
 /** A pull request or an Actions run on GitHub, by its URL; undefined for any other. */
 export const githubTarget = (

@@ -28,37 +28,37 @@ const FETCH_TOOLS: ReadonlySet<string> = new Set(["WebFetch", "webfetch"]);
 const SEARCH_TOOLS: ReadonlySet<string> = new Set(["WebSearch", "websearch"]);
 /** An MCP tool, by its server or its name, that reaches pages. */
 const WEB_NAME =
-  /fetch|scrape|crawl|search|browser|chrome|playwright|puppeteer|navigate|firecrawl|exa|web/i;
-const SEARCH_NAME = /search/i;
+  /fetch|scrape|crawl|search|browser|chrome|playwright|puppeteer|navigate|firecrawl|exa|web/iu;
+const SEARCH_NAME = /search/iu;
 /** CawCo's own tools as a harness names them: `mcp__cawco__<tool>` (Claude, pi), `cawco_<tool>` (OpenCode). */
-export const CAWCO_TOOL = /^(?:mcp__cawco__|cawco_)/;
+export const CAWCO_TOOL = /^(?:mcp__cawco__|cawco_)/u;
 /** A claude.ai connector's tool (Gmail, Drive, Slack, Notion…): an outside service. */
-const CONNECTOR = /^mcp__claude_ai_/;
+const CONNECTOR = /^mcp__claude_ai_/u;
 /** Claude's name for an MCP tool: `mcp__<server>__<tool>`. */
-const CLAUDE_MCP = /^mcp__(.+?)__/;
+const CLAUDE_MCP = /^mcp__(.+?)__/u;
 /** The harnesses' shell tools: Claude Code's `Bash`, OpenCode 2.0's `shell`. */
 const SHELLS: ReadonlySet<string> = new Set(["Bash", "shell"]);
 
 /** A URL anywhere in a command, of a scheme that fetches. */
-const URL_IN_TEXT = /\b(?:https?|ftps?|wss?|git):\/\/[^\s'"`<>|;()]+/gi;
-const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
-const USERINFO = /^[^@/?#]*@/;
-const HOST_END = /[:/?#]/;
-const TRAILING_DOT = /\.$/;
+const URL_IN_TEXT = /\b(?:https?|ftps?|wss?|git):\/\/[^\s'"`<>|;()]+/giu;
+const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//iu;
+const USERINFO = /^[^@/?#]*@/u;
+const HOST_END = /[:/?#]/u;
+const TRAILING_DOT = /\.$/u;
 /** An IPv6 host as a URL writes it: `[::1]`. */
-const BRACKETS = /^\[(.*)\]$/;
-const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-const MAPPED_V4 = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/;
-const LINK_LOCAL_V6 = /^fe[89ab][0-9a-f]:/;
-const PRIVATE_V6 = /^f[cd][0-9a-f]{2}:/;
-const QUOTES = /^(["'])(.*)\1$/s;
-const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
-const SHORT_FLAGS = /^-[A-Za-z]+$/;
-const DURATION = /^\d/;
-const HTTP_METHOD = /^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/;
+const BRACKETS = /^\[(.*)\]$/u;
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u;
+const MAPPED_V4 = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/u;
+const LINK_LOCAL_V6 = /^fe[89ab][0-9a-f]:/u;
+const PRIVATE_V6 = /^f[cd][0-9a-f]{2}:/u;
+const QUOTES = /^(["'])(.*)\1$/su;
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
+const SHORT_FLAGS = /^-[A-Za-z]+$/u;
+const DURATION = /^\d/u;
+const HTTP_METHOD = /^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/u;
 /** Where one command of a shell line ends and the next begins. */
-const SEGMENT = /\|\||&&|[|;&\n()`]|\$\(/;
-const TOKEN = /"(?:[^"\\]|\\.)*"|'[^']*'|\S+/g;
+const SEGMENT = /\|\||&&|[|;&\n()`]|\$\(/u;
+const TOKEN = /"(?:[^"\\]|\\.)*"|'[^']*'|\S+/gu;
 
 /** Words that run the command after them. */
 const WRAPPERS: ReadonlySet<string> = new Set([

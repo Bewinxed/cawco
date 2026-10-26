@@ -109,7 +109,7 @@ const DELEGATE = "mcp__cawco__delegate";
 /** What finish_item answers a blocked finish (work-items.ts `finishItem`). */
 const BLOCKED = "The item failed as blocked";
 /** git's own words for a checkout's write the boundary refused (entry.c, unpack-trees.c). */
-const GIT_REFUSED = /unable to (create file|unlink old) /;
+const GIT_REFUSED = /unable to (create file|unlink old) /u;
 /** What a refused move of config says (hub-command.ts `ownConfigWords`). */
 const CONFIG_REFUSED = "which no workspace's commit changes";
 /** The start of `ownConfigWords`, before the changed paths: where its excerpt begins, so it never opens inside a presence reminder's tail. */
@@ -222,7 +222,7 @@ const bash = (command: string, description: string): Reply =>
   useTool("Bash", { command, description, timeout: 300_000 });
 
 /** The held workspace the parent's message names. */
-const ASKED = new RegExp(`${ASK} ([0-9a-f-]{36})`);
+const ASKED = new RegExp(`${ASK} ([0-9a-f-]{36})`, "u");
 
 /** Which session has made its one call already. */
 const called = {
@@ -367,7 +367,7 @@ const textAt = (path: string): Promise<string | undefined> =>
 
 /** What the command said after `marker`, up to the end of its word. */
 const after = (said: string, marker: string): string | undefined =>
-  new RegExp(`${marker}(\\S*)`).exec(said)?.[1];
+  new RegExp(`${marker}(\\S*)`, "u").exec(said)?.[1];
 
 /**
  * The config refusal in `answer`, from the `its commits change` that precedes

@@ -126,7 +126,7 @@ export function machineSilenceWords(
 
 /** The causes {@link machineFaultWords} and {@link machineSilenceWords} say a machine's silence with. */
 const MACHINE_SILENCE =
-  /(?:didn't answer in time\.|isn't connected\.|did not answer within \d+ s\b|is not connected\b)/;
+  /(?:didn't answer in time\.|isn't connected\.|did not answer within \d+ s\b|is not connected\b)/u;
 
 /**
  * Whether an error carries CawCo's word that a machine didn't answer one

@@ -427,6 +427,7 @@
     </div>
     {#if width === "phone"}
       {#key `${search}:${generation}`}
+        <!-- biome-ignore lint/security/useIframeSandbox: a /motion bench framing the dashboard's own route; it needs scripts and its origin, and with both a sandbox holds nothing back. -->
         <iframe
           class="h-c-bench-phone-h w-c-bench-phone-w rounded-lg border border-border-hairline bg-surface-page"
           src="/motion/caw-notices?frame&{search}"

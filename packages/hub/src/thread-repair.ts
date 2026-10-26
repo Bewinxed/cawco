@@ -22,7 +22,7 @@ import type { HistoryRead } from "./transcripts";
 export const REPAIRED_THREAD = "ad5f8277-a861-4110-9089-b8d423699beb";
 /** The note that marks the repair done. */
 export const REPAIR_NOTE = "Hub · thread repaired";
-const THREAD_REPLY = /(^|__)thread_reply$/;
+const THREAD_REPLY = /(^|__)thread_reply$/u;
 
 export interface ThreadRepairDeps {
   readonly db: Pick<DbShape, "leadSends" | "thread" | "threadMessages">;

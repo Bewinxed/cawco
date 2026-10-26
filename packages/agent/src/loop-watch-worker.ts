@@ -269,7 +269,7 @@ const memory = async (): Promise<string> => {
   }
   const status = await readFile("/proc/self/status", "utf8").catch(() => "");
   const kb = (key: string): number | undefined => {
-    const found = new RegExp(`^${key}:\\s+(\\d+) kB`, "m").exec(status)?.[1];
+    const found = new RegExp(`^${key}:\\s+(\\d+) kB`, "mu").exec(status)?.[1];
     return found === undefined ? undefined : Number(found);
   };
   const size = (value: number | undefined) => {

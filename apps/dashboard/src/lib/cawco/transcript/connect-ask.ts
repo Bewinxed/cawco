@@ -7,7 +7,7 @@
  */
 
 /** A sign-in address: its scheme, its host, and the rest. */
-const ADDRESS = /^(https?:\/\/)([^/?#]+)(.*)$/i;
+const ADDRESS = /^(https?:\/\/)([^/?#]+)(.*)$/iu;
 
 /** The address split for reading: its host in strong ink, the rest muted. */
 export function addressParts(url: string): {
@@ -22,7 +22,7 @@ export function addressParts(url: string): {
 }
 
 /** Where a sign-in path may break: after one of these, never inside a run. */
-const BREAK_AFTER = /(?<=[./&=?])/;
+const BREAK_AFTER = /(?<=[./&=?])/u;
 /** A last run shorter than this joins the run before it, so no line holds a few characters alone. */
 const TAIL_MIN = 12;
 

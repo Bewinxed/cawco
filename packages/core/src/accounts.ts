@@ -1022,7 +1022,7 @@ export const joinProviders = (
 };
 
 /** Model families the provider scopes some weekly windows by. */
-const FAMILY = /(?:^|claude-)(fable|opus|sonnet|haiku)(?:\b|-)/i;
+const FAMILY = /(?:^|claude-)(fable|opus|sonnet|haiku)(?:\b|-)/iu;
 
 /**
  * The model scope a session's model falls in, as the provider's scoped windows
@@ -1745,7 +1745,7 @@ const unmovedNext = (
 };
 
 /** Trailing stops a clause ends on, so a sentence ends on one of its own. */
-const TRAILING_STOP = /[\s.]+$/;
+const TRAILING_STOP = /[\s.]+$/u;
 
 /**
  * An account line as one sentence, for a log: its line, then its detail,

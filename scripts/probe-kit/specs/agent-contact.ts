@@ -41,7 +41,7 @@ const HELD_MS = MACHINE_LOST_MS + 30_000;
 /** The scratch fleet's machine (scratch-fleet.ts `MACHINE`). */
 const MACHINE = "scratch-fleet";
 /** A request that upgrades to a WebSocket. */
-const WEBSOCKET_UPGRADE = /^upgrade:\s*websocket/im;
+const WEBSOCKET_UPGRADE = /^upgrade:\s*websocket/imu;
 /** RFC 6455 §5.2: opcodes from here up are control frames. */
 const CONTROL = 0x8;
 

@@ -150,11 +150,11 @@ light = Option("light", "A light", "The edge lights under the pointer.", false, 
 ];
 
 /** Files' read of the session's artifacts (those that reached the person), which the offline leg refuses. */
-const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts\/files$/;
+const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts\/files$/u;
 /** Files' search of a session's artifacts. */
-const SEARCH_READ = /\/artifacts\/search\?/;
+const SEARCH_READ = /\/artifacts\/search\?/u;
 /** The session's attachments read. */
-const ATTACHMENT_LIST = /\/api\/instances\/[^/]+\/attachments$/;
+const ATTACHMENT_LIST = /\/api\/instances\/[^/]+\/attachments$/u;
 /**
  * The session's two list reads, held until the leg releases them, so the
  * skeleton stands past the grace however long the page took to open: they
@@ -177,7 +177,7 @@ const heldReads = () => {
   return { hold, release: () => release() };
 };
 /** The sidebar row's name once its count stands. */
-const FILES_COUNTED = /Files, \d+/;
+const FILES_COUNTED = /Files, \d+/u;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -1084,7 +1084,7 @@ const reviewLegs = async (
   const refusedSaid = await refused.evaluate(() => ({
     fault: document
       .querySelector('[data-files-region="attachments"] [data-files-failed]')
-      ?.textContent?.replace(/\s+/g, " ")
+      ?.textContent?.replace(/\s+/gu, " ")
       .trim(),
     cards: document.querySelectorAll("[data-files-card]").length,
     count: document.querySelector("[data-files-count]")?.textContent ?? null,
@@ -1409,7 +1409,7 @@ const reviewLegs = async (
           };
         });
         return {
-          text: segment.textContent?.replace(/\s+/g, " ").trim(),
+          text: segment.textContent?.replace(/\s+/gu, " ").trim(),
           fits: runs.length > 0 && runs.every((one) => one.inside && one.whole),
         };
       }
@@ -2320,7 +2320,7 @@ const narrowLeg = async (
     ),
     segments: [
       ...document.querySelectorAll<HTMLElement>("[data-files-segment]"),
-    ].map((one) => one.textContent?.replace(/\s+/g, " ").trim()),
+    ].map((one) => one.textContent?.replace(/\s+/gu, " ").trim()),
     regions: document.querySelectorAll("[data-glass-card-frame='files-pop']")
       .length,
   }));

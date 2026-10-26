@@ -89,10 +89,10 @@ import {
 import { pagePins, writePagePins } from "../pins";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** The id in artifact_create's answer, as the tool result carries it. */
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
-const LOOP = /ResizeObserver loop/;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
+const LOOP = /ResizeObserver loop/u;
 
 const PAGE = `<!doctype html>
 <html lang="en">

@@ -55,8 +55,8 @@ const SAID_MS = 60_000;
 /** How long a process is given to open the streams it will hold: OpenCode's file index scans first. */
 const SETTLE_MS = 6000;
 /** What `opencode serve` says on stdout once it listens, and the password it asks for. */
-const LISTENING = /server listening on (http:\/\/127\.0\.0\.1:\d+)/;
-const PASSWORD = /server password (\S+)/;
+const LISTENING = /server listening on (http:\/\/127\.0\.0\.1:\d+)/u;
+const PASSWORD = /server password (\S+)/u;
 
 const freePort = (): Promise<number> =>
   new Promise((resolve, reject) => {

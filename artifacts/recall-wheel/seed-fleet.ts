@@ -15,9 +15,9 @@
 import { scratchFleet, until } from "../../scripts/scratch-fleet";
 
 const SENDS = 40;
-const STEP = /step (\d+)/;
+const STEP = /step (\d+)/u;
 /** Each word with the space after it: the mock joins them as they are. */
-const WORDS = /(?<= )/;
+const WORDS = /(?<= )/u;
 const reply = (n: number) => `Step ${n} is done. `;
 const send = (n: number) =>
   n % 7 === 0

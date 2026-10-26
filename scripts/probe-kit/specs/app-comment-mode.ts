@@ -51,7 +51,7 @@ const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
 const COMPOSE = '[data-slot="pin-composer"]';
 /** The comments notice (core injected.ts `artifactCommentsNotice`). */
-const NOTICE = /\[CawCo\] The person commented on the page "app-comment"/;
+const NOTICE = /\[CawCo\] The person commented on the page "app-comment"/u;
 /** The hub's quiet before a person's comments go (service.ts `COMMENTS_QUIET_MS`, 3 s), and room past it. */
 const QUIET_MS = 3000;
 const HELD_MS = QUIET_MS * 2 + 1000;
@@ -59,11 +59,11 @@ const HELD_MS = QUIET_MS * 2 + 1000;
 const DELIVERY_MS = 15_000;
 /** PreviewController.swift's `static let host = """…"""` and `static let viewport = """…"""`: each one's lines, and its closing delimiter's indent. */
 const APP_SCRIPTS = {
-  host: /static let host = """\n([\s\S]*?)\n( *)"""/,
-  viewport: /static let viewport = """\n([\s\S]*?)\n( *)"""/,
+  host: /static let host = """\n([\s\S]*?)\n( *)"""/u,
+  viewport: /static let viewport = """\n([\s\S]*?)\n( *)"""/u,
 } as const;
 /** A line's first character that is not a space, or its end. */
-const FIRST_INK = /\S|$/;
+const FIRST_INK = /\S|$/u;
 
 /** Every request the model was asked with, in order. */
 const heard: Seen[] = [];

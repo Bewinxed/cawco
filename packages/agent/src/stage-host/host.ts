@@ -535,9 +535,9 @@ async function mountedFiles(abs: string, text: string): Promise<string[]> {
 }
 
 /** A source file's imports of other files, as it writes them: `import … from "…"` and `import "…"`, never a dynamic `import()`. Ours: no parser, a module's imports are its first lines. */
-const IMPORT_FROM = /\bimport\s+(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/g;
+const IMPORT_FROM = /\bimport\s+(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/gu;
 /** A file whose imports the stage reads: a component or a script. */
-const SOURCE_FILE = /\.(?:svelte|vue|[cm]?[jt]sx?)$/;
+const SOURCE_FILE = /\.(?:svelte|vue|[cm]?[jt]sx?)$/u;
 /** Each source file's resolved imports, kept by the file's time. */
 const importsKept = new Map<string, { at: number; to: string[] }>();
 
@@ -612,13 +612,13 @@ async function contentHash(file: string): Promise<string> {
   return hash.digest("hex").slice(0, 16);
 }
 
-const ASTRO_FILE = /\.astro$/;
+const ASTRO_FILE = /\.astro$/u;
 
 /** The app's page: SvelteKit's `src/app.html`, a Vite app's `index.html`. */
 const shellFile = () => resolve(root, kit ? "src/app.html" : "index.html");
 
 const ENTRY_SCRIPT =
-  /<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["'][^>]*>\s*<\/script>/i;
+  /<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["'][^>]*>\s*<\/script>/iu;
 
 /**
  * The app's root modules, whose style imports are the app's global CSS:
@@ -645,10 +645,10 @@ function rootModules(): string[] {
     : undefined;
   return entry ? [resolve(root, entry.replace(LEADING_SLASH, ""))] : [];
 }
-const LEADING_SLASH = /^\//;
+const LEADING_SLASH = /^\//u;
 
 const STYLE_IMPORT =
-  /^\s*import\s+["']([^"']+\.(?:css|scss|sass|less|styl|stylus|pcss|postcss))["'];?/gm;
+  /^\s*import\s+["']([^"']+\.(?:css|scss|sass|less|styl|stylus|pcss|postcss))["'];?/gmu;
 
 /**
  * The app's global CSS: Nuxt's `css`, else the root modules' side-effect
@@ -1002,7 +1002,7 @@ function sourced(error: PageError): PageError {
     : error.file;
   return { ...error, file, line: traced.line, column: traced.column + 1 };
 }
-const FILE_URL = /^file:\/\//;
+const FILE_URL = /^file:\/\//u;
 
 /** The state of each frame of states file `abs` no current draw holds: failed with the browser's words when a page couldn't load its section, else unseen. */
 function unloadedState(abs: string): {
@@ -1124,12 +1124,12 @@ const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
   ),
 };
 
-const BODY = /(<body\b[^>]*>)[\s\S]*(<\/body>)/i;
-const VIEWPORT_META = /<meta\b[^>]*\bname=["']viewport["']/i;
+const BODY = /(<body\b[^>]*>)[\s\S]*(<\/body>)/iu;
+const VIEWPORT_META = /<meta\b[^>]*\bname=["']viewport["']/iu;
 /** `%sveltekit.head%`, `%sveltekit.assets%` … and a project's own (`%cawco.tab-icon%`). */
-const PLACEHOLDER = /%[\w.-]+%/g;
-const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi;
-const TRAILING_SLASH = /\/$/;
+const PLACEHOLDER = /%[\w.-]+%/gu;
+const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/giu;
+const TRAILING_SLASH = /\/$/u;
 
 /** A JSON answer, never cached. */
 const json = (res: ServerResponse, status: number, body: unknown) => {
@@ -1278,11 +1278,11 @@ const keyedUrl = (url: string, key: string): string =>
     : url;
 
 /** An import of an address on the stage: what a module with none (a prebundle's chunk) is served without parsing. */
-const STAGE_IMPORT = /(?:\bfrom|\bimport)\s*\(?\s*["']\/(?!\/)/;
+const STAGE_IMPORT = /(?:\bfrom|\bimport)\s*\(?\s*["']\/(?!\/)/u;
 
 /** The page's module scripts and preloads (Vite's client among them) at `key`. */
 const MODULE_TAG =
-  /(<script\b[^>]*\btype="module"[^>]*\bsrc="|<link\b[^>]*\brel="modulepreload"[^>]*\bhref=")([^"]+)"/g;
+  /(<script\b[^>]*\btype="module"[^>]*\bsrc="|<link\b[^>]*\brel="modulepreload"[^>]*\bhref=")([^"]+)"/gu;
 const keyedPage = (html: string, key: string): string =>
   html.replace(
     MODULE_TAG,
@@ -1410,7 +1410,7 @@ const MAP_AT = "/@cawco-map";
  * prebundle, 1.5 MB of code, is served as 4.4 MB with it).
  */
 const INLINE_MAP =
-  /\n\/\/# sourceMappingURL=data:application\/json;(?:charset=utf-8;)?base64,([A-Za-z0-9+/=]+)\s*$/;
+  /\n\/\/# sourceMappingURL=data:application\/json;(?:charset=utf-8;)?base64,([A-Za-z0-9+/=]+)\s*$/u;
 
 /**
  * `code` with its inline source map taken out and named by its address
@@ -1539,13 +1539,13 @@ const escapeAttr = (value: string): string =>
   value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 
 /** Code that imports or re-exports anything: what a module with no module syntax (a prebundle's leaf chunk) is passed by without parsing. */
-const ANY_IMPORT = /\b(?:import|export)\b/;
+const ANY_IMPORT = /\b(?:import|export)\b/u;
 /** Vite's `?import` (its `importQueryRE`), which it takes off an address before it transforms it. */
-const IMPORT_QUERY = /(\?|&)import=?(?:&|$)/;
-const TRAILING_SEPARATOR = /[?&]$/;
+const IMPORT_QUERY = /(\?|&)import=?(?:&|$)/u;
+const TRAILING_SEPARATOR = /[?&]$/u;
 /** Vite's address of a module named by its id (`/@id/<id>`, its `wrapId`), and the null byte a virtual id starts with, written out in it. */
-const WRAPPED_ID = /^\/@id\//;
-const NULL_BYTE = /^__x00__/;
+const WRAPPED_ID = /^\/@id\//u;
+const NULL_BYTE = /^__x00__/u;
 /** Each served module's static imports, as its code writes them, by the transform that wrote it. */
 const staticKept = new WeakMap<object, string[]>();
 
@@ -1991,10 +1991,10 @@ const ROUTE_DIRS = new Set([
   "dist",
   "build",
 ]);
-const COMPONENT_FILE = /\.(?:svelte|vue|[jt]sx)$/;
+const COMPONENT_FILE = /\.(?:svelte|vue|[jt]sx)$/u;
 /** A `.tsx`/`.jsx` file worth asking react-docgen about: one that exports a capitalised name. Our prefilter. */
 const CAPITAL_EXPORT =
-  /export\s+(?:default\s+)?(?:const|function|class|let)\s+[A-Z]|export\s+default\s+[A-Z]|export\s*\{[^}]*\b[A-Z]/;
+  /export\s+(?:default\s+)?(?:const|function|class|let)\s+[A-Z]|export\s+default\s+[A-Z]|export\s*\{[^}]*\b[A-Z]/u;
 const recognised = new Map<string, { at: number; name: string | null }>();
 
 /** Every component file under `dir`, routes and builds left out. */
@@ -2049,7 +2049,7 @@ const statTime = (file: string): number =>
   statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0;
 const fileName = (file: string): string =>
   (file.split(sep).at(-1) ?? file).replace(EXTENSION, "");
-const EXTENSION = /\.[^.]+$/;
+const EXTENSION = /\.[^.]+$/u;
 
 /** The toolchain root's source folder: Nuxt's own (`app/` from Nuxt 4, where it holds components, not routes), else `src/` when it has one. */
 const sourceTop = (): string =>
@@ -2360,7 +2360,7 @@ function storyFilesUnder(dir: string): string[] {
 }
 
 /** A module Vite prebundled, kept by the browser at its `?v=` address. */
-const PREBUNDLED = /\/node_modules\/\.vite\/deps\/|[?&]v=/;
+const PREBUNDLED = /\/node_modules\/\.vite\/deps\/|[?&]v=/u;
 /** How many of a story file's imports a weight names. The design's number. */
 const HEAVIEST = 3;
 /** How far a weight's `via` goes down from an import. Ours: past it, the import to cut is named. */
@@ -2829,7 +2829,7 @@ function sectionLoad(file: string): Promise<string> {
 }
 
 /** A parser's trailing place in its message: Babel's ` (2:61)`. */
-const PLACE_SUFFIX = / \(\d+:\d+\)$/;
+const PLACE_SUFFIX = / \(\d+:\d+\)$/u;
 
 /**
  * A states file's read that threw (Babel's syntax error: its message and a
@@ -3227,7 +3227,7 @@ async function stampTransform(code: string, id: string) {
     : { code: stamped.split(prefix).join('data-insp-path="'), map: null };
 }
 
-const JSX_FILE = /\.[jt]sx$/;
+const JSX_FILE = /\.[jt]sx$/u;
 
 /** A Kit stub's id: `cawco:kit/navigation`. */
 const KIT_STUB = "cawco:kit/";
@@ -3310,7 +3310,7 @@ function cawcoKit() {
       handler: () => ({
         resolve: {
           alias: Object.keys(KIT_STUBS).map((name) => ({
-            find: new RegExp(`^\\$app/${name}$`),
+            find: new RegExp(`^\\$app/${name}$`, "u"),
             replacement: `${KIT_STUB}${name}`,
           })),
         },

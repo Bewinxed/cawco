@@ -28,7 +28,7 @@ const TICK_MS = 60_000;
 /** A change's look waits this long, so a burst of changes looks once. */
 const SETTLE_MS = 1000;
 const ISO_DATE =
-  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/u;
 
 export interface WaitsDeps {
   readonly lifetime: HubLifetimeShape;

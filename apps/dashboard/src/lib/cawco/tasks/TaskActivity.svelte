@@ -113,7 +113,7 @@
     add: "added",
     reword: "reworded",
   };
-  const VERB = /^(update|tick|untick|add|reword)\b/;
+  const VERB = /^(update|tick|untick|add|reword)\b/u;
   const done = (what: string) =>
     what.replace(VERB, (verb) => DONE[verb] ?? verb);
 

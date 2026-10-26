@@ -16,7 +16,7 @@ import { hostGh } from "../host-gh";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
 import type { ForgeAdapter, ForgeSignIn } from "./forge";
 
-const HTTPS = /^https:/;
+const HTTPS = /^https:/u;
 
 /** gh's config dir, as gh finds it: `$GH_CONFIG_DIR`, else `<config home>/gh`. */
 const ghConfigDir = (): string =>

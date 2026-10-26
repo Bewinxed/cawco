@@ -1565,7 +1565,7 @@
   /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
   const REACH_HUB_MS = 10_000;
   /** A reason's own full stop, which the sentence that quotes it puts back. */
-  const REASON_STOP = /\.$/;
+  const REASON_STOP = /\.$/u;
   /** Resolves once the pane's doc holds comment `id` (the page's link carried it to the hub); rejects, saying why, when it doesn't within {@link REACH_HUB_MS}. */
   const reachedHub = (id: string) =>
     new Promise<void>((resolve, reject) => {
@@ -4133,6 +4133,7 @@
     {#each reached?.origin === paneOrigin ? frames : [] as key (key)}
       {@const current = key === frameKey}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
+      <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
       <iframe
         data-ready={!current || loaded || undefined}
         data-panel-inspector={(inspecting && inspectorLayout === "panel") ||

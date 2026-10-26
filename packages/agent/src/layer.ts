@@ -259,7 +259,7 @@ const LAYERED_TYPES = new Set([
   "ntfs3",
 ]);
 
-const OCTAL_ESCAPE = /\\([0-7]{3})/g;
+const OCTAL_ESCAPE = /\\([0-7]{3})/gu;
 
 /** A mountinfo path as the kernel escapes it (`\040` for a space). */
 const unescapeMount = (path: string): string =>
@@ -377,7 +377,7 @@ const nsOf = (pid: number, kind: "mnt" | "user"): string | undefined => {
   }
 };
 
-const NUMERIC = /^\d+$/;
+const NUMERIC = /^\d+$/u;
 
 /** Every live process in mount namespace `mnt`. */
 const membersOf = (mnt: string): number[] =>

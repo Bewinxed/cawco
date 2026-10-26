@@ -169,7 +169,7 @@ const anchorOf = (page: Page) =>
       const label =
         node.children.length === 0 &&
         // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-        node.textContent?.match(/held-\d{4}/)?.[0];
+        node.textContent?.match(/held-\d{4}/u)?.[0];
       if (label && node.getBoundingClientRect().top >= top + 40) {
         return label;
       }

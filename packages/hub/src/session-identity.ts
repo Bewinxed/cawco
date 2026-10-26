@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DbShape } from "./db";
 
-const CREDENTIAL = /^[A-Za-z0-9_-]{43}$/;
+const CREDENTIAL = /^[A-Za-z0-9_-]{43}$/u;
 
 /** The hub keeps hashes only. The raw value travels directly to one retained harness. */
 export const createSessionIdentities = (db: DbShape) => {

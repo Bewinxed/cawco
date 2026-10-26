@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /** A default's quotes, as docgen writes it (`"neutral"`): the control's value is the bare option. */
-  const QUOTES = /^["'`]|["'`]$/g;
+  const QUOTES = /^["'`]|["'`]$/gu;
   /** Where each control stands in the list. */
   const RANK = {
     segments: 0,

@@ -112,21 +112,21 @@ const cardState = () => {
   const box = card?.getBoundingClientRect();
   return {
     drawn: Boolean(card && box && box.height > 0),
-    text: card?.textContent?.replace(/\s+/g, " ").trim().slice(0, 300) ?? "",
+    text: card?.textContent?.replace(/\s+/gu, " ").trim().slice(0, 300) ?? "",
     command:
       card?.querySelector('[data-slot="cmd-text"]')?.textContent?.length ?? 0,
     fields: [
       ...(card?.querySelectorAll(
         ':is([data-slot="new-page-field"], [data-slot="add-machine-dialog-field"], [data-slot="project-chip-field"], [data-slot="location-section-field"], [data-slot="task-fields-field"], [data-slot="task-activity-field"], [data-slot="task-labels-field"], [data-slot="field-field"], [data-slot="project-spend-field"], [data-slot="mk-input-field"], [data-field], [data-slot="tool-group-field"], [data-slot="composer-field"], [data-slot="prompt-field"], [data-slot="finder-field"])'
       ) ?? []),
-    ].map((field) => field.textContent?.replace(/\s+/g, " ").trim() ?? ""),
+    ].map((field) => field.textContent?.replace(/\s+/gu, " ").trim() ?? ""),
   };
 };
 
 /** The ask card's buttons, by their accessible names (`buttonNames`). */
 const ASK_CARD = '[data-slot="ask"]';
 /** Approve's accessible name, however it goes on. */
-const APPROVE = /^Approve/;
+const APPROVE = /^Approve/u;
 /** The ask card's Approve, by its accessible name. */
 const approveOf = (page: Page) =>
   page.locator(ASK_CARD).getByRole("button", { name: APPROVE }).first();

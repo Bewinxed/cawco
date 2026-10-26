@@ -45,18 +45,18 @@ const KNOWN = new Map<string, string>([
   ],
 ]);
 
-const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/;
+const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
 
 /** What sends a signal itself, by name. */
 const RAW: [string, RegExp][] = [
-  ["process.kill", /(?<![\w$.])process\.kill\s*\(/],
-  ["a group kill", /\.kill\s*\(\s*-/],
+  ["process.kill", /(?<![\w$.])process\.kill\s*\(/u],
+  ["a group kill", /\.kill\s*\(\s*-/u],
   [
     "a spawn of kill",
-    /\[\s*["'`](?:\/(?:usr\/)?bin\/)?(?:kill|pkill|killall)["'`]|\$`\s*(?:kill|pkill|killall)\b/,
+    /\[\s*["'`](?:\/(?:usr\/)?bin\/)?(?:kill|pkill|killall)["'`]|\$`\s*(?:kill|pkill|killall)\b/u,
   ],
 ];
-const FORGED = /\bas\s+Pid\b|(?<![\w$])<Pid>|\bis\s+Pid\b/;
+const FORGED = /\bas\s+Pid\b|(?<![\w$])<Pid>|\bis\s+Pid\b/u;
 
 const listed = Bun.spawnSync(
   ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],

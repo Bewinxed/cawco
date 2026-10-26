@@ -92,7 +92,7 @@ const refusalFrame = (reason: string): Buffer => {
 /** How long the stand-in keeps the hub's first messages from the pane. */
 const HOLD_MS = 2500;
 /** A tab's label carrying a count, as the recorder writes it. */
-const COUNTED = /[=|](?:Open|Resolved) \d/;
+const COUNTED = /[=|](?:Open|Resolved) \d/u;
 
 interface HubPin {
   id: string;
@@ -205,7 +205,7 @@ const drawn = (page: Page): Promise<Drawn> =>
           moved: numbers("[data-pin-row][data-moved]", "data-pin-row"),
           empty: !!root?.querySelector('[data-slot="pin-list-empty"]'),
           reading: !!root?.querySelector('[data-slot="pin-list-reading"]'),
-          failed: reason?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+          failed: reason?.textContent?.replace(/\s+/gu, " ").trim() ?? null,
         };
       },
       { list: LIST, pane: PANE }

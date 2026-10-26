@@ -141,28 +141,28 @@ const SHARED = new Set([
 ]);
 /** A change here can change any verdict. */
 const EVERYTHING = [
-  /(^|\/)tsconfig[^/]*\.json$/,
-  /(^|\/)package\.json$/,
-  /^bun\.lock$/,
-  /^bunfig\.toml$/,
-  /^patches\//,
-  /^golar\.config\.ts$/,
-  /^biome\.jsonc$/,
-  /^scripts\/check\.ts$/,
-  /^scripts\/lib\/checks\.ts$/,
-  /^scripts\/lint\//,
+  /(^|\/)tsconfig[^/]*\.json$/u,
+  /(^|\/)package\.json$/u,
+  /^bun\.lock$/u,
+  /^bunfig\.toml$/u,
+  /^patches\//u,
+  /^golar\.config\.ts$/u,
+  /^biome\.jsonc$/u,
+  /^scripts\/check\.ts$/u,
+  /^scripts\/lib\/checks\.ts$/u,
+  /^scripts\/lint\//u,
 ];
-const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/;
-const TSCONFIG = /(^|\/)tsconfig[^/]*\.json$/;
-const MANIFEST = /(^|\/)package\.json$/;
-const DASHBOARD_CSS = /^apps\/dashboard\/src\/.*\.css$/;
-const TYPESCRIPT_FILE = /\.[cm]?tsx?$/;
-const STEM = /(?:\.d)?\.[cm]?[jt]sx?$/;
+const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
+const TSCONFIG = /(^|\/)tsconfig[^/]*\.json$/u;
+const MANIFEST = /(^|\/)package\.json$/u;
+const DASHBOARD_CSS = /^apps\/dashboard\/src\/.*\.css$/u;
+const TYPESCRIPT_FILE = /\.[cm]?tsx?$/u;
+const STEM = /(?:\.d)?\.[cm]?[jt]sx?$/u;
 /** An import of a file TypeScript reads: code, JSON, or a path with no extension. */
-const TYPED_TARGET = /\.(?:[cm]?[jt]sx?|svelte|json)$/;
-const WORKSPACE_IMPORT = /^(@cawco\/[^/]+)(?:\/(.+))?$/;
+const TYPED_TARGET = /\.(?:[cm]?[jt]sx?|svelte|json)$/u;
+const WORKSPACE_IMPORT = /^(@cawco\/[^/]+)(?:\/(.+))?$/u;
 const SPECIFIER =
-  /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|<reference\s+path=)["']([^"'\n]+)["']/g;
+  /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|<reference\s+path=)["']([^"'\n]+)["']/gu;
 
 /* ---------------------------------------------------------- the tree */
 
@@ -176,7 +176,7 @@ interface Project {
   dir: string;
 }
 /** The dashboard's top-level files (its manifest, Vite config), which its Svelte project's checks read too. */
-const DASHBOARD_TOP = /^apps\/dashboard\/[^/]+$/;
+const DASHBOARD_TOP = /^apps\/dashboard\/[^/]+$/u;
 const SVELTE_PROJECT = `${DASHBOARD}/tsconfig.json`;
 const projects: Project[] = files
   .filter((path) => TSCONFIG.test(path) && !SHARED.has(path))
@@ -378,7 +378,7 @@ const keyOf = async (paths: string[], ...more: string[]): Promise<string> => {
   return hash.digest("hex");
 };
 const stampFile = (name: string): string =>
-  join(STAMPS, `${name.replace(/[^\w.-]+/g, "_")}.stamp`);
+  join(STAMPS, `${name.replace(/[^\w.-]+/gu, "_")}.stamp`);
 const passed = async (name: string, key: string): Promise<boolean> => {
   const file = Bun.file(stampFile(name));
   return (await file.exists()) && (await file.text()).split("\n").includes(key);
@@ -444,7 +444,7 @@ const RULES_READ = [
   ...files.filter((p) => DASHBOARD_CSS.test(p)),
 ];
 const LINTED =
-  /^(?:apps\/dashboard\/src\/.*\.(?:ts|svelte)|packages\/[^/]+\/src\/.*\.(?:ts|tsx|svelte))$/;
+  /^(?:apps\/dashboard\/src\/.*\.(?:ts|svelte)|packages\/[^/]+\/src\/.*\.(?:ts|tsx|svelte))$/u;
 const linted = [...reached].filter((p) => LINTED.test(p) && present.has(p));
 {
   const key = await keyOf([...linted, ...RULES_READ], everything ? "all" : "");
@@ -464,7 +464,7 @@ const linted = [...reached].filter((p) => LINTED.test(p) && present.has(p));
   }
 }
 const BIOME_READS =
-  /\.(?:[cm]?[jt]sx?|svelte|json|jsonc|css|html|grit|vue|astro|graphql|md)$/;
+  /\.(?:[cm]?[jt]sx?|svelte|json|jsonc|css|html|grit|vue|astro|graphql|md)$/u;
 const biomed = [...reached].filter(
   (p) => BIOME_READS.test(p) && present.has(p)
 );

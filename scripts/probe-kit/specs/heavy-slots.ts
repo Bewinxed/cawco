@@ -65,8 +65,8 @@ const CHILD = join(import.meta.dir, "..", "slot-child.ts");
 /** A merge check's command: when it starts (ms), its lease, 2 s of work, when it ends. */
 const NOW_MS = `perl -MTime::HiRes=time -e 'printf "%.0f", time*1000'`;
 const WORK = `echo "START $(${NOW_MS}) $${HEAVY_SLOT_ENV}"; sleep 2; echo "END $(${NOW_MS})"`;
-const START = /^START (\d+) (.*)$/m;
-const END = /^END (\d+)$/m;
+const START = /^START (\d+) (.*)$/mu;
+const END = /^END (\d+)$/mu;
 
 /** A process's nice (`ps -o nice=`) and, on Linux, its I/O class (`ionice -p`, "idle" or "none: prio 4"). */
 const priorityOf = (pid: number): { io: string; nice: number } => ({
@@ -273,7 +273,9 @@ async function inLine(kit: Kit, place: SlotPlace): Promise<void> {
   kit.check(
     "(a) each command runs under its lease, its environment naming it",
     leases.every((words, k) =>
-      new RegExp(`^slot \\d+ of ${count}, merge check ${k + 1}$`).test(words)
+      new RegExp(`^slot \\d+ of ${count}, merge check ${k + 1}$`, "u").test(
+        words
+      )
     ),
     leases.slice(-2).join(" | ")
   );
@@ -300,7 +302,7 @@ async function cancelWhileWaiting(kit: Kit, place: SlotPlace): Promise<void> {
 }
 
 const SHARE_LINE =
-  /check: (\d+) checks at once, golar tsc --builders (\d+): (\d+) core\(s\)/;
+  /check: (\d+) checks at once, golar tsc --builders (\d+): (\d+) core\(s\)/u;
 
 async function checkWaits(kit: Kit, place: SlotPlace): Promise<void> {
   const held = await holders(place, place.count);

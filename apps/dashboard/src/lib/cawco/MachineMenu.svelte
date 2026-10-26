@@ -42,7 +42,7 @@
   let { machine, children }: { machine: Machine; children: Snippet } = $props();
 
   /** Only macOS has a keychain that locks; offering it elsewhere is noise. */
-  const isMac = $derived(/darwin|mac/i.test(machine.os));
+  const isMac = $derived(/darwin|mac/iu.test(machine.os));
   /**
    * The keychain workaround is offered only to the machine that is actually
    * stuck behind one. Signing an account in is Configure → Accounts' work.

@@ -70,7 +70,7 @@
   } = $props();
 
   /** An overflow that scrolls: the footer's scroller is the nearest such ancestor. */
-  const SCROLLS = /auto|scroll/;
+  const SCROLLS = /auto|scroll/u;
 
   const ACTS: Record<NonNullable<Notice["action"]>, string> = {
     retry: "Retry",

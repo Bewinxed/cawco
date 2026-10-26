@@ -75,8 +75,8 @@ const GLASS = {
   jump: "16px",
 } as const;
 
-const ARC_RADIUS = /A ([\d.]+) /;
-const FIRST_Y = /^M [\d.]+ ([\d.]+)/;
+const ARC_RADIUS = /A ([\d.]+) /u;
+const FIRST_Y = /^M [\d.]+ ([\d.]+)/u;
 const TOOLS = '[data-slot="tools"]';
 const MACHINES = `${TOOLS} [data-machines]`;
 const JUMP_SVG = `${TOOLS} button[data-share="jump"] > svg`;

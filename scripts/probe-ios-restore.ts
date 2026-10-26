@@ -102,7 +102,7 @@ if (!app) {
   );
   const text = await new Response(build.stdout).text();
   process.stdout.write(text);
-  if ((await build.exited) !== 0 || !/^BUILT iOS 18\.5$/m.test(text)) {
+  if ((await build.exited) !== 0 || !/^BUILT iOS 18\.5$/mu.test(text)) {
     console.log("FAIL compile");
     process.exit(1);
   }
@@ -208,7 +208,7 @@ async function tree(): Promise<Node[]> {
   walkTree(lastTree);
   return nodes;
 }
-const ROW = /row-(\d{4})/;
+const ROW = /row-(\d{4})/u;
 interface Place {
   area: { bottom: number; mid: number; top: number };
   first?: string;
@@ -393,8 +393,8 @@ xcrun simctl install ${udid} "${app}"`);
   await fromUsage(kind);
 }
 
-const RESTORE_LINE = /restor|place/i;
-const RESTORE_PREFIX = /^.*Restore\]\s*/;
+const RESTORE_LINE = /restor|place/iu;
+const RESTORE_PREFIX = /^.*Restore\]\s*/u;
 
 /** The session, left scrolled up: each relaunch brings it back with the row that led the view in view. */
 async function sessionLeftScrolledUp(kind: string) {

@@ -97,7 +97,7 @@ const planName = (plan: SessionPlan): string => {
 };
 
 /** A markdown heading's marks. */
-const HEADING = /^#+\s*/;
+const HEADING = /^#+\s*/u;
 
 /** A hub read of `path` as JSON; its status on a refusal, so a 4xx keeps "none". */
 async function readJson<T>(path: string): Promise<T> {

@@ -29,8 +29,8 @@ const SHAPE = "What shape is the plan?";
 const TRIAL = "How long is the trial?";
 const PER_MACHINE = "One per host";
 const A_MONTH = "A month";
-const PICKS = /picked/;
-const CAW_SHEET = /^Caw, lead of /;
+const PICKS = /picked/u;
+const CAW_SHEET = /^Caw, lead of /u;
 
 interface Seeded {
   projectId: string;
@@ -139,7 +139,7 @@ async function walk(leg: Leg): Promise<void> {
       }),
     async () => {
       await shows(
-        page.getByRole("link", { name: new RegExp(title.slice(0, 40)) }),
+        page.getByRole("link", { name: new RegExp(title.slice(0, 40), "u") }),
         `the page's row, “${title}”`
       );
       if (leg.size === "phone") {
@@ -156,7 +156,7 @@ async function walk(leg: Leg): Promise<void> {
     "Open the page",
     async () => {
       await page
-        .getByRole("link", { name: new RegExp(title.slice(0, 40)) })
+        .getByRole("link", { name: new RegExp(title.slice(0, 40), "u") })
         .first()
         .click();
       at = page.url();

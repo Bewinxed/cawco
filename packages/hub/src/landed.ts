@@ -26,7 +26,7 @@ import { projectRoot } from "./project-folder";
 
 /** A fetch of origin's default branch and a read of it; past this the machine is not going to answer. */
 const READ_MS = 30_000;
-const LAST_NEWLINE = /\n$/;
+const LAST_NEWLINE = /\n$/u;
 
 export interface LandedDeps {
   db: Pick<DbShape, "project">;

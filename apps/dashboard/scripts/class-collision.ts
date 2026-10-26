@@ -25,8 +25,8 @@ import { parse } from "svelte/compiler";
 const DASHBOARD = join(dirname(new URL(import.meta.url).pathname), "..");
 const SRC = process.argv[2] ? resolve(process.argv[2]) : join(DASHBOARD, "src");
 const APP_CSS = join(SRC, "app.css");
-const STYLE_OPEN = /<style[\s>]/;
-const SPACE = /\s+/;
+const STYLE_OPEN = /<style[\s>]/u;
+const SPACE = /\s+/u;
 /** A comparison's operands are values, not classes (`variant === "ring"`). */
 const COMPARE = new Set(["===", "!==", "==", "!="]);
 

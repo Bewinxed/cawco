@@ -947,7 +947,7 @@ const pluginsDir = (): string =>
     "plugin"
   );
 
-const PLUGIN_VERSION_DIR = /^cawco-context-[0-9a-f]{16}$/;
+const PLUGIN_VERSION_DIR = /^cawco-context-[0-9a-f]{16}$/u;
 
 /**
  * The plugin written as a directory named for its source, and its path: a
@@ -992,7 +992,7 @@ export const prunePlugins = async (
 
 /** 1.x's generated bridge plugin files (`cawco-context-<hash>.js`, `cockpit-handoff.js`). */
 const V1_BRIDGE =
-  /^(?:cawco-(?:handoff|context)(?:-[a-f0-9]+)?|cockpit-handoff)\.js(?:\.disabled-\d+)?$/;
+  /^(?:cawco-(?:handoff|context)(?:-[a-f0-9]+)?|cockpit-handoff)\.js(?:\.disabled-\d+)?$/u;
 
 /**
  * What 1.x's bridge left in OpenCode's global config dir, gone: its plugin

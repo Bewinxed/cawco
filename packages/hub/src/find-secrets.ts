@@ -47,7 +47,7 @@ interface Said {
 }
 
 const ELLIPSIS = "…";
-const SPACES = /\s+/g;
+const SPACES = /\s+/gu;
 
 /**
  * What the recognizer reads for a moment: the words around its excerpt

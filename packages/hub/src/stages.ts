@@ -105,20 +105,20 @@ export const TEMPLATES = [
 export type StagesTemplate = (typeof TEMPLATES)[number];
 
 /** A stage's name: lowercase, a letter first. */
-export const STAGE_NAME = /^[a-z][a-z0-9_-]{0,39}$/;
-const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
-const FIELD_NAME = /^[a-z_][a-z0-9_]{0,63}$/;
-const DURATION = /^(\d{1,4})(m|h|d|w)$/;
-const FENCE = /^---\s*$/;
-const LINE_SPLIT = /\r?\n/;
-const COMMENT = /(?:^|\s)#.*$/;
-const SECTION = /^(moves|views):?$/;
-const STAGE_LINE = /^(\S+)\s+(\S+)(.*)$/;
-const HOOK = /([A-Za-z_]+):\s*(\S+)/g;
-const MOVE_LINE = /^(\S+?)\s*(?:→|->)\s*(\S+)\s+(.+)$/;
-const VIEW_LINE = /^(\S+)(?:\s+by\s+(\S+))?$/;
-const WHO_SPLIT = /[\s,]+/;
-const INDENTED = /^\s/;
+export const STAGE_NAME = /^[a-z][a-z0-9_-]{0,39}$/u;
+const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
+const FIELD_NAME = /^[a-z_][a-z0-9_]{0,63}$/u;
+const DURATION = /^(\d{1,4})(m|h|d|w)$/u;
+const FENCE = /^---\s*$/u;
+const LINE_SPLIT = /\r?\n/u;
+const COMMENT = /(?:^|\s)#.*$/u;
+const SECTION = /^(moves|views):?$/u;
+const STAGE_LINE = /^(\S+)\s+(\S+)(.*)$/u;
+const HOOK = /([A-Za-z_]+):\s*(\S+)/gu;
+const MOVE_LINE = /^(\S+?)\s*(?:→|->)\s*(\S+)\s+(.+)$/u;
+const VIEW_LINE = /^(\S+)(?:\s+by\s+(\S+))?$/u;
+const WHO_SPLIT = /[\s,]+/u;
+const INDENTED = /^\s/u;
 const STAGES_LIMIT = 32;
 
 const MS: Record<string, number> = {

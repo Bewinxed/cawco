@@ -96,7 +96,7 @@ function layoutTop(element: HTMLElement, host: HTMLElement): number {
 let styled: { sheets: number; names: Set<string> } | undefined;
 
 /** Each `data-*` name a selector reads (`[data-state=open]`, `[data-slot]`). */
-const SELECTED = /\[\s*(data-[\w-]+)/g;
+const SELECTED = /\[\s*(data-[\w-]+)/gu;
 
 /**
  * The `data-*` attributes some style selects on: what an element is drawn
@@ -1095,8 +1095,8 @@ export const BLEED = 64;
  */
 const OPEN = `${-BLEED}px`;
 /** A box's clip, read for where its bottom edge is drawn: above (hiding) or below its foot. */
-const CLIP_BOTTOM = /^inset\(\S+ \S+ (-?[\d.]+)px/;
-const CUBIC = /^cubic-bezier\(([^)]+)\)$/;
+const CLIP_BOTTOM = /^inset\(\S+ \S+ (-?[\d.]+)px/u;
+const CUBIC = /^cubic-bezier\(([^)]+)\)$/u;
 
 /** A keyframe's curve at `t` (0 to 1): `linear`, or a `cubic-bezier()` (the curves the runs here are made on). */
 function curveAt(easing: string, t: number): number {

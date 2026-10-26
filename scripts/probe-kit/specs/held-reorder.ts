@@ -785,9 +785,9 @@ async function traceLeg(kit: Kit, fleet: KitFleet, live: [string, string]) {
 }
 
 /** The served module that holds lists' order (motion/held-order), on the dev server. */
-const HELD_MODULE = /\/held-order\.svelte\.ts(\?|$)/;
+const HELD_MODULE = /\/held-order\.svelte\.ts(\?|$)/u;
 /** Where the served module's `heldOrder` begins. */
-const HELD_HEAD = /export function heldOrder\(([^)]*)\)\s*\{/;
+const HELD_HEAD = /export function heldOrder\(([^)]*)\)\s*\{/u;
 
 /**
  * The dev server's held-order module, served with a count of every list it

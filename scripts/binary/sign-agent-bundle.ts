@@ -72,7 +72,7 @@ const ENTITLEMENTS = join(import.meta.dir, "agent.entitlements");
 /** "98 percent of software within 15 minutes" (Apple, customizing-the-notarization-workflow); past this the release fails. */
 const NOTARY_WAIT_S = 30 * 60;
 /** The designated requirement as `rcodesign print-signature-info` prints it. */
-const DESIGNATED = /designated\(3\): \d+: (.*)$/m;
+const DESIGNATED = /designated\(3\): \d+: (.*)$/mu;
 
 const fail = (what: string): never => {
   throw new Error(`Signing the agent bundle failed: ${what}`);

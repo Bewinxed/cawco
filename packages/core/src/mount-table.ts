@@ -6,8 +6,8 @@
 import { readdirSync, readFileSync, readlinkSync } from "node:fs";
 
 /** A process's entry in `/proc`. */
-const PID = /^\d+$/;
-const OCTAL_ESCAPE = /\\([0-7]{3})/g;
+const PID = /^\d+$/u;
+const OCTAL_ESCAPE = /\\([0-7]{3})/gu;
 
 const readOr = <T>(read: () => T, otherwise: T): T => {
   try {

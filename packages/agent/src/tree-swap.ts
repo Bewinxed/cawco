@@ -53,7 +53,7 @@ export const CARRIED = ".cawco-carried.json";
 const treeName = (name: string): string =>
   `${name}-${randomUUID().replaceAll("-", "").slice(0, 8)}`;
 
-const TREE_SUFFIX = /^[0-9a-f]{8}$/;
+const TREE_SUFFIX = /^[0-9a-f]{8}$/u;
 
 const isTreeOf = (name: string, entry: string): boolean =>
   entry.length === name.length + 9 &&
@@ -293,7 +293,7 @@ export const linkedTree = async (path: string): Promise<string | undefined> =>
     : undefined;
 
 /** Python's own name for the bytecode of `<stem>.py`: `<stem>.<tag>.pyc`, or `.opt-N.pyc` (PEP 3147, PEP 488). */
-const BYTECODE = /^([^.]+)\.[^.]+(?:\.opt-\d+)?\.pyc$/;
+const BYTECODE = /^([^.]+)\.[^.]+(?:\.opt-\d+)?\.pyc$/u;
 
 /**
  * The bytecode Python made in `tree` of the files the fleet carried in it:

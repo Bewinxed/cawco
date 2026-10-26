@@ -27,14 +27,14 @@ import { FACES_SHEET, PAGE_ICON } from "./decision-program";
 /** The largest page the hub publishes. */
 export const PAGE_LIMIT = 512 * 1024;
 
-const PLACEHOLDER = /\{\{([^}]+)\}\}/g;
+const PLACEHOLDER = /\{\{([^}]+)\}\}/gu;
 /** A page's own icon, named in its head. */
-const NAMES_ICON = /<link\b[^>]*\brel=["']?(?:shortcut )?icon\b/i;
-const MOCKUP = /\{\{MK:([a-z0-9-]+)\}\}/g;
-const MOCKUP_NAME = /^MK:[a-z0-9-]+$/;
-const SOURCE = /(\bsrc=)"([^"]+)"/g;
-const KEPT_SOURCE = /^(data:|https?:|\/\/|#)/;
-const IMAGE_TAG = /<img\b[^>]*>/gi;
+const NAMES_ICON = /<link\b[^>]*\brel=["']?(?:shortcut )?icon\b/iu;
+const MOCKUP = /\{\{MK:([a-z0-9-]+)\}\}/gu;
+const MOCKUP_NAME = /^MK:[a-z0-9-]+$/u;
+const SOURCE = /(\bsrc=)"([^"]+)"/gu;
+const KEPT_SOURCE = /^(data:|https?:|\/\/|#)/u;
+const IMAGE_TAG = /<img\b[^>]*>/giu;
 /** The attribute an inlined `<img>` names its image by, in place of `src`. */
 const DRAWN = "data-dp-img";
 /**

@@ -169,8 +169,8 @@ export interface TaskLife {
 }
 
 /** The `CawCo-Stage` trailer's value, `from -> to`: the hub writes it, so it is read. */
-const STAGE_TRAILER = /^(\S+) -> (\S+)$/;
-const ACTION_ID = /^action:(.+)$/;
+const STAGE_TRAILER = /^(\S+) -> (\S+)$/u;
+const ACTION_ID = /^action:(.+)$/u;
 
 const stageName = (name: string): string | null =>
   name === NO_STAGE ? null : name;

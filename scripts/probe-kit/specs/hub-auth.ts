@@ -56,10 +56,10 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec } from "../kit";
 
-const TAG = /PROBE-AUTH-([A-Z])/;
+const TAG = /PROBE-AUTH-([A-Z])/u;
 const FINISH = "mcp__cawco__finish_item";
 /** A pairing code (RFC 8628 §6.1's base-20 alphabet), as the pairing screen shows it. */
-const CODE = /[B-Z]{3}-[B-Z]{3}/;
+const CODE = /[B-Z]{3}-[B-Z]{3}/u;
 
 /** The header proving `machineId` with `key` for one request, as its agent signs one (core machine-key.ts). */
 const proofOf = (

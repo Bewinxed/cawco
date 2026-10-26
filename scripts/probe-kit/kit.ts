@@ -282,7 +282,7 @@ const RUN_ENGINE: Engine = (() => {
  * 'http://127.0.0.1:25570/' …", the preview's own address).
  */
 const SANDBOX_REFUSED =
-  /^Blocked script execution in '[^']+' because the document's frame is sandboxed and the 'allow-scripts' permission is not set\.$/;
+  /^Blocked script execution in '[^']+' because the document's frame is sandboxed and the 'allow-scripts' permission is not set\.$/u;
 export const kitsOwnMessage = (text: string): boolean =>
   SANDBOX_REFUSED.test(text);
 
@@ -404,7 +404,7 @@ export const OWN_HOME_ENV = "CAWCO_PROBE_OWN_HOME";
  * own (`CAWCO_GIT_*`), its ssh, LFS and template settings, and gh's config dir.
  */
 export const ENCLOSING_GIT_ENV =
-  /^(?:GIT_CONFIG_\w+|CAWCO_GIT_\w+|GIT_SSH_COMMAND|GIT_LFS_SKIP_PUSH|GIT_TEMPLATE_DIR|GH_CONFIG_DIR)$/;
+  /^(?:GIT_CONFIG_\w+|CAWCO_GIT_\w+|GIT_SSH_COMMAND|GIT_LFS_SKIP_PUSH|GIT_TEMPLATE_DIR|GH_CONFIG_DIR)$/u;
 
 /**
  * Why a spec cannot start a boundary of its own where this run is: inside a
@@ -1420,7 +1420,7 @@ export type KitFleet = Fleet & {
 };
 
 /** What `fleetEvidence` copies of each kind, by where it goes under its folder. */
-const LOG_FILE = /\.(log|err)$/;
+const LOG_FILE = /\.(log|err)$/u;
 
 /**
  * A failed run's fleet, kept in `dir` before the fleet goes: its services'
@@ -1445,7 +1445,7 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
     "SELECT id, title FROM instances"
   );
   for (const { id, title } of instances) {
-    const name = `${(title ?? "untitled").replace(/[^\w-]+/g, "-").slice(0, 60)}-${id.slice(0, 8)}.json`;
+    const name = `${(title ?? "untitled").replace(/[^\w-]+/gu, "-").slice(0, 60)}-${id.slice(0, 8)}.json`;
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one session at a time, off a hub that is closing next
       const response = await fetch(
@@ -1609,7 +1609,7 @@ export async function open(
     }
   } catch (error) {
     const shows = await page
-      .evaluate(() => document.body?.innerText.replace(/\s+/g, " ").trim())
+      .evaluate(() => document.body?.innerText.replace(/\s+/gu, " ").trim())
       .catch(() => "unread");
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\n  the page threw: ${thrown.join(" | ") || "nothing"}\n  it shows: ${(shows ?? "").slice(0, 400) || "no words"}`,
@@ -1623,7 +1623,7 @@ export async function open(
 }
 
 /** A button line of an ARIA snapshot (`- button "Try again"`), its name quoted as JSON. */
-const BUTTON_LINE = /- button "((?:[^"\\]|\\.)*)"/g;
+const BUTTON_LINE = /- button "((?:[^"\\]|\\.)*)"/gu;
 
 /**
  * The buttons in `scope` by their accessible names, as the accessibility

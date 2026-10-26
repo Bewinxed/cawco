@@ -49,24 +49,24 @@ const { delay, MACHINE, scratchFleet, until, untilGone } =
   await import("./scratch-fleet");
 
 const keep = process.argv.includes("--keep");
-const LOGGED = /\[caw\]|\[dispatch\]|work-items|routines|error/i;
+const LOGGED = /\[caw\]|\[dispatch\]|work-items|routines|error/iu;
 const CAW = "You are Caw";
 const TASK_CREATE = "mcp__cawco__task_create";
 const TASK_START = "mcp__cawco__task_start";
 const DELEGATE = "mcp__cawco__delegate";
 const REPLY = "mcp__cawco__thread_reply";
 const FINISH = "mcp__cawco__finish_item";
-const THREAD_ID = /thread ([0-9a-f-]{36})/g;
+const THREAD_ID = /thread ([0-9a-f-]{36})/gu;
 /** Where an event Caw reads begins, in his conversation. */
 const EVENT_START =
-  /You started a thread|You wrote in the thread|Routine “|The attempt at/g;
+  /You started a thread|You wrote in the thread|Routine “|The attempt at/gu;
 const OFF_REASON = "Caw is off, so only your words wake him";
 /** Your ask that Caw start an attempt at a task: `PROBE-CAW-START tsk-4`. */
-const START_ASK = /PROBE-CAW-START (tsk-\d+)/;
+const START_ASK = /PROBE-CAW-START (tsk-\d+)/u;
 /** Your ask (or a routine's) that Caw delegate: `PROBE-CAW-DELEGATE-STOP`. */
-const DELEGATE_ASK = /PROBE-CAW-DELEGATE-(STOP|FINISH|YOURS)/;
+const DELEGATE_ASK = /PROBE-CAW-DELEGATE-(STOP|FINISH|YOURS)/u;
 /** A worker's brief: an attempt's task title, or Caw's delegate's prompt. */
-const WORKER_TAG = /PROBE-(?:ATTEMPT|DELEGATE)-([A-Z]+)/;
+const WORKER_TAG = /PROBE-(?:ATTEMPT|DELEGATE)-([A-Z]+)/u;
 /** How long each worker sleeps before it finishes, by tag; absent: none. */
 const SLEEPS: Record<string, number> = {
   DISPATCH: 25,

@@ -137,6 +137,7 @@
     >
       {#if stage.src}
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
+        <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
         <iframe
           allow="clipboard-write"
           class="block size-full border-none border-current scheme-inherit"

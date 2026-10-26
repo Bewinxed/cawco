@@ -32,7 +32,7 @@ export const APP_SCHEMA =
 export const GENERATOR_CONFIG =
   "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi-generator-config.yaml";
 const STREAM = "packages/core/src/stream.ts";
-const WIRE_PROTOCOL_LINE = /export const WIRE_PROTOCOL = (\d+);/;
+const WIRE_PROTOCOL_LINE = /export const WIRE_PROTOCOL = (\d+);/u;
 
 /**
  * The dashboard socket's frames, by the core file that declares them: the
@@ -298,7 +298,7 @@ interface Place {
 const COMPONENT = "#/components/schemas/";
 const UNIONS = ["oneOf", "anyOf"] as const;
 const MAX_HOPS = 32;
-const OPEN_ENUM = /^ {4}([A-Za-z0-9_]+): OpenEnums\./gm;
+const OPEN_ENUM = /^ {4}([A-Za-z0-9_]+): OpenEnums\./gmu;
 
 const isObject = (value: unknown): value is Schema =>
   typeof value === "object" && value !== null && !Array.isArray(value);

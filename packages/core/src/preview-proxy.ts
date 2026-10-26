@@ -14,10 +14,10 @@ import { embeddedFile, standalone } from "./runtime";
 
 /** Where every previewed page loads the overlay from, on its own origin. */
 export const OVERLAY_PATH = "/__cawco/overlay.js";
-const HEAD_OPEN = /<head(\s[^>]*)?\s*>/i;
-const HTML_OPEN = /<html(\s[^>]*)?\s*>/i;
-const DOCTYPE = /^\s*<!doctype[^>]*>/i;
-const SCRIPT_OPEN = /<script\b/i;
+const HEAD_OPEN = /<head(\s[^>]*)?\s*>/iu;
+const HTML_OPEN = /<html(\s[^>]*)?\s*>/iu;
+const DOCTYPE = /^\s*<!doctype[^>]*>/iu;
+const SCRIPT_OPEN = /<script\b/iu;
 let overlay: Promise<string> | undefined;
 
 /**
@@ -91,7 +91,7 @@ export const PARENTS_GLOBAL = "__cawcoParents";
 
 /** The last overlay gzipped, by its whole text: the parents line changes only when the hub's addresses do. */
 let zipped: { text: string; body: Uint8Array<ArrayBuffer> } | undefined;
-const GZIP = /\bgzip\b/i;
+const GZIP = /\bgzip\b/iu;
 
 /**
  * The overlay's whole text: the origins a host may frame it from
@@ -227,7 +227,7 @@ const HTML_ESCAPES: Record<string, string> = {
   ">": "&gt;",
 };
 const escapeHtml = (text: string): string =>
-  text.replaceAll(/[&"<>]/g, (char) => HTML_ESCAPES[char] ?? char);
+  text.replaceAll(/[&"<>]/gu, (char) => HTML_ESCAPES[char] ?? char);
 
 /**
  * What a proxy answers when the hop behind it does not: a page that says
@@ -268,14 +268,16 @@ export function downResponse(
 }
 
 const DOWN_META = new RegExp(
-  `<meta name="${PREVIEW_DOWN_META}" content="([a-z]+)">`
+  `<meta name="${PREVIEW_DOWN_META}" content="([a-z]+)">`,
+  "u"
 );
 /** The hops a proxy's page may name: every way a view fails but `page`, which no proxy says. */
 const DOWNS: ReadonlySet<string> = new Set(
   SHOWN_FAILURES.filter((failure) => failure !== "page")
 );
 const WHY_META = new RegExp(
-  `<meta name="${PREVIEW_WHY_META}" content="([^"]*)">`
+  `<meta name="${PREVIEW_WHY_META}" content="([^"]*)">`,
+  "u"
 );
 const HTML_UNESCAPES: Record<string, string> = Object.fromEntries(
   Object.entries(HTML_ESCAPES).map(([char, escaped]) => [escaped, char])
@@ -302,7 +304,7 @@ export function downOf(
       why === undefined
         ? null
         : why.replaceAll(
-            /&(?:amp|quot|lt|gt);/g,
+            /&(?:amp|quot|lt|gt);/gu,
             (escaped) => HTML_UNESCAPES[escaped] ?? escaped
           ),
   };
@@ -420,7 +422,7 @@ export function injectOverlay(
   const extra = Object.entries(data)
     .map(
       ([name, value]) =>
-        ` data-${name}="${value.replaceAll(/[&"<]/g, (char) => ATTRIBUTE_ESCAPES[char] ?? char)}"`
+        ` data-${name}="${value.replaceAll(/[&"<]/gu, (char) => ATTRIBUTE_ESCAPES[char] ?? char)}"`
     )
     .join("");
   const script = `<script src="${OVERLAY_PATH}" data-page-hash="${hash}"${extra}></script>`;
@@ -460,9 +462,9 @@ export function injectOverlay(
  * reload (developers.cloudflare.com/cache/concepts/cache-control/).
  */
 export const IMMUTABLE = "public, max-age=31536000, immutable";
-const VERSIONED = /^\/__cawco\/v\/([0-9a-z]+)(\/.*)$/;
-const BASE_TAG = /<base[\s>]/i;
-const LEADING_SLASH = /^\//;
+const VERSIONED = /^\/__cawco\/v\/([0-9a-z]+)(\/.*)$/u;
+const BASE_TAG = /<base[\s>]/iu;
+const LEADING_SLASH = /^\//u;
 /** The overlay's own and the hub's: never one of the page's files. */
 const RESERVED_PATH = "/__cawco/";
 
@@ -540,7 +542,7 @@ export function cachePreview(
  * block fills, so it goes as it is.
  */
 const COMPRESSIBLE =
-  /^(?:text\/(?!event-stream$)|application\/(?:javascript|json|wasm)$|image\/svg\+xml$)/;
+  /^(?:text\/(?!event-stream$)|application\/(?:javascript|json|wasm)$|image\/svg\+xml$)/u;
 
 /** Whether `answer` is one {@link compressed} gzips for a client that takes `acceptEncoding`. */
 const gzips = (answer: Response, acceptEncoding: string | null): boolean => {
@@ -680,13 +682,13 @@ export interface FolderWeight {
   wasm: number;
 }
 
-const JS_FILE = /\.[cm]?js$/;
-const WASM_FILE = /\.wasm$/;
+const JS_FILE = /\.[cm]?js$/u;
+const WASM_FILE = /\.wasm$/u;
 
-const QUERY_OR_HASH = /[?#]/;
-const LEADING_SLASHES = /^\/+/;
+const QUERY_OR_HASH = /[?#]/u;
+const LEADING_SLASHES = /^\/+/u;
 /** A source on another origin or scheme: no file of the folder. */
-const ELSEWHERE = /^[a-z][a-z0-9+.-]*:|^\/\//i;
+const ELSEWHERE = /^[a-z][a-z0-9+.-]*:|^\/\//iu;
 
 /** The start page a folder preview opens at `path` (its index.html when the path names a folder), from `root`. */
 const startPage = (path: string | undefined): string => {
@@ -907,7 +909,7 @@ export interface PreviewSocket {
 }
 
 /** Bun's words for a client socket that failed, before its reason. */
-const FAILED_PREFIX = /^WebSocket connection to '[^']*' failed: /;
+const FAILED_PREFIX = /^WebSocket connection to '[^']*' failed: /u;
 /** Bun's reason when no connection opened at all (`ECONNREFUSED`): no listener there. */
 const NOT_CONNECTED = "Failed to connect";
 

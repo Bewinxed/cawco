@@ -44,7 +44,7 @@ const SLOW_S = 30;
 const ONLINE_MS = 3000;
 /** The agent's word for a dir whose `auth status` gave no answer (accounts.ts `AuthStatusUnanswered`). */
 const UNANSWERED =
-  /Claude Code did not answer `claude auth status` for (\S+): no answer within 20 s after (\d+) ms\./g;
+  /Claude Code did not answer `claude auth status` for (\S+): no answer within 20 s after (\d+) ms\./gu;
 
 interface AgentRow {
   auth: string;

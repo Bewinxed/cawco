@@ -824,7 +824,7 @@ export const weekLeft = (r: RingAccount): number | null =>
   r.limitOn === "week" ? 0 : (r.week?.left ?? null);
 
 /** An email domain's top level ("gmail.com" → "gmail"). */
-const TOP_DOMAIN = /\.[^.]+$/;
+const TOP_DOMAIN = /\.[^.]+$/u;
 /** An account's first name: its nickname, else its email's local part. */
 const localOf = (r: RingAccount): string =>
   r.nick || !r.email ? r.name : r.email.slice(0, r.email.lastIndexOf("@"));

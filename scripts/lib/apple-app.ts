@@ -24,7 +24,7 @@ export const APPLE_BUILDS = join(
   "cawco-apple.noindex"
 );
 
-const TRAILING_SLASH = /\/$/;
+const TRAILING_SLASH = /\/$/u;
 
 /** The build a checkout's apps are made in: its folder's name, `main` for ~/cockpit. */
 export const buildName = (top: string): string => {

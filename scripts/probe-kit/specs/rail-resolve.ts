@@ -32,7 +32,7 @@ import {
 } from "../kit";
 import { writePagePins } from "../pins";
 
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 const FRAME = 'iframe[title="Preview"]';
 const RAIL = '[data-slot="comment-rail"]';
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
@@ -220,7 +220,10 @@ const toggleResolve = async (screen: Page, n: number, touch: boolean) => {
     await card.waitFor({ timeout: 10_000 });
     await card
       .getByRole("button", {
-        name: new RegExp(`^(${commentWords.resolve}|${commentWords.reopen})$`),
+        name: new RegExp(
+          `^(${commentWords.resolve}|${commentWords.reopen})$`,
+          "u"
+        ),
       })
       .first()
       .click();
@@ -244,7 +247,10 @@ const toggleResolve = async (screen: Page, n: number, touch: boolean) => {
     await screen
       .locator(`${RAIL} li:has([data-pin-row="${n}"])`)
       .getByRole("button", {
-        name: new RegExp(`^(${commentWords.resolve}|${commentWords.reopen})$`),
+        name: new RegExp(
+          `^(${commentWords.resolve}|${commentWords.reopen})$`,
+          "u"
+        ),
       })
       .first()
       .click();

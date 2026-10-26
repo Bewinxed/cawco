@@ -516,7 +516,7 @@ export const hearSleep = (
   return () => child.stdin.end();
 };
 
-const PREPARE_FOR_SLEEP = /PrepareForSleep \((true|false),\)/;
+const PREPARE_FOR_SLEEP = /PrepareForSleep \((true|false),\)/u;
 
 /** macOS: CoreGraphics' seconds since any input in the combined session state. */
 const macIdle = async (): Promise<IdleSource | undefined> => {

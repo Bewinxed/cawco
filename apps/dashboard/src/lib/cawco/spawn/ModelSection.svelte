@@ -171,7 +171,7 @@
    * line, and its fade would fade them twice. Beside the name the line is
    * the row's own, and has no height of its own to fold.
    */
-  const FOLDS = /^(height|padding|border|margin)/;
+  const FOLDS = /^(height|padding|border|margin)/u;
   const line = (
     node: HTMLElement,
     _: unknown,

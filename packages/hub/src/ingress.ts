@@ -141,7 +141,7 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 /** What a character cut in half decodes to, at the end of a cut. */
-const TORN_CHARACTER = /�$/;
+const TORN_CHARACTER = /�$/u;
 
 /** `text` cut to at most `max` bytes, on a character boundary. */
 const cutTo = (text: string, max: number): string => {

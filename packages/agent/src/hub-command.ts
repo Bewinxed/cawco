@@ -129,7 +129,8 @@ const RUNNER_SLOTS: ReadonlySet<QueueSlot> = new Set(["folder", "boundary"]);
 const QUEUE_LINE = new RegExp(
   `^${QUEUE_MARKER} (wait|held) (${(Object.keys(QUEUE_SLOTS) as QueueSlot[])
     .filter((slot) => !RUNNER_SLOTS.has(slot))
-    .join("|")})(?:: (.*))?$`
+    .join("|")})(?:: (.*))?$`,
+  "u"
 );
 
 /** One run's wait, to the hub under its id; nothing for a run the hub did not name. */
@@ -317,7 +318,7 @@ const commandClock = (
   };
 };
 
-const CARRIAGE_RETURN = /\r$/;
+const CARRIAGE_RETURN = /\r$/u;
 
 /** Splits a stream into whole lines for `each`, holding a partial last one. */
 const lines = (each: (line: string) => void) => {
@@ -625,7 +626,7 @@ const spawned = ({
   });
 
 /** A commit name a move may name: a sha, or a ref of plain words. */
-const MOVE_TARGET = /^[\w./@^~-]+$/;
+const MOVE_TARGET = /^[\w./@^~-]+$/u;
 
 /** How long a move on the host waits between looks at a boundary that still runs something. */
 const BUSY_LOOK_MS = 2000;

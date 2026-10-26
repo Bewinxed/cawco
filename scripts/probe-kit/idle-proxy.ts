@@ -49,9 +49,9 @@ export interface IdleProxy {
   url: string;
 }
 
-const REQUEST_LINE = /^[A-Z]+ (\S+) HTTP\/1\.1\r\n/;
+const REQUEST_LINE = /^[A-Z]+ (\S+) HTTP\/1\.1\r\n/u;
 /** An upgrade sent to the proxy whole (WebKit's), and how much of a head tells one apart. */
-const WS_LINE = /^GET wss?:\/\//;
+const WS_LINE = /^GET wss?:\/\//u;
 const WS_PREFIX = "GET wss://".length;
 
 /** The proxy, its tunnels cut once idle for `idleMs`. */

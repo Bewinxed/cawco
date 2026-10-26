@@ -7,21 +7,21 @@
 
 /** `text` as a pattern that matches it literally. */
 export const literal = (text: string): string =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, (char) => `\\${char}`);
+  text.replace(/[.*+?^${}()|[\]\\]/gu, (char) => `\\${char}`);
 
 /** A label that starts with `words`. */
 export const startsWith = (words: string): RegExp =>
-  new RegExp(`^${literal(words)}`);
+  new RegExp(`^${literal(words)}`, "u");
 
 /** A label that is exactly `words`. */
 export const exactly = (words: string): RegExp =>
-  new RegExp(`^${literal(words)}$`);
+  new RegExp(`^${literal(words)}$`, "u");
 
 /** The mark of value `i` in a word's text, where `shaped` reads it back: a private-use character, never a digit or a word. */
 const mark = (i: number): string => String.fromCodePoint(0xe0_00 + i);
-const MARKS = /[-]/g;
+const MARKS = /[-]/gu;
 /** A number as words print it: digits, maybe grouped or with a fraction ("117.7", "65536", "1,024"). */
-const NUMBER = /(\d(?:[\d.,]*\d)?)/;
+const NUMBER = /(\d(?:[\d.,]*\d)?)/u;
 /** What a numeric value's place matches. */
 const ANY_NUMBER = String.raw`(\d(?:[\d.,]*\d)?)`;
 /** Two large numbers a numeric value is tried with, its place the numbers that differ between them. */
@@ -31,7 +31,7 @@ const PROBES = ["", "a value", 0, 1, 2] as const;
 /** The probes a numeric value is tried with besides {@link SAMPLES}: none, one and two. */
 const NUMBER_PROBES = [SAMPLES[1], 0, 1, 2] as const;
 /** What a number op on a value that is no number prints. */
-const NOT_A_NUMBER = /NaN|Infinity/g;
+const NOT_A_NUMBER = /NaN|Infinity/gu;
 
 /** A word that cannot be shaped, said by its name and why. */
 class Unshapeable extends Error {
@@ -148,7 +148,8 @@ export const shaped = (word: (...values: never[]) => string): RegExp => {
       .map((token, k) =>
         placed.has(k) ? ANY_NUMBER : literal(token).replace(MARKS, "(.+?)")
       )
-      .join("")
+      .join(""),
+    "u"
   );
 };
 

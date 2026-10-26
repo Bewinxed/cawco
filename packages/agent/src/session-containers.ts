@@ -138,10 +138,10 @@ const UNIX = "unix://";
 type Stamping = "container" | "libpod-container" | "pod" | "kube";
 /** Each request a door stamps, by its path behind any API version prefix. */
 const STAMPED: readonly [RegExp, Stamping][] = [
-  [/^(?:\/v[\d.]+)?\/containers\/create$/, "container"],
-  [/^(?:\/v[\d.]+)?\/libpod\/containers\/create$/, "libpod-container"],
-  [/^(?:\/v[\d.]+)?\/libpod\/pods\/create$/, "pod"],
-  [/^(?:\/v[\d.]+)?\/libpod\/(?:play\/kube|kube\/play)$/, "kube"],
+  [/^(?:\/v[\d.]+)?\/containers\/create$/u, "container"],
+  [/^(?:\/v[\d.]+)?\/libpod\/containers\/create$/u, "libpod-container"],
+  [/^(?:\/v[\d.]+)?\/libpod\/pods\/create$/u, "pod"],
+  [/^(?:\/v[\d.]+)?\/libpod\/(?:play\/kube|kube\/play)$/u, "kube"],
 ];
 const stampingOf = (method: string, path: string): Stamping | undefined =>
   method === "POST"
@@ -330,7 +330,7 @@ const owner = async (): Promise<{ hub: string; machine: string }> => ({
 });
 
 /** What a Kubernetes label value holds (a kube play's pod labels are one): 63 of `[A-Za-z0-9_.-]`. */
-const LABEL_UNSAFE = /[^A-Za-z0-9_.-]/g;
+const LABEL_UNSAFE = /[^A-Za-z0-9_.-]/gu;
 const labelValue = (value: string): string =>
   value.replace(LABEL_UNSAFE, "_").slice(0, 63);
 
@@ -828,7 +828,7 @@ export const containersUntrackedWords = (
   untracked.length === 0 ? undefined : containerWords.untracked(untracked);
 
 /** The `/` the Engine API puts before each container's name. */
-const NAME_SLASH = /^\//;
+const NAME_SLASH = /^\//u;
 
 /** A container as the Engine API lists it (`GET /containers/json`), Docker's and Podman's alike. */
 interface ListedContainer {

@@ -51,9 +51,9 @@ const HOP = "hub loopback";
 /** This computer's loopback, by both families: `localhost` is either. */
 const LOOPBACK = ["127.0.0.1", "::1"];
 /** An IPv6 literal's brackets, as a URL's hostname carries them. */
-const BRACKETS = /^\[|\]$/g;
+const BRACKETS = /^\[|\]$/gu;
 /** 127.0.0.0/8, as itself or IPv4-mapped (`::ffff:127.0.0.1`). */
-const LOOPBACK_V4 = /^(?:::ffff:)?127\./i;
+const LOOPBACK_V4 = /^(?:::ffff:)?127\./iu;
 
 /** Whether `address` (as `dns.lookup` answers it) is this computer's loopback: 127.0.0.0/8 or `::1`. */
 const loopbackAddress = (address: string): boolean =>

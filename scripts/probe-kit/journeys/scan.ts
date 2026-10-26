@@ -37,13 +37,13 @@ export function scan(): string[] {
   const TOLERANCE = 1;
   const MAX_FINDINGS = 6;
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-  const PAINT = /paint|strict|content/;
+  const PAINT = /paint|strict|content/u;
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-  const CONTAINS = /paint|layout|strict|content/;
+  const CONTAINS = /paint|layout|strict|content/u;
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-  const WILL_HOLD = /transform|filter|perspective/;
+  const WILL_HOLD = /transform|filter|perspective/u;
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-  const INLINE = /^(inline|contents)$/;
+  const INLINE = /^(inline|contents)$/u;
   const found: string[] = [];
   const width = document.documentElement.clientWidth;
   const height = document.documentElement.clientHeight;
@@ -168,7 +168,7 @@ export function scan(): string[] {
     bottom: r.bottom,
   });
   const words = (text: string) => {
-    const one = text.replace(/\s+/g, " ").trim();
+    const one = text.replace(/\s+/gu, " ").trim();
     return one.length > 48 ? `${one.slice(0, 45)}…` : one;
   };
   const px = (box: Box) =>
@@ -428,9 +428,9 @@ export function scan(): string[] {
   // fixed, or inside a box so placed before any row, is placed on purpose;
   // and one no clip leaves showing (a carousel's next slide) is not read.
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-  const SCROLLS = /^(auto|scroll)$/;
+  const SCROLLS = /^(auto|scroll)$/u;
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-  const ROW = /flex|grid/;
+  const ROW = /flex|grid/u;
   const describe = (el: Element) => {
     const slot = el.getAttribute("data-slot");
     const cls = [...el.classList].slice(0, 2).join(".");

@@ -27,7 +27,7 @@ import { PROGRAM_MAX } from "../decision-program";
 const ARTIFACT_REF_MAX = 100;
 
 /** A workspace id, or the 8-character prefix delegate reports. */
-export const WORKSPACE_ID = /^[0-9a-f][0-9a-f-]{7,35}$/;
+export const WORKSPACE_ID = /^[0-9a-f][0-9a-f-]{7,35}$/u;
 
 /** Patch operations one update may hold. Our bound. */
 export const PATCH_LIMIT = 200;
@@ -48,7 +48,7 @@ export const ARTIFACT_TOOLS = [
 ] as const;
 
 /** A story's export name in a CSF file: `Roomy`. */
-export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/;
+export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
 /** Args one write may set. Our bound: a component's props. */
 export const ARGS_LIMIT = 100;
 
@@ -119,7 +119,7 @@ const canvasFields = {
         unit: z.string().max(10).optional(),
         options: z.array(z.string().max(100)).max(24).optional(),
         target: z.union([
-          z.object({ cssVar: z.string().regex(/^--[\w-]+$/) }),
+          z.object({ cssVar: z.string().regex(/^--[\w-]+$/u) }),
           z.object({ arg: z.string().min(1).max(100) }),
         ]),
       })

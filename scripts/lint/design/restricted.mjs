@@ -15,7 +15,7 @@
 //   the delivery says why in a `golar-ignore-next-line` comment.
 import { eachNode } from "./model.mjs";
 
-const DURATION_TOKEN = /^--dur-/;
+const DURATION_TOKEN = /^--dur-/u;
 const DIMENSIONS = new Set([
   "offsetHeight",
   "offsetWidth",

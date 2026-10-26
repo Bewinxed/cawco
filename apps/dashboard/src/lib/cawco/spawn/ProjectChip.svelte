@@ -43,7 +43,7 @@
   let creating = $state(false);
   let createError = $state("");
   const slug = (value: string) =>
-    value.trim().toLowerCase().replace(/\s+/g, "-");
+    value.trim().toLowerCase().replace(/\s+/gu, "-");
   $effect(() => {
     if (!open) {
       draft = null;

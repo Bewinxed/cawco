@@ -162,17 +162,17 @@ const REFUSED = [
 ];
 
 /** The pass host mode's lock gives for a ticket, as the browser sends it back: `name=value`. */
-const PASS = /^set-cookie:\s*([^;]+)/im;
+const PASS = /^set-cookie:\s*([^;]+)/imu;
 /** What the closed page and the locked page carry (core preview-proxy `downResponse`, hub preview-access `lockedResponse`). */
 const CLOSED_PAGE = '<meta name="cawco-preview-down" content="closed">';
 const LOCKED_PAGE = '<meta name="cawco-preview-locked" content="1">';
 /** A request head's Cookie line. */
-const COOKIE_LINE = /^cookie:.*$/im;
+const COOKIE_LINE = /^cookie:.*$/imu;
 /** The pass's whole `Set-Cookie`, its attributes after its value. */
-const PASS_ATTRIBUTES = /^set-cookie:\s*__Secure-cawco-pass=[^;]+;(.*)$/im;
+const PASS_ATTRIBUTES = /^set-cookie:\s*__Secure-cawco-pass=[^;]+;(.*)$/imu;
 /** A session's pass's whole `Set-Cookie`, its attributes after its value. */
 const SESSION_ATTRIBUTES =
-  /^set-cookie:\s*__Secure-cawco-session-pass-[^=]+=[^;]+;(.*)$/im;
+  /^set-cookie:\s*__Secure-cawco-session-pass-[^=]+=[^;]+;(.*)$/imu;
 
 /** What leg 7 reads of the hub: its tickets, its passes as kept, and a status line's reader. */
 interface SessionLegHub {

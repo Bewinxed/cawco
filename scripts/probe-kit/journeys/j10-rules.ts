@@ -34,8 +34,8 @@ const REPLY =
 const EDITED = "Show me the command you ran and every line of its output.";
 const CLAIM = "JOURNEY-RULE";
 const CLAIMED = "That should work now.";
-const UNDO = /^Undo/;
-const FIRED = /Fired \d+ times?/;
+const UNDO = /^Undo/u;
+const FIRED = /Fired \d+ times?/u;
 
 interface RuleRow {
   enabled: boolean;

@@ -48,7 +48,7 @@ import { userBun } from "./user-bun";
 const BUN_NODE_ROOT = process.platform === "darwin" ? "/private/tmp" : "/tmp";
 
 /** `bun --revision`: `1.4.3+c6da4a4d3`, the version and the commit Bun names its dir by. */
-const REVISION = /^\S+\+([0-9a-f]+)$/;
+const REVISION = /^\S+\+([0-9a-f]+)$/u;
 
 /** The shim dir of the bun last looked at, keyed by its real path and its file's change. */
 let known: { key: string; dir: string | undefined } | undefined;

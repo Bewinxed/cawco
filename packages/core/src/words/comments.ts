@@ -9,7 +9,7 @@
 import { commonWords } from "./common";
 
 /** A reason's own full stop, which the line that quotes it puts back. */
-const FINAL_STOP = /\.$/;
+const FINAL_STOP = /\.$/u;
 /** A delivery no one took, before its reason. */
 const NOT_SENT = "Not sent:";
 

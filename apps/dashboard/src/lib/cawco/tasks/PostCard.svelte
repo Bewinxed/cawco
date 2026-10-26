@@ -47,7 +47,7 @@
         )
   );
   const parts = $derived(compact ? [first] : [first, ...(post.thread ?? [])]);
-  const handle = $derived(post.account.replace(/^@/, ""));
+  const handle = $derived(post.account.replace(/^@/u, ""));
   const media = $derived(post.media?.files ?? []);
 </script>
 

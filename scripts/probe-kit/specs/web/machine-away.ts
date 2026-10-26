@@ -55,17 +55,17 @@ const FORM = "[data-ns-popover], [data-session-card][data-vaul-drawer]";
 const AWAY_LINE = '[data-slot="machine-away"]';
 const SOURCE_TITLE = "Away source";
 /** The sizing the continue form reads once the hub answers it. */
-const SIZED = new RegExp(literal(spawnWords.currentContext));
+const SIZED = new RegExp(literal(spawnWords.currentContext), "u");
 /** How long the line may take: the hub's read deadline (server.ts `READ_TIMEOUT_MS`), and a margin. */
 const LINE_WITHIN_MS = 30_000;
 /** How long the answer may take once the machine is back. */
 const BACK_WITHIN_MS = 60_000;
 /** The hub's refusal of a read, drawn as it was before a machine away was waited out. */
 const REFUSAL =
-  /whether it ran is not known|Could not read what this machine|Could not read this machine/;
+  /whether it ran is not known|Could not read what this machine|Could not read this machine/u;
 /** The away line's words: the machine on its way back or offline, and that the read comes by itself. */
 const AWAY_WORDS =
-  /is (reconnecting|offline)\. This reads again by itself once it's back\./;
+  /is (reconnecting|offline)\. This reads again by itself once it's back\./u;
 /** What the fleet's memory says, and the line its machine adds to it there. */
 const MEMORY = "# PROBE-AWAY fleet memory\n";
 const MEMORY_EDIT = "PROBE-AWAY edited on the machine";
@@ -147,7 +147,7 @@ async function leg(
   kit.check(
     `${tag}: ${what}, with the machine back, its answer arrives with no press and the line goes`,
     answered && gone,
-    `answered ${answered}, line gone ${gone}; ${(await said()).replace(/\s+/g, " ").slice(0, 240)}`
+    `answered ${answered}, line gone ${gone}; ${(await said()).replace(/\s+/gu, " ").slice(0, 240)}`
   );
 }
 
@@ -325,7 +325,7 @@ async function inventory(
             !machine.querySelector('[data-slot="machine-away"]') &&
             (machine.querySelector('[data-slot="entry"]') !== null ||
               // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-              /no skills at all/.test(machine.textContent ?? ""))
+              /no skills at all/u.test(machine.textContent ?? ""))
           );
         },
         null,

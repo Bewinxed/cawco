@@ -97,7 +97,7 @@ const calls: { path: string; as: string; tool: string; args: unknown }[] = [];
 const LONG_TOOL = "files/read.pull_request_review_comments_for_a_probe";
 const ALIAS = `mcp__cawco__${sessionToolName("echo-alpha", LONG_TOOL)}`;
 /** Anthropic's tool-name rule: a request with a tool outside it fails whole (connections.ts). */
-const API_TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
+const API_TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/u;
 /** Tool names Claude Code sent the model that the real API would refuse. */
 const refusedNames = new Set<string>();
 let refreshes = 0;
@@ -174,9 +174,9 @@ const mcp = (
   });
 };
 
-const BEARER = /^Bearer /;
-const CREDENTIAL = /Bearer ([A-Za-z0-9_-]{43})/;
-const LOGGED = /connections|delegation|work-items|error/i;
+const BEARER = /^Bearer /u;
+const CREDENTIAL = /Bearer ([A-Za-z0-9_-]{43})/u;
+const LOGGED = /connections|delegation|work-items|error/iu;
 const invalid = (error: string) => Response.json({ error }, { status: 400 });
 
 /** Whether a token request's grant holds: a code with its PKCE proof, or an issued refresh token. */
@@ -336,7 +336,7 @@ const noneSearched: { at: number } = { at: 0 };
 /** What the no-connection delegate was offered, request by request. */
 const noneOffered: string[][] = [];
 
-const PARENT_TAG = /PROBE-PARENT-(USER|NONE)/g;
+const PARENT_TAG = /PROBE-PARENT-(USER|NONE)/gu;
 
 /** The parent: one typed session per message it is sent, by its own tool call. */
 const parentTurn = (request: Seen, tag: string): Reply => {

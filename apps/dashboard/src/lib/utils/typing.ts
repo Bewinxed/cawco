@@ -15,7 +15,7 @@ export function isTyping(): boolean {
 /** Apple's systems, where ⌃ letters in a field are text keys and ⌘ is the command key. */
 const APPLE =
   typeof navigator !== "undefined" &&
-  /Mac|iPhone|iPad/.test(navigator.platform);
+  /Mac|iPhone|iPad/u.test(navigator.platform);
 
 /**
  * Whether a modifier chord is the focused field's own text key rather than

@@ -20,13 +20,13 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 /** A CGI answer's head and body, split at its blank line. */
-const CGI_HEAD_END = /\r?\n\r?\n/;
-const LINE_BREAK = /\r?\n/;
-const RECEIVE_PACK = /\/git-receive-pack$/;
+const CGI_HEAD_END = /\r?\n\r?\n/u;
+const LINE_BREAK = /\r?\n/u;
+const RECEIVE_PACK = /\/git-receive-pack$/u;
 /** `<endpoint>/objects/batch`: the LFS server's endpoint before it. */
-const LFS_BATCH = /^\/(.+)\/info\/lfs\/objects\/batch$/;
+const LFS_BATCH = /^\/(.+)\/info\/lfs\/objects\/batch$/u;
 /** An upload's href: `/lfs-upload/<endpoint path>/<oid>`. */
-const LFS_UPLOAD = /^\/lfs-upload\/(.+)\/([0-9a-f]{64})$/;
+const LFS_UPLOAD = /^\/lfs-upload\/(.+)\/([0-9a-f]{64})$/u;
 const LFS_JSON = "application/vnd.git-lfs+json";
 
 /** One LFS object a server took: its id and the login that sent it. */

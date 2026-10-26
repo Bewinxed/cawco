@@ -42,13 +42,13 @@ import { declareGate } from "../gate";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-STOP-([AB])/;
+const TAG = /PROBE-STOP-([AB])/u;
 type Tag = "A" | "B";
 /** The gate's step log, in a workspace's scratch dir. */
 const STEP_LOG = "probe-gate-steps.log";
 /** B's gate step's process, found on the host by its argv. */
 const SLEEP = ["sleep", "7313"];
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 /** Each leg's gate.md. */
 const GATES: Record<Tag, string> = {
   A: `---\nsh -c 'echo "ran A" >> "$TMPDIR/${STEP_LOG}"'\n  name: step log\n---\n`,

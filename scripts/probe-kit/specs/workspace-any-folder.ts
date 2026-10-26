@@ -80,7 +80,7 @@ import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-FOLDER-(A|B|C1|C2|C3|E|F|P)\b/;
+const TAG = /PROBE-FOLDER-(A|B|C1|C2|C3|E|F|P)\b/u;
 /** How finish_item answers a folder landing's conflict (hub work-items.ts `conflictText`). */
 const CONFLICT = "Not landed: a file you changed";
 type Tag = "A" | "B" | "C1" | "C2" | "C3" | "E" | "F" | "P";
@@ -173,7 +173,7 @@ const noteViewServer = (): void => {
   }
 };
 
-const NUMERIC = /^\d+$/;
+const NUMERIC = /^\d+$/u;
 
 /** What the host's folder held at the moment each delegate's command answered. */
 const hostAt: Partial<Record<Tag, string>> = {};

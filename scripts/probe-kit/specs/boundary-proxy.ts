@@ -72,7 +72,7 @@ type Env = Record<string, string | undefined>;
 const WSS_ECHO = "wss://echo.websocket.org/";
 
 /** srt's own bridge to its port inside the sandbox, as `pgrep -af` lists it: the socket it connects to. */
-const SRT_BRIDGE = /UNIX-CONNECT:(\S+)/;
+const SRT_BRIDGE = /UNIX-CONNECT:(\S+)/u;
 
 /**
  * srt's own ports inside the sandbox, each a socat to srt's proxy on the host
@@ -83,13 +83,13 @@ const SRT_HTTP_PORT = 3128;
 const SRT_SOCKS_PORT = 1080;
 
 /** A socat's listen address on its command line: `TCP-LISTEN`, or from srt 0.0.81 `TCP6-LISTEN` (IPv4 mapped in) or `TCP4-LISTEN`, its port and options. */
-const SOCAT_LISTEN = /\b(TCP[46]?-LISTEN:\d+,\S*)/;
+const SOCAT_LISTEN = /\b(TCP[46]?-LISTEN:\d+,\S*)/u;
 
 /** The command line of the socat listening on `port` in this sandbox, as `pgrep -a socat` lists it; undefined when none does. */
 const socatOn = async (port: number): Promise<string | undefined> =>
   (await Bun.$`pgrep -a socat`.nothrow().text())
     .split("\n")
-    .find((line) => new RegExp(`\\bTCP[46]?-LISTEN:${port},`).test(line));
+    .find((line) => new RegExp(`\\bTCP[46]?-LISTEN:${port},`, "u").test(line));
 
 /** A port nothing on this loopback holds now. */
 const freePort = async (): Promise<number> => {
@@ -104,7 +104,7 @@ const freePort = async (): Promise<number> => {
 };
 
 /** `git ls-remote <url> HEAD`'s one line. */
-const COMMIT_HEAD = /^[0-9a-f]{40}\tHEAD$/;
+const COMMIT_HEAD = /^[0-9a-f]{40}\tHEAD$/u;
 
 /** This checkout's CLI: `--record` is this tree's, which the machine's installed `cawco` may predate. */
 const CLI = join(ROOT, "packages/cli/src/cli.ts");

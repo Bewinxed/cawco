@@ -12,16 +12,16 @@
 export const TITLE_LIMIT = 80;
 
 const COMMAND_ECHO =
-  /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/;
-const ANY_TAG = /<[^>]+>/g;
-const WHITESPACE_RUN = /\s+/g;
+  /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/u;
+const ANY_TAG = /<[^>]+>/gu;
+const WHITESPACE_RUN = /\s+/gu;
 /**
  * The attached files' lines (core `attachedFileLine`) and all after them: a
  * turn carries them after its typed words. Matched from the first one to the
  * end, not line by line, because a harness's session list reports its first
  * prompt folded onto one line and cut short (claude's `firstPrompt`).
  */
-const ATTACHED_TAIL = /\s*Attached file: [~/][\s\S]*$/;
+const ATTACHED_TAIL = /\s*Attached file: [~/][\s\S]*$/u;
 
 /**
  * A session's first message as a title. A slash command's first message is the

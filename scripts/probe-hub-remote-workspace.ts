@@ -46,11 +46,11 @@ const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");
 const BIG = 60 * 1024 * 1024;
 /** The mark in a delegate's brief that this probe drives its tools. */
-const DELEGATE_TAG = /PROBE-DELEGATE-(\w+)/;
+const DELEGATE_TAG = /PROBE-DELEGATE-(\w+)/u;
 const FINISH = "mcp__cawco__finish_item";
-const NEWLINES = /\n/g;
+const NEWLINES = /\n/gu;
 /** The line the delegate's Bash prints with its git door's path. */
-const DOOR_LINE = /door: (\S+)/;
+const DOOR_LINE = /door: (\S+)/u;
 
 /** What the delegate of `tag` runs in its workspace, inside its boundary. */
 const delegateCommand = (tag: string, large: boolean) =>
@@ -373,7 +373,7 @@ try {
   );
   check(
     "a: source config holds no credential",
-    !/password|authorization|extraheader/i.test(
+    !/password|authorization|extraheader/iu.test(
       await sh(src, "cat .git/config")
     ),
     (await sh(src, "git config --local --list"))

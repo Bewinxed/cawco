@@ -45,8 +45,8 @@ export const FUNNEL_PORT = 10_000;
 export const FUNNEL_MOUNT = "/hooks/";
 /** How long one `tailscale` call may take: the first apply waits on the owner's approval page. Our choice. */
 const CALL_MS = 20_000;
-const URL_IN_OUTPUT = /https:\/\/\S+/;
-const ACCESS_DENIED = /access denied/i;
+const URL_IN_OUTPUT = /https:\/\/\S+/u;
+const ACCESS_DENIED = /access denied/iu;
 const AGAIN = "the relay applies itself within a minute after.";
 
 /** What Funnel is, for the relay. */

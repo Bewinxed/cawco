@@ -38,7 +38,7 @@ import {
 } from "./dtcg-resolver";
 import { fromCss, sameValue, TOKENS_EXTENSION, toCss } from "./dtcg-values";
 
-const REFS = /\{([^}]+)\}/g;
+const REFS = /\{([^}]+)\}/gu;
 
 export interface ViewToken extends CssToken {
   description?: string;
@@ -528,7 +528,7 @@ type ThemeUtility = [string, string[]];
 
 const strip = (leaf: string, prefix: string): string =>
   leaf.startsWith(prefix) ? leaf.slice(prefix.length) : leaf;
-const RADIUS_SUFFIX = /-r$/;
+const RADIUS_SUFFIX = /-r$/u;
 
 /** Tokens whose value a media context switches, and every token whose CSS reads one of them. */
 function switchedTokens(

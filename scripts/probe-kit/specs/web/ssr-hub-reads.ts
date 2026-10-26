@@ -189,7 +189,7 @@ async function serverLog(base: string): Promise<() => Promise<string[]>> {
 
 /** A line of the server's log that is this failure. */
 const RELATIVE_FETCH =
-  /ssr_fetch_relative_url|fetch\(\) URL is invalid|relative URL/;
+  /ssr_fetch_relative_url|fetch\(\) URL is invalid|relative URL/u;
 
 interface Cold {
   html: string;

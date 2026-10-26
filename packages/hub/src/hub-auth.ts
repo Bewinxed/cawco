@@ -58,7 +58,7 @@ import { HUB_SELF_HEADER, isHubSelf } from "./hub-self";
 import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
 
 /** A machine's own row, which its join wait reads (cli await-joined.ts). */
-const AGENT_ROW = /^\/api\/agents\/([^/]+)$/;
+const AGENT_ROW = /^\/api\/agents\/([^/]+)$/u;
 
 /** What a request is, once its credential is read. */
 export type Caller =
@@ -85,71 +85,71 @@ type Access = "open" | "tool" | "session" | "machine" | "machine-proof";
 
 /** Every route that is not the owner's alone, by method (`*` any) and path. */
 const RULES: readonly [string, RegExp, Access][] = [
-  ["GET", /^\/health$/, "open"],
-  ["GET", /^\/install\.sh$/, "open"],
+  ["GET", /^\/health$/u, "open"],
+  ["GET", /^\/install\.sh$/u, "open"],
   // A command route's installer says how it ended; its one-time code is its credential.
-  ["POST", /^\/api\/installs\/code\/[^/]+\/ended$/, "open"],
-  ["GET", /^\/api\/auth$/, "open"],
-  ["POST", /^\/api\/pair$/, "open"],
-  ["POST", /^\/api\/pair\/poll$/, "open"],
-  ["GET", /^\/ws$/, "open"],
+  ["POST", /^\/api\/installs\/code\/[^/]+\/ended$/u, "open"],
+  ["GET", /^\/api\/auth$/u, "open"],
+  ["POST", /^\/api\/pair$/u, "open"],
+  ["POST", /^\/api\/pair\/poll$/u, "open"],
+  ["GET", /^\/ws$/u, "open"],
   // An artifact tab's socket reads its caller at its open and refuses it
   // there with a close the tab can read (server.ts, ARTIFACT_SESSION_REFUSED).
-  ["GET", /^\/ws\/artifact-session\/[^/]+\/[^/]+$/, "open"],
-  ["*", /^\/git\//, "open"],
-  ["POST", /^\/api\/delegation\/call\/[^/]+$/, "open"],
-  ["POST", /^\/api\/session-identities\/ack$/, "open"],
-  ["*", /^\/mcp\/cawco$/, "open"],
-  ["*", /^\/mcp\/fleet\/[^/]+$/, "tool"],
-  ["GET", /^\/api\/delegation\/tools$/, "tool"],
-  ["GET", /^\/api\/instances$/, "tool"],
-  ["*", /^\/api\/work-items(?:\/.*)?$/, "session"],
+  ["GET", /^\/ws\/artifact-session\/[^/]+\/[^/]+$/u, "open"],
+  ["*", /^\/git\//u, "open"],
+  ["POST", /^\/api\/delegation\/call\/[^/]+$/u, "open"],
+  ["POST", /^\/api\/session-identities\/ack$/u, "open"],
+  ["*", /^\/mcp\/cawco$/u, "open"],
+  ["*", /^\/mcp\/fleet\/[^/]+$/u, "tool"],
+  ["GET", /^\/api\/delegation\/tools$/u, "tool"],
+  ["GET", /^\/api\/instances$/u, "tool"],
+  ["*", /^\/api\/work-items(?:\/.*)?$/u, "session"],
   [
     "GET",
-    /^\/api\/binary-updates\/(?:settings|latest|release|hub-readiness)$/,
+    /^\/api\/binary-updates\/(?:settings|latest|release|hub-readiness)$/u,
     "machine",
   ],
-  ["GET", /^\/api\/binary-updates\/artifacts\/[^/]+\/[^/]+$/, "machine"],
-  ["POST", /^\/api\/binary-updates\/hub-fence$/, "machine"],
+  ["GET", /^\/api\/binary-updates\/artifacts\/[^/]+\/[^/]+$/u, "machine"],
+  ["POST", /^\/api\/binary-updates\/hub-fence$/u, "machine"],
   // A release just published on a machine (scripts/release.ts): the hub looks
   // at its release host now, not when its cached release ages out.
-  ["POST", /^\/api\/binary-updates\/check$/, "machine"],
+  ["POST", /^\/api\/binary-updates\/check$/u, "machine"],
   // What the landing gate passed on a tree, which a release asks before it
   // checks a commit again (scripts/release.ts `gatePassed`).
-  ["GET", /^\/api\/landing-gate$/, "machine"],
-  ["PUT", /^\/api\/binary-updates\/machines\/[^/]+\/state$/, "machine"],
+  ["GET", /^\/api\/landing-gate$/u, "machine"],
+  ["PUT", /^\/api\/binary-updates\/machines\/[^/]+\/state$/u, "machine"],
   // A file a reader attached, by the hash a send names: the session's
   // machine fetches it (agent attachments.ts).
-  ["GET", /^\/api\/files\/[0-9a-f]{64}$/, "machine"],
+  ["GET", /^\/api\/files\/[0-9a-f]{64}$/u, "machine"],
   // The names previews stand on, which a machine's browser containers map
   // when they resolve to its loopback (agent container-host.ts).
-  ["GET", /^\/api\/preview-names$/, "machine"],
+  ["GET", /^\/api\/preview-names$/u, "machine"],
   // A machine's own row and busy count; the fleet's list stays the person's.
-  ["GET", /^\/api\/agents\/[^/]+$/, "machine"],
-  ["GET", /^\/api\/agents\/[^/]+\/busy$/, "machine"],
+  ["GET", /^\/api\/agents\/[^/]+$/u, "machine"],
+  ["GET", /^\/api\/agents\/[^/]+\/busy$/u, "machine"],
   // A workspace's post held for the person (upstream-asks.ts), raised by its machine.
-  ["POST", /^\/api\/upstream\/asks$/, "machine"],
+  ["POST", /^\/api\/upstream\/asks$/u, "machine"],
   // Where a project's large files live, and a .lfsconfig its git-lfs refused (agent host-lfs.ts).
-  ["GET", /^\/api\/lfs\/projects\/[^/]+$/, "machine"],
-  ["POST", /^\/api\/lfs\/projects\/[^/]+\/refused$/, "machine"],
-  ["POST", /^\/api\/session-identities\/install$/, "machine-proof"],
+  ["GET", /^\/api\/lfs\/projects\/[^/]+$/u, "machine"],
+  ["POST", /^\/api\/lfs\/projects\/[^/]+\/refused$/u, "machine"],
+  ["POST", /^\/api\/session-identities\/install$/u, "machine-proof"],
 ];
 
 /** A browser's take-over and hand-back (browsers.ts): the person's act alone, refused to a session in its own words. */
-const TAKEOVER_ROUTE = /^\/api\/browsers\/[^/]+\/(?:takeover|handback)$/;
+const TAKEOVER_ROUTE = /^\/api\/browsers\/[^/]+\/(?:takeover|handback)$/u;
 const TAKEOVER_REFUSED = "Only the person takes over";
 /** Forgetting a browser's sign-ins (browsers.ts `/remove`): the person's alone, in the same words' shape. */
-const REMOVE_ROUTE = /^\/api\/browsers\/[^/]+\/remove$/;
+const REMOVE_ROUTE = /^\/api\/browsers\/[^/]+\/remove$/u;
 const REMOVE_REFUSED = "Only the person forgets a browser's sign-ins";
 
 /** A browser view's routes (browser-routes.ts), where the view's own client sends a Bearer that is no credential of the hub's. */
-const BROWSER_VIEW = /^\/ws\/browser\/[^/]+\/[^/]+\/(?:api(?:\/.*)?|cdp)$/;
+const BROWSER_VIEW = /^\/ws\/browser\/[^/]+\/[^/]+\/(?:api(?:\/.*)?|cdp)$/u;
 
 /** Machine routes that name a machine: a machine reaches them for itself alone. */
 const OWN_MACHINE: readonly RegExp[] = [
-  /^\/api\/binary-updates\/machines\/([^/]+)\/state$/,
-  /^\/api\/agents\/([^/]+)$/,
-  /^\/api\/agents\/([^/]+)\/busy$/,
+  /^\/api\/binary-updates\/machines\/([^/]+)\/state$/u,
+  /^\/api\/agents\/([^/]+)$/u,
+  /^\/api\/agents\/([^/]+)\/busy$/u,
 ];
 
 const namesAnother = (path: string, machineId: string): boolean =>
@@ -202,19 +202,19 @@ const userCode = (): string => {
 
 /** A user agent's browser, first match wins (Edge's says Chrome too, Chrome's says Safari). */
 const BROWSERS: readonly [RegExp, string][] = [
-  [/Edg\//, "Edge"],
-  [/Firefox\//, "Firefox"],
-  [/Chrome\//, "Chrome"],
-  [/Safari\//, "Safari"],
+  [/Edg\//u, "Edge"],
+  [/Firefox\//u, "Firefox"],
+  [/Chrome\//u, "Chrome"],
+  [/Safari\//u, "Safari"],
 ];
 /** Its system, first match wins (an iPhone's says Mac OS X). */
 const SYSTEMS: readonly [RegExp, string][] = [
-  [/iPhone/, "iPhone"],
-  [/iPad/, "iPad"],
-  [/Android/, "Android"],
-  [/Mac OS X|Macintosh/, "macOS"],
-  [/Windows/, "Windows"],
-  [/Linux/, "Linux"],
+  [/iPhone/u, "iPhone"],
+  [/iPad/u, "iPad"],
+  [/Android/u, "Android"],
+  [/Mac OS X|Macintosh/u, "macOS"],
+  [/Windows/u, "Windows"],
+  [/Linux/u, "Linux"],
 ];
 
 /** "Chrome on Linux", from a browser's user agent; "A browser" when it says nothing known. */
@@ -228,7 +228,7 @@ export const browserName = (userAgent: string | null): string => {
 
 /** A client's own name for itself, kept short and on one line. */
 const cleanName = (name: string | undefined, fallback: string): string =>
-  name?.replace(/\s+/g, " ").trim().slice(0, 60) || fallback;
+  name?.replace(/\s+/gu, " ").trim().slice(0, 60) || fallback;
 
 interface Pairing extends PairingRequest {
   /** Set once approved: the device made, and its token until the client takes it. */

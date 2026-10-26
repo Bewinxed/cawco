@@ -17,12 +17,12 @@ import { BUNDLED_SKILLS, TEMPLATE_SKILLS } from "../src/bundled-skills";
 
 /** Claude Code's longest skill description. */
 const DESCRIPTION_LIMIT = 1024;
-const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
+const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/u;
 const CALL = "artifact_create(";
-const LEADING_SPACE = /^ /;
-const ABOUT = /\babout\b/;
+const LEADING_SPACE = /^ /u;
+const ABOUT = /\babout\b/u;
 /** `does` as a field: `does: "judge"`, or the shorthand `{ kind, does, ask }`. */
-const DOES = /\bdoes\s*[:,}]/;
+const DOES = /\bdoes\s*[:,}]/u;
 
 const ROOT = join(import.meta.dir, "../skills");
 
@@ -44,7 +44,7 @@ const fieldsOf = (block: string): Map<string, string> =>
 
 /** The code span holding `at` on `line` (between backticks), else the whole line. */
 const spanAround = (line: string, at: number): string => {
-  const ticks = [...line.matchAll(/`/g)].map((match) => match.index ?? 0);
+  const ticks = [...line.matchAll(/`/gu)].map((match) => match.index ?? 0);
   for (let index = 0; index + 1 < ticks.length; index += 2) {
     const open = ticks[index] as number;
     const close = ticks[index + 1] as number;

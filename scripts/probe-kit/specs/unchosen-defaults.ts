@@ -78,12 +78,12 @@ import {
 import { startsWith } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const SERVE = join(ROOT, "apps/dashboard/serve.js");
 /** The fleet board's ways into the New Session dialog. */
-const STARTER = /^(New session|Start session)$/;
-const MACHINES = /^Machines:/;
+const STARTER = /^(New session|Start session)$/u;
+const MACHINES = /^Machines:/u;
 const PERMISSION = startsWith(spawnWords.permissionModeHead);
 /** What the probe's OpenCode says as it refuses to start. */
 const OPENCODE_REFUSES = "probe: this opencode will not start";
@@ -134,7 +134,7 @@ const pageOf = (heading: string) =>
 /** A page whose one button asks `cawco.pickPlace()` (check 9). */
 const PICK_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Place</title></head><body><h1>Place</h1><button type="button" data-pick>Choose a machine and folder</button><script>document.querySelector("[data-pick]").addEventListener("click", () => window.cawco.pickPlace().catch(() => null));</script></body></html>`;
 /** The hub's address scheme, swapped for its socket's. */
-const HTTP = /^http/;
+const HTTP = /^http/u;
 
 /** The hub's online word on the fleet's machine. */
 const machineOnline = async (fleet: KitFleet): Promise<boolean> =>

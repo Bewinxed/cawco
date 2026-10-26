@@ -110,67 +110,67 @@ const { parse } = (await import(
 // ---------------------------------------------------------------------------
 // Patterns.
 
-const WHITESPACE = /\s+/;
-const LEADING_SPACE = /^\s/;
-const TRAILING_SPACE = /\s$/;
-const APPLE_SPEC = /^(ios-|mac-|apple-|keychain-)/;
-const CLASS_NAME = /^-?[a-zA-Z_][\w-]*/;
-const ID_NAME = /^-?[a-zA-Z_\uE000][\w\-\uE000]*/;
-const PSEUDO_NAME = /^:?[a-z][a-z-]*/;
-const WORD = /^[a-zA-Z][\w-]*/;
-const LETTER = /[a-zA-Z]/;
-const COMBINATOR = /[\s>+~,*\uE000]/;
-const ARGUMENT = /[\w+-]/;
-const COMPOUND_AFTER = /[.[:#]/;
-const COMPOUND_BEFORE = /[\w\])]/;
-const BACKSLASH = /\\/;
-const PLACEHOLDER = /\uE000/g;
-const JS_EXT = /\.js$/;
-const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g;
-const LINE_COMMENT = /\/\/.*$/gm;
-const HTML_COMMENT = /<!--[\s\S]*?-->/g;
-const TYPE_PREFIX = /^type\s+/;
-const AS = /\s+as\s+/;
-const DEFAULT_IMPORT = /import\s+(\w+)\s+from\s+["']([^"']+)["']/g;
-const EXPORT_LIST = /export\s*\{([^}]*)\}\s*(?:from\s*["']([^"']+)["'])?/g;
+const WHITESPACE = /\s+/u;
+const LEADING_SPACE = /^\s/u;
+const TRAILING_SPACE = /\s$/u;
+const APPLE_SPEC = /^(ios-|mac-|apple-|keychain-)/u;
+const CLASS_NAME = /^-?[a-zA-Z_][\w-]*/u;
+const ID_NAME = /^-?[a-zA-Z_\uE000][\w\-\uE000]*/u;
+const PSEUDO_NAME = /^:?[a-z][a-z-]*/u;
+const WORD = /^[a-zA-Z][\w-]*/u;
+const LETTER = /[a-zA-Z]/u;
+const COMBINATOR = /[\s>+~,*\uE000]/u;
+const ARGUMENT = /[\w+-]/u;
+const COMPOUND_AFTER = /[.[:#]/u;
+const COMPOUND_BEFORE = /[\w\])]/u;
+const BACKSLASH = /\\/u;
+const PLACEHOLDER = /\uE000/gu;
+const JS_EXT = /\.js$/u;
+const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//gu;
+const LINE_COMMENT = /\/\/.*$/gmu;
+const HTML_COMMENT = /<!--[\s\S]*?-->/gu;
+const TYPE_PREFIX = /^type\s+/u;
+const AS = /\s+as\s+/u;
+const DEFAULT_IMPORT = /import\s+(\w+)\s+from\s+["']([^"']+)["']/gu;
+const EXPORT_LIST = /export\s*\{([^}]*)\}\s*(?:from\s*["']([^"']+)["'])?/gu;
 // `import A from`, `import * as A from`, `import { A } from`, `import A, { B } from`.
 const ANY_IMPORT =
-  /import\s+(?:(\w+)\s*,?\s*)?(?:\*\s+as\s+(\w+)|\{([^}]*)\})?\s*from\s+["']([^"']+)["']/g;
-const CAMEL = /([a-z0-9])([A-Z])/g;
-const ROUTE_PUNCTUATION = /[[\]()]/g;
-const LIBRARY_ATTR = /data-([a-z][a-z0-9-]*[a-z0-9])/g;
-const ATTR_SELECTOR = /\[data-([a-z][a-z0-9-]*[a-z0-9])/g;
-const ATTR_VARIANT = /data-([a-z][a-z0-9-]*[a-z0-9])(?:\/[\w-]+)?:/g;
-const ATTR_ARBITRARY = /data-\[([a-z][a-z0-9-]*)/g;
+  /import\s+(?:(\w+)\s*,?\s*)?(?:\*\s+as\s+(\w+)|\{([^}]*)\})?\s*from\s+["']([^"']+)["']/gu;
+const CAMEL = /([a-z0-9])([A-Z])/gu;
+const ROUTE_PUNCTUATION = /[[\]()]/gu;
+const LIBRARY_ATTR = /data-([a-z][a-z0-9-]*[a-z0-9])/gu;
+const ATTR_SELECTOR = /\[data-([a-z][a-z0-9-]*[a-z0-9])/gu;
+const ATTR_VARIANT = /data-([a-z][a-z0-9-]*[a-z0-9])(?:\/[\w-]+)?:/gu;
+const ATTR_ARBITRARY = /data-\[([a-z][a-z0-9-]*)/gu;
 const ATTR_READ =
-  /(?:get|has|set|toggle|remove)Attribute\(\s*["'`]data-([a-z][\w-]*)/g;
-const DATASET = /\bdataset\.([a-zA-Z]\w*)/g;
-const ATTR_SET = /(?:set|toggle)Attribute\(\s*["'`]data-([a-z][\w-]*)/g;
-const CLASS_LIST = /classList\.(?:add|toggle)\(([^)]*)\)/g;
-const QUOTED_WORD = /["'`]([\w-]+)["'`]/g;
+  /(?:get|has|set|toggle|remove)Attribute\(\s*["'`]data-([a-z][\w-]*)/gu;
+const DATASET = /\bdataset\.([a-zA-Z]\w*)/gu;
+const ATTR_SET = /(?:set|toggle)Attribute\(\s*["'`]data-([a-z][\w-]*)/gu;
+const CLASS_LIST = /classList\.(?:add|toggle)\(([^)]*)\)/gu;
+const QUOTED_WORD = /["'`]([\w-]+)["'`]/gu;
 const SLOT_SET =
-  /setAttribute\(\s*["'`]data-slot["'`]\s*,\s*["'`]([\w-]+)["'`]/g;
+  /setAttribute\(\s*["'`]data-slot["'`]\s*,\s*["'`]([\w-]+)["'`]/gu;
 const CLASS_SET =
-  /(?:className\s*=|setAttribute\(\s*["'`]class["'`]\s*,)\s*["'`]([^"'`]+)["'`]/g;
+  /(?:className\s*=|setAttribute\(\s*["'`]class["'`]\s*,)\s*["'`]([^"'`]+)["'`]/gu;
 const SLOT_SELECTOR =
-  /(?:\[data-slot|data-\[slot)[~|^$*]?=\\?["']?([a-zA-Z][\w-]*)/g;
-const LIBRARY_FILE = /\.(js|svelte|css|mjs)$/;
-const OWN_FILE = /\.(svelte|ts|js|css)$/;
-const AGENT_FILE = /\.(ts|css|svelte|html)$/;
-const SPACES = /\s+/g;
-const SPACES_AND_PARENS = /[\s()]+/g;
-const IDENT = /^[A-Za-z_$][\w$]*/;
-const MEMBER = /^[A-Za-z_$][\w$]*\??\.([A-Za-z_$][\w$]*)$/;
-const STRING_LITERAL = /["'`]([^"'`\n]*)["'`]/g;
-const CALLEE = /\b([A-Za-z_$][\w$]*)\s*\(/g;
-const OUTER_PARENS = /^\((.*)\)$/;
+  /(?:\[data-slot|data-\[slot)[~|^$*]?=\\?["']?([a-zA-Z][\w-]*)/gu;
+const LIBRARY_FILE = /\.(js|svelte|css|mjs)$/u;
+const OWN_FILE = /\.(svelte|ts|js|css)$/u;
+const AGENT_FILE = /\.(ts|css|svelte|html)$/u;
+const SPACES = /\s+/gu;
+const SPACES_AND_PARENS = /[\s()]+/gu;
+const IDENT = /^[A-Za-z_$][\w$]*/u;
+const MEMBER = /^[A-Za-z_$][\w$]*\??\.([A-Za-z_$][\w$]*)$/u;
+const STRING_LITERAL = /["'`]([^"'`\n]*)["'`]/gu;
+const CALLEE = /\b([A-Za-z_$][\w$]*)\s*\(/gu;
+const OUTER_PARENS = /^\((.*)\)$/u;
 const ARIA_TERNARY =
-  /^(.*)\?\s*["']([\w-]+)["']\s*:\s*(undefined|false|null|"false")$/s;
-const SIMPLE = /^[\w$.]+$/;
-const GLUE_END = /[-_]$/;
-const GLUE_START = /^[-_]/;
-const DIGITS = /^\d+$/;
-const QUOTE = /"/g;
+  /^(.*)\?\s*["']([\w-]+)["']\s*:\s*(undefined|false|null|"false")$/su;
+const SIMPLE = /^[\w$.]+$/u;
+const GLUE_END = /[-_]$/u;
+const GLUE_START = /^[-_]/u;
+const DIGITS = /^\d+$/u;
+const QUOTE = /"/gu;
 
 // ---------------------------------------------------------------------------
 // Files.
@@ -874,7 +874,7 @@ const passedNone = (why: string): Passed => ({
  * `<svg {...props}>`), and set no `data-slot` of their own.
  */
 const SPREADING_LIBRARY =
-  /^(bits-ui|vaul-svelte|paneforge|svelte-sonner|~icons\/|\(local\))/;
+  /^(bits-ui|vaul-svelte|paneforge|svelte-sonner|~icons\/|\(local\))/u;
 
 interface Props {
   classProp?: string;
@@ -968,7 +968,7 @@ function passThrough(component: string, file: string, depth = 0): Passed {
   }
   // A class prop lands where its name is in a class; one left in the rest
   // props lands where they are spread.
-  const reaches = new RegExp(`\\b${classProp}\\b`);
+  const reaches = new RegExp(`\\b${classProp}\\b`, "u");
   const receiving = elements.filter(
     (el) =>
       el.file === path &&
@@ -1138,7 +1138,7 @@ const AGENT_TEXT = walk(join(ROOT, "packages", "agent", "src"), (f) =>
 collect(takenAttrs, [AGENT_TEXT], LIBRARY_ATTR);
 collect(takenSlots, [AGENT_TEXT], SLOT_SELECTOR);
 const mentions = (cls: string, text: string): boolean =>
-  new RegExp(`(^|[^\\w-])${cls.replaceAll("-", "\\-")}([^\\w-]|$)`).test(text);
+  new RegExp(`(^|[^\\w-])${RegExp.escape(cls)}([^\\w-]|$)`, "u").test(text);
 const agentRenders = (cls: string): boolean => mentions(cls, AGENT_TEXT);
 /** The dashboard's source without its comments, where prose names words no element carries. */
 const OWN_CODE = OWN_TEXT.join("\n")
@@ -1288,7 +1288,7 @@ function containsCall(node: ts.Node): {
 }
 
 /** DOM packages/agent renders: the preview overlay's shadow root, the canvas host's frame. */
-const AGENT_DOM = /shadowRoot|contentFrame|frameLocator|\.frame\(|frames\(\)/;
+const AGENT_DOM = /shadowRoot|contentFrame|frameLocator|\.frame\(|frames\(\)/u;
 
 /**
  * Whether a selector (or a `classList` receiver) reads DOM packages/agent
@@ -1455,7 +1455,7 @@ for (const file of SPEC_FILES) {
 
 /** Classes whose DOM a library renders, or the kit's own recipes: they stay. */
 const KEPT =
-  /^(kit-|cm-|ec-|pswp|svelte-flow|xyflow|react-flow|sonner|shiki|milkdown|ProseMirror|streamdown|vaul|bits-|diffs?-|katex|hljs|mermaid|excalidraw|tippy)/;
+  /^(kit-|cm-|ec-|pswp|svelte-flow|xyflow|react-flow|sonner|shiki|milkdown|ProseMirror|streamdown|vaul|bits-|diffs?-|katex|hljs|mermaid|excalidraw|tippy)/u;
 const KEPT_EXACT = new Set(["dark", "light", "sr-only", "line", "token"]);
 
 /**
@@ -1796,7 +1796,8 @@ function sourcesOf(file: string): string[] {
 function valuesFor(cls: string): string[] {
   // A word of a string literal: `"caw-pop gap-0"`, `` `${peer} approve` ``.
   const quoted = new RegExp(
-    `["'\`]([^"'\`\\n]*\\s)?${cls.replaceAll("-", "\\-")}(\\s[^"'\`\\n]*)?["'\`]`
+    `["'\`]([^"'\`\\n]*\\s)?${RegExp.escape(cls)}(\\s[^"'\`\\n]*)?["'\`]`,
+    "u"
   );
   const values = valueHooks
     .filter((v) => {
@@ -1895,7 +1896,7 @@ function localWords(
   ]);
   // A member's value: only the literals given to it (`tone: "failed"`).
   const given = member
-    ? new RegExp(`\\b${member}\\s*:\\s*["'\`]([^"'\`\\n]*)["'\`]`, "g")
+    ? new RegExp(`\\b${member}\\s*:\\s*["'\`]([^"'\`\\n]*)["'\`]`, "gu")
     : null;
   const out = new Set(
     bodies.flatMap((body) =>
@@ -1911,7 +1912,7 @@ function localWords(
 function memberWords(member: string): Set<string> | null {
   const given = new RegExp(
     `\\b${member}\\s*:\\s*["'\`]([^"'\`\\n]*)["'\`]`,
-    "g"
+    "gu"
   );
   const out = new Set(
     [...OWN_CODE.matchAll(given)].flatMap((m) => words(m[1] as string))
@@ -1920,7 +1921,7 @@ function memberWords(member: string): Set<string> | null {
 }
 
 const constTag = (name: string): RegExp =>
-  new RegExp(`\\{@const\\s+${name}\\s*=\\s*([^\\n]*)\\}`, "g");
+  new RegExp(`\\{@const\\s+${name}\\s*=\\s*([^\\n]*)\\}`, "gu");
 
 /** The source of `name`'s declarations (its initializer, a function's body) and of every assignment to it, in a script. */
 function definitionsOf(script: string, name: string): string[] {

@@ -237,15 +237,15 @@ export const longestIn = (tasks: MainTask[], from: number, to: number) =>
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
-const COMMAND = /PROBE-CALL:(\d+)/g;
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const FRAME = 'iframe[title="Preview"]';
 const CANVAS_FRAME =
   '[data-slot="canvas-stage"][data-canvas-stages-docked] iframe';
 /** A mark's section in what the session hears. */
-const SECTION = /^## /m;
+const SECTION = /^## /mu;
 /** A pen stroke in a canvas's outline. */
-const INK_LINE = /^ink /m;
+const INK_LINE = /^ink /mu;
 
 const page = (spacer: boolean, para: boolean) => `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">

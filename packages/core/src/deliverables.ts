@@ -33,11 +33,11 @@ export type DeliverableKind =
   "post" | "markdown" | "image" | "video" | "audio" | "file";
 
 const KINDS: [RegExp, DeliverableKind][] = [
-  [/\.post\.json$/i, "post"],
-  [/\.(md|markdown)$/i, "markdown"],
-  [/\.(png|jpe?g|gif|webp|avif|svg)$/i, "image"],
-  [/\.(mp4|webm|mov|m4v)$/i, "video"],
-  [/\.(mp3|m4a|wav|ogg|oga|flac|aac)$/i, "audio"],
+  [/\.post\.json$/iu, "post"],
+  [/\.(md|markdown)$/iu, "markdown"],
+  [/\.(png|jpe?g|gif|webp|avif|svg)$/iu, "image"],
+  [/\.(mp4|webm|mov|m4v)$/iu, "video"],
+  [/\.(mp3|m4a|wav|ogg|oga|flac|aac)$/iu, "audio"],
 ];
 
 export const deliverableKind = (path: string): DeliverableKind =>
@@ -99,7 +99,7 @@ export function parsePost(
 export const POST_LIMIT = 280;
 /** Every link counts as this many characters on X (t.co), however long it is. */
 const LINK_WEIGHT = 23;
-const LINK = /https?:\/\/[^\s]+/g;
+const LINK = /https?:\/\/[^\s]+/gu;
 
 /**
  * A post's length as X counts it: a link is 23 whatever its length, a line

@@ -839,7 +839,7 @@ export interface TodoChanges {
 const TITLE_LIMIT = 200;
 const TODO_LIMIT = 500;
 /** A to-do line promoted to a task: `- [ ] Persist it → #152` (task-file.ts `PROMOTED`), its number apart. */
-const PROMOTED_TODO = /^(\s*- \[[ xX]\] .*?(?:→|->)\s*#)(\d{1,9})(?=\s*$)/gm;
+const PROMOTED_TODO = /^(\s*- \[[ xX]\] .*?(?:→|->)\s*#)(\d{1,9})(?=\s*$)/gmu;
 const TEXT_LIMIT = 20_000;
 const ITEM_LIMIT = 200;
 /** How many numberings a create or merge tries while files keep landing on the numbers it took. */
@@ -851,10 +851,10 @@ const sameNumber: Exclusive = (name, rel) => {
   return number !== undefined && fileTaskNumber(name) === number;
 };
 const LIST_LIMIT = 50;
-const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
-const SECTION_LINE = /^##\s/m;
-const TODO_MARKER_START = /^\[td-\d+\]/;
-const LINE_BREAK = /[\r\n]/;
+const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
+const SECTION_LINE = /^##\s/mu;
+const TODO_MARKER_START = /^\[td-\d+\]/u;
+const LINE_BREAK = /[\r\n]/u;
 
 /** The project folder's stages file, and the template that stands in while there is none. */
 /** A project's stages, in its folder (§5.2). */
@@ -895,7 +895,7 @@ const refuse = (code: 400 | 403 | 404 | 409 | 422, message: string): never => {
 const hashOf = (content: string): string =>
   new Bun.CryptoHasher("sha256").update(content).digest("hex");
 
-const WEB_LINK = /^https?:\/\//i;
+const WEB_LINK = /^https?:\/\//iu;
 
 /**
  * Refuses an artifact a result may not hand in, in a sentence naming it: a
@@ -1080,7 +1080,7 @@ const extraFieldsOf = (
   });
 };
 
-const COMMENT_ENTRY_LINE = /^###\s/m;
+const COMMENT_ENTRY_LINE = /^###\s/mu;
 
 /** A comment's text: markdown that opens neither a section nor a comment entry of its own. */
 const commentText = (text: string): string => {
@@ -1559,7 +1559,7 @@ const actorTrailer = (actor: TaskActor): string => {
   return actor.routineId ? `routine:${actor.routineId}` : actor.mover;
 };
 
-const WHITESPACE = /\s+/g;
+const WHITESPACE = /\s+/gu;
 
 /**
  * A task commit's message: the subject as people read it (`task tsk-12:

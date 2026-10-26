@@ -463,7 +463,7 @@ export interface SettledInstance {
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /** A folder's trailing slashes, which {@link DbShape.projectHolding} reads past. */
-const TRAILING_SLASHES = /\/+$/;
+const TRAILING_SLASHES = /\/+$/u;
 
 /**
  * Whether a sleeping row stays listed however long it sleeps: a person's

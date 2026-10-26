@@ -128,7 +128,7 @@ export async function canvasHostAssets(
   ];
 }
 
-const LEADING_SLASHES = /^\/+/;
+const LEADING_SLASHES = /^\/+/u;
 
 const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",

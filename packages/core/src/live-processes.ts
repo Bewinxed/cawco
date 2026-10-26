@@ -33,18 +33,18 @@ interface LiveProcess {
   settingsFile?: string;
 }
 
-const NUMERIC = /^\d+$/;
+const NUMERIC = /^\d+$/u;
 /**
  * `--settings <file>` or `--settings=<file>`, as `ps` joins it on macOS: the
  * file ends where the argument does. The Agent SDK sends `--flag=value` since
  * 0.3.295 ("the values of its named options are now sent in the same argument
  * as their flag").
  */
-const SETTINGS_FILE = /--settings[=\s]+(\/\S+)/;
+const SETTINGS_FILE = /--settings[=\s]+(\/\S+)/u;
 const SETTINGS_FLAG = "--settings";
 /** A build's folder name, up to the separator or quote that ends it inside a path or a JSON string. */
-const VERSION_NAME = /^[^/\s'"\\]+/;
-const BLANKS = /\s+/;
+const VERSION_NAME = /^[^/\s'"\\]+/u;
+const BLANKS = /\s+/u;
 
 const readOr = (read: () => string): string | undefined => {
   try {
@@ -187,7 +187,7 @@ const under = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 
 /** Linux names a working directory deleted under its process so. */
-const DELETED = / \(deleted\)$/;
+const DELETED = / \(deleted\)$/u;
 
 /**
  * Every process this user can see that runs from inside one of `roots`

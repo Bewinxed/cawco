@@ -17,11 +17,11 @@ export interface ModelEntry {
   released?: string;
 }
 
-const CLAUDE_PREFIX = /^claude-/;
-const CONTEXT_SUFFIX = /\[1m\]$/i;
-const VERSION = /^v?\d+(?:\.\d+)*$/;
-const VERSION_PREFIX = /^v/;
-const ID_SHAPE = /^[\w.\-/[\]:]+$/;
+const CLAUDE_PREFIX = /^claude-/u;
+const CONTEXT_SUFFIX = /\[1m\]$/iu;
+const VERSION = /^v?\d+(?:\.\d+)*$/u;
+const VERSION_PREFIX = /^v/u;
+const ID_SHAPE = /^[\w.\-/[\]:]+$/u;
 
 /** A model's display name as the picker lists it, e.g. "Opus 5.5 · 1M". */
 export function modelName(id: string, displayName?: string) {

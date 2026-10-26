@@ -102,9 +102,9 @@ const GITHUB_EVENTS = [
   "discussion",
   "discussion_comment",
 ] as const;
-const ID = /^\/hooks\/([A-Za-z0-9_-]{22})$/;
-const HEADER = /^[A-Za-z0-9-]{1,64}$/;
-const HEX = /^[0-9a-f]{64}$/;
+const ID = /^\/hooks\/([A-Za-z0-9_-]{22})$/u;
+const HEADER = /^[A-Za-z0-9-]{1,64}$/u;
+const HEX = /^[0-9a-f]{64}$/u;
 const SHA256_PREFIX = "sha256=";
 
 /**

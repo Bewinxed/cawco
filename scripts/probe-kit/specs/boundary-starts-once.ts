@@ -45,7 +45,7 @@ type Harness = keyof typeof MODEL;
 const HARNESSES: readonly Harness[] = ["claude", "opencode", "pi"];
 
 const tagOf = (harness: Harness) => `PROBE-ONCE-${harness.toUpperCase()}:`;
-const TAG = /PROBE-ONCE-([A-Z]+):/;
+const TAG = /PROBE-ONCE-([A-Z]+):/u;
 /** The command's mark, spelled apart in the command so only its output carries it whole. */
 const ranMark = (harness: Harness) => `ONCE-RAN-${harness.toUpperCase()}`;
 

@@ -26,7 +26,7 @@ import type { LimitWindow } from "./types";
 const DEFAULT_BASE_URL = "https://chatgpt.com/backend-api";
 const TIMEOUT_MS = 10_000;
 
-const TRAILING_SLASHES = /\/+$/;
+const TRAILING_SLASHES = /\/+$/u;
 
 export const chatgptBaseUrl = (): string =>
   (process.env.CAWCO_CHATGPT_BASE_URL || DEFAULT_BASE_URL).replace(

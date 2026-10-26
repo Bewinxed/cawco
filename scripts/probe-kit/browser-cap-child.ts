@@ -18,7 +18,7 @@ const { Run } = await import("./kit");
 const engine = (process.argv[2] ?? "chromium") as Engine;
 const capGiB = Number(process.argv[3] ?? "1.5");
 const GIB = 1024 ** 3;
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 /** How long the runaway page has to reach the cap before the spec gives up on it. */
 const GROW_MS = 120_000;
 

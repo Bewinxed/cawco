@@ -76,7 +76,7 @@
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
 
-  const WHITESPACE = /\s+/;
+  const WHITESPACE = /\s+/u;
 
   /**
    * The hook editor. A hook reads back as a sentence like a rule does, but it

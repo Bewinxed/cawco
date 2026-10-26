@@ -386,7 +386,7 @@ export const parentProblem = (
  * `host:`, as `host: bun scripts/probe-kit/run.ts x`. No attempt can run it
  * inside its workspace.
  */
-const HOST_CHECK = /^host:\s*/;
+const HOST_CHECK = /^host:\s*/u;
 
 /**
  * The brief's line for one task check: the command to run and quote, or a
@@ -462,7 +462,7 @@ export interface RetryContext {
 
 /** The longest stretch of a failure a retry's brief carries: its end. */
 const FAILURE_TAIL = 4000;
-const BACKTICKS = /`+/g;
+const BACKTICKS = /`+/gu;
 
 /** An attempt by its session's link, labelled by its task's title: what a comment or a message names it by. */
 const attemptNamed = (

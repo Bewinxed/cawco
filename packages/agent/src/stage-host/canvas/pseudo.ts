@@ -38,13 +38,13 @@ const PREFIX = "cawco-";
 /** The class a frame's body carries to force a state on everything in it. */
 export const allClass = (state: PseudoState): string => `${PREFIX}${state}-all`;
 
-const selectorStartPattern = /[|>+~,\s(]/;
-const pseudoStatePattern = new RegExp(`:(${PSEUDO_STATES.join("|")})`, "g");
+const selectorStartPattern = /[|>+~,\s(]/u;
+const pseudoStatePattern = new RegExp(`:(${PSEUDO_STATES.join("|")})`, "gu");
 const excludedPseudoElementPattern = new RegExp(
   `(?:${EXCLUDED_PSEUDO_ELEMENT_PATTERNS.join("|")})\\S*`,
-  "g"
+  "gu"
 );
-const BLANK_ITEMS = /([\s(]),\s+|(,\s+)+(?=\))/g;
+const BLANK_ITEMS = /([\s(]),\s+|(,\s+)+(?=\))/gu;
 
 interface PseudoStateMatch {
   index: number;
@@ -300,8 +300,8 @@ export function rewriteSheet(sheet: CSSStyleSheet, into: Rewrite): void {
 
 /* --- Reduced motion -------------------------------------------------- */
 
-const REDUCE = /\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)/g;
-const NO_PREFERENCE = /\(\s*prefers-reduced-motion\s*:\s*no-preference\s*\)/g;
+const REDUCE = /\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)/gu;
+const NO_PREFERENCE = /\(\s*prefers-reduced-motion\s*:\s*no-preference\s*\)/gu;
 const ORIGINAL_MEDIA = new WeakMap<CSSMediaRule, string>();
 
 /**

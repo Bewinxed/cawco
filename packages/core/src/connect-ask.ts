@@ -87,7 +87,7 @@ export const connectAnswerOf = (
   return { outcome: "connected", server, as: as || null, access };
 };
 
-const CONNECT_ASK_NAME = /(?:^|_)connect_ask$/;
+const CONNECT_ASK_NAME = /(?:^|_)connect_ask$/u;
 
 /** A tool name that is the connect ask, under any harness's naming of it (`mcp__cawco__…`, `cawco_…`). */
 export const isConnectAskTool = (name: string | undefined): boolean =>

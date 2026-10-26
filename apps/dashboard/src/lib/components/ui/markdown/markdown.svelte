@@ -142,7 +142,7 @@
    */
   const LINKS = ["*", "cawco:"];
 
-  const COMMENT = /<!--[\s\S]*?-->/g;
+  const COMMENT = /<!--[\s\S]*?-->/gu;
   const ESCAPES: Record<string, string> = {
     "&": "&amp;",
     "<": "&lt;",
@@ -157,7 +157,7 @@
   function literal(token: { raw: string }): string {
     return token.raw
       .replace(COMMENT, "")
-      .replace(/[&<>]/g, (character) => ESCAPES[character]);
+      .replace(/[&<>]/gu, (character) => ESCAPES[character]);
   }
 
   /**
@@ -170,7 +170,7 @@
    * message settles is drawn then, faded in like one more chunk.
    */
   const drawn = $derived(
-    marked(streaming ? source.slice(0, source.search(/\S*$/)) : source)
+    marked(streaming ? source.slice(0, source.search(/\S*$/u)) : source)
   );
 
   /**
@@ -191,7 +191,7 @@
   }
 
   /** A fence's opening or closing line: three or more backticks or tildes. */
-  const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
+  const FENCE = /^\s{0,3}(`{3,}|~{3,})/u;
 
   /**
    * Where a block can end: after a blank line outside a fence, where the

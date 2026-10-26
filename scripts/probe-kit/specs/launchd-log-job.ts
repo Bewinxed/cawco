@@ -36,7 +36,7 @@ import { type Kit, OWN_HOME_ENV, type Spec } from "../kit";
 import { checkRotation, pastCap, WRITER } from "../log-writer";
 
 const xml = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 
 const spec: Spec = {
   group: "The hub and machines",

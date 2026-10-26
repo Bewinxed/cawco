@@ -85,7 +85,7 @@ export const count = (n: number, one: string, many = `${one}s`): string =>
 
 /** Words as said, cut at `max` characters, in quotes. */
 export const quote = (text: string, max = 200): string => {
-  const flat = text.replace(/\s+/g, " ").trim();
+  const flat = text.replace(/\s+/gu, " ").trim();
   return `“${flat.length > max ? `${flat.slice(0, max - 1)}…` : flat}”`;
 };
 

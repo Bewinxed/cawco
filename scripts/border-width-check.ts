@@ -37,22 +37,22 @@ const GENERATED = new Set([
   "apps/dashboard/src/lib/tokens/theme.css",
   "packages/hub/skills/decision-page/kit/tokens.css",
 ]);
-const SOURCE = /\.(svelte|ts|tsx|css|html|js)$/;
+const SOURCE = /\.(svelte|ts|tsx|css|html|js)$/u;
 
-const DECLARATION = /--([\w-]+)\s*:\s*([^;]*);/g;
-const PX = /(-?\d*\.?\d+)px/g;
-const ALIAS = /^var\(--([\w-]+)\)$/;
-const LENGTH = /^(-?\d*\.?\d+)px$/;
-const SPACES = /\s+/g;
-const WIDTH_NAME = /(border|outline)(-[\w]+)*-(width|w)$/;
-const SHORTHAND = /(\d*\.\d+)px\s+(solid|dashed|dotted|double)/;
-const VAR = /var\(--([\w-]+)\)/g;
+const DECLARATION = /--([\w-]+)\s*:\s*([^;]*);/gu;
+const PX = /(-?\d*\.?\d+)px/gu;
+const ALIAS = /^var\(--([\w-]+)\)$/u;
+const LENGTH = /^(-?\d*\.?\d+)px$/u;
+const SPACES = /\s+/gu;
+const WIDTH_NAME = /(border|outline)(-[\w]+)*-(width|w)$/u;
+const SHORTHAND = /(\d*\.\d+)px\s+(solid|dashed|dotted|double)/u;
+const VAR = /var\(--([\w-]+)\)/gu;
 /** A class setting a border's or an outline's width: its value, bracketed, parenthesised or a bare number. */
 const CLASS =
-  /(?<![\w-])(?:[\w-]+:)*(border(?:-[xytrblse])?|outline)-(?:\[(?:length:)?([^\]\s]+)\]|\(length:(--[\w-]+)\)|(\d+\.\d+)(?![\w.-]))/g;
+  /(?<![\w-])(?:[\w-]+:)*(border(?:-[xytrblse])?|outline)-(?:\[(?:length:)?([^\]\s]+)\]|\(length:(--[\w-]+)\)|(\d+\.\d+)(?![\w.-]))/gu;
 /** A CSS declaration of a border's or an outline's width, or its shorthand. */
 const CSS_DECLARATION =
-  /(?<![\w-])(border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|outline)(-width)?\s*:\s*([^;}"'`\n]+)/g;
+  /(?<![\w-])(border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?|outline)(-width)?\s*:\s*([^;}"'`\n]+)/gu;
 
 const fractional = (px: number) => !Number.isInteger(px);
 

@@ -68,7 +68,7 @@ import type { Kit, KitFleet, Spec } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
 
 const BROWSE = "mcp__cawco__artifact_browse";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 const MCP_VERSION = "1.11.0";
 
 const asks = new Map<string, { input: object; name: string }>();
@@ -492,9 +492,9 @@ interface ToggleState {
 }
 
 /** The toggle's line in the browser tool's snapshot, off: its uid. */
-const TOGGLE_OFF = /uid=(\S+) \S+ "Lamp: off"/;
+const TOGGLE_OFF = /uid=(\S+) \S+ "Lamp: off"/u;
 /** The toggle's line in the browser tool's snapshot, either way. */
-const TOGGLE_LINE = /^.*"Lamp: (?:off|on)".*$/m;
+const TOGGLE_LINE = /^.*"Lamp: (?:off|on)".*$/mu;
 
 /**
  * The session's own browser tool (the fleet's chrome-devtools, launched

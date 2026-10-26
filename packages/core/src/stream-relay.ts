@@ -480,7 +480,7 @@ export const suggestedName = (domain: string): string | null => {
 
 /** A DNS name the relay's certificate is issued for: labels of letters, digits and hyphens, under a top label of letters. */
 export const RELAY_DNS_NAME =
-  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/i;
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/iu;
 
 /** The ports the relay answers on, by whether a name stands: its chips' and its tick's words. */
 export const portsWords = (named: boolean): string =>

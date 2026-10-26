@@ -24,10 +24,10 @@
 
 // RFC 7239 permits quoted values and case-insensitive parameter names. Commas
 // inside quoted extension values belong to the first element, not the next hop.
-const FIRST_FORWARDED_ELEMENT = /^(?:[^",]|"(?:\\.|[^"\\])*")*/;
+const FIRST_FORWARDED_ELEMENT = /^(?:[^",]|"(?:\\.|[^"\\])*")*/u;
 const FORWARDED_PARAMETER =
-  /(?:^|;)\s*([!#$%&'*+.^_`|~0-9a-z-]+)\s*=\s*("(?:\\.|[^"\\])*"|[^;\s]+)\s*(?=;|$)/gi;
-const QUOTED_PAIR = /\\(.)/g;
+  /(?:^|;)\s*([!#$%&'*+.^_`|~0-9a-z-]+)\s*=\s*("(?:\\.|[^"\\])*"|[^;\s]+)\s*(?=;|$)/giu;
+const QUOTED_PAIR = /\\(.)/gu;
 
 /** A header's one value, as node gives a repeated one (an array) or joins it. */
 const one = (value) => (Array.isArray(value) ? value[0] : value);

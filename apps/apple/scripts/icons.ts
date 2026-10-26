@@ -317,7 +317,7 @@ for (const [asset, [setName, name]] of Object.entries(BRANDS)) {
   const height = icon.height ?? from.height ?? 24;
   // A one-ink mark draws by alpha, as a glyph does.
   const body = INK_BRANDS.has(asset)
-    ? icon.body.replaceAll(/fill="(?!none)[^"]*"/g, 'fill="#000"')
+    ? icon.body.replaceAll(/fill="(?!none)[^"]*"/gu, 'fill="#000"')
     : icon.body;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${body}</svg>`;
   if (INK_BRANDS.has(asset)) {

@@ -450,7 +450,7 @@ export interface NotificationsServices {
 }
 
 /** 127.0.0.0/8 or ::1, as {@link plainAddress} leaves it. */
-const LOOPBACK_V4 = /^127\./;
+const LOOPBACK_V4 = /^127\./u;
 const isLoopback = (address: string): boolean =>
   address === "::1" || LOOPBACK_V4.test(address);
 

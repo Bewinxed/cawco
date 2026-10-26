@@ -207,6 +207,7 @@
   </div>
 {:else if src}
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
+  <!-- biome-ignore lint/security/useIframeSandbox: a page CawCo serves itself under /__cawco, which needs scripts and its own origin to run, and with both a sandbox holds nothing back. -->
   <iframe
     class="block min-h-0 w-full flex-auto border-none border-current bg-transparent"
     onload={hello}

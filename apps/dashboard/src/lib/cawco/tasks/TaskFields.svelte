@@ -56,7 +56,7 @@
     await save({ [key]: next.length > 0 ? next : "" });
   }
   async function add() {
-    const key = newKey.trim().toLowerCase().replace(/\s+/g, "_");
+    const key = newKey.trim().toLowerCase().replace(/\s+/gu, "_");
     if (key && newValue.trim()) {
       await save({ [key]: newValue.trim() });
     }

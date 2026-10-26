@@ -46,13 +46,13 @@ const WRAPPERS = new Set([
   "ParenthesizedExpression",
   "ChainExpression",
 ]);
-const WORD = /\S+/g;
-const LEADING_SPACE = /^\s/;
-const TRAILING_SPACE = /\s$/;
-const LEADING_WORD = /^\S+/;
-const TRAILING_WORD = /\S+$/;
-export const CLASS_ATTRIBUTE = /class/i;
-const KIT_IMPORT = /^#lib\/components\//;
+const WORD = /\S+/gu;
+const LEADING_SPACE = /^\s/u;
+const TRAILING_SPACE = /\s$/u;
+const LEADING_WORD = /^\S+/u;
+const TRAILING_WORD = /\S+$/u;
+export const CLASS_ATTRIBUTE = /class/iu;
+const KIT_IMPORT = /^#lib\/components\//u;
 
 export function calleeName(call) {
   return call.callee?.type === "Identifier" ? call.callee.name : null;
@@ -86,10 +86,10 @@ const blank = (word) => " ".repeat(word.length);
 
 /* -------------------------------------------------- other modules' values */
 
-const LIB_ALIAS = /^[#$]lib\//;
-const SCRIPT_MODULE = /\.(?:ts|js)$/;
-const JS_EXTENSION = /\.js$/;
-const SVELTE_FILE = /\.svelte$/;
+const LIB_ALIAS = /^[#$]lib\//u;
+const SCRIPT_MODULE = /\.(?:ts|js)$/u;
+const JS_EXTENSION = /\.js$/u;
+const SVELTE_FILE = /\.svelte$/u;
 
 /** The `.ts`/`.js` module a specifier names, in this repo, or null. */
 export function moduleFile(specifier, from) {
@@ -611,8 +611,8 @@ export function componentFile(name, imports, from) {
     : null;
 }
 
-const PROPS_BINDING = /let\s*\{([\s\S]*?)\}\s*(?::[^=]*)?=\s*\$props\(\)/;
-const CLASS_PROP = /\bclass\s*:\s*(\w+)/;
+const PROPS_BINDING = /let\s*\{([\s\S]*?)\}\s*(?::[^=]*)?=\s*\$props\(\)/u;
+const CLASS_PROP = /\bclass\s*:\s*(\w+)/u;
 
 const wrappers = new Map();
 /**
@@ -632,7 +632,7 @@ export function wrapsKit(file, depth = 0) {
   if (binding && depth < 4) {
     const model = modelOf(file);
     const imports = importsOf(model);
-    const uses = new RegExp(`\\b${binding.replace("$", "\\$")}\\b`);
+    const uses = new RegExp(`\\b${binding.replace("$", "\\$")}\\b`, "u");
     eachNode(model, (node) => {
       if (wraps || node.type !== "Component") {
         return;

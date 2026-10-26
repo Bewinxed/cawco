@@ -31,7 +31,7 @@ const EXTENSIONS: Record<string, string> = {
 };
 
 /** `<sha256>.<ext>` — the only names {@link mediaFilePath} will resolve. */
-const MEDIA_NAME = /^[a-f0-9]{64}\.(png|jpg|gif|webp)$/;
+const MEDIA_NAME = /^[a-f0-9]{64}\.(png|jpg|gif|webp)$/u;
 
 let ready = false;
 
@@ -159,7 +159,7 @@ export function mediaBase64(url: string): string | undefined {
   return bytes ? Buffer.from(bytes).toString("base64") : undefined;
 }
 
-const MEDIA_URL_PREFIX = /^\/api\/media\//;
+const MEDIA_URL_PREFIX = /^\/api\/media\//u;
 
 /**
  * Files the reader attaches that are neither a picture nor text: stored as
@@ -171,7 +171,7 @@ const FILES_DIR = join(MEDIA_DIR, "files");
 /** The most one attached file may weigh. */
 export const FILE_LIMIT_BYTES = 100 * 1024 * 1024;
 
-const FILE_HASH = /^[a-f0-9]{64}$/;
+const FILE_HASH = /^[a-f0-9]{64}$/u;
 
 /** Stores `bytes` once under their hash, and answers that hash. */
 export async function storeFile(bytes: Uint8Array): Promise<string> {

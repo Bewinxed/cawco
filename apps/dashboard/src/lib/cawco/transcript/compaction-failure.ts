@@ -12,18 +12,18 @@
  */
 
 /** A class name and status the agent puts in front of opencode's message. */
-const CLASS = /^([A-Za-z]*Error)(?: (\d{3}))?: /;
+const CLASS = /^([A-Za-z]*Error)(?: (\d{3}))?: /u;
 /** A status code standing in the words themselves. */
-const STATUS = /\b(4\d\d|5\d\d)\b/;
+const STATUS = /\b(4\d\d|5\d\d)\b/u;
 /** What each kind sounds like in a harness's own words. */
-const AUTH = /api key|unauthori[sz]ed|authentication/i;
+const AUTH = /api key|unauthori[sz]ed|authentication/iu;
 const TOO_LONG =
-  /too (long|large)|context (window|limit)|exceeds (the )?model/i;
-const STOPPED = /\babort|\bcancel+ed\b|\binterrupt/i;
-const TOO_SHORT = /not enough messages|nothing to compact/i;
-const BUSY = /rate.?limit|overloaded/i;
+  /too (long|large)|context (window|limit)|exceeds (the )?model/iu;
+const STOPPED = /\babort|\bcancel+ed\b|\binterrupt/iu;
+const TOO_SHORT = /not enough messages|nothing to compact/iu;
+const BUSY = /rate.?limit|overloaded/iu;
 /** The stops and spaces a sentence ends on. */
-const CLOSING = /[.\s]+$/;
+const CLOSING = /[.\s]+$/u;
 
 interface Kind {
   /** Why, as a sentence with no full stop. */

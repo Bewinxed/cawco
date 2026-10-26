@@ -87,7 +87,7 @@
   const captionsOf = (machineId: string, path: string): string | undefined =>
     isVideo(path) ? machineMedia(machineId, sidecarOf(path)) : undefined;
   /** A captions file sent with no video of its own: a file, not a picture. */
-  const CAPTIONS_FILE = /\.vtt$/i;
+  const CAPTIONS_FILE = /\.vtt$/iu;
   /**
    * A lone captions file's text, read once per URL, for its file row. The
    * browser reads it, from its own origin: the server's render has no origin
@@ -110,7 +110,7 @@
   };
 
   /** `send_to_user` under any harness's naming of it (`mcp__cawco__…`, `cawco_…`). */
-  const SEND_TO_USER = /(^|_)send_to_user$/;
+  const SEND_TO_USER = /(^|_)send_to_user$/u;
 
   /**
    * What a `send_to_user` call attached, shown under its row as the owner
@@ -132,12 +132,12 @@
 
   /** The calls that change a page or answer a comment, under any harness's naming of them. */
   const POINTING_CALL =
-    /(^|_)(artifact_update|artifact_create|comment_reply|comment_resolve)$/;
+    /(^|_)(artifact_update|artifact_create|comment_reply|comment_resolve)$/u;
   /** A change's or a pin's link in a call's answer, its label escaped as markdown (and JSON) write it. */
   // A label holds no bracket of its own (references.ts escapes it), so a JSON answer's own `[` never opens one.
   const POINTED =
-    /\[((?:[^[\]\\]|\\.)*)\]\((cawco:(?:change|pin)\/[^)\s"]+)\)/g;
-  const ESCAPED = /\\(.)/g;
+    /\[((?:[^[\]\\]|\\.)*)\]\((cawco:(?:change|pin)\/[^)\s"]+)\)/gu;
+  const ESCAPED = /\\(.)/gu;
 
   /**
    * What a call changed on a page or which comment it answered, each by the
@@ -164,7 +164,7 @@
   };
 
   /** The calls that answer a pin in its thread, under any harness's naming of them. */
-  const ANSWERING_CALL = /(^|_)(comment_reply|comment_resolve)$/;
+  const ANSWERING_CALL = /(^|_)(comment_reply|comment_resolve)$/u;
 
   /** One entry of the exchange a call answered: who said it, and their words whole. */
   interface Said {
@@ -388,9 +388,9 @@
     text: string;
   }
 
-  const ADDED = /^\+\d[\d,._]*$/;
-  const REMOVED = /^[−-]\d[\d,._]*$/;
-  const WHITESPACE_TOKEN = /(\s+)/;
+  const ADDED = /^\+\d[\d,._]*$/u;
+  const REMOVED = /^[−-]\d[\d,._]*$/u;
+  const WHITESPACE_TOKEN = /(\s+)/u;
 
   const factParts = (fact: string): FactPart[] =>
     fact

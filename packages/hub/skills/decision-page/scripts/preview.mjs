@@ -30,7 +30,7 @@ const body = readFileSync(
   join(work, "mockups", `${name}.html`),
   "utf8"
 ).replaceAll('src="caw/', `src="${pathToFileURL(join(kit, "caw"))}/`);
-const declared = Number(body.match(/\bdata-mk-width="(\d+)"/)?.[1] ?? 0);
+const declared = Number(body.match(/\bdata-mk-width="(\d+)"/u)?.[1] ?? 0);
 const live =
   "<script>document.querySelectorAll('.mk').forEach(function(el){el.classList.add('is-live');el.dispatchEvent(new CustomEvent('mk:live'));});</script>";
 const shell = declared

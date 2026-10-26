@@ -725,7 +725,7 @@ export const machineName = (machineId: string): string => {
  * A workspace checkout is named `<project>-<8 hex>`: the hex is an id and
  * nobody reads ids, so the project's own name is what shows.
  */
-const WORKSPACE_ID = /-[0-9a-f]{8}$/;
+const WORKSPACE_ID = /-[0-9a-f]{8}$/u;
 
 /**
  * The project whose place holds the folder most closely (core `projectAt`),

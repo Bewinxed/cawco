@@ -27,10 +27,10 @@ import { hostEnvironment } from "./session-env";
 import { isDamagedRecord, readRecord } from "./state-file";
 
 /** Every CawCo job's label: `dev.cawco.<name>`, `<name>` its service's. */
-const CAWCO_LABEL = /^dev\.cawco\.(.+)$/;
-const CAWCO_PLIST = /^dev\.cawco\.(.+)\.plist$/;
+const CAWCO_LABEL = /^dev\.cawco\.(.+)$/u;
+const CAWCO_PLIST = /^dev\.cawco\.(.+)\.plist$/u;
 /** A CawCo job's log and its one rotated copy: `cawco-<name>.log`, `cawco-<name>.log.1`. */
-const CAWCO_LOG = /^cawco-(.+)\.log(?:\.1)?$/;
+const CAWCO_LOG = /^cawco-(.+)\.log(?:\.1)?$/u;
 
 /** Where launchd writes every CawCo job's stdout and stderr: the user's own logs folder. */
 export const launchdLogsDir = (): string => join(homedir(), "Library", "Logs");

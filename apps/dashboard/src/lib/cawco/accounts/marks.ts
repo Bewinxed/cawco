@@ -100,11 +100,11 @@ export interface Mark {
   mask: string;
 }
 
-const PAINT = /(fill|stroke|stop-color)="([^"]+)"/g;
-const HEX = /^[\da-f]{3}$|^[\da-f]{6}$/i;
-const HEX6 = /^[\da-f]{6}$/i;
-const SVG_PARTS = /<svg[^>]*viewBox="([^"]+)"[^>]*>([\s\S]*)<\/svg>/;
-const BOX_SPLIT = /[\s,]+/;
+const PAINT = /(fill|stroke|stop-color)="([^"]+)"/gu;
+const HEX = /^[\da-f]{3}$|^[\da-f]{6}$/iu;
+const HEX6 = /^[\da-f]{6}$/iu;
+const SVG_PARTS = /<svg[^>]*viewBox="([^"]+)"[^>]*>([\s\S]*)<\/svg>/u;
+const BOX_SPLIT = /[\s,]+/u;
 
 /** A colour's lightness, 0 to 1, for the hex and named inks marks use. */
 function lightness(colour: string): number | null {

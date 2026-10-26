@@ -34,7 +34,7 @@ export function mcpServerHost(
   segment: string
 ): string | undefined {
   const server = servers?.find(
-    (item) => item.name.replace(/[^\w-]/g, "_") === segment
+    (item) => item.name.replace(/[^\w-]/gu, "_") === segment
   );
   return (server && mcpHost(server)) ?? undefined;
 }

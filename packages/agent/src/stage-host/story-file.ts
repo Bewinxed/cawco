@@ -51,8 +51,8 @@ export interface StaticSheet {
 /** Why a write was not made, in one sentence the person and the agent read. */
 export class StoryRefusal extends Error {}
 
-const TSX = /\.tsx$/;
-const TS = /\.[cm]?ts$/;
+const TSX = /\.tsx$/u;
+const TS = /\.[cm]?ts$/u;
 
 /** A story file's syntax plugins, by its extension: JSX only where the file may hold it, so a `.ts` file's `<T>() =>` stays a generic. */
 const syntaxOf = (file: string): ("jsx" | "typescript")[] => {
@@ -639,7 +639,7 @@ const commentWords = (comment: Node): string =>
     .filter((line) => line && !line.startsWith("@"))
     .join(" ")
     .trim();
-const COMMENT_STAR = /^\s*\*+\s?/;
+const COMMENT_STAR = /^\s*\*+\s?/u;
 
 /**
  * A story's label: its doc comment in plain words, the comments right
@@ -662,7 +662,7 @@ function labelOf(text: string, statement: Node): string | null {
   const words = run.map(commentWords).filter(Boolean).join(" ");
   return words ? words.slice(0, LABEL_LIMIT) : null;
 }
-const BLANK_BETWEEN = /\n[ \t]*\n/;
+const BLANK_BETWEEN = /\n[ \t]*\n/u;
 /** A label's longest. Ours: a frame's caption, one line. */
 const LABEL_LIMIT = 160;
 
@@ -915,10 +915,10 @@ interface Style {
   trailing: boolean;
 }
 
-const LEADING = /^([ \t]+)\S/m;
-const DOUBLE = /"(?:[^"\\\n]|\\.)*"/g;
-const SINGLE = /'(?:[^'\\\n]|\\.)*'/g;
-const TRAILING_COMMA = /,\s*[}\]]/;
+const LEADING = /^([ \t]+)\S/mu;
+const DOUBLE = /"(?:[^"\\\n]|\\.)*"/gu;
+const SINGLE = /'(?:[^'\\\n]|\\.)*'/gu;
+const TRAILING_COMMA = /,\s*[}\]]/u;
 
 function styleOf(text: string): Style {
   const doubles = text.match(DOUBLE)?.length ?? 0;
@@ -930,8 +930,8 @@ function styleOf(text: string): Style {
   };
 }
 
-const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
-const STORY_NAME = /^[A-Z][A-Za-z0-9_]*$/;
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/u;
+const STORY_NAME = /^[A-Z][A-Za-z0-9_]*$/u;
 
 /** A string in the file's quote. */
 const quoted = (value: string, quote: Style["quote"]): string => {
@@ -1008,7 +1008,7 @@ const lineIndent = (text: string, offset: number): string => {
   const start = text.lastIndexOf("\n", offset - 1) + 1;
   return text.slice(start).match(INDENT)?.[0] ?? "";
 };
-const INDENT = /^[ \t]*/;
+const INDENT = /^[ \t]*/u;
 
 /** Whether an object literal stands on more than one line. */
 const multiline = (text: string, object: Node): boolean =>
@@ -1084,7 +1084,7 @@ function removed(text: string, object: Node, property: Node): Splice {
     ? { from: previous.end ?? 0, to: property.end ?? 0, text: "" }
     : { from: (object.start ?? 0) + 1, to: (object.end ?? 0) - 1, text: "" };
 }
-const COMMA_AFTER = /^[ \t]*,?/;
+const COMMA_AFTER = /^[ \t]*,?/u;
 
 /** The story `name` of the file, refused by name when it has none or it is no object literal. */
 function storyNamed(
@@ -1367,4 +1367,4 @@ function moveStory(
     { from: at, to: at, text: target ? `${piece}\n` : `\n${piece}` },
   ]);
 }
-const BLANK = /^[ \t]*\n/;
+const BLANK = /^[ \t]*\n/u;

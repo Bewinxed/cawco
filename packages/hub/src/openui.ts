@@ -46,9 +46,9 @@ const TOOLS = new Set<string>(VIEW_TOOLS);
 
 /** A string that points outside the view: a scheme with `//`, a data/script/mail scheme, or a bare `www.` host. */
 const URL_LIKE =
-  /[a-z][a-z0-9+.-]*:\/\/|(?:^|[\s"'(])(?:data|javascript|vbscript|mailto|blob|file|tel):|(?:^|[\s"'(/])www\.[a-z0-9-]+\./i;
+  /[a-z][a-z0-9+.-]*:\/\/|(?:^|[\s"'(])(?:data|javascript|vbscript|mailto|blob|file|tel):|(?:^|[\s"'(/])www\.[a-z0-9-]+\./iu;
 /** Markup in a string: a view's text is plain. */
-const MARKUP = /<\s*\/?\s*[a-z!][^>]*>/i;
+const MARKUP = /<\s*\/?\s*[a-z!][^>]*>/iu;
 /** OpenUI Cloud's protocol markers: a scripts section carries code. */
 const CLOUD_MARKER = "]]>openui:";
 /** Action steps and the plan that runs them: a view only reads. */

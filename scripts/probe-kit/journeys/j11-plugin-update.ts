@@ -37,7 +37,7 @@ const PLUGIN = "pyhook";
 const ID = `${PLUGIN}@${MARKETPLACE}`;
 const HOOK = "JOURNEY-HOOK";
 const RAN = "hook-ran.txt";
-const HELPER_VALUE = /VALUE = "([^"]*)"/;
+const HELPER_VALUE = /VALUE = "([^"]*)"/u;
 /** What Claude Code sets to the plugin's own path, and to the session's folder, when it runs a hook. */
 const PLUGIN_ROOT = "CLAUDE_PLUGIN_ROOT";
 const PROJECT_DIR = "CLAUDE_PROJECT_DIR";

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  const HOME = /^\/(home|Users)\/[^/]+/;
+  const HOME = /^\/(home|Users)\/[^/]+/u;
 </script>
 
 <script lang="ts">

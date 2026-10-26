@@ -139,13 +139,13 @@ export const CHILD_TASKS = 8192;
 export const KEEPER_CPU_WEIGHT = 1000;
 /** cpu.max's period, the kernel's own default ("max 100000"), in µs. */
 const CPU_PERIOD_US = 100_000;
-const BLANKS = /\s+/;
+const BLANKS = /\s+/u;
 /** What a cgroup's name keeps of a procId: the rest becomes `_`. */
-const UNNAMEABLE = /[^A-Za-z0-9_-]/g;
+const UNNAMEABLE = /[^A-Za-z0-9_-]/gu;
 /** A cgroup systemd made for a unit, by its directory name. */
-const UNIT_CGROUP = /\.(service|scope)$/;
+const UNIT_CGROUP = /\.(service|scope)$/u;
 /** A unit under a user's manager: its cgroup is below that manager's `user@<uid>.service`. */
-const USER_MANAGER = /\/user@\d+\.service\//;
+const USER_MANAGER = /\/user@\d+\.service\//u;
 /** The unit line every "isn't delegated" sentence names. */
 const DELEGATE_LINE = "Delegate=pids memory cpu";
 

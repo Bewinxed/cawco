@@ -88,10 +88,10 @@ export interface FleetSnapshot {
 }
 
 /** The charset MCP server names are held to, on the hub and here. */
-const NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+const NAME_PATTERN = /^[A-Za-z0-9_-]+$/u;
 
 /** Splits an args field, or an installer command line, on runs of whitespace. */
-const WHITESPACE_PATTERN = /\s+/;
+const WHITESPACE_PATTERN = /\s+/u;
 
 /**
  * Names Claude Code keeps for its own servers. The hub turns these away, so the
@@ -135,7 +135,7 @@ export function suggestMcpName(pkg: string): string {
   const segment = pkg.trim().split("/").pop() ?? "";
   const at = segment.lastIndexOf("@");
   const bare = at > 0 ? segment.slice(0, at) : segment;
-  return bare.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return bare.replace(/[^A-Za-z0-9_-]+/gu, "-").replace(/^-+|-+$/gu, "");
 }
 
 /** Remote servers are the ones with an endpoint; stdio's `type` is optional. */
@@ -180,16 +180,16 @@ export const recordToPairs = (
 ];
 
 /** The charset skill names are held to, on the hub and here. */
-const SKILL_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
+const SKILL_NAME_PATTERN = /^[A-Za-z0-9._-]+$/u;
 
 /** The source forms the hub's resolver takes as they are. */
-const SKILL_SCHEME = /^(?:skills:|github:|npm:|https?:\/\/)/;
+const SKILL_SCHEME = /^(?:skills:|github:|npm:|https?:\/\/)/u;
 
 /** The scheme prefix a skill source names itself with, when it has one. */
-const SKILL_SOURCE_SCHEME_PATTERN = /^(skills|github|npm):/;
+const SKILL_SOURCE_SCHEME_PATTERN = /^(skills|github|npm):/u;
 
 /** Splits a skill source's path into segments, at either kind of separator. */
-const SKILL_PATH_SPLIT_PATTERN = /[/?]/;
+const SKILL_PATH_SPLIT_PATTERN = /[/?]/u;
 
 /**
  * The words an installer command line is built out of — the runner, its
@@ -273,8 +273,8 @@ export function suggestSkillName(source: string): string {
     segments.pop();
   }
   return (filter || segments.at(-1) || "")
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^A-Za-z0-9._-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
 }
 
 /** The same source, narrowed to one skill of a repo that holds several. */
@@ -299,7 +299,7 @@ export function formatBytes(bytes: number): string {
 }
 
 /** A machine's own words' closing stops, dropped so they sit inside a sentence of ours. */
-const TRAILING_STOPS = /\.+$/;
+const TRAILING_STOPS = /\.+$/u;
 
 /** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
 async function said(response: Response): Promise<string> {
@@ -461,7 +461,7 @@ export const completeMcpSignIn = (
  * server still waiting for a sign-in. `none` means the text is not this command
  * and goes to the agent as typed.
  */
-const MCP_AUTH_RE = /^\/mcp\s+(?:auth|login)(?:\s+(\S+))?$/i;
+const MCP_AUTH_RE = /^\/mcp\s+(?:auth|login)(?:\s+(\S+))?$/iu;
 
 export type McpSignInIntent =
   | { kind: "none" }

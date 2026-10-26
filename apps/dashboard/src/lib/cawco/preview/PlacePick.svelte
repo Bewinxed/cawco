@@ -30,7 +30,7 @@
   } = $props();
 
   /** Trailing slashes on a typed folder, past the one that could be root. */
-  const TRAILING_SLASHES = /(?!^)\/+$/;
+  const TRAILING_SLASHES = /(?!^)\/+$/u;
 
   const fleet = paneFleet();
   const onlineMachines = $derived(fleet.machines.filter((row) => row.online));

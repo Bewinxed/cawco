@@ -358,7 +358,7 @@ export interface HarnessNote {
 /** The inner text of the first `<tag>…</tag>`, or undefined. */
 const inner = (tag: string, text: string): string | undefined =>
   // RegExp#exec returns RegExpExecArray | null — a tag absent from text hits the null case.
-  new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(text)?.[1];
+  new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "u").exec(text)?.[1];
 
 const isReminder = (trimmed: string): boolean =>
   trimmed.startsWith("<system-reminder>") &&

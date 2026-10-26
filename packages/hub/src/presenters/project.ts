@@ -35,7 +35,7 @@ import {
 } from "./words";
 
 /** A list line's mark, which a single answer says as its kind. */
-const LIST_MARK = /^- /;
+const LIST_MARK = /^- /u;
 
 /** One thread of Caw's, a line. */
 const threadLine = (

@@ -31,7 +31,7 @@ const BACKFILL_DAYS = 30;
 const SCORE_WINDOW_DAYS = 120;
 const DAY_MS = 86_400_000;
 
-const COMMAND_NAME = /<command-name>\/?([^<\s]+)<\/command-name>/;
+const COMMAND_NAME = /<command-name>\/?([^<\s]+)<\/command-name>/u;
 
 /** Local calendar date, `YYYY-MM-DD`. */
 export const dayOf = (at: Date): string => at.toLocaleDateString("en-CA");

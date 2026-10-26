@@ -366,7 +366,7 @@
       : (placeholder?.short ?? "Message the agent…")
   );
   /** What the field is called, read out: its hint without the trailing ellipsis. */
-  const FIELD_LABEL = $derived(HINT_SHORT.replace(/…$/, ""));
+  const FIELD_LABEL = $derived(HINT_SHORT.replace(/…$/u, ""));
   /**
    * The hint the field shows: in full wherever the field's own width holds
    * it on one line, else its first part. The server draws the short one,
@@ -429,7 +429,7 @@
   let chips = $state<ReturnType<ComposerFleet["SuggestionChips"]>>();
 
   /** A `/` or `@` token stops being typed as one the moment it holds whitespace. */
-  const TOKEN_WHITESPACE = /\s/;
+  const TOKEN_WHITESPACE = /\s/u;
 
   /**
    * The words put back from outside (Edit on a failed send, a starter) land

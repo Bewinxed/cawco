@@ -76,7 +76,7 @@ const twiceWeekdays = (timeZone: string) => {
 const UNREADABLE =
   "“every weekday at 9” is not a cron schedule: Invalid number of segments in cron expression. Give five fields (minute hour day month weekday), or six with seconds first.";
 
-const VALUES = /\s+/;
+const VALUES = /\s+/u;
 
 const hub = (over: Partial<RoutineFormHub> = {}): RoutineFormHub => ({
   types: () =>

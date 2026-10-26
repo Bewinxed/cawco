@@ -72,9 +72,9 @@ const RETRY_MAX_MS = 30_000;
 const RETRY_BUDGET_MS = 120_000;
 /** The hub's line for a settle read its machine left unanswered (server.ts `askSettle`). */
 const SETTLE =
-  /\[hub\] ([0-9a-f-]{36}): settle read on .+ not answered \(asked at (\d+), waited (\d+) ms\); its next is asked no sooner than (\d+),/;
+  /\[hub\] ([0-9a-f-]{36}): settle read on .+ not answered \(asked at (\d+), waited (\d+) ms\); its next is asked no sooner than (\d+),/u;
 const RETRY =
-  /\[opencode\] recovery ([0-9a-f-]{36}) waiting; retry (\d+) in (\d+)ms/;
+  /\[opencode\] recovery ([0-9a-f-]{36}) waiting; retry (\d+) in (\d+)ms/u;
 
 /** Leg (f)'s hold of the agent: past the 90 s it gives the hub's answer to an ACK. */
 const HELD_MS = 95_000;
@@ -88,12 +88,12 @@ const NOT_ACKED = "Session credential installation was not acknowledged";
 /** What the hub asks a machine for when it reads a transcript (core harness.ts `CONTROL_GET_SESSION_MESSAGES`). */
 const TRANSCRIPT_ASK = "getSessionMessages";
 /** The upgrade's header that offers permessage-deflate. */
-const DEFLATE_OFFER = /^sec-websocket-extensions:/i;
+const DEFLATE_OFFER = /^sec-websocket-extensions:/iu;
 /** A request that upgrades to a WebSocket. */
-const WEBSOCKET_UPGRADE = /^upgrade:\s*websocket/im;
+const WEBSOCKET_UPGRADE = /^upgrade:\s*websocket/imu;
 
 /** A transcript ask's request id, as the hub's frame carries it (plain, or inside a wire part's string). */
-const REQUEST_ID = /requestId\\?"\s*:\s*\\?"([0-9a-f-]{36})/g;
+const REQUEST_ID = /requestId\\?"\s*:\s*\\?"([0-9a-f-]{36})/gu;
 
 /**
  * A relay the agent reaches the hub through, standing for a machine that

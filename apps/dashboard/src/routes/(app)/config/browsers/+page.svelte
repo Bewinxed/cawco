@@ -26,7 +26,7 @@
 
   const section = sectionOf("browsers");
   /** A hub sentence that already tells the person to try again. */
-  const SAYS_TRY_AGAIN = /\btry again\b/i;
+  const SAYS_TRY_AGAIN = /\btry again\b/iu;
 
   let problem = $state<string | null>(null);
   onMount(() => {

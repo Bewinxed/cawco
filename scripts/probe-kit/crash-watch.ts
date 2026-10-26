@@ -118,7 +118,7 @@ function readFrames(): void {
           `${nameOf(run)} on ${whereOf(run)} at ${Math.round(Number(run.currentTime ?? 0))}ms`
       );
     // biome-ignore lint/performance/useTopLevelRegex: this runs in the page, serialized alone; nothing of this module's scope goes with it
-    const said = runs.map((one) => one.replace(/ at \d+ms$/, "")).join("|");
+    const said = runs.map((one) => one.replace(/ at \d+ms$/u, "")).join("|");
     if (said !== last) {
       last = said;
       send(JSON.stringify({ at: Math.round(performance.now()), runs }));

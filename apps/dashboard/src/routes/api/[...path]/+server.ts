@@ -33,9 +33,9 @@ const hubCookiesOf = (cookie: string | null): string | undefined =>
     )
     .join("; ") || undefined;
 
-const WS_SCHEME = /^ws(s?):\/\//;
-const TRAILING_WS_PATH = /\/ws\/?$/;
-const TRAILING_SLASHES = /\/+$/;
+const WS_SCHEME = /^ws(s?):\/\//u;
+const TRAILING_WS_PATH = /\/ws\/?$/u;
+const TRAILING_SLASHES = /\/+$/u;
 /** The hub's own response headers (`X-Cawco-Machine`, …), as fetch lowercases them. */
 const CAWCO_HEADER = "x-cawco-";
 /**

@@ -24,8 +24,8 @@ import { eachNode } from "./model.mjs";
 
 const CLIP = new Set(["clipPath", "clip-path"]);
 const MOVES = new Set(["transform", "translate", "scale", "rotate"]);
-const CSS_CLIP = /(?<![\w-])clip-path\s*:/;
-const CSS_MOVE = /(?<![\w-])(?:transform|translate|scale|rotate)\s*:/;
+const CSS_CLIP = /(?<![\w-])clip-path\s*:/u;
+const CSS_MOVE = /(?<![\w-])(?:transform|translate|scale|rotate)\s*:/u;
 
 const MESSAGE =
   "An animation effect never cuts (clip-path) and moves (transform, translate, scale, rotate) at once: Chromium kills the renderer once a later move displaces it (scripts/lint/design/clip-move.mjs). Animate the cut as its own effect on the same timing.";

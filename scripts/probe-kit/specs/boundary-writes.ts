@@ -82,9 +82,9 @@ const COMMIT_SUBJECT = "Probe commit inside the boundary";
 /** Under the home dir, outside every path the boundary lets a command write. */
 const HOME_TARGET = ".cache/cawco-orchestrator/probe-x";
 /** Node's fs error for a write refused as read-only, and the path it names. */
-const EROFS_PATH = /EROFS: read-only file system, \w+ '([^']+)'/;
+const EROFS_PATH = /EROFS: read-only file system, \w+ '([^']+)'/u;
 /** `process.versions.bun` under Bun; under Node the bin says "none-" and Node's version. */
-const BUN_VERSION = /^\d+\.\d+\.\d+/;
+const BUN_VERSION = /^\d+\.\d+\.\d+/u;
 
 /** `marker` spelled apart in a command, so only the command's output carries it whole. */
 const apart = (marker: string): string =>
@@ -182,7 +182,7 @@ const bash = (input: Record<string, unknown>): Reply => ({
 /** The CLI's answer to a Bash call it runs in the background. */
 const BG_STARTED = "Command running in background";
 /** The output file the CLI's completion notice names. */
-const BG_OUTPUT_FILE = /<output-file>([^<]+)<\/output-file>/;
+const BG_OUTPUT_FILE = /<output-file>([^<]+)<\/output-file>/u;
 /** Each line of the output file as the session's shell reads it, after this. */
 const BG_LINE = "READ> ";
 /** The fleet's own `CLAUDE_CODE_TMPDIR` left out of a service's environment. */
@@ -252,7 +252,7 @@ const makeRepo = async (fleet: Fleet): Promise<string> => {
 
 /** What the command said after `marker`, up to the end of its word. */
 const after = (said: string, marker: string): string | undefined =>
-  new RegExp(`${marker}(\\S*)`).exec(said)?.[1];
+  new RegExp(`${marker}(\\S*)`, "u").exec(said)?.[1];
 
 /** The boundary's proxy URLs name its relay with no credential, and a client presenting none gets out through it. */
 const checkRelay = (kit: Kit, said: string): void => {

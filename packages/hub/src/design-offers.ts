@@ -39,8 +39,8 @@ const DESIGN_TEMPLATES: ReadonlySet<StagesTemplate> = new Set([
   "social",
 ]);
 const DESIGN_LABELS: ReadonlySet<string> = new Set(["ui", "design"]);
-const PICTURE = /\.(png|jpe?g|webp|gif|svg|avif)$/i;
-const SCREEN = /screen/i;
+const PICTURE = /\.(png|jpe?g|webp|gif|svg|avif)$/iu;
+const SCREEN = /screen/iu;
 
 export const BUILD_TITLE = "Build the design system";
 export const DESIGN_SKILL = "design-system";
@@ -87,7 +87,7 @@ const DESIGN_SKILLS = [
 ] as const;
 const NAMES_DESIGN_SKILL = new RegExp(
   `(?:^|[^\\w-])\`?(?:${DESIGN_SKILLS.join("|")})\`?\\s+skill\\b`,
-  "i"
+  "iu"
 );
 
 /**

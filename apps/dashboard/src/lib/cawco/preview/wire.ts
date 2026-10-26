@@ -23,8 +23,8 @@ import {
 const ERROR_MAX = 300;
 /** A base64 PNG this long is ~3 MB: a page's thumbnail, a pin's picture. */
 const PNG_MAX = 4_000_000;
-const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
-const PIN_ID = /^[0-9a-f-]{36}$/;
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
+const PIN_ID = /^[0-9a-f-]{36}$/u;
 /** The keys a page hands the pane (overlay `PANE_KEYS`). */
 const PANE_KEYS = new Set([
   "v",
@@ -220,7 +220,7 @@ export function previewCompose(
  * the overlay's window, so each field is checked and bounded; every write
  * is checked again by the stage against the props it reads itself.
  */
-const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/;
+const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
 const KINDS = new Set<PropKind>([
   "string",
   "number",

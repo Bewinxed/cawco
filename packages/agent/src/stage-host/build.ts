@@ -61,9 +61,9 @@ const notice = async (): Promise<string> => {
  * strings. Pinned to the version it was read in; another version that reads
  * them otherwise fails the build here, never a stage at its start.
  */
-const CORE_DIST = /@code-inspector[/\\]core[/\\]dist[/\\]index\.mjs$/;
+const CORE_DIST = /@code-inspector[/\\]core[/\\]dist[/\\]index\.mjs$/u;
 const CLIENT_READ =
-  /(\w+) = (\w+)\.resolve\(\w+, "\.\/client\.(?:umd|iife)\.js"\), (\w+) = \w+\.readFileSync\(\1, "utf-8"\)/g;
+  /(\w+) = (\w+)\.resolve\(\w+, "\.\/client\.(?:umd|iife)\.js"\), (\w+) = \w+\.readFileSync\(\1, "utf-8"\)/gu;
 const noClient: Bun.BunPlugin = {
   name: "code-inspector-no-client",
   setup(build) {

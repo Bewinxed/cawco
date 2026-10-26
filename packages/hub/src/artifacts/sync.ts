@@ -137,7 +137,7 @@ const sameMap = (a: YMap<unknown>, b: YMap<unknown>): boolean =>
 const PEN_KEYS = new Set(["penMode", "penDetected"]);
 
 /** A request's keys a screen writes: its claim (`claim-<clientID>`) and the result. */
-const SCREEN_REQUEST_KEY = /^(claim-\d+|result)$/;
+const SCREEN_REQUEST_KEY = /^(claim-\d+|result)$/u;
 
 /** Why a screen's change to a canvas's `requests` may not be kept, or null. */
 const requestsProblem = (
@@ -321,7 +321,7 @@ export const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
  * as the overlay and the canvas's host page reach them.
  */
 export const ARTIFACT_PATH =
-  /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send|\/picture|\/pictures|\/canvas|\/show)?$/;
+  /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send|\/picture|\/pictures|\/canvas|\/show)?$/u;
 
 /** Where a canvas's latest picture is kept: its folder under the artifacts' root. */
 export const picturePath = (root: string, artifactId: string): string =>
@@ -423,7 +423,7 @@ const URL_MAX = 2048;
 /** The longest mark id a picture names: a pin's or a stroke group's. Our call. */
 const MARK_ID_MAX = 100;
 
-const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
+const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/u;
 
 const SEND_SHAPE = "Send takes JSON: { text?, pins?, control? }.";
 

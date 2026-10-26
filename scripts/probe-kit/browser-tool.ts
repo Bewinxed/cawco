@@ -92,6 +92,6 @@ export const called = async (
 };
 
 /** The page a `new_page` or `list_pages` answer marks selected: its id. */
-const SELECTED = /(\d+):[^\n]*\[selected\]/;
+const SELECTED = /(\d+):[^\n]*\[selected\]/u;
 export const selected = (list: string): number =>
   Number(SELECTED.exec(list)?.[1]);

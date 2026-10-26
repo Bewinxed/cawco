@@ -326,8 +326,8 @@ const githubDomain = (credential: Credential): string => {
     ? enterprise.trim().replace(LEADING_SCHEME, "").replace(TRAILING_PATH, "")
     : "github.com";
 };
-const LEADING_SCHEME = /^https?:\/\//;
-const TRAILING_PATH = /\/.*$/;
+const LEADING_SCHEME = /^https?:\/\//u;
+const TRAILING_PATH = /\/.*$/u;
 
 /**
  * A Copilot sign-in's GitHub user, read with its GitHub token (`refresh`,
@@ -685,11 +685,11 @@ export const lendAccount = async (accountId: string): Promise<LentAccess> => {
 
 const COMPLETE_WAIT_MS = 60_000;
 /** A sign-in method that asks for a device code, by its id or its label. */
-const DEVICE_OPTION = /device/i;
-const DEVICE_LABEL = /device|headless/i;
+const DEVICE_OPTION = /device/iu;
+const DEVICE_LABEL = /device|headless/iu;
 /** A pi key resolved at request time (`!command`, `$VAR`): not a key to move. */
-const RESOLVED_KEY = /^[!$]/;
-const DEVICE_FLOW_TIMED_OUT = /Device flow timed out|expired/i;
+const RESOLVED_KEY = /^[!$]/u;
+const DEVICE_FLOW_TIMED_OUT = /Device flow timed out|expired/iu;
 
 interface SignIn {
   readonly abort: AbortController;

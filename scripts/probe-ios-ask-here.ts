@@ -97,7 +97,7 @@ if (!args.includes("--built")) {
   const text = await sh(
     "bash apps/apple/scripts/build-both.sh ios --compile-only"
   );
-  check("compile", /^BUILT iOS/m.test(text), "BUILT iOS");
+  check("compile", /^BUILT iOS/mu.test(text), "BUILT iOS");
 }
 
 /** A prompt whose turn runs long, so its session stays running. */
@@ -228,7 +228,7 @@ try {
   const launched = await sh(
     `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -ask-probe -ask-probe-ids ${ids}`
   );
-  const pid = /dev\.cawco\.app: (\d+)/.exec(launched)?.[1];
+  const pid = /dev\.cawco\.app: (\d+)/u.exec(launched)?.[1];
   if (!pid) {
     throw new Error(`no pid in the launch's answer: ${launched}`);
   }
@@ -328,7 +328,7 @@ try {
     "remove cancelled",
     remove,
     "question: none on screen",
-    /row: (?!no row)/
+    /row: (?!no row)/u
   );
   expect(
     "Remove pends in place",
@@ -390,7 +390,7 @@ try {
     "The hub's refusal stays under the question",
     "delete answered",
     del,
-    /refused '[^']+'/,
+    /refused '[^']+'/u,
     "confirm 'Delete transcript'",
     "cancel on",
     "under its row: yes",
@@ -410,7 +410,7 @@ try {
     "remove machine asked",
     MACHINE,
     `confirm 'Remove machine'`,
-    /reaches \[[^\]]+\]/,
+    /reaches \[[^\]]+\]/u,
     "under its row: yes",
     free
   );

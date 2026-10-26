@@ -38,7 +38,7 @@ const files = args.files ? args.files.split(",") : FILES.map(fileName);
 const RATIOS = [1, 2];
 const BLEED = 2;
 const PAGE_DARK = "oklch(18.4% 0.004 70)";
-const CHROMIUM_DIR = /^chromium-\d+$/;
+const CHROMIUM_DIR = /^chromium-\d+$/u;
 const runtimeDir = here("./node_modules/@rive-app/canvas-advanced/");
 
 const PAGE = `

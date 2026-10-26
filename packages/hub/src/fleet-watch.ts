@@ -106,9 +106,9 @@ const FILE_TOOLS: ReadonlySet<string> = new Set([
   "apply_patch",
 ]);
 
-const DIGITS = /\d+/g;
-const HEX = /\b[0-9a-f]{8,}\b/g;
-const SPACE = /\s+/g;
+const DIGITS = /\d+/gu;
+const HEX = /\b[0-9a-f]{8,}\b/gu;
+const SPACE = /\s+/gu;
 
 /** An error's words with what changes between runs (numbers, ids, spacing) folded. */
 const errorKey = (text: string): string =>

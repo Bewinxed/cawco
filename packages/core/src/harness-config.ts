@@ -56,9 +56,9 @@ export const CLAUDE_SETTINGS_REFUSED: readonly string[] = [
   "disableAllHooks",
 ];
 
-const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 /** An npm package as `npm install` takes one: `@scope/name@version` or `name@version`. */
-const NPM_PACKAGE = /^(?:npm:)?((?:@[^/@\s]+\/)?[^/@\s:]+)@([^/\s:]+)$/;
+const NPM_PACKAGE = /^(?:npm:)?((?:@[^/@\s]+\/)?[^/@\s:]+)@([^/\s:]+)$/u;
 
 /** A kind as the person reads it. */
 export const harnessConfigLabel = (kind: HarnessConfigKind): string => {

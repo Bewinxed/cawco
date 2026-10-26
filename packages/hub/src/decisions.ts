@@ -79,7 +79,7 @@ export class DecisionRefusal extends Error {
   }
 }
 
-const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
 // --- the built page, read as the kit draws it ---------------------------------
 
@@ -101,8 +101,8 @@ const ENTITIES: Record<string, string> = {
   times: "×",
   rarr: "→",
 };
-const ENTITY = /&(#x[0-9a-f]+|#\d+|[a-z]+);/gi;
-const SPACES = /\s+/g;
+const ENTITY = /&(#x[0-9a-f]+|#\d+|[a-z]+);/giu;
+const SPACES = /\s+/gu;
 
 /** Text as the page shows it: its entities read, its runs of space one space. */
 const shown = (raw: string): string =>
@@ -119,8 +119,8 @@ const shown = (raw: string): string =>
     .replace(SPACES, " ")
     .trim();
 
-const MOCKUP_CLASS = /(?:^|\s)mk-([a-z0-9-]+)(?:\s|$)/;
-const RECOMMENDED = /recommended/i;
+const MOCKUP_CLASS = /(?:^|\s)mk-([a-z0-9-]+)(?:\s|$)/u;
+const RECOMMENDED = /recommended/iu;
 
 /** An option's part as the kit labels it (`Gets: …`, RECIPES.md), its words without the label the card draws for itself. */
 const unlabelled = (raw: string, label: (words: string) => string): string => {

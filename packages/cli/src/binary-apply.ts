@@ -815,7 +815,7 @@ async function verify(
 }
 
 /** The timing inside a problem, which changes every attempt while what it says does not. */
-const TIMING = / (?:after|in) \d+ms/g;
+const TIMING = / (?:after|in) \d+ms/gu;
 
 /** One verification's running account: the trial as it stands, the streak, and what was last said. */
 class TrialWatch {

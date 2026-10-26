@@ -26,7 +26,7 @@ import type { Kit, Spec } from "../kit";
 import { respond } from "./hub-loopback";
 
 /** Runs of whitespace, as the kernel lays its two numbers out. */
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 
 /** The kernel's ephemeral ports, as Linux says them. */
 const ephemeral = async () => {

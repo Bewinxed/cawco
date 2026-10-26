@@ -38,9 +38,9 @@ export const FIRST_WHEN: When = {
   custom: "",
 };
 
-const TIME = /^(\d{1,2}):(\d{2})$/;
-const SPACES = /\s+/;
-const NUMBER = /^\d+$/;
+const TIME = /^(\d{1,2}):(\d{2})$/u;
+const SPACES = /\s+/u;
+const NUMBER = /^\d+$/u;
 
 /** A time of day's hour and minute, or null while it isn't one. */
 function hourMinute(time: string): [number, number] | null {

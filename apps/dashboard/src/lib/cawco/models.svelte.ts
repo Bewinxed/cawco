@@ -224,7 +224,7 @@ export const covers = (row: ModelInfo, model: string): boolean =>
 const NAMES_NO_MODEL = new Set(["default"]);
 
 /** The 1M-context variant's mark on a Claude model id: `claude-opus-5-5[1m]`. */
-const CONTEXT_SUFFIX = /\[1m\]$/i;
+const CONTEXT_SUFFIX = /\[1m\]$/iu;
 
 /**
  * The offered row for a model id — the one that carries its name, its provider

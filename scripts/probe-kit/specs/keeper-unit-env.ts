@@ -35,7 +35,7 @@ const UNIT_ID = "c0ffee00c0ffee00c0ffee00c0ffee00";
 /** Words the session's prompt carries, so the mock knows which request to answer with the command. */
 const TAG = "PROBE-UNIT-ENV";
 /** What each probe prints, its prefix spelled apart in the command so only its output carries it whole. */
-const ANSWER = /UE\|([a-z]+)=([^|"\\]*)\|end/;
+const ANSWER = /UE\|([a-z]+)=([^|"\\]*)\|end/u;
 const echo = (key: string): string =>
   `echo "U""E|${key}=\${INVOCATION_ID:-none}|end"`;
 

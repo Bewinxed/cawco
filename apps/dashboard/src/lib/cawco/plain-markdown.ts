@@ -86,7 +86,7 @@ function rows(tokens: Token[]): string[] {
 }
 
 /** The word a stream is still writing: whatever follows its last whitespace. */
-const LAST_WORD = /\S*$/;
+const LAST_WORD = /\S*$/u;
 
 /** A finished reply, flat. */
 export function plainMarkdown(source: string): string {

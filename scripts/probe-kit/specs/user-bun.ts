@@ -94,12 +94,12 @@ const [INSTALL = "", LINT = "", TYPECHECK = ""] = JS_GATE.split("\n").filter(
 /** What the stand-in records of a command: its arguments, after `bun `. */
 const argsOf = (command: string): string => command.slice("bun ".length);
 const STORY = "src/Card.stories.js";
-const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 600);
-const STATUS = /"status":"(\w+)"/;
+const short = (said: string) => said.replaceAll(/\s+/gu, " ").slice(0, 600);
+const STATUS = /"status":"(\w+)"/u;
 
 type Tag = "A" | "C" | "O" | "P";
 /** A delegate's prompt marker: the report its parent reads never carries it. */
-const TAG = /PROBE-USERBUN-([ACOP]):/;
+const TAG = /PROBE-USERBUN-([ACOP]):/u;
 /** What each Claude Code delegate commits. */
 const FILES: Record<"A" | "C", string> = {
   A: "src/a.ts",
@@ -120,7 +120,7 @@ const delegateSteps: Partial<
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\w+)/g;
+const COMMAND = /PROBE-CALL:(\w+)/gu;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const tool = (name: string, input: object): Reply => ({
@@ -133,9 +133,9 @@ const tool = (name: string, input: object): Reply => ({
 const SHELLS = ["Bash", "bash", "shell"];
 
 /** What a delegate's shell says of the `bun` it finds, before it installs: `BUN-AT:<path>`. */
-const BUN_AT = /BUN-AT:(\/[^\s"\\]*)/;
+const BUN_AT = /BUN-AT:(\/[^\s"\\]*)/u;
 /** And of its PATH: `PATH-AT:<PATH>`. */
-const PATH_AT = /PATH-AT:(\/[^\s"\\]*)/;
+const PATH_AT = /PATH-AT:(\/[^\s"\\]*)/u;
 
 /**
  * An OpenCode or pi delegate's turns: the bun its shell finds, then the

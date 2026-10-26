@@ -477,14 +477,14 @@ const tokenPath = (s: string) => (s.includes(".") ? s : `color.${s}`);
 
 /** `{motion.x}` inside a raw form is a number token: its value under `mode`. */
 const numbersIn = (css: string, mode: string) =>
-  css.replace(/\{((?:motion|effect)\.[^}]+)\}/g, (_, path: string) =>
+  css.replace(/\{((?:motion|effect)\.[^}]+)\}/gu, (_, path: string) =>
     String(ev.numeric(ev.cssOf(path, mode, path), path, mode))
   );
 
 /** `calc(n * 100%)` the evaluator's color-mix reads as a plain percentage. */
 const plainPercent = (css: string) =>
   css.replace(
-    /calc\(([\d.]+) \* 100%\)/g,
+    /calc\(([\d.]+) \* 100%\)/gu,
     (_, n: string) => `${Number(n) * 100}%`
   );
 

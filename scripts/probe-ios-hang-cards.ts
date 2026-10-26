@@ -51,17 +51,17 @@ const DEVICES = [
 ];
 
 /** One side of a held card: `w 478.0 (531.0 to 425.0)`, as drawn, from, to. */
-const HALF_SIDE = /[wh] ([\d.]+) \(([\d.]+) to ([\d.]+)\)/g;
+const HALF_SIDE = /[wh] ([\d.]+) \(([\d.]+) to ([\d.]+)\)/gu;
 /** A session mark's part as drawn: `face 23.0 41.5 18.0 18.0`. */
-const MARK_PART = /\b(mark|face|sprite) -?[\d.]+ -?[\d.]+ ([\d.]+) ([\d.]+)/g;
+const MARK_PART = /\b(mark|face|sprite) -?[\d.]+ -?[\d.]+ ([\d.]+) ([\d.]+)/gu;
 /** The images drawn at another size than their own bounds. */
-const MARKS_OFF = /off \[([^\]]*)\]/;
+const MARKS_OFF = /off \[([^\]]*)\]/u;
 /** The images drawn over 40pt. */
-const MARKS_BIG = /big \[([^\]]*)\]/;
+const MARKS_BIG = /big \[([^\]]*)\]/u;
 /** The layout animations in the contents. */
-const MARKS_LAYING = /laying \[([^\]]*)\]/;
+const MARKS_LAYING = /laying \[([^\]]*)\]/u;
 /** How many marks and images a stop read. */
-const MARKS_COUNT = /\d+ marks .*? images \d+/;
+const MARKS_COUNT = /\d+ marks .*? images \d+/u;
 
 let failures = 0;
 const check = (step: string, ok: boolean, detail: string) => {
@@ -201,21 +201,24 @@ try {
           );
           const size = (name: string) => {
             const m = stop.match(
-              new RegExp(`${name} (-?[\\d.]+) (-?[\\d.]+) ([\\d.]+) ([\\d.]+)`)
+              new RegExp(
+                `${name} (-?[\\d.]+) (-?[\\d.]+) ([\\d.]+) ([\\d.]+)`,
+                "u"
+              )
             );
             return m ? [Number(m[3]), Number(m[4])] : null;
           };
           const card = size("card");
           const casts = [
-            ...(stop.match(/casts \[([^\]]*)\]/)?.[1] ?? "").matchAll(
-              /-?[\d.]+ -?[\d.]+ ([\d.]+) ([\d.]+)/g
+            ...(stop.match(/casts \[([^\]]*)\]/u)?.[1] ?? "").matchAll(
+              /-?[\d.]+ -?[\d.]+ ([\d.]+) ([\d.]+)/gu
             ),
           ].map((m) => [Number(m[1]), Number(m[2])]);
           // The cut clips only at the card's top edge: its box is the card's
           // grown by its room out to each side and down, so it is read as that
           // box less the room (the room from its width, the same below).
           const cutBox = stop.match(
-            /cut path (-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)/
+            /cut path (-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)/u
           );
           const room = cutBox ? -Number(cutBox[1]) : 0;
           // Its top on the card's top, or it is off (null).

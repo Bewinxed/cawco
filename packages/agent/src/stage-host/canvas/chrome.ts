@@ -343,8 +343,8 @@ function bezierOf(easing: string): [number, number, number, number] {
     ? (numbers as [number, number, number, number])
     : [0, 0, 1, 1];
 }
-const BEZIER = /cubic-bezier\(([^)]+)\)/;
-const CLIP_NAME = /[^A-Za-z0-9_]/g;
+const BEZIER = /cubic-bezier\(([^)]+)\)/u;
+const CLIP_NAME = /[^A-Za-z0-9_]/gu;
 
 /**
  * DialKit drawn in CawCo's own tokens (DESIGN.md: its theme follows ours),

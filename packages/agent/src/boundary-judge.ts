@@ -105,7 +105,7 @@ const ANSWER_END = "\0";
 const UNPREFIXED =
   "cawco: this session's shell commands would run outside the workspace's boundary (a settings file sets CLAUDE_CODE_SHELL_PREFIX to something other than the workspace's executor), so this call did not run. Say so and end your turn: that setting is the person's to change.";
 
-const HEX = /^(?:[0-9a-f]{2})*$/;
+const HEX = /^(?:[0-9a-f]{2})*$/u;
 
 /** What the hook sends for a CLI whose environment names no shell prefix: one launched before it had one. */
 const NO_PREFIX = "-";

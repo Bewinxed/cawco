@@ -56,11 +56,11 @@ const FILTERS = [
 ];
 const POINTER = "version https://git-lfs.github.com/spec/v1";
 /** An LFS API path's tail, after its repository. */
-const LFS_TAIL = /\/info\/lfs\/.*$/;
+const LFS_TAIL = /\/info\/lfs\/.*$/u;
 /** An object's own path on the server. */
-const OBJECT_PATH = /\/obj\/([0-9a-f]{64})$/;
+const OBJECT_PATH = /\/obj\/([0-9a-f]{64})$/u;
 /** A `.gitconfig` section of git-lfs's. */
-const LFS_SECTION = /\[lfs "/;
+const LFS_SECTION = /\[lfs "/u;
 
 interface Asked {
   auth: string | null;

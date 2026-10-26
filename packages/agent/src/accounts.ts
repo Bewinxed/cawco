@@ -428,7 +428,7 @@ export const keychainUser = (): string => {
 };
 
 /** A user name Claude Code files its Keychain item under as it is. */
-const KEYCHAIN_USER = /^[a-zA-Z0-9._-]+$/;
+const KEYCHAIN_USER = /^[a-zA-Z0-9._-]+$/u;
 
 /**
  * The Keychain service Claude Code keeps an account dir's login under:

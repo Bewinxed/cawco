@@ -89,12 +89,12 @@ const SKIP = ["node_modules", ".git", "dist", "build", "__pycache__"];
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-const URL_SOURCE_RE = /^https?:\/\//i;
-const ZIP_NAME_RE = /\.zip$/i;
-const MD_PATH_RE = /\.md$/i;
-const ARCHIVE_PATH_RE = /\.(zip|tgz|tar\.gz)$/i;
-const MEDIA_PATH_RE = /\.(gif|jpe?g|png|webp|svg|mp4|mov|webm|avif)$/i;
-const README_NAME_RE = /^readme\.md$/i;
+const URL_SOURCE_RE = /^https?:\/\//iu;
+const ZIP_NAME_RE = /\.zip$/iu;
+const MD_PATH_RE = /\.md$/iu;
+const ARCHIVE_PATH_RE = /\.(zip|tgz|tar\.gz)$/iu;
+const MEDIA_PATH_RE = /\.(gif|jpe?g|png|webp|svg|mp4|mov|webm|avif)$/iu;
+const README_NAME_RE = /^readme\.md$/iu;
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the four source shapes (url, npm:, github:, bare owner/repo) cawco accepts; each branch is a distinct grammar, not incidental complexity.
 export const parseSkillSource = (source: string): SkillSource | undefined => {

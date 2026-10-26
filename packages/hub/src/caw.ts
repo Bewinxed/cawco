@@ -159,7 +159,7 @@ import type { TaskEvent, TaskView } from "./tasks";
 import type { Views } from "./views";
 
 /** A thread's handle as find and a chip write it: `thread#1a2b3c4d`. */
-const THREAD_HANDLE_PREFIX = /^thread#/;
+const THREAD_HANDLE_PREFIX = /^thread#/u;
 /**
  * Where a view asked for from a page's end stands once drafted: that page,
  * at `position` in its order (null: its end).
@@ -421,8 +421,8 @@ const messageOf = (row: ThreadMessageRow): ThreadMessage => {
 
 /** How long a thread's title runs: the first line of its first message, cut. */
 const TITLE_MAX = 60;
-const FIRST_LINE = /\r?\n/;
-const TASK_ID = /^tsk-\d{1,9}$/;
+const FIRST_LINE = /\r?\n/u;
+const TASK_ID = /^tsk-\d{1,9}$/u;
 
 /** The most files one reply names. */
 const FILES_MAX = 40;

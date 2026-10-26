@@ -113,10 +113,10 @@ export const pullImage = async (
 };
 
 /** A build's step line: Docker's `Step 2/5 :`, Podman's `STEP 2/5:`. */
-const STEP = /step (\d+)\/(\d+)/i;
+const STEP = /step (\d+)\/(\d+)/iu;
 
 /** The base image the Dockerfile names. */
-const FROM = /^FROM\s+(\S+)/m;
+const FROM = /^FROM\s+(\S+)/mu;
 
 /**
  * The browser image's tag, pulled and built when the runtime lacks it.

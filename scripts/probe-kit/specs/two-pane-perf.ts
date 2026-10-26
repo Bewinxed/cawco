@@ -270,9 +270,9 @@ export function watchCost(): void {
             const text = String(event.data).slice(0, 400);
             const kind =
               // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-              /"kind":"([^"]+)"/.exec(text)?.[1] ??
+              /"kind":"([^"]+)"/u.exec(text)?.[1] ??
               // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-              /"type":"([^"]+)"/.exec(text)?.[1] ??
+              /"type":"([^"]+)"/u.exec(text)?.[1] ??
               "?";
             queueMicrotask(() => {
               w.__cost.messages.push([start, performance.now() - start, kind]);

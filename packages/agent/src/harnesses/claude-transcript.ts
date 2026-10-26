@@ -727,7 +727,7 @@ const isTaskNotification = (prompt: unknown): prompt is string =>
 /** The text of a notification's `<tag>…</tag>`, trimmed; undefined when absent. */
 const notificationField = (text: string, tag: string): string | undefined =>
   // RegExp#exec returns null for a tag the block does not carry.
-  new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(text)?.[1]?.trim();
+  new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "u").exec(text)?.[1]?.trim();
 
 const XML_ENTITIES: Record<string, string> = {
   "&amp;": "&",
@@ -768,7 +768,7 @@ export const harnessNoteOf = (text: string): HarnessNote | undefined => {
     return;
   }
   const title = notificationField(whole, "summary")?.replace(
-    /&(?:amp|lt|gt|quot|apos);/g,
+    /&(?:amp|lt|gt|quot|apos);/gu,
     (entity) => XML_ENTITIES[entity]
   );
   const body = notificationField(whole, "result") ?? "";
@@ -823,7 +823,7 @@ function taskNotification(
     task_id: notificationField(block, "task-id"),
     status: notificationField(block, "status"),
     summary: notificationField(block, "summary")?.replace(
-      /&(?:amp|lt|gt|quot|apos);/g,
+      /&(?:amp|lt|gt|quot|apos);/gu,
       (entity) => XML_ENTITIES[entity]
     ),
     ...(toolUseId ? { tool_use_id: toolUseId } : {}),

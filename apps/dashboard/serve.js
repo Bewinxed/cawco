@@ -100,7 +100,7 @@ if (!process.env.CAWCO_HUB_URL) {
   process.exit(1);
 }
 const target = new URL(process.env.CAWCO_HUB_URL);
-const URL_BRACKETS = /^\[|\]$/g;
+const URL_BRACKETS = /^\[|\]$/gu;
 /** An `https:` or `wss:` hub is dialled with TLS, on its own port or 443. */
 const SCHEMES = {
   "http:": { secure: false, port: 80 },
@@ -208,7 +208,7 @@ const TYPES = {
   ".woff2": "font/woff2",
 };
 
-const ACCEPTS_BROTLI = /(br|brotli)/i;
+const ACCEPTS_BROTLI = /(br|brotli)/iu;
 
 /**
  * The client trees of earlier builds still on disk, newest first: every

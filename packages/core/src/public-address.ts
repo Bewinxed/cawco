@@ -42,10 +42,10 @@ for (const [address, prefix] of [
 }
 
 /** An IPv4-mapped IPv6 address (`::ffff:203.0.113.9`), as a socket reports an IPv4 peer on a dual-stack listener. */
-const MAPPED = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i;
+const MAPPED = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/iu;
 
 /** An IPv6 address's zone (`fe80::1%eth0`). */
-const ZONE = /%.*$/;
+const ZONE = /%.*$/u;
 
 /** `address` as itself: an IPv4-mapped one unwrapped, an IPv6 zone dropped. */
 export const plainAddress = (address: string): string =>

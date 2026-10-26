@@ -17,9 +17,9 @@ import { GITHUB_API } from "./upstreams";
 const READ_MS = 10_000;
 
 const GITHUB_URL =
-  /^(?:https?:\/\/|git@)github\.com[/:]([^/\s]+)\/([^/#?\s]+?)(?:\.git)?(?:[/#?].*)?$/i;
-const OWNER_REPO = /^[\w.-]+\/[\w.-]+$/;
-const LOCAL = /^(?:\/|\.|~)/;
+  /^(?:https?:\/\/|git@)github\.com[/:]([^/\s]+)\/([^/#?\s]+?)(?:\.git)?(?:[/#?].*)?$/iu;
+const OWNER_REPO = /^[\w.-]+\/[\w.-]+$/u;
+const LOCAL = /^(?:\/|\.|~)/u;
 
 type Origin =
   | { kind: "github"; owner: string; repo: string }

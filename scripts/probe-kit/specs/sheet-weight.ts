@@ -386,9 +386,9 @@ const stageChecks = async (kit: Kit) => {
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** The folder's weight in artifact_create's answer, as the tool result carries it. */
-const ANSWERED_WEIGHT = /"weight":(\{[^}]*\})/;
+const ANSWERED_WEIGHT = /"weight":(\{[^}]*\})/u;
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });

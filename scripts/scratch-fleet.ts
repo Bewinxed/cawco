@@ -99,10 +99,10 @@ export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
 
 /** A launch's stderr file, whose stdout is the same name in `.log`. */
-const ERR_SUFFIX = /\.err$/;
+const ERR_SUFFIX = /\.err$/u;
 /** An agent's line on its sign-in reads and its reports (accounts.ts, daemon.ts `readPart`, auth.ts). */
 const SIGNIN_LINE =
-  /\[accounts\]|\[keychain\]|harness's report|sign-ins|Claude account|could not be read|was not read/;
+  /\[accounts\]|\[keychain\]|harness's report|sign-ins|Claude account|could not be read|was not read/u;
 
 /**
  * How Claude Code opens the words a person sent while a turn ran, which it
@@ -356,7 +356,7 @@ const limitRefusal = ({
 export const delay = (ms: number) => Bun.sleep(ms);
 
 /** Runs of whitespace, as `ss` lays its columns out. */
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 
 /** How many preview ports a scratch hub gets: one per session that shows a preview or a canvas. */
 export const PREVIEW_PORTS = 12;
@@ -618,7 +618,7 @@ const answeredOf = (
 
 const encoder = new TextEncoder();
 /** The agent's log lines about accounts and sign-ins, for a failed wait to show. */
-const ACCOUNT_LINE = /account|sign|auth|login|credential/i;
+const ACCOUNT_LINE = /account|sign|auth|login|credential/iu;
 
 /**
  * Variable `name` of process `pid`'s environment, as core `processArgs`
@@ -927,7 +927,7 @@ const chatEvents = (
 };
 
 /** A workspace's fleet folder's name ({@link workspaceFleetDir}). */
-const FLEET_DIR = /^cawco-[0-9a-f]{8}$/;
+const FLEET_DIR = /^cawco-[0-9a-f]{8}$/u;
 
 /**
  * macOS: where a scratch fleet that workspace `id` runs keeps its sandbox
@@ -1458,7 +1458,7 @@ for (const [name, number] of Object.entries(END_SIGNALS)) {
 }
 
 /** A process's own folder in /proc. */
-const PID_ENTRY = /^\d+$/;
+const PID_ENTRY = /^\d+$/u;
 
 /**
  * Whether a live process holds `dir`: has it as its working directory, an

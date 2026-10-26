@@ -522,7 +522,7 @@ const MAX_PAYLOAD_BYTES = 4096;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 /** A device's push key: 32 random bytes, standard base64 with padding. */
-const KEY = /^[A-Za-z0-9+/]{43}=$/;
+const KEY = /^[A-Za-z0-9+/]{43}=$/u;
 
 const utf8 = new TextEncoder();
 /** The sealed alert's UTF-8 JSON, as WebCrypto takes it. */
@@ -2434,9 +2434,9 @@ const deviceView = (device: PushDeviceRow) => ({
 
 /** A pairing id as the app mints it: a lowercase v4 uuid. */
 const PAIRING_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 /** A pairing secret: 32 random bytes, base64url without padding. */
-const SECRET = /^[A-Za-z0-9_-]{43}$/;
+const SECRET = /^[A-Za-z0-9_-]{43}$/u;
 
 export const pushRoutes = (db: DbShape, push: Push) =>
   new Elysia()

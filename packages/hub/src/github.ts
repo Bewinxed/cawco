@@ -82,7 +82,7 @@ const PER_PAGE = 100;
 /** One request. Our choice. */
 const REQUEST_MS = 30_000;
 
-const REPO_PATH = /\/repos\/([^/]+)\/([^/]+?)(?:\/|$)/;
+const REPO_PATH = /\/repos\/([^/]+)\/([^/]+?)(?:\/|$)/u;
 
 const user = z.object({ login: z.string() }).nullish();
 const label = z.union([z.string(), z.object({ name: z.string() })]);

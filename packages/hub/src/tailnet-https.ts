@@ -60,9 +60,9 @@ const CHECK_MS = 30_000;
 const NEEDS_CHECK_MS = 5000;
 /** How long one `tailscale` call may take: a first certificate is an ACME order. Our choice. */
 const CALL_MS = 60_000;
-const ACCESS_DENIED = /access denied/i;
-const PEM_BLOCK = /-----BEGIN ([A-Z ]+)-----[\s\S]+?-----END \1-----/g;
-const TRAILING_DOT = /\.$/;
+const ACCESS_DENIED = /access denied/iu;
+const PEM_BLOCK = /-----BEGIN ([A-Z ]+)-----[\s\S]+?-----END \1-----/gu;
+const TRAILING_DOT = /\.$/u;
 
 /** `tailscale status --json`: ipnstate.Status, the parts read here. */
 interface Status {
@@ -581,7 +581,7 @@ export type TailnetHttpsService = ReturnType<typeof createTailnetHttps>;
 const RELAY_HOP = "tailnet dashboard relay";
 /** What a client says of where it came from that the relay doesn't carry on: it says its hop in `X-Forwarded-*` alone. */
 const UNCARRIED_HEADERS = ["forwarded", "x-forwarded-for"];
-const LIST_SEPARATOR = /\s*,\s*/;
+const LIST_SEPARATOR = /\s*,\s*/u;
 
 /** `headers`' first hop of `name`, as public-origin.js reads it. */
 const firstHop = (headers: Headers, name: string): string | undefined =>

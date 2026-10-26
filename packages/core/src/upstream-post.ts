@@ -180,15 +180,15 @@ export interface UpstreamAskInput {
 
 /** A REST path's kind, by what it posts to. */
 const REST_KINDS: readonly [RegExp, string][] = [
-  [/\/issues\/\d+\/comments$/, "comment"],
-  [/\/issues$/, "issue"],
-  [/\/pulls\/\d+\/reviews/, "review"],
-  [/\/pulls\/\d+\/comments/, "review comment"],
-  [/\/pulls$/, "pull request"],
-  [/\/forks$/, "fork"],
-  [/\/git\/refs/, "branch"],
-  [/\/contents\//, "file"],
-  [/\/releases/, "release"],
+  [/\/issues\/\d+\/comments$/u, "comment"],
+  [/\/issues$/u, "issue"],
+  [/\/pulls\/\d+\/reviews/u, "review"],
+  [/\/pulls\/\d+\/comments/u, "review comment"],
+  [/\/pulls$/u, "pull request"],
+  [/\/forks$/u, "fork"],
+  [/\/git\/refs/u, "branch"],
+  [/\/contents\//u, "file"],
+  [/\/releases/u, "release"],
 ];
 
 /** A GraphQL mutation's kind, by its first field. */
@@ -202,10 +202,10 @@ const GRAPHQL_KINDS: Readonly<Record<string, string>> = {
   createRef: "branch",
 };
 
-const MUTATION_FIELD = /mutation\b[^{]*\{\s*(?:\w+\s*:\s*)?(\w+)/;
-const TRAILING_SLASHES = /\/+$/;
+const MUTATION_FIELD = /mutation\b[^{]*\{\s*(?:\w+\s*:\s*)?(\w+)/u;
+const TRAILING_SLASHES = /\/+$/u;
 /** A branch's ref prefix, left off where a push names its branches. */
-const HEADS = /^refs\/heads\//;
+const HEADS = /^refs\/heads\//u;
 
 /** A forge write's kind and its one line, as the card says them. */
 const forgeDescribed = (
@@ -394,7 +394,7 @@ export const describePost = (
 /** A repository on GitHub is named without its host. */
 const GITHUB_HOST = "github.com/";
 /** A REST path's issue or pull request: `/issues/12`, `/pulls/12/reviews`. */
-const REST_NUMBER = /\/(?:issues|pulls)\/(\d+)(?:\/|$)/;
+const REST_NUMBER = /\/(?:issues|pulls)\/(\d+)(?:\/|$)/u;
 /** A GitHub connection tool's issue or pull request, by the argument it names it with. */
 const MCP_NUMBER_ARGS = ["issue_number", "pullNumber", "pull_number"] as const;
 

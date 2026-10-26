@@ -64,13 +64,13 @@ const PRODUCT = [
 /** Folders that hold no probe or product code: pictures, fixtures, and core's words (rule 1's). */
 const SKIP = new Set(["baselines", "fixtures", "node_modules", WORDS]);
 /** States files draw a component for review; the product never renders their text. */
-const NOT_PRODUCT = /\.(stories|test|spec)\.[cm]?[jt]sx?$/;
+const NOT_PRODUCT = /\.(stories|test|spec)\.[cm]?[jt]sx?$/u;
 /** A word shorter than this is no sentence only a copy would spell. */
 const MIN_LENGTH = 8;
 /** A word of two or more words, a sign or a dash between them too ("Configure → Updates"). */
 const SENTENCE = /\p{L}[^\p{L}]*\s[^\p{L}]*\p{L}/u;
 /** Runs of white space, as a page lays them out: one space. */
-const SPACE = /\s+/g;
+const SPACE = /\s+/gu;
 
 const isPhrase = (text: string): boolean =>
   text.length >= MIN_LENGTH && SENTENCE.test(text);
@@ -227,11 +227,11 @@ function spelledBy(phrase: string): { file: string; text: string } | null {
 }
 
 /** A pattern's anchors, at its start and its end. */
-const ANCHORS = /^\^|\$$/g;
+const ANCHORS = /^\^|\$$/gu;
 /** An escaped character, which matches itself. */
-const ESCAPED = /\\([.*+?^${}()|[\]\\/-])/g;
+const ESCAPED = /\\([.*+?^${}()|[\]\\/-])/gu;
 /** What makes a pattern more than words. */
-const SPECIAL = /[.*+?^${}()|[\]\\]/;
+const SPECIAL = /[.*+?^${}()|[\]\\]/u;
 
 /** A regular expression's source as the words it matches whole, if it is only words. */
 function regexWords(source: string): string | null {
@@ -339,7 +339,7 @@ const IN_PAGE = new Set([
   "waitForFunction",
 ]);
 /** The words modules, as a probe imports them. */
-const WORDS_IMPORT = /packages\/core\/src\/words\//;
+const WORDS_IMPORT = /packages\/core\/src\/words\//u;
 
 /** The names a file imports from a core words module. */
 function wordImports(source: ts.SourceFile): Set<string> {

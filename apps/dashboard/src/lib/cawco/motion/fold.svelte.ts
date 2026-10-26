@@ -30,7 +30,7 @@ const running = new WeakMap<HTMLElement, Animation>();
 export const folding = new Set<HTMLElement>();
 export const foldStarts = new Set<(node: HTMLElement) => void>();
 /** Layouts whose gap an unfolding child brings with it. */
-const STACKS = /flex|grid/;
+const STACKS = /flex|grid/u;
 
 /** The drawn height now, including a fold in flight. */
 const drawn = (node: HTMLElement) => node.getBoundingClientRect().height;

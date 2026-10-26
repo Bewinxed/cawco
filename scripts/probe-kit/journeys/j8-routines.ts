@@ -24,14 +24,14 @@ import type { KitFleet } from "../kit";
 import { callsInOrder, say } from "./mock";
 import { type Data, eventually, type Journey, type Leg, shows } from "./suite";
 
-const ROUTINE = /JOURNEY-ROUTINE (\S+)/;
+const ROUTINE = /JOURNEY-ROUTINE (\S+)/u;
 const PAUSED = "Paused";
 /** A schedule with no run inside the week: only its test and Run now run it. */
 const CRON = "0 6 1 1 *";
 /** The read-back's words for a schedule that runs this week: its next run. */
-const NEXT_RUN = /· next run /;
+const NEXT_RUN = /· next run /u;
 /** Any name: the strip is an image named by the schedule's words. */
-const NAMED = /\S/;
+const NAMED = /\S/u;
 
 interface Seeded {
   projectId: string;

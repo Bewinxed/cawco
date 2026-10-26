@@ -16,9 +16,9 @@ import { scratchFleet, until } from "../../scripts/scratch-fleet";
 const SENDS = 12;
 const PARAGRAPH =
   "The transcript keeps its place while the rows above it settle, so a reader who scrolled up to check an earlier step is never pulled back down. Each tool call folds into one line once it lands, and the lines stack in the ledger's rail. ";
-const STEP = /step (\d+)/;
+const STEP = /step (\d+)/u;
 /** Each word with the space after it: the mock joins them as they are. */
-const WORDS = /(?<= )/;
+const WORDS = /(?<= )/u;
 const reply = (n: number) =>
   `Step ${n} is done. ${PARAGRAPH}\n\n- The branch builds clean.\n- The lint pass is quiet.\n- The captures are saved beside the script.\n\n${PARAGRAPH}${PARAGRAPH}`;
 

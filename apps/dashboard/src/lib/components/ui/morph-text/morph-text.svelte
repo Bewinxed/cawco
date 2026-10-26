@@ -6,7 +6,7 @@
    * plain would morph on one long line and jump back to its lines when the
    * morph ends.
    */
-  const TRAILING_SPACE = / $/;
+  const TRAILING_SPACE = / $/u;
 
   /** `text` with a "\n" wherever it wraps in `probe`, laid out already. */
   function linesIn(probe: HTMLElement, text: string): string {

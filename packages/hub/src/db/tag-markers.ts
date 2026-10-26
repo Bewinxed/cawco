@@ -18,48 +18,48 @@ const BEFORE: readonly {
   tag: (said: RegExpExecArray) => string;
 }[] = [
   {
-    line: /^\[Hand-off from the (.+?)(?:#([0-9a-f]{8}))? session — another agent, not the user\]/,
+    line: /^\[Hand-off from the (.+?)(?:#([0-9a-f]{8}))? session — another agent, not the user\]/u,
     tag: ([, from, short]) => markerTag("handoff", { from, short }),
   },
   {
-    line: /^\[CawCo\] Your message to (.+?) was not delivered: /,
+    line: /^\[CawCo\] Your message to (.+?) was not delivered: /u,
     tag: ([, to]) => markerTag("undelivered", { to }),
   },
   {
-    line: /^\[CawCo\] The (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: \d+ \}\)/,
+    line: /^\[CawCo\] The (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: \d+ \}\)/u,
     tag: ([, kind, name, since, id]) =>
       markerTag("artifact-responses", { id, kind, name, since }),
   },
   {
-    line: /^\[CawCo\] The person commented on the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\)\./,
+    line: /^\[CawCo\] The person commented on the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\)\./u,
     tag: ([, kind, name, id]) =>
       markerTag("artifact-comments", { id, kind, name }),
   },
   {
-    line: /^\[CawCo\] The (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\) does not compile on its stage;/,
+    line: /^\[CawCo\] The (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\) does not compile on its stage;/u,
     tag: ([, kind, name, id]) =>
       markerTag("artifact-errors", { id, kind, name }),
   },
   {
-    line: /^\[CawCo\] The person changed the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\) from its inspector,/,
+    line: /^\[CawCo\] The person changed the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\) from its inspector,/u,
     tag: ([, kind, name, id]) =>
       markerTag("artifact-saves", { id, kind, name }),
   },
   {
-    line: /^\[CawCo\] (.+) put the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" in your panel \(artifact ([0-9a-f-]{36})\)\./,
+    line: /^\[CawCo\] (.+) put the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" in your panel \(artifact ([0-9a-f-]{36})\)\./u,
     tag: ([, from, kind, name, id]) =>
       markerTag("artifact-handed", { from, id, kind, name }),
   },
   {
-    line: /^\[Fleet watch\] (.+)\n\n/,
+    line: /^\[Fleet watch\] (.+)\n\n/u,
     tag: ([, line]) => markerTag("fleet-watch", { line }),
   },
   {
-    line: /^\[Fork\] (.+)\n\n/,
+    line: /^\[Fork\] (.+)\n\n/u,
     tag: ([, line]) => markerTag("fork", { line }),
   },
   {
-    line: /^\[Report from delegate (.+?)#([0-9a-f]{8}) — (turn complete|turn failed|notice)\]\n(?:Headline: ([^\n]+)\n)?\n/,
+    line: /^\[Report from delegate (.+?)#([0-9a-f]{8}) — (turn complete|turn failed|notice)\]\n(?:Headline: ([^\n]+)\n)?\n/u,
     tag: ([, name, short, outcome, headline]) =>
       markerTag("report", {
         name,
@@ -69,12 +69,12 @@ const BEFORE: readonly {
       }),
   },
   {
-    line: /^\[Delegate ask from (.+?)\]\n\n[\s\S]*?\n\n\[delegate-ask instance=([0-9a-f-]{36}) request=(\S+)\]/,
+    line: /^\[Delegate ask from (.+?)\]\n\n[\s\S]*?\n\n\[delegate-ask instance=([0-9a-f-]{36}) request=(\S+)\]/u,
     tag: ([, label, instance, request]) =>
       markerTag("delegate-ask", { label, instance, request }),
   },
   {
-    line: /^\[Rule: (.+?)\]\n\n/,
+    line: /^\[Rule: (.+?)\]\n\n/u,
     tag: ([, name]) => markerTag("rule", { name }),
   },
 ];

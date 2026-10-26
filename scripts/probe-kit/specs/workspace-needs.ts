@@ -49,7 +49,7 @@ import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
 /** The dashboard's Machines button: its count of machines. */
-const MACHINES_BUTTON = /^\d+ machines?/;
+const MACHINES_BUTTON = /^\d+ machines?/u;
 
 /** A folder of stand-in commands, each an executable that does nothing. */
 const standIns = async (dir: string, commands: string[]): Promise<string> => {

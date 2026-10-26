@@ -39,8 +39,8 @@ import { ds } from "./tailwind.mjs";
 const OPEN = new Set(["(", "["]);
 const CLOSE = new Set([")", "]"]);
 const COMBINATORS = new Set([" ", ">", "+", "~"]);
-const NAME_END = /[.#[:\s>+~,()]/;
-const IS_OR_WHERE = /^:(?:is|where)\(/;
+const NAME_END = /[.#[:\s>+~,()]/u;
+const IS_OR_WHERE = /^:(?:is|where)\(/u;
 
 /** Walks a selector, calling `visit(char, index, depth)` outside escapes. */
 function walk(text, visit) {
@@ -228,7 +228,7 @@ function complexSubject(complex) {
 
 /* ------------------------------------------------------- one variant's state */
 
-const ESCAPED_PROBE = /\.(?:[^\s.#[\]():>+~,\\]|\\.)*\\:hidden/g;
+const ESCAPED_PROBE = /\.(?:[^\s.#[\]():>+~,\\]|\\.)*\\:hidden/gu;
 const CONDITIONS = new Set(["@media", "@container", "@supports"]);
 
 /**
@@ -291,12 +291,12 @@ const DISCRETE = new Set([
   "display-mode",
 ]);
 
-const SPACES = /\s+/g;
-const AND = /\s+and\s+/;
-const NOT = /^not /;
-const RANGE = /^(width|height)(>=|<=|>|<)([\d.]+)([a-z%]*)$/;
-const MIN_MAX = /^(min|max)-(width|height):([\d.]+)([a-z%]*)$/;
-const CONTAINER_NAME = /\s+(?=\()/;
+const SPACES = /\s+/gu;
+const AND = /\s+and\s+/u;
+const NOT = /^not /u;
+const RANGE = /^(width|height)(>=|<=|>|<)([\d.]+)([a-z%]*)$/u;
+const MIN_MAX = /^(min|max)-(width|height):([\d.]+)([a-z%]*)$/u;
+const CONTAINER_NAME = /\s+(?=\()/u;
 
 function bare(text) {
   let t = text.replace(SPACES, "");
@@ -389,8 +389,8 @@ function atRulesExclusive(a, b) {
   return a.some((x) => b.some((y) => atRuleExclusive(x, y)));
 }
 
-const COMMA_SPACE = /,\s+/g;
-const DESCENDANT_OF = /^(.+)\s+&$/;
+const COMMA_SPACE = /,\s+/gu;
+const DESCENDANT_OF = /^(.+)\s+&$/u;
 
 /**
  * `&X, &Y` → `&:is(X,Y)`, and `X &` (`in-`) → `&:is(X *)`, the form
@@ -427,7 +427,7 @@ function negations(a, b) {
   return false;
 }
 
-const ATTRIBUTE_VALUE = /\[([\w-]+)=("?)([^\]"]*)\2\]/g;
+const ATTRIBUTE_VALUE = /\[([\w-]+)=("?)([^\]"]*)\2\]/gu;
 
 /** One attribute, at one place in one selector, with two different values. */
 function attributeValuesDiffer(a, b) {
@@ -443,13 +443,13 @@ function attributeValuesDiffer(a, b) {
 // `first:`/`last:` are the first and last of `nth-*` counts:
 // `:first-child` is `:nth-child(1)`, `:last-child` is `:nth-last-child(1)`.
 const POSITION_ALIASES = [
-  [/:first-child\b/g, ":nth-child(1)"],
-  [/:last-child\b/g, ":nth-last-child(1)"],
-  [/:first-of-type\b/g, ":nth-of-type(1)"],
-  [/:last-of-type\b/g, ":nth-last-of-type(1)"],
+  [/:first-child\b/gu, ":nth-child(1)"],
+  [/:last-child\b/gu, ":nth-last-child(1)"],
+  [/:first-of-type\b/gu, ":nth-of-type(1)"],
+  [/:last-of-type\b/gu, ":nth-last-of-type(1)"],
 ];
-const POSITION = /:nth-((?:last-)?(?:child|of-type))\(([^()]*)\)/g;
-const PLAIN_POSITION = /^\d+$/;
+const POSITION = /:nth-((?:last-)?(?:child|of-type))\(([^()]*)\)/gu;
+const PLAIN_POSITION = /^\d+$/u;
 const PARITY = new Set(["odd", "even"]);
 
 function positions(selector) {
@@ -590,11 +590,11 @@ const GROUPS = {
   container: ["container-name", "container-type"],
 };
 const BORDER =
-  /^(-(?:inline|block)(?:-start|-end)?|-top|-right|-bottom|-left)?(-width|-style|-color)?$/;
-const CORNER = /^border-(start|end)-(start|end)-radius$/;
+  /^(-(?:inline|block)(?:-start|-end)?|-top|-right|-bottom|-left)?(-width|-style|-color)?$/u;
+const CORNER = /^border-(start|end)-(start|end)-radius$/u;
 const BOX =
-  /^(margin|padding|scroll-margin|scroll-padding|inset)((?:-(?:inline|block)(?:-start|-end)?|-top|-right|-bottom|-left)?)$/;
-const SEVERAL_VALUES = /\s|,/;
+  /^(margin|padding|scroll-margin|scroll-padding|inset)((?:-(?:inline|block)(?:-start|-end)?|-top|-right|-bottom|-left)?)$/u;
+const SEVERAL_VALUES = /\s|,/u;
 
 /** The physical sides a box property's suffix names (``, `-inline`, `-top`). */
 function sidesOf(suffix) {
@@ -809,13 +809,13 @@ function winnerOf(a, b) {
 
 /* ---------------------------- a class passed to a component's root */
 
-const SVELTE_FILE = /\.svelte$/;
-const PROPS_BINDING = /let\s*\{([\s\S]*?)\}\s*(?::[^=]*)?=\s*\$props\(\)/;
-const CLASS_PROP = /\bclass\s*:\s*(\w+)/;
-const QUOTED = /"([^"]*)"|'([^']*)'|`([^`]*)`/g;
-const CALLED = /\b([A-Za-z_$][\w$]*)\s*\(/g;
-const CLASS_EQUALS = /^class=/;
-const SPACE_RUN = /\s+/;
+const SVELTE_FILE = /\.svelte$/u;
+const PROPS_BINDING = /let\s*\{([\s\S]*?)\}\s*(?::[^=]*)?=\s*\$props\(\)/u;
+const CLASS_PROP = /\bclass\s*:\s*(\w+)/u;
+const QUOTED = /"([^"]*)"|'([^']*)'|`([^`]*)`/gu;
+const CALLED = /\b([A-Za-z_$][\w$]*)\s*\(/gu;
+const CLASS_EQUALS = /^class=/u;
+const SPACE_RUN = /\s+/u;
 
 function quotedClasses(text) {
   return [...text.matchAll(QUOTED)].flatMap((m) =>
@@ -885,7 +885,8 @@ const MAX_DEPTH = 4;
 
 function recipePattern(name) {
   return new RegExp(
-    `\\b(?:const|let)\\s+${name.replace("$", "\\$")}\\s*=\\s*(tv|cva)\\(`
+    `\\b(?:const|let)\\s+${name.replace("$", "\\$")}\\s*=\\s*(tv|cva)\\(`,
+    "u"
   );
 }
 
@@ -973,7 +974,7 @@ function callArguments(text, open) {
   return text.slice(open + 1);
 }
 
-const GATED = /([A-Za-z_$][\w$]*)\s*&&\s*$/;
+const GATED = /([A-Za-z_$][\w$]*)\s*&&\s*$/u;
 
 /**
  * The classes of the `tv`/`cva` recipes a class expression calls. A call
@@ -1105,7 +1106,7 @@ function componentRoots(file) {
     const props = ast ? propLocals(ast) : new Map();
     const found = [];
     const uses = binding
-      ? new RegExp(`\\b${binding.replace("$", "\\$")}\\b`)
+      ? new RegExp(`\\b${binding.replace("$", "\\$")}\\b`, "u")
       : null;
     svelteNodes(ast?.fragment, (node) => {
       const attribute = node.attributes?.find(

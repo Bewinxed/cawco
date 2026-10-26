@@ -255,7 +255,7 @@ async function backdrop(page) {
     for (const l of document.querySelectorAll(s)) {
       l.style.cssText = l
         .getAttribute("style")
-        .replace(/animation[^;]*;|opacity[^;]*;/g, "");
+        .replace(/animation[^;]*;|opacity[^;]*;/gu, "");
     }
   }, sel);
   return {

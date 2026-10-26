@@ -690,7 +690,7 @@ export const labelOf = (typed: string): string => typed.trim().toLowerCase();
 
 /** `ready` → `Ready`, `follow_up` → `Follow up`: a stage as a column head says it. */
 export const stageLabel = (name: string): string => {
-  const words = name.replace(/[-_]+/g, " ").trim();
+  const words = name.replace(/[-_]+/gu, " ").trim();
   return words ? words[0].toUpperCase() + words.slice(1) : "No stage";
 };
 

@@ -13,16 +13,16 @@
 import type { CDPSession } from "playwright-core";
 
 /** DevTools' own prefix on a detached node's name, where the snapshot writes it. */
-const DETACHED_PREFIX = /^Detached /;
+const DETACHED_PREFIX = /^Detached /u;
 /** An HTML element's name in a snapshot: its opening tag, attributes and all. */
-const OPENING_TAG = /^<([a-z][\w-]*)[\s\S]*$/;
+const OPENING_TAG = /^<([a-z][\w-]*)[\s\S]*$/u;
 /** A probe's own mark on an element (`data-probe="…"`), said beside the element in a path. */
-const PROBE_TAG = /data-probe="([^"]*)"/;
+const PROBE_TAG = /data-probe="([^"]*)"/u;
 /** A probe's mark on an element that sits in a pane put away (`data-probe-away`), said as `[away]` in a path. */
-const AWAY_TAG = /\sdata-probe-away(?:=|\s|>|$)/;
+const AWAY_TAG = /\sdata-probe-away(?:=|\s|>|$)/u;
 /** A script URL's scheme and host, left off a closure's source position. */
-const ORIGIN = /^.*?\/\/[^/]+/;
-const WHITESPACE = /\s+/g;
+const ORIGIN = /^.*?\/\/[^/]+/u;
+const WHITESPACE = /\s+/gu;
 /** The snapshot's `detachedness` of a node no document holds. */
 const DETACHED = 2;
 

@@ -60,7 +60,7 @@ const END = "HOSTPROBE-END";
 const REPORT = "[Report from delegate ";
 
 /** Runs of whitespace between `ss`'s columns. */
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 /** How host's refusal opens, for one field and for several (core `workWords.hostRefused`). */
 const HEADING = {
   one: workWords.hostRefused(["x"]).split("\n")[0] ?? "",
@@ -68,11 +68,11 @@ const HEADING = {
 };
 
 /** A tool text that names the `host` parameter. */
-const NAMES_HOST = /\bhost\b/;
+const NAMES_HOST = /\bhost\b/u;
 /** Where a summary's reading ends. */
 const READ_END = "HOSTPROBE-READ-END";
 /** The reading's JSON list, from its tag to {@link READ_END}. */
-const READ_JSON = new RegExp(`^(\\[.*?\\]) ${READ_END}`);
+const READ_JSON = new RegExp(`^(\\[.*?\\]) ${READ_END}`, "u");
 
 /** The reading: namespaces, PID 1, groups, listening sockets, one per line. */
 const PROBE = `printf '${BEGIN}\\n'; echo "pidns $(readlink /proc/self/ns/pid)"; echo "netns $(readlink /proc/self/ns/net)"; echo "pid1 $(tr '\\000' '\\n' < /proc/1/cmdline | head -n 1)"; echo "groups $(id -G)"; ss -tlnH | awk '{print "listen " $4}'; printf '${END}\\n'`;

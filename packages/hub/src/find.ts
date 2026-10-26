@@ -133,7 +133,7 @@ const LISTED_DOCS = 200;
 /** How many characters of a thread message a listing's moment carries; an agent's find cuts its own from the whole message, which rides as its `context` when asked. */
 const LISTED_CHARS = 240;
 
-const SPACES = /\s+/g;
+const SPACES = /\s+/gu;
 
 /** A conversation's or thread's moments; none for anything else. */
 const momentsOf = (result: FindResult): FindMoment[] =>

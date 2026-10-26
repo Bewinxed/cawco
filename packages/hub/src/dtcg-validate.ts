@@ -15,8 +15,8 @@
 
 type Json = Record<string, unknown>;
 
-const REF = /^\{[^{}]+\}$/;
-const HEX = /^#[0-9a-f]{6}$/i;
+const REF = /^\{[^{}]+\}$/u;
+const HEX = /^#[0-9a-f]{6}$/iu;
 const isObject = (v: unknown): v is Json =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const isRef = (v: unknown): boolean => typeof v === "string" && REF.test(v);

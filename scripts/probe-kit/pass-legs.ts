@@ -85,7 +85,7 @@ export interface Heard {
   url: string;
 }
 
-const TICKET = /ticket=[^&]+/;
+const TICKET = /ticket=[^&]+/u;
 
 /** Everything `tab`'s browser asks of a preview name (one under the domain, never the dashboard's own) and is answered, in order. */
 export const hear = (tab: Page): Heard[] => {

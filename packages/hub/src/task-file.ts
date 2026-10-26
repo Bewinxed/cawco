@@ -214,35 +214,35 @@ export interface ParsedTask {
 }
 
 /** A task file's name: `tsk-12-some-slug.md`. */
-const FILE_NAME = /^tsk-(\d{1,9})(?:-[^/]*)?\.md$/;
+const FILE_NAME = /^tsk-(\d{1,9})(?:-[^/]*)?\.md$/u;
 /** A task named by an API caller or a file: `tsk-12`, `#12` or `12`. */
-const TASK_REF = /^(?:tsk-|#)?(\d{1,9})$/i;
-const TODO_ID = /^td-(\d{1,6})$/;
-const TODO_PATH = /^\d{1,4}(?:\.\d{1,4})*$/;
-const TODO_LINE = /^([ \t]*)([-*+]) \[( |x|X)\](?: (.*))?$/;
-const TODO_MARKER = /^\[(td-\d{1,6})\]\s*/;
-const PROMOTED = /(?:^|\s)(?:→|->)\s*#(\d{1,9})\s*$/;
-const PROPOSED = /^\(proposed\)\s*/i;
+const TASK_REF = /^(?:tsk-|#)?(\d{1,9})$/iu;
+const TODO_ID = /^td-(\d{1,6})$/u;
+const TODO_PATH = /^\d{1,4}(?:\.\d{1,4})*$/u;
+const TODO_LINE = /^([ \t]*)([-*+]) \[( |x|X)\](?: (.*))?$/u;
+const TODO_MARKER = /^\[(td-\d{1,6})\]\s*/u;
+const PROMOTED = /(?:^|\s)(?:→|->)\s*#(\d{1,9})\s*$/u;
+const PROPOSED = /^\(proposed\)\s*/iu;
 /** An acceptance criterion's line: a list item, its box ticked, open or absent; its indent, bullet and words. */
-const CRITERION_LINE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+)$/;
+const CRITERION_LINE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+)$/u;
 const BUDGET_ENTRY =
-  /^\s*(usd|turns|minutes)\s*:\s*\$?([0-9]+(?:\.[0-9]+)?)\s*$/;
-const SECTION = /^##\s+(.*?)(?:\s+#+)?\s*$/;
-const SPACES = /\s+/g;
-const TITLE = /^#\s+(.*?)(?:\s+#+)?\s*$/;
-const FENCE = /^\s*(```|~~~)/;
-const SEQUENCE_ITEM = /^\s*-\s+(.*)$/;
-const BARE_SCALAR = /^[A-Za-z0-9_][A-Za-z0-9_ ./@+-]*$/;
-const BARE_ITEM = /^[A-Za-z0-9_][A-Za-z0-9_./@+-]*$/;
-const YAML_WORDS = /^(?:true|false|null|yes|no|on|off|~)$/i;
-const SLUG_UNSAFE = /[^a-z0-9]+/g;
-const EDGE_DASHES = /^-+|-+$/g;
-const CR = /\r$/;
-const NOT_LETTERS = /[^a-z]/g;
-const SPACE = /\s/;
-const BOX = /\[( |x|X)\]/;
-const MD_EXTENSION = /\.md$/;
-const ID_PREFIX = /^tsk-\d+-?/;
+  /^\s*(usd|turns|minutes)\s*:\s*\$?([0-9]+(?:\.[0-9]+)?)\s*$/u;
+const SECTION = /^##\s+(.*?)(?:\s+#+)?\s*$/u;
+const SPACES = /\s+/gu;
+const TITLE = /^#\s+(.*?)(?:\s+#+)?\s*$/u;
+const FENCE = /^\s*(```|~~~)/u;
+const SEQUENCE_ITEM = /^\s*-\s+(.*)$/u;
+const BARE_SCALAR = /^[A-Za-z0-9_][A-Za-z0-9_ ./@+-]*$/u;
+const BARE_ITEM = /^[A-Za-z0-9_][A-Za-z0-9_./@+-]*$/u;
+const YAML_WORDS = /^(?:true|false|null|yes|no|on|off|~)$/iu;
+const SLUG_UNSAFE = /[^a-z0-9]+/gu;
+const EDGE_DASHES = /^-+|-+$/gu;
+const CR = /\r$/u;
+const NOT_LETTERS = /[^a-z]/gu;
+const SPACE = /\s/u;
+const BOX = /\[( |x|X)\]/u;
+const MD_EXTENSION = /\.md$/u;
+const ID_PREFIX = /^tsk-\d+-?/u;
 
 /** The longest slug a file name takes. */
 const SLUG_LIMIT = 48;
@@ -677,7 +677,7 @@ const readFields = (
 };
 
 /** A front matter key a task file may carry beyond its own: what YAML reads bare. */
-export const EXTRA_KEY = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+export const EXTRA_KEY = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u;
 
 // --- the body ------------------------------------------------------------------
 
@@ -700,9 +700,9 @@ const isComments = (heading: string): boolean =>
   sectionName(heading) === "comments";
 
 /** A comment entry's heading: `### <name> · <mover>[ · <id>] · <ISO time>`. */
-const COMMENT_HEADING = /^###\s+(.+)$/;
+const COMMENT_HEADING = /^###\s+(.+)$/u;
 const COMMENT_SEPARATOR = " · ";
-const MIDDLE_DOT = /·/g;
+const MIDDLE_DOT = /·/gu;
 const COMMENT_MOVERS: ReadonlySet<string> = new Set([
   "you",
   "lead",

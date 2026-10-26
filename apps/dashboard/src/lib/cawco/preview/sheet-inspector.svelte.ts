@@ -29,7 +29,7 @@ type ToPage =
   | { story: string | null; type: "cawco:story-select" };
 
 /** A story's name the file can take: an identifier starting with a capital (story-file.ts `STORY_NAME`). */
-export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/;
+export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
 
 export class SheetInspector {
   /** The sheet as its page last said it; null until it has. */

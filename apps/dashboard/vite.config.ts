@@ -76,7 +76,7 @@ const devHub = (): URL => {
  * stylesheet). Every other asset keeps Vite's limit.
  */
 const firstPaint = new Set<string>();
-const FONT_FILE = /\.(?:woff2?|ttf|otf)$/;
+const FONT_FILE = /\.(?:woff2?|ttf|otf)$/u;
 
 const houseFaces = (): Plugin => ({
   name: "cawco:house-faces",
@@ -296,7 +296,8 @@ const VENDOR_COMPONENT_STYLE = new RegExp(
   [
     `[\\\\/]node_modules[\\\\/](?:${VENDOR_COMPONENT_SHEETS.map(pathPattern).join("|")})[\\\\/].*\\.svelte\\?.*type=style`,
     `[\\\\/]node_modules[\\\\/](?:${VENDOR_IMPORTED_SHEETS.map(pathPattern).join("|")})[\\\\/][^\\\\/?]+\\.css(?:\\?|$)`,
-  ].join("|")
+  ].join("|"),
+  "u"
 );
 export const vendorComponentSheets = (): Plugin => ({
   name: "cawco-vendor-component-sheets",
@@ -356,8 +357,8 @@ export const vendorComponentSheets = (): Plugin => ({
  * the build here instead of leaking again.
  */
 const STREAMDOWN_ROOT =
-  /svelte-streamdown[\\/]dist[\\/]Streamdown\.svelte\?.*type=style/;
-const STREAMDOWN_OVERLAY = /\[data-expanded=(['"]?)true\1\](?=\s*\{)/g;
+  /svelte-streamdown[\\/]dist[\\/]Streamdown\.svelte\?.*type=style/u;
+const STREAMDOWN_OVERLAY = /\[data-expanded=(['"]?)true\1\](?=\s*\{)/gu;
 export const streamdownOverlayOwn = (): Plugin => ({
   name: "cawco-streamdown-overlay-own",
   transform(code, id) {
@@ -399,8 +400,8 @@ export const streamdownOverlayOwn = (): Plugin => ({
  * itself comes or goes. A release that writes it another way fails the build
  * here.
  */
-const APP_CSS = /[\\/]src[\\/]app\.css(\?.*)?$/;
-const NOT_PROSE_ATTRIBUTE = /\[class~=(['"]?)not-prose\1\]/g;
+const APP_CSS = /[\\/]src[\\/]app\.css(\?.*)?$/u;
+const NOT_PROSE_ATTRIBUTE = /\[class~=(['"]?)not-prose\1\]/gu;
 export const proseNotByClass = (): Plugin => ({
   name: "cawco-prose-not-by-class",
   transform(code, id) {

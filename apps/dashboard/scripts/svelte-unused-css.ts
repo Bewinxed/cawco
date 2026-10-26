@@ -23,7 +23,7 @@ import { compile, preprocess } from "svelte/compiler";
 const DASHBOARD = join(dirname(new URL(import.meta.url).pathname), "..");
 const SRC = process.argv[2] ? resolve(process.argv[2]) : join(DASHBOARD, "src");
 const UNUSED = "/* (unused) ";
-const STYLE_OPEN = /<style[\s>]/;
+const STYLE_OPEN = /<style[\s>]/u;
 
 const preprocessors = vitePreprocess();
 const pruned: string[] = [];
@@ -47,7 +47,7 @@ function prunedRules(source: string, css: string, file: string): string[] {
     }
     from = found + selector.length;
     const line = source.slice(0, found).split("\n").length;
-    out.push(`  ${file}:${line}: ${selector.replace(/\s+/g, " ")}`);
+    out.push(`  ${file}:${line}: ${selector.replace(/\s+/gu, " ")}`);
     at = css.indexOf(UNUSED, at + UNUSED.length);
   }
   return out;

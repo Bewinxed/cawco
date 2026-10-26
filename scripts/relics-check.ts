@@ -40,14 +40,14 @@ const KINDS = [
 ] as const;
 type Kind = (typeof KINDS)[number];
 
-const LITERAL = /<!--\s*literal:/;
+const LITERAL = /<!--\s*literal:/u;
 const STYLE_VAR =
-  /style:--[\w-]+=["']-?\d[\d.]*(px|rem|em|ch|vh|vw|dvh|%|ms|s|deg)["']/;
-const IMPORTANT = /!important/;
+  /style:--[\w-]+=["']-?\d[\d.]*(px|rem|em|ch|vh|vw|dvh|%|ms|s|deg)["']/u;
+const IMPORTANT = /!important/u;
 /** A quoted string in source: the class lists live in them. */
-const STRING = /"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/g;
+const STRING = /"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/gu;
 /** A utility with Tailwind's trailing `!`: a token with a `-` or `:` in it (words in copy end in `!` too). */
-const BANG = /(?:^|\s)([\w:.[\]()/%#-]*[-:][\w:.[\]()/%#-]*[\w)\]])!(?=\s|$)/g;
+const BANG = /(?:^|\s)([\w:.[\]()/%#-]*[-:][\w:.[\]()/%#-]*[\w)\]])!(?=\s|$)/gu;
 
 /**
  * The overrides the design system sanctions: where only this form can say
@@ -65,7 +65,7 @@ const SANCTIONED: readonly {
   {
     file: "apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte",
     kind: "bang",
-    text: /^motion-reduce:transition-none$/,
+    text: /^motion-reduce:transition-none$/u,
     reason:
       "vaul-svelte writes the drawer's transition inline from script (use-drawer-root.svelte.js:335, helpers.js set() → el.style); only an important declaration outranks an inline style",
     docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
@@ -73,7 +73,7 @@ const SANCTIONED: readonly {
   {
     file: "apps/dashboard/src/app.css",
     kind: "important",
-    text: /^\s*(animation: none|display: inline|white-space: inherit) !important;$/,
+    text: /^\s*(animation: none|display: inline|white-space: inherit) !important;$/u,
     reason:
       "svelte-streamdown 4.2.1 (the npm latest) writes each streamed token's animation, inline-block and pre-wrap into its style attribute (dist/context.svelte.js:53–59, :67) and offers no mode without them; only an important declaration outranks an inline style",
     docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
@@ -81,7 +81,7 @@ const SANCTIONED: readonly {
   {
     file: "apps/dashboard/src/app.css",
     kind: "important",
-    text: /^\s*(visibility|pointer-events): inherit !important;$/,
+    text: /^\s*(visibility|pointer-events): inherit !important;$/u,
     reason:
       "virtua 0.53.4 (0.53.5, the latest, the same) writes a measuring item's visibility inline (lib/svelte/ListItem.svelte:54) and its container's pointer-events while it scrolls (lib/svelte/Virtualizer.svelte:186), with no option to skip either; only an important declaration outranks an inline style",
     docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
@@ -94,12 +94,12 @@ const sanctioned = (file: string, kind: Kind, text: string): boolean =>
       relative(ROOT, file) === entry.file &&
       entry.text.test(text)
   );
-const STYLE_OPEN = /<style\b[^>]*>/;
-const STYLE_REASON = /^\s*\/\*\s*tailwind:\s*\S.*tailwindcss\.com\/docs/;
+const STYLE_OPEN = /<style\b[^>]*>/u;
+const STYLE_REASON = /^\s*\/\*\s*tailwind:\s*\S.*tailwindcss\.com\/docs/u;
 /** A file the check reads: Svelte, a stylesheet or TypeScript, never a declaration file. */
-const READ = /\.(svelte|css|ts)$/;
+const READ = /\.(svelte|css|ts)$/u;
 /** What stands before a `<style>`'s first line on its own line. */
-const BEFORE_STYLE = /.*<style\b[^>]*>/;
+const BEFORE_STYLE = /.*<style\b[^>]*>/u;
 
 const args = process.argv.slice(2);
 const list = args.includes("--list");

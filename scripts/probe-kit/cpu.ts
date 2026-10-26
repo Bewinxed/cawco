@@ -64,12 +64,12 @@ const GRAIN_MS = 1;
  */
 const CAPACITY = 65_536;
 /** A process's folder in /proc. */
-const PROCESS = /^\d+$/;
+const PROCESS = /^\d+$/u;
 /** Raster threads. */
-const PAINT = /^SkiaCPUWorker/;
+const PAINT = /^SkiaCPUWorker/u;
 /** Compositing threads: the compositor and its software GL. */
-const COMPOSITING = /Compositor$|^llvmpipe/;
-const HZ = /^CONFIG_HZ=(\d+)$/m;
+const COMPOSITING = /Compositor$|^llvmpipe/u;
+const HZ = /^CONFIG_HZ=(\d+)$/mu;
 
 /** One recording, read. */
 export interface FrameCpu {

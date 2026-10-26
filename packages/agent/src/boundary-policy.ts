@@ -373,10 +373,10 @@ const holdersIn = (policy: Policy): string[] => {
   return [...holders].sort();
 };
 
-const LETTER = /[a-z]/i;
-const AS_IS = /[0-9/]/;
-const UNSPELLED = /[\]\\^"\n]/;
-const PLAIN = /[a-z0-9/]/i;
+const LETTER = /[a-z]/iu;
+const AS_IS = /[0-9/]/u;
+const UNSPELLED = /[\]\\^"\n]/u;
+const PLAIN = /[a-z0-9/]/iu;
 
 /** One character of a path as a Seatbelt regex matches it in either case; nothing for one this does not spell. */
 const caseClass = (char: string): string | undefined => {

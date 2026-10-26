@@ -113,7 +113,9 @@ async function mac(script: string, retried = false): Promise<string> {
   const code = await build.exited;
   check(
     "compile",
-    code === 0 && /^BUILT iOS$/m.test(text) && /^BUILT iOS 18\.5$/m.test(text),
+    code === 0 &&
+      /^BUILT iOS$/mu.test(text) &&
+      /^BUILT iOS 18\.5$/mu.test(text),
     code === 0 ? "BUILT iOS and BUILT iOS 18.5" : `build-both.sh exited ${code}`
   );
   if (code !== 0) {
@@ -335,7 +337,7 @@ interface MaestroNode {
   children?: MaestroNode[];
 }
 /** Maestro's `bounds`: "[left,top][right,bottom]", in points. */
-const BOUNDS = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/;
+const BOUNDS = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/u;
 const frameOf = (bounds: string | undefined): Frame | undefined => {
   const m = BOUNDS.exec(bounds ?? "");
   if (!m) {
@@ -458,14 +460,14 @@ function maestroTimes(): string {
  */
 const NOTICE = "Probe";
 const NOTICE_OPEN = "Design";
-const GROUP_DISMISS = /^Dismiss all \d+ moved logins?$/;
-const FOLD = /^(Show|Hide) \d+ signed in everywhere$/;
+const GROUP_DISMISS = /^Dismiss all \d+ moved logins?$/u;
+const FOLD = /^(Show|Hide) \d+ signed in everywhere$/u;
 /**
  * Caw's own label: "Needs you, N" (or what he says with nothing waiting),
  * then " · N notices" while any stands. The panel's head reads "Needs you" alone.
  */
 const CAW_LABEL =
-  /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)( · \d+ notices?)?$/;
+  /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)( · \d+ notices?)?$/u;
 /** With the seeded ask and moved login: his rim counts the ask, his label adds the notice. */
 const CAW_SEEDED = "Needs you, 1 · 1 notice";
 const caw = (nodes: Node[]) =>
@@ -518,7 +520,7 @@ const panelBox = (nodes: Node[]): Frame | undefined => {
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 };
 /** The probe's own Bash rows' labels ("Print a line echo row-output", "… row-below"). */
-const OUR_ROWS = /row-(output|below)/;
+const OUR_ROWS = /row-(output|below)/u;
 /** The transcript's disclosure rows (tool calls), each Collapsed or Expanded. */
 const disclosureRows = (nodes: Node[]) =>
   nodes.filter(
@@ -672,7 +674,7 @@ interface Hanging {
   panel: Frame;
 }
 const HANGS =
-  /panel hangs: glass (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) panel (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) flare (-?[\d.]+)/;
+  /panel hangs: glass (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) panel (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) flare (-?[\d.]+)/u;
 async function hanging(udid: string): Promise<Hanging | undefined> {
   const text = await mac(
     `xcrun simctl spawn ${udid} log show --last 2m --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "CawPanel"' | grep 'panel hangs' | tail -1`
@@ -700,7 +702,7 @@ xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
 sips -s format bmp "$F/s.png" --out "$F/s.bmp" >/dev/null 2>&1
 base64 < "$F/s.bmp"
 rm -rf "$F"`);
-  return { bmp: Buffer.from(text.replace(/\s/g, ""), "base64"), points };
+  return { bmp: Buffer.from(text.replace(/\s/gu, ""), "base64"), points };
 }
 /** The mean colour, [r, g, b] 0–255, of the 2pt square centred on a point. */
 function colourAt({ bmp, points }: Pixels, x: number, y: number): number[] {
@@ -738,7 +740,7 @@ const apart = (a: number[], b: number[]) =>
 
 /** The phone's row as the shell drew it (`-shell-probe`'s line): Caw's glass, the first tab, the transcript's top. */
 const SHELL_LINE =
-  /caw=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)x(-?[\d.]+) .*firstTab=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)x(-?[\d.]+) transcriptTop=(-?[\d.]+)/;
+  /caw=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)x(-?[\d.]+) .*firstTab=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)x(-?[\d.]+) transcriptTop=(-?[\d.]+)/u;
 
 /** The phone's row in the window's points: Caw's glass, the first tab, and the row's floor. */
 interface Row {
@@ -855,7 +857,7 @@ async function hangChecks(kind: Kind, udid: string, closed: Pixels) {
 }
 
 /** A pid as the Mac's shell prints it (`echo $!`): digits alone. */
-const DIGITS = /^\d+$/;
+const DIGITS = /^\d+$/u;
 
 /**
  * A recording of the panel closing and opening twice on the phone
@@ -890,7 +892,7 @@ for i in $(seq 1 30); do kill -0 ${pid} 2>/dev/null || break; sleep 0.5; done`).
   );
   const movie = await mac(`base64 < ${file}; rm -f ${file}`).catch(() => "");
   const saved = join(out, "phone-open-close.mov");
-  const bytes = Buffer.from(movie.replace(/\s/g, ""), "base64");
+  const bytes = Buffer.from(movie.replace(/\s/gu, ""), "base64");
   if (bytes.length > 0) {
     await Bun.write(saved, bytes);
   }
@@ -1261,7 +1263,7 @@ async function answerFromPanel(kind: Kind, udid: string) {
 }
 
 const STAGE_WORDS =
-  /^(Sending…|The hub has it|The session has it|Couldn't send)/;
+  /^(Sending…|The hub has it|The session has it|Couldn't send)/u;
 
 /**
  * Why an answered ask stayed in the panel: the row's own stage words, and the
@@ -1292,7 +1294,7 @@ async function answerEvidence(udid: string) {
     console.log(`    ${line.replace(LOG_PREFIX, "")}`);
   }
 }
-const LOG_PREFIX = /^.*\[dev\.cawco\.app:/;
+const LOG_PREFIX = /^.*\[dev\.cawco\.app:/u;
 
 /**
  * The same with a delegate chip's panel open over the tray (iPad, where the
@@ -1373,18 +1375,18 @@ async function pass(
  * the CLI's DriverTimeout, and its insight for a read that runs long.
  */
 const HUNG_WORDS =
-  /Timed out while evaluating UI query|main thread busy|Maestro driver timed out|taking longer than usual/;
+  /Timed out while evaluating UI query|main thread busy|Maestro driver timed out|taking longer than usual/u;
 /** A read that failed after this long waited on the app, whatever it said. */
 const HUNG_MS = 60_000;
 /** The shared wrapper's word on how long a failed read ran (`screenRead`). */
-const FAILED_AFTER = /failed after (\d+) ms/;
+const FAILED_AFTER = /failed after (\d+) ms/u;
 const hung = (message: string) =>
   HUNG_WORDS.test(message) ||
   Number(FAILED_AFTER.exec(message)?.[1] ?? 0) > HUNG_MS;
 /** `sample`'s seconds on the app's process. */
 const SAMPLE_SECONDS = 3;
 /** A call graph line's sample count, after its tree marks. */
-const GRAPH_COUNT = /^[\s+!:|]*(\d+) /;
+const GRAPH_COUNT = /^[\s+!:|]*(\d+) /u;
 /**
  * The share of the main thread's samples a frame needs to be printed: a
  * fifth, so the graph shows past where a loop's stack splits (at a half, run
@@ -1417,7 +1419,7 @@ rm -f "$F"`).catch((error) => String(error));
   );
   const total = Number(GRAPH_COUNT.exec(graph[0] ?? "")?.[1] ?? 0);
   const clean = (line: string) =>
-    line.replace(/\s+\[0x[0-9a-f,]+\]/g, "").slice(0, 240);
+    line.replace(/\s+\[0x[0-9a-f,]+\]/gu, "").slice(0, 240);
   console.log(
     `  ${udid}: a read out for ${SAMPLE_AFTER_MS / 1000}s; ${lines[0]?.startsWith("PID") ? `the app (${lines[0]}) sampled for ${SAMPLE_SECONDS}s, its main thread's hot path (frames in at least ${HOT_SHARE * 100}% of its ${total} samples):` : `not sampled: ${text.trim().slice(0, 300)}`}`
   );
@@ -1468,7 +1470,7 @@ async function pressEvidence(kind: Kind, udid: string) {
 /** How far back the app's log is read after a hung read: past the 187s one read has waited. */
 const EVIDENCE_WINDOW = "6m";
 /** The app's once-a-second census under `-shell-probe` (ShellController `probeShell`, `LoopCensus`). */
-const LOOPS_LINE = /probe loops n=\d+.*/;
+const LOOPS_LINE = /probe loops n=\d+.*/u;
 
 /**
  * Why the app never went idle, from its own log over `EVIDENCE_WINDOW`.

@@ -166,7 +166,7 @@ const LANDED_MS = 1500;
  */
 const REACH_TASK_MS = 12;
 /** A run of whitespace, as the kernel's port range file separates its two ports. */
-const SPACE_RUN = /\s+/;
+const SPACE_RUN = /\s+/u;
 /** Transcript's `ROW_ESTIMATE`: virtua's size for a row it has not measured, px. */
 const ROW_ESTIMATE = 21;
 /** How long leg 3 shows each silent session before reading its pane: its read has long landed. */
@@ -180,7 +180,7 @@ const PRESS_RESTYLE_ROOM = 100;
 /** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
 const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
-const LENGTH = / (\d+)ms/;
+const LENGTH = / (\d+)ms/u;
 const RIVE = join(
   ROOT,
   "node_modules/.bun/@rive-app+canvas@2.44.0/node_modules/@rive-app/canvas"
@@ -1059,7 +1059,7 @@ function landingOf(page: Page, pane: string): Promise<string> {
         .filter(({ rect }) => rect.height > 0 && rect.bottom > view.top)
         .sort((a, b) => a.rect.top - b.rect.top);
       const words = (first?.row.textContent ?? "")
-        .replace(/\s+/g, " ")
+        .replace(/\s+/gu, " ")
         .trim()
         .slice(0, 48);
       return `scrollTop ${box.scrollTop} of ${box.scrollHeight - box.clientHeight} (${box.scrollHeight - box.clientHeight - box.scrollTop}px off its end); first row in view "${words}", its top ${first ? Math.round(first.rect.top - view.top) : "none"}px from the view's`;
@@ -1451,12 +1451,12 @@ async function checkPaneLookup(
 }
 
 /** A sampled function's bundle file: `name@file:line:column`, or the engine's own. */
-const FILE_OF = /@([^:@]+):\d+:\d+$/;
+const FILE_OF = /@([^:@]+):\d+:\d+$/u;
 
 /** A trace's naming of the pressed tab's own box (TabItem `group/ff-tab`). */
-const PRESSED_TAB = /^SPAN class='group\/ff-tab /;
+const PRESSED_TAB = /^SPAN class='group\/ff-tab /u;
 /** Where a restyle ask or a scheduled set names its element: `<why> on <node>`. */
-const ASKED_ON = / on (.*?)(?: \(by [^)]*\))?$/;
+const ASKED_ON = / on (.*?)(?: \(by [^)]*\))?$/u;
 
 /**
  * A task's restyles a `:has()` asked for (a subject "Affected by :has()",
@@ -2287,13 +2287,13 @@ function checkPage(kit: Kit, back: Back): void {
 /** The detached kinds the leg reads (audit 0d8f70d1: +192 div, +113 svg, +1688 text per 30 switches). */
 const DETACHED_KINDS = ["SVGSVGElement", "div", "Text"] as const;
 /** A step of a retaining path at an element that sits in a pane put away (heap.ts' `[away]`, `markAway`). */
-const AWAY_STEP = /^native <.* \[away\]/;
+const AWAY_STEP = /^native <.* \[away\]/u;
 /** A step of a retaining path that is the engine's own, not script's (an element, a layout object, a fragment). */
-const NATIVE_STEP = /^native /;
+const NATIVE_STEP = /^native /u;
 /** A step of a retaining path that is a DOM node. */
-const DOM_STEP = /^native (<|SVG\w*Element|Text|Comment|DocumentFragment)/;
+const DOM_STEP = /^native (<|SVG\w*Element|Text|Comment|DocumentFragment)/u;
 /** A context's heap id in a retaining path's step. */
-const SCOPE_ID = /@\d+\b/g;
+const SCOPE_ID = /@\d+\b/gu;
 /** Quiet sessions the detached leg opens beside the scene's five, so the pane holds the audit's dozen tabs. */
 const QUIET_TABS = 7;
 /** Busy turns let run through the thirty switches (`TURN_MS` each: about their 39 s). */
@@ -2309,11 +2309,11 @@ const SWITCH_REST_MS = 1300;
  * flight (`tool:`, `live:`) leave the list as they land, the session's own
  * change (rows.ts `liveTail`), not the list's cut.
  */
-const LIST_ROW = /^div\{(?!tool\}|live\})[^}]*\} in {2}\(list \d+/;
+const LIST_ROW = /^div\{(?!tool\}|live\})[^}]*\} in {2}\(list \d+/u;
 /** A row in flight taken out of its list as it landed (`LIST_ROW`). */
-const IN_FLIGHT_ROW = /^div\{(tool|live)\} in {2}\(list \d+/;
+const IN_FLIGHT_ROW = /^div\{(tool|live)\} in {2}\(list \d+/u;
 /** Any node taken out (`watchHiddenRemovals`' mark). */
-const ANY_NODE = /./;
+const ANY_NODE = /./u;
 
 /**
  * Every element in a pane put away (`[data-pane-hidden]`) marked

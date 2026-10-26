@@ -49,7 +49,7 @@ export const VIEW_BLOCK = "view:";
  * hub's `VIEW_NAME`). A built-in id this build does not know (a newer
  * build's block) keeps its place.
  */
-export const BLOCK_ID = /^(?:[a-z][a-z-]{0,31}|view:[a-z0-9][a-z0-9-]{0,62})$/;
+export const BLOCK_ID = /^(?:[a-z][a-z-]{0,31}|view:[a-z0-9][a-z0-9-]{0,62})$/u;
 
 /** One block in a page's arrangement. */
 export interface BlockPlace {
@@ -152,7 +152,7 @@ export interface ViewAsked extends ThreadSaid {
 
 /** A view's name as a person reads it: `spend-per-routine` is "Spend per routine". */
 export const viewTitle = (name: string): string => {
-  const words = name.replace(/-+/g, " ").trim();
+  const words = name.replace(/-+/gu, " ").trim();
   return words ? words[0].toUpperCase() + words.slice(1) : name;
 };
 

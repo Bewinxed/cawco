@@ -38,7 +38,7 @@ const SSH = [
   "ServerAliveCountMax=3",
   "mac",
 ];
-const UDID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
+const UDID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/iu;
 /** The command the slot runs: says the UDID, then holds until its stdin ends. */
 const HOLDER = 'echo "$CAWCO_SIM_UDID"; exec cat >/dev/null';
 

@@ -838,7 +838,7 @@ async function proveStage1(
   );
 }
 
-const RIG_LINE = /^rig (\S+):$/;
+const RIG_LINE = /^rig (\S+):$/u;
 
 /**
  * Stage 2's builds (build-stage2.ts) for the rigs that have not passed on
@@ -1224,7 +1224,7 @@ interface Holder extends Proc {
   groups?: Proc[];
   staging?: string;
 }
-const WHITESPACE = /\s+/;
+const WHITESPACE = /\s+/u;
 /** A process's start time (`ps -o lstart=`), or undefined once it is gone. */
 async function startedOf(pid: number): Promise<string | undefined> {
   const ps = Bun.spawn(["ps", "-o", "lstart=", "-p", String(pid)], {
@@ -1463,7 +1463,7 @@ if (!superseded) {
 // lock the first one had just taken. A released generation keeps a marker
 // file, so no claim can land on it either.
 const locks = join(state, "build-lock");
-const GENERATION = /^\d+$/;
+const GENERATION = /^\d+$/u;
 await mkdir(locks, { recursive: true });
 const readHolder = async (dir: string): Promise<Holder | undefined> =>
   (await Bun.file(join(dir, "holder.json"))
@@ -1648,7 +1648,7 @@ const keepEvidence = async (
   if (found.length === 0) {
     return;
   }
-  const time = new Date().toISOString().replace(/[:.]/g, "-");
+  const time = new Date().toISOString().replace(/[:.]/gu, "-");
   const kept = join(failedEvidence, `failed-${commitId.slice(0, 12)}-${time}`);
   await Promise.all(
     found.map((name) => {

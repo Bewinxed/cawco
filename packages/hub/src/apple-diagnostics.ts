@@ -124,7 +124,7 @@ async function readAll(): Promise<Stored[]> {
     .sort((a, b) => b.receivedAt - a.receivedAt);
 }
 
-const ID = /^[a-f0-9]{16}$/;
+const ID = /^[a-f0-9]{16}$/u;
 
 interface Upload {
   appVersion: string;

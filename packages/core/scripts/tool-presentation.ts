@@ -35,12 +35,12 @@ const OUT = join(
 );
 
 /** `path-leaf-span` → `pathLeafSpan`. */
-const KEBAB = /-([a-z])/g;
+const KEBAB = /-([a-z])/gu;
 const caseName = (name: string): string =>
   name.replace(KEBAB, (_, letter: string) => letter.toUpperCase());
 
 const str = (text: string): string =>
-  `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  `"${text.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"')}"`;
 const raw = (text: string): string => `#"${text}"#`;
 const opt = <T>(value: T | undefined, write: (value: T) => string): string =>
   value === undefined ? "nil" : write(value);
@@ -239,19 +239,19 @@ function missingOnClients(): string[] {
   );
   const keysOf = (table: string): Set<string> => {
     const body = web.match(
-      new RegExp(`const ${table}: Record<string, \\w+> = \\{([^}]*)\\}`)
+      new RegExp(`const ${table}: Record<string, \\w+> = \\{([^}]*)\\}`, "u")
     )?.[1];
     if (body === undefined) {
       throw new Error(`tools:check: descriptors.ts has no ${table} table`);
     }
-    return new Set([...body.matchAll(/"([^"]+)":/g)].map((m) => m[1] ?? ""));
+    return new Set([...body.matchAll(/"([^"]+)":/gu)].map((m) => m[1] ?? ""));
   };
   const webGlyphs = keysOf("GLYPHS");
   const webInks = keysOf("INKS");
   const swiftGlyphs = new Set(
     [
       ...readFileSync(join(design, "Glyph.swift"), "utf8").matchAll(
-        /case \w+ = "([^"]+)"/g
+        /case \w+ = "([^"]+)"/gu
       ),
     ].map((m) => m[1] ?? "")
   );
@@ -284,11 +284,11 @@ function missingOnClients(): string[] {
  * whoever changes how one client reads a call changes the other in the same
  * commit. Comments and whitespace are not the rules and are not counted.
  */
-const PIN = /^\/\/ Interpreters: ts ([0-9a-f]{16}) swift ([0-9a-f]{16})$/m;
-const BLOCK_COMMENT = /^\s*\/\*[\s\S]*?\*\/\s*$/gm;
-const LINE_COMMENT = /^\s*\/\/.*$/gm;
-const WHITESPACE = /\s+/g;
-const PROSE_FIELD_LINE = /^export const PROSE_FIELD = .*$/m;
+const PIN = /^\/\/ Interpreters: ts ([0-9a-f]{16}) swift ([0-9a-f]{16})$/mu;
+const BLOCK_COMMENT = /^\s*\/\*[\s\S]*?\*\/\s*$/gmu;
+const LINE_COMMENT = /^\s*\/\/.*$/gmu;
+const WHITESPACE = /\s+/gu;
+const PROSE_FIELD_LINE = /^export const PROSE_FIELD = .*$/mu;
 
 function fingerprint(code: string): string {
   const rules = code

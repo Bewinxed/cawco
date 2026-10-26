@@ -346,7 +346,7 @@ export const relative = (file) => path.relative(ROOT, file);
 export const lineOf = (text, at) => text.slice(0, at).split("\n").length;
 
 const IGNORE =
-  /golar-ignore-next-line\s+([\w/-]+(?:\s*,\s*[\w/-]+)*)\s+--\s+\S/;
+  /golar-ignore-next-line\s+([\w/-]+(?:\s*,\s*[\w/-]+)*)\s+--\s+\S/u;
 
 /**
  * Whether the line before `at` holds `golar-ignore-next-line <rule> -- why`

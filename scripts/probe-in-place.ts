@@ -81,11 +81,11 @@ const hubRequire = createRequire(join(root, "packages/hub/package.json"));
 const delay = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 /** A whole move the machine refused, as its transcript line says it (core `accountMoveWords`). */
 const MOVE_REFUSED =
-  /^Couldn't move from A to (B|C): its Claude Code process is busy \(it holds 1 send\(s\) it has not read yet\), and a conversation isn't copied while the process writing it runs$/;
+  /^Couldn't move from A to (B|C): its Claude Code process is busy \(it holds 1 send\(s\) it has not read yet\), and a conversation isn't copied while the process writing it runs$/u;
 /** A move refused, held back or not tried again, as a hub line says it. */
-const MOVE_HELD = /can't move|stays on|isn't tried/;
+const MOVE_HELD = /can't move|stays on|isn't tried/u;
 /** Any wording of a continuation. */
-const CONTINUE_WORDS = /continu/i;
+const CONTINUE_WORDS = /continu/iu;
 
 async function until<T>(
   label: string,

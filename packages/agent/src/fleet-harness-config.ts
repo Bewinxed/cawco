@@ -29,7 +29,7 @@ import { resolveBin, toolEnv } from "./tools";
 const NPM_INSTALL_MS = 180_000;
 
 /** What a path component may hold. */
-const UNSAFE = /[^A-Za-z0-9._-]/g;
+const UNSAFE = /[^A-Za-z0-9._-]/gu;
 
 /** The dirs under {@link fleetPlacedDir} that hold modules, by kind, and the one that holds packages. */
 const MODULE_KINDS = ["opencodePlugins", "piExtensions"] as const;

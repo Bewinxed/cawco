@@ -605,7 +605,7 @@ const factNote = (note: Note): FactNote => ({
   text: note.text.trim(),
 });
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/u;
 
 /**
  * A note's `since` as its writer gave it: a day before `today` is kept, today
@@ -634,8 +634,8 @@ const sinceAsked = (
 const oneLine = (note: Note): boolean =>
   !note.text.trim().includes("\n") && note.text.trim().length <= FACT_WORDS;
 
-const PROPOSAL_ID = /^p-\d{8}-\d{6}-[0-9a-f]{6}$/;
-const STAMP_PUNCTUATION = /[-:]/g;
+const PROPOSAL_ID = /^p-\d{8}-\d{6}-[0-9a-f]{6}$/u;
+const STAMP_PUNCTUATION = /[-:]/gu;
 
 /** `n-20261013-120000-ab12cd`: sorts by when it was made. */
 const idAt = (prefix: "n" | "p", at: Date): string => {
@@ -710,7 +710,7 @@ const parseNote = (path: string, content: string): Note | undefined => {
 
 // --- the rules ----------------------------------------------------------------------
 
-const LOOSE = /[\s*_`>#|-]+/g;
+const LOOSE = /[\s*_`>#|-]+/gu;
 /** Words as an exact match compares them: case, markdown marks and spacing aside. */
 const plain = (text: string): string =>
   text.toLowerCase().replace(LOOSE, " ").trim();
@@ -1046,7 +1046,7 @@ const reasonOf = (raw: string): string => {
   return why;
 };
 
-const LEADING_SLASHES = /^\/+/;
+const LEADING_SLASHES = /^\/+/u;
 
 /**
  * What a project's fact files cannot say yet, in the hub's log: each line
@@ -3773,4 +3773,4 @@ export const memoryRoutes = (memory: Memory) =>
     );
 
 /** What opens a Caw thread message that is the person's note, not words to Caw. */
-export const MAKE_A_NOTE = /^make a note\s*:\s*/i;
+export const MAKE_A_NOTE = /^make a note\s*:\s*/iu;

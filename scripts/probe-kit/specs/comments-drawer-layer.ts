@@ -57,7 +57,7 @@ import {
 } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 const SHEET = "[data-preview-sheet]";
 const FRAME = `${SHEET} iframe[title="Preview"]`;
 const RAIL = '[data-slot="rail-sheet"]';

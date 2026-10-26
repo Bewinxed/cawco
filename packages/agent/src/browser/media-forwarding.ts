@@ -346,9 +346,9 @@ const MEASURE_MS = 15_000;
 const MEASURE_POLL_MS = 250;
 /** How long `netstat` has to answer, and a connection to be taken. */
 const READ_MS = 5000;
-const WHITESPACE = /\s+/;
+const WHITESPACE = /\s+/u;
 /** A /proc/net address bound on every address: all zeros, IPv4 or IPv6. */
-const EVERY_ADDRESS = /^0+$/;
+const EVERY_ADDRESS = /^0+$/u;
 
 /** Whether `/proc/net/<proto>{,6}` holds a socket bound on every address at `port` (TCP: listening), whoever owns it. */
 const procBinds = async (proto: "udp" | "tcp", port: number) => {

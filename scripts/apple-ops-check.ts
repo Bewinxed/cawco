@@ -17,7 +17,7 @@ const ROOT = join(import.meta.dir, "..");
 const APPLE = join(ROOT, "apps/apple");
 const SPEC = join(APPLE, "Packages/CawCoKit/Sources/CawCoAPI/openapi.json");
 const SKIP_DIRS = new Set([".build", "build", "DerivedData", ".swiftpm"]);
-const REFERENCE = /\bOperations\.([A-Za-z_][A-Za-z0-9_]*)/g;
+const REFERENCE = /\bOperations\.([A-Za-z_][A-Za-z0-9_]*)/gu;
 
 const walk = (dir: string, out: string[]): void => {
   for (const name of readdirSync(dir)) {

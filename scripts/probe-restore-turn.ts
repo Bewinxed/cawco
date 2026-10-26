@@ -31,8 +31,8 @@ const { delay, HARNESSES, MODEL, scratchFleet, until } =
   await import("./scratch-fleet");
 
 const HAND_BACK =
-  /CawCo restarted this session's process|A restart cut your turn/;
-const TAG = /SLOW-PROBE ([\w-]+)/;
+  /CawCo restarted this session's process|A restart cut your turn/u;
+const TAG = /SLOW-PROBE ([\w-]+)/u;
 const SLOW_WORDS = Array.from({ length: 240 }, (_, i) => `word${i} `);
 
 const wanted = (() => {

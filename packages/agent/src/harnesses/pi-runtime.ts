@@ -736,7 +736,7 @@ const INTERRUPTED =
  * built-in's name takes its place in the registry, path and all
  * (agent-session.js `_refreshToolRegistry`).
  */
-const CAWCO_TOOL_SOURCE = /^(?:builtin:|<sdk:|<inline:)/;
+const CAWCO_TOOL_SOURCE = /^(?:builtin:|<sdk:|<inline:)/u;
 
 /** Whether the tool `name` stands in pi's registry as one CawCo gave the session ({@link CAWCO_TOOL_SOURCE}); a name pi does not hold is not. */
 const cawcosTool = (pi: ExtensionAPI, name: string): boolean => {
@@ -931,7 +931,7 @@ class ProviderAnswers {
 }
 
 /** A send that is pi's `/compact`, with its optional focus text. */
-const COMPACT_COMMAND = /^\/compact(?:\s+([\s\S]*))?$/;
+const COMPACT_COMMAND = /^\/compact(?:\s+([\s\S]*))?$/u;
 
 class PiSession implements HarnessSession {
   readonly harness = "pi" as const;

@@ -41,7 +41,7 @@ import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-GATE-([ABPN])/;
+const TAG = /PROBE-GATE-([ABPN])/u;
 type Tag = "A" | "B" | "P" | "N";
 /** What each delegate commits: A's type-checks, B's is a deliberate type error, P's is a passing test. */
 const FILES: Record<Tag, { path: string; body: string }> = {

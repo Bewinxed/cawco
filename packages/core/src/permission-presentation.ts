@@ -135,7 +135,7 @@ export interface PresentationContext {
 
 // ── line changes ─────────────────────────────────────────────────────────
 
-const HEADING = /^#{1,6}\s+(.+?)\s*#*\s*$/;
+const HEADING = /^#{1,6}\s+(.+?)\s*#*\s*$/u;
 
 /** Each line's markdown section: the nearest heading at or above it. */
 const sectionsOf = (lines: string[]): (string | undefined)[] => {
@@ -255,16 +255,16 @@ const hunkOf = (
 
 /** A field whose name says it carries a credential. */
 const SECRET_KEY =
-  /secret|token|passw|api[-_]?key|apikey|auth|credential|cookie|private[-_]?key|^key$|bearer|session[-_]?id/i;
+  /secret|token|passw|api[-_]?key|apikey|auth|credential|cookie|private[-_]?key|^key$|bearer|session[-_]?id/iu;
 /** A value that reads as a credential whatever its field is called. */
 const SECRET_VALUE = [
-  /^(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}/,
-  /^gh[pousr]_[A-Za-z0-9]{20,}/,
-  /^github_pat_[A-Za-z0-9_]{20,}/,
-  /^xox[abprs]-[A-Za-z0-9-]{10,}/,
-  /^AKIA[0-9A-Z]{16}$/,
-  /^eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}$/,
-  /^bearer\s+\S{8,}/i,
+  /^(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}/u,
+  /^gh[pousr]_[A-Za-z0-9]{20,}/u,
+  /^github_pat_[A-Za-z0-9_]{20,}/u,
+  /^xox[abprs]-[A-Za-z0-9-]{10,}/u,
+  /^AKIA[0-9A-Z]{16}$/u,
+  /^eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}$/u,
+  /^bearer\s+\S{8,}/iu,
 ];
 /** Maps whose every value is private by nature: a server's environment, a request's headers. */
 const KEYS_ONLY = new Set(["env", "headers", "environment"]);
@@ -333,11 +333,11 @@ export function fieldsOf(
 
 // ── the tools ────────────────────────────────────────────────────────────
 
-const MCP_NAME = /^mcp__(.+?)__(.+)$/;
-const CAWCO_ADMIN_WRITE = /^(?:mcp__cawco__|cawco_)?admin_([a-z_]+)_write$/;
-const WORD_BREAK = /[_-]+/g;
-const CAMEL = /([a-z\d])([A-Z])/g;
-const SPACES = /\s+/g;
+const MCP_NAME = /^mcp__(.+?)__(.+)$/u;
+const CAWCO_ADMIN_WRITE = /^(?:mcp__cawco__|cawco_)?admin_([a-z_]+)_write$/u;
+const WORD_BREAK = /[_-]+/gu;
+const CAMEL = /([a-z\d])([A-Z])/gu;
+const SPACES = /\s+/gu;
 const COMMAND_CAP = 120;
 
 const text = (value: unknown): string | undefined =>
@@ -1085,13 +1085,13 @@ function memoryProposal(input: Record<string, unknown>): Presented {
   const made = files.map((file) =>
     changeOf(file.path, file.before, file.content)
   );
-  const stat = made.reduce(
+  const stat = made.reduce<LineStat>(
     (sum, each) => ({
       added: sum.added + each.stat.added,
       removed: sum.removed + each.stat.removed,
       sections: [],
     }),
-    { added: 0, removed: 0, sections: [] } as LineStat
+    { added: 0, removed: 0, sections: [] }
   );
   const notes = Array.isArray(input.notes)
     ? input.notes.filter((note): note is string => typeof note === "string")
@@ -1142,13 +1142,13 @@ function designProposal(input: Record<string, unknown>): Presented {
   const made = files.map((file) =>
     changeOf(file.path, file.before, file.after)
   );
-  const stat = made.reduce(
+  const stat = made.reduce<LineStat>(
     (sum, each) => ({
       added: sum.added + each.stat.added,
       removed: sum.removed + each.stat.removed,
       sections: [],
     }),
-    { added: 0, removed: 0, sections: [] } as LineStat
+    { added: 0, removed: 0, sections: [] }
   );
   return {
     summary:
@@ -1161,7 +1161,7 @@ function designProposal(input: Record<string, unknown>): Presented {
   };
 }
 
-const VOWEL_FIRST = /^[aeiou]/i;
+const VOWEL_FIRST = /^[aeiou]/iu;
 
 /** "an issue", "a comment": a kind with its article. */
 const withArticle = (kind: string): string =>

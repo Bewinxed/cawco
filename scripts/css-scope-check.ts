@@ -54,29 +54,29 @@ const SOURCES = ["apps/dashboard/src"];
  */
 const NAMED_VARIANTS = "apps/dashboard/src/lib/tokens/variants.css";
 const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
-const ALLOW = /^\/\*\s*css-scope:\s*\S/;
+const ALLOW = /^\/\*\s*css-scope:\s*\S/u;
 /** `/* css-scope .a .b: why *\/`: names this component owns though another file uses them. */
-const DECLARE = /\/\*\s*css-scope\s+((?:[.#][\w-]+\s*)+):\s*\S/g;
-const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style>/g;
+const DECLARE = /\/\*\s*css-scope\s+((?:[.#][\w-]+\s*)+):\s*\S/gu;
+const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style>/gu;
 /** At-rules whose blocks hold rules (the selector context carries through). */
-const GROUPING = /^@(?:media|supports|container|layer|scope|starting-style)\b/;
+const GROUPING = /^@(?:media|supports|container|layer|scope|starting-style)\b/u;
 /** A simple selector Svelte scopes: a class, id, attribute, element or `*`. */
-const OWN = /[.#[*]|^[a-zA-Z]|[\s>+~(][a-zA-Z]/;
-const COMBINATOR = /[\s>+~]/;
-const PSEUDO_CALL = /^::?[\w-]+\(/;
-const PSEUDO = /^::?[\w-]+/;
+const OWN = /[.#[*]|^[a-zA-Z]|[\s>+~(][a-zA-Z]/u;
+const COMBINATOR = /[\s>+~]/u;
+const PSEUDO_CALL = /^::?[\w-]+\(/u;
+const PSEUDO = /^::?[\w-]+/u;
 /** Pseudo-classes whose arguments narrow nothing for certain. */
-const LOOSE_CALL = /^:(?:not|is|where)\(/;
-const NAME = /[.#](-?[_a-zA-Z][\w-]*)/g;
-const DATA_ATTR = /\[(data-[\w-]+)/g;
-const SPACES = /\s+/;
-const SVELTE_FILE = /\.svelte$/;
+const LOOSE_CALL = /^:(?:not|is|where)\(/u;
+const NAME = /[.#](-?[_a-zA-Z][\w-]*)/gu;
+const DATA_ATTR = /\[(data-[\w-]+)/gu;
+const SPACES = /\s+/u;
+const SVELTE_FILE = /\.svelte$/u;
 /** Where a class or attribute name can be written: markup, scripts, styles. */
-const SOURCE_FILE = /\.(?:svelte|ts|js|css|html)$/;
+const SOURCE_FILE = /\.(?:svelte|ts|js|css|html)$/u;
 /** A name as CSS writes it: hyphens are part of the word. */
-const WORD = /-?[_a-zA-Z][\w-]*/g;
+const WORD = /-?[_a-zA-Z][\w-]*/gu;
 /** Module specifiers: `from "…"`, `import "…"`, `import("…")`. */
-const IMPORTED = /\b(?:from|import)\s*\(?\s*(["'])[^"'\n]*\1/g;
+const IMPORTED = /\b(?:from|import)\s*\(?\s*(["'])[^"'\n]*\1/gu;
 
 const walk = (dir: string, out: string[], keep: RegExp): void => {
   for (const name of readdirSync(dir)) {

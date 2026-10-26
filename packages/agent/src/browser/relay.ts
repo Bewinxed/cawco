@@ -144,7 +144,7 @@ const CERTBOT_MS = 180_000;
 const DEPLOY_HOOK = `chmod 0755 ${LETSENCRYPT}/live ${LETSENCRYPT}/archive && chmod 0644 ${LETSENCRYPT}/archive/*/privkey*.pem`;
 
 /** certbot's `certificates` line: `Expiry Date: 2027-01-17 10:00:00+00:00 (VALID: 89 days)`. */
-const EXPIRY = /Expiry Date: (\S+ \S+)/;
+const EXPIRY = /Expiry Date: (\S+ \S+)/u;
 
 const NO_PORTS: RelayPorts = {
   udp: false,
@@ -218,12 +218,12 @@ interface BoundSocket {
 
 /** TCP's LISTEN state in /proc/net/tcp (include/net/tcp_states.h `TCP_LISTEN`). */
 const TCP_LISTEN = "0A";
-const FIELDS = /\s+/;
-const PID = /^\d+$/;
-const SOCKET_LINK = /^socket:\[(\d+)\]$/;
+const FIELDS = /\s+/u;
+const PID = /^\d+$/u;
+const SOCKET_LINK = /^socket:\[(\d+)\]$/u;
 /** The lines of certbot's that say why it failed. */
 const CERTBOT_ERROR =
-  /^(?:Detail|Type|Error|An unexpected error)|Problem|error/i;
+  /^(?:Detail|Type|Error|An unexpected error)|Problem|error/iu;
 
 /** Every socket of `proto` bound to a local port: TCP listening, UDP bound. */
 const boundSockets = async (proto: "tcp" | "udp"): Promise<BoundSocket[]> => {

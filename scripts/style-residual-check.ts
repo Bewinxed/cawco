@@ -66,17 +66,17 @@ type Kind = (typeof KINDS)[number];
 /** Unmapped declarations a Sonnet lane may leave in one file. */
 const LANE_CAP = 5;
 
-const RESIDUAL = /^\s*residual:\s*([a-z-]+)/;
+const RESIDUAL = /^\s*residual:\s*([a-z-]+)/u;
 const LENGTH =
-  /(?<![\w.#-])(-?(?:\d+\.?\d*|\.\d+))(px|em|rem|ch|ex|cap|ic|lh|rlh|vw|vh|vi|vb|vmin|vmax|svw|svh|svi|svb|lvw|lvh|dvw|dvh|dvi|dvb|cqw|cqh|cqi|cqb|cqmin|cqmax|cm|mm|q|in|pt|pc)(?![\w-])/gi;
-const HEX = /#[0-9a-f]{3,8}(?![\w-])/i;
-const COLOR_FN = /(?<![\w-])(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/gi;
-const DIGIT = /\d/;
-const WORD = /[a-z][a-z-]*/gi;
-const STRING = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g;
-const URL = /url\([^)]*\)/gi;
+  /(?<![\w.#-])(-?(?:\d+\.?\d*|\.\d+))(px|em|rem|ch|ex|cap|ic|lh|rlh|vw|vh|vi|vb|vmin|vmax|svw|svh|svi|svb|lvw|lvh|dvw|dvh|dvi|dvb|cqw|cqh|cqi|cqb|cqmin|cqmax|cm|mm|q|in|pt|pc)(?![\w-])/giu;
+const HEX = /#[0-9a-f]{3,8}(?![\w-])/iu;
+const COLOR_FN = /(?<![\w-])(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/giu;
+const DIGIT = /\d/u;
+const WORD = /[a-z][a-z-]*/giu;
+const STRING = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu;
+const URL = /url\([^)]*\)/giu;
 /** A custom property's name, `--x` in `var(--x)` or a declaration's own: never a colour word. */
-const CUSTOM_NAME = /--[\w-]+/g;
+const CUSTOM_NAME = /--[\w-]+/gu;
 /** The lengths a residual may hold as they are: a hairline and its double. */
 const ALLOWED_LENGTHS = new Set([0, 1, 2]);
 /** CSS's named colours (css-color-4 §6.1), `transparent` and `currentcolor` aside: keywords, not literals. */
@@ -107,7 +107,7 @@ interface Report {
   violations: string[];
 }
 
-const VAR_CALL = /var\([^)]*\)/g;
+const VAR_CALL = /var\([^)]*\)/gu;
 
 /** A call's own arguments, from `open` (just past its `(`) to its closing parenthesis. */
 function argumentsFrom(text: string, open: number): string {
@@ -256,7 +256,7 @@ function check(path: string): Report {
     }
     if (kind === "unmapped") {
       report.unmapped.push(
-        `${at(node.start)}  ${node.property}: ${(node.value ?? "").replace(/\s+/g, " ").trim()}`
+        `${at(node.start)}  ${node.property}: ${(node.value ?? "").replace(/\s+/gu, " ").trim()}`
       );
     }
     for (const literal of literals(node.value ?? "")) {
@@ -445,17 +445,17 @@ const CORE_NAMESPACES: Record<string, string[]> = {
   aspect: ["aspect"],
 };
 /** A theme key's declaration, `--color-x: var(--x);`. */
-const THEME_KEY = /^\s*(--[\w-]+)\s*:\s*([^;]*);/gm;
+const THEME_KEY = /^\s*(--[\w-]+)\s*:\s*([^;]*);/gmu;
 /** A key's value that is one token and nothing else, `var(--x)`. */
-const ONE_TOKEN = /^var\((--[\w-]+)\)$/;
+const ONE_TOKEN = /^var\((--[\w-]+)\)$/u;
 /** A house functional utility, `@utility name-* { … }`. */
-const HOUSE_UTILITY = /@utility\s+([\w-]+)-\*\s*\{([^}]*)\}/g;
+const HOUSE_UTILITY = /@utility\s+([\w-]+)-\*\s*\{([^}]*)\}/gu;
 /** A utility's `--value(…)` call. */
-const VALUE_CALL = /--value\(([^)]*)\)/g;
+const VALUE_CALL = /--value\(([^)]*)\)/gu;
 /** A theme namespace `--value()` reads, `--spacing-*`. */
-const VALUE_NAMESPACE = /--([\w-]+)-\*/g;
+const VALUE_NAMESPACE = /--([\w-]+)-\*/gu;
 /** The files the token rule reads. */
-const CLASS_FILE = /\.(svelte|ts|js)$/;
+const CLASS_FILE = /\.(svelte|ts|js)$/u;
 /** Every namespace a key can sit in, longest first, so `--font-weight-x` is `font-weight`, not `font`. */
 const NAMESPACES = [
   ...new Set([...Object.values(CORE_NAMESPACES).flat(), "duration"]),
@@ -522,7 +522,7 @@ function houseNamespaces(): Record<string, string[]> {
 
 /** `utility-[var(--x)]` or `utility-(--x)`, a variant's `:` or a `-` sign before it; no fallback in the var. */
 const TOKEN_ARBITRARY =
-  /(?<![\w-])-?([a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*)-(?:\[var\((--[\w-]+)\)\]|\((--[\w-]+)\))(?![\w-])/g;
+  /(?<![\w-])-?([a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*)-(?:\[var\((--[\w-]+)\)\]|\((--[\w-]+)\))(?![\w-])/gu;
 
 /** Each class in `path` that writes a theme token as an arbitrary value, with the utility that says it. */
 function tokenArbitraries(

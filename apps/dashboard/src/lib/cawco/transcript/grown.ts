@@ -89,7 +89,7 @@ interface Shadow {
   dy: number;
 }
 const SHADOW =
-  /^\s*(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+([\d.]+)(?:px)?\s+(.+?)\s*$/;
+  /^\s*(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+([\d.]+)(?:px)?\s+(.+?)\s*$/u;
 /** A one-shadow token as written (`0 14px 28px <colour>`), or null. */
 function shadowOf(value: string): Shadow | null {
   const m = SHADOW.exec(value);

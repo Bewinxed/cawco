@@ -368,9 +368,9 @@ export interface WaitReader {
 /** A written wait the hub refuses, in words that name it. */
 export class WaitRefusal extends Error {}
 
-const HANDLE_HEX = /^[0-9a-f-]{6,}$/i;
-const PIN_NUMBER = /^\d{1,6}$/;
-const WEB = /^https?:\/\//i;
+const HANDLE_HEX = /^[0-9a-f-]{6,}$/iu;
+const PIN_NUMBER = /^\d{1,6}$/u;
+const WEB = /^https?:\/\//iu;
 
 const refuseWait = (message: string): never => {
   throw new WaitRefusal(message);

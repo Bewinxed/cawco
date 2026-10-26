@@ -34,11 +34,11 @@ export { Pairing } from "./pairing";
 export { Seats } from "./seats";
 
 const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 /** 32 random bytes, base64url without padding. */
-const SECRET = /^[A-Za-z0-9_-]{43}$/;
-const BEARER = /^Bearer (\S+)$/;
-const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/;
+const SECRET = /^[A-Za-z0-9_-]{43}$/u;
+const BEARER = /^Bearer (\S+)$/u;
+const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/u;
 /** APNs' limit on an alert's payload. */
 const MAX_PAYLOAD_BYTES = 4096;
 const MAX_BODY_BYTES = 32_768;

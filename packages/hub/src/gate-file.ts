@@ -104,24 +104,24 @@ export type CawEdits =
   | { kind: "declared"; globs: string[] }
   | { kind: "unreadable"; problems: string[] };
 
-const FENCE = /^---\s*$/;
-const LINE_SPLIT = /\r?\n/;
-const INDENTED = /^\s/;
-const OPTION = /^([a-z-]+):\s*(.*)$/;
-const DURATION = /^(\d{1,5})(s|m|h)$/;
+const FENCE = /^---\s*$/u;
+const LINE_SPLIT = /\r?\n/u;
+const INDENTED = /^\s/u;
+const OPTION = /^([a-z-]+):\s*(.*)$/u;
+const DURATION = /^(\d{1,5})(s|m|h)$/u;
 const SECONDS = { s: 1, m: 60, h: 3600 } as const;
 /** A day: no landing gate step waits longer. */
 const MOST_SEC = 86_400;
-const GLOB = /[*?[\]{}]/;
-const TRAILING = /\/(\*\*)?$/;
-const LEADING = /^\.\//;
+const GLOB = /[*?[\]{}]/u;
+const TRAILING = /\/(\*\*)?$/u;
+const LEADING = /^\.\//u;
 const KEYS = ["name", "on", "targets", "needs", "timeout", "on-fail"] as const;
 /** The word in a `targets:` step's command the hub gives the targets to build. */
 export const TARGETS_PLACE = "{targets}";
 /** The margin line that opens the files Caw may edit, any case. */
-const CAW_EDITS = /^caw edits:\s*(.*)$/i;
+const CAW_EDITS = /^caw edits:\s*(.*)$/iu;
 /** The margin line that declares the ship command, any case. */
-const SHIP = /^ship:\s*(.*)$/i;
+const SHIP = /^ship:\s*(.*)$/iu;
 /** The words a ship command is given: the landed commit and the notes' file. */
 const SHIP_PLACES = ["{commit}", "{notes}"] as const;
 type Key = (typeof KEYS)[number];

@@ -62,15 +62,15 @@ const AXE = "/opt/homebrew/bin/axe";
 const DEVICE = "iPad Pro 13-inch (M4)";
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 /** What `log stream --style compact` puts before a Probe line's own words. */
-const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
+const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/u;
 /** The same before a Canvas line's: the page's load, answer and posts, printed, never a check. */
-const CANVAS_PREFIX = /^.*\[dev\.cawco\.app:Canvas\]\s*/;
+const CANVAS_PREFIX = /^.*\[dev\.cawco\.app:Canvas\]\s*/u;
 /** The app asking for the finger's drag: where it goes down, in points. */
-const SWIPE_AT = /canvas swipe at (\d+),(\d+)/;
+const SWIPE_AT = /canvas swipe at (\d+),(\d+)/u;
 /** An element's label in axe's `describe-ui`. */
-const LABELLED = /"AXLabel" : "([^"]+)"/g;
+const LABELLED = /"AXLabel" : "([^"]+)"/gu;
 /** One of the app's checks. */
-const CHECK_LINE = /^canvas (PASS|FAIL) /;
+const CHECK_LINE = /^canvas (PASS|FAIL) /u;
 console.log(
   `  at ${(await Bun.$`git -C ${root} log -1 --format=%h\ %s`.text()).trim()}`
 );
@@ -111,7 +111,7 @@ if (build) {
   );
   const text = await new Response(child.stdout).text();
   process.stdout.write(text);
-  if ((await child.exited) !== 0 || !/^BUILT iOS$/m.test(text)) {
+  if ((await child.exited) !== 0 || !/^BUILT iOS$/mu.test(text)) {
     fail("compile: build-both.sh did not print BUILT iOS");
     process.exit(1);
   }
@@ -326,8 +326,8 @@ xcrun simctl install ${udid} "${app}"`);
   // The canvas's link to the hub: refused, up, cut (no input from outside).
   const sync = await launchPass(udid, id, port, "sync", ["-canvas-probe-sync"]);
   for (const [want, line] of [
-    ["cawco:sync synced", /cawco:sync synced/],
-    ["cawco:drawn count=N (N > 0)", /cawco:drawn count=[1-9]/],
+    ["cawco:sync synced", /cawco:sync synced/u],
+    ["cawco:drawn count=N (N > 0)", /cawco:drawn count=[1-9]/u],
   ] as const) {
     if (sync.canvas.some((l) => line.test(l))) {
       pass(`sync: the app logged ${want}`);

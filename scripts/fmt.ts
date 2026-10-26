@@ -84,13 +84,13 @@ async function formatOne(file: string, text: string): Promise<string> {
 
 /** What {@link cssCanonical} leaves as written: a comment, or a quoted string. */
 const CSS_AS_WRITTEN =
-  /\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g;
+  /\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/gu;
 
 /** A decimal number in CSS: not part of a name, an escape or a longer number. */
-const CSS_DECIMAL = /(?<![\w.\\])(\d*)\.(\d+)(?![\d.])/g;
+const CSS_DECIMAL = /(?<![\w.\\])(\d*)\.(\d+)(?![\d.])/gu;
 
 /** A fraction's trailing zeros. */
-const TRAILING_ZEROS = /0+$/;
+const TRAILING_ZEROS = /0+$/u;
 
 /** One decimal as Prettier prints it: no trailing zeros, no bare dot, a leading zero. */
 const cssDecimal = (_: string, whole: string, fraction: string): string => {
@@ -99,13 +99,13 @@ const cssDecimal = (_: string, whole: string, fraction: string): string => {
 };
 
 /** A declaration's value: after its colon, up to its `;` or the block's `}` (a selector runs to a `{`). */
-const CSS_VALUE = /:[^;{}]*(?=[;}])/g;
+const CSS_VALUE = /:[^;{}]*(?=[;}])/gu;
 
 /** A hex colour, which Prettier prints in lower case. */
-const CSS_HEX = /#[\da-fA-F]{3,8}\b/g;
+const CSS_HEX = /#[\da-fA-F]{3,8}\b/gu;
 
 /** A run of spaces or tabs between two words on a line: one space wherever CSS reads it. */
-const CSS_SPACES = /(?<=\S)[ \t]{2,}(?=\S)/g;
+const CSS_SPACES = /(?<=\S)[ \t]{2,}(?=\S)/gu;
 
 /** CSS outside comments and strings as Prettier prints its numbers, its values' hex colours and the spaces between its words. */
 const cssPlain = (css: string): string =>

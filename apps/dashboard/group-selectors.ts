@@ -48,7 +48,7 @@ type Node = parser.Selector["nodes"][number];
 const DESCENDANT = " ";
 const SIBLING = new Set(["~", "+"]);
 const AROUND = new Set([DESCENDANT, ...SIBLING]);
-const KEYFRAMES = /keyframes$/i;
+const KEYFRAMES = /keyframes$/iu;
 const IS = ":is(";
 
 /** What a group's `:is(A *)` or a peer's `:is(P ~ *)` stands on: A or P, and the combinator. */

@@ -77,7 +77,7 @@ const DETAIL = "reference/detail.md";
 /** The models file the mock's pi provider is in (scratch-fleet.ts `furnish`). */
 const PI_MODELS = "models.json";
 /** A refusal to write: Linux binds the trees read only, Seatbelt denies the write. */
-const REFUSED = /Read-only file system|Operation not permitted/;
+const REFUSED = /Read-only file system|Operation not permitted/u;
 /** How long a command waits for the fleet to place the project's skill in its clone. */
 const PLACED_WAIT_S = 100;
 /**
@@ -151,7 +151,7 @@ const envLeg = (home: string): Leg => ({
 });
 
 const tagOf = (key: string) => `PROBE-READS-${key.toUpperCase()}:`;
-const TAG = /PROBE-READS-([A-Z]+):/;
+const TAG = /PROBE-READS-([A-Z]+):/u;
 
 /**
  * One line per probe, `FR|<leg>|<root>|<what>|<answer>`, its prefix spelled
@@ -274,7 +274,7 @@ const answersOf = (body: string, key: string): Map<string, string> => {
   // In a request body as JSON: a line ends at an escaped newline or a quote.
   const each = new RegExp(
     `FR\\|${key}\\|([a-z]+)\\|([a-z-]+)\\|((?:[^"\\\\]|\\\\[^n])*)`,
-    "g"
+    "gu"
   );
   for (const match of body.matchAll(each)) {
     found.set(`${match[1]}|${match[2]}`, (match[3] ?? "").trim());

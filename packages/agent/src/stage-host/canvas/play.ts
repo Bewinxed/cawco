@@ -41,7 +41,7 @@ function pointer(el: Element, type: string): void {
   }
 }
 
-const HEADING = /^h[1-6]$/;
+const HEADING = /^h[1-6]$/u;
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"]),[contenteditable="true"]';
 

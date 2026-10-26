@@ -17,10 +17,10 @@ export interface CalledArtifact {
   name?: string;
 }
 
-const UUID = /^[0-9a-f-]{36}$/;
+const UUID = /^[0-9a-f-]{36}$/u;
 /** An artifact's link in a tool's words, `[name](cawco:artifact/<id>)` (core references.ts). */
-const ARTIFACT_LINK = /\[((?:[^\]\\]|\\.)*)\]\((cawco:artifact\/[^)\s]+)\)/;
-const ESCAPED = /\\(.)/g;
+const ARTIFACT_LINK = /\[((?:[^\]\\]|\\.)*)\]\((cawco:artifact\/[^)\s]+)\)/u;
+const ESCAPED = /\\(.)/gu;
 
 /** The artifact a tool's words name by its link; undefined when they name none (a refusal). */
 const linkedArtifact = (text: string): CalledArtifact | undefined => {

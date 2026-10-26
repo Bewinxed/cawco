@@ -9,8 +9,8 @@ import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
 import { hubAnswer } from "./hub-away";
 
 export const MCP_SERVER_NAME = "cawco";
-const WS_SCHEME = /^ws/;
-const WS_PATH = /\/ws$/;
+const WS_SCHEME = /^ws/u;
+const WS_PATH = /\/ws$/u;
 export const delegationHubUrl = () =>
   (readEnv(CAWCO_ENV.hubUrl) ?? `ws://localhost:${CAWCO_HUB_PORT}/ws`)
     .replace(WS_SCHEME, "http")

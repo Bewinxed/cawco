@@ -35,9 +35,9 @@
      */
     folding?: boolean;
   } = $props();
-  const FENCE = /^\s*(```|~~~)/;
+  const FENCE = /^\s*(```|~~~)/u;
   /** Emphasis, code ticks and heading marks: noise in a three-line glimpse. */
-  const MARKUP = /[*_`#>]/g;
+  const MARKUP = /[*_`#>]/gu;
   const TAIL_CHARS = 240;
 
   /**
@@ -173,7 +173,7 @@
   const tail = $derived(
     (paragraphs.at(-1) ?? "")
       .replace(MARKUP, "")
-      .replace(/\s+/g, " ")
+      .replace(/\s+/gu, " ")
       .trim()
       .slice(-TAIL_CHARS)
   );

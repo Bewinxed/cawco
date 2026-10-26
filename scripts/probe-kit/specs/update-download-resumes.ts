@@ -100,8 +100,8 @@ const MB = 1_000_000;
 const TRICKLE_PER_S = 150_000;
 const SILENCE_MS = 45_000;
 const PIECE = 16 * 1024;
-const RANGE = /^bytes=(\d+)-$/;
-const CONTENT_RANGE = /^bytes (\d+)-/;
+const RANGE = /^bytes=(\d+)-$/u;
+const CONTENT_RANGE = /^bytes (\d+)-/u;
 
 /** Where `plan` stops a body, if it does: a stall or a cut at its byte. */
 const stopAt = (plan: Plan): number | undefined =>

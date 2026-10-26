@@ -60,7 +60,7 @@ export const upstreamRule = (id: string): UpstreamRule | undefined => {
 
 /** The hosts the door forwards to: GitHub's own, and where its downloads redirect. */
 const FORWARDED =
-  /^(?:(?:api|uploads|codeload)\.)?github\.com$|\.githubusercontent\.com$/;
+  /^(?:(?:api|uploads|codeload)\.)?github\.com$|\.githubusercontent\.com$/u;
 
 /** Request headers never forwarded: the placeholder login, the hop's own. */
 const DROPPED_REQUEST = [
@@ -176,8 +176,8 @@ const refused = (graphql: boolean, why: string): Response =>
     : Response.json({ message: why }, { status: 403 });
 
 /** A `:port` after a host. */
-const PORT = /:\d+$/;
-const TRAILING_SLASHES = /\/+$/;
+const PORT = /:\d+$/u;
+const TRAILING_SLASHES = /\/+$/u;
 
 /** One request's host, path and body as the door judges them. */
 interface Asked {

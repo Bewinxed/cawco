@@ -80,7 +80,7 @@ import { BEFORE_PREFIX, legacyClaudeOptions } from "../legacy-claude";
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const FIXTURE = join(import.meta.dir, "..", "fixtures", "where-mcp-server.ts");
 const ASK_COMMAND = "echo probe-ask-rule";
-const WHERE = /PROBE-WHERE (\{.*\})/;
+const WHERE = /PROBE-WHERE (\{.*\})/u;
 
 interface Where {
   cwd: string;

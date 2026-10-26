@@ -169,7 +169,7 @@ export function estimateContentHeight(
   }
 
   // Count actual newlines in content
-  const newlineCount = (content.match(/\n/g) || []).length;
+  const newlineCount = (content.match(/\n/gu) || []).length;
   // Estimate wrapped lines based on content length
   const wrappedLines = Math.ceil(content.length / config.charsPerLine);
   // Total lines is the max of newlines or wrapped estimate

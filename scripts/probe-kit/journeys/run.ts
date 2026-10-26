@@ -10,7 +10,7 @@ import { sweepDeadFleets } from "../../scratch-fleet";
 import { Run } from "../kit";
 import { type Journey, journeySpec, parse } from "./suite";
 
-const JOURNEY_FILE = /^j(\d+)-.+\.ts$/;
+const JOURNEY_FILE = /^j(\d+)-.+\.ts$/u;
 
 /** A journey file's number: j2 runs before j10. */
 const numberOf = (name: string) => Number(JOURNEY_FILE.exec(`${name}.ts`)?.[1]);

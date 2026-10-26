@@ -41,7 +41,7 @@ const gate = (name: string, leg: () => Promise<void>): Promise<string> =>
 const idleLeg = () => Bun.sleep(1000);
 
 /** The CPU values a leg's line reads, start / middle / end. */
-const CPU_READ = /cpu ([\d.]+) \/ ([\d.]+) \/ ([\d.]+)/;
+const CPU_READ = /cpu ([\d.]+) \/ ([\d.]+) \/ ([\d.]+)/u;
 const cpuOf = (line: string): number[] =>
   (CPU_READ.exec(line)?.slice(1) ?? []).map(Number);
 

@@ -54,7 +54,7 @@ export const prepareDoor = async (path: string): Promise<void> => {
   await rm(path, { force: true });
 };
 
-const CALL = /^\/api\/delegation\/call\/[^/]+$/;
+const CALL = /^\/api\/delegation\/call\/[^/]+$/u;
 
 const refused = (): Response =>
   new Response(

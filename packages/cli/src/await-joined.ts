@@ -26,7 +26,7 @@ import {
 
 const JOIN_TIMEOUT_MS = INSTALL_LIST_LIMIT_MS;
 const LOCAL_NETWORK_URL =
-  /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
+  /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/u;
 
 /**
  * This machine's own row, as this machine (core machine-key.ts): a hub that

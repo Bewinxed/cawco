@@ -46,7 +46,7 @@ const SIGN_IN_TTL_MS = 10 * 60_000;
  * alone (`docs.read`, `files:read`, `repo_readonly`). CawCo's own call: no
  * standard names an OAuth scope's reach, so the name is all there is.
  */
-const READ_SCOPE = /(?:^|[.:_/-])(?:read(?:[._-]?only)?|ro|view)$/i;
+const READ_SCOPE = /(?:^|[.:_/-])(?:read(?:[._-]?only)?|ro|view)$/iu;
 
 /**
  * The access a server's scopes offer (core `ConnectAccessSet`): read-only
@@ -175,7 +175,7 @@ export interface SignInPorts {
   signedIn: (name: string) => void;
 }
 
-const TRAILING_STOP = /\.$/;
+const TRAILING_STOP = /\.$/u;
 
 /** A provider's words, cut to what a log line and a Show details carry. */
 const cut = (words: string): string =>
@@ -212,8 +212,8 @@ const endedWords = (refusal: string, unanswered: number): string => {
   return `The token endpoint refused to renew it: ${refusal}.${earlier}`;
 };
 
-const BEARER_ERROR = /\berror="([^"]*)"/;
-const BEARER_DESCRIPTION = /\berror_description="([^"]*)"/;
+const BEARER_ERROR = /\berror="([^"]*)"/u;
+const BEARER_DESCRIPTION = /\berror_description="([^"]*)"/u;
 
 /** The upstream's own words on a 401: its `WWW-Authenticate` error and description (RFC 6750 §3). */
 const bearerWords = (response: Response): string => {

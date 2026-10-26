@@ -128,7 +128,7 @@ const RANDOM_FLAG = 1;
 /** SolidColor.colorValue's property key (rive-mcp-server vendor/rive-defs/defs.json). */
 const COLOR_VALUE_KEY = 37;
 /** State-machine input types; Caw's files must carry none. */
-const INPUT_TYPE = /^StateMachine(Number|Bool|Trigger)$/;
+const INPUT_TYPE = /^StateMachine(Number|Bool|Trigger)$/u;
 
 /** A data-bind path is a list of ids, stored as packed LEB128 varuints (7 bits per byte). */
 function pathIds(ids) {

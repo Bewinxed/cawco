@@ -162,9 +162,9 @@ const STDERR_KEPT = 2000;
 
 /** The toolchains a stage runs, by the config file that makes a dir their root; in this order where one dir has several (Astro and Nuxt run Vite inside). */
 const TOOLCHAINS: [RegExp, StageToolchain][] = [
-  [/^astro\.config\.[cm]?[jt]s$/, "astro"],
-  [/^nuxt\.config\.[cm]?[jt]s$/, "nuxt"],
-  [/^vite\.config\.[cm]?[jt]s$/, "vite"],
+  [/^astro\.config\.[cm]?[jt]s$/u, "astro"],
+  [/^nuxt\.config\.[cm]?[jt]s$/u, "nuxt"],
+  [/^vite\.config\.[cm]?[jt]s$/u, "vite"],
 ];
 /**
  * The Astro major the stage starts: Astro's `dev()` is its "Programmatic
@@ -181,9 +181,9 @@ const NUXT_MAJOR = 4;
  * compiles only route entries.
  */
 const NO_PLUGIN: [RegExp, string][] = [
-  [/^next\.config\.[cm]?[jt]s$/, "Next.js"],
-  [/^angular\.json$/, "Angular CLI"],
-  [/^webpack\.config\.[cm]?[jt]s$/, "webpack"],
+  [/^next\.config\.[cm]?[jt]s$/u, "Next.js"],
+  [/^angular\.json$/u, "Angular CLI"],
+  [/^webpack\.config\.[cm]?[jt]s$/u, "webpack"],
 ];
 
 /** What `artifact_create` and the agent are told when a sheet cannot run, and why. */

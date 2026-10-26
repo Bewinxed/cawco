@@ -38,17 +38,17 @@ const RULES = { rules: [{ id: recommended.meta.id, rule: recommended }] };
 
 /** A word that says the sentence is about a credential. */
 const CREDENTIAL_TALK =
-  /\b(?:pass(?:word|phrase|wd)s?|key(?:chain|ring)s?|unlock(?:s|ed|ing)?|log-?ins?|sudo)\b/i;
+  /\b(?:pass(?:word|phrase|wd)s?|key(?:chain|ring)s?|unlock(?:s|ed|ing)?|log-?ins?|sudo)\b/iu;
 /** A sentence: up to an end mark and its space, or a line break. */
-const SENTENCE = /[^\n]*?(?:[.!?](?=\s|$)|\n|$)/g;
-const WORD = /\S+/g;
+const SENTENCE = /[^\n]*?(?:[.!?](?=\s|$)|\n|$)/gu;
+const WORD = /\S+/gu;
 /** Wrapping a word may carry that is not part of it: quotes, brackets, a trailing comma or stop. */
-const WRAP_START = /^["'`([{<]+/;
-const WRAP_END = /["'`)\]}>]*[.,;:]?["'`)\]}>]*$/;
+const WRAP_START = /^["'`([{<]+/u;
+const WRAP_END = /["'`)\]}>]*[.,;:]?["'`)\]}>]*$/u;
 const PASSWORD_MIN = 8;
-const LOWER = /[a-z]/;
-const UPPER = /[A-Z]/;
-const DIGIT_OR_SYMBOL = /[^A-Za-z]/;
+const LOWER = /[a-z]/u;
+const UPPER = /[A-Z]/u;
+const DIGIT_OR_SYMBOL = /[^A-Za-z]/u;
 
 /** Eight characters or more, upper and lower case, and a digit or a symbol. */
 export const passwordShaped = (word: string): boolean =>
@@ -62,8 +62,8 @@ type Range = readonly [start: number, end: number];
 
 /** A credential's key and its value; the value (group 1) is what is cut. */
 const SET_TO_VALUE = [
-  /\b(?:password|passwd|secret|token|api[-_]?key)\s*[:=]\s*(\S{6,})/dgi,
-  /\bbearer\s+([A-Za-z0-9._~+/-]{16,}=*)/dgi,
+  /\b(?:password|passwd|secret|token|api[-_]?key)\s*[:=]\s*(\S{6,})/dgiu,
+  /\bbearer\s+([A-Za-z0-9._~+/-]{16,}=*)/dgiu,
 ];
 
 /** Every value a credential's key is set to ({@link SET_TO_VALUE}). */

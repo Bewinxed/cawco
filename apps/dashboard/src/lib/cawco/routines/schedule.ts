@@ -24,8 +24,8 @@ export const placeOf = (zone: string): string =>
   (zone.split("/").at(-1) ?? zone).replaceAll("_", " ");
 
 const two = (n: number) => String(n).padStart(2, "0");
-const SPACES = /\s+/;
-const NUMBER = /^\d+$/;
+const SPACES = /\s+/u;
+const NUMBER = /^\d+$/u;
 
 /** The days a cron's day-of-week field names (0 Sunday … 6 Saturday); null when it names a form we don't read. */
 function dayNumbersOf(field: string): Set<number> | null {

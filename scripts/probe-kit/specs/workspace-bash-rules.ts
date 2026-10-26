@@ -65,15 +65,15 @@ const ASK_COMMAND = "echo probe-ask-rule";
 const SHELL_PREFIX = "CLAUDE_CODE_SHELL_PREFIX";
 const FIXTURE = join(import.meta.dir, "..", "fixtures", "where-mcp-server.ts");
 /** A step, in the person's words: the session it is for and its number. */
-const STEP_TAG = /PROBE-WBR-([a-z]+-\d+)/g;
-const WHERE = /PROBE-WHERE (\{.*?\})(?:"|\\n|$)/;
+const STEP_TAG = /PROBE-WBR-([a-z]+-\d+)/gu;
+const WHERE = /PROBE-WHERE (\{.*?\})(?:"|\\n|$)/u;
 /** The page new_page selected, in its answer as JSON or text. */
-const SELECTED = /(\d+): [^\\"\n]*\[selected\]/;
+const SELECTED = /(\d+): [^\\"\n]*\[selected\]/u;
 const SHOT_NAME = "take_screenshot";
 /** A pid namespace as `readlink /proc/self/ns/pid` names it. */
-const NAMESPACE = /pid:\[\d+\]/;
+const NAMESPACE = /pid:\[\d+\]/u;
 /** The workspace a command's executor named, as the probe's command prints it. */
-const WORKSPACE = /ws=(\S+)/;
+const WORKSPACE = /ws=(\S+)/u;
 const PAGE_NAME = "new_page";
 
 /** One step as the mock plays it: each call it made, and what came back. */
@@ -134,7 +134,7 @@ const lastToolResult = (body: string): string => {
 const WAITS = ["mcp__cawco__wait_item", "cawco_wait_item", "wait_item"];
 const WAIT_INPUT = { minutes: 60, reason: "The probe's next step." };
 /** A delegate's brief, by its title: the first in its words is its own. */
-const BRIEF = /PROBE-WBR-BRIEF ([^:]+):/;
+const BRIEF = /PROBE-WBR-BRIEF ([^:]+):/u;
 
 /**
  * Each delegate between steps, by its brief's title: its wait on its item
@@ -223,7 +223,7 @@ const shell =
   };
 
 /** Letters and digits alone: each harness writes a server's name into its tools' its own way. */
-const bare = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+const bare = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/gu, "");
 
 /** The tool of `server` ending in `ending` that the request offers, however the harness names it. */
 const offered = (request: Seen, ending: string, server: string) =>

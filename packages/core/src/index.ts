@@ -1,3 +1,7 @@
+// The registry of CawCo's environment variables, in a file of its own that
+// imports nothing (cawco-env.ts), re-exported here as every caller reads it,
+// and read here by the readers below it.
+import { CAWCO_ENV, readEnv } from "./cawco-env";
 import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
 import type { PlanWait } from "./plan";
@@ -439,15 +443,15 @@ export interface SpawnPayload {
   workspace?: import("./harness").WorkspaceRef;
 }
 
-const TRAILING_SLASHES = /\/+$/;
-const URL_SCHEME_AND_HOST = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i;
-const SCP_LIKE_HOST = /^[^/]+@[^:]+:/;
-const DOT_GIT_SUFFIX = /\.git$/;
+const TRAILING_SLASHES = /\/+$/u;
+const URL_SCHEME_AND_HOST = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\//iu;
+const SCP_LIKE_HOST = /^[^/]+@[^:]+:/u;
+const DOT_GIT_SUFFIX = /\.git$/u;
 
 /** A URL with a scheme: `https://`, `ssh://`, `git://`, `file://`, any `<scheme>://`. */
-const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i;
+const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\/\S+$/iu;
 /** git's scp-like form, `[<user>@]<host>:<path>`: "only recognized if there are no slashes before the first colon". */
-const SCP_LIKE_URL = /^[^/\s:]+:\S+$/;
+const SCP_LIKE_URL = /^[^/\s:]+:\S+$/u;
 
 /**
  * Whether `repo` is a git URL, in git's own syntaxes (git-scm.com/docs/git-clone,
@@ -1623,7 +1627,7 @@ export const CAWCO_LOCAL_DASHBOARD_PORT = 3455;
  * A preview's start page: a path on the previewed server, one leading slash
  * (never `//host`, which would leave it), no whitespace.
  */
-export const PREVIEW_START_PATH = /^\/(?!\/)\S*$/;
+export const PREVIEW_START_PATH = /^\/(?!\/)\S*$/u;
 
 /**
  * What an artifact shows (Projects spec §5.10): a dev server or a folder on
@@ -1667,7 +1671,7 @@ export type ArtifactKind =
   "page" | "canvas" | "preview" | "component" | "browser";
 
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
-export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
+export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
 /** What the person does on an artifact: the reason it is in their panel. */
 export const ARTIFACT_DOES = ["pick", "judge", "try", "draw"] as const;
@@ -1675,10 +1679,10 @@ export type ArtifactDoes = (typeof ARTIFACT_DOES)[number];
 /** The ask's length: one line in the panel's head. */
 export const ASK_LIMIT = 160;
 /** Words the owner banned from anything that reaches him. */
-export const ASK_BANNED = /\b(tap|poke)(s|ped|ping)?\b/i;
+export const ASK_BANNED = /\b(tap|poke)(s|ped|ping)?\b/iu;
 /** A path or a file in the ask: the person's words carry neither. */
 export const ASK_PATHLIKE =
-  /(^|[\s(])[\w.-]*\/[\w.-]+\.[a-z]{1,5}\b|\b[\w-]+\.(svelte|tsx?|png|webp|jpe?g|oui|html)\b/i;
+  /(^|[\s(])[\w.-]*\/[\w.-]+\.[a-z]{1,5}\b|\b[\w-]+\.(svelte|tsx?|png|webp|jpe?g|oui|html)\b/iu;
 /** Desk captures one page for judging or picking may hold: past it, the page is a catalogue of pictures drawn at a fraction of their size in the panel. */
 export const DESK_CAPTURES_PER_PAGE = 2;
 /** A capture wider than this many pixels is a desk capture: the panel is 600px beside the transcript, 390px on a phone. */
@@ -1865,11 +1869,6 @@ export const PREVIEW_WEIGHT = "previewWeight";
  * `folderGone`'s words for one that isn't there, or null.
  */
 export const PREVIEW_FOLDERS = "previewFolders";
-
-// The registry of CawCo's environment variables, in a file of its own that
-// imports nothing (cawco-env.ts), re-exported here as every caller reads it,
-// and read here by the readers below it.
-import { CAWCO_ENV, readEnv } from "./cawco-env";
 
 export { CAWCO_ENV, type CawcoEnvVar, readEnv } from "./cawco-env";
 

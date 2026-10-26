@@ -96,7 +96,7 @@ async function answer(
 }
 
 /** An Authorization header's scheme, before its token. */
-const BEARER = /^Bearer /i;
+const BEARER = /^Bearer /iu;
 
 /** What the mock has issued and ended. */
 interface Issued {

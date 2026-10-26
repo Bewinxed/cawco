@@ -8,6 +8,7 @@
  * such global, and no way for a page to stage anything.
  */
 declare global {
+  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
   var __cawcoDebug: Record<string, unknown> | undefined;
 }
 

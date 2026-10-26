@@ -39,7 +39,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^\$app\/env$/,
+        find: /^\$app\/env$/u,
         replacement: here("../src/lib/cawco/address/flow/kit-env.ts"),
       },
     ],

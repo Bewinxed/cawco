@@ -15,7 +15,7 @@ import {
   type SkillFile,
 } from "@cawco/core";
 
-const QUOTED = /^(["'])(.*)\1$/;
+const QUOTED = /^(["'])(.*)\1$/u;
 
 const fileText = (
   files: readonly SkillFile[],

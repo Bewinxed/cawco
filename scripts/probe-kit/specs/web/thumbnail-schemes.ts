@@ -51,7 +51,7 @@ import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { type Kit, open, type Spec } from "../../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** Mean luminance a day picture is above, and a night one below. Our call. */
 const DAY_ABOVE = 0.6;
 const NIGHT_BELOW = 0.35;

@@ -53,7 +53,8 @@ const HELD_ROW = "probe-held-npm";
 /** The hub's refusal around the machine it names (placement.ts noAccountRefusal), the machine caught. */
 const [BEFORE, AFTER] = noAccountRefusal("\n").split("\n");
 const REFUSAL = new RegExp(
-  `^${literal(BEFORE ?? "")}(.+?)${literal(AFTER ?? "")}`
+  `^${literal(BEFORE ?? "")}(.+?)${literal(AFTER ?? "")}`,
+  "u"
 );
 
 interface AgentRow {

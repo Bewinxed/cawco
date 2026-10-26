@@ -52,7 +52,7 @@ export const git = async (dir: string, ...args: string[]): Promise<string> => {
 /** Workspace creation supplies its aggregate git deadline through this runner. */
 type GitRunner = typeof git;
 
-const SYMREF_HEAD = /^ref: refs\/heads\/(\S+)\tHEAD$/m;
+const SYMREF_HEAD = /^ref: refs\/heads\/(\S+)\tHEAD$/mu;
 
 /**
  * The branch `origin` itself names as its HEAD — the repository's default

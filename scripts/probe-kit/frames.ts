@@ -85,11 +85,11 @@ export function asReader<R, A = undefined>(
   })()`) as Promise<R | null>;
 }
 /** A trace's node name's class attribute, cut to its first class. */
-const CLASS_ATTRIBUTE = / class='([^' ]*)[^']*'/;
+const CLASS_ATTRIBUTE = / class='([^' ]*)[^']*'/u;
 /** A style invalidation that restyles a container's whole subtree. */
-const SUBTREE = /subtree/i;
+const SUBTREE = /subtree/iu;
 /** A restyle asked for because the element is a `:has()` rule's subject. */
-const HAS_REASON = /:has\(\)/;
+const HAS_REASON = /:has\(\)/u;
 /**
  * A frame's phases besides style and layout, as the trace names them: what
  * a sampled profile counts as "(program)" when no script is on the stack.
@@ -302,7 +302,7 @@ export function watch(): void {
 export function attribute(): void {
   const kit = (window as unknown as { __kit: Watched }).__kit;
   const named = (kind: string, fn: unknown) =>
-    `${kind} ${(typeof fn === "function" && fn.name) || String(fn).replace(/\s+/g, " ").slice(0, 60)}`;
+    `${kind} ${(typeof fn === "function" && fn.name) || String(fn).replace(/\s+/gu, " ").slice(0, 60)}`;
   const timed = <A extends unknown[], R>(kind: string, fn: (...a: A) => R) =>
     function (this: unknown, ...a: A): R {
       const start = performance.now();

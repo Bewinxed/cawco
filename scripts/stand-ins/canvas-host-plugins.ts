@@ -6,7 +6,7 @@
  */
 import { join } from "node:path";
 
-const BOUND = /packages\/agent\/src\/canvas-host\/bound\.ts$/;
+const BOUND = /packages\/agent\/src\/canvas-host\/bound\.ts$/u;
 
 export const HOST_PLUGINS: Bun.BunPlugin[] = [
   {

@@ -63,7 +63,7 @@ export const NAME = "probe-box.tail0000.ts.net";
 /** How long a state takes to be read: the hub reads Tailscale every 5 s while a step stands, else every 30 s. */
 const READ_MS = 45_000;
 /** An environment variable that names a proxy. */
-const PROXY_VARIABLE = /proxy/i;
+const PROXY_VARIABLE = /proxy/iu;
 const ROW =
   ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) [data-slot="row"][data-kind="tailnet"]';
 const USER = userInfo().username;
@@ -189,7 +189,7 @@ const readRow = (page: Page) =>
     const text = (slot: string, from: Element = row) =>
       from
         .querySelector(`[data-slot="${slot}"]`)
-        ?.textContent?.replace(/\s+/g, " ")
+        ?.textContent?.replace(/\s+/gu, " ")
         .trim() ?? "";
     const button = row.querySelector(
       '[data-slot="peers"] [data-slot="button"]'
@@ -306,13 +306,13 @@ const readRow = (page: Page) =>
           ...numberOf(step),
           ...commandOf(step),
           note: text("step-note", step),
-          link: link?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+          link: link?.textContent?.replace(/\s+/gu, " ").trim() ?? null,
           href: link?.getAttribute("href") ?? null,
         };
       }),
       listRole:
         row.querySelector('[data-slot="steps"]')?.getAttribute("role") ?? null,
-      button: button?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      button: button?.textContent?.replace(/\s+/gu, " ").trim() ?? "",
       href: button?.getAttribute("href") ?? null,
       buttons: row.querySelectorAll('[data-slot="peers"] [data-slot="button"]')
         .length,
@@ -324,8 +324,8 @@ const readRow = (page: Page) =>
 
 type Row = NonNullable<Awaited<ReturnType<typeof readRow>>>;
 
-const LISTITEM = /^\s*- listitem/;
-const DIGIT_ONLY = /^\s*- (text: )?"?\d+"?\s*$/;
+const LISTITEM = /^\s*- listitem/u;
+const DIGIT_ONLY = /^\s*- (text: )?"?\d+"?\s*$/u;
 
 /**
  * Chromium's accessibility tree of the steps (Playwright's ARIA snapshot)

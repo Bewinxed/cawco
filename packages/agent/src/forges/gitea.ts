@@ -26,7 +26,7 @@ import type { ForgeAdapter, ForgeSignIn } from "./forge";
 /** The gitea-mcp tools the adapter calls, and no others are listed to it. */
 const TOOLS = "get_me,issue_write,pull_request_write,pull_request_read";
 
-const TRAILING_SLASHES = /\/+$/;
+const TRAILING_SLASHES = /\/+$/u;
 
 /** One login in tea's config. */
 interface TeaLogin {

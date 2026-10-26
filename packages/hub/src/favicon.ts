@@ -40,12 +40,12 @@ const MAX_HOPS = 3;
 
 /** A DNS name: dot-separated labels, no port, no address literal. */
 const HOST =
-  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/;
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/u;
 
-const HEXTET = /^[0-9a-f]{1,4}$/i;
-const LINK_TAG = /<link\b[^>]*>/gi;
-const SPACES = /\s+/;
-const TRAILING_DOT = /\.$/;
+const HEXTET = /^[0-9a-f]{1,4}$/iu;
+const LINK_TAG = /<link\b[^>]*>/giu;
+const SPACES = /\s+/u;
+const TRAILING_DOT = /\.$/u;
 
 /** Whether `host` names a public site this hub may ask for its icon. */
 const publicName = (host: string): boolean =>
@@ -320,7 +320,7 @@ const sniff = (bytes: Uint8Array): string | undefined => {
 
 const attribute = (tag: string, name: string): string | undefined => {
   const match = tag.match(
-    new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i")
+    new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "iu")
   );
   const value = match?.[1] ?? match?.[2] ?? match?.[3];
   return value?.replaceAll("&amp;", "&").trim();

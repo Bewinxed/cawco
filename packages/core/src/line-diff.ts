@@ -13,7 +13,7 @@
 /** Past this many cells the line table is not built: every line on each side counts as changed. */
 const TABLE_CAP = 4_000_000;
 
-const LINE = /[^\n]*\n|[^\n]+$/g;
+const LINE = /[^\n]*\n|[^\n]+$/gu;
 
 /** A text's lines, each with its newline when it has one. */
 export const linesOf = (source: string): string[] => source.match(LINE) ?? [];

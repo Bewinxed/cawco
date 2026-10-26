@@ -32,7 +32,7 @@ const timing = JSON.parse(readFileSync(join(from, 'timing.json'), 'utf8'));
 const holds = timing.drawings.map((hold) => `${hold.drawing}:${hold.length}`);
 const groups = [...new Set(timing.drawings.map((hold) => hold.drawing))].map((drawing) => {
   const file = `body-${String(drawing).padStart(2, '0')}.svg`;
-  const body = readFileSync(join(from, file), 'utf8').match(/<svg[^>]*>([\s\S]*)<\/svg>/)?.[1];
+  const body = readFileSync(join(from, file), 'utf8').match(/<svg[^>]*>([\s\S]*)<\/svg>/u)?.[1];
   if (!body?.startsWith('<g ')) throw new Error(`${folder}/${file} is not one group of shapes.`);
   return body.replace('<g ', `<g data-drawing="${drawing}" `);
 });

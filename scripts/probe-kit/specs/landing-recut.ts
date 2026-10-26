@@ -60,7 +60,7 @@ import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-RECUT-GATE-([LNSMK])/;
+const TAG = /PROBE-RECUT-GATE-([LNSMK])/u;
 type Tag = "L" | "N" | "S" | "M" | "K";
 /** The projects that land, retire and land again; S's gate refuses its stale lockfile; M and K, the move line. */
 type LegTag = "L" | "N";
@@ -138,7 +138,7 @@ const commitCommand = (
   name: string,
   mark: string,
   waitFor?: string,
-  lines: readonly string[] = [`export const ${name.replace(/\W/g, "_")} = 1;`]
+  lines: readonly string[] = [`export const ${name.replace(/\W/gu, "_")} = 1;`]
 ) =>
   [
     `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(" ")} > src/${name}.ts`,

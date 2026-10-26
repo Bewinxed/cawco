@@ -98,11 +98,11 @@ const linuxLinks = async (): Promise<ReachableLink[]> => {
 };
 
 /** `networksetup -listallhardwareports`: a hardware port's interface. */
-const HARDWARE_PORT = /^Device: (\S+)$/gm;
+const HARDWARE_PORT = /^Device: (\S+)$/gmu;
 /** `ifconfig -a`: an interface's first line, its name and flags. */
-const IFCONFIG_HEAD = /^(\S+): flags=\w+<([^>]*)>/;
+const IFCONFIG_HEAD = /^(\S+): flags=\w+<([^>]*)>/u;
 /** `ifconfig -a`: a bridge's member. */
-const IFCONFIG_MEMBER = /^\s+member: (\S+)/;
+const IFCONFIG_MEMBER = /^\s+member: (\S+)/u;
 
 /** macOS: `ifconfig -a`'s flags and bridge members, and the Mac's hardware ports. */
 const darwinLinks = async (): Promise<ReachableLink[]> => {

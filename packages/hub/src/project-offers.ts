@@ -106,7 +106,7 @@ const plural = (n: number, one: string, many: string): string =>
 
 /** A plan step's words as a task title: one line, within the limit. */
 const titleOf = (content: string): string => {
-  const line = content.replace(/\s+/g, " ").trim();
+  const line = content.replace(/\s+/gu, " ").trim();
   return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1)}…` : line;
 };
 

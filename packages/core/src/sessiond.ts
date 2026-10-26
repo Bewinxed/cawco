@@ -491,7 +491,7 @@ export const sweepDeadShortLinks = (
   const own = sessiondLinkName();
   // `c-` (sessiondLinkName) or `t-` (paths.ts scratchLinkName) and 8 hex.
   // Built here, as paths.ts and this module import each other.
-  const given = new RegExp(`^(${SESSIOND_LINK}|t)-[0-9a-f]{8}$`);
+  const given = new RegExp(`^(${SESSIOND_LINK}|t)-[0-9a-f]{8}$`, "u");
   return names.filter((name) => {
     if (name === own || !given.test(name)) {
       return false;

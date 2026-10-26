@@ -237,7 +237,7 @@ export interface FleetRefresh {
  * telling the machines (`latestHash`, `latestVersion`, `checkedAt`);
  * `updateAvailable` is the source holding other content than the fleet's.
  */
-const LOOPBACK_V4 = /^127(?:\.\d{1,3}){3}$/;
+const LOOPBACK_V4 = /^127(?:\.\d{1,3}){3}$/u;
 
 /**
  * A source served from the hub's own machine: an `http(s)` URL on a loopback
@@ -420,16 +420,16 @@ export interface AgentFrontMatter {
  * What a subagent may be called. Claude Code's own rule: the name is the token
  * a delegation asks for, and a `:` in it collides with the plugin namespace.
  */
-export const AGENT_NAME = /^[a-z][a-z0-9-]*$/;
+export const AGENT_NAME = /^[a-z][a-z0-9-]*$/u;
 
-const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[^\n]*(?:\n|$)/;
-const QUOTED_SCALAR = /^(["'])([\s\S]*)\1$/;
-const LINE_SPLIT = /\r?\n/;
-const TOP_LEVEL_KEY = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/;
-const INDENTED_LINE = /^\s+\S/;
-const SEQUENCE_ITEM = /^\s*-\s+/;
+const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[^\n]*(?:\n|$)/u;
+const QUOTED_SCALAR = /^(["'])([\s\S]*)\1$/u;
+const LINE_SPLIT = /\r?\n/u;
+const TOP_LEVEL_KEY = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/u;
+const INDENTED_LINE = /^\s+\S/u;
+const SEQUENCE_ITEM = /^\s*-\s+/u;
 /** A line that belongs to the field above it: indented, or a sequence item at the margin. */
-const UNDER_LINE = /^(?:\s+\S|-\s)/;
+const UNDER_LINE = /^(?:\s+\S|-\s)/u;
 
 /**
  * One top-level line of a front matter block, with the lines that belong to
@@ -499,7 +499,7 @@ const unquote = (value: string): string => {
 /** A comma-separated list, an inline `[a, b]`, or a sequence already joined. */
 const splitList = (value: string): string[] =>
   value
-    .replace(/^\[|\]$/g, "")
+    .replace(/^\[|\]$/gu, "")
     .split(",")
     .map(unquote)
     .filter(Boolean);
@@ -582,7 +582,7 @@ export const agentProblem = (
  * ever stored that a machine would then have to turn away — and nothing under
  * `~/.claude/memories/` is ever a write anywhere else.
  */
-const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:/;
+const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:/u;
 
 export const memoryDocProblem = (path: string): string | undefined => {
   if (!path.endsWith(".md")) {

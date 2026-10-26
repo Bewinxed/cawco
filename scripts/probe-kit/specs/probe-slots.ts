@@ -41,13 +41,13 @@ import type { Kit, Spec } from "../kit";
 const CHILD = join(import.meta.dir, "..", "slot-child.ts");
 const POLL_MS = 200;
 /** A run's line once it holds a slot of two. */
-const SLOT_TAKEN = /heavy-work slot \d of 2 /;
+const SLOT_TAKEN = /heavy-work slot \d of 2 /u;
 const TOOK_AFTER_WAITING =
-  /heavy-work slot \d of 2 taken by third@\S+ after waiting \ds/;
+  /heavy-work slot \d of 2 taken by third@\S+ after waiting \ds/u;
 const RAN_OUT =
-  /no heavy-work slot came free in 2s for late@\S+: 1 of 1 held by hog@\S+ \(\ds\)/;
+  /no heavy-work slot came free in 2s for late@\S+: 1 of 1 held by hog@\S+ \(\ds\)/u;
 /** A run's nice, from its TAKEN or INHERITED line. */
-const NICE = / nice (\d+)/;
+const NICE = / nice (\d+)/u;
 const niceOf = (line: string): number => Number(NICE.exec(line)?.[1] ?? -1);
 
 /** A run of slot-child.ts: its lines as they come, and its process. */

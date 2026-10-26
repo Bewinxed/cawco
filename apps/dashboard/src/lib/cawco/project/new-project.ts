@@ -83,19 +83,19 @@ export const STARTERS = [
 
 /** A URL, or a path (`/srv/site`, `~/code/site`, `./site`). */
 const URL_OR_PATH =
-  /\bhttps?:\/\/\S+|\b[\w-]+(?:\.[\w-]+)+\/\S+|(?:^|\s)(?:~|\.{1,2})?\/[\w.-]+(?:\/[\w.-]+)*/;
+  /\bhttps?:\/\/\S+|\b[\w-]+(?:\.[\w-]+)+\/\S+|(?:^|\s)(?:~|\.{1,2})?\/[\w.-]+(?:\/[\w.-]+)*/u;
 
 /** The fit rule, first match wins; "repo" counts with URLs and paths, as the code chip names one. */
 const RULES: readonly [RegExp, TemplateName][] = [
   [URL_OR_PATH, "code"],
-  [/\brepo(?:sitory)?\b/i, "code"],
-  [/\b(?:launch|campaign)/i, "launch"],
-  [/\b(?:seo|audit|pages?)\b/i, "seo"],
-  [/\b(?:voice|brand)/i, "brand"],
-  [/\b(?:design|screens?)\b/i, "design"],
-  [/\b(?:posts?|social)\b/i, "social"],
+  [/\brepo(?:sitory)?\b/iu, "code"],
+  [/\b(?:launch|campaign)/iu, "launch"],
+  [/\b(?:seo|audit|pages?)\b/iu, "seo"],
+  [/\b(?:voice|brand)/iu, "brand"],
+  [/\b(?:design|screens?)\b/iu, "design"],
+  [/\b(?:posts?|social)\b/iu, "social"],
   // X, the network: the capital letter alone, so "x" in "2x" is not it.
-  [/\bX\b/, "social"],
+  [/\bX\b/u, "social"],
 ];
 
 /** The template the words fit, or null. */
@@ -107,9 +107,9 @@ export function fitOf(words: string): TemplateName | null {
   return RULES.find(([rule]) => rule.test(text))?.[1] ?? null;
 }
 
-const TRAILING = /[/\s]+$/;
-const GIT_SUFFIX = /\.git$/;
-const LAST_SEGMENT = /([^/\s]+)\/?$/;
+const TRAILING = /[/\s]+$/u;
+const GIT_SUFFIX = /\.git$/u;
+const LAST_SEGMENT = /([^/\s]+)\/?$/u;
 const WORD = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
 
 /**

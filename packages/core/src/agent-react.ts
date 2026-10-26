@@ -18,7 +18,7 @@
 /** The agent package, which declares react and react-dom. */
 const AGENT_DIR = new URL("../../agent/", import.meta.url).pathname;
 
-const REACT = /^react(?:-dom)?(?:\/.*)?$/;
+const REACT = /^react(?:-dom)?(?:\/.*)?$/u;
 
 export const agentReact: Bun.BunPlugin = {
   name: "agent-react",

@@ -72,14 +72,14 @@ function readBar(): BarRead {
     }
     // Each shadow's colour aside, its lengths: x, y, blur, spread.
     // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-    for (const one of value.split(/,(?![^(]*\))/)) {
+    for (const one of value.split(/,(?![^(]*\))/u)) {
       if (one.includes("inset")) {
         continue;
       }
       const lengths = (
         one
-          .replace(/(rgba?|hsla?|oklch|oklab|lab|lch|color)\([^)]*\)/g, "")
-          .match(/-?[\d.]+px/g) ?? []
+          .replace(/(rgba?|hsla?|oklch|oklab|lab|lch|color)\([^)]*\)/gu, "")
+          .match(/-?[\d.]+px/gu) ?? []
       ).map(px);
       const [x = 0, , blur = 0, spread = 0] = lengths;
       left = Math.max(left, blur + spread - x);

@@ -21,7 +21,7 @@
     Fixed: { variant: "note-fixed", icon: IconBug },
   };
 
-  const HEADING = /^#{1,6}\s+(.+?)\s*$/;
+  const HEADING = /^#{1,6}\s+(.+?)\s*$/u;
 
   interface Section {
     body: string;

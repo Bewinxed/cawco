@@ -87,7 +87,7 @@ const schemeOf = (cookie: Cookie): "https" | "http" =>
   cookie.secure || cookie.sourceScheme === "Secure" ? "https" : "http";
 
 /** A domain cookie's leading dot. */
-const LEADING_DOT = /^\./;
+const LEADING_DOT = /^\./u;
 
 /** The origin a cookie's host stands for, its port when it was set from another. */
 const originOf = (cookie: Cookie): string => {

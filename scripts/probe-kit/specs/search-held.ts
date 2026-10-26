@@ -47,9 +47,9 @@ import { delay, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const args = process.argv.slice(2);
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 /** The search process, run from source or as the binary's verb. */
-const SEARCH_HOST = /search\/host\.ts|search-host/;
+const SEARCH_HOST = /search\/host\.ts|search-host/u;
 const INDEX = args[args.indexOf("--index") + 1];
 /** The query that took 87 s on main (an agent's `find`, its words as the hub splits them). */
 const Q34 =

@@ -61,7 +61,10 @@ fleet.env.CLAUDE_CONFIG_DIR = operatorDir;
 // The services clone from GitHub; inside a workspace boundary that is only
 // through its proxy, which the scratch env does not carry on its own.
 for (const key of Object.keys(process.env)) {
-  if (/^(https?|all|no)_proxy$/i.test(key) || key === "GIT_CONFIG_PARAMETERS") {
+  if (
+    /^(https?|all|no)_proxy$/iu.test(key) ||
+    key === "GIT_CONFIG_PARAMETERS"
+  ) {
     fleet.env[key] = process.env[key] ?? "";
   }
 }
@@ -477,7 +480,7 @@ try {
   // and data kept by the id it moved to.
   const agentLog = await fleet.logs("agent");
   const moved =
-    /show-me@cawco moved to (show-me@cawco-[\w-]+)(, disabled as it was)?/.exec(
+    /show-me@cawco moved to (show-me@cawco-[\w-]+)(, disabled as it was)?/u.exec(
       agentLog
     );
   const heir = moved?.[1] ?? "";
@@ -503,7 +506,7 @@ try {
     fleet.home,
     "plugins",
     "data",
-    heir.replace(/[^a-zA-Z0-9_-]/g, "-"),
+    heir.replace(/[^a-zA-Z0-9_-]/gu, "-"),
     "marker"
   );
   check(

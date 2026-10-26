@@ -70,7 +70,7 @@ const AUTHORIZE_PARAMS = ["client_id", "code_challenge", "state"];
  * Each whole link on the screen: one a space or a line's end follows, so a
  * link still arriving is never read cut short.
  */
-const LINKS = /https:\/\/\S+(?=\s)/g;
+const LINKS = /https:\/\/\S+(?=\s)/gu;
 
 /** Long enough for the CLI to boot and print its link. */
 const LINK_TIMEOUT_MS = 30_000;
@@ -232,7 +232,7 @@ const SCREEN_LINES = 6;
 const SCREEN_LINE_CHARS = 240;
 
 /** A pty's line ends: `\r\n`, and `\r\r\n` where it adds its own `\r`. */
-const LINE_BREAKS = /[\r\n]+/;
+const LINE_BREAKS = /[\r\n]+/u;
 
 /** The CLI's last lines since `from`, ANSI stripped, for a stop to show. */
 const lastLines = (signIn: SignIn, from = 0): string => {

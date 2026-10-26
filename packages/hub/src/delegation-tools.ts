@@ -95,7 +95,7 @@ const sessionTitle = () =>
 const ISO_TIME =
   "an ISO date or datetime, like 2026-10-20 or 2026-10-20T14:00Z";
 /** An ISO time opens on its date; `Date.parse` alone takes "Oct 20" too. */
-const ISO_DATE_FIRST = /^\d{4}-\d{2}-\d{2}/;
+const ISO_DATE_FIRST = /^\d{4}-\d{2}-\d{2}/u;
 
 /** A bound of `delegate_list`'s window: an ISO date or datetime the hub's clock reads. */
 const isoTime = () =>

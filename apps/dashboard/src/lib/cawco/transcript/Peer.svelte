@@ -24,7 +24,7 @@
   import { disclosure } from "./disclosure.svelte";
 
   /** Emphasis, code ticks, heading and quote marks: noise in a one-line glimpse. */
-  const MARKUP = /[*_`#>]/g;
+  const MARKUP = /[*_`#>]/gu;
 
   let { message }: { message: Message } = $props();
 

@@ -32,10 +32,10 @@ import { z } from "zod";
 const ref = z.string().min(1).max(400);
 
 /** One path component: not `.` or `..`, no slash. */
-const ONE_COMPONENT = /^(?!\.\.?$)[^/\\]+$/;
-const SEPARATORS = /[/\\]+/g;
-const UNSAFE = /[^\w.@+-]+/g;
-const LEADING_DOTS = /^[.-]+/;
+const ONE_COMPONENT = /^(?!\.\.?$)[^/\\]+$/u;
+const SEPARATORS = /[/\\]+/gu;
+const UNSAFE = /[^\w.@+-]+/gu;
+const LEADING_DOTS = /^[.-]+/u;
 
 /** A file name an entry lands under: one path component. */
 const fileName = z

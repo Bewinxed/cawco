@@ -50,7 +50,7 @@ export interface SuggestCandidate {
  */
 function usageName(candidate: SuggestCandidate): string {
   return candidate.kind === "mcp"
-    ? candidate.name.replace(/[^A-Za-z0-9_-]/g, "_")
+    ? candidate.name.replace(/[^A-Za-z0-9_-]/gu, "_")
     : candidate.name;
 }
 

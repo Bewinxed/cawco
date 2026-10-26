@@ -147,7 +147,7 @@ export function matchesSession(
  * (`renderDelegateAsk`, packages/hub). Question-form bodies (`Q1: …`) and
  * anything that does not parse return null and render as plain text.
  */
-const ASK_BODY_PATTERN = /^([A-Za-z_][\w-]*) — (\{.*\})$/s;
+const ASK_BODY_PATTERN = /^([A-Za-z_][\w-]*) — (\{.*\})$/su;
 
 function askBodyParts(
   body: string

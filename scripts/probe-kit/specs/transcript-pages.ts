@@ -59,13 +59,13 @@ const OC_WINDOW = 3;
 /** The window the hub asks for (server.ts `HISTORY_WINDOW`). */
 const HISTORY_WINDOW = 300;
 /** A process's folder name under /proc. */
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 /** Its resident memory, in /proc's status. */
-const VM_RSS = /VmRSS:\s+(\d+)/;
+const VM_RSS = /VmRSS:\s+(\d+)/u;
 /** The agent's first memory line, said once its first usage scan and search sync end (daemon.ts `logMemory`). */
 const FIRST_SCANS_ENDED = "memory rss=";
 /** A stored picture's address on a page (media.ts). */
-const MEDIA_URL = /\/api\/media\/[a-f0-9]{64}\.(?:png|jpg|gif|webp)/g;
+const MEDIA_URL = /\/api\/media\/[a-f0-9]{64}\.(?:png|jpg|gif|webp)/gu;
 /** The agent's line for a stall (loop-watch.ts). */
 const STALL = "[loop] the agent's loop was held";
 

@@ -82,7 +82,7 @@ const issue = () => {
   refresh.add(tokens.refresh_token);
   return Response.json(tokens);
 };
-const BEARER = /^Bearer /;
+const BEARER = /^Bearer /u;
 
 /** The token endpoint: a code for the PKCE verifier it was issued under, or a refresh token, once. */
 const tokenEndpoint = async (request: Request): Promise<Response> => {
@@ -365,7 +365,7 @@ try {
     "before sign-in, no harness is asked to authorize",
     unsigned.status !== "needs-auth" &&
       before.state !== "needs-auth" &&
-      !/registration|authoriz/i.test(`${unsigned.error} ${before.detail}`),
+      !/registration|authoriz/iu.test(`${unsigned.error} ${before.detail}`),
     `${unsigned.status}: ${unsigned.error ?? ""}`
   );
   const opencodeLine = before.detail

@@ -249,7 +249,7 @@ export interface Section {
 }
 
 /** A section module's address as an HMR update names it: `/@id/__x00__cawco:sheet/<the states file, encoded>.js`. */
-const SECTION_PATH = /cawco:sheet\/([^?]+)\.js(?:\?|$)/;
+const SECTION_PATH = /cawco:sheet\/([^?]+)\.js(?:\?|$)/u;
 
 /** The states file (from the toolchain root) an update's module path is the section of; null for any other module. */
 const sectionOfPath = (path: string): string | null => {
@@ -3404,7 +3404,7 @@ export function boot(options: BootOptions): void {
 const WORLD_INSET = { x: 24, y: 16 };
 
 /** `file:Story`: the colon before the story's name. */
-const LAST_COLON = /:(?=[^:]+$)/;
+const LAST_COLON = /:(?=[^:]+$)/u;
 /**
  * The edges' gutter, on DESIGN.md's spacing ladder: a lane's first stands
  * 18px out from the frames, each next one 7px further, its corners turn on
@@ -3424,5 +3424,5 @@ const EDGE_LABEL_LINE = 16;
  * every frame's left edge as a stray speck).
  */
 const EDGE_CLEAR = 4;
-const BODY_RULE = /(^|,)\s*(body|html|:root)\s*(,|$)/;
-const REDUCED_QUERY = /prefers-reduced-motion/;
+const BODY_RULE = /(^|,)\s*(body|html|:root)\s*(,|$)/u;
+const REDUCED_QUERY = /prefers-reduced-motion/u;

@@ -34,8 +34,8 @@ export const HUB_PREVIEWS_FILE = "hub-previews.json";
 /** The srt host's environment entry naming {@link HUB_PREVIEWS_FILE}'s path for its relay. */
 export const HUB_PREVIEWS_ENV = "CAWCO_HUB_PREVIEWS";
 
-const BRACKETS = /^\[|\]$/g;
-const TRAILING_DOTS = /\.+$/;
+const BRACKETS = /^\[|\]$/gu;
+const TRAILING_DOTS = /\.+$/u;
 
 /** `host` as the origins name it: lowercased, IPv6 brackets and trailing dots gone. */
 const nameOf = (host: string): string =>
@@ -60,7 +60,7 @@ export const isHubPreview = (
   );
 };
 
-const LOOPBACK_V4 = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+const LOOPBACK_V4 = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/u;
 
 /** A loopback name or address: `localhost`, a name under `.localhost`, 127/8, ::1. */
 const isLoopback = (name: string): boolean =>

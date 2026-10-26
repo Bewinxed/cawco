@@ -78,15 +78,15 @@ const check = (step: string, ok: boolean, detail: string) => {
 const pause = (ms: number) => Bun.sleep(ms);
 
 /** A compact log line's time. */
-const LOG_TIME = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d\.\d+)/;
+const LOG_TIME = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d\.\d+)/u;
 /** CawPanel's DEBUG lines (`panel rows`, `panel hangs`, `panel pull`, `notice swipe`). */
-const ENTRIES = /(\d+) entries/;
-const HANGS = /panel (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/;
-const PULL = /finger (-?[\d.]+) foot (-?[\d.]+) from (-?[\d.]+)/;
-const SWIPE_LINE = /finger (-?[\d.]+) row (-?[\d.]+)/;
+const ENTRIES = /(\d+) entries/u;
+const HANGS = /panel (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/u;
+const PULL = /finger (-?[\d.]+) foot (-?[\d.]+) from (-?[\d.]+)/u;
+const SWIPE_LINE = /finger (-?[\d.]+) row (-?[\d.]+)/u;
 /** The moved logins' fold, shut; and the group's head. */
-const FOLD_SHUT = /^Show \d+ signed in everywhere$/;
-const GROUP_HEAD = /^\d+ logins? moved into CawCo$/;
+const FOLD_SHUT = /^Show \d+ signed in everywhere$/u;
+const GROUP_HEAD = /^\d+ logins? moved into CawCo$/u;
 
 /** Runs `script` in bash here; its stdout, or throws with its stderr. */
 async function sh(script: string): Promise<string> {
@@ -352,7 +352,7 @@ const LOGINS = [
   "Audit",
 ];
 const CAW =
-  /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)( · \d+ notices?)?$/;
+  /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)( · \d+ notices?)?$/u;
 const caw = (nodes: Node[]) =>
   nodes.find((n) => CAW.test(n.label ?? "") && n.frame);
 /** An entry's ✕ ("Dismiss <name>"), not the group's. */

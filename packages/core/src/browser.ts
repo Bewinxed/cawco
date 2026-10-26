@@ -353,7 +353,7 @@ export interface BrowserHandedBackFrame extends BrowserHandback {
 export const isBrowserKey = (value: unknown): value is BrowserKey =>
   typeof value === "string" && BROWSER_KEY.test(value);
 
-const BROWSER_KEY = /^(?:project|machine):[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+const BROWSER_KEY = /^(?:project|machine):[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
 
 /** A key as a name the runtime and the filesystem take: `project:abc` → `project-abc`. */
 export const browserSlug = (key: BrowserKey): string => key.replace(":", "-");

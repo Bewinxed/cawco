@@ -72,10 +72,10 @@ const DUPLICATE: IssueState = {
 /** The states the sync puts an issue in, in GitHub's order. */
 const STATES: readonly IssueState[] = [OPEN, COMPLETED, NOT_PLANNED];
 
-const ISSUE_PATH = /\/repos\/[^/]+\/[^/]+\/issues\/(\d+)$/;
+const ISSUE_PATH = /\/repos\/[^/]+\/[^/]+\/issues\/(\d+)$/u;
 const ISSUE_URL =
-  /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\/?$/i;
-const OWNER_REPO = /^([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})$/;
+  /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\/?$/iu;
+const OWNER_REPO = /^([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})$/u;
 
 const ISSUES_ROUTE = "GET /repos/{owner}/{repo}/issues";
 const COMMENTS_ROUTE = "GET /repos/{owner}/{repo}/issues/comments";

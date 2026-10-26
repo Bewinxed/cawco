@@ -6,9 +6,9 @@
  */
 
 /** A fence's opening or closing line (markdown.svelte's own). */
-const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
+const FENCE = /^\s{0,3}(`{3,}|~{3,})/u;
 /** A line cut at its code spans: every odd part is one. */
-const CODE_SPAN = /(`+[^`]*?`+)/;
+const CODE_SPAN = /(`+[^`]*?`+)/u;
 
 /** `source` with `change` run over each run of words outside fenced code and code spans. */
 export function outsideCode(

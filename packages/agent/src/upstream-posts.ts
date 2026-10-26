@@ -104,10 +104,10 @@ const cut = (text: string): string =>
   text.length > SAID_MAX ? `${text.slice(0, SAID_MAX)}…` : text;
 
 const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
-const TRAILING_SLASHES = /\/+$/;
+const TRAILING_SLASHES = /\/+$/u;
 
 /** What @octokit/endpoint reads as its URL template's own (`:name`, `{name}`): kept as the URL's escapes, which GitHub reads alike. */
-const TEMPLATE_MARKS = /[:{}]/g;
+const TEMPLATE_MARKS = /[:{}]/gu;
 
 /**
  * A held request, sent again to GitHub's API with the host's token through
@@ -190,8 +190,8 @@ const graphqlErrors = (post: HttpPost, data: unknown): boolean => {
     : true;
 };
 
-const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
-const REF = /^refs\/[A-Za-z0-9._/-]+$/;
+const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
+const REF = /^refs\/[A-Za-z0-9._/-]+$/u;
 
 /**
  * A held push, made from the clone of workspace `ref` to the same URL and

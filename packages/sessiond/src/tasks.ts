@@ -45,12 +45,12 @@ export interface Headroom {
   what: string;
 }
 
-const NPROC_LINE = /^Max processes\s+(\S+)\s+(\S+)/m;
+const NPROC_LINE = /^Max processes\s+(\S+)\s+(\S+)/mu;
 /** What separates a `/proc/self/maps` line's fields; the sixth on is the mapped file's path. */
-const MAPS_FIELDS = /\s+/;
-const NUMERIC = /^\d+$/;
-const REAL_UID = /^Uid:\s+(\d+)/m;
-const THREADS = /^Threads:\s+(\d+)/m;
+const MAPS_FIELDS = /\s+/u;
+const NUMERIC = /^\d+$/u;
+const REAL_UID = /^Uid:\s+(\d+)/mu;
+const THREADS = /^Threads:\s+(\d+)/mu;
 const CGROUP_ROOT = "/sys/fs/cgroup";
 /** `RLIMIT_NPROC` in Linux's numbering, on x86-64 and aarch64 alike. */
 const RLIMIT_NPROC = 6;

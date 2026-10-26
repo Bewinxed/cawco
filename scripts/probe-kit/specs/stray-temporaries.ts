@@ -47,9 +47,9 @@ import {
 import type { Kit, Spec } from "../kit";
 
 /** A process's entry in `/proc`. */
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 /** The blanks between `ps`'s columns. */
-const BLANKS = /\s+/;
+const BLANKS = /\s+/u;
 
 /**
  * A live process another user owns, as this machine shows it now (`/proc` on

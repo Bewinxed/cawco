@@ -451,7 +451,7 @@ const doesProblem = (
 };
 
 /** A choice in a page's HTML: a kit choice, or a field the person fills. */
-const HTML_CHOICE = /data-cawco-choice=|<(input|select|textarea)[^>]*\sname=/i;
+const HTML_CHOICE = /data-cawco-choice=|<(input|select|textarea)[^>]*\sname=/iu;
 
 /** Check 3b: a page for picking that holds no choice, once built. */
 const NO_CHOICE =
@@ -491,7 +491,7 @@ const jsonFile = (value: unknown): Buffer =>
 
 /** A whole artifact id, which needs no resolving. */
 const WHOLE_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 /** An entry as `artifact_read` answers it. */
 type ReadEntry = ChoiceEntry & { earlierRevision?: true };
@@ -633,7 +633,7 @@ export interface Revised {
 }
 
 /** A decision page's choice, as the kit marks it (`data-cawco-choice="<id>"`). */
-const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/g;
+const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/gu;
 
 /** One artifact as `artifact_list` answers it. */
 export interface ArtifactStatus {
@@ -776,7 +776,7 @@ const SOURCE_GONE = "sourceGone";
 const MEDIA_OF = "mediaOf";
 
 /** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
-const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/;
+const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/u;
 
 /** A view's word that it has (or could not load) the artifact at `revision` (`POST …/artifacts/:artifact/shown`). */
 export interface ShownAck {
@@ -829,9 +829,9 @@ export interface Promoted {
   path: string;
 }
 
-const PAGE_HIDDEN = /<(script|style|template|noscript)\b[\s\S]*?<\/\1\s*>/gi;
-const PAGE_TAG = /<[^>]+>/g;
-const PAGE_ENTITY = /&(amp|lt|gt|quot|#39|apos|nbsp);/g;
+const PAGE_HIDDEN = /<(script|style|template|noscript)\b[\s\S]*?<\/\1\s*>/giu;
+const PAGE_TAG = /<[^>]+>/gu;
+const PAGE_ENTITY = /&(amp|lt|gt|quot|#39|apos|nbsp);/gu;
 const ENTITIES: Record<string, string> = {
   amp: "&",
   lt: "<",
@@ -841,7 +841,7 @@ const ENTITIES: Record<string, string> = {
   apos: "'",
   nbsp: " ",
 };
-const PAGE_SPACES = /\s+/g;
+const PAGE_SPACES = /\s+/gu;
 
 /** The words a page's reader sees: its HTML less scripts, styles and tags, its common entities read. */
 export const pageText = (html: string): string =>
@@ -900,7 +900,7 @@ const promotedFolder = (name: string): string => {
   return folder;
 };
 
-const TRAILING_DOT = /\.$/;
+const TRAILING_DOT = /\.$/u;
 
 /** A promote git refused, in WORDS.md's error formula: what failed, and git's reason. */
 const notCommitted = (name: string, error: FolderRefusal): ArtifactRefusal =>
@@ -1214,7 +1214,7 @@ export interface Removed {
 }
 
 /** A sentence's closing full stop, for one folded into another. */
-const FINAL_STOP = /\.$/;
+const FINAL_STOP = /\.$/u;
 
 /**
  * How one stored attachment rides a delivery: a picture as an image block
@@ -6017,7 +6017,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const said = text.toLowerCase();
       const token = (word: string) =>
         new RegExp(
-          `(^|[^a-z0-9-])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9-])`
+          `(^|[^a-z0-9-])${word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}($|[^a-z0-9-])`,
+          "u"
         ).test(said);
       return [...rows.values()]
         .filter(

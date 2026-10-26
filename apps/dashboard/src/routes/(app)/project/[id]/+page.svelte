@@ -190,7 +190,7 @@
   const refusal = (read: HubRead<unknown>): string | null =>
     read.ok ? null : failureSentence(read);
   /** A reason that already ends as a sentence does. */
-  const SENTENCE_END = /[.!?]$/;
+  const SENTENCE_END = /[.!?]$/u;
 
   // --- the tasks: what the hub answered, from the load and each re-read ------
 
@@ -1072,7 +1072,7 @@
    * Work Outlives Its Surface Rule).
    */
   /** A refusal's closing stop, dropped so it sits inside the sentence. */
-  const REASON_STOP = /\.$/;
+  const REASON_STOP = /\.$/u;
   type ViewAct =
     { act: "keep" | "discard" } | { act: "place"; on: BlockPageId };
   /** Where a view's refused act is said: kept through a reload (refusals.svelte.ts). */

@@ -84,7 +84,7 @@ import { type LaunchAgents, launchAgents, RESULT_MARK } from "../launch-agent";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const HUB_ENTRY = join(ROOT, "packages", "hub", "src", "index.ts");
-const HELD = /^cawco(?:-(\d+))?\.local$/;
+const HELD = /^cawco(?:-(\d+))?\.local$/u;
 /** How long a query waits for answers: mDNS responders answer within 500 ms. */
 const LISTEN_MS = 2000;
 
@@ -170,7 +170,7 @@ interface Asked {
   /** `/health`'s `localName` at `http://<name>:<port>`, or what curl said instead. */
   opened: string;
 }
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 /** The first privileged port: CawCo listens on none below it. */
 const PRIVILEGED = 1024;
 /** `/api/local-name`'s fields while a name is held: the name and its address, no step. */

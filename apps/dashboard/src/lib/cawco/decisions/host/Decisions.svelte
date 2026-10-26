@@ -214,7 +214,7 @@
   /** The send key's modifier as this keyboard names it. */
   const modifier =
     typeof navigator !== "undefined" &&
-    /Mac|iPhone|iPad/.test(navigator.platform)
+    /Mac|iPhone|iPad/u.test(navigator.platform)
       ? "⌘"
       : "Ctrl";
 

@@ -1,4 +1,7 @@
 <script lang="ts" module>
+  import { type SessionPlan, todoProgress } from "@cawco/core/plan";
+  import { planWords } from "@cawco/core/words/plan";
+  import { stepsTree, todosTree } from "./PlanTree.svelte";
   /** How far a plan has got: its steps, else its task's agreed to-dos. */
   export function planProgress(plan: SessionPlan): {
     done: number;
@@ -28,10 +31,6 @@
   /** The plan's card title. */
   export const planTitle = (plan: SessionPlan | undefined): string =>
     onlyTodos(plan) ? planWords.todos : planWords.plan;
-
-  import { type SessionPlan, todoProgress } from "@cawco/core/plan";
-  import { planWords } from "@cawco/core/words/plan";
-  import { stepsTree, todosTree } from "./PlanTree.svelte";
 </script>
 
 <script lang="ts">

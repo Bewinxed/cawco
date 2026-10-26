@@ -106,7 +106,7 @@ const said = (id: StepId): { exit?: number; text: string } => {
   const before = at > 0 ? marker(STEPS[at - 1]?.id as StepId) : TAG;
   const start = text.lastIndexOf(before);
   const end = text.lastIndexOf(marker(id));
-  const exit = new RegExp(`${marker(id)} exit=(\\d+)`).exec(text)?.[1];
+  const exit = new RegExp(`${marker(id)} exit=(\\d+)`, "u").exec(text)?.[1];
   return {
     text: start >= 0 && end > start ? text.slice(start, end) : "",
     ...(exit === undefined ? {} : { exit: Number(exit) }),

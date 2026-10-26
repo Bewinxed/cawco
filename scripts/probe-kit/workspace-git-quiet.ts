@@ -17,7 +17,7 @@ import type { Kit } from "./kit";
 import { standExecutor } from "./workspace-executor";
 
 /** A git that does upkeep, as a process's command line or git's trace of a command it ran names it. */
-const UPKEEP = /\bgit(?:\.exe)?\s+(?:maintenance|gc)\b/;
+const UPKEEP = /\bgit(?:\.exe)?\s+(?:maintenance|gc)\b/u;
 const SETTLE_MS = 3000;
 
 export const workspaceGitQuietLeg = async (

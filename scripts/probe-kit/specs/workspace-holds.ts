@@ -75,7 +75,7 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyArgv, copyGone, gitInCopy, inCopy, isView } from "../copy";
 import type { Kit, KitFleet, Spec } from "../kit";
 
-const TAG = /PROBE-HOLDS-([NLXSRDUOPT])\b/;
+const TAG = /PROBE-HOLDS-([NLXSRDUOPT])\b/u;
 type Tag = "N" | "L" | "X" | "S" | "R" | "D" | "U" | "O" | "P" | "T";
 const FINISH = "mcp__cawco__finish_item";
 const COMMIT =
@@ -100,7 +100,7 @@ const P_AGAIN = "PROBE-HOLDS-P-AGAIN";
 const P_THIRD = "PROBE-HOLDS-P-THIRD";
 const P_READ = "P-READ-42";
 /** What T prints of its tree as its boundary sees it. */
-const INSIDE_SEEN = /T-INSIDE-(\d+)-END/;
+const INSIDE_SEEN = /T-INSIDE-(\d+)-END/u;
 /** A workspace's settle: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 180_000;
 /** An item's ask to its end. */

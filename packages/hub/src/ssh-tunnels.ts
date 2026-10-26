@@ -132,10 +132,10 @@ const controlDir = (): string => {
 };
 const controlPath = (id: string): string => join(controlDir(), id);
 
-const CARRIAGE_RETURN = /\r$/;
-const PORT_LINE = /^\d+$/;
+const CARRIAGE_RETURN = /\r$/u;
+const PORT_LINE = /^\d+$/u;
 /** A listener's address as `ss` and `lsof` print it: its host, then `:<port>`. */
-const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1|localhost)$/;
+const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1|localhost)$/u;
 
 /**
  * The machine's command that prints the address of every listener on
@@ -181,7 +181,7 @@ const endOwnOn = (port: number, session: string): string =>
   `${listenersOf(port)}; for pid in $pids; do [ "$pid" -gt 1 ] 2>/dev/null || continue; if [ "$pid ${START_OF_PID}" = "${session}" ]; then kill "$pid" && echo "$pid"; fi; done; exit 0`;
 
 /** A session as {@link holderOn} prints it: a pid, then its start in `ps`'s words. */
-const SESSION = /^\d+ [A-Za-z0-9: ]+$/;
+const SESSION = /^\d+ [A-Za-z0-9: ]+$/u;
 
 /**
  * The machine's command that keeps its key where its agent reads it

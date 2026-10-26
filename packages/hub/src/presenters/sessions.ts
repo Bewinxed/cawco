@@ -162,7 +162,7 @@ const typeLine = (type: DelegateType & { source?: string }): string => {
     ...(type.canDelegate ? ["may delegate"] : []),
     ...(type.source === "project" ? ["the project's own"] : []),
   ];
-  return `- ${type.name}: ${type.description.replace(/\s+/g, " ").trim()} (${runs.join("; ")})`;
+  return `- ${type.name}: ${type.description.replace(/\s+/gu, " ").trim()} (${runs.join("; ")})`;
 };
 
 /** `list_delegate_types` and admin_delegate_types_read's list: each type, a line. */

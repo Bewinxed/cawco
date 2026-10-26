@@ -54,11 +54,11 @@ interface FirstSession {
 const SPILLING: readonly HarnessKind[] = ["claude", "opencode", "pi"];
 
 /** A CawCo instance id as one path component, as the workspace's policy reads a spill folder's (core workspace-policy.ts). */
-const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
 /** A Claude Code session id: a UUID. */
 const SESSION_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 /**
  * The hub's `first` of a workspace's cut, as it came over the wire: a

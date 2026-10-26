@@ -27,16 +27,16 @@ const FONT_NAMESPACES: Record<string, string> = {
   tracking: "tracking-",
 };
 /** A top-level `@utility` block: its name and body. */
-const UTILITY = /^@utility ([\w-]+) \{\n([\s\S]*?)^\}/gm;
+const UTILITY = /^@utility ([\w-]+) \{\n([\s\S]*?)^\}/gmu;
 /**
  * A declaration on the utility's own element: the body's first level (two
  * spaces, as `bun fmt` writes it). One inside a nested rule (`& .prose {
  * font-size: inherit }`) styles a descendant, so it never meets a font
  * utility on the same element.
  */
-const SHORTHAND = /^ {2}font:/m;
-const LONGHAND = /^ {2}(font-[a-z-]+|line-height|letter-spacing):/m;
-const NOT_IDENT = /[^a-zA-Z0-9_-]/g;
+const SHORTHAND = /^ {2}font:/mu;
+const LONGHAND = /^ {2}(font-[a-z-]+|line-height|letter-spacing):/mu;
+const NOT_IDENT = /[^a-zA-Z0-9_-]/gu;
 const selector = (candidate: string) =>
   `.${candidate.replace(NOT_IDENT, (ch) => `\\${ch}`)} {`;
 

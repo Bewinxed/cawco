@@ -95,7 +95,7 @@ import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-CUTOFF-([ABCDEFG])/;
+const TAG = /PROBE-CUTOFF-([ABCDEFG])/u;
 type Tag = "A" | "B" | "C" | "D" | "E" | "F" | "G";
 /** Each background command (A's, F's, G's), found on the host by its argv. */
 const SLEEP: Partial<Record<Tag, string[]>> = {
@@ -118,17 +118,17 @@ const CLOSED_ON_PURPOSE: readonly string[] = [
 /** How long the first mock LFS server holds an answer it gives. */
 const SLOW_MS = 4000;
 /** A process's entry in `/proc`. */
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 const LFS_JSON = { "content-type": "application/vnd.git-lfs+json" };
 /** An object's own URL on a mock LFS server, which its batch answers name. */
-const OBJECT_PATH = /^\/lfs\/objects\/([0-9a-f]{64})$/;
+const OBJECT_PATH = /^\/lfs\/objects\/([0-9a-f]{64})$/u;
 /** D's large file: what E's checkout must hold. */
 const D_BYTES = 1_048_576;
 /** E's first command: the sha256 of the large file its checkout holds, as one line. */
 const READ_E =
   "printf 'LARGE-D-SHA %s\\n' \"$(shasum -a 256 large-d.bin | cut -d' ' -f1)\"";
 /** That line, as E's command printed it. */
-const SHA_SAID = /LARGE-D-SHA [0-9a-f]{64}/;
+const SHA_SAID = /LARGE-D-SHA [0-9a-f]{64}/u;
 
 /** The shell that commits a large file `name` of `bytes` copies of `char`, its object in the clone's store. */
 const largeFile = (name: string, bytes: number, char: string): string[] => [

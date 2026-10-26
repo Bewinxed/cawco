@@ -141,8 +141,8 @@ const appOf = async (dir: string) => {
   }
   return app;
 };
-const BUILT_IOS = /^BUILT iOS$/m;
-const BUILT_IOS_18 = /^BUILT iOS 18\.5$/m;
+const BUILT_IOS = /^BUILT iOS$/mu;
+const BUILT_IOS_18 = /^BUILT iOS 18\.5$/mu;
 const compile = async (dir: string, label: string): Promise<boolean> => {
   const build = Bun.spawn(
     ["bash", "apps/apple/scripts/build-both.sh", "ios", "--compile-only"],
@@ -415,7 +415,7 @@ async function tree(): Promise<Node[]> {
   walkTree(JSON.parse(await mac(`${AXE} describe-ui --udid ${udid}`)));
   return nodes;
 }
-const ROW = /row-(\d{4})/;
+const ROW = /row-(\d{4})/u;
 interface Place {
   /** The transcript's box on screen. */
   area: { bottom: number; top: number };

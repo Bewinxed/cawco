@@ -94,7 +94,7 @@ export interface TailnetOrigin {
   origin: string;
 }
 
-const BRACKETS = /^\[|\]$/g;
+const BRACKETS = /^\[|\]$/gu;
 
 /** `host` as a URL writes it, without an IPv6 address's brackets, lower case. */
 const bare = (host: string): string => host.replace(BRACKETS, "").toLowerCase();

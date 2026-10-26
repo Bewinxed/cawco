@@ -156,7 +156,7 @@ const VERSIONED: readonly string[] = [
   "pi",
   "node",
 ];
-const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/;
+const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/u;
 
 /**
  * Asks an installed tool for its version, so the report says which one it is.

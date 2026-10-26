@@ -534,7 +534,7 @@ export const limitSentence = (
     ? `${LIMIT_SUBJECT[holder]} hit its limit of ${limitSize(limit, max)}: something it ran keeps starting processes. CawCo stopped it there, and the rest of the machine is fine. Stop the command that keeps starting them, or stop the session.`
     : `${LIMIT_SUBJECT[holder]} hit its memory limit of ${limitSize(limit, max)}: something it ran kept taking memory, so the system ended the largest process in it. The rest of the machine is fine. Check what the session was running before it runs that again.`;
 
-const SENTENCE_END = /[.?!](\s|$)/;
+const SENTENCE_END = /[.?!](\s|$)/u;
 
 /** A text's first sentence, its full stop kept, and the rest; the whole as the first when it is one sentence. */
 export const firstSentence = (text: string): [string, string] => {
@@ -1184,7 +1184,7 @@ export const PROVIDER_RETRY = "provider_retry";
  */
 export const MCP_NOT_CONNECTED = "mcp_not_connected";
 
-const FINAL_STOP = /\.$/;
+const FINAL_STOP = /\.$/u;
 
 /** What a session's transcript and its model are told of a server that did not connect ({@link MCP_NOT_CONNECTED}). */
 export const mcpNotConnectedLine = (name: string, why: string): string =>
@@ -1682,7 +1682,7 @@ export const opencodeSignInFaultWords = (
 };
 
 /** A name read with a vowel sound first, by its first letter ("an Anthropic API key"). */
-const VOWEL_START = /^[aeiou]/i;
+const VOWEL_START = /^[aeiou]/iu;
 
 /** What a machine knows about one harness: is it installed, can it work, what can it do. */
 export interface HarnessReport {

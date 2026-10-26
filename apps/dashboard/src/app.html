@@ -16,7 +16,7 @@
     -->
     <script>
       "use strict";
-      const VIEWPORT_KEY_READERS = /\b(Chrome|Firefox)\/\d/;
+      const VIEWPORT_KEY_READERS = /\b(Chrome|Firefox)\/\d/u;
       const viewportMeta = document.createElement("meta");
       viewportMeta.name = "viewport";
       viewportMeta.content = VIEWPORT_KEY_READERS.test(navigator.userAgent)

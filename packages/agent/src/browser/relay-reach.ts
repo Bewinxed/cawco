@@ -27,7 +27,7 @@ export const mappedBy = (url: string): Promise<string | undefined> =>
     }
   });
 
-const PRIVATE_V4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
+const PRIVATE_V4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/u;
 
 /**
  * This machine's address on its router's network: the first private IPv4
@@ -59,7 +59,7 @@ export const routerAddress = async (): Promise<
   return address && isPublicAddress(address) ? { address, lan } : undefined;
 };
 
-const TURN_SCHEME = /^turn(s?):/;
+const TURN_SCHEME = /^turn(s?):/u;
 
 /** A TURN URL as the STUN binding through it: `turn:` → `stun:`, `turns:` → `stuns:`. */
 const asStun = (url: string): string => url.replace(TURN_SCHEME, "stun$1:");

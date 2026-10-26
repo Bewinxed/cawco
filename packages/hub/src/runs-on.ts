@@ -95,7 +95,7 @@ export const runsOnValue = (
  * session filing such a task without one; never applied on its own.
  */
 const APPLE_WORK =
-  /\bbuild-both\.sh\b|\bxcodebuild\b|\bxcrun\b|\bsimctl\b|\bsimulators?\b/i;
+  /\bbuild-both\.sh\b|\bxcodebuild\b|\bxcrun\b|\bsimctl\b|\bsimulators?\b/iu;
 
 /** The suggestion for a task filed without `runs_on` whose words need a Mac; undefined otherwise. */
 export const appleSuggestion = (

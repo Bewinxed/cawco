@@ -376,7 +376,7 @@ const browserSocket: WebSocketHandler<BrowserSocket> = {
 };
 
 /** `/__cawco/browser/<key>/api/…` or `/__cawco/browser/<key>/cdp` (core `browserMount`). */
-const BROWSER_PATH = /^\/__cawco\/browser\/([^/]+)\/(api(?:\/.*)?|cdp)$/;
+const BROWSER_PATH = /^\/__cawco\/browser\/([^/]+)\/(api(?:\/.*)?|cdp)$/u;
 
 const refused = (status: number, why: string): Response =>
   new Response(`${why}\n`, {

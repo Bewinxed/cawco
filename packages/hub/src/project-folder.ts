@@ -65,8 +65,8 @@ export const FOLDER_ENCODINGS = ["utf8", "base64"] as const;
 export type FolderEncoding = (typeof FOLDER_ENCODINGS)[number];
 /** The longest content a write takes as given: a whole file's bytes, as base64, are a third longer. */
 export const FOLDER_CONTENT_LIMIT = Math.ceil(FOLDER_FILE_LIMIT / 3) * 4;
-const WHITESPACE = /\s+/g;
-const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+const WHITESPACE = /\s+/gu;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/u;
 
 /**
  * `content` as what a write puts in the file: the words themselves, or the
@@ -183,11 +183,11 @@ export class FolderTaken extends FolderRefusal {
   }
 }
 
-const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-const DRIVE = /^[A-Za-z]:/;
-const NAME_UNSAFE = /[<>]/g;
-const EMAIL = /^[^\s<>]+@[^\s<>]+$/;
-const TRAILING_DOT = /\.$/;
+const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
+const DRIVE = /^[A-Za-z]:/u;
+const NAME_UNSAFE = /[<>]/gu;
+const EMAIL = /^[^\s<>]+@[^\s<>]+$/u;
+const TRAILING_DOT = /\.$/u;
 const MIB = 1024 * 1024;
 
 const isMissing = (error: unknown): boolean => {
@@ -863,7 +863,7 @@ export const readFolderBytes = async (
   return { path: file.path, bytes: new Uint8Array(await readFile(file.real)) };
 };
 
-const COMMIT_SHA = /^[0-9a-f]{40}$/;
+const COMMIT_SHA = /^[0-9a-f]{40}$/u;
 /** Files as a commit held them, by commit and path: a commit never changes, so neither does its reading. */
 const readAt = new Map<string, string | undefined>();
 /** How many past readings {@link readFolderFileAt} keeps. */
@@ -1492,7 +1492,7 @@ export interface FolderTimes {
   times: ReadonlyMap<string, FolderFileTimes>;
 }
 
-const REF_LINE = /^ref: (\S+)\s*$/;
+const REF_LINE = /^ref: (\S+)\s*$/u;
 const RECORD = "\x1e";
 
 /**
@@ -1755,8 +1755,8 @@ export const folderFileTimes = async (
   return await next;
 };
 
-const BLAME_HEAD = /^[0-9a-f]{40} \d+ (\d+)/;
-const AUTHOR_TIME = /^author-time (\d+)$/;
+const BLAME_HEAD = /^[0-9a-f]{40} \d+ (\d+)/u;
+const AUTHOR_TIME = /^author-time (\d+)$/u;
 
 /**
  * When each line of a folder file was written, by git blame's author time

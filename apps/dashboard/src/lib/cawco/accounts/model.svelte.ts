@@ -40,7 +40,7 @@ export const nextHue = (accounts: Account[]): AccountHue =>
   SWATCHES.find((hue) => !accounts.some((one) => one.hue === hue)) ??
   SWATCHES[accounts.length % SWATCHES.length];
 
-const ELLIPSIS = /^…/;
+const ELLIPSIS = /^…/u;
 
 /**
  * The name it goes by beside the fleet's other accounts (core

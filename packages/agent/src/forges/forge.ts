@@ -93,12 +93,12 @@ const hostAndPath = (repo: string): { host: string; path: string } => {
   return { host: repo.slice(0, at), path: repo.slice(at + 1) };
 };
 
-const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//iu;
 /** git's scp-like form, `[user@]host:path`, no slash before the colon (git-scm.com/docs/git-clone, "GIT URLS"). */
-const SCP_LIKE = /^(?:[^@/\s]+@)?([^/:\s]+):(.+)$/;
-const EDGE_SLASHES = /^\/+|\/+$/g;
-const DOT_GIT = /\.git$/i;
-const PORT = /:\d+$/;
+const SCP_LIKE = /^(?:[^@/\s]+@)?([^/:\s]+):(.+)$/u;
+const EDGE_SLASHES = /^\/+|\/+$/gu;
+const DOT_GIT = /\.git$/iu;
+const PORT = /:\d+$/u;
 
 /**
  * Where a repository is, from its git URL or `host/path`: its host with its

@@ -129,9 +129,9 @@ const BODY = `${WINDOW} [data-slot=grid]`;
 /** The dialog's own ×. */
 const CLOSE = `${WINDOW} [data-slot=dialog-close]`;
 const RELOAD_FORGETS = exactly(connectWords.typeItAgain);
-const FETCHING = /Fetching the signed build/;
-const LACKS_TAR = /Failed at Fetching the signed build · it lacks tar/;
-const CODE_IN = /code=([A-Z0-9]+)/;
+const FETCHING = /Fetching the signed build/u;
+const LACKS_TAR = /Failed at Fetching the signed build · it lacks tar/u;
+const CODE_IN = /code=([A-Z0-9]+)/u;
 const OPEN_NAVIGATION = sidebarWords.openNavigation;
 const OUTPUT = "[data-connect-output]";
 /** What the forced failure left: the installer undid itself; the key the add gave the machine stays. */
@@ -183,7 +183,7 @@ const read = (page: Page): Promise<Reading | null> =>
                 `${(one as CSSAnimation).animationName ?? "script"} ${one.playState}`
             )
         )}; grid ${inner.clientHeight}/${inner.scrollHeight}`,
-        text: node.innerText.replace(/\s+/g, " ").trim(),
+        text: node.innerText.replace(/\s+/gu, " ").trim(),
       };
     },
     [WINDOW, BODY] as const
@@ -1031,7 +1031,7 @@ async function walk(
         well:
           node
             ?.querySelector<HTMLElement>("[data-slot=well]")
-            ?.innerText.replace(/\s+/g, " ")
+            ?.innerText.replace(/\s+/gu, " ")
             .trim() ?? "",
         copyDisabled: copy?.disabled ?? false,
         copyWaits: said
@@ -1250,7 +1250,7 @@ async function walk(
     sheetAsks.includes("Stop installing on 127.0.0.1?") &&
       sheetAsks.includes(connectWords.partWayIn) &&
       runsOn === "running",
-    `${sheetAsks.replace(/\s+/g, " ")}; the install ${runsOn}`
+    `${sheetAsks.replace(/\s+/gu, " ")}; the install ${runsOn}`
   );
   await page
     .locator(OUTPUT)
@@ -2225,8 +2225,8 @@ async function entryTabs(
               ...document.querySelectorAll<HTMLElement>(
                 "[data-slot=icon-card]"
               ),
-            ].map((one) => one.innerText.replace(/\s+/g, " ").slice(0, 40)),
-            text: document.body.innerText.replace(/\s+/g, " ").slice(0, 300),
+            ].map((one) => one.innerText.replace(/\s+/gu, " ").slice(0, 40)),
+            text: document.body.innerText.replace(/\s+/gu, " ").slice(0, 300),
           }));
           throw new Error(
             `${error.message}; ${where} "${way}" on ${view}: ${JSON.stringify(seen)}; page errors ${JSON.stringify(errors)}`

@@ -23,11 +23,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { machinePath } from "@cawco/core/machine-path";
 import { hubInProcess } from "./hub-in-process";
+import { newestNightly } from "./shipped";
 
 /** A fixture folder on a fixture machine, made as every machine path is. */
 const fixturePath = (raw: string) => machinePath("/home/dev", raw, "fixture");
-
-import { newestNightly } from "./shipped";
 
 const HUB = resolve(import.meta.dir, "..");
 export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");

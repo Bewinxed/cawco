@@ -169,7 +169,7 @@ export const matchOf = (
 
 /** How much of a message an excerpt shows around its first match, characters each side. */
 const EXCERPT_AROUND = 70;
-const SPACES = /\s+/g;
+const SPACES = /\s+/gu;
 
 /** `body` around the first of `words` it holds, each of them between 「 and 」. */
 export const excerptOf = (body: string, words: string[]): string => {

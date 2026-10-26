@@ -93,7 +93,7 @@ const bodyOf = async (request: Request): Promise<Record<string, unknown>> => {
   }
 };
 
-const TOKEN_PREFIX = /^(?:token|bearer) /i;
+const TOKEN_PREFIX = /^(?:token|bearer) /iu;
 
 const kept = (): Kept => {
   let counter = 0;
@@ -157,10 +157,10 @@ const withBody = (
   answer: (asked: Asked, body: Record<string, unknown>) => Response
 ): Route => ({ method, path, answer: (asked) => answer(asked, asked.body) });
 
-const GITHUB_REPO = /^\/api\/v3\/repos\/([^/]+\/[^/]+)\/(.+)$/;
-const ISSUES = /^issues$/;
-const PULLS = /^pulls$/;
-const ISSUE_COMMENTS = /^issues\/(\d+)\/comments$/;
+const GITHUB_REPO = /^\/api\/v3\/repos\/([^/]+\/[^/]+)\/(.+)$/u;
+const ISSUES = /^issues$/u;
+const PULLS = /^pulls$/u;
+const ISSUE_COMMENTS = /^issues\/(\d+)\/comments$/u;
 
 /** GitHub's REST API under `/api/v3`, signed `token <t>` (Octokit sends it so). */
 export const githubStub = (where: StubWhere): ForgeStub =>
@@ -241,9 +241,9 @@ export const githubStub = (where: StubWhere): ForgeStub =>
     },
   });
 
-const GITLAB_PROJECT = /^\/api\/v4\/projects\/([^/]+)\/(.+)$/;
-const MERGE_REQUESTS = /^merge_requests$/;
-const NOTES = /^(issues|merge_requests)\/(\d+)\/notes$/;
+const GITLAB_PROJECT = /^\/api\/v4\/projects\/([^/]+)\/(.+)$/u;
+const MERGE_REQUESTS = /^merge_requests$/u;
+const NOTES = /^(issues|merge_requests)\/(\d+)\/notes$/u;
 
 /** GitLab's REST API v4, signed `PRIVATE-TOKEN` (gitbeaker's `token`). */
 export const gitlabStub = (where: StubWhere): ForgeStub =>
@@ -313,8 +313,8 @@ export const gitlabStub = (where: StubWhere): ForgeStub =>
     },
   });
 
-const GITEA_REPO = /^\/api\/v1\/repos\/([^/]+\/[^/]+)\/(.+)$/;
-const GITEA_PULL_BY_BRANCHES = /^pulls\/([^/]+)\/(.+)$/;
+const GITEA_REPO = /^\/api\/v1\/repos\/([^/]+\/[^/]+)\/(.+)$/u;
+const GITEA_PULL_BY_BRANCHES = /^pulls\/([^/]+)\/(.+)$/u;
 
 /** Gitea's API v1 as gitea-mcp calls it, signed `token <t>`. */
 export const giteaStub = (where: StubWhere): ForgeStub =>

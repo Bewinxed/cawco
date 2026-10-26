@@ -91,7 +91,9 @@ async function mac(script: string): Promise<string> {
   const code = await build.exited;
   check(
     "compile",
-    code === 0 && /^BUILT iOS$/m.test(text) && /^BUILT iOS 18\.5$/m.test(text),
+    code === 0 &&
+      /^BUILT iOS$/mu.test(text) &&
+      /^BUILT iOS 18\.5$/mu.test(text),
     code === 0 ? "BUILT iOS and BUILT iOS 18.5" : `build-both.sh exited ${code}`
   );
   if (code !== 0) {
@@ -237,7 +239,7 @@ xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
 sips -s format bmp "$F/s.png" --out "$F/s.bmp" >/dev/null 2>&1
 base64 < "$F/s.bmp"
 rm -rf "$F"`);
-  const bmp = Buffer.from(bmpText.replace(/\s/g, ""), "base64");
+  const bmp = Buffer.from(bmpText.replace(/\s/gu, ""), "base64");
   // The clock left of the island; wifi and battery right of it.
   const ink = {
     clock: darkestIn(bmp, points, { x0: 20, x1: 140, y0: 10, y1: 48 }),
@@ -253,7 +255,7 @@ rm -rf "$F"`);
 const appearance = (mode: "light" | "dark") =>
   mac(`xcrun simctl ui ${udid} appearance ${mode}`);
 const pause = (ms: number) => Bun.sleep(ms);
-const LOG_PREFIX = /^.*\[dev\.cawco\.app:Swipe\]\s*/;
+const LOG_PREFIX = /^.*\[dev\.cawco\.app:Swipe\]\s*/u;
 /** The swipe recognizer's own account of the last few seconds (a DEBUG build's `Swipe` log). */
 const swipeLog = async (what: string) => {
   const lines = (

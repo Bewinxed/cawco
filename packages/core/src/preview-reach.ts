@@ -110,7 +110,7 @@ export type PreviewUnreached =
   /** Answered with an error status, which the hub never sends: something in front of it answered. */
   | { cause: "status"; status: number };
 
-const TRAILING_STOP = /\.$/;
+const TRAILING_STOP = /\.$/u;
 
 /**
  * Offline is two facts, never `navigator.onLine` alone: the browser says so,

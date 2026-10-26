@@ -112,7 +112,7 @@
       "class" | "onsubmit" | keyof Handlers
     > = $props();
 
-  const SPACE = /\s/;
+  const SPACE = /\s/u;
   const CHIP = "[data-mention-chip]";
   // A copy that reaches past the field (the page selected whole) gives each
   // chip as what it stands for too (chip-copy.ts).

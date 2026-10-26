@@ -39,10 +39,10 @@ export interface GitRemoteDeps {
 }
 
 /** A repository's segment of the path: `<projectId>.git`. */
-const REPO = /^([A-Za-z0-9][A-Za-z0-9_-]{0,127})\.git$/;
-const OID = /^[0-9a-f]{64}$/;
-const RANGE = /^bytes=(\d+)-(\d*)$/;
-const HEADER_LINE = /^([^:]+):\s*(.*)$/;
+const REPO = /^([A-Za-z0-9][A-Za-z0-9_-]{0,127})\.git$/u;
+const OID = /^[0-9a-f]{64}$/u;
+const RANGE = /^bytes=(\d+)-(\d*)$/u;
+const HEADER_LINE = /^([^:]+):\s*(.*)$/u;
 const LFS_TYPE = "application/vnd.git-lfs+json";
 const REALM = 'Basic realm="CawCo"';
 /** How long a large file's link in a batch answer stands. */
@@ -159,7 +159,7 @@ const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
   return joined;
 };
 
-const LINE_BREAK = /\r?\n/;
+const LINE_BREAK = /\r?\n/u;
 
 /**
  * A CGI's stdout read up to the end of its header block: its status, its

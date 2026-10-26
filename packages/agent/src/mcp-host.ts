@@ -109,7 +109,7 @@ interface Launch {
 }
 
 /** The path a harness dials a shared server on, under the gateway. */
-export const HOSTED_PATH = /^\/mcp\/local\/([^/]+)$/;
+export const HOSTED_PATH = /^\/mcp\/local\/([^/]+)$/u;
 
 /** Each list method, and the key its result carries the items under. */
 const LIST_METHODS: Record<string, { items: string; capability: string }> = {
@@ -185,7 +185,7 @@ const hostDir = (): string => join(cawcoDataDir(), "mcp-host");
 const keptFile = (name: string): string =>
   join(hostDir(), `${encodeURIComponent(name)}.json`);
 /** A gate id as a workspace's is written: a word of its state dir's name, never a path. */
-const GATE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+const GATE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 /** A gate's server's listing, by its config's key: every gate on that config lists the same. */
 const gateKeptFile = (configKey: string): string =>
   join(hostDir(), `gate-${configKey}.json`);

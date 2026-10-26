@@ -60,7 +60,7 @@ export type TaskTitles = Readonly<Record<string, string>>;
 
 /** Words cut at `max` characters, a link's label. */
 const cut = (text: string, max: number): string => {
-  const flat = text.replace(/\s+/g, " ").trim();
+  const flat = text.replace(/\s+/gu, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 };
 
@@ -586,7 +586,7 @@ const stepLines = (plan: SessionPlan, links: LinkScope): string[] =>
       `${"  ".repeat(step.depth)}- [${STEP_BOX[step.status]}] ${links.session ? stepLink(links.session, step.id, step.content) : `${step.id} ${step.content}`}${step.priority ? ` (${step.priority})` : ""}`
   );
 
-const HEADING = /^#+\s*/;
+const HEADING = /^#+\s*/u;
 
 /** What a plan is called: its spec's first line, else its first step's words, else Plan (the dashboard's chip reads it so too). */
 const planName = (plan: SessionPlan): string =>

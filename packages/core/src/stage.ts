@@ -52,7 +52,7 @@ export interface SectionPlan {
 }
 
 /** A states file's `.stories.<ext>`. */
-const STORIES_EXT = /\.stories\.[cm]?[jt]sx?$/;
+const STORIES_EXT = /\.stories\.[cm]?[jt]sx?$/u;
 
 /**
  * A section's name in plain words: its states file's `title` (its last
@@ -565,7 +565,7 @@ export const SECTION_MISSING = "cawco-section-missing";
 export const SECTION_WRITTEN = "cawco:section-written";
 
 /** A CSF story file: `Who.stories.ts`, `Card.stories.tsx`, `Page.stories.js`. */
-export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/;
+export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/u;
 
 /**
  * Where a stage is: `starting` its first start, `waking` a start after

@@ -30,7 +30,7 @@ import type { ProjectRow } from "./db";
 import type { PlaceRepos } from "./place-repo";
 
 /** GitHub's rule for a repository's name. */
-const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/;
+const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/u;
 /** How long one GitHub API call may take. Our choice. */
 const API_MS = 30_000;
 /** How long the hub's push to GitHub may take. Our choice. */

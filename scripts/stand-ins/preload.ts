@@ -11,8 +11,8 @@ import { plugin } from "bun";
 
 /** Each product module's path, and the stand-in loaded in its place. */
 const IN_PLACE: [RegExp, string][] = [
-  [/packages\/hub\/src\/upstreams\.ts$/, "hub-upstreams.ts"],
-  [/packages\/core\/src\/canvas-host-plugins\.ts$/, "canvas-host-plugins.ts"],
+  [/packages\/hub\/src\/upstreams\.ts$/u, "hub-upstreams.ts"],
+  [/packages\/core\/src\/canvas-host-plugins\.ts$/u, "canvas-host-plugins.ts"],
 ];
 
 plugin({

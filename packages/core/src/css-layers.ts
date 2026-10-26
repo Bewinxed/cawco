@@ -26,7 +26,7 @@ export async function unlayeredRules(css: string): Promise<string[]> {
         return;
       }
     }
-    found.push(rule.selector.replace(/\s+/g, " "));
+    found.push(rule.selector.replace(/\s+/gu, " "));
   });
   return found;
 }

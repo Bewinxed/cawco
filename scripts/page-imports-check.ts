@@ -44,10 +44,10 @@ const PAGES: {
   },
 ];
 
-const SCRIPT = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
-const CODE = /\.(svelte|ts|js|mjs)$/;
+const SCRIPT = /<script\b[^>]*>([\s\S]*?)<\/script>/gu;
+const CODE = /\.(svelte|ts|js|mjs)$/u;
 /** A `.js` specifier names its `.ts` source (TypeScript's own convention). */
-const JS_EXTENSION = /\.js$/;
+const JS_EXTENSION = /\.js$/u;
 
 /** The specifiers a file loads statically: type-only imports and exports left out. */
 function imports(file: string): string[] {

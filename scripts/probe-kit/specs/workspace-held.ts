@@ -46,7 +46,7 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyGone, gitInCopy } from "../copy";
 import type { Kit, Spec } from "../kit";
 
-const TAG = /PROBE-HELD-([ASXTUVPQRHZ])/;
+const TAG = /PROBE-HELD-([ASXTUVPQRHZ])/u;
 type Tag = "A" | "S" | "X" | "T" | "U" | "V" | "P" | "Q" | "R" | "H" | "Z";
 const FINISH = "mcp__cawco__finish_item";
 const COMMIT =
@@ -66,9 +66,9 @@ const NOT_FINISHED = "Not finished: your clone holds work that is in no commit";
 const U_UNTRACKED = "notes-U.md";
 const U_EXCLUDED = "scratch-U.log";
 /** The refusal's excludes section, naming U's excluded file. */
-const U_EXCLUDED_NAMED = /own excludes[\s\S]{0,300}?scratch-U\.log/;
+const U_EXCLUDED_NAMED = /own excludes[\s\S]{0,300}?scratch-U\.log/u;
 /** Where discard_workspace's answer names its carry (server.ts, the discard route). */
-const CARRY_AT = /the carry (\S+) on/;
+const CARRY_AT = /the carry (\S+) on/u;
 /** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;
 /** How long a delegate's item may take from its ask to its end. */

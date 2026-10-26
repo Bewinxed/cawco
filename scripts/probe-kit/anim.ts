@@ -661,7 +661,7 @@ export async function overlay(page: Page, looks: Look[]): Promise<void> {
     const look = { held: [] as Held[], over: [] as Animation[] };
     w.__kitLook = look;
     const camel = (prop: string) =>
-      prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+      prop.replace(/-([a-z])/gu, (_, c: string) => c.toUpperCase());
     /** Whether a run (a transition, or keyframes) drives `prop`. */
     const animates = (run: Animation, prop: string) =>
       run instanceof CSSTransition
@@ -722,11 +722,11 @@ export const sameCurve = (a: string, b: string): boolean => {
   );
   return x !== "" && x === y;
 };
-const NUMBER = /-?\d*\.?\d+/g;
+const NUMBER = /-?\d*\.?\d+/gu;
 
 /** `cubic-bezier(x1, y1, x2, y2)` at progress `x`, solved for its t. */
 export function bezierAt(curve: string, x: number): number {
-  const [x1, y1, x2, y2] = (curve.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+  const [x1, y1, x2, y2] = (curve.match(/-?\d*\.?\d+/gu) ?? []).map(Number);
   const at = (a: number, b: number, t: number) =>
     3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
   let lo = 0;

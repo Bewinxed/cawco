@@ -131,9 +131,10 @@ const PENDING = "pending:";
 /** How far a description's headings go, and a comment's (tracker-adapter.ts). */
 const DESCRIPTION_DEPTH = 1;
 const COMMENT_DEPTH = 2;
-const GITHUB_ISSUE_URL = /^https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/i;
+const GITHUB_ISSUE_URL =
+  /^https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/iu;
 const LINEAR_ISSUE_URL =
-  /^https:\/\/linear\.app\/[^/]+\/issue\/([A-Z0-9]+-\d+)/i;
+  /^https:\/\/linear\.app\/[^/]+\/issue\/([A-Z0-9]+-\d+)/iu;
 
 export interface TrackersDeps {
   readonly connections: Pick<

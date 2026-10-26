@@ -17,8 +17,8 @@ const DASHBOARD = join(dirname(new URL(import.meta.url).pathname), "..");
 const LIB = join(DASHBOARD, "src/lib");
 /** An import, export or dynamic import of a `#lib` specifier. */
 const SPECIFIER =
-  /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(["'])(#lib(?:\/[^"']*)?)\1/g;
-const SOURCE = /\.(?:ts|js|svelte)$/;
+  /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(["'])(#lib(?:\/[^"']*)?)\1/gu;
+const SOURCE = /\.(?:ts|js|svelte)$/u;
 /** The forms a module is written in, each as its specifier names it. */
 const FORMS: [file: string, specifier: string][] = [
   [".ts", ".js"],

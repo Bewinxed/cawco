@@ -100,7 +100,7 @@ export type StartersTrigger =
 
 /** Where a project's views Caw drafted wait (views.ts `DRAFTS`). */
 const DRAFTS_DIR = "views/drafts";
-const OUI = /\.oui$/;
+const OUI = /\.oui$/u;
 
 export interface ProjectStartersDeps {
   /** Every open dashboard hears a project's new set. */

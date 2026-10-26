@@ -169,7 +169,7 @@ const deniedAddress = (address: string): boolean => {
  * for", resolved-address-guard.ts), and through the proxy, which dials from
  * the host, that is the host's own loopback: the agent and the hub.
  */
-const TRAILING_DOTS = /\.+$/;
+const TRAILING_DOTS = /\.+$/u;
 
 const loopbackName = (name: string): boolean =>
   name === "localhost" || name.endsWith(".localhost");
@@ -605,12 +605,12 @@ const toProtect = (): Map<string, string> => {
 /** A path as `/proc/<pid>/mountinfo` spells it (the kernel's `seq_escape` of space, tab, newline and backslash). */
 const mountinfoSpelling = (path: string): string =>
   path.replace(
-    /[ \t\n\\]/g,
+    /[ \t\n\\]/gu,
     (char) => `\\${char.charCodeAt(0).toString(8).padStart(3, "0")}`
   );
 
 /** A process's entry in `/proc`. */
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 
 /**
  * `inner` and every process that descends from it, by each one's parent:

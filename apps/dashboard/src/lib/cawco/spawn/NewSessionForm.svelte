@@ -189,7 +189,7 @@
   /** The card's head and its Close, as every kit sheet draws them. */
   const sheetHead = sheetHeadVariants();
   /** A home folder at the start of a path (Linux, macOS). */
-  const HOME = /^\/(home|Users)\/[^/]+(?=\/|$)/;
+  const HOME = /^\/(home|Users)\/[^/]+(?=\/|$)/u;
   /**
    * The first prompt, its words and its attachments, as a session's composer
    * holds a message: attached, uploaded and sent the same way.
@@ -644,7 +644,7 @@
   const workdir = $derived(
     repo === undefined
       ? cwd.trim()
-      : `${cwd.trim().replace(/\/+$/, "")}/${repoPath(repo).split("/").pop() ?? ""}`
+      : `${cwd.trim().replace(/\/+$/u, "")}/${repoPath(repo).split("/").pop() ?? ""}`
   );
   const project = $derived(cawco.projects.find((row) => row.id === projectId));
   /** A fork its source had no mode for (spawn/new-session `startFork`): Start forks it. Never on a continuation. */

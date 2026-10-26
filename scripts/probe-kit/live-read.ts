@@ -169,11 +169,11 @@ const DIGIT = new Map([...BASE64].map((c, i) => [c, i]));
 const VALUE_BITS = 32;
 const MORE = 32;
 /** A served chunk's address, less its origin. */
-const ORIGIN = /^[a-z]+:\/\/[^/]+\//;
+const ORIGIN = /^[a-z]+:\/\/[^/]+\//u;
 /** A source's path as a map names it, less its climb to the repository. */
-const CLIMB = /^(\.\.\/)+/;
+const CLIMB = /^(\.\.\/)+/u;
 /** A package's source, said by its name. */
-const PACKAGE = /^.*node_modules\/(\.bun\/[^/]+\/node_modules\/)?/;
+const PACKAGE = /^.*node_modules\/(\.bun\/[^/]+\/node_modules\/)?/u;
 
 /**
  * One segment's numbers off its Base64 VLQ text. A digit carries five bits
@@ -317,7 +317,7 @@ export function sourceAt(
   return `${source}:${(best[2] ?? 0) + 1}`;
 }
 
-const STACK_FRAME = /\(?(https?:\/\/[^\s)]+):(\d+):(\d+)\)?\s*$/;
+const STACK_FRAME = /\(?(https?:\/\/[^\s)]+):(\d+):(\d+)\)?\s*$/u;
 
 /**
  * Slow callbacks (live-page.ts `attributeOn`) by the stack that scheduled

@@ -19,8 +19,8 @@ import {
 import { age, rowOf } from "./find-rows";
 import type { Answer } from "./finder-state.svelte";
 
-const SPACES = /\s+/;
-const ENDS_IN_SPACE = /\s$/;
+const SPACES = /\s+/u;
+const ENDS_IN_SPACE = /\s$/u;
 
 /** How many candidates the menu holds (the wireframe's "up to five"). */
 export const MENU_ROWS = 5;
@@ -114,14 +114,14 @@ export function chipOf(
  * A draft put back (restored, recalled, lifted for an edit) is parsed by it
  * into its chips again.
  */
-export const SERIALISED = /@([^\n<>@]+?) <([^\s<>]+)>/g;
+export const SERIALISED = /@([^\n<>@]+?) <([^\s<>]+)>/gu;
 
 /** A message's text with each chip as it reads, `@<label>`: what a copy of the words shows. */
 export const readAs = (text: string): string =>
   text.replace(SERIALISED, (_, label: string) => `@${label}`);
 
 /** A session's or a thread's handle: `<dir>#<id8>`, `thread#<id8>` (hub labels.ts). */
-const SESSION_HANDLE = /#[0-9a-f]{6,}$/i;
+const SESSION_HANDLE = /#[0-9a-f]{6,}$/iu;
 
 /**
  * Words of a message (outside code, outside-code.ts) with each mention in

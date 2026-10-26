@@ -21,7 +21,7 @@ export const listedAs = (seen: Seen, tool: string): string | undefined =>
 export const callCount = (seen: Seen, tool: string): number =>
   (
     seen.body.match(
-      new RegExp(`"type":"tool_use"[^}]*"name":"(?:[\\w-]+__)?${tool}"`, "g")
+      new RegExp(`"type":"tool_use"[^}]*"name":"(?:[\\w-]+__)?${tool}"`, "gu")
     ) ?? []
   ).length;
 

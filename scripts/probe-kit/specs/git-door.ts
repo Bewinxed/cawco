@@ -110,8 +110,8 @@ const LFS_FILTERS = [
 ];
 /** A traced line of an option git sent its helper, or the helper's answer to one (`ok`, `unsupported`, `error …`). */
 const HELPER_OPTION_TRACE =
-  /Debug: Remote helper: (-> option |<- (ok|unsupported|error)\b)/;
-const HELPER_TRACE_HEAD = /^.*Debug: Remote helper: /;
+  /Debug: Remote helper: (-> option |<- (ok|unsupported|error)\b)/u;
+const HELPER_TRACE_HEAD = /^.*Debug: Remote helper: /u;
 /** The host's own sign-in on the loopback host, as its git credential store keeps it. */
 const HOST_LOGIN = { user: "host-probe", password: "host-secret" };
 

@@ -307,10 +307,10 @@ interface Bag {
   attributes: string;
   pem: string;
 }
-const PEM_BLOCK = /-----BEGIN ([A-Z ]+)-----[\s\S]*?-----END \1-----/g;
-const KEY_ID = /localKeyID:\s*([0-9A-F ]+)/i;
-const FRIENDLY_NAME = /friendlyName: (.*)/;
-const EXPORT = /^export /;
+const PEM_BLOCK = /-----BEGIN ([A-Z ]+)-----[\s\S]*?-----END \1-----/gu;
+const KEY_ID = /localKeyID:\s*([0-9A-F ]+)/iu;
+const FRIENDLY_NAME = /friendlyName: (.*)/u;
+const EXPORT = /^export /u;
 
 /** The team's Developer ID Application certificate and its key, out of `openssl pkcs12 -nodes`' text. */
 const developerIdentity = (text: string): string => {

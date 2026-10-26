@@ -215,7 +215,7 @@ const sweepDoors = async (
 
 /** chrome-devtools-mcp's arguments that pick a browser or a config: the door picks both now. */
 const BROWSER_ARG =
-  /^--(?:config|wsEndpoint|wsHeaders|browserUrl|browser-url|executable[Pp]ath|channel|isolated|userDataDir|user-data-dir|headless|autoConnect|auto-connect)(?:=|$)/;
+  /^--(?:config|wsEndpoint|wsHeaders|browserUrl|browser-url|executable[Pp]ath|channel|isolated|userDataDir|user-data-dir|headless|autoConnect|auto-connect)(?:=|$)/u;
 
 /** A chrome-devtools-mcp command line's arguments through `door`, whatever browser they named before. */
 export const throughGate = (

@@ -45,7 +45,7 @@ export interface Listed {
   tree?: string;
 }
 
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 
 /** Where the worker is: the binary's own entry when compiled, the source beside this file otherwise. */
 const WORKER_URL = new URL(

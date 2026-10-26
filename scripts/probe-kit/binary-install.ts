@@ -24,7 +24,7 @@ interface GithubRelease {
   tag_name: string;
 }
 
-const NIGHTLY = /^nightly-(\d+)-/;
+const NIGHTLY = /^nightly-(\d+)-/u;
 
 /** The two newest published nightlies with a signed manifest, older first. */
 export async function newestNightlies(): Promise<[Signed, Signed]> {

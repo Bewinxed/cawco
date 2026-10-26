@@ -102,7 +102,60 @@
   // its union at runtime (a verb or type off the wire, a plain string).
   "linter": {
     "rules": {
-      "style": { "useDefaultSwitchClause": "off" },
+      "style": {
+        "useDefaultSwitchClause": "off",
+        // Ultracite 8.1's: a numbered group is read by its index at the call
+        // site, and naming 1,873 of them changes no match. Style, no defect.
+        "useNamedCaptureGroup": "off",
+        // A method an interface or a base class names must stay a method,
+        // `this` or not; the rest move out of the class when they read none.
+        "useThisInClassMethods": {
+          "level": "error",
+          "options": {
+            "ignoreClassesWithImplements": "public-fields",
+            "ignoreOverrideMethods": true,
+          },
+        },
+      },
+      // Baseline, read against what the dashboard ships to: current Chromium
+      // and WebKit (the phone app's WKWebView), never an older engine. The
+      // tier is "newly"; the allow lists name the features it uses on purpose
+      // that are not yet Baseline in every engine.
+      "suspicious": {
+        "useBaseline": {
+          "level": "error",
+          "options": {
+            "available": "newly",
+            // Progressive enhancements: an engine without them lays the page
+            // out as before (ragged wrap, no head fade, no trim).
+            "allowProperties": [
+              "text-wrap",
+              "text-box",
+              "text-size-adjust",
+              "line-clamp",
+              "overflow-anchor",
+              "overflow-clip-margin",
+              "accent-color",
+              "resize",
+              // scroll-driven fades: without them the edge stays unfaded.
+              "scroll-timeline",
+              "timeline-scope",
+              "animation-timeline",
+              "animation-range",
+              // written after its -webkit- twin, which WebKit reads.
+              "user-select",
+            ],
+            "allowPropertyValues": {
+              "text-wrap-style": ["pretty"],
+              "background-clip": ["text"],
+              // SvelteKit's app.html wrapper; every target engine has it.
+              "display": ["contents"],
+            },
+            "allowMediaConditions": ["prefers-reduced-transparency"],
+            "allowSelectors": ["selection"],
+          },
+        },
+      },
       // Two of Biome's recommended rules whose only fix ("unsafe") changes
       // what correct code does, and which they report on 103 places that
       // mean it: Math.max/min over strings, which they cannot tell from

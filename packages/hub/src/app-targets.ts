@@ -54,7 +54,7 @@ export interface Affected {
   why: string;
 }
 
-const NAME = /^[A-Za-z0-9_-]+$/;
+const NAME = /^[A-Za-z0-9_-]+$/u;
 
 /** Whether `value` is an array of strings. */
 const strings = (value: unknown): value is string[] =>

@@ -146,17 +146,17 @@ interface ShellLine {
 }
 
 /** A redirection's operator, at the `<` or `>` it starts with. */
-const REDIRECT_OP = /^(?:<<<|<<-?|<>|<&|>>|>\||>&|<|>)/;
+const REDIRECT_OP = /^(?:<<<|<<-?|<>|<&|>>|>\||>&|<|>)/u;
 /** Where one file descriptor goes onto another, or is closed: `&1`'s `1`, `&-`'s `-`. */
-const DESCRIPTOR = /^(?:\d+|-)$/;
+const DESCRIPTOR = /^(?:\d+|-)$/u;
 /** A redirection's target ends at a blank or at what ends a command. */
-const TARGET_END = /[ \t\n|;&()<>]/;
+const TARGET_END = /[ \t\n|;&()<>]/u;
 /** Where output may go and nothing is written. */
 const DEV_NULL = "/dev/null";
 /** An fd number written right before a redirection, as in `2>`. */
-const FD_NUMBER = /^\d+$/;
+const FD_NUMBER = /^\d+$/u;
 
-const BLANK = /[ \t]/;
+const BLANK = /[ \t]/u;
 
 /** The text up to the `)` that closes the one at `from` (just past `(`), and where it ends. */
 const closing = (
@@ -371,7 +371,7 @@ const redirectReads = (op: string, target: string): boolean => {
 const readShell = (command: string): ShellLine =>
   new ShellReader(command).read();
 
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 /** Shell words that open or join commands, never one themselves. */
 const KEYWORDS: ReadonlySet<string> = new Set([
   "!",
@@ -430,8 +430,8 @@ const SHELLS: ReadonlySet<string> = new Set([
   "ksh",
   "fish",
 ]);
-const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/;
-const DURATION = /^\d/;
+const SHELL_COMMAND_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/u;
+const DURATION = /^\d/u;
 
 const baseName = (word: string): string => posix.basename(word);
 
@@ -485,7 +485,7 @@ const programWords = (segment: string[]): string[] => {
 };
 
 /** A name a `for` or `select` loop binds. */
-const LOOP_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const LOOP_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 
 /**
  * Whether a simple command is a `for NAME in WORDS` or `select NAME in
@@ -587,7 +587,7 @@ const GIT_VALUED: ReadonlySet<string> = new Set([
 ]);
 /** git's global options that can make it run a command or read another repository. */
 const GIT_RISKY_GLOBAL =
-  /^(?:-c|--config-env|--exec-path|--git-dir|--work-tree|-C)(?:=|$)/;
+  /^(?:-c|--config-env|--exec-path|--git-dir|--work-tree|-C)(?:=|$)/u;
 
 /** A git command line's subcommand and its arguments, and whether a global option before it is risky. */
 const gitOf = (
@@ -642,7 +642,7 @@ const GIT_COMMANDS: ReadonlySet<string> = new Set(
 );
 /** `git add`'s arguments that stage the whole tree. */
 const ADD_ALL =
-  /^(?:-[a-zA-Z]*A[a-zA-Z]*|--all|--no-ignore-removal|\.|\.\/|:\/|:|\*)$/;
+  /^(?:-[a-zA-Z]*A[a-zA-Z]*|--all|--no-ignore-removal|\.|\.\/|:\/|:|\*)$/u;
 
 const addsAll = (args: string[]): boolean =>
   args.some((arg) => ADD_ALL.test(arg));
@@ -684,7 +684,7 @@ const GIT_READS: ReadonlySet<string> = new Set([
 ]);
 /** `git branch` and `git tag` options that only list. */
 const LISTS =
-  /^(?:-a|--all|-r|--remotes|-v|-vv|--verbose|-l|--list|--show-current|-i|--ignore-case|--column|--no-column|--contains|--no-contains|--merged|--no-merged|--points-at|--sort|--format|(?:--contains|--no-contains|--merged|--no-merged|--points-at|--sort|--format)=.*|-n\d*)$/;
+  /^(?:-a|--all|-r|--remotes|-v|-vv|--verbose|-l|--list|--show-current|-i|--ignore-case|--column|--no-column|--contains|--no-contains|--merged|--no-merged|--points-at|--sort|--format|(?:--contains|--no-contains|--merged|--no-merged|--points-at|--sort|--format)=.*|-n\d*)$/u;
 /** `git branch` and `git tag` listing options whose value may be the next word: a commit, a key, a format. */
 const LIST_VALUED: ReadonlySet<string> = new Set([
   "--contains",
@@ -698,20 +698,20 @@ const LIST_VALUED: ReadonlySet<string> = new Set([
 /** The listing options under which the words after are patterns to list by, never a name to make. */
 const LIST_MODE: ReadonlySet<string> = new Set(["-l", "--list"]);
 /** Arguments that make a reading git command write a file. */
-const WRITES_OUTPUT = /^--output(?:=|$)|^-o$/;
+const WRITES_OUTPUT = /^--output(?:=|$)|^-o$/u;
 /** `git config`'s options that only read. */
-const CONFIG_READS = /^(?:--get|--get-all|--get-regexp|--list|-l)$/;
+const CONFIG_READS = /^(?:--get|--get-all|--get-regexp|--list|-l)$/u;
 /**
  * `git fetch`'s options that change nothing but its remote-tracking refs:
  * none runs a program (`--upload-pack`), recurses into submodules or writes
  * a local branch.
  */
 const FETCH_FLAGS =
-  /^(?:-q|--quiet|-v|--verbose|-p|--prune|-P|--prune-tags|-t|--tags|-n|--no-tags|--all|--multiple|--dry-run|--progress|--no-progress|--no-recurse-submodules|--no-write-fetch-head|--depth=\d+|--deepen=\d+|--shallow-since=\S+|--shallow-exclude=\S+|--unshallow)$/;
+  /^(?:-q|--quiet|-v|--verbose|-p|--prune|-P|--prune-tags|-t|--tags|-n|--no-tags|--all|--multiple|--dry-run|--progress|--no-progress|--no-recurse-submodules|--no-write-fetch-head|--depth=\d+|--deepen=\d+|--shallow-since=\S+|--shallow-exclude=\S+|--unshallow)$/u;
 /** A configured remote's name: never a URL or a path, which would reach a host the project does not name. */
-const REMOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const REMOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 /** A ref to fetch, into FETCH_HEAD and the remote-tracking refs only: no `:<dst>` naming a local branch to write. */
-const FETCH_REF = /^\+?[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+const FETCH_REF = /^\+?[A-Za-z0-9][A-Za-z0-9._/-]*$/u;
 
 /**
  * Whether a `git branch` or `git tag` line only lists: every option one
@@ -829,18 +829,18 @@ const gitTidies = (git: { args: string[]; sub: string }): boolean => {
 
 /** `find`'s actions that run a command or write a file. */
 const FIND_ACTS =
-  /^-(?:exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/;
+  /^-(?:exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/u;
 
 /** `tail`'s options that keep it running after the file's end. */
-const FOLLOWS = /^(?:-f|-F|--follow(?:=.*)?|--retry)$/;
+const FOLLOWS = /^(?:-f|-F|--follow(?:=.*)?|--retry)$/u;
 /** `sort`'s options that write a file or run a program. */
-const SORT_ACTS = /^(?:-o|--output(?:=.*)?|--compress-program(?:=.*)?)$/;
+const SORT_ACTS = /^(?:-o|--output(?:=.*)?|--compress-program(?:=.*)?)$/u;
 /** `file`'s options that write a compiled magic file. */
-const FILE_ACTS = /^(?:-C|--compile)$/;
+const FILE_ACTS = /^(?:-C|--compile)$/u;
 /** `tree`'s options that write its listing into a file. */
-const TREE_ACTS = /^(?:-o|--output(?:=.*)?)$/;
+const TREE_ACTS = /^(?:-o|--output(?:=.*)?)$/u;
 /** `date`'s options that set the clock. */
-const DATE_ACTS = /^(?:-s|--set(?:=.*)?)$/;
+const DATE_ACTS = /^(?:-s|--set(?:=.*)?)$/u;
 
 /** A program that only reads whatever it is given. */
 const onlyReads = (): boolean => true;
@@ -1238,7 +1238,7 @@ const noteFor = (row: LeadCallRow): ThreadNote | undefined => {
 };
 
 /** A line a lead's place's guard said (agent boundary.ts `PLACE_GUARD`). */
-const GUARD_LINE = /^cawco place-guard: .+$/gm;
+const GUARD_LINE = /^cawco place-guard: .+$/gmu;
 
 /** What a call's result says its place's guard found: each line, without its tag. */
 const guardLines = (text: string): string[] =>

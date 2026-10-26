@@ -432,6 +432,6 @@ export const moveBranch = (machineName: string): string =>
   `cawco/move/${
     machineName
       .toLowerCase()
-      .replace(/[^a-z0-9._-]+/g, "-")
-      .replace(/^[-.]+|[-.]+$/g, "") || "machine"
+      .replace(/[^a-z0-9._-]+/gu, "-")
+      .replace(/^[-.]+|[-.]+$/gu, "") || "machine"
   }`;

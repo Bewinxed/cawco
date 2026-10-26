@@ -137,8 +137,8 @@ export const RULE_SCAN_LIMIT = 200_000;
 /** The most times in a row a rule fires on one session before the hub goes quiet for it. */
 export const RULE_FIRE_CEILING = 10;
 
-const RESERVED = /[.*+?^${}()|[\]\\]/g;
-const INVALID_REGEX_PREFIX = /^Invalid regular expression:\s*/;
+const RESERVED = /[.*+?^${}()|[\]\\]/gu;
+const INVALID_REGEX_PREFIX = /^Invalid regular expression:\s*/u;
 const escapeForRegex = (text: string): string => text.replace(RESERVED, "\\$&");
 
 /**
@@ -236,6 +236,7 @@ export function ruleProblem(draft: Partial<RuleDraft>): Record<string, string> {
     }
   } else if (draft.matchKind === "regex") {
     try {
+      // biome-ignore lint/style/useUnicodeRegex: compiled as ruleRegex compiles the owner's stored pattern, without u, so what passes here runs there.
       const compiled = new RegExp(pattern);
       if (compiled.test("")) {
         wrong.pattern =

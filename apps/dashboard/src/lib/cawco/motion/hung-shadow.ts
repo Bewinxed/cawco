@@ -51,11 +51,11 @@ interface Cast {
 export type Corners = [number, number, number, number];
 
 /** The commas between a list's items, not those inside a color's parentheses. */
-const ITEMS = /,(?![^(]*\))/;
+const ITEMS = /,(?![^(]*\))/u;
 /** A computed shadow: its color (a function or a word), then its lengths. */
-const CAST = /^\s*((?:[a-z-]+\([^)]*\))|#[\da-f]+|[a-z]+)\s+(.+)$/i;
+const CAST = /^\s*((?:[a-z-]+\([^)]*\))|#[\da-f]+|[a-z]+)\s+(.+)$/iu;
 /** The gaps between a shadow's lengths. */
-const SPACES = /\s+/;
+const SPACES = /\s+/u;
 
 /** A computed `box-shadow` (color first, as engines serialize it), its outer shadows. */
 function casts(computed: string): Cast[] {

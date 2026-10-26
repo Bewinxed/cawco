@@ -51,20 +51,20 @@ import { createHash } from "node:crypto";
 export const KNOWLEDGE_DIR = "knowledge";
 /** Where fact lines go once archived: `knowledge/archive/<topic>.md`, kept by git. */
 export const KNOWLEDGE_ARCHIVE = "knowledge/archive";
-export const NOTE_ID = /^n-\d{8}-\d{6}-[0-9a-f]{6}$/;
+export const NOTE_ID = /^n-\d{8}-\d{6}-[0-9a-f]{6}$/u;
 /** The brand kit: `knowledge/brand/…` and `knowledge/brand*.md`; images and voice, not fact lines. */
-export const BRAND = /^knowledge\/brand(?:\/|[^/]*\.md$)/i;
+export const BRAND = /^knowledge\/brand(?:\/|[^/]*\.md$)/iu;
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-const TRAILING_SPACE = /\s+$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/u;
+const TRAILING_SPACE = /\s+$/u;
 /** One source in `from`: a note id, or a file's prose before it became fact lines. */
 const SOURCE =
-  /^(n-\d{8}-\d{6}-[0-9a-f]{6}|knowledge\/\S+\.md \(before facts\))(?:\s+|$)/;
-const HEADING = /^#{1,6}\s+(.*)$/;
+  /^(n-\d{8}-\d{6}-[0-9a-f]{6}|knowledge\/\S+\.md \(before facts\))(?:\s+|$)/u;
+const HEADING = /^#{1,6}\s+(.*)$/u;
 /** A fact's grounding: indented under its line. */
-const WHY = /^\s+Why:\s*(.*\S)\s*$/;
-const SPACES = /\s+/g;
-const FIELD_SPLIT = /\s*,\s*/;
+const WHY = /^\s+Why:\s*(.*\S)\s*$/u;
+const SPACES = /\s+/gu;
+const FIELD_SPLIT = /\s*,\s*/u;
 
 export type FactSection = "current" | "conflict" | "formerly";
 
@@ -464,7 +464,7 @@ const put = (
   lines.splice(fact.line - 1, spanOf(fact), ...renderFact(next).split("\n"));
 };
 const joined = (lines: string[]): string => {
-  const text = lines.join("\n").replace(/\n{3,}/g, "\n\n");
+  const text = lines.join("\n").replace(/\n{3,}/gu, "\n\n");
   return text.endsWith("\n") ? text : `${text}\n`;
 };
 
@@ -960,9 +960,9 @@ export const sourcesOf = (files: FactFile[]): Set<string> =>
 export const isProse = (file: FactFile): boolean =>
   file.facts.length === 0 && file.unreadable.length > 0;
 
-const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.*)$/;
-const CONTINUED = /^\s+\S/;
-const FENCE = /^\s*(?:```|~~~)/;
+const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.*)$/u;
+const CONTINUED = /^\s+\S/u;
+const FENCE = /^\s*(?:```|~~~)/u;
 
 /** One claim of a prose file: its words on one line, and the file lines they came from. */
 interface ProseUnit {
@@ -1077,5 +1077,5 @@ export const factsFromProse = (
           from: [beforeFacts(path)],
         })
   );
-  return `${description}\n\n${body.join("\n")}\n`.replace(/\n{3,}/g, "\n\n");
+  return `${description}\n\n${body.join("\n")}\n`.replace(/\n{3,}/gu, "\n\n");
 };

@@ -111,8 +111,8 @@ const CGROUP_ROOT = "/sys/fs/cgroup";
 /** The keeper's groups of its children's own groups: `children`, and `children/workspaces` for a workspace's own processes (sessiond cgroup.ts `CHILDREN_GROUP`, `WORKSPACES_GROUP`). */
 const CHILDREN_GROUPS = ["/children", "/children/workspaces"];
 /** `/proc/<pid>/status`'s pids of a process, one per pid namespace it is in, innermost last. */
-const NS_PID = /^NSpid:\s*(.+)$/m;
-const BLANKS = /\s+/;
+const NS_PID = /^NSpid:\s*(.+)$/mu;
+const BLANKS = /\s+/u;
 
 /** Who a keeper child's leaks are told to, and where its processes run. */
 export interface LeakTarget {
@@ -152,7 +152,7 @@ const cgroupOf = async (pid: number): Promise<string | undefined> =>
     .trim();
 
 /** What a keeper's cgroup name keeps of a procId: the rest becomes `_` (sessiond cgroup.ts `openChildGroup`). */
-const UNNAMEABLE = /[^A-Za-z0-9_-]/g;
+const UNNAMEABLE = /[^A-Za-z0-9_-]/gu;
 
 /**
  * Linux: the cgroup dir the keeper made for child `procId` (process `pid`),
@@ -371,7 +371,7 @@ type Sandbox =
   { idle: readonly number[]; inner: number } | { members: readonly number[] };
 
 /** A browser's crash handler, by its file's name: Chromium's and Chrome's `chrome_crashpad_handler`, Edge's `msedge_crashpad_handler`, a Mac helper's `… Crashpad Handler`. */
-const CRASH_HANDLER = /crashpad[_ ]handler$/i;
+const CRASH_HANDLER = /crashpad[_ ]handler$/iu;
 const APP = ".app/";
 
 /** The install a file is part of: its `.app` bundle on the Mac, else its folder (a browser's helpers and crash handler stand beside it). */

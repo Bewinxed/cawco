@@ -72,7 +72,7 @@ const requestWithin = async (
   }
 };
 
-const TAG = /PROBE-EXCL-([XYZ])/;
+const TAG = /PROBE-EXCL-([XYZ])/u;
 const FINISH = "mcp__cawco__finish_item";
 /** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;

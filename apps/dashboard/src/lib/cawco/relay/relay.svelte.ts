@@ -32,8 +32,8 @@ import {
 } from "#lib/cawco/client.svelte.js";
 
 /** A TURN URL's scheme and its query, as the STUN URL through its host drops them. */
-const TURN_SCHEME = /^turns?:/;
-const QUERY = /\?.*$/;
+const TURN_SCHEME = /^turns?:/u;
+const QUERY = /\?.*$/u;
 /** How long a relay candidate has to come, per URL (the journey design's 8 s). */
 const PROVE_MS = 8000;
 /** A TURN server's refusal of a credential (RFC 8656 401 Unauthorized). */

@@ -314,7 +314,7 @@ const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
 /** A call's marker: its leg's number, the letter of a leg's later calls (2c), and the count of a leg's repeated read (5b2). */
-const COMMAND = /PROBE-CALL:(\d+[a-z]?\d*)/g;
+const COMMAND = /PROBE-CALL:(\d+[a-z]?\d*)/gu;
 
 /** A verifier's brief opens this way (hub design-verify.ts `VERIFIER_BRIEF`). */
 const VERIFIER_BRIEF = "You are the design system verifier";
@@ -391,11 +391,11 @@ const respond = (request: Seen): Reply => {
     : text(`${ask.name} is not offered`);
 };
 
-const STATUS = /"status":"(\w+)"/;
+const STATUS = /"status":"(\w+)"/u;
 
-const ERRORS = /"errors":(\[[^\]]*\])/;
-const ID = /"id":"([0-9a-f-]{36})"/;
-const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 500);
+const ERRORS = /"errors":(\[[^\]]*\])/u;
+const ID = /"id":"([0-9a-f-]{36})"/u;
+const short = (said: string) => said.replaceAll(/\s+/gu, " ").slice(0, 500);
 
 /** The files of a detailed design_map record's components, or undefined when the answer is not that record. */
 const componentFiles = (said: string): string[] | undefined => {
@@ -564,7 +564,7 @@ const stageCloneIn = async (
 };
 
 /** A read's `unreached` (hub service.ts `unreachedWritten`), whole. */
-const UNREACHED = /"unreached":(\{[^}]*\})/;
+const UNREACHED = /"unreached":(\{[^}]*\})/u;
 
 /** The stage host's file, from its toolchain root (agent stage.ts `HOST_FILE`). */
 const HOST_FILE = ".cawco/stage/host.mjs";
@@ -786,7 +786,7 @@ const HEAD_ORDER = [
   "reload",
   "expand",
 ];
-const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/;
+const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/u;
 
 /** The head as drawn: its width (what the words key on), its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, whether its word is drawn, its name; then whether More and Close stand, More before Close. */
 const headOf = (page: Page) =>
@@ -1411,7 +1411,7 @@ async function neverDrawnLeg(
     .then(
       async () => ({
         text: await neverDrawn.evaluate(
-          (node) => node.textContent?.replace(/\s+/g, " ").trim() ?? ""
+          (node) => node.textContent?.replace(/\s+/gu, " ").trim() ?? ""
         ),
         // By their accessible names: a kit Button's text holds its pending words too.
         buttons: await buttonNames(neverDrawn),

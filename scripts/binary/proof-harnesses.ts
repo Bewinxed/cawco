@@ -74,7 +74,7 @@ type Session = Awaited<ReturnType<Harness["spawn"]>>;
 const keepers = new KeeperPool();
 
 /** A line of a message the session runs as a tool call, as a model calls a tool its prompt names: `cawco tool <name> [json]`. */
-const TOOL_LINE = /^cawco tool (\S+)(?: (.+))?$/;
+const TOOL_LINE = /^cawco tool (\S+)(?: (.+))?$/u;
 
 /** The command every session's process runs: what its exec'd argv[0] reads. */
 const SESSION_COMMAND = "sleep";

@@ -21,27 +21,27 @@ const MESSAGE = "(?:messages?|repl(?:y|ies)|responses?)";
 /** Each pattern is one way a report points at the chat; its match is quoted in the refusal. */
 const POINTERS: readonly RegExp[] = [
   // "my previous message", "my two chat messages to you", "my last reply".
-  new RegExp(`\\bmy\\s+(?:${ORDINAL}\\s+){1,3}${MESSAGE}\\b`, "i"),
+  new RegExp(`\\bmy\\s+(?:${ORDINAL}\\s+){1,3}${MESSAGE}\\b`, "iu"),
   // "my message above", "the reply above", "the messages above".
   new RegExp(
     `\\b(?:my|the)\\s+(?:${ORDINAL}\\s+){0,3}${MESSAGE}\\s+above\\b`,
-    "i"
+    "iu"
   ),
   // "The report is the previous message", "see the last assistant message".
   new RegExp(
     `\\b(?:is|are|was|were|in|see)\\s+the\\s+(?:previous|last|earlier|prior|preceding)\\s+(?:assistant\\s+|chat\\s+)?${MESSAGE}\\b`,
-    "i"
+    "iu"
   ),
   // "report delivered above.", "the options are above", "written above in full".
-  /\b(?:delivered|posted|sent|written|given|provided|pasted|returned|is|are|was|were)\s+above(?=\s*(?:[.,;:!)]|$|in\s+full\b|in\s+(?:the|this|my)\s+(?:chat|conversation)\b))/im,
+  /\b(?:delivered|posted|sent|written|given|provided|pasted|returned|is|are|was|were)\s+above(?=\s*(?:[.,;:!)]|$|in\s+full\b|in\s+(?:the|this|my)\s+(?:chat|conversation)\b))/imu,
   // "earlier in this conversation", "above in the chat", "in my chat".
-  /\b(?:earlier|above)\s+in\s+(?:the|this|our)\s+(?:chat|conversation|session|thread)\b/i,
-  /\b(?:in|see)\s+(?:my|our)\s+(?:chat|conversation)\b/i,
-  /\b(?:written|posted|sent|given|delivered|answered|replied|laid\s+out|listed)\s+(?:it\s+)?in\s+(?:the\s+)?chat\b/i,
+  /\b(?:earlier|above)\s+in\s+(?:the|this|our)\s+(?:chat|conversation|session|thread)\b/iu,
+  /\b(?:in|see)\s+(?:my|our)\s+(?:chat|conversation)\b/iu,
+  /\b(?:written|posted|sent|given|delivered|answered|replied|laid\s+out|listed)\s+(?:it\s+)?in\s+(?:the\s+)?chat\b/iu,
 ];
 
 /** "See above." with nothing above it in the report: it can only mean the chat. */
-const BARE_ABOVE = /\b(?:see|as|is|are)\s+above\b/i;
+const BARE_ABOVE = /\b(?:see|as|is|are)\s+above\b/iu;
 /** Characters of report before a bare "see above" that still count as nothing above it. */
 const NOTHING_ABOVE = 40;
 
@@ -49,7 +49,7 @@ const NOTHING_ABOVE = 40;
  * Quoted words: code fences, inline code, and "…" or “…” spans. A report that
  * quotes a phrase talks about it rather than pointing with it.
  */
-const QUOTED = /```[\s\S]*?```|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”/g;
+const QUOTED = /```[\s\S]*?```|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”/gu;
 
 /**
  * The phrase in `report` that points at the chat as where the result is, or
@@ -67,7 +67,7 @@ export const chatPointer = (report: string): string | undefined => {
   // Quoted words above it are still above it: measured on the report itself.
   if (
     bare &&
-    report.slice(0, bare.index).replace(/\s+/g, "").length < NOTHING_ABOVE
+    report.slice(0, bare.index).replace(/\s+/gu, "").length < NOTHING_ABOVE
   ) {
     return bare[0];
   }

@@ -91,10 +91,10 @@ export interface DelegateCatalog {
 }
 
 const DELEGATES = "delegates";
-const TYPE_FILE = /^(.+)\.md$/;
-const NUMBER = /^\d+(?:\.\d+)?$/;
-const PAIR = /^([A-Za-z_]+)\s*:\s*(.*)$/;
-const LEADING_SPACE = /^\s+/;
+const TYPE_FILE = /^(.+)\.md$/u;
+const NUMBER = /^\d+(?:\.\d+)?$/u;
+const PAIR = /^([A-Za-z_]+)\s*:\s*(.*)$/u;
+const LEADING_SPACE = /^\s+/u;
 
 const KNOWN_FIELDS = new Set([
   "harness",
@@ -115,7 +115,7 @@ const KNOWN_FIELDS = new Set([
 const budgetOf = (line: FrontMatterLine): DelegateBudget | string => {
   const flow = line.value.trim();
   const pairs = flow.startsWith("{")
-    ? flow.replace(/^\{|\}$/g, "").split(",")
+    ? flow.replace(/^\{|\}$/gu, "").split(",")
     : line.under.map((under) => under.replace(LEADING_SPACE, ""));
   const budget: DelegateBudget = {};
   for (const raw of pairs.map((pair) => pair.trim()).filter(Boolean)) {

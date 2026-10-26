@@ -15,7 +15,7 @@ import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import { eventually, waiting } from "./suite";
 
-const ASK = /JOURNEY-ASK (\S+)/;
+const ASK = /JOURNEY-ASK (\S+)/u;
 const TOOL_RESULT = '"tool_result"';
 /** What the model says once the command has run. */
 export const RAN = "The command ran; carrying on with the release notes.";

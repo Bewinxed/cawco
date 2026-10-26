@@ -5,13 +5,15 @@ import theme from "./tokens/theme.css?raw";
 
 /** The keys a namespace of the token theme holds (`--spacing-space-3` → `space-3`). */
 const keys = (ns: string): string[] =>
-  [...theme.matchAll(new RegExp(`^\\s*--${ns}-([a-z0-9-]+):`, "gm"))].map(
+  [...theme.matchAll(new RegExp(`^\\s*--${ns}-([a-z0-9-]+):`, "gmu"))].map(
     ([, key]) => key
   );
 /** The names of the theme's `@utility <prefix>-<name>` rules. */
 const utilities = (prefix: string): string[] =>
   [
-    ...theme.matchAll(new RegExp(`^@utility ${prefix}-([a-z0-9-]+) \\{`, "gm")),
+    ...theme.matchAll(
+      new RegExp(`^@utility ${prefix}-([a-z0-9-]+) \\{`, "gmu")
+    ),
   ].map(([, name]) => name);
 const durations = keys("duration");
 /** What a `font` shorthand class resets: every font longhand group, and the other shorthands. */

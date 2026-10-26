@@ -57,13 +57,13 @@ import { nextRunsOf, slotLabel } from "./routines";
 import type { TaskSummary, Tasks } from "./tasks";
 
 /** A view's name: what its file is called, and the tab it becomes. */
-const VIEW_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const VIEW_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 const KEPT = "views";
 const DRAFTS = "views/drafts";
 const EXT = ".oui";
 /** An ISO 8601 date, or a date and time: a task file's field that places it on a calendar. */
 const ISO_DATE =
-  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/u;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const nameOf = (raw: string): string =>

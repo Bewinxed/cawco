@@ -27,11 +27,11 @@ const TONE = "Which tone for the replies?";
 const PLAIN = "Plain";
 const WARM = "Warm";
 const TWO_NEED = needsCount(2);
-const QUESTION = /^Question from Caw/;
-const FIRST_OF_TWO = /1 of 2/;
-const SECOND_OF_TWO = /2 of 2/;
+const QUESTION = /^Question from Caw/u;
+const FIRST_OF_TWO = /1 of 2/u;
+const SECOND_OF_TWO = /2 of 2/u;
 /** The Plain option as the card names it: its keycap, its label and its description. */
-const PLAIN_DESCRIBED = /Plain Say it plainly, no flourish/;
+const PLAIN_DESCRIBED = /Plain Say it plainly, no flourish/u;
 
 const question = (text: string) => ({
   questions: [
@@ -178,7 +178,7 @@ async function walk(leg: Leg): Promise<void> {
     "Answer the first by click",
     async () => {
       const first = cardAt(page, FIRST_OF_TWO);
-      await first.getByRole("radio", { name: new RegExp(PLAIN) }).click();
+      await first.getByRole("radio", { name: new RegExp(PLAIN, "u") }).click();
       await first.getByRole("button", { name: "Answer" }).click();
     },
     async () => {

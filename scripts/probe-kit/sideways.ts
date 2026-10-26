@@ -57,7 +57,7 @@ export function sideways(): SidewaysRead {
   const clips = (el: Element) =>
     getComputedStyle(el).overflowX !== "visible" ||
     // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-    /paint|strict|content/.test(getComputedStyle(el).contain);
+    /paint|strict|content/u.test(getComputedStyle(el).contain);
   /** Whether a box between `el` and `scroller` clips it first. */
   const clippedBefore = (el: Element, scroller: Element) => {
     for (

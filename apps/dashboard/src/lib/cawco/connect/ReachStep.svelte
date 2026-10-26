@@ -123,10 +123,10 @@
     );
   }
 
-  const PORT = /^\d+$/;
-  const SPACE = /\s/;
-  const SCHEME = /^https?:\/\//;
-  const LINE_BREAK = /[\r\n]/;
+  const PORT = /^\d+$/u;
+  const SPACE = /\s/u;
+  const SCHEME = /^https?:\/\//u;
+  const LINE_BREAK = /[\r\n]/u;
   /** What stops an SSH install before anything starts, in words; empty when nothing does. */
   function check(): string {
     const target = connect.fields.target.trim();

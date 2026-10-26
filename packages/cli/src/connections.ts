@@ -27,7 +27,7 @@ const INTERRUPT = "\x03";
 const END_OF_INPUT = "\x04";
 /** The first printable character: what sorts below it is a terminal's control, never a key's. */
 const FIRST_PRINTABLE = 0x20;
-const TRAILING_NEWLINES = /[\r\n]+$/;
+const TRAILING_NEWLINES = /[\r\n]+$/u;
 
 /** One keystroke on the key typed so far: the key it leaves, or that typing ended or was cancelled. */
 const keystroke = (

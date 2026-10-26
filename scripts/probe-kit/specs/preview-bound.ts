@@ -122,9 +122,9 @@ const OPENED_MS = 3000;
 /** The overlay's own script time as a page artifact opens, at most (12). The owner's design: under 30 ms. */
 const OVERLAY_CPU_MS = 30;
 /** A sampled function of the overlay's own script (`name@overlay.js?k=…:line:column`, or a native it called). */
-const OVERLAY_FRAME = /@overlay\.js/;
+const OVERLAY_FRAME = /@overlay\.js/u;
 /** The overlay's own address (core `OVERLAY_PATH`), at its key or not. */
-const OVERLAY_URL = /\/__cawco\/overlay\.js(?:\?|$)/;
+const OVERLAY_URL = /\/__cawco\/overlay\.js(?:\?|$)/u;
 /** Sections of the page artifact 12 opens: a long landing page's worth, each with a choice and a field. Our call. */
 const FULL_SECTIONS = 300;
 /** A page artifact the size of a real one (12): headings, copy, a choice and a kept field in every section. */
@@ -496,7 +496,7 @@ function sheetOf(page: Page, origin: string, name: string) {
 }
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** The calls the mock model makes, by the marker the message asking for each carries (artifact-reopen's). */
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();

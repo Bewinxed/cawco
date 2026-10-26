@@ -55,7 +55,7 @@ import { roleOf } from "./roles";
 import { runsOnValue } from "./runs-on";
 
 const GITHUB_REPO =
-  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/u;
 const REASON_LIMIT = 300;
 const LANDS: readonly ProjectLands[] = ["main", "branch", "pr"];
 

@@ -27,7 +27,7 @@ const sizeOf = (path: string): Promise<number> =>
     () => 0
   );
 
-const LINE = /^line (\d+) /;
+const LINE = /^line (\d+) /u;
 
 /** The numbers of the complete `line <n>` lines in `text`, in order. */
 const numbers = (text: string): number[] =>

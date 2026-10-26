@@ -21,8 +21,8 @@ const ROOT = join(import.meta.dir, "../..");
 const GOLAR = join(ROOT, "node_modules/golar/dist/bin.js");
 const FIXTURES = "scripts/lint/fixtures/";
 /** A report as Golar prints it: `path:line:column: rule: message`. */
-const SPACES = /\s+/;
-const FINDING = /^(\S[^:]*):(\d+):(\d+): ([\w/-]+): /;
+const SPACES = /\s+/u;
+const FINDING = /^(\S[^:]*):(\d+):(\d+): ([\w/-]+): /u;
 
 const fail = (why: string, said = ""): never => {
   if (said) {

@@ -406,10 +406,10 @@ const waitingAnswer = (
 };
 
 /** A thread's handle (`thread#1a2b3c4d`), as find and a chip carry it. */
-const THREAD_HANDLE = /^thread#([0-9a-f-]{6,36})$/;
+const THREAD_HANDLE = /^thread#([0-9a-f-]{6,36})$/u;
 
 /** What an id is made of, its dashes aside. */
-const HEX = /^[0-9a-f]+$/;
+const HEX = /^[0-9a-f]+$/u;
 
 /**
  * The one session of `peers` the target names by id, as every tool reads

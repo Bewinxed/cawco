@@ -63,15 +63,15 @@ import { pagePins, writePagePins } from "../pins";
 
 const CREATE = "mcp__cawco__artifact_create";
 const REPLY_TOOL = "mcp__cawco__comment_reply";
-const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
-const CALL = /PROBE-PR-CALL:(\d+)/g;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
+const CALL = /PROBE-PR-CALL:(\d+)/gu;
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const RAIL = '[data-slot="comment-rail"]';
 const FRAME = `${PANE} iframe[title="Preview"]`;
 /** The pane's own link to the doc, through the dashboard's relay (artifact-doc.ts). */
-const PANE_SOCKET = /\/ws\/artifact\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/;
+const PANE_SOCKET = /\/ws\/artifact\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/u;
 /** The page's own link to the doc, on its preview origin (overlay artifact.ts). */
-const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/;
+const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/u;
 const PAGE_HTML =
   "<!doctype html><html><body><main><h1>Refusal</h1><p>A page to pin.</p></main></body></html>";
 

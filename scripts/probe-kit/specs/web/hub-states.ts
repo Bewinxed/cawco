@@ -59,17 +59,17 @@ const installing = (phase: "installing" | "available") => ({
 });
 /** Every word that says the hub's connection is away, wherever it is drawn. */
 const AWAY =
-  /hub unreachable|can.t reach the hub|reach the hub|retrying in|retrying now|reconnecting|reconnect/i;
+  /hub unreachable|can.t reach the hub|reach the hub|retrying in|retrying now|reconnecting|reconnect/iu;
 
-const UNREACHABLE = new RegExp(literal(connectionWords.unreachable));
-const RECONNECTED = /reconnected/i;
+const UNREACHABLE = new RegExp(literal(connectionWords.unreachable), "u");
+const RECONNECTED = /reconnected/iu;
 /** The build's name kept whole: a word joiner may follow its hyphen. */
-const UPDATING_PROBE = /updating to 9\.9\.9-\u2060?probe/;
-const UPDATING = /updating/;
-const PROXY_WORDS = /Bad gateway|cloudflare/i;
-const RETRY = /^(retry|try again)$/i;
+const UPDATING_PROBE = /updating to 9\.9\.9-\u2060?probe/u;
+const UPDATING = /updating/u;
+const PROXY_WORDS = /Bad gateway|cloudflare/iu;
+const RETRY = /^(retry|try again)$/iu;
 /** A reason joined to the sentence before it with a colon. */
-const COLON_JOIN = /: The hub/;
+const COLON_JOIN = /: The hub/u;
 
 /** The socket's proxy: forward, refuse new sockets, drop the one open, or speak as the hub. */
 interface Socket {
@@ -143,7 +143,7 @@ async function until(ok: () => boolean | Promise<boolean>, ms: number) {
 /** The visible elements whose own words say the hub's connection is away, by where they stand. */
 const awaySayers = (page: Page) =>
   page.evaluate((source) => {
-    const away = new RegExp(source, "i");
+    const away = new RegExp(source, "iu");
     const out: string[] = [];
     const walker = document.createTreeWalker(
       document.body,
@@ -187,7 +187,7 @@ const bandNow = (page: Page) =>
       exists: band !== null,
       open: band?.hasAttribute("data-open") ?? false,
       tone: band?.getAttribute("data-tone") ?? "",
-      words: (band?.innerText ?? "").replace(/\s+/g, " ").trim(),
+      words: (band?.innerText ?? "").replace(/\s+/gu, " ").trim(),
     };
   }, BAND);
 
@@ -599,7 +599,7 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
     !board.includes("<") &&
       board.includes("The hub didn't answer (502).") &&
       !PROXY_WORDS.test(board),
-    board.replace(/\s+/g, " ").slice(0, 240)
+    board.replace(/\s+/gu, " ").slice(0, 240)
   );
   // One failing read of the project is said once, with one Retry.
   const said502 = await page.evaluate(() => {
@@ -620,7 +620,7 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
         continue;
       }
       holders.add(block);
-      out.push((block.textContent ?? "").replace(/\s+/g, " ").trim());
+      out.push((block.textContent ?? "").replace(/\s+/gu, " ").trim());
     }
     return { out };
   });
@@ -639,7 +639,7 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
   kit.check(
     `${name}: the board's sentence joins its reason as a sentence, not "read: The"`,
     !COLON_JOIN.test(board),
-    board.replace(/\s+/g, " ").slice(0, 240)
+    board.replace(/\s+/gu, " ").slice(0, 240)
   );
   // The hairline under the bar here is the bar's own, drawn whatever the hub
   // does, not a hub state's: `border-hairline`, the rule between regions
@@ -900,7 +900,7 @@ async function search(kit: Kit, page: Page, name: string, view: View) {
     !searched.includes("<") &&
       searched.includes("The hub didn't answer (502).") &&
       !PROXY_WORDS.test(searched),
-    searched.replace(/\s+/g, " ").slice(0, 200)
+    searched.replace(/\s+/gu, " ").slice(0, 200)
   );
   const faulted = await cardPlace(page);
   inside("search 502", faulted);
@@ -1121,11 +1121,11 @@ async function runLeg(
     // Every shadow's reach past the box: offset, blur and spread, each side.
     const reach = { bottom: 0, left: 0, right: 0, top: 0 };
     // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
-    for (const one of shadow.split(/,(?![^(]*\))/)) {
+    for (const one of shadow.split(/,(?![^(]*\))/u)) {
       const [x = 0, y = 0, blur = 0, spread = 0] = (
         one
-          .replace(/(rgba?|oklch|oklab|color|lab|lch|hsla?)\([^)]*\)/g, "")
-          .match(/-?\d*\.?\d+px/g) ?? []
+          .replace(/(rgba?|oklch|oklab|color|lab|lch|hsla?)\([^)]*\)/gu, "")
+          .match(/-?\d*\.?\d+px/gu) ?? []
       ).map((v) => Number.parseFloat(v));
       const out = blur + spread;
       reach.right = Math.max(reach.right, x + out);

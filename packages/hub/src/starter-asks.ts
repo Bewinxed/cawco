@@ -131,7 +131,7 @@ const within = (words: string, max: number): string =>
 /** `words`' end in at most `max` characters, its mark included: a conversation's last words are where it stands. */
 const endWithin = (words: string, max: number): string =>
   words.length > max ? `…${words.slice(-(max - 1))}` : words;
-const SPACES = /\s+/g;
+const SPACES = /\s+/gu;
 
 /** Every text cut to its length and every list to its count. */
 export const boundStarterInputs = (raw: StarterInputs): StarterInputs => {
@@ -241,18 +241,18 @@ export const REASON_WORDS = 14;
  * never reach a reason's words.
  */
 const REASON_RULES: [RegExp, string][] = [
-  [/[·•|]/, "it lists with “·”"],
-  [/`/, "it sets words in mono"],
-  [/\b\d+(?:d|h|m|w|mo|y|hr|min)\b/i, "it shortens a duration (“2d”)"],
-  [/\b[a-z]{1,4}-[a-z0-9]*\d[a-z0-9]*\b/i, "it names an id"],
-  [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/i, "it names a sha"],
-  [/\b[a-z0-9]+(?:-[a-z0-9]+){2,}\b/i, "it names a slug"],
-  [/\b[a-z0-9]+_[a-z0-9_]+\b/i, "it names an identifier"],
-  [/\b[a-z]+\.[a-z]+\b/i, "it names a dotted id or a file"],
-  [/(?:^|\s)\/\S/, "it names a route"],
+  [/[·•|]/u, "it lists with “·”"],
+  [/`/u, "it sets words in mono"],
+  [/\b\d+(?:d|h|m|w|mo|y|hr|min)\b/iu, "it shortens a duration (“2d”)"],
+  [/\b[a-z]{1,4}-[a-z0-9]*\d[a-z0-9]*\b/iu, "it names an id"],
+  [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/iu, "it names a sha"],
+  [/\b[a-z0-9]+(?:-[a-z0-9]+){2,}\b/iu, "it names a slug"],
+  [/\b[a-z0-9]+_[a-z0-9_]+\b/iu, "it names an identifier"],
+  [/\b[a-z]+\.[a-z]+\b/iu, "it names a dotted id or a file"],
+  [/(?:^|\s)\/\S/u, "it names a route"],
 ];
-const SENTENCE_END = /[.!?](?=\s+\S)/;
-const ENDS = /[.!?]$/;
+const SENTENCE_END = /[.!?](?=\s+\S)/u;
+const ENDS = /[.!?]$/u;
 
 /**
  * Why `reason` breaks the rules above, in words, or null when it holds to
@@ -765,7 +765,7 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
 /** `views/drafts/pricing.oui` → `pricing`. */
 const draftName = (path: string): string =>
   (path.split("/").at(-1) ?? path).replace(OUI, "");
-const OUI = /\.oui$/;
+const OUI = /\.oui$/u;
 
 const decisionSubjects = (inputs: StarterInputs): Map<string, Subject> => {
   const subjects = new Map<string, Subject>();

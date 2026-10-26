@@ -25,7 +25,7 @@ import { until } from "../scratch-fleet";
 export const RESULT_MARK = "PROBE-RESULT ";
 
 const xml = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 
 /** A job's plist: its program through launchd's shell, its environment, its one log, run once at load. */
 const plistOf = (

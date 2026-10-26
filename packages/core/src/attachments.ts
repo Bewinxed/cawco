@@ -40,7 +40,7 @@ export function humanSize(bytes: number): string {
 }
 
 const UNITS: Record<string, number> = { B: 1, KB, MB: KB * KB, GB: KB ** 3 };
-const SIZE = /^(\d+(?:\.\d+)?) (B|KB|MB|GB)$/;
+const SIZE = /^(\d+(?:\.\d+)?) (B|KB|MB|GB)$/u;
 
 /** A {@link humanSize} back to bytes, as near as it says. */
 function sizeOf(said: string): number {
@@ -48,13 +48,13 @@ function sizeOf(said: string): number {
   return match ? Math.round(Number(match[1]) * UNITS[match[2]]) : 0;
 }
 
-const HASH_PREFIX = /^([a-f0-9]{8}|[a-f0-9]{64})-(.+)$/;
+const HASH_PREFIX = /^([a-f0-9]{8}|[a-f0-9]{64})-(.+)$/u;
 
 /** The hash of a file's bytes from a {@link FileAttachment.ref}. */
 export const fileHash = (ref: string): string =>
   ref.slice(ref.lastIndexOf("/") + 1);
 
-const FOLDERS = /[\\/]/;
+const FOLDERS = /[\\/]/u;
 
 /**
  * Where a session's machine keeps an attached file, under the attachments
@@ -83,7 +83,7 @@ export const attachedFileLine = (
 ): string => `Attached file: ${path} (${humanSize(size)}, ${mediaType})`;
 
 const ATTACHED_FILE =
-  /\n*^Attached file: (\S.*?) \(([^,()\n]+), ([^()\n]+)\)$/gm;
+  /\n*^Attached file: (\S.*?) \(([^,()\n]+), ([^()\n]+)\)$/gmu;
 
 /** A file a sent turn names, as its transcript row shows it. */
 export interface ShownFile {
@@ -129,7 +129,7 @@ export function attachedFiles(text: string): {
 }
 
 /** The clips a machine's file reader serves (agent fs.ts `MEDIA_TYPES`). */
-export const VIDEO_FILE = /\.(mp4|mov|webm)$/i;
+export const VIDEO_FILE = /\.(mp4|mov|webm)$/iu;
 
 /** A video's captions: the `.vtt` of the same name beside it. */
 export const sidecarOf = (path: string): string =>

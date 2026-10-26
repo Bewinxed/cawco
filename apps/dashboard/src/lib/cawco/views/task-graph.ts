@@ -25,7 +25,7 @@ export interface TaskEdge {
 }
 
 /** A wait on a task, as the hub keeps it: `tsk-12`. */
-const TASK_ID = /^tsk-\d+$/;
+const TASK_ID = /^tsk-\d+$/u;
 
 /** Every edge between two of the project's tasks. */
 export function taskEdges(tasks: TaskSummary[]): TaskEdge[] {

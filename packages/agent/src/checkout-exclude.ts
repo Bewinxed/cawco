@@ -45,7 +45,7 @@ export const BLOCK_START =
   "# cawco: the stand-ins it made for the workspace's denied paths";
 export const BLOCK_END = "# cawco: end of stand-ins";
 
-const LEADING_SLASH = /^\//;
+const LEADING_SLASH = /^\//u;
 
 /** A clone's own `info/exclude`, by its absolute path. */
 const excludeFileOf = async (clone: string): Promise<string> => {
@@ -90,8 +90,8 @@ export const excludedStandIns = async (clone: string): Promise<string[]> =>
   (await readExclude(await excludeFileOf(clone))).listed.filter(Boolean);
 
 /** A line of `info/exclude` that is a pattern, not one path: a glob, a negation or an escape. */
-const PATTERN = /[*?[\\!]/;
-const TRAILING_SLASHES = /\/+$/;
+const PATTERN = /[*?[\\!]/u;
+const TRAILING_SLASHES = /\/+$/u;
 
 /**
  * Every path a clone's `info/exclude` names by an anchored line, relative to

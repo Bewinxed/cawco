@@ -347,7 +347,7 @@
 
   /** The words of a copy box, each a unit that never breaks inside: a parenthesis is one ("(DNS only, no proxy)"). */
   const unitsOf = (text: string): string[] =>
-    text.match(/\([^)]*\)|\S+/g) ?? [text];
+    text.match(/\([^)]*\)|\S+/gu) ?? [text];
 
   /** A step's note: meta, muted; a failure's in the fail ink. */
   const NOTE = "min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere";

@@ -35,7 +35,7 @@ import { TOKENS_EXTENSION } from "./dtcg-values";
 
 const VERSION = "2025.10";
 /** A resolution-order reference: `#/sets/<name>` or `#/modifiers/<name>`. */
-const ORDER_REF = /^#\/(sets|modifiers)\/(.+)$/;
+const ORDER_REF = /^#\/(sets|modifiers)\/(.+)$/u;
 
 /** Where a context's tokens go in the stylesheet. */
 export type ContextCondition =

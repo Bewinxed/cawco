@@ -77,8 +77,8 @@
   let listing = $state(false);
   let listError = $state("");
   let request = 0;
-  const trailing = /\/+$/;
-  const rootPrefix = /^~\/?|^\//;
+  const trailing = /\/+$/u;
+  const rootPrefix = /^~\/?|^\//u;
   const crumbs = $derived.by(() => {
     const root = path.startsWith("/") ? "/" : "~";
     const rest = path.replace(rootPrefix, "").split("/").filter(Boolean);

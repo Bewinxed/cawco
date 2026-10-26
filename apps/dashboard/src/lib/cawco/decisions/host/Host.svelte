@@ -14,7 +14,7 @@
   import { overlayTag, programIn, takeServed } from "./page.svelte.js";
 
   let program = $state(programIn(document));
-  const SERVED_HASH = /data-page-hash="([0-9a-f]{64})"/;
+  const SERVED_HASH = /data-page-hash="([0-9a-f]{64})"/u;
 
   /** Tells the overlay the page drew `hash`'s program. */
   const drawn = async (hash: string) => {

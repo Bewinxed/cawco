@@ -279,7 +279,7 @@ export interface CommentAttachment {
 }
 
 /** A hub file reference: `/api/files/` and the bytes' sha256. */
-export const FILE_REF = /^\/api\/files\/[0-9a-f]{64}$/;
+export const FILE_REF = /^\/api\/files\/[0-9a-f]{64}$/u;
 
 export interface ThreadEntry {
   /**
@@ -920,7 +920,7 @@ export function seeChanges(
 }
 
 /** A revision's key in the `seen` map: its number. */
-const REVISION_KEY = /^\d{1,9}$/;
+const REVISION_KEY = /^\d{1,9}$/u;
 
 /** Why a person's `seen` map may not be kept; null when it may. */
 export function seenProblem(seen: Map<string, unknown>): string | null {
@@ -1558,9 +1558,9 @@ export const wholePage = (anchor: PageAnchor): boolean =>
  * render hands it to: React's `useId` (`:r3:`, `:R1d6:` on the server) and
  * Radix's (`radix-…`). Never an element's identity.
  */
-const MINTED_ID = /^:r[0-9a-z]+:$|^radix-/i;
+const MINTED_ID = /^:r[0-9a-z]+:$|^radix-/iu;
 /** A selector starting at such an id, as `CSS.escape` writes it (`#\:r3\:`, `#radix-…`). */
-const MINTED_ID_SELECTOR = /^#(?:\\:r[0-9a-z]+\\:|radix-)/i;
+const MINTED_ID_SELECTOR = /^#(?:\\:r[0-9a-z]+\\:|radix-)/iu;
 
 /** Whether an element's id is one a framework minted ({@link MINTED_ID}): it anchors by its next rule. */
 export const generatedId = (id: string): boolean => MINTED_ID.test(id);

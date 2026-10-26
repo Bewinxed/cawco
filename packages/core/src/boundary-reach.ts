@@ -54,7 +54,7 @@ for (const range of [...DENIED_RESOLVED_ADDRESSES, ...GUARDED]) {
 }
 
 /** An IPv6 host's brackets in a URL. */
-const BRACKETS = /^\[|\]$/g;
+const BRACKETS = /^\[|\]$/gu;
 
 const family = (address: string): "ipv4" | "ipv6" =>
   isIP(address) === 6 ? "ipv6" : "ipv4";

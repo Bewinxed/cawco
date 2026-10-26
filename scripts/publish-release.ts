@@ -44,7 +44,7 @@ const UPLOAD_TIMEOUT_MS = 15 * 60_000;
 /** gh's exit for "not signed in" (cli/cli cmd/gh/main.go `exitAuth`): a refusal, not a dropped call. */
 const GH_EXIT_AUTH = 4;
 /** The `{?name,label}` a release's upload_url ends in. */
-const URI_TEMPLATE = /\{.*$/;
+const URI_TEMPLATE = /\{.*$/u;
 
 /** The gh calls running now, so a stop can end them before it removes the draft they write to. */
 const calls = new Set<Subprocess>();

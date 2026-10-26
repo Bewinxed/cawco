@@ -80,7 +80,7 @@
   /** Only lives while the panel is open — a directory may have changed by the next visit. */
   const cache = new Map<string, FsEntry[]>();
 
-  const TRAILING_SLASHES = /(?!^)\/+$/;
+  const TRAILING_SLASHES = /(?!^)\/+$/u;
 
   const dirs = $derived(
     entries
@@ -89,7 +89,7 @@
   );
 
   const parent = $derived(
-    path === "/" ? null : path.replace(/\/[^/]+$/, "") || "/"
+    path === "/" ? null : path.replace(/\/[^/]+$/u, "") || "/"
   );
 
   const join = (dir: string, name: string) =>

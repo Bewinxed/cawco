@@ -23,7 +23,7 @@ export const LONG_CALLS: Readonly<Record<string, string>> = {
 /** The tool that changes a project's settings, asking the person first unless it is in Full Send. */
 export const PROJECT_SETTINGS = "project_settings";
 
-const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
+const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/u;
 
 /** Whether a tool is an admin write: the hub asks the person before each call runs, unless its session is in Full Send (hub admin-asks.ts). */
 export const isAdminWrite = (name: string): boolean =>

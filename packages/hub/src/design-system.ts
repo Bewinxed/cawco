@@ -154,7 +154,7 @@ export interface DesignManifest {
 }
 
 /** A path's leading `design/` (or `./design/`), which `design_write` drops. */
-const DESIGN_PREFIX = /^\.?\/?design\//;
+const DESIGN_PREFIX = /^\.?\/?design\//u;
 
 /**
  * A path as `design_write` takes it, relative to `design/` (a leading

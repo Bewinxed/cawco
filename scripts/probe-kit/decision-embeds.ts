@@ -61,13 +61,13 @@ export const APP = join(ROOT, "apps/dashboard");
 export const STAGE_START_MS = 240_000;
 /** An embed on a decision page: a Preview's live frame (dashboard decisions host Preview.svelte). */
 export const EMBED_FRAME = "[data-slot=media] iframe[data-slot=embed]";
-const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
+const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/u;
 /** Where a Preview tells the shape its canvas said, beside its page (hub preview.ts `PAGE_SHAPE_PATH`). */
-const SHAPE_PATH = /^\/page\/[a-z-]+\/(?:light|dark)\/shape$/;
+const SHAPE_PATH = /^\/page\/[a-z-]+\/(?:light|dark)\/shape$/u;
 /** A page artifact's own address, as the hub serves it. */
-const PAGE_ARTIFACT = /^\/__cawco\/page\/([^/]+)\/$/;
-const TITLE = /Decisions\("([^"]*)"/;
-const STATES_EXT = /\.stories\.ts$/;
+const PAGE_ARTIFACT = /^\/__cawco\/page\/([^/]+)\/$/u;
+const TITLE = /Decisions\("([^"]*)"/u;
+const STATES_EXT = /\.stories\.ts$/u;
 /** Where a stage's page loads the overlay's own pick, wired to the stand-in bridge (`pickWiring`). */
 const PICK_PATH = "/__probe/pick.js";
 
@@ -603,7 +603,7 @@ function embedRead() {
     );
   };
   const words = (el: Element) =>
-    (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 48);
+    (el.textContent ?? "").replace(/\s+/gu, " ").trim().slice(0, 48);
   const shadow = document.getElementById("cawco-chrome")?.shadowRoot;
   const chrome = [
     ...[".head", ".foot", ".steps", ".outline"].flatMap((selector) => {
@@ -815,7 +815,7 @@ const POINTER_HALF = 12;
 const FOOT_SLACK = 1;
 /** One side of a `reachOf` line: how far past its drawn edge a press landed, how far it had to, and what it met. */
 const SIDE =
-  /^(left|right|up|down) reach ([\d.]+) need ([\d.]+)(?: SHORT)? \(then (.*)\)$/;
+  /^(left|right|up|down) reach ([\d.]+) need ([\d.]+)(?: SHORT)? \(then (.*)\)$/u;
 
 /**
  * Whether a control's every side reaches 24px through its centre (The 24
@@ -1067,9 +1067,9 @@ export const CAPTURE_ORIGIN = "http://decisions.test";
 /** A dev server's preview origin that never answers its ping: Preview's wait. */
 export const SILENT_ORIGIN = "http://decisions-site.test";
 /** A capture page's own path, and a file beside it. */
-const CAPTURE_PATH = /^\/page\/([a-z]+)\/(.*)$/;
+const CAPTURE_PATH = /^\/page\/([a-z]+)\/(.*)$/u;
 /** A page artifact a Preview embeds, on the page's own origin (Preview.svelte: `/__cawco/page/<id>/`). */
-const EMBEDDED_PAGE = /^\/__cawco\/page\/([0-9a-f-]{36})\/$/;
+const EMBEDDED_PAGE = /^\/__cawco\/page\/([0-9a-f-]{36})\/$/u;
 
 /** The artifacts the media pages name: a page a Preview embeds, a dev server's preview, and ids no artifact has. */
 const CAPTURE_IDS = {

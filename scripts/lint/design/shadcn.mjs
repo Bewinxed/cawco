@@ -43,7 +43,8 @@ export function patterns(entries) {
   const compiled = entries.map(
     (entry) =>
       new RegExp(
-        `^${entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`
+        `^${entry.replace(/[.+?^${}()|[\]\\]/gu, "\\$&").replace(/\*/gu, ".*")}$`,
+        "u"
       )
   );
   return (token) => {
@@ -60,7 +61,7 @@ const styleClasses = (model) =>
     ? classSelectors(model.text.slice(model.ast.css.start, model.ast.css.end))
     : new Set();
 
-const MODIFIER = /\/[\w.%]+$/;
+const MODIFIER = /\/[\w.%]+$/u;
 
 /** Each class no CSS is written for. */
 export function unknownClasses(model, { allow = [] } = {}) {
@@ -199,7 +200,7 @@ export function placesOnly(token, allowedClass) {
   return !own.some((d) => NUMERIC_STEP.test(d.value));
 }
 
-const NUMERIC_STEP = /var\(--spacing\)/;
+const NUMERIC_STEP = /var\(--spacing\)/u;
 
 /** Each class on a design-system component that changes how it looks. */
 export function restyle(model, { allowClasses = [] } = {}) {
@@ -249,27 +250,27 @@ export function staticClasses(model) {
 /* -------------------------------------------------------- no-inline-styles */
 
 const COLOR_FUNCTION =
-  /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|hwb|oklch|oklab|lab|lch|color|color-mix|light-dark)\(/i;
+  /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|hwb|oklch|oklab|lab|lch|color|color-mix|light-dark)\(/iu;
 const NAMED_COLORS = new Set(
   "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen".split(
     " "
   )
 );
 
-const LEAVES = /[\s,()/]+/;
+const LEAVES = /[\s,()/]+/u;
 
 /** Whether a CSS value names a colour outright (not through a variable). */
 export function hasRawColor(value) {
   const text = value
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, " ")
-    .replace(/url\([^)]*\)/gi, " ")
+    .replace(/\/\*[\s\S]*?\*\//gu, " ")
+    .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu, " ")
+    .replace(/url\([^)]*\)/giu, " ")
     // A colour function whose channels are one variable reads the theme.
     .replace(
-      /\b(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch)\(\s*var\([^()]*\)\s*(?:\/\s*(?:[\d.]+%?|var\([^()]*\)))?\s*\)/gi,
+      /\b(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch)\(\s*var\([^()]*\)\s*(?:\/\s*(?:[\d.]+%?|var\([^()]*\)))?\s*\)/giu,
       " "
     )
-    .replace(/var\([^)]*\)/gi, " ");
+    .replace(/var\([^)]*\)/giu, " ");
   if (COLOR_FUNCTION.test(text)) {
     return true;
   }
@@ -282,7 +283,7 @@ export function hasRawColor(value) {
 const cssName = (name) =>
   name.startsWith("--")
     ? name
-    : name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`).toLowerCase();
+    : name.replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`).toLowerCase();
 
 /** The declarations of a style text, split at top-level semicolons. */
 function declarationsIn(css) {
@@ -385,7 +386,7 @@ export function inlineStyles(model, { allow = [] } = {}) {
     return [];
   }
   const allowed = allow.map(
-    (entry) => new RegExp(`^${cssName(entry).replace(/\*/g, ".*")}$`)
+    (entry) => new RegExp(`^${cssName(entry).replace(/\*/gu, ".*")}$`, "u")
   );
   const exempt = (property) => allowed.some((p) => p.test(cssName(property)));
   const findings = [];

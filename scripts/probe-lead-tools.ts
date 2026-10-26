@@ -39,7 +39,7 @@ const { MACHINE, delay, scratchFleet, until } = await import("./scratch-fleet");
 const QUIET_MS = 15_000;
 
 const keep = process.argv.includes("--keep");
-const LOGGED = /caw|decisions|lead|boundary|error/i;
+const LOGGED = /caw|decisions|lead|boundary|error/iu;
 
 let failed = false;
 const check = (name: string, passed: boolean, detail: string) => {
@@ -60,7 +60,7 @@ const toCall = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 /** What each numbered message's tool answered: the next request's last user text. */
 const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\d+)/g;
+const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** The words of each wake Caw read that offers a relay (caw.ts `offerRelay`). */
 const relayWakes: string[] = [];
 const RELAY_WAKE = "Event connection:";

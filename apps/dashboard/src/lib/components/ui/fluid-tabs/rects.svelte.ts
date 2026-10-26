@@ -30,7 +30,7 @@ import {
  * the tabs measured again, their offsets laying the page out in the frame's
  * callbacks, ahead of the frame's own layout.
  */
-const DRAWN = /--[\w-]+\s*:[^;]*;?/g;
+const DRAWN = /--[\w-]+\s*:[^;]*;?/gu;
 
 /** An inline style less what draws a tab: what can place one. */
 const placedBy = (style: string | null): string =>

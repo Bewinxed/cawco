@@ -69,14 +69,14 @@ import {
 import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
 
-const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
+const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/u;
 /** A page hash: sha256, hex. */
-const PAGE_HASH = /^[0-9a-f]{64}$/;
+const PAGE_HASH = /^[0-9a-f]{64}$/u;
 /** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
 const SERVED_HASH =
-  /<script src="\/__cawco\/overlay\.js(?:\?k=[0-9a-z]+)?" data-page-hash="([0-9a-f]{64})"/;
+  /<script src="\/__cawco\/overlay\.js(?:\?k=[0-9a-z]+)?" data-page-hash="([0-9a-f]{64})"/u;
 /** The overlay's own tag's address: its path, at the overlay's key (core `keyOverlay`) or not. */
-const OVERLAY_SRC = /^\/__cawco\/overlay\.js(?:\?|$)/;
+const OVERLAY_SRC = /^\/__cawco\/overlay\.js(?:\?|$)/u;
 /**
  * The pane's mode (its head's Interact | Comment | Draw): Interact gives the
  * page every press; Comment takes them, and a tap pins a comment to what it
@@ -239,7 +239,7 @@ function outline(el: Element | null, lead?: boolean) {
 }
 
 /** A computed colour with no alpha: the element paints nothing with it. */
-const CLEAR = /^(?:transparent|rgba\(.*,\s*0\)|.*\/\s*0\))$/;
+const CLEAR = /^(?:transparent|rgba\(.*,\s*0\)|.*\/\s*0\))$/u;
 
 /**
  * Whether `el` draws a box of its own (a computed border, a background
@@ -1105,9 +1105,9 @@ const svelteCalls = (el: DevElement): DevStackEntry[] => {
 };
 
 /** A stamped component root's call site (`data-insp-path="<file>:<line>:<column>:<Tag>"`), its tag capitalised. */
-const STAMPED_CALL = /^(.*):(\d+):(\d+):([A-Z][\w.$]*)$/;
+const STAMPED_CALL = /^(.*):(\d+):(\d+):([A-Z][\w.$]*)$/u;
 /** A frame's story place (`data-cawco-source="<file>:<line>:<column>"`). */
-const STORY_PLACE = /^(.*):(\d+):(\d+)$/;
+const STORY_PLACE = /^(.*):(\d+):(\d+)$/u;
 
 /**
  * On a sheet (live components): the components `el` stands in, each where
@@ -1510,7 +1510,7 @@ function textOf(el: Element): string {
     return words;
   }
   for (const attribute of NAMED_BY) {
-    const name = el.getAttribute(attribute)?.replace(/\s+/g, " ").trim();
+    const name = el.getAttribute(attribute)?.replace(/\s+/gu, " ").trim();
     if (name) {
       return name.slice(0, COMMENT_LIMITS.anchorText);
     }
@@ -1535,7 +1535,7 @@ function wordsOf(el: Element): string {
     text += `${parent && node.parentNode !== parent ? " " : ""}${node.textContent ?? ""}`;
     parent = node.parentNode;
   }
-  return text.replace(/\s+/g, " ").trim().slice(0, COMMENT_LIMITS.anchorText);
+  return text.replace(/\s+/gu, " ").trim().slice(0, COMMENT_LIMITS.anchorText);
 }
 
 /**
@@ -2524,7 +2524,7 @@ window.addEventListener(
 let shortcutPress: KeyboardEvent | null = null;
 
 /** Apple's systems, where ⌃ letters in a field are text keys and ⌘ is the command key. */
-const APPLE = /Mac|iPhone|iPad/.test(navigator.platform);
+const APPLE = /Mac|iPhone|iPad/u.test(navigator.platform);
 
 /** Whether `event` is a field's own text key rather than a shell combo. */
 const fieldKeeps = (event: KeyboardEvent): boolean =>

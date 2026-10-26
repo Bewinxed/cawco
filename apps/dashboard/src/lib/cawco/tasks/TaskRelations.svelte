@@ -56,7 +56,7 @@
   );
   /** A pasted card (`page#card`), pin (`page/3`), session or GitHub link: only a wait takes one. */
   const pasted = $derived(
-    kind === "waitsOn" && /[#/]|^https?:/i.test(query.trim())
+    kind === "waitsOn" && /[#/]|^https?:/iu.test(query.trim())
       ? query.trim()
       : null
   );

@@ -312,7 +312,7 @@ function syncGate(): void {
   const sockets = new Set<WebSocket>();
   const holding = new Set<{ close: () => void }>();
   // biome-ignore lint/performance/useTopLevelRegex: an init script is serialized alone into the page; it reaches nothing outside itself.
-  const ARTIFACT = /\/__cawco\/artifact\/[0-9a-f-]{36}$/;
+  const ARTIFACT = /\/__cawco\/artifact\/[0-9a-f-]{36}$/u;
   /** A socket never answered: connecting until closed, then closed as an abnormal close is. */
   const held = (url: string) => {
     const socket = {
@@ -2528,7 +2528,7 @@ const sendCheck = async (on: On, id: string) => {
     carried.names.includes("canvas.excalidraw") &&
       carried.names.includes("canvas.md") &&
       carried.images === 1 &&
-      (before.outline?.match(/^ink /gm)?.length ?? 0) === 2,
+      (before.outline?.match(/^ink /gmu)?.length ?? 0) === 2,
     `${JSON.stringify(carried)}; outline before:\n${before.outline}`
   );
   kit.check(

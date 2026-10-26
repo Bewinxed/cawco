@@ -46,11 +46,11 @@ const ALLOWED: Record<string, string> = {
     "the skill-escape probe, which on purpose builds a NESTED `sub/.claude/skills/probe/` inside a delegate's clone — the adversarial path the clone-side deny list does not cover; paths.ts builds only the managed root `.claude`, never this one",
 };
 
-const EXTENSIONS = /\.(?:ts|tsx|mts|cts|js|mjs|cjs|svelte)$/;
+const EXTENSIONS = /\.(?:ts|tsx|mts|cts|js|mjs|cjs|svelte)$/u;
 const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 
 /** `.claude` as a path segment or a file stem, not as part of a longer word. */
-export const CLAUDE_PATH = /(?:^|[^\w.-])\.claude(?![\w-])/;
+export const CLAUDE_PATH = /(?:^|[^\w.-])\.claude(?![\w-])/u;
 
 const walk = (dir: string, out: string[]): void => {
   let names: string[];
@@ -112,9 +112,9 @@ const literalsOf = (
 const lineAt = (text: string, offset: number): number =>
   text.slice(0, offset).split("\n").length;
 
-const SCRIPT = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
-const STYLE = /<style\b[^>]*>[\s\S]*?<\/style>/g;
-const HTML_COMMENT = /<!--[\s\S]*?-->/g;
+const SCRIPT = /<script\b[^>]*>([\s\S]*?)<\/script>/gu;
+const STYLE = /<style\b[^>]*>[\s\S]*?<\/style>/gu;
+const HTML_COMMENT = /<!--[\s\S]*?-->/gu;
 
 /** Every `.claude` path one file names. */
 const hitsIn = (path: string): Hit[] => {
@@ -129,7 +129,7 @@ const hitsIn = (path: string): Hit[] => {
     }
     // The markup: what is left once scripts, styles and comments are blanked
     // out to the same length, so offsets still name lines.
-    const blank = (s: string) => s.replace(/[^\n]/g, " ");
+    const blank = (s: string) => s.replace(/[^\n]/gu, " ");
     const markup = text
       .replace(SCRIPT, blank)
       .replace(STYLE, blank)

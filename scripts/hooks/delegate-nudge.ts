@@ -16,10 +16,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const CD_PREFIX = /^\s*cd\s+\S+\s*&&\s*(.*)/s;
-const TWO_WORD = /^(\S+)\s+(\S+)/;
-const FIRST_WORD = /^(\S+)/;
-const SED_N = /\bsed\s+(-[^ ]*\s+)*-n\b/;
+const CD_PREFIX = /^\s*cd\s+\S+\s*&&\s*(.*)/su;
+const TWO_WORD = /^(\S+)\s+(\S+)/u;
+const FIRST_WORD = /^(\S+)/u;
+const SED_N = /\bsed\s+(-[^ ]*\s+)*-n\b/u;
 
 /**
  * Returns true when the command's effective first word is a read-only
@@ -113,7 +113,7 @@ function main(): void {
 
   const stateDir = join("/tmp", "cawco-delegate-nudge");
   // Safe file name: strip anything that isn't alphanumeric, dash, or underscore.
-  const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/gu, "_");
   const stateFile = join(stateDir, `${safeId}.count`);
 
   let count = 0;

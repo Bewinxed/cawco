@@ -70,16 +70,16 @@ const WEIGHTS: Record<string, string> = {
   "900": ".black",
 };
 
-const REF = /^\{([^}]+)\}$/;
-const KEBAB = /-([a-z0-9])/g;
-const SWIFT_ID = /^[a-z][A-Za-z0-9]*$/;
-const QUOTES = /^["']|["']$/g;
-const BACKSLASH = /\\/g;
-const DOUBLE_QUOTE = /"/g;
-const FONT_REF = /^\{font\.([^}]+)\}$/;
-const EM = /[^r]em$/;
-const DECLARED = /static let (\w+)/;
-const LENGTH = /^-?\d*\.?\d+(?:px|rem)?$/;
+const REF = /^\{([^}]+)\}$/u;
+const KEBAB = /-([a-z0-9])/gu;
+const SWIFT_ID = /^[a-z][A-Za-z0-9]*$/u;
+const QUOTES = /^["']|["']$/gu;
+const BACKSLASH = /\\/gu;
+const DOUBLE_QUOTE = /"/gu;
+const FONT_REF = /^\{font\.([^}]+)\}$/u;
+const EM = /[^r]em$/u;
+const DECLARED = /static let (\w+)/u;
+const LENGTH = /^-?\d*\.?\d+(?:px|rem)?$/u;
 
 type Mode = "light" | "dark";
 
@@ -203,7 +203,7 @@ function swiftString(s: string): string {
 
 /** The letter-spacing a type role is set with, named by its token: its
     DTCG `letterSpacing`, when that references a `track-*`. */
-const TRACK_REF = /^\{type\.(track-[a-z0-9-]+)\}$/;
+const TRACK_REF = /^\{type\.(track-[a-z0-9-]+)\}$/u;
 
 function roleTracking(
   token: TransformedToken,

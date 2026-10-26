@@ -46,7 +46,7 @@ const spokeIndex = (pathname: string) =>
 /** How many segments a path runs: `/config` is 1, an editor under it 3. */
 const depth = (pathname: string) => pathname.split("/").filter(Boolean).length;
 
-const CONFIG = /^\/config(\/|$)/;
+const CONFIG = /^\/config(\/|$)/u;
 
 export interface Plan {
   from: string;
@@ -140,7 +140,7 @@ export const route = $state<{ spoke: string; travel: Travel }>({
   travel: nudge(8, 0),
 });
 
-const PROJECT = /^\/project(\/|$)/;
+const PROJECT = /^\/project(\/|$)/u;
 
 /** Remember where a navigation leaves from, unless it is a project home. */
 export function leaving(from: URL): void {

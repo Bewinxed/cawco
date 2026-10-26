@@ -57,8 +57,8 @@ import {
 import type { Kit, Spec } from "../kit";
 
 type Tag = "A" | "B" | "PA" | "PB";
-const TAG = /PROBE-INSTALL-(?:LIST-)?(P?[AB])\b/g;
-const LIST = /PROBE-INSTALL-LIST-P?[AB]: (\S+)/g;
+const TAG = /PROBE-INSTALL-(?:LIST-)?(P?[AB])\b/gu;
+const LIST = /PROBE-INSTALL-LIST-P?[AB]: (\S+)/gu;
 /** The most a second clone may add, in KiB: a copied install adds about 2 GB. */
 const SECOND_CLONE_LIMIT_KB = 100 * 1024;
 /** A cold install fetches every package into the scratch fleet's empty cache. */
@@ -441,7 +441,7 @@ const installed = async (
       ? "node_modules held packages"
       : "unread"
   );
-  const exit = new RegExp(`INSTALLED-${tag}:(\\d+)`).exec(said ?? "")?.[1];
+  const exit = new RegExp(`INSTALLED-${tag}:(\\d+)`, "u").exec(said ?? "")?.[1];
   const tail = said?.slice(said.indexOf(`INSTALLED-${tag}:`)).slice(0, 400);
   kit.check(
     `${tag}: its own ${installOf(tag)}, inside its boundary, finishes`,
@@ -556,7 +556,7 @@ const cannotList = async (
     Boolean,
     240_000
   ).catch(() => undefined);
-  const exit = new RegExp(`LISTED-${tag}:(\\d+)`).exec(said ?? "")?.[1];
+  const exit = new RegExp(`LISTED-${tag}:(\\d+)`, "u").exec(said ?? "")?.[1];
   const shown = said
     ?.slice(Math.max(0, said.lastIndexOf(`LISTED-${tag}:`) - 300))
     .slice(0, 400);

@@ -209,7 +209,7 @@ export const splitModel = (
     : { providerID: model.slice(0, slash), id: model.slice(slash + 1) };
 };
 
-const WHITESPACE_RE = /\s+/;
+const WHITESPACE_RE = /\s+/u;
 const MCP_USAGE = "Usage: /mcp connect|disconnect <server>";
 
 /** `/name rest` → its parts; undefined for anything that is not a slash command. */
@@ -334,7 +334,7 @@ const DELEGATION_TOOLS = [
 ].map((name) => `cawco_${name}`);
 
 /** What OpenCode makes of a server's name in its tools' ids. */
-const MCP_NAME_UNSAFE = /[^a-zA-Z0-9_-]/g;
+const MCP_NAME_UNSAFE = /[^a-zA-Z0-9_-]/gu;
 
 /** How long a fenced session's read of its location's MCP servers may take. */
 const MCP_FENCE_READ_MS = 65_000;
@@ -379,7 +379,7 @@ const ROLE_ENTRY = "cawco-role.";
 const INSTRUCTION_ENTRY_MAX = 262_144;
 
 /** What an instruction key may not hold (settled #11: `^[a-z0-9][a-z0-9._-]*$`). */
-const ENTRY_KEY_UNSAFE = /[^a-z0-9._-]+/g;
+const ENTRY_KEY_UNSAFE = /[^a-z0-9._-]+/gu;
 
 /** The entry key of a fleet memory document, under `kind`: `cawco-role.roles-orchestrator.md`. */
 const memoryEntryKey = (kind: "role" | "project", path: string): string =>

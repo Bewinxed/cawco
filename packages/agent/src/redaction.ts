@@ -153,14 +153,18 @@ const matcherOf = (values: Set<string>) => {
       values,
       version,
       longest: held.reduce((most, value) => Math.max(most, value.length), 0),
-      pattern: held.length > 0 ? new RegExp(trieSource(held), "g") : null,
+      pattern:
+        held.length > 0
+          ? // biome-ignore lint/style/useUnicodeRegex: the trie branches on code units (trieSource), and its escapes (`\-`) are not valid in u mode.
+            new RegExp(trieSource(held), "g")
+          : null,
     };
   }
   return matcher;
 };
 
 const escaped = (text: string): string =>
-  text.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&");
+  text.replace(/[\\^$.*+?()[\]{}|/-]/gu, "\\$&");
 
 /**
  * A pattern's source that matches each of `values` (none empty), as a trie:

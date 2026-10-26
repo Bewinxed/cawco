@@ -110,29 +110,29 @@ const EMPTY_DRAFT: InstallDraft = {
   code: null,
 };
 /** A carriage return a pty-less session can still send. */
-const CARRIAGE_RETURN = /\r$/;
+const CARRIAGE_RETURN = /\r$/u;
 /** A one-time code's letters: no 0/O or 1/I/L to misread. */
 const CODE_LETTERS = "ACDEFGHJKMNPQRTUVWXY3479";
 const CODE_LENGTH = 6;
 /** One of the hub's addresses as a command carries it: a scheme, a host and a port. */
-const HUB_ADDRESS = /^https?:\/\/[A-Za-z0-9.\-[\]:]+$/;
+const HUB_ADDRESS = /^https?:\/\/[A-Za-z0-9.\-[\]:]+$/u;
 /** A code as the install route takes it. */
-export const INSTALL_CODE = /^[A-Z0-9]{6}$/;
+export const INSTALL_CODE = /^[A-Z0-9]{6}$/u;
 /** The installer's own refusals start so (core install-script.ts `fail`). */
 const FAIL_PREFIX = "cawco: ";
 
 /** The installer's refusals, by the check they name (core install-script.ts). */
 const CHECK_SAID: [RegExp, InstallCheck][] = [
-  [/runs on Linux and macOS/, "os"],
-  [/builds for x86_64 and arm64/, "arch"],
-  [/^curl is needed/, "curl"],
-  [/^tar is needed/, "tar"],
-  [/SHA-256 tool/, "sha256"],
+  [/runs on Linux and macOS/u, "os"],
+  [/builds for x86_64 and arm64/u, "arch"],
+  [/^curl is needed/u, "curl"],
+  [/^tar is needed/u, "tar"],
+  [/SHA-256 tool/u, "sha256"],
   [
-    /not running systemd|persistent user services are off|launchctl is missing/,
+    /not running systemd|persistent user services are off|launchctl is missing/u,
     "systemd",
   ],
-  [/openssl/, "openssl"],
+  [/openssl/u, "openssl"],
 ];
 
 /** The words the join wait leaves when the hub never listed the machine (cli await-joined.ts). */
@@ -142,12 +142,12 @@ const MAC_LOCAL = "macOS does not let a background service";
 
 /** The installer's step lines, by the step they start. */
 const STEP_SAID: [RegExp, InstallStep][] = [
-  [/^installing CawCo /, "install"],
-  [/^joining |^moving this machine from /, "agent"],
-  [new RegExp(`^${JOIN_WAIT_STEP}`), "listed"],
+  [/^installing CawCo /u, "install"],
+  [/^joining |^moving this machine from /u, "agent"],
+  [new RegExp(`^${JOIN_WAIT_STEP}`, "u"), "listed"],
 ];
-const CHECKS_PASSED = /^finding the newest /;
-const LINGER_USER = /enable-linger (\S+)/;
+const CHECKS_PASSED = /^finding the newest /u;
+const LINGER_USER = /enable-linger (\S+)/u;
 
 /** What an install holds besides what every dashboard reads. */
 interface Kept {
@@ -237,7 +237,7 @@ export interface Refused<Status extends 409 | 422 = 409 | 422> {
 }
 
 /** An IPv4 or IPv6 address: it names a machine whole, never by a first label. */
-const IP_ADDRESS = /^[\d.]+$|:/;
+const IP_ADDRESS = /^[\d.]+$|:/u;
 /** The first label of a machine's name, as the fleet names it: `build-01.example.net` → `build-01`. */
 const label = (host: string): string =>
   (IP_ADDRESS.test(host) ? host : host.split(".")[0])?.toLowerCase() ?? "";

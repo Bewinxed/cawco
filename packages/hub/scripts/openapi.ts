@@ -138,7 +138,7 @@ for (const [path, item] of Object.entries(paths)) {
     // Elysia's id keeps a path's hyphens (`getApiModel-windows`); camel-cased
     // across them it is an identifier in TypeScript and Swift alike.
     operation.operationId = operation.operationId.replace(
-      /-(\w)/g,
+      /-(\w)/gu,
       (_, letter: string) => letter.toUpperCase()
     );
     operations.push({ path, method, op: operation });
@@ -162,7 +162,7 @@ const optionalBodies = new Set(
     .filter((route) => route.hooks?.body?.["~optional"] === true)
     .map(
       (route) =>
-        `${route.method.toLowerCase()} ${route.path.replace(/:([^/]+)/g, "{$1}")}`
+        `${route.method.toLowerCase()} ${route.path.replace(/:([^/]+)/gu, "{$1}")}`
     )
 );
 
@@ -184,7 +184,7 @@ if (repeated.length) {
 // One alias per operation, named by its operationId: the route's response
 // map in `~Routes`, which nests by path segment (`:id`, as Elysia writes a
 // parameter), then method.
-const PARAMETER = /^\{(.+)\}$/;
+const PARAMETER = /^\{(.+)\}$/u;
 const routesFile = join(scratch, "routes.ts");
 writeFileSync(
   routesFile,
@@ -303,7 +303,7 @@ const DEFINITION = "#/definitions/";
 const COMPONENT = "#/components/schemas/";
 const RESPONSE = `${DEFINITION}Response`;
 /** What OpenAPI allows a component to be called. */
-const NAME = /^[A-Za-z0-9._-]+$/;
+const NAME = /^[A-Za-z0-9._-]+$/u;
 
 /** `properties` by name: one order, whatever order the checker met them in. */
 const byName = (properties: unknown): unknown =>
@@ -966,7 +966,7 @@ const findUnions = (value: unknown): void => {
 findUnions(components);
 
 const pascal = (word: string): string =>
-  word.replace(/(^|[^A-Za-z0-9]+)([A-Za-z0-9])/g, (_, __, c: string) =>
+  word.replace(/(^|[^A-Za-z0-9]+)([A-Za-z0-9])/gu, (_, __, c: string) =>
     c.toUpperCase()
   );
 /** One open enum per value list, the first schema to use it naming it. */
@@ -1065,12 +1065,12 @@ const SWIFT_KEYWORDS = new Set(
 );
 const SEPARATORS = new Set(["_", "-", " ", "/", "+"]);
 const BETWEEN_WORDS = new Set(["_", "-", ".", "/", "+", "{", "}"]);
-const ALNUM = /[A-Za-z0-9]/;
-const LETTER = /[A-Za-z]/;
-const UPPER = /[A-Z]/;
-const LOWER = /[a-z]/;
-const LEADING_DIGIT = /^[0-9]/;
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const ALNUM = /[A-Za-z0-9]/u;
+const LETTER = /[A-Za-z]/u;
+const UPPER = /[A-Z]/u;
+const LOWER = /[a-z]/u;
+const LEADING_DIGIT = /^[0-9]/u;
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const isAlnum = (c: string): boolean => ALNUM.test(c);
 const isUpper = (c: string): boolean => UPPER.test(c);
 const isLower = (c: string): boolean => LOWER.test(c);
@@ -1462,7 +1462,7 @@ for (const { app, label, protocol, breaks: against } of readers) {
  */
 const RUNTIME = "packages/core/src/runtime.ts";
 const PROTOCOL_RANGE =
-  /export const protocolRange = \{ min: (\d+), max: (\d+) \}/;
+  /export const protocolRange = \{ min: (\d+), max: (\d+) \}/u;
 const rangeOf = (text: string, where: string): { max: number; min: number } => {
   const found = PROTOCOL_RANGE.exec(text);
   if (!found) {
@@ -1477,7 +1477,7 @@ const hubRange = rangeOf(
 /** A route path as the document keys it (`{id}`), as the hub's table writes it (`:id`). */
 const asRoute = (path: string): HubRoute => ({
   method: "",
-  path: path.replace(/\{([^}]+)\}/g, ":$1"),
+  path: path.replace(/\{([^}]+)\}/gu, ":$1"),
 });
 const agents = publishedNightlies(HUB);
 /** Each call no route answers now: the agents that make it, and where the newest builds it. */

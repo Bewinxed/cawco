@@ -868,7 +868,7 @@
       )
       .map((server) => {
         // Tool names carry the server name with anything outside [A-Za-z0-9_-] as `_`.
-        const prefix = `mcp__${server.name.replace(/[^A-Za-z0-9_-]/g, "_")}__`;
+        const prefix = `mcp__${server.name.replace(/[^A-Za-z0-9_-]/gu, "_")}__`;
         return {
           id: `mcp:${server.name}`,
           kind: "mcp",

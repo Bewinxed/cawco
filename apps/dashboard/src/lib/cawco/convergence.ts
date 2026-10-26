@@ -140,7 +140,7 @@ export function syncNotice(
 }
 
 /** A project's row as an item id (core fleet-items.ts): `project:<id>/<kind>:<key>`. */
-const PROJECT_ITEM = /^project:[^/]+\/([^:]+):(.*)$/;
+const PROJECT_ITEM = /^project:[^/]+\/([^:]+):(.*)$/u;
 
 /** A project row's kind in words, before its key. */
 const PROJECT_KIND_WORDS: Record<string, string> = {
@@ -226,7 +226,7 @@ export function failureGroups(
  * says whose it was, and the "Error: " a thrown Error's string carries after
  * it says nothing more.
  */
-const HARNESS_ERROR = /^([\w-]+): (?:Error: )+/gm;
+const HARNESS_ERROR = /^([\w-]+): (?:Error: )+/gmu;
 
 /**
  * A group's reason, in the error formula: what happened (the one item by
@@ -240,7 +240,7 @@ export function failureReason(group: FailureGroup): string {
       : `${group.items.length} items didn't set up.`;
   const cause = group.cause
     ?.replace(HARNESS_ERROR, "$1: ")
-    .replace(/\s+/g, " ");
+    .replace(/\s+/gu, " ");
   return `${what} ${cause ?? "The machine gave no reason."}`;
 }
 

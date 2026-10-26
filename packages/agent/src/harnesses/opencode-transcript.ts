@@ -69,7 +69,7 @@ export const toolInputOf = (input: unknown): Record<string, unknown> => {
 };
 
 /** A `data:` URI's media type and base64 body, when it is one. */
-const DATA_URI = /^data:([^;,]+);base64,(.*)$/s;
+const DATA_URI = /^data:([^;,]+);base64,(.*)$/su;
 
 /** One block of a tool's content (`Tool.Content`), as events and stored messages both carry it. */
 type ContentBlock =

@@ -34,7 +34,7 @@ const mark = (name: string): string => inlineIcon(brands, name, 'brand mark');
  */
 function device(name: string): string {
   return asset(`devices/${name}.svg`)
-    .replace(/<svg[^>]*viewBox="([^"]+)"[^>]*>/, (_, box: string) => {
+    .replace(/<svg[^>]*viewBox="([^"]+)"[^>]*>/u, (_, box: string) => {
       const [, , width, height] = box.split(' ');
       return `<svg class="device" viewBox="${box}" style="--w:${width};--h:${height}" aria-hidden="true">`;
     })
@@ -60,7 +60,7 @@ const percent = (frame: number, frames: number): string =>
 function clip(name: string): Clip {
   const source = asset(`caw/${name}.svg`);
   const read = (key: string): string => {
-    const value = source.match(new RegExp(`data-${key}="([^"]*)"`))?.[1];
+    const value = source.match(new RegExp(`data-${key}="([^"]*)"`, 'u'))?.[1];
     if (!value) throw new Error(`The "${name}" clip has no ${key}.`);
     return value;
   };
@@ -91,7 +91,7 @@ function clip(name: string): Clip {
   const length = Math.round((frames / Number(read('fps'))) * 1000);
 
   const svg = source
-    .replace(/<svg[^>]*>/, `<svg class="caw" viewBox="0 0 512 512" data-clip="${name}"__REST__>`)
+    .replace(/<svg[^>]*>/u, `<svg class="caw" viewBox="0 0 512 512" data-clip="${name}"__REST__>`)
     .replace(`data-drawing="${last}"`, `data-drawing="${last}" data-last`)
     .trim();
   return {
@@ -110,14 +110,14 @@ function pageMarkup(): Plugin {
       handler(html) {
         const page = html
           // The formatter can also break a closing tag as `</i` + newline + `>`, so space may sit before its `>`.
-          .replace(/<i data-icon="([^"]+)"><\/i\s*>/g, (_, name: string) => icon(name))
-          .replace(/<i data-mark="([^"]+)"><\/i\s*>/g, (_, name: string) => mark(name))
-          .replace(/<i data-device="([^"]+)"><\/i\s*>/g, (_, name: string) => device(name))
+          .replace(/<i data-icon="([^"]+)"><\/i\s*>/gu, (_, name: string) => icon(name))
+          .replace(/<i data-mark="([^"]+)"><\/i\s*>/gu, (_, name: string) => mark(name))
+          .replace(/<i data-device="([^"]+)"><\/i\s*>/gu, (_, name: string) => device(name))
           // The formatter breaks a Caw's attributes onto lines of their own, so any space leads them.
-          .replace(/<i\s+data-caw="([^"]+)"([^>]*)><\/i\s*>/g, (_, name: string, rest: string) => {
+          .replace(/<i\s+data-caw="([^"]+)"([^>]*)><\/i\s*>/gu, (_, name: string, rest: string) => {
             const made = clips.get(name) ?? clip(name);
             clips.set(name, made);
-            return made.svg.replace('__REST__', rest.replace(/\s+/g, ' ').trimEnd());
+            return made.svg.replace('__REST__', rest.replace(/\s+/gu, ' ').trimEnd());
           });
         const tags: HtmlTagDescriptor[] = [
           {
@@ -154,12 +154,12 @@ const paperGround: Plugin = {
   name: 'cawco-paper-ground',
   buildStart() {
     const styles = readFileSync(new URL('./src/styles.css', import.meta.url), 'utf8');
-    mustBePaper('--paper in src/styles.css', styles.match(/--paper:\s*(#[0-9a-f]{6})/i)?.[1]);
+    mustBePaper('--paper in src/styles.css', styles.match(/--paper:\s*(#[0-9a-f]{6})/iu)?.[1]);
   },
   transformIndexHtml(html) {
     mustBePaper(
       'theme-color in index.html',
-      html.match(/<meta name="theme-color" content="(#[0-9a-f]{6})"/i)?.[1],
+      html.match(/<meta name="theme-color" content="(#[0-9a-f]{6})"/iu)?.[1],
     );
   },
 };
@@ -173,9 +173,9 @@ const returnPath: Plugin = {
   name: 'cawco-oauth-return-path',
   buildStart() {
     const core = readFileSync(new URL('../packages/core/src/fleet.ts', import.meta.url), 'utf8');
-    const named = core.match(/MCP_OAUTH_RETURN_PATH\s*=\s*"([^"]+)"/)?.[1];
+    const named = core.match(/MCP_OAUTH_RETURN_PATH\s*=\s*"([^"]+)"/u)?.[1];
     const page = readFileSync(new URL('./src/oauth/handoff.ts', import.meta.url), 'utf8');
-    const used = page.match(/HUB_RETURN_PATH\s*=\s*'([^']+)'/)?.[1];
+    const used = page.match(/HUB_RETURN_PATH\s*=\s*'([^']+)'/u)?.[1];
     if (!named || named !== used) {
       throw new Error(
         `src/oauth/handoff.ts hands sign-ins to ${used ?? 'nothing'}, but core's MCP_OAUTH_RETURN_PATH is ${named ?? 'missing'}.`,
@@ -206,12 +206,12 @@ const appPrice: Plugin = {
     const paywall = read(
       '../apps/apple/Packages/CawCoKit/Sources/CawCoScreens/Paywall/PaywallCopy.swift',
     );
-    const days = paywall.match(/"(\d+) days free, then \\\(price/)?.[1];
+    const days = paywall.match(/"(\d+) days free, then \\\(price/u)?.[1];
     if (!days) throw new Error('PaywallCopy.swift no longer says how many days are free.');
     const price = `$${pro.displayPrice}`;
 
     const page = read('./index.html');
-    const card = page.match(/<h3>The native app<\/h3>([\s\S]*?)<\/article>/)?.[1] ?? '';
+    const card = page.match(/<h3>The native app<\/h3>([\s\S]*?)<\/article>/u)?.[1] ?? '';
     const llms = read('./public/llms.txt');
     const claims: [where: string, text: string, says: string][] = [
       ['The pricing card in index.html', card, `<p class="price">${price} <span>once</span></p>`],
@@ -220,7 +220,7 @@ const appPrice: Plugin = {
       ['public/llms.txt', llms, `${days} days free`],
     ];
     for (const [where, text, says] of claims) {
-      if (!text.replace(/\s+/g, ' ').includes(says)) {
+      if (!text.replace(/\s+/gu, ' ').includes(says)) {
         throw new Error(
           `${where} doesn't say "${says}", as the app's StoreKit product and paywall do.`,
         );

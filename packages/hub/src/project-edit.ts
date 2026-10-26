@@ -25,7 +25,7 @@ import type { DbShape, ProjectRow } from "./db";
 /** As long as a name `POST /api/projects` takes. */
 export const PROJECT_NAME_LIMIT = 200;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: a name is one line of text, so control characters are what it refuses
-const CONTROL = /[\u0000-\u001f\u007f]/;
+const CONTROL = /[\u0000-\u001f\u007f]/u;
 
 export interface ProjectEdit {
   /** Where its attempts land when their task says nothing. */
@@ -69,8 +69,8 @@ export const projectName = (raw: string): string => {
   return name;
 };
 
-const LFS_PATH = /\/info\/lfs\/*$/;
-const TRAILING_SLASH = /\/+$/;
+const LFS_PATH = /\/info\/lfs\/*$/u;
+const TRAILING_SLASH = /\/+$/u;
 
 /**
  * An LFS endpoint as a project declares it: an https URL with no credential

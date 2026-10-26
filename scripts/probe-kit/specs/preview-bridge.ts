@@ -36,8 +36,8 @@ const BRIDGE_FILE = join(
   import.meta.dir,
   "../../../packages/agent/src/preview-bridge.ts"
 );
-const OWN_BRIDGE = /packages\/agent\/src\/preview-bridge\.ts\?bridge-spec$/;
-const OWN_BOUNDARY = /packages\/agent\/src\/boundary\.ts\?bridge-spec$/;
+const OWN_BRIDGE = /packages\/agent\/src\/preview-bridge\.ts\?bridge-spec$/u;
+const OWN_BOUNDARY = /packages\/agent\/src\/boundary\.ts\?bridge-spec$/u;
 const STOPPED = "was stopped while its way into the workspace opened";
 
 const bridgeAlive = async (socket: string): Promise<string> =>

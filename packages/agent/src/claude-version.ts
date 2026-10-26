@@ -43,7 +43,7 @@ export const INITIALIZE_SAYS_VERSION_FROM = "2.1.299";
 const VERSION_WAIT_MS = 5000;
 
 /** The first `x.y.z` that `claude --version` prints. */
-const SAID = /\d+\.\d+\.\d+/;
+const SAID = /\d+\.\d+\.\d+/u;
 
 /**
  * The version read of one binary: the file it is (`<real path>:<mtime>:<size>`),

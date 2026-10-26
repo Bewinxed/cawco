@@ -63,10 +63,10 @@ const PUBLISHED_PACKAGES: Record<string, string> = {
   "playwright-core": "playwright-core",
   "@silvia-odwyer/photon-node": "photon-node",
 };
-const PUBLISHED_PACKAGE = /^(?:playwright-core|@silvia-odwyer\/photon-node)$/;
+const PUBLISHED_PACKAGE = /^(?:playwright-core|@silvia-odwyer\/photon-node)$/u;
 /** The wire protocol range core runtime.ts declares, which a proof build's `protocol` replaces. */
 const PROTOCOL_RANGE =
-  /export const protocolRange = \{ min: \d+, max: \d+ \} as const;/;
+  /export const protocolRange = \{ min: \d+, max: \d+ \} as const;/u;
 
 export function packageDir(
   name: string,
@@ -257,7 +257,7 @@ export async function prepareAssets(options: {
       await filesUnder(join(pi, "dist/core/export-html"), "pi/export-html")
     ).filter(
       ([name]) =>
-        name.includes("/vendor/") || /template\.(html|css|js)$/.test(name)
+        name.includes("/vendor/") || /template\.(html|css|js)$/u.test(name)
     ),
     ["pi/package.json", join(pi, "package.json")],
     ["preview/overlay.js", join(WORK, "overlay.js")],
@@ -460,7 +460,7 @@ export async function compileBinary(options: {
           setup(build) {
             if (options.testPublicKey) {
               build.onLoad(
-                { filter: /packages\/core\/src\/release-key\.ts$/ },
+                { filter: /packages\/core\/src\/release-key\.ts$/u },
                 () => ({
                   contents: `export const RELEASE_PUBLIC_KEY=${JSON.stringify(options.testPublicKey)};`,
                   loader: "ts",
@@ -470,7 +470,7 @@ export async function compileBinary(options: {
             const { protocol } = options;
             if (protocol) {
               build.onLoad(
-                { filter: /packages\/core\/src\/runtime\.ts$/ },
+                { filter: /packages\/core\/src\/runtime\.ts$/u },
                 async ({ path }) => {
                   const source = await Bun.file(path).text();
                   const moved = source.replace(
@@ -486,17 +486,17 @@ export async function compileBinary(options: {
                 }
               );
             }
-            build.onResolve({ filter: /^cawco:pi-runtime$/ }, () => ({
+            build.onResolve({ filter: /^cawco:pi-runtime$/u }, () => ({
               path: join(ROOT, "packages/agent/src/standalone-setup.ts"),
             }));
-            build.onResolve({ filter: /^cawco:pi-config$/ }, () => ({
+            build.onResolve({ filter: /^cawco:pi-config$/u }, () => ({
               path: join(pi, "dist/config.js"),
             }));
-            build.onResolve({ filter: /^cawco:quickjs$/ }, () => ({
+            build.onResolve({ filter: /^cawco:quickjs$/u }, () => ({
               path: requirePi.resolve("quickjs-wasi/quickjs.wasm"),
             }));
             build.onLoad(
-              { filter: /packages\/core\/src\/binary-assets\.ts$/ },
+              { filter: /packages\/core\/src\/binary-assets\.ts$/u },
               () => ({ contents: assetsSource, loader: "ts", resolveDir: ROOT })
             );
             // A package that reads files beside itself is never bundled, whose
@@ -508,20 +508,20 @@ export async function compileBinary(options: {
               namespace: "published-package",
             }));
             build.onLoad(
-              { filter: /.*/, namespace: "published-package" },
+              { filter: /.*/u, namespace: "published-package" },
               ({ path }) => ({
                 contents: `module.exports=require(${JSON.stringify(join(ROOT, "packages/core/src/published-package.ts"))}).publishedPackage(${JSON.stringify(PUBLISHED_PACKAGES[path])});`,
                 loader: "js",
               })
             );
-            build.onResolve({ filter: /^socket-activation$/ }, () => ({
+            build.onResolve({ filter: /^socket-activation$/u }, () => ({
               path: join(ROOT, "scripts/binary/socket-activation.ts"),
             }));
             if (options.stubHarness) {
               // The stage 2 proof's builds run the update's timed steps at the
               // pace its machines set (scripts/binary/proof-clock.ts).
               build.onLoad(
-                { filter: /packages\/core\/src\/clock\.ts$/ },
+                { filter: /packages\/core\/src\/clock\.ts$/u },
                 () => ({
                   contents: readFileSync(
                     join(ROOT, "scripts/binary/proof-clock.ts"),
@@ -533,7 +533,7 @@ export async function compileBinary(options: {
               // And answer a retiring keeper's `list` as late as they set
               // (scripts/binary/proof-list-pace.ts).
               build.onLoad(
-                { filter: /packages\/sessiond\/src\/list-pace\.ts$/ },
+                { filter: /packages\/sessiond\/src\/list-pace\.ts$/u },
                 () => ({
                   contents: `export * from ${JSON.stringify(join(ROOT, "scripts/binary/proof-list-pace.ts"))};`,
                   loader: "ts",
@@ -543,16 +543,16 @@ export async function compileBinary(options: {
             if (options.proof) {
               // proof-runtime.ts `proof-pi` calls pi's and pi-tui's own
               // exports, which the scripts package does not declare.
-              build.onResolve({ filter: /^cawco:proof-pi$/ }, () => ({
+              build.onResolve({ filter: /^cawco:proof-pi$/u }, () => ({
                 path: join(pi, "dist/index.js"),
               }));
-              build.onResolve({ filter: /^cawco:proof-pi-tui$/ }, () => ({
+              build.onResolve({ filter: /^cawco:proof-pi-tui$/u }, () => ({
                 path: join(tui, "dist/index.js"),
               }));
             }
             if (options.proof || options.stubHarness) {
               build.onLoad(
-                { filter: /packages\/agent\/src\/harnesses\/index\.ts$/ },
+                { filter: /packages\/agent\/src\/harnesses\/index\.ts$/u },
                 async () => ({
                   // Its imports are relative to scripts/binary, not to the file it replaces.
                   contents: (

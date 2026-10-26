@@ -12,8 +12,8 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { CAWCO_ENV, CAWCO_HUB_PORT } from "@cawco/core";
 
-const WS_SCHEME = /^ws/;
-const WS_PATH_SUFFIX = /\/ws$/;
+const WS_SCHEME = /^ws/u;
+const WS_PATH_SUFFIX = /\/ws$/u;
 
 /** Where the hub answers REST, derived from the websocket url the daemon uses. */
 export const hubHttpUrl = (): string => {

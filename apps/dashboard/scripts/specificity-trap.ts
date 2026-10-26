@@ -50,23 +50,23 @@ import { parse } from "svelte/compiler";
 
 const DASHBOARD = join(dirname(new URL(import.meta.url).pathname), "..");
 const SRC = join(DASHBOARD, "src");
-const SPACE = /\s+/;
+const SPACE = /\s+/u;
 const COMPARE = new Set(["===", "!==", "==", "!="]);
-const TV_CALL = /\btv\(\s*\{/g;
-const EXCUSE = /specificity-trap:\s*\S/;
-const SCRIPT_COMMENT = /^(\/\/|\/\*|\*)/;
-const LEADING_COLONS = /^:+/;
-const GROUP_CLASS = /^(group|peer)/;
-const WIDTH_RANGE = /width\s*(>=|>|<=|<)\s*([\d.]+)px/g;
-const WIDTH_MIN_MAX = /(min|max)-width:\s*([\d.]+)px/g;
-const NEGATED_MEDIA = /\bnot\b/;
+const TV_CALL = /\btv\(\s*\{/gu;
+const EXCUSE = /specificity-trap:\s*\S/u;
+const SCRIPT_COMMENT = /^(\/\/|\/\*|\*)/u;
+const LEADING_COLONS = /^:+/u;
+const GROUP_CLASS = /^(group|peer)/u;
+const WIDTH_RANGE = /width\s*(>=|>|<=|<)\s*([\d.]+)px/gu;
+const WIDTH_MIN_MAX = /(min|max)-width:\s*([\d.]+)px/gu;
+const NEGATED_MEDIA = /\bnot\b/u;
 const MEDIA_FEATURE =
-  /\((pointer|hover|any-pointer|prefers-reduced-motion|prefers-color-scheme|orientation):\s*([a-z-]+)\)/g;
-const PREFIX = /^(group|peer|in|not|has)-/;
-const NAMED = /\/[\w-]+$/;
-const NEGATION = /(^|-)not-/;
+  /\((pointer|hover|any-pointer|prefers-reduced-motion|prefers-color-scheme|orientation):\s*([a-z-]+)\)/gu;
+const PREFIX = /^(group|peer|in|not|has)-/u;
+const NAMED = /\/[\w-]+$/u;
+const NEGATION = /(^|-)not-/u;
 /** Where an element stands (a slot, a kit part's variant), not a state it takes. */
-const STRUCTURE = /^data-\[(slot|variant)=/;
+const STRUCTURE = /^data-\[(slot|variant)=/u;
 const PRESSES = new Set(["active", "hit-pressed", "pressed"]);
 /**
  * Interactions that pass and conditions of the page, not the element's own

@@ -27,7 +27,7 @@ export interface McpGate {
 export const GATE_PREFIX = "/mcp/gate/";
 
 /** The gateway path a gate's server is dialled on: its gate id and its name. */
-export const GATE_PATH = /^\/mcp\/gate\/([^/]+)\/([^/]+)$/;
+export const GATE_PATH = /^\/mcp\/gate\/([^/]+)\/([^/]+)$/u;
 
 /** The gate path of gate `gateId`, server names after it. */
 export const gatePath = (gateId: string): string =>

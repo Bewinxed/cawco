@@ -50,7 +50,7 @@ const HOLD_TOLERANCE = 2;
 /** Load plus instancing, steady state, per file. */
 const BUDGET_MS = 100;
 const TIMING_RUNS = 6;
-const CHROMIUM_DIR = /^chromium-\d+$/;
+const CHROMIUM_DIR = /^chromium-\d+$/u;
 /**
  * `pixel` values the rim is proven at: unset, half the kit's rim (held at the kit's), and one
  * device pixel where his box is drawn at 18 px on a 2x and on a 1x screen (512 / 36, 512 / 18).
@@ -61,7 +61,7 @@ const CANVAS_PER_ARTBOARD = 512 / 592;
 /** How far the rim's measured reach may be from `pixel`, in canvas px: a pixel's half-width each side. */
 const RIM_TOLERANCE = 1;
 /** The Variant layer's states a random draw lands on: a hold, the beat, or a loop. */
-const DRAWN_STATE = /^(hold_\d+|beat|loop_.+)$/;
+const DRAWN_STATE = /^(hold_\d+|beat|loop_.+)$/u;
 
 const args = {};
 const argv = process.argv.slice(2);

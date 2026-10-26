@@ -72,7 +72,7 @@ if (build) {
   );
   const text = await new Response(child.stdout).text();
   process.stdout.write(text);
-  if ((await child.exited) !== 0 || !/^BUILT iOS$/m.test(text)) {
+  if ((await child.exited) !== 0 || !/^BUILT iOS$/mu.test(text)) {
     fail("compile: build-both.sh did not print BUILT iOS");
     process.exit(1);
   }
@@ -129,7 +129,7 @@ const SENDS = 200;
 const sims: MacSim[] = [];
 const DEVICES = ["iPhone 16 Pro", "iPad Pro 11-inch (M4)"];
 /** What `log show --style compact` puts before a Probe line's own words. */
-const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
+const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/u;
 
 try {
   fleet.launch("sessiond");

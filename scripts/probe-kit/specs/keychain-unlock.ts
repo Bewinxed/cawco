@@ -54,15 +54,15 @@ import type { Kit, Spec } from "../kit";
 import { open, settle } from "../kit";
 import { startsWith } from "../words";
 
-const MACHINES_BUTTON = /^\d+ machines?/;
+const MACHINES_BUTTON = /^\d+ machines?/u;
 const UNLOCK_ITEM = startsWith(machineWords.unlockKeychain);
-const UNLOCK_BUTTON = /^Unlock$/;
+const UNLOCK_BUTTON = /^Unlock$/u;
 /** What puts the step away: Done once answered, Close while it works, Cancel on the form. */
-const PUT_AWAY = /^(Done|Close|Cancel)$/;
+const PUT_AWAY = /^(Done|Close|Cancel)$/u;
 /** agent/src/auth.ts, `security unlock-keychain` exiting errSecAuthFailed. */
 const WRONG_PASSWORD = "That password did not unlock the keychain.";
 /** A user name Claude Code files its Keychain item under as it is (agent/src/accounts.ts). */
-const KEYCHAIN_USER = /^[a-zA-Z0-9._-]+$/;
+const KEYCHAIN_USER = /^[a-zA-Z0-9._-]+$/u;
 
 const within = (child: string, parent: string): boolean =>
   child === parent || child.startsWith(`${parent}/`);
@@ -186,7 +186,7 @@ const scratchSearchList = (home: string): Promise<Said> => {
 
 const OWNER_READ = ["list-keychains", "-d", "user"] as const;
 /** One line of `list-keychains`: a path in double quotes. */
-const LISTED_PATH = /^\s*"(.+)"\s*$/;
+const LISTED_PATH = /^\s*"(.+)"\s*$/u;
 
 /** `list-keychains` output as its exact paths; throws on any line it cannot read as one. */
 function listedPaths(out: string): string[] {
@@ -333,7 +333,7 @@ const stepState = (page: Page, machineId: string) =>
         document.querySelector('[role="dialog"][aria-modal="true"]') !== null,
       titles: Array.from(
         section?.querySelectorAll('[id$="-title"]') ?? [],
-        (title) => title.textContent?.replace(/\s+/g, " ").trim() ?? ""
+        (title) => title.textContent?.replace(/\s+/gu, " ").trim() ?? ""
       ),
       alert:
         section?.querySelector('[role="alert"]')?.textContent?.trim() ?? null,
@@ -370,7 +370,7 @@ async function machineMenu(page: Page): Promise<string[]> {
     return [];
   }
   return (await menu.first().getByRole("menuitem").allTextContents()).map(
-    (text) => text.replace(/\s+/g, " ").trim()
+    (text) => text.replace(/\s+/gu, " ").trim()
   );
 }
 
@@ -612,7 +612,7 @@ const spec: Spec = {
             )
           ).some((title) =>
             finals.includes(
-              title.textContent?.replace(/\s+/g, " ").trim() ?? ""
+              title.textContent?.replace(/\s+/gu, " ").trim() ?? ""
             )
           ) ||
           Array.from(

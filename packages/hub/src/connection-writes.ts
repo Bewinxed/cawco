@@ -76,7 +76,7 @@ const GITLAB_PROJECT_ARGS = [
   "project_full_path",
 ] as const;
 
-const EDGE_SLASHES = /^\/+|\/+$/g;
+const EDGE_SLASHES = /^\/+|\/+$/gu;
 
 /**
  * The project a GitLab page names, `host/group/project`: its path up to

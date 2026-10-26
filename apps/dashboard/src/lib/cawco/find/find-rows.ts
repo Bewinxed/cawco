@@ -124,7 +124,7 @@ const THREAD: Record<FindThread["state"], Shape> = {
   ready: STATE.idle,
 };
 
-const WENT_WRONG = /fail|error/i;
+const WENT_WRONG = /fail|error/iu;
 
 /** No secret shown: what a row is drawn with when nothing says otherwise. */
 const NONE_SHOWN: ReadonlySet<string> = new Set();

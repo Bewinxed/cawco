@@ -46,11 +46,11 @@ export type DecisionComponentName = (typeof DECISION_COMPONENTS)[number];
 export const DECISION_ROOT: DecisionComponentName = "Decisions";
 
 /** A decision's or an option's id: lowercase, and never changed, since picks are kept by it. */
-export const DECISION_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
+export const DECISION_ID = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
 /** A decision another names in `after`: its id on the same page, or `page#id` on another. */
 export const AFTER_REF =
-  /^(?:([a-z0-9][a-z0-9-]{0,62})#)?([a-z0-9][a-z0-9-]{0,62})$/;
+  /^(?:([a-z0-9][a-z0-9-]{0,62})#)?([a-z0-9][a-z0-9-]{0,62})$/u;
 
 /**
  * The library over `renderers`, one per component, by name: the host page's

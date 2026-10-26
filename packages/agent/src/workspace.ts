@@ -222,7 +222,7 @@ export const gitUntil =
     }
   };
 
-const SYMREF = /^ref: refs\/heads\/(\S+)\tHEAD$/m;
+const SYMREF = /^ref: refs\/heads\/(\S+)\tHEAD$/mu;
 
 /** Whether `treeish` marks any file for LFS (`filter=lfs` in a `.gitattributes`). */
 const marksLfs = (git: Git, repo: string, treeish: string): Promise<boolean> =>
@@ -1348,7 +1348,7 @@ export const PACKAGE_TREES = new Set([
 
 /** The largest bundle of a workspace's commits another machine takes. */
 const BUNDLE_LIMIT = 256 * 1024 * 1024;
-const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
 
 /** Runs git commands in a workspace's clone, inside its boundary, as `safe-git.ts` says; throws git's words. */
 const insideGit =
@@ -1549,7 +1549,7 @@ interface CreateRecord {
 }
 
 /** A branch name taken into a refspec: no option, no second refspec, no `:`. */
-const BRANCH_NAME = /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/;
+const BRANCH_NAME = /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/u;
 
 /**
  * `origin`'s `base` fetched into the clone's `origin/<base>` before what it
@@ -1725,7 +1725,7 @@ const ownObjects = async (
 
 type ClosedGit = Awaited<ReturnType<typeof closedCloneGit>>;
 
-const TRAILING_SLASH = /\/$/;
+const TRAILING_SLASH = /\/$/u;
 
 /**
  * The untracked paths in the clone kept out of git by no `.gitignore` the
@@ -2261,7 +2261,7 @@ const LEFT_INSIDE_PASSES = 5;
 const LEFT_INSIDE_SETTLE_MS = 500;
 
 /** The user's service manager, which adopts what a process of the user's session left (Linux `systemd --user`, macOS `launchd`). */
-const SERVICE_MANAGER = /(^|\/)(systemd --user|launchd)( |$)/;
+const SERVICE_MANAGER = /(^|\/)(systemd --user|launchd)( |$)/u;
 
 /** A process left running from a clone, and whose it is ({@link whoseLeft}). */
 interface LeftInside {

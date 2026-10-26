@@ -162,7 +162,8 @@ export const bridgeRelay = (
 
 /** A workspace's id, or a place's (core `isPlace`): a sheet's stage runs in either. */
 const WORKSPACE_ID = new RegExp(
-  `^(?:[0-9a-f-]{36}|[0-9a-f]{8}${PLACE_SUFFIX})$`
+  `^(?:[0-9a-f-]{36}|[0-9a-f]{8}${PLACE_SUFFIX})$`,
+  "u"
 );
 
 /**
@@ -217,7 +218,7 @@ const netOf = (pid: number): string | undefined => {
   }
 };
 
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 
 const tool = (name: string): string => {
   const found = Bun.which(name, { PATH: SYSTEM_PATH });

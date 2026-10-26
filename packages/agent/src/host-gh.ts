@@ -101,7 +101,7 @@ export const ghAccountToken = async (
   return { token };
 };
 
-const SCOPE_SEPARATOR = /\s*,\s*/;
+const SCOPE_SEPARATOR = /\s*,\s*/u;
 
 /**
  * The accounts the host's gh is signed in to, as `gh auth status --json

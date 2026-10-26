@@ -126,7 +126,7 @@ function readWorking(): Read {
     oldWords: (card?.textContent ?? "").includes("Working on it"),
     pageSpills: document.documentElement.scrollWidth > window.innerWidth + 0.5,
     room: box(room),
-    status: (status?.innerText ?? "").replaceAll(/\s+/g, " ").trim(),
+    status: (status?.innerText ?? "").replaceAll(/\s+/gu, " ").trim(),
     statusInFoot: !!(foot && status && foot.contains(status)),
     working: box(working),
   };

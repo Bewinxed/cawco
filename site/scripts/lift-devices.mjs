@@ -32,7 +32,7 @@ const machines = await tab.evaluate(() => {
     (el) => el.tagName === 'g' && !el.classList.contains('ghost') && el.querySelector('circle'),
   );
   const round = (text) =>
-    text.replace(/-?\d+\.\d+/g, (n) => String(Math.round(Number(n) * 10) / 10));
+    text.replace(/-?\d+\.\d+/gu, (n) => String(Math.round(Number(n) * 10) / 10));
   return groups.map((g) => {
     const box = g.getBBox();
     const marks = [...g.querySelectorAll('path, circle')].map((el) => {

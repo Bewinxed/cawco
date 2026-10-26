@@ -33,7 +33,7 @@ interface Emitted {
 }
 
 /** One rule (its selector and block, innermost) whose block reads a switch variable. */
-const LOWERED = /[^{}]*\{[^{}]*var\(--buncss-(?:light|dark)[^{}]*\}/g;
+const LOWERED = /[^{}]*\{[^{}]*var\(--buncss-(?:light|dark)[^{}]*\}/gu;
 
 /** The rules in `css` that read Bun's scheme switch variables. */
 export const loweredRules = (css: string): string[] =>

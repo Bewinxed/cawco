@@ -48,7 +48,7 @@ export const BROWSER_MEMORY_CAP = 6 * GIB;
 const WATCH_MS = 250;
 const PAGE_SIZE = 4096;
 /** One row of `ps -o pid=,ppid=,rss=,command=`. */
-const PS_ROW = /^(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/;
+const PS_ROW = /^(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/u;
 
 /** What a watched browser is, for the lines about it. */
 interface Watched {

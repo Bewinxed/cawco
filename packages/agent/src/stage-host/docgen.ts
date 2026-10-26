@@ -75,7 +75,7 @@ function tokenKindOf(text: string): TokenKind | undefined {
     ? TOKEN_TYPES[name as TokenType]
     : undefined;
 }
-const QUALIFIED = /^(?:import\(["'][^"']*["']\)|[A-Za-z_$][\w$]*)\./;
+const QUALIFIED = /^(?:import\(["'][^"']*["']\)|[A-Za-z_$][\w$]*)\./u;
 
 /** A prop typed with a token alias, its names its options; an enum otherwise. */
 const enumOf = (
@@ -132,10 +132,10 @@ const literals = (members: string[]): (string | number)[] | null => {
   }
   return values.length > 0 ? values : null;
 };
-const QUOTED = /^(["'`]).*\1$/s;
-const NUMBER = /^-?\d+(?:\.\d+)?$/;
+const QUOTED = /^(["'`]).*\1$/su;
+const NUMBER = /^-?\d+(?:\.\d+)?$/u;
 /** Types a framework's content goes by: a slot, never an arg. */
-const SLOT_TYPE = /^(?:Snippet|ReactNode|ReactElement|JSX\.Element|VNode)\b/;
+const SLOT_TYPE = /^(?:Snippet|ReactNode|ReactElement|JSX\.Element|VNode)\b/u;
 
 /* --- Svelte: svelte2tsx and TypeScript's checker --------------------- */
 
@@ -149,8 +149,8 @@ const svelteCache: SvelteCache = { files: new Map() };
 const SHIMS = join(root, ".cawco", "stage", "svelte-shims-v4.d.ts");
 
 /** A `.svelte` file as TypeScript, through svelte2tsx: named `<file>.tsx`, as Storybook names it. */
-const SVELTE_TSX = /\.svelte\.[jt]sx$/;
-const TS_SCRIPT = /<script\s[^>]*?lang=(["'])(ts|typescript)\1/;
+const SVELTE_TSX = /\.svelte\.[jt]sx$/u;
+const TS_SCRIPT = /<script\s[^>]*?lang=(["'])(ts|typescript)\1/u;
 
 /** The project's compiler options for `file`, its tsconfig's, with docgen's own forced over them (Storybook's). */
 function svelteOptions(ts: Ts, file: string): TS.CompilerOptions {
@@ -739,13 +739,13 @@ const TYPED_OPTIONS = {
 
 const kept = new Map<string, { doc: ComponentDoc; hash: string }>();
 
-const SVELTE = /\.svelte$/;
-const VUE = /\.vue$/;
+const SVELTE = /\.svelte$/u;
+const VUE = /\.vue$/u;
 
 /** A component's name by its file: `StatTile.svelte` is StatTile. */
 const nameOf = (file: string): string =>
   (file.split(sep).at(-1) ?? file).replace(EXTENSION, "");
-const EXTENSION = /\.[^.]+$/;
+const EXTENSION = /\.[^.]+$/u;
 
 /**
  * Component `file`'s props (absolute; `name` the export a story imports,

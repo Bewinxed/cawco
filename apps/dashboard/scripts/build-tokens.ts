@@ -398,7 +398,7 @@ const theme = tailwindThemeCss(built.view, {
   spacing: "0.25rem",
   breakpoints: { phone: "640px", desk: "900px", wide: "1025px" },
   containers: CONTAINERS,
-  spacingSizes: /^(c|icon)-/,
+  spacingSizes: /^(c|icon)-/u,
   weights: { "weight-body": "normal", "weight-strong": "medium" },
   // Fredoka ships one weight (@fontsource/fredoka/600.css), for the brand's
   // display only. Not `display`: `font-display` is the family.

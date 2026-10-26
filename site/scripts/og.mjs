@@ -19,11 +19,11 @@ const ink = tokens.color['crow-ink'].$value.hex;
 
 const clip = readFileSync(at('../src/assets/caw/ready-enter-distance.svg'), 'utf8');
 const last = clip
-  .match(/data-holds="([^"]+)"/)?.[1]
+  .match(/data-holds="([^"]+)"/u)?.[1]
   .split(' ')
   .at(-1)
   ?.split(':')[0];
-const caw = clip.match(new RegExp(`<g data-drawing="${last}"[\\s\\S]*?</g>`))?.[0];
+const caw = clip.match(new RegExp(`<g data-drawing="${last}"[\\s\\S]*?</g>`, 'u'))?.[0];
 if (!caw) throw new Error('The clip has no last drawing.');
 
 const font = fileURLToPath(
