@@ -15,11 +15,13 @@
    * facts and ages of every group stand on four shared edges (one grid, each
    * row its subgrid); in a narrow pane a row is its title with its age at
    * its end, then the fact, then the links. Needs you is a mark beside its
-   * word, never a fill (DESIGN.md, Needs you). A search reads each page's
-   * title and its cards' questions; a question it finds stands under its
-   * row. Under it the row's one act, Make tasks on a sent page, takes the
-   * age's place while a resting pointer is on the row; on a phone it is the
-   * page's own.
+   * word, never a fill (DESIGN.md, Needs you). A page is decided by his
+   * Send, so Decided holds every page he sent picks on, tasks or none. A
+   * search reads each page's title, its cards' questions and its record's
+   * answers (each chosen option, and the why behind it); a line it finds
+   * stands under its row. Under it the row's one act, Make tasks on a sent
+   * or decided page with no tasks, takes the age's place while a resting
+   * pointer is on the row; on a phone it is the page's own.
    */
   import { decisionsWords as words } from "@cawco/core";
   import type {
@@ -80,9 +82,13 @@
   });
 
   const has = (text: string) => text.toLowerCase().includes(q);
-  /** The questions a search finds on a page, three at most. */
+  /** The questions and answers a search finds on a page, three at most. */
   const hitsOf = (page: DecisionPageSummary): string[] =>
-    q ? page.questions.filter(has).slice(0, 3) : [];
+    q
+      ? [...new Set([...page.questions, ...page.answers])]
+          .filter(has)
+          .slice(0, 3)
+      : [];
   const found = (page: DecisionPageSummary) =>
     !q || has(page.title) || hitsOf(page).length > 0;
 
@@ -257,7 +263,10 @@
 {#snippet row(page: DecisionPageSummary)}
   {@const hits = hitsOf(page)}
   {@const act =
-    page.state === "sent" && page.picked > 0 && making !== page.name}
+    (page.state === "sent" || page.state === "decided") &&
+    page.picked > 0 &&
+    page.tasks === 0 &&
+    making !== page.name}
   <!-- mark-line: the row is a grid; its mark stands in the lead column, centred on the title's first line by its own cell -->
   <div
     data-slot="decision-row"

@@ -13979,6 +13979,25 @@ export const createServer = (
       })
     );
   };
+  /**
+   * A decided page's record follows its picks (decisions.ts `picksMoved`)
+   * once they stand quiet {@link RECORD_QUIET_MS}: a note typed, or picks
+   * changed in a burst, is one commit to the project's folder, not one a
+   * keystroke.
+   */
+  const RECORD_QUIET_MS = 2000;
+  const recordsFollowing = new Map<string, HubTimer>();
+  const recordFollows = (projectId: string, name: string): void => {
+    const key = `${projectId}/${name}`;
+    lifetime.cancel(recordsFollowing.get(key));
+    recordsFollowing.set(
+      key,
+      lifetime.after(RECORD_QUIET_MS, () => {
+        recordsFollowing.delete(key);
+        decisions.picksMoved(projectId, name);
+      })
+    );
+  };
   const artifactDocs = createArtifactDocs({
     db: db.artifacts,
     lifetime,
@@ -13992,11 +14011,13 @@ export const createServer = (
       // A task or a plan step waiting on a card or pin of it may settle now.
       waitPageMoved(id);
     },
-    // A pick or a note on a project's page moves its Decisions tab.
+    // A pick or a note on a project's page moves its Decisions tab, and,
+    // once quiet, its record when the page is decided.
     changed: (id) => {
       const row = db.artifacts.get(id);
       if (row?.kind === "page" && row.projectId) {
         decisionsChanged(row.projectId);
+        recordFollows(row.projectId, row.name);
       }
     },
   });
@@ -14285,9 +14306,13 @@ export const createServer = (
       const refused = await dropPage(instance, projectId, name);
       return refused && { status: refused.code, refused: refused.refused };
     },
-    sending: (instance, artifact, state) => {
+    sending: async (instance, artifact, state) => {
       // A step of the session's plan that waited on a card picked here stops waiting.
       plans.waitsMoved(instance.id);
+      // His Send of a project's decision page decides it: its record and log are written from these picks.
+      if (artifact.kind === "page" && artifact.projectId) {
+        await decisions.decide(artifact.projectId, artifact.name, artifact.id);
+      }
       return applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),
         // Set up opens the relay's journey, and its row stands in Needs you;
@@ -25133,6 +25158,8 @@ export const createServer = (
       return {
         state: doc.getMap("state").toJSON() as Record<string, ChoiceEntry>,
         meta: {
+          revisedAt:
+            (meta.get("revisedAt") as string | null | undefined) ?? null,
           sentAt: (meta.get("sentAt") as string | null | undefined) ?? null,
           sentText: (meta.get("sentText") as string | null | undefined) ?? null,
         },
@@ -25230,6 +25257,12 @@ export const createServer = (
     },
   });
   tasks.listen((event) => decisions.tasksChanged(event.projectId));
+  // Pages sent before a Send decided them are decided once, from their sent picks.
+  offBoot.push(() => {
+    for (const project of db.listProjects()) {
+      detach(decisions.decideSent(project.id), "sent pages decided");
+    }
+  });
   // "Make this a project": offered once to a plain session that outgrew
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({

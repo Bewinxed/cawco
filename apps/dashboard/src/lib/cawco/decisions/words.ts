@@ -8,7 +8,7 @@ import { decisionsWords as words } from "@cawco/core";
 import type { DecisionPageSummary } from "@cawco/core/decisions";
 import { formatAgeShort } from "#lib/utils/time.js";
 
-/** Whether a page shows its record: Make tasks wrote it. */
+/** Whether a page shows its record: his Send of its picks wrote it. */
 export const isDecided = (page: Pick<DecisionPageSummary, "state">): boolean =>
   page.state === "decided" || page.state === "making";
 

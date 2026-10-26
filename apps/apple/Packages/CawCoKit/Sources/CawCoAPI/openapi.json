@@ -39655,7 +39655,7 @@
         ]
       },
       "DecisionPageSummary": {
-        "description": "A page as the Decisions tab lists it: its facts, the pages it links to, and its questions for search.",
+        "description": "A page as the Decisions tab lists it: its facts, the pages it links to, and its questions and answers for search.",
         "type": "object",
         "properties": {
           "after": {
@@ -39663,6 +39663,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/DecisionLink"
+            }
+          },
+          "answers": {
+            "description": "What its record says was decided, for search: each card's chosen options by label, and the why behind its pick ({@link pickRecord}); none before it is decided.",
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
           "questions": {
@@ -39691,7 +39698,7 @@
             "type": "number"
           },
           "decided": {
-            "description": "Cards decided in its record; 0 before Make tasks.",
+            "description": "Cards decided in its record; 0 before it is decided.",
             "type": "number"
           },
           "name": {
@@ -39725,6 +39732,7 @@
         },
         "required": [
           "after",
+          "answers",
           "artifactId",
           "cards",
           "decided",
@@ -39811,7 +39819,7 @@
             "type": "number"
           },
           "decided": {
-            "description": "Cards decided in its record; 0 before Make tasks.",
+            "description": "Cards decided in its record; 0 before it is decided.",
             "type": "number"
           },
           "name": {
@@ -39862,7 +39870,7 @@
         "type": "object",
         "properties": {
           "askedOf": {
-            "description": "The session asked to make its tasks; null when none was reached.",
+            "description": "The session asked to make its tasks; null when none was (Caw's thread, or Make tasks not pressed).",
             "type": [
               "null",
               "string"
@@ -39875,7 +39883,7 @@
             }
           },
           "madeAt": {
-            "description": "When Make tasks wrote it, ISO.",
+            "description": "When its picks were recorded: the Send that decided it, or the pick since that moved them, ISO.",
             "type": "string"
           },
           "name": {

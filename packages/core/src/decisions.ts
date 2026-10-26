@@ -10,13 +10,18 @@
  *   statements ({@link readProgram}), or an HTML page's
  *   `[data-cawco-choice]` groups, read from the built page by the hub.
  * - **State**, derived on read and never stored: `picking`, until the person
- *   sends (I'm done picking, or a comment) and nothing was picked after it;
- *   `sent`; `making`, while the session asked to Make tasks is on its turn;
- *   `decided`, once its record stands.
- * - **The record** (`decisions/<name>/record.json`), written by Make tasks:
- *   each card as the person saw it (question, why, options as labelled),
- *   what was chosen, the note, the dials and the tasks it made. `log.md`
- *   beside it is the record in words, for sessions to read why.
+ *   sends; `decided` from his Send of its picks (I'm done picking, or any
+ *   Send that carries picks), which writes its record, until its session
+ *   revises it or asks anew, which asks him again (`picking`, its record
+ *   kept) until his next Send; `sent`, a page sent with no picks to carry
+ *   (a note); `making`, while the session asked to Make tasks, an optional
+ *   next step, is on its turn.
+ * - **The record** (`decisions/<name>/record.json`), written at the Send
+ *   and following the picks from then on (a card a revision took off the
+ *   page kept as it was decided): each card as the person saw it
+ *   (question, why, options as labelled), what was chosen and who settled
+ *   it, the note, the dials and the tasks filed from it. `log.md` beside it
+ *   is the record in words, for sessions to read why.
  * - **Tasks link back** by a field of the project's own on the task file:
  *   `decided: <page>#<card>` ({@link DECIDED_FIELD}).
  * - **Links between pages**, derived from the programs the project's
@@ -89,7 +94,7 @@ interface DecisionPageFacts {
   artifactId: string | null;
   /** Its cards. */
   cards: number;
-  /** Cards decided in its record; 0 before Make tasks. */
+  /** Cards decided in its record; 0 before it is decided. */
   decided: number;
   name: string;
   /** Cards with a note. */
@@ -105,10 +110,12 @@ interface DecisionPageFacts {
   writer: DecisionWriter | null;
 }
 
-/** A page as the Decisions tab lists it: its facts, the pages it links to, and its questions for search. */
+/** A page as the Decisions tab lists it: its facts, the pages it links to, and its questions and answers for search. */
 export interface DecisionPageSummary extends DecisionPageFacts {
   /** The pages one of its decisions comes after, in the order its cards name them. */
   after: DecisionLink[];
+  /** What its record says was decided, for search: each card's chosen options by label, and the why behind its pick ({@link pickRecord}); none before it is decided. */
+  answers: string[];
   /** Its cards' questions, in page order. */
   questions: string[];
   /** The pages with a decision that comes after one of its own. */
@@ -151,10 +158,10 @@ export interface RecordCard {
 
 /** `decisions/<name>/record.json`. */
 export interface DecisionRecord {
-  /** The session asked to make its tasks; null when none was reached. */
+  /** The session asked to make its tasks; null when none was (Caw's thread, or Make tasks not pressed). */
   askedOf: string | null;
   cards: RecordCard[];
-  /** When Make tasks wrote it, ISO. */
+  /** When its picks were recorded: the Send that decided it, or the pick since that moved them, ISO. */
   madeAt: string;
   name: string;
   title: string;
@@ -188,8 +195,10 @@ export interface PickRecord {
   why: string;
 }
 
-/** A pick's record of who made it ({@link PickRecord}): the hub's `settled`, else the person's with his note as the why. */
-export const pickRecord = (entry: ChoiceEntry): PickRecord =>
+/** A pick's record of who made it ({@link PickRecord}): the hub's `settled`, else the person's with his note as the why. A page's choice or its record's card. */
+export const pickRecord = (
+  entry: Pick<ChoiceEntry, "note" | "settled">
+): PickRecord =>
   entry.settled
     ? {
         by: entry.settled.by,

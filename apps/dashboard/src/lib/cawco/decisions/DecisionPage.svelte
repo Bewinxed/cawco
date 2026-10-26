@@ -13,9 +13,9 @@
    * grid. At its foot, one docked composer: a note for the session (its
    * send says the words to the session and never sends the page's picks:
    * talk is never a Send) and the page's one coral act, the next step: I'm
-   * done picking, then
-   * Make tasks, then none. A refusal stays the page as it was and says why
-   * in the composer's line.
+   * done picking, which decides it; then Make tasks, a decided page's
+   * optional next step, until its tasks are filed; then none. A refusal
+   * stays the page as it was and says why in the composer's line.
    */
   import { decisionsWords as words } from "@cawco/core";
   import type {
@@ -112,7 +112,8 @@
     untrack(() => load());
   });
 
-  const decided = $derived(!!read?.record);
+  /** Its record shows while it is decided; a page its session asked again is picked on live, its record kept. */
+  const decided = $derived(!!read?.record && isDecided(read));
   const working = $derived(
     !!shown?.writer && cawco.activityOf(shown.writer.instanceId) === "working"
   );
@@ -121,7 +122,7 @@
     if (!shown) {
       return "";
     }
-    return read?.record
+    return decided && read?.record
       ? decidedMeta(shown, read.record.madeAt, now)
       : progressWords(shown);
   });
@@ -165,9 +166,9 @@
     return () => watch.disconnect();
   });
 
-  /** The page's one act, the next step: none once decided. */
+  /** The page's one act, the next step: Make tasks once decided, none once its tasks are filed. */
   const primary = $derived.by(() => {
-    if (!shown || decided || shown.state === "decided") {
+    if (!shown || shown.tasks > 0) {
       return null;
     }
     if (shown.state === "picking") {
@@ -325,7 +326,7 @@
       <p class="type-body py-space-5 text-ink-muted" role="alert">
         {words.unread(unread)}
       </p>
-    {:else if read?.record}
+    {:else if decided && read?.record}
       <!-- The record on the page's own grid: two across on a desk, one under;
            the cards stretch to their row, their content at its top. -->
       <div class="grid grid-cols-1 gap-space-3 wide:grid-cols-2" in:reveal>

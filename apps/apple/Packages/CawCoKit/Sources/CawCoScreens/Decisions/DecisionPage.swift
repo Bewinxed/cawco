@@ -11,8 +11,9 @@ import WebKit
 /// origin (DecisionPageFrame); once decided, its record: the cards as they
 /// were settled (RecordCardView). At its foot, one docked composer: a note
 /// for the session (Send) and the page's one coral act, the next step: I'm
-/// done picking, then Make tasks, then none. A refusal leaves the page as it
-/// was and says why over the dock.
+/// done picking, which decides it; then Make tasks, a decided page's
+/// optional next step, until its tasks are filed; then none. A refusal
+/// leaves the page as it was and says why over the dock.
 final class DecisionPageView: UIView, UITextViewDelegate {
     /// ‹ Decisions.
     var onBack: () -> Void = {}
@@ -288,12 +289,12 @@ final class DecisionPageView: UIView, UITextViewDelegate {
         let state = read?.state ?? summary?.state
         let title = read?.title ?? summary?.title ?? name
         titleLabel.text = title
-        let decided = read?.record != nil
+        let filed = (read?.tasks ?? summary?.tasks ?? 0) > 0
         if let state {
             let picked = read?.picked ?? summary?.picked ?? 0, cards = read?.cards ?? summary?.cards ?? 0
             let made = read?.decided ?? summary?.decided ?? 0, tasks = read?.tasks ?? summary?.tasks ?? 0
             let words = DecisionWords.progress(picked: picked, cards: cards, decided: made, tasks: tasks, state: state)
-            if let madeAt = read?.record?.madeAt, let at = try? Date(madeAt, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)) {
+            if DecisionWords.isDecided(state), let madeAt = read?.record?.madeAt, let at = try? Date(madeAt, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)) {
                 figure.text = Words.Decisions.decidedAt(figure: words, age: RailAge.short(at.timeIntervalSince1970 * 1000, now: Date.now.timeIntervalSince1970 * 1000))
             } else {
                 figure.text = words
@@ -317,7 +318,7 @@ final class DecisionPageView: UIView, UITextViewDelegate {
         if let unread, read == nil {
             problem.text = Words.Decisions.unread(problem: unread)
             problem.isHidden = false
-        } else if let record = read?.record {
+        } else if let record = read?.record, let state, DecisionWords.isDecided(state) {
             records.isHidden = false
             showRecord(record)
         } else if let artifact, let read {
@@ -341,9 +342,9 @@ final class DecisionPageView: UIView, UITextViewDelegate {
             opening.isHidden = false
         }
 
-        // The one act: the next step, none once decided.
+        // The one act: the next step; Make tasks once decided, none once its tasks are filed.
         let act: (label: String, pending: String)? = {
-            guard let state, !decided, state != .decided else { return nil }
+            guard let state, !filed else { return nil }
             return state == .picking ? (Words.Decisions.done, Words.Decisions.sending) : (Words.Decisions.makeTasks, Words.Decisions.making)
         }()
         primary.isHidden = act == nil
