@@ -381,24 +381,29 @@ export interface DecisionsDeps {
     artifactId: string,
     route: string
   ) => Promise<void>;
+  /**
+   * Whether the send `uuid` (a Make tasks ask) is in flight: its session
+   * has not read it yet, or the turn that read it has not ended.
+   */
+  sendInFlight: (uuid: string) => boolean;
   /** Stamps a page's send when Caw took it in place of its ended session. */
   stampSent: (artifactId: string) => void;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
   tasks: (projectId: string) => Promise<DecidedTask[]>;
-  /** The person's own words to a session, through the one send path. */
-  tell: (instance: InstanceRow, text: string) => void;
+  /** The person's own words to a session, through the one send path, as the send `uuid`. */
+  tell: (instance: InstanceRow, text: string, uuid: string) => void;
   /** Whether Caw's turn is on a thread now. */
   threadWorking: (threadId: string) => boolean;
   /** Wakes the project's Caw with the person's words, in a new thread; its id. */
   wakeCaw: (projectId: string, text: string) => Promise<string>;
-  /** Whether a session is on a turn now. */
-  working: (instance: InstanceRow) => boolean;
 }
 
 /** The record as written: what the hub reads back, with who it asked. */
 interface StoredRecord extends DecisionRecord {
-  /** The thread Caw was asked in, when Caw was asked. */
+  /** The thread Caw was asked in, when Caw was asked: the ask's own thread. */
   askedIn?: string | null;
+  /** The send that asked its session, when a session was asked. */
+  askedSend?: string;
 }
 
 const recordPath = (name: string) => `decisions/${name}/record.json`;
@@ -643,12 +648,16 @@ export const createDecisions = (deps: DecisionsDeps) => {
       : null;
   };
 
+  /**
+   * Whether its Make tasks ask is in flight: Caw's turn on the thread it
+   * was asked in, or the session's send of it unread or its turn not ended.
+   * Never the asked session's other work.
+   */
   const making = (record: StoredRecord): boolean => {
     if (record.askedIn) {
       return deps.threadWorking(record.askedIn);
     }
-    const asked = record.askedOf ? deps.instance(record.askedOf) : undefined;
-    return !!asked && deps.working(asked);
+    return !!record.askedSend && deps.sendInFlight(record.askedSend);
   };
 
   /**
@@ -860,6 +869,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
           : new Date().toISOString(),
       askedOf: prior?.askedOf ?? null,
       ...(prior?.askedIn ? { askedIn: prior.askedIn } : {}),
+      ...(prior?.askedSend ? { askedSend: prior.askedSend } : {}),
       cards,
     };
   };
@@ -925,6 +935,45 @@ export const createDecisions = (deps: DecisionsDeps) => {
         `[decisions] ${projectId}: a record was not written: ${error instanceof Error ? error.message : String(error)}`
       )
     );
+  };
+
+  /**
+   * The Make tasks ask, said to its session as the record's send, or to Caw
+   * in a thread of its own, which the record is written again to name;
+   * what refused it, if anything.
+   */
+  const askTasks = async (
+    projectId: string,
+    record: StoredRecord,
+    to: ReturnType<typeof heardBy>,
+    ask: string
+  ): Promise<{ error: unknown; why: string } | null> => {
+    try {
+      if ("instance" in to) {
+        deps.tell(to.instance, ask, record.askedSend ?? crypto.randomUUID());
+        return null;
+      }
+      const askedIn = await deps.wakeCaw(projectId, ask);
+      await deps.commit(
+        projectId,
+        {
+          writes: [
+            {
+              path: recordPath(record.name),
+              content: recordText({ ...record, askedIn }),
+            },
+          ],
+          deletes: [],
+        },
+        `decisions: ${record.name} asked of Caw`
+      );
+      return null;
+    } catch (error) {
+      return {
+        error,
+        why: error instanceof Error ? error.message : String(error),
+      };
+    }
   };
 
   /**
@@ -1060,7 +1109,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
       const noted = `On the decision page “${read.title}” (decisions/${name}/) I wrote: ${words}`;
       if ("instance" in to) {
         if (words) {
-          deps.tell(to.instance, noted);
+          deps.tell(to.instance, noted, crypto.randomUUID());
         } else {
           await deps.send(
             to.instance.id,
@@ -1122,6 +1171,11 @@ export const createDecisions = (deps: DecisionsDeps) => {
           ? `artifact_read({ id: "${artifactId}" }) has my picks and notes by card id.`
           : handedToCaw(read)
       } The record is decisions/${name}/record.json (each card's id, question, what I chose and my note), and log.md beside it says it in words. File one or more tasks for each card I decided and none for a card left open, and give each the field ${DECIDED_FIELD}: "${name}#<card id>" (task_create's fields), so it links back to its card.`;
+      // Who it asks: a session by the send the record names, or Caw.
+      const asked: Pick<StoredRecord, "askedOf" | "askedSend"> =
+        "instance" in to
+          ? { askedOf: to.instance.id, askedSend: crypto.randomUUID() }
+          : { askedOf: null };
       await serially(async () => {
         const tasks = await deps.tasks(projectId);
         const titles = titlesOf(tasks);
@@ -1133,41 +1187,18 @@ export const createDecisions = (deps: DecisionsDeps) => {
             `This project has no decision page ${name}.`
           );
         }
-        const { askedIn: _askedBefore, ...picks } = now;
-        const record: StoredRecord = {
-          ...picks,
-          askedOf: "instance" in to ? to.instance.id : null,
-        };
+        const {
+          askedIn: _askedInBefore,
+          askedSend: _askedSendBefore,
+          ...picks
+        } = now;
+        const record: StoredRecord = { ...picks, ...asked };
         await deps.commit(
           projectId,
           { writes: recordFiles(record, titles), deletes: [] },
           `decisions: ${name}'s tasks asked for`
         );
-        const refused = await (async () => {
-          try {
-            if ("instance" in to) {
-              deps.tell(to.instance, ask);
-              return null;
-            }
-            const askedIn = await deps.wakeCaw(projectId, ask);
-            await deps.commit(
-              projectId,
-              {
-                writes: [
-                  {
-                    path: recordPath(name),
-                    content: recordText({ ...record, askedIn }),
-                  },
-                ],
-                deletes: [],
-              },
-              `decisions: ${name} asked of Caw`
-            );
-            return null;
-          } catch (error) {
-            return { error };
-          }
-        })();
+        const refused = await askTasks(projectId, record, to, ask);
         if (refused) {
           await deps.commit(
             projectId,
@@ -1176,11 +1207,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
               : { writes: [], deletes: [recordPath(name), logPath(name)] },
             `decisions: ${name}'s tasks were not asked for`
           );
-          const { error } = refused;
           throw new DecisionRefusal(
             503,
-            `Couldn't make tasks: ${error instanceof Error ? error.message : String(error)}`,
-            { cause: error }
+            `Couldn't make tasks: ${refused.why}`,
+            { cause: refused.error }
           );
         }
       });

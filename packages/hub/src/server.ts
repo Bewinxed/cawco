@@ -25206,7 +25206,7 @@ export const createServer = (
     },
     tasks: async (projectId) =>
       decidedTasks((await tasks.list(projectId)).tasks),
-    tell: (instance, text) => {
+    tell: (instance, text, uuid) => {
       deliverSend({
         verb: "send",
         machineId: instance.machineId,
@@ -25215,7 +25215,7 @@ export const createServer = (
           instanceId: instance.id,
           message: {
             type: "user",
-            uuid: crypto.randomUUID(),
+            uuid,
             message: { role: "user", content: text },
             parent_tool_use_id: null,
             origin: { kind: "human" },
@@ -25241,9 +25241,30 @@ export const createServer = (
         ? Promise.reject(new Error(sent.reason ?? "Caw couldn't take them."))
         : Promise.resolve(threadId);
     },
-    working: (instance) =>
-      !ENDED_STATUSES.has(instance.status) &&
-      pulses.get(instance.id)?.busy === true,
+    // The send's own record: unread while pending, then the turn that read
+    // it until that session's next turn end (the send may have gone on to
+    // a continuation: its record names where).
+    sendInFlight: (uuid) => {
+      const send = db.sendRecord(uuid);
+      const [row] = send?.instanceId
+        ? db.getInstancesByIds([send.instanceId])
+        : [];
+      if (!(send && row) || ENDED_STATUSES.has(row.status)) {
+        return false;
+      }
+      if (send.state === "pending") {
+        return true;
+      }
+      return (
+        send.state === "read" &&
+        pulses.get(row.id)?.busy === true &&
+        !(
+          send.readAt &&
+          row.turnEndedAt &&
+          row.turnEndedAt.getTime() >= send.readAt.getTime()
+        )
+      );
+    },
     threadWorking: (threadId) => {
       const thread = db.thread(threadId);
       return (

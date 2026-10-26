@@ -14,8 +14,8 @@
  *   Send that carries picks), which writes its record, until its session
  *   revises it or asks anew, which asks him again (`picking`, its record
  *   kept) until his next Send; `sent`, a page sent with no picks to carry
- *   (a note); `making`, while the session asked to Make tasks, an optional
- *   next step, is on its turn.
+ *   (a note); `making`, while its Make tasks ask (an optional next step)
+ *   is in flight: unread, or the turn that read it not ended.
  * - **The record** (`decisions/<name>/record.json`), written at the Send
  *   and following the picks from then on (a card a revision took off the
  *   page kept as it was decided): each card as the person saw it
