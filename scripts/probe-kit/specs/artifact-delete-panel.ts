@@ -317,5 +317,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "artifact-delete-panel", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "artifact-delete-panel",
+  run,
+};
 export default spec;

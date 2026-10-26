@@ -144,6 +144,7 @@ const probing = (fleet: KitFleet) => {
 const worst = (times: number[]) => Math.round(Math.max(0, ...times));
 
 export default {
+  group: "Speed",
   name: "search-held",
   run: async (kit: Kit) => {
     const { check } = kit;

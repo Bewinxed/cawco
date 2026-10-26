@@ -2109,6 +2109,7 @@ function longReply(
 }
 
 const spec: Spec = {
+  group: "Speed",
   name: "two-pane-perf",
   run: async (kit) => {
     // The machine's pressure readable before anything is built: no gate, no run.

@@ -2260,5 +2260,9 @@ const stillOnly = (): { folder?: string; query?: string } | null => {
   return query ? { folder, query } : { folder };
 };
 
-const spec: Spec = { name: "artifact-resize-loop", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "artifact-resize-loop",
+  run,
+};
 export default spec;

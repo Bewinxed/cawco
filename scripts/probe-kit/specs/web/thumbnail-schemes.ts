@@ -577,5 +577,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "thumbnail-schemes", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "thumbnail-schemes",
+  run,
+};
 export default spec;

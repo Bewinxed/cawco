@@ -660,6 +660,7 @@ const run = async (kit: Kit) => {
 };
 
 export default {
+  group: "Workspaces and what agents may touch",
   name: "workspace-install",
   host: "it delegates, so its fleet cuts workspaces",
   run,

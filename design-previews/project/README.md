@@ -8,10 +8,7 @@ waiting on you, the task pane open, an empty project, a read failure, Caw's
 first thread), the phone's board (one grouped list, or the desk's columns
 sideways) and the scheme. Under 1100px it shows one frame at a time.
 
-Serve the folder as it is (`bunx serve design-previews/project`). Its proof
-is `scripts/probe-kit/specs/project-preview.ts`
-(`bun scripts/probe-kit/run.ts project-preview`), which reads it at 390, 680,
-1037 and 1440 and runs the house rules at 390, 1037 and 1440.
+Serve the folder as it is (`bunx serve design-previews/project`).
 
 The head and the pane's bar follow DESIGN.md's Title Bars Follow Liquid Glass
 Rule as the live head does (`ProjectHead.svelte`): one row, the name, the

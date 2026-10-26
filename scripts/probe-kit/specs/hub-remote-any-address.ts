@@ -29,6 +29,7 @@ const OTHER = "hub-remote-other";
 const NO_CREDENTIAL = "This remote takes a CawCo machine or session credential";
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "hub-remote-any-address",
   run: async (kit: Kit) => {
     const { check } = kit;

@@ -74,6 +74,7 @@ const PAGES: Record<string, { html: string; want: "finding" | "none" }> = {
 };
 
 const spec: Spec = {
+  group: "The probe kit's own rig",
   name: "scan-control-box",
   run: async (kit) => {
     const page = await kit.page("phone");

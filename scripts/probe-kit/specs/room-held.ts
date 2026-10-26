@@ -221,6 +221,10 @@ const run = async (kit: Kit): Promise<void> => {
   }
 };
 
-const spec: Spec = { name: "room-held", run };
+const spec: Spec = {
+  group: "The hub and machines",
+  name: "room-held",
+  run,
+};
 
 export default spec;

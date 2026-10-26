@@ -1948,5 +1948,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "comment-delivery", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "comment-delivery",
+  run,
+};
 export default spec;

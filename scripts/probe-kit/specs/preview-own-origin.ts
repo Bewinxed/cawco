@@ -246,5 +246,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "preview-own-origin", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "preview-own-origin",
+  run,
+};
 export default spec;

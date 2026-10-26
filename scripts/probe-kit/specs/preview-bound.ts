@@ -1310,5 +1310,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "preview-bound", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "preview-bound",
+  run,
+};
 export default spec;

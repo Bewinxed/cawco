@@ -15,7 +15,6 @@ holds still until the switcher moves.
 ```sh
 bun design-previews/suggestions/app/build.ts                  # build index.html and assets/
 python3 -m http.server -d design-previews/suggestions 8080    # any static server on this folder
-bun scripts/probe-kit/run.ts suggestions-preview               # the proof (Chromium + WebKit)
 ```
 
 ## The surroundings

@@ -601,5 +601,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "edge-top", run };
+const spec: Spec = {
+  group: "iPhone Safari",
+  name: "edge-top",
+  run,
+};
 export default spec;

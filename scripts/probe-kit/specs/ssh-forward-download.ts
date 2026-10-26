@@ -295,4 +295,8 @@ console.log(JSON.stringify({ settings: settings.status, status: answer.status, s
   }
 }
 
-export default { name: "ssh-forward-download", run } satisfies Spec;
+export default {
+  group: "Release checks",
+  name: "ssh-forward-download",
+  run,
+} satisfies Spec;

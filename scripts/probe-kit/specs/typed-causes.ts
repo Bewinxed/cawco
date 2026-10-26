@@ -1247,6 +1247,7 @@ const midTurn = async (kit: Kit, scratch: string): Promise<void> => {
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "typed-causes",
   run: async (kit: Kit) => {
     const scratch = await mkdtemp(

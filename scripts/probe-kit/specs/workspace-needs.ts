@@ -413,4 +413,8 @@ const run = async (kit: Kit) => {
   await legD(kit, fleet, needs);
 };
 
-export default { name: "workspace-needs", run } satisfies Spec;
+export default {
+  group: "Workspaces and what agents may touch",
+  name: "workspace-needs",
+  run,
+} satisfies Spec;

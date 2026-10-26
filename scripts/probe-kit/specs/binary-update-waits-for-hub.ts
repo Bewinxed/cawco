@@ -217,6 +217,7 @@ async function checkRefusalFails(
 }
 
 const spec: Spec = {
+  group: "Release checks",
   name: "binary-update-waits-for-hub",
   async run(kit) {
     const { check } = kit;

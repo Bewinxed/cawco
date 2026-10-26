@@ -199,6 +199,7 @@ interface Cold {
 }
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "ssr-hub-reads",
   async run(kit: Kit) {
     const asked: Asked[] = [];

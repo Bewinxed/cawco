@@ -162,5 +162,9 @@ const run = async (kit: Kit): Promise<void> => {
   }
 };
 
-const spec: Spec = { name: "app-targets", run };
+const spec: Spec = {
+  group: "Release checks",
+  name: "app-targets",
+  run,
+};
 export default spec;

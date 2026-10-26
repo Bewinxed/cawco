@@ -375,5 +375,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "canvas-preload", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "canvas-preload",
+  run,
+};
 export default spec;

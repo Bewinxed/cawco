@@ -55,8 +55,8 @@ import {
 import { signal } from "../../../packages/core/src/signal";
 import { delay, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { type Phone, standInPhone } from "../phone";
 import { frames } from "../ws-frames";
-import { type Phone, standInPhone } from "./turn-push";
 
 /** server.ts `SETTLE_READS_PER_MACHINE`. */
 const SETTLE_READS_PER_MACHINE = 4;
@@ -235,6 +235,7 @@ interface SettleRead {
 }
 
 export default {
+  group: "The hub and machines",
   name: "machine-silence",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));

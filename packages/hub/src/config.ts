@@ -148,7 +148,7 @@ const wholeFrom = (
  * Days a project's fact line may go unused (no brief carried it, no note
  * corroborated it) before a curator run proposes moving it to
  * `knowledge/archive/` (memory.ts). The default is the replay's pick
- * (scripts/probe-kit/specs/memory-replay.ts, 2026-10-18): over the 974
+ * (the memory-replay probe, 2026-10-18, cut on 2026-10-26): over the 974
  * bullet lines this repository's curated docs held since 2025-12-31, a use
  * being a commit that shares three words with a line, 30 days archives 54
  * lines of which 16 were needed again, 45 days 38 (6), 60 days 29 (3), and
@@ -165,7 +165,7 @@ export const MEMORY_ARCHIVE_DAYS = wholeFrom(
 /**
  * A knowledge file's budget, in characters: what one brief carries of it,
  * and the size past which a curator run is asked to fold it (memory.ts).
- * The default is the replay's pick (scripts/probe-kit/specs/memory-replay.ts,
+ * The default is the replay's pick (the memory-replay probe, cut on 2026-10-26,
  * 2026-10-18, 24 topic files): 8,000 and 12,000 fold the same 5 files, the
  * ones past either; 6,000 adds three that sit just over it (6.4k to 6.9k);
  * 8,000 is also what a brief carried of a file before.

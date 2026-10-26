@@ -750,5 +750,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "update-toast", run };
+const spec: Spec = {
+  group: "Release checks",
+  name: "update-toast",
+  run,
+};
 export default spec;

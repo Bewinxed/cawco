@@ -7,7 +7,6 @@ thread where the chosen option puts it.
 
 ```sh
 python3 -m http.server -d design-previews/comment-sizing 8080   # any static server on this folder
-bun scripts/probe-kit/run.ts comment-sizing-preview              # the proof (Chromium + WebKit)
 bun design-previews/comment-sizing/capture/capture.ts            # remake parts.js, house.css, fonts/
 ```
 

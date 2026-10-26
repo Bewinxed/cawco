@@ -4533,5 +4533,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "canvas-cost", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "canvas-cost",
+  run,
+};
 export default spec;

@@ -12463,5 +12463,9 @@ const footThread = async (rig: FootRig, number: number) => {
   await footBack(rig, `pin ${number}'s thread`, card);
 };
 
-const spec: Spec = { name: "comments", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "comments",
+  run,
+};
 export default spec;

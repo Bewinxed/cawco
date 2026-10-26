@@ -33,7 +33,7 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
 import { callCount, callsInOrder, listedAs, say } from "../journeys/mock";
 import type { Kit, Spec } from "../kit";
-import { atRest } from "./turn-push";
+import { atRest } from "../phone";
 
 const TAG = "PROBE-MAC-WAIT";
 const COMMITTED = "DONE-COMMIT-MAC-WAIT";
@@ -241,6 +241,7 @@ const run = async (kit: Kit) => {
 };
 
 export default {
+  group: "Workspaces and what agents may touch",
   name: "mac-wait",
   host: "it delegates, so its fleet cuts workspaces",
   run,

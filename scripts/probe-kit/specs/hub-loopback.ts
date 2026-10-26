@@ -504,5 +504,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "hub-loopback", run };
+const spec: Spec = {
+  group: "The hub and machines",
+  name: "hub-loopback",
+  run,
+};
 export default spec;

@@ -2085,6 +2085,7 @@ const run = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Previews, pages and comments",
   name: "session-sheet",
   host: "its stage runs in a place, a boundary of its own",
   run,

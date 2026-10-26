@@ -572,5 +572,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "preview-query", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "preview-query",
+  run,
+};
 export default spec;

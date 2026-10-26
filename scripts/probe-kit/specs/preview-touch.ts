@@ -717,5 +717,9 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   );
 };
 
-const spec: Spec = { name: "preview-touch", run: probe };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "preview-touch",
+  run: probe,
+};
 export default spec;

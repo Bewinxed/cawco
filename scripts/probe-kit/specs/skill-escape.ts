@@ -568,6 +568,7 @@ const reportVector = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "skill-escape",
   host: "it delegates, so its fleet cuts a workspace whose boundary the skill's own shell runs in",
   run,

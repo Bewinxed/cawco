@@ -385,4 +385,8 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default { name: "landing-stop", run } satisfies Spec;
+export default {
+  group: "Workspaces and what agents may touch",
+  name: "landing-stop",
+  run,
+} satisfies Spec;

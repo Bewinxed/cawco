@@ -75,6 +75,7 @@ const pidIn = async (file: string): Promise<number | undefined> => {
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "keeper-sweep-scope",
   host: "it runs a keeper as a systemd user unit, and its child moves a process into a scope of the user's service manager",
   run: async (kit: Kit) => {

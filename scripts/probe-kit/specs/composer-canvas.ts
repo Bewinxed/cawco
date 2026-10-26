@@ -2822,5 +2822,9 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
   await page.close();
 };
 
-const spec: Spec = { name: "composer-canvas", run: probe };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "composer-canvas",
+  run: probe,
+};
 export default spec;

@@ -979,4 +979,8 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default { name: "tailnet-https", run } satisfies Spec;
+export default {
+  group: "The hub and machines",
+  name: "tailnet-https",
+  run,
+} satisfies Spec;

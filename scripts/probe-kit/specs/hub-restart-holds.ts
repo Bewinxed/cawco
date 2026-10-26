@@ -811,6 +811,7 @@ const run = async (kit: Kit) => {
 };
 
 export default {
+  group: "The hub and machines",
   name: "hub-restart-holds",
   host: "legs (c), (d) and (e) delegate, so its fleet cuts workspaces",
   run,

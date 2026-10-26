@@ -909,5 +909,9 @@ const claudeModels = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "unchosen-defaults", run };
+const spec: Spec = {
+  group: "The hub and machines",
+  name: "unchosen-defaults",
+  run,
+};
 export default spec;

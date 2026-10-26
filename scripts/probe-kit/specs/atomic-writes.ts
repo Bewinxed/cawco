@@ -67,6 +67,7 @@ const killedOnce = async (
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "atomic-writes",
   run: async (kit: Kit) => {
     const root = await mkdtemp(join(process.env.TMPDIR ?? tmpdir(), "atomic-"));

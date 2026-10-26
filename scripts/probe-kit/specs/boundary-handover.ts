@@ -909,6 +909,7 @@ const keptAsItWas = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "boundary-handover",
   run,
 };

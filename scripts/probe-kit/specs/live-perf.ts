@@ -1710,6 +1710,7 @@ const boardRead = async (): Promise<unknown> => {
 };
 
 const spec: Spec = {
+  group: "Speed",
   name: "live-perf",
   run: async (kit: Kit) => {
     const fleetMode = process.argv.includes("--fleet");

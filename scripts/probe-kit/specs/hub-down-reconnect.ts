@@ -98,6 +98,7 @@ async function countKnocks(
 }
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "hub-down-reconnect",
   async run(kit) {
     const { check } = kit;

@@ -91,6 +91,7 @@ const seedSource = async (): Promise<{ dir?: string; why: string }> => {
 };
 
 const spec: Spec = {
+  group: "The probe kit's own rig",
   name: "fleet-leaves-nothing",
   async run(kit) {
     const { check } = kit;

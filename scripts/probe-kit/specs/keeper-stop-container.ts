@@ -368,6 +368,7 @@ const runLeg = async (kit: Kit, leg: Leg): Promise<void> => {
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "keeper-stop-container",
   host: "it runs keepers as systemd user units and starts podman containers from their children",
   run: async (kit: Kit) => {

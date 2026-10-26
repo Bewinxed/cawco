@@ -110,6 +110,7 @@ const run = async (kit: Kit): Promise<void> => {
 };
 
 const spec: Spec = {
+  group: "The probe kit's own rig",
   name: "quiet-gate",
   host: "its load runs in a user unit of its own, which a workspace cannot start",
   run,

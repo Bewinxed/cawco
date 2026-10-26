@@ -1866,6 +1866,7 @@ async function run(kit: Kit): Promise<void> {
 }
 
 export default {
+  group: "The hub and machines",
   name: "ssh-reach",
   host: "it gives the box a network of its own (bwrap --unshare-net), which no workspace boundary starts",
   run,

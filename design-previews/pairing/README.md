@@ -8,7 +8,6 @@ asked; the endings are report a8f73fdb §3 and §4.
 
 ```sh
 python3 -m http.server -d design-previews/pairing 8080   # any static server on this folder
-bun scripts/probe-kit/run.ts pairing-preview               # the proof (Chromium + WebKit)
 PAIRING_ENGINES=chromium PAIRING_LEGS=end,motion PAIRING_MOMENTS=expired …   # a narrower run
 ```
 

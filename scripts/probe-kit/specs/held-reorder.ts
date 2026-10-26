@@ -57,7 +57,7 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { taskOf, traceMain } from "../frames";
 import { type Kit, type KitFleet, open, readMotion, type Spec } from "../kit";
 import { quietLeg } from "../quiet";
-import { asleep, conversationFile, seedRows } from "./no-wake-at-rest";
+import { asleep, conversationFile, seedRows } from "../seeded-sessions";
 import { SLOWER } from "./two-pane-perf";
 
 /** Projects on the board. */
@@ -1128,6 +1128,7 @@ async function chromiumLegs(
 }
 
 const spec: Spec = {
+  group: "Speed",
   name: "held-reorder",
   run: async (kit) => {
     const fleet = await kit.fleet(respond);

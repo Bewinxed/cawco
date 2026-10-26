@@ -307,6 +307,7 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
 const px = (value: string) => Number.parseFloat(value) || 0;
 
 const spec: Spec = {
+  group: "iPhone Safari",
   name: "phone-bar",
   run: async (kit: Kit) => {
     const bench = await kit.bench();

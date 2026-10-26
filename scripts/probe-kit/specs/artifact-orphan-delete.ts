@@ -299,6 +299,7 @@ const run = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Previews, pages and comments",
   name: "artifact-orphan-delete",
   host: "it delegates, so its fleet cuts workspaces",
   run,

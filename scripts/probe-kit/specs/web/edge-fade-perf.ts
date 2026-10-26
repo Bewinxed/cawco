@@ -535,6 +535,7 @@ async function checkLook(kit: Kit, page: Page, view: string) {
 }
 
 const spec: Spec = {
+  group: "Speed",
   name: "edge-fade-perf",
   async run(kit) {
     const fleet = await kit.fleet(() => ({ everyMs: 20, words: ["Ready."] }));

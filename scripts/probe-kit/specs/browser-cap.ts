@@ -93,6 +93,7 @@ async function leg(kit: Kit, engine: "chromium" | "webkit"): Promise<void> {
 }
 
 const spec: Spec = {
+  group: "The probe kit's own rig",
   name: "browser-cap",
   run: async (kit) => {
     await leg(kit, "chromium");

@@ -91,6 +91,7 @@ const hubMachine = async (
 };
 
 const spec: Spec = {
+  group: "Release checks",
   name: "hub-restart-announce",
   async run(kit) {
     const { check } = kit;

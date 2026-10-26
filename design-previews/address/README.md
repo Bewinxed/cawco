@@ -12,7 +12,6 @@ would. Where it stands, and which trays are parked, is kept across a reload.
 
 ```sh
 python3 -m http.server -d design-previews/address 8080   # any static server on this folder
-bun scripts/probe-kit/run.ts address-preview              # the proof (Chromium + WebKit)
 ```
 
 It is built, not written by hand: the source is

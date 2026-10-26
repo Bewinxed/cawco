@@ -582,6 +582,7 @@ const rootLeg = (kit: Kit): void => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "host-delegates",
   host: "its workspace leg cuts a workspace, whose boundary is user namespaces",
   run: async (kit: Kit) => {

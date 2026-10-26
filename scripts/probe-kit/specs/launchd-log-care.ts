@@ -29,6 +29,7 @@ import { type Kit, OWN_HOME_ENV, type Spec } from "../kit";
 import { checkRotation, pastCap, WRITER } from "../log-writer";
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "launchd-log-care",
   ownHome: "it writes CawCo's logs and plists under a HOME of its own",
   run: async (kit: Kit) => {

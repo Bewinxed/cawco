@@ -306,6 +306,7 @@ const run = async (kit: Kit) => {
 };
 
 export default {
+  group: "Workspaces and what agents may touch",
   name: "layer-view",
   host: "it mounts a Linux view (bwrap's overlay in a user namespace), which no workspace boundary allows inside it",
   ownHome:

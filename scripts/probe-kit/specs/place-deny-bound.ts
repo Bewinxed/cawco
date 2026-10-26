@@ -464,6 +464,7 @@ const goneLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "place-deny-bound",
   host: "Caw's place starts a boundary of its own",
   run: async (kit: Kit) => {

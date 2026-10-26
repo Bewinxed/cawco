@@ -2773,5 +2773,9 @@ const pictureChecks = async (on: OnCanvas, id: string, lifted: number) => {
   );
 };
 
-const spec: Spec = { name: "canvas", run: runSpec };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "canvas",
+  run: runSpec,
+};
 export default spec;

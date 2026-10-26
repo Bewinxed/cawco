@@ -354,6 +354,7 @@ const endedCheck = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "leak-notice-workspace",
   host: "its delegate's commands run in a workspace boundary",
   run: async (kit: Kit) => {

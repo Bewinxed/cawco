@@ -101,7 +101,7 @@ const listed = (dir: string) =>
     .sort();
 // `web` runs the web specs named, or all of them. Otherwise every name is a
 // spec of its own in specs/, or one found only in specs/web/, run as that
-// web spec: `run.ts mcp-shared room-held` runs both, in that order.
+// web spec: `run.ts room-held boundary-quiet` runs both, in that order.
 const chosen = web && named.length === 0 ? listed(webDir) : named;
 // Its probe slot's holder line names the specs it runs (slot.ts).
 nameProbeRun(web && named.length === 0 ? "web (every spec)" : chosen.join(" "));

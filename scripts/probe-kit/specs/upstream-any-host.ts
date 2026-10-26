@@ -118,6 +118,7 @@ interface HeldAsk {
 }
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "upstream-any-host",
   async run(kit) {
     const { check } = kit;

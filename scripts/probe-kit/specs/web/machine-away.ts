@@ -417,6 +417,7 @@ async function fetchAgain(
 }
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "machine-away",
   async run(kit) {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));

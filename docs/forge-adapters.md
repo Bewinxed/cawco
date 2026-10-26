@@ -337,12 +337,9 @@ request, on Gitea a pull request.
   `forgePost`. A held write is the existing upstream ask card, its kind
   "GitLab merge request", "Gitea issue", and made on approval through
   `CONTROL_UPSTREAM_POST`.
-- Probe kit: `forge-adapters` (runs anywhere: GitHub and GitLab every leg,
-  Gitea its pushes, refusal and held card; (g) an ambiguous `forge_post`
-  refused, asking for the URL; (p) the GitHub poller through Octokit against
-  a stand-in, `github-poll.ts`), `git-door` (s: a workspace whose project
-  lets agents post holds no forge token in its commands' environment or its
-  files, and its gh's post is made, or held, by the GitHub door, through the
-  workspace's real executor and runner, `workspace-gh.ts`) and
-  `forge-adapters-gitea` (host: Gitea's writes through the real gitea-mcp).
-  Stand-ins in `scripts/probe-kit/forge-stubs.ts`; legs in `forge-legs.ts`.
+- Probe kit: `git-door` (s: a workspace whose project lets agents post
+  holds no forge token in its commands' environment or its files, and its
+  gh's post is made, or held, by the GitHub door, through the workspace's
+  real executor and runner, `workspace-gh.ts`). Stand-ins in
+  `scripts/probe-kit/forge-stubs.ts`. The forge-adapters specs were cut on
+  2026-10-26 with the owner's Tools group.

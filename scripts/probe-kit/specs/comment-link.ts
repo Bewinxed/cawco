@@ -910,5 +910,9 @@ const downForGood = async (at: At, proxy: Proxy, where: Where) => {
   await page.close();
 };
 
-const spec: Spec = { name: "comment-link", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "comment-link",
+  run,
+};
 export default spec;

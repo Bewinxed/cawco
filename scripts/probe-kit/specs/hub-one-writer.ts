@@ -102,6 +102,7 @@ const leftOver = (db: string): string[] =>
   readdirSync(dirname(db)).filter((name) => name.startsWith("pairing-off."));
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "hub-one-writer",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));

@@ -961,6 +961,7 @@ const projectAt = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "workspace-holds",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {

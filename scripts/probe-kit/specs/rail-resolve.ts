@@ -382,5 +382,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "rail-resolve", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "rail-resolve",
+  run,
+};
 export default spec;

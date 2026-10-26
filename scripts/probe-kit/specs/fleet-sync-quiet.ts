@@ -442,6 +442,7 @@ const run = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "fleet-sync-quiet",
   host: "it delegates, so its fleet cuts workspaces",
   run,

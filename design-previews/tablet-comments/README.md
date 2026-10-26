@@ -9,7 +9,6 @@ comments, read from the hub.
 
 ```sh
 python3 -m http.server -d design-previews/tablet-comments 8080   # any static server on this folder
-bun scripts/probe-kit/run.ts tablet-comments-preview               # the proof (Chromium + WebKit)
 bun design-previews/tablet-comments/capture/capture.ts             # remake parts.js, house.css, fonts/, hung-shadow.png, page/
 ```
 

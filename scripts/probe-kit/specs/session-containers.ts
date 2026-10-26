@@ -687,6 +687,7 @@ const prepare = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "session-containers",
   host: "it runs containers on the machine's own runtime, which no workspace reaches",
   run: async (kit: Kit) => {

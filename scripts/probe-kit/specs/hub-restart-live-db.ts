@@ -815,4 +815,8 @@ const bootHub = async (
   return Date.now() - launched;
 };
 
-export default { name: "hub-restart-live-db", run } satisfies Spec;
+export default {
+  group: "Speed",
+  name: "hub-restart-live-db",
+  run,
+} satisfies Spec;

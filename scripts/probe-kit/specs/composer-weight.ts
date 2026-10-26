@@ -358,5 +358,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "composer-weight", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "composer-weight",
+  run,
+};
 export default spec;

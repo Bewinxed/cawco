@@ -244,4 +244,8 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default { name: "machine-rekey", run } satisfies Spec;
+export default {
+  group: "The hub and machines",
+  name: "machine-rekey",
+  run,
+} satisfies Spec;

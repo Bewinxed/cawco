@@ -524,5 +524,9 @@ const run = async (kit: Kit) => {
   tunnel.stop();
 };
 
-const spec: Spec = { name: "project-origin", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "project-origin",
+  run,
+};
 export default spec;

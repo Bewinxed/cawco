@@ -318,6 +318,7 @@ const run = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Previews, pages and comments",
   name: "project-origin-sheet",
   run,
   host: "a sheet's stage runs in a stage clone's boundary, which needs namespaces no workspace can make",

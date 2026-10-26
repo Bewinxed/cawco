@@ -39,6 +39,7 @@ const xml = (value: string): string =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "launchd-log-job",
   host: "it bootstraps a launchd job into this user's GUI domain, which a workspace cannot reach",
   ownHome: "the job's plist, start record and log live under a HOME of its own",

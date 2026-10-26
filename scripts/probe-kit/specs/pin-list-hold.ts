@@ -901,5 +901,9 @@ const rejoined = async (at: At) => {
   await page.close();
 };
 
-const spec: Spec = { name: "pin-list-hold", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "pin-list-hold",
+  run,
+};
 export default spec;

@@ -244,6 +244,7 @@ const indexLeg = async (kit: Kit): Promise<void> => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "sandbox-end",
   run: async (kit: Kit) => {
     pureLegs(kit);

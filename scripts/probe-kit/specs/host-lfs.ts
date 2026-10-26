@@ -735,6 +735,7 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "host-lfs",
   run: async (kit: Kit) => {
     const root = await mkdtemp(

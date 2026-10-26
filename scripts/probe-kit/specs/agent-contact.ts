@@ -33,8 +33,8 @@ import {
 } from "../../../packages/core/src";
 import { delay, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { standInPhone } from "../phone";
 import { frames, PING, type WsFrame } from "../ws-frames";
-import { standInPhone } from "./turn-push";
 
 /** How long (a) holds the agent's messages: past the span by half a minute. */
 const HELD_MS = MACHINE_LOST_MS + 30_000;
@@ -148,6 +148,7 @@ const agentRelay = (hubPort: number) => {
 };
 
 export default {
+  group: "The hub and machines",
   name: "agent-contact",
   run: async (kit: Kit) => {
     const { check } = kit;

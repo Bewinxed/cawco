@@ -448,4 +448,8 @@ async function run(kit: Kit): Promise<void> {
   );
 }
 
-export default { name: "hub-restart-load", run } satisfies Spec;
+export default {
+  group: "Speed",
+  name: "hub-restart-load",
+  run,
+} satisfies Spec;

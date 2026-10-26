@@ -3180,5 +3180,9 @@ const switchMotionLeg = async (kit: Kit, base: string, id: string) => {
   await page.close();
 };
 
-const spec: Spec = { name: "files-panel", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "files-panel",
+  run,
+};
 export default spec;

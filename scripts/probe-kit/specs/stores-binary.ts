@@ -35,6 +35,7 @@ const hostTarget = (): string => {
 };
 
 export default {
+  group: "Release checks",
   name: "stores-binary",
   run: async (kit: Kit) => {
     const { check } = kit;

@@ -52,6 +52,7 @@ interface UpdateReport {
 }
 
 const spec: Spec = {
+  group: "Release checks",
   name: "binary-update-found",
   async run(kit) {
     const { check } = kit;

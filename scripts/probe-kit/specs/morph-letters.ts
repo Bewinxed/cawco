@@ -196,5 +196,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "morph-letters", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "morph-letters",
+  run,
+};
 export default spec;

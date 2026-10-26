@@ -926,6 +926,7 @@ const emptiedLeg = async (kit: Kit, fleet: KitFleet, emptied: Delegate) => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "workspace-bash-rules",
   host: "it delegates, so its fleet cuts workspaces whose boundaries it runs commands in",
   run,

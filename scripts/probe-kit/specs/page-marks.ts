@@ -401,5 +401,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "page-marks", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "page-marks",
+  run,
+};
 export default spec;

@@ -704,6 +704,7 @@ const run = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "boundary-proxy",
   workspace:
     "it reads the srt proxy and the tool door a Linux workspace's boundary gives a command",

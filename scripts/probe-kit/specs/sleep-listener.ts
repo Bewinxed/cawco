@@ -114,6 +114,7 @@ const saysWithin = async (
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "sleep-listener",
   async run(kit: Kit) {
     const { check } = kit;

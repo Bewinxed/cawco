@@ -601,6 +601,7 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "workspace-held",
   run: async (kit: Kit) => {
     for (const tag of Object.keys(steps) as Tag[]) {

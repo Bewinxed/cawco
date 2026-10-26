@@ -2366,5 +2366,9 @@ const fieldChecks = async ({
   );
 };
 
-const spec: Spec = { name: "artifacts", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "artifacts",
+  run,
+};
 export default spec;

@@ -1415,6 +1415,7 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "workspace-retire",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {

@@ -95,6 +95,7 @@ const startHub = (dbPath: string) => {
 };
 
 const spec: Spec = {
+  group: "Release checks",
   name: "binary-prune",
   run: async (kit: Kit) => {
     const scratch = await mkdtemp(

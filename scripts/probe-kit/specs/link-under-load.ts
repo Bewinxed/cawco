@@ -227,6 +227,7 @@ const cutMidLoad = async (
 };
 
 const spec: Spec = {
+  group: "Speed",
   name: "link-under-load",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {

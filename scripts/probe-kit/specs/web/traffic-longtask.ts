@@ -196,6 +196,7 @@ const heaviestAfter = (main: MainThread, mark: string) => {
 };
 
 const spec: Spec = {
+  group: "Speed",
   name: "traffic-longtask",
   run: async (kit) => {
     const page = await kit.page("desk", { init: [watch] });

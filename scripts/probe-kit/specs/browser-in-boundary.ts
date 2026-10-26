@@ -127,6 +127,10 @@ const run = async (kit: Kit): Promise<void> => {
   }
 };
 
-const spec: Spec = { name: "browser-in-boundary", run };
+const spec: Spec = {
+  group: "Workspaces and what agents may touch",
+  name: "browser-in-boundary",
+  run,
+};
 
 export default spec;

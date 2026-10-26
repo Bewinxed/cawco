@@ -900,4 +900,8 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default { name: "update-download-resumes", run } satisfies Spec;
+export default {
+  group: "Release checks",
+  name: "update-download-resumes",
+  run,
+} satisfies Spec;

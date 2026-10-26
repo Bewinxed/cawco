@@ -38,6 +38,7 @@ import {
 } from "./artifact-resize-loop";
 
 const spec: Spec = {
+  group: "Previews, pages and comments",
   name: "artifact-resize-loop-thread",
   host: "a project's Caw starts in a bounded place, so its fleet starts a boundary",
   async run(kit) {

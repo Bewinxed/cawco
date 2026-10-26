@@ -1033,6 +1033,7 @@ const worktreeLeg = async (
 };
 
 export default {
+  group: "Workspaces and what agents may touch",
   name: "workspace-any-folder",
   host: "it delegates, so its fleet makes workspaces",
   run,

@@ -136,6 +136,7 @@ const typecheck = async (): Promise<Checked> => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "leak-notice",
   run: async (kit: Kit) => {
     const { check } = kit;

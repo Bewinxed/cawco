@@ -256,6 +256,7 @@ async function leg(
 }
 
 const spec: Spec = {
+  group: "iPhone Safari",
   name: "safari-long-ask",
   run: async (kit) => {
     const fleet = await kit.fleet(respond);

@@ -343,5 +343,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "stale-reload", run };
+const spec: Spec = {
+  group: "Release checks",
+  name: "stale-reload",
+  run,
+};
 export default spec;

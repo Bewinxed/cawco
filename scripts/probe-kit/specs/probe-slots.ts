@@ -276,6 +276,7 @@ async function waitRunsOut(kit: Kit, root: string): Promise<void> {
 }
 
 const spec: Spec = {
+  group: "The probe kit's own rig",
   name: "probe-slots",
   run: async (kit) => {
     const root = join(kit.out, "slots");

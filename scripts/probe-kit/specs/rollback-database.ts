@@ -280,6 +280,7 @@ const lockLegs = async (kit: Kit, scratch: string) => {
 };
 
 const spec: Spec = {
+  group: "Release checks",
   name: "rollback-database",
   run: async (kit: Kit) => {
     const scratch = mkdtempSync(join(tmpdir(), "rollback-database-"));

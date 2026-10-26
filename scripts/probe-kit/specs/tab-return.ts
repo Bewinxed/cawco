@@ -3165,5 +3165,9 @@ const run = async (kit: Kit) => {
   checkQuiet(kit, silentReads, loopReads);
 };
 
-const spec: Spec = { name: "tab-return", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "tab-return",
+  run,
+};
 export default spec;

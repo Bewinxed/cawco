@@ -1819,6 +1819,7 @@ async function neverConnected(kit: Kit, base: string) {
 }
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "hub-states",
   run: async (kit) => {
     // A turn's answer a few lines long, so a conversation of a few turns

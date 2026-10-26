@@ -1022,5 +1022,9 @@ const run = async (kit: Kit) => {
   await realJoin(kit);
 };
 
-const spec: Spec = { name: "preview-burst", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "preview-burst",
+  run,
+};
 export default spec;

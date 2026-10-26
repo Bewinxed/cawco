@@ -147,6 +147,7 @@ const run = async (kit: Kit) => {
 };
 
 export default {
+  group: "The probe kit's own rig",
   name: "fleet-kept-removal",
   run,
 } satisfies Spec;

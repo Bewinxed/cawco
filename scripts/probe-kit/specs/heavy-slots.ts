@@ -416,6 +416,7 @@ async function checkUnderMergeCheck(kit: Kit, place: SlotPlace): Promise<void> {
 }
 
 const spec: Spec = {
+  group: "Release checks",
   name: "heavy-slots",
   ownHome:
     "its heavy-work slots are a pool of its own under a scratch HOME, so no real run on the machine is held up and none holds it up",

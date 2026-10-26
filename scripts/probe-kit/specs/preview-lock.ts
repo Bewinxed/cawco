@@ -286,5 +286,9 @@ const probe = async (kit: Kit, servedPort: number) => {
   );
 };
 
-const spec: Spec = { name: "preview-lock", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "preview-lock",
+  run,
+};
 export default spec;

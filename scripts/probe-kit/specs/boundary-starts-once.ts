@@ -257,6 +257,7 @@ const run = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "boundary-starts-once",
   run,
 };

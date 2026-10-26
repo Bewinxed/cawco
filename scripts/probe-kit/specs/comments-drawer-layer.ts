@@ -742,5 +742,9 @@ const probe = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "comments-drawer-layer", run: probe };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "comments-drawer-layer",
+  run: probe,
+};
 export default spec;

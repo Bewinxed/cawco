@@ -195,6 +195,7 @@ interface Scene {
 }
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "workspace-excluded",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {

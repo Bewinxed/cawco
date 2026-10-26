@@ -500,6 +500,7 @@ const startThroughCut = async (at: Legs): Promise<void> => {
 };
 
 const spec: Spec = {
+  group: "Speed",
   name: "source-burst",
   run: async (kit: Kit) => {
     const { check } = kit;

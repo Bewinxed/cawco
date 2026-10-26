@@ -111,6 +111,7 @@ import {
   type Spec,
   type Theme,
 } from "../kit";
+import { type Phone, standInPhone } from "../phone";
 import {
   HELD,
   keyAccepted,
@@ -119,7 +120,6 @@ import {
   WAYS,
 } from "../ssh-target";
 import { exactly } from "../words";
-import { type Phone, standInPhone } from "./turn-push";
 
 const USER = "deploy";
 const PASSWORD = `pw-${crypto.randomUUID()}`;
@@ -2505,4 +2505,8 @@ async function tabsFit(
   );
 }
 
-export default { name: "connect-machine", run } satisfies Spec;
+export default {
+  group: "The hub and machines",
+  name: "connect-machine",
+  run,
+} satisfies Spec;

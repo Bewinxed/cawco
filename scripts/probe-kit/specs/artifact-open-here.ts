@@ -245,5 +245,9 @@ const run = async (kit: Kit) => {
   await top.close();
 };
 
-const spec: Spec = { name: "artifact-open-here", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "artifact-open-here",
+  run,
+};
 export default spec;

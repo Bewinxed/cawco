@@ -1180,4 +1180,8 @@ const run = async (kit: Kit) => {
   await legW(kit, fleet, session);
 };
 
-export default { name: "pane-refusal", run } satisfies Spec;
+export default {
+  group: "Previews, pages and comments",
+  name: "pane-refusal",
+  run,
+} satisfies Spec;

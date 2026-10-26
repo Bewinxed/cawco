@@ -98,6 +98,7 @@ const childReads = async (
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "keeper-unit-env",
   run: async (kit: Kit) => {
     const { check } = kit;

@@ -420,5 +420,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "canvas-parallel", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "canvas-parallel",
+  run,
+};
 export default spec;

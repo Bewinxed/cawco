@@ -23,6 +23,7 @@ import { MACHINE, until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "clone-any-host",
   async run(kit) {
     const fleet = await kit.fleet(() => ({

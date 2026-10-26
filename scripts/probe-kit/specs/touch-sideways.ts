@@ -181,6 +181,7 @@ const legs = async (
 };
 
 const spec: Spec = {
+  group: "iPhone Safari",
   name: "touch-sideways",
   run: async (kit: Kit) => {
     const fleet = await fleetUp(kit);

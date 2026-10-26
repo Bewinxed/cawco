@@ -380,6 +380,10 @@ mockup = Preview("${mock.id}", "The mock")`,
   );
 };
 
-const spec: Spec = { name: "files-reached", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "files-reached",
+  run,
+};
 
 export default spec;

@@ -1125,4 +1125,8 @@ interface HeldAsk {
   requestId: string;
 }
 
-export default { name: "upstream-guard", run } satisfies Spec;
+export default {
+  group: "Workspaces and what agents may touch",
+  name: "upstream-guard",
+  run,
+} satisfies Spec;

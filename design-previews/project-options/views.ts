@@ -1,8 +1,7 @@
 /**
  * Every option of every pick the owner makes as a frame the preview draws,
  * with the widths it shows at and one plain caption per width saying what
- * he is looking at. The proof (scripts/probe-kit/specs/project-options-preview.ts)
- * reads each at each width; capture/shots.ts captures each for the decision
+ * he is looking at. capture/shots.ts captures each for the decision
  * page (captures/, manifest.json).
  *
  * A pick is drawn only at the widths where its options differ: the desk's

@@ -144,6 +144,7 @@ const welcomeRefused = (
 type Denials = { denied: string[] } | { refused: string };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "fallback-refusals",
   async run(kit) {
     const { check } = kit;

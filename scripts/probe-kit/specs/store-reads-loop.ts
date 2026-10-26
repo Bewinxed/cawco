@@ -213,6 +213,7 @@ const holdsIn = (lines: string[]): number[] => {
 };
 
 export default {
+  group: "Speed",
   name: "store-reads-loop",
   run: async (kit: Kit) => {
     const { check } = kit;

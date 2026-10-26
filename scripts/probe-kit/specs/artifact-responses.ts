@@ -473,5 +473,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "artifact-responses", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "artifact-responses",
+  run,
+};
 export default spec;

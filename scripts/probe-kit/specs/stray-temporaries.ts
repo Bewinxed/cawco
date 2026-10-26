@@ -84,6 +84,7 @@ const temporary = (name: string, pid: number | string): string =>
   `.${name}.cawco-${pid}-0123abcd.tmp`;
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "stray-temporaries",
   ownHome:
     "it plants temporaries in the agent's own state dirs, which sweepRecords reads under HOME",

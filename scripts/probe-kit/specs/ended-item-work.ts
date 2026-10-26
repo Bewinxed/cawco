@@ -418,6 +418,7 @@ const stoppedLeg = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "ended-item-work",
   host: "its delegates' commands run in workspace boundaries",
   run: async (kit: Kit) => {

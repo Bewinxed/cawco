@@ -399,6 +399,7 @@ const readerLeg = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "scratch-outputs",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {

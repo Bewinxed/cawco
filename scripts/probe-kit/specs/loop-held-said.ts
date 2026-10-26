@@ -39,6 +39,7 @@ const hostTarget = (): string => {
 };
 
 export default {
+  group: "Speed",
   name: "loop-held-said",
   run: async (kit: Kit) => {
     const { check } = kit;

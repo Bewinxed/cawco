@@ -277,5 +277,9 @@ const leg = async (
   );
 };
 
-const spec: Spec = { name: "artifact-reopen", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "artifact-reopen",
+  run,
+};
 export default spec;

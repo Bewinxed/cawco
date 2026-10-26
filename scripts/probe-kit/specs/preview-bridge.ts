@@ -180,5 +180,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "preview-bridge", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "preview-bridge",
+  run,
+};
 export default spec;

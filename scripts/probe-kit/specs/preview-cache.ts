@@ -359,6 +359,7 @@ const probe = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Previews, pages and comments",
   name: "preview-cache",
   run: async (kit) => {
     try {

@@ -380,6 +380,7 @@ async function menuOffersUnlock(page: Page): Promise<boolean> {
 }
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "keychain-unlock",
   run: async (kit: Kit) => {
     if (platform() !== "darwin") {

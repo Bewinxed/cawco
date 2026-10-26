@@ -492,6 +492,7 @@ const folderCheck = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Speed",
   name: "sheet-weight",
   run: async (kit) => {
     await stageChecks(kit);

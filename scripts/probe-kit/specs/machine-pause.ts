@@ -825,6 +825,7 @@ const runningBuild = async (
 };
 
 export default {
+  group: "The hub and machines",
   name: "machine-pause",
   host: "its delegates cut workspaces on both machines",
   run,

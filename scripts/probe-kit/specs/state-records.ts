@@ -204,6 +204,7 @@ const noticesPhase = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "state-records",
   host: "its delegates cut workspaces",
   run: async (kit: Kit) => {

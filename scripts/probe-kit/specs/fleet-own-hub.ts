@@ -123,5 +123,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "fleet-own-hub", run };
+const spec: Spec = {
+  group: "The probe kit's own rig",
+  name: "fleet-own-hub",
+  run,
+};
 export default spec;

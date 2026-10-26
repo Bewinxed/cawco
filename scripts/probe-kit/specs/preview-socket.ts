@@ -679,6 +679,7 @@ const probe = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Previews, pages and comments",
   name: "preview-socket",
   run: async (kit) => {
     try {

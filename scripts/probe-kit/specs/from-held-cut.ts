@@ -419,6 +419,7 @@ const repairPhase = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "from-held-cut",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {

@@ -200,5 +200,9 @@ const run = async (kit: Kit) => {
   server.stop(true);
 };
 
-const spec: Spec = { name: "hub-start-orphans", run };
+const spec: Spec = {
+  group: "The hub and machines",
+  name: "hub-start-orphans",
+  run,
+};
 export default spec;

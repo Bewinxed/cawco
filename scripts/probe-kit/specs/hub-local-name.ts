@@ -781,6 +781,7 @@ const macLegs = async (
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   host: "leg 5 makes user and network namespaces (unshare), legs 1-4 and 6 announce on the machine's own interfaces, and on macOS the hubs run as launchd agents of the installed CawCo Agent.app",
   name: "hub-local-name",
   run: async (kit: Kit) => {

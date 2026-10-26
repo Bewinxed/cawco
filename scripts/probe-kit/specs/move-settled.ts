@@ -234,4 +234,8 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default { name: "move-settled", run } satisfies Spec;
+export default {
+  group: "Workspaces and what agents may touch",
+  name: "move-settled",
+  run,
+} satisfies Spec;

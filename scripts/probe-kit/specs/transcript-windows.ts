@@ -376,6 +376,7 @@ const deletedReadsAsNone = async (
 };
 
 export default {
+  group: "Speed",
   name: "transcript-windows",
   run: async (kit: Kit) => {
     const { check, note } = kit;

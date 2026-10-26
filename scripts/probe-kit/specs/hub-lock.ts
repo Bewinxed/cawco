@@ -51,6 +51,7 @@ const ports = async () => {
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "hub-lock",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));

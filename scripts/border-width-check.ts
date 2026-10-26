@@ -2,7 +2,7 @@
  * `bun scripts/border-width-check.ts` (part of `bun run check`): a border or
  * an outline is drawn at a whole CSS pixel. Chromium snaps a border's width
  * (and an outline's, "snapped as a border width") to whole device pixels: a
- * 1.5px border draws 1px on a 1× screen and on a 3× one (specs/concentric).
+ * 1.5px border draws 1px on a 1× screen and on a 3× one (the concentric probe, cut on 2026-10-26).
  * A fractional stroke is an inset ring, whose spread is never snapped
  * (`inset-ring-(length:--x) inset-ring-<colour>`, as CanvasGrip.svelte draws
  * the canvas's corner grip and DecisionNode.svelte its ring), or an SVG

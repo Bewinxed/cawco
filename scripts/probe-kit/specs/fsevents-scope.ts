@@ -421,6 +421,7 @@ const daemonLeg = async (kit: Kit, dylib: string, root: string) => {
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "fsevents-scope",
   run: async (kit: Kit) => {
     if (process.platform !== "darwin") {

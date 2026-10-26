@@ -40,13 +40,6 @@
       },
       {
         "rule": "design-system-font",
-        "value": "figtree",
-        "files": ["scripts/probe-kit/specs/tool-answers.ts"],
-        "createdAt": "2026-10-25T05:39:49.616Z",
-        "reason": "agent call: the font is a pin fixture's recorded computed style in the tool-answers probe, not UI"
-      },
-      {
-        "rule": "design-system-font",
         "value": "probe",
         "createdAt": "2026-10-25T23:50:41.348Z",
         "reason": "agent's call: canvas-cost memory leg's webfont probe names a house face file 'Probe' inside a test page string to read whether a loaded face keeps a frame; no UI uses it"

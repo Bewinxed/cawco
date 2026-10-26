@@ -8,7 +8,6 @@ switch.
 
 ```sh
 python3 -m http.server -d design-previews/project-options 8080   # any static server on this folder
-bun scripts/probe-kit/run.ts project-options-preview              # the proof (Chromium + WebKit)
 bun design-previews/project-options/capture/capture.ts            # remake parts.js, house.css, fonts/
 bun design-previews/project-options/capture/shots.ts              # remake captures/ and its manifest.json
 ```

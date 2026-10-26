@@ -619,6 +619,7 @@ const checkEngineCache = async (
 };
 
 export default {
+  group: "Workspaces and what agents may touch",
   name: "boundary-writes",
   host: "it delegates, so its fleet cuts workspaces",
   run,

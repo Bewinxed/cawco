@@ -287,4 +287,8 @@ const run = async (kit: Kit) => {
   await legD(kit, fleet, join(fleet.sandbox, "plain-large"));
 };
 
-export default { name: "place-repo-home", run } satisfies Spec;
+export default {
+  group: "Workspaces and what agents may touch",
+  name: "place-repo-home",
+  run,
+} satisfies Spec;

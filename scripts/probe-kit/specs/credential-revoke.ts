@@ -202,6 +202,7 @@ const run = async (kit: Kit): Promise<void> => {
 };
 
 export default {
+  group: "The hub and machines",
   name: "credential-revoke",
   run,
 } satisfies Spec;

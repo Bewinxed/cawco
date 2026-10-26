@@ -1657,5 +1657,9 @@ const mapChecks = async (on: On) => {
   }
 };
 
-const spec: Spec = { name: "ink", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "ink",
+  run,
+};
 export default spec;

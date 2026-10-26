@@ -393,5 +393,9 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "artifact-tab-cold", run };
+const spec: Spec = {
+  group: "Speed",
+  name: "artifact-tab-cold",
+  run,
+};
 export default spec;

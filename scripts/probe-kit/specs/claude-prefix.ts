@@ -850,6 +850,7 @@ const run = async (kit: Kit) => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "claude-prefix",
   ownHome:
     "it stands up a workspace's executor, judge and MCP gate under its own HOME, and runs the real Claude Code in its clone",

@@ -1041,6 +1041,7 @@ const endedLeg = async (
 };
 
 const spec: Spec = {
+  group: "Previews, pages and comments",
   name: "artifact-browse",
   run,
   host: "a sheet's stage runs in a stage clone's boundary, which needs namespaces no workspace can make, and the gated browser's container needs the machine's runtime",

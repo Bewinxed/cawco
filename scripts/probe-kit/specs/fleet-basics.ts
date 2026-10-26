@@ -69,6 +69,7 @@ interface AgentRow {
 }
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "fleet-basics",
   async run(kit) {
     const { check } = kit;

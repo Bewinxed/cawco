@@ -2363,5 +2363,9 @@ const run = async (kit: Kit) => {
   phone.stop();
 };
 
-const spec: Spec = { name: "artifact-needs", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "artifact-needs",
+  run,
+};
 export default spec;

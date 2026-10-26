@@ -122,4 +122,8 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default { name: "archive-once", run } satisfies Spec;
+export default {
+  group: "Release checks",
+  name: "archive-once",
+  run,
+} satisfies Spec;

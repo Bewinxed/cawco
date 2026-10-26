@@ -636,4 +636,8 @@ const run = async (kit: Kit): Promise<void> => {
   );
 };
 
-export default { name: "console-quiet", run } satisfies Spec;
+export default {
+  group: "The hub and machines",
+  name: "console-quiet",
+  run,
+} satisfies Spec;

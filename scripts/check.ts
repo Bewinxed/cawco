@@ -583,6 +583,13 @@ const gated: Gated[] = [
     "scripts/probe-kit/",
     "scripts/probe-words.baseline.json",
   ]),
+  bun("scripts/probe-waits-check.ts", [
+    ...PKG,
+    "scripts/probe-kit/",
+    "scripts/scratch-fleet.ts",
+    "scripts/probe-waits.baseline.json",
+  ]),
+  bun("scripts/probe-groups-check.ts", ["scripts/probe-kit/"]),
   bun("scripts/design-rules.ts", DASH, "--check"),
   run("packages/hub", "openapi:check", [
     ...PKG,

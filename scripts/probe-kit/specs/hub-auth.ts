@@ -250,6 +250,7 @@ const dashboardOpens = (base: string, headers: Record<string, string>) =>
   });
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "hub-auth",
   run: async (kit: Kit) => {
     const { check } = kit;

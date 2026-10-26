@@ -132,6 +132,7 @@ function noButtonFocus() {
 }
 
 const spec: Spec = {
+  group: "iPhone Safari",
   name: "webkit-caw",
   run: async (kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 10, words: ["Done."] }));

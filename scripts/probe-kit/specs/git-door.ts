@@ -116,6 +116,7 @@ const HELPER_TRACE_HEAD = /^.*Debug: Remote helper: /;
 const HOST_LOGIN = { user: "host-probe", password: "host-secret" };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "git-door",
   ownHome:
     "it serves bare repositories and opens a workspace's doors under its own HOME, and pushes to them with the host's git",

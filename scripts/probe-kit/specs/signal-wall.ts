@@ -76,6 +76,7 @@ const sent = (calls: Call[]): string =>
     : `asked ${calls.map((call) => `kill(${call.target}, ${call.sig})${call.made ? "" : " (held back)"}`).join(", ")}`;
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "signal-wall",
   async run(kit: Kit) {
     const { check } = kit;

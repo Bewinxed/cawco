@@ -504,6 +504,7 @@ const runLeg = async (
 };
 
 const spec: Spec = {
+  group: "Release checks",
   name: "release-stop",
   ownHome:
     "it clones the repository into scratch HOMEs and runs ship.sh and release.ts there, with stand-ins for gh and podman on PATH",

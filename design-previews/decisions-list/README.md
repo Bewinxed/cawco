@@ -16,6 +16,3 @@ Left to the owner (report 068af135, answer 3), not built: whether the badge
 stops counting a page that has waited past N days. Today it counts every
 page that waits.
 
-Its proof is `scripts/probe-kit/specs/web/decisions-list-preview.ts`:
-
-    bun scripts/probe-kit/run.ts web decisions-list-preview

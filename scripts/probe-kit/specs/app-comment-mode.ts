@@ -539,5 +539,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "app-comment-mode", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "app-comment-mode",
+  run,
+};
 export default spec;

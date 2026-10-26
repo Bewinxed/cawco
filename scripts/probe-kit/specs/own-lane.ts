@@ -241,6 +241,7 @@ const nodeLeg = async (kit: Kit, root: string): Promise<void> => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "own-lane",
   run: async (kit: Kit) => {
     const root = await mkdtemp(

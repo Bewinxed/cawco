@@ -682,6 +682,7 @@ async function loads(kit: Kit, fleet: KitFleet, base: string) {
 }
 
 const spec: Spec = {
+  group: "iPhone Safari",
   name: "safari-blurs",
   run: async (kit) => {
     const bench = await kit.bench();

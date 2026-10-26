@@ -841,5 +841,9 @@ const run = async (kit: Kit) => {
   bare.stop(true);
 };
 
-const spec: Spec = { name: "preview-reach", run };
+const spec: Spec = {
+  group: "Previews, pages and comments",
+  name: "preview-reach",
+  run,
+};
 export default spec;

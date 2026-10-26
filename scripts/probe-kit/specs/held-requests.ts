@@ -127,6 +127,7 @@ exec '${real}' "$@"
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "held-requests",
   run: async (kit: Kit) => {
     const { check } = kit;

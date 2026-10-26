@@ -250,6 +250,7 @@ const differing = (
 };
 
 export default {
+  group: "Speed",
   name: "transcript-pages",
   run: async (kit: Kit) => {
     const { check, note } = kit;

@@ -817,6 +817,7 @@ const depthPhase = async (
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "cut-tracked-denies",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {

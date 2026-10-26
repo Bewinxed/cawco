@@ -123,6 +123,7 @@ const transcript = (sessionId: string, cwd: string, mb: number): string => {
 };
 
 export default {
+  group: "Speed",
   name: "agent-loop",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));

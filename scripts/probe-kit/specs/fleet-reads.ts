@@ -483,6 +483,7 @@ const report = (kit: Kit, fleet: Fleet, { answers, leg, placed }: Answered) => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "fleet-reads",
   host: "a delegate per harness reads skills from inside its workspace's boundary",
   run: async (kit) => {

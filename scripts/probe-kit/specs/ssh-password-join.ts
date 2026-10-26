@@ -680,4 +680,8 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default { name: "ssh-password-join", run } satisfies Spec;
+export default {
+  group: "The hub and machines",
+  name: "ssh-password-join",
+  run,
+} satisfies Spec;

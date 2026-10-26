@@ -316,6 +316,7 @@ const concurrentReads = async (
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "keeper-custody-stall",
   ownHome: "the OpenCode server owner keeps its records under ~/.cawco",
   run: async (kit: Kit) => {

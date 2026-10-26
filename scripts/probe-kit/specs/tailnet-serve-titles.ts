@@ -183,5 +183,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "tailnet-serve-titles", run };
+const spec: Spec = {
+  group: "The hub and machines",
+  name: "tailnet-serve-titles",
+  run,
+};
 export default spec;

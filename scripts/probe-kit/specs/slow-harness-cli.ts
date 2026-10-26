@@ -204,6 +204,7 @@ const heard = (said: Bounded<string>): string => {
 };
 
 const spec: Spec = {
+  group: "The hub and machines",
   name: "slow-harness-cli",
   async run(kit) {
     const { check } = kit;

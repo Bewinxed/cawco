@@ -736,6 +736,7 @@ async function scrollFollow(kit: Kit, base: string): Promise<void> {
 }
 
 const spec: Spec = {
+  group: "Previews, pages and comments",
   name: "pin-working",
   run: async (kit: Kit) => {
     const base = await kit.bench();

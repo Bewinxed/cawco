@@ -51,6 +51,7 @@ const FREEZE_HUB_AT_MS = 8000;
 const HUB_FROZEN_MS = 4000;
 
 export default {
+  group: "The hub and machines",
   name: "late-answer",
   run: async (kit: Kit) => {
     const { check } = kit;

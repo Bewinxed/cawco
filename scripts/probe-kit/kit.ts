@@ -61,6 +61,7 @@ import {
   watchBrowser,
   watchContext,
 } from "./crash-watch";
+import type { SpecGroup } from "./groups";
 import { probeSlot } from "./slot";
 
 export const ROOT = resolve(import.meta.dir, "../..");
@@ -358,6 +359,12 @@ const networkOf = (options: PageOptions) => ({
 export interface Spec {
   /** The command that runs it alone, said with `host`; the spec's own by its name when unsaid. */
   command?: string;
+  /**
+   * The group it stands in (groups.ts): one the owner kept, never one he
+   * cut. Every module under specs/ names one (scripts/probe-groups-check.ts);
+   * a run the kit makes of something else (a journey, a preview) needs none.
+   */
+  group?: SpecGroup;
   /**
    * Why the spec runs on the host, outside every workspace, when it does:
    * it starts workspace boundaries (a delegate's, a stage's, a place's), and

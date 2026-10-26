@@ -1,12 +1,4 @@
 {
-  "scripts/probe-kit/forge-legs.ts": {
-    "` did not run": 1,
-    "more than one forge": 1,
-    "Name the repository by its URL": 1,
-    "opened the": 1,
-    "opened the issue:": 1,
-    "waits in the owner's Needs you": 1
-  },
   "scripts/probe-kit/journeys/j3-spawn.ts": {
     "in its own view": 1
   },
@@ -21,26 +13,6 @@
   },
   "scripts/probe-kit/journeys/j7-comments.ts": {
     "Comments on": 1
-  },
-  "scripts/probe-kit/specs/account-join.ts": {
-    "didn't answer": 1,
-    "There is no account": 2
-  },
-  "scripts/probe-kit/specs/account-move-asleep.ts": {
-    "[carry] started": 1,
-    "is connected again": 1,
-    "is connected again.": 1,
-    "not carried": 1
-  },
-  "scripts/probe-kit/specs/admin-ergonomics.ts": {
-    "[claude] permission asked:": 1,
-    "[full send: answered]": 2,
-    "asks the person": 1,
-    "asks to run": 1,
-    "Change MCP server": 1,
-    "needs a `reason`": 1,
-    "project only": 1,
-    "sessions in": 1
   },
   "scripts/probe-kit/specs/artifact-orphan-delete.ts": {
     "Discarded workspace": 1,
@@ -58,9 +30,6 @@
     "artifact_create takes kind, name, does (pick | judge | try | draw), ask": 1,
     "changed the": 1
   },
-  "scripts/probe-kit/specs/attach-continue.ts": {
-    ": it continues compressed:": 1
-  },
   "scripts/probe-kit/specs/binary-prune.ts": {
     "[updates] no update": 1,
     "[updates] no update policy at": 1
@@ -70,39 +39,6 @@
   },
   "scripts/probe-kit/specs/boundary-handover.ts": {
     "Start it again": 2
-  },
-  "scripts/probe-kit/specs/browser-cutover.ts": {
-    "still running": 1
-  },
-  "scripts/probe-kit/specs/browser-gate.ts": {
-    "isn't answering": 1
-  },
-  "scripts/probe-kit/specs/browser-shield.ts": {
-    "isn't answering": 1
-  },
-  "scripts/probe-kit/specs/canvas-design.ts": {
-    "does not exist": 1,
-    "does not exist in": 1,
-    "No states file": 1,
-    "Not drawn yet": 1,
-    "The canvas draws it once its session writes it.": 1
-  },
-  "scripts/probe-kit/specs/caw-edits.ts": {
-    "withdrawn while gate.md was read": 2
-  },
-  "scripts/probe-kit/specs/claude-effort.ts": {
-    "effort read failed": 1
-  },
-  "scripts/probe-kit/specs/claude-update.ts": {
-    ": lost, and": 1,
-    "came from none of the ways CawCo installs": 1,
-    "Claude Code": 3,
-    "is in the fleet": 1,
-    "No Claude account is signed in": 1,
-    "on this machine isn't one CawCo runs (": 2,
-    "this session didn't start again": 1,
-    "Update Claude Code": 2,
-    "Update it on the machine the way it was installed": 1
   },
   "scripts/probe-kit/specs/comment-delivery.ts": {
     "Caw couldn't take them": 1,
@@ -131,62 +67,11 @@
     "couldn't be read": 1,
     "Fetching the signed build": 2
   },
-  "scripts/probe-kit/specs/connections-server-address.ts": {
-    "Sign in to": 1
-  },
-  "scripts/probe-kit/specs/context-read-slow.ts": {
-    "asked again when its turn ends": 1,
-    "Export CSV": 1,
-    "may be offline": 1,
-    "Nothing recorded in this range.": 1,
-    "this session didn't report its context": 1
-  },
-  "scripts/probe-kit/specs/continued-line.ts": {
-    "from the person's messages": 1
-  },
-  "scripts/probe-kit/specs/decision-pages.ts": {
-    "Figtree Variable": 1,
-    "Open to draw": 1
-  },
   "scripts/probe-kit/specs/delegate-inputs.ts": {
     "a credential store no workspace reads": 1,
     "there's no file": 1,
     "there's no file at": 1,
     "Your parent's inputs are in $TMPDIR/inputs/:": 1
-  },
-  "scripts/probe-kit/specs/delegate-lifecycle.ts": {
-    "delegate with from: \"": 1,
-    "Handed to": 1
-  },
-  "scripts/probe-kit/specs/design-approve.ts": {
-    "approved your design proposal": 2,
-    "declined your design proposal": 3,
-    "must be fixed before your result reaches review": 1,
-    "Not finished": 1,
-    "Not finished:": 1,
-    "stays landed": 1
-  },
-  "scripts/probe-kit/specs/design-brief.ts": {
-    "## Project context": 1
-  },
-  "scripts/probe-kit/specs/design-flow.ts": {
-    "Build a design system": 4,
-    "color-scheme: light;": 1,
-    "decision page": 1,
-    "design offer declined": 1,
-    "design-system skill": 1,
-    "not DTCG 2025.10": 2
-  },
-  "scripts/probe-kit/specs/design-offers.ts": {
-    "Build the design system": 1,
-    "design-system skill": 1,
-    "the repository's styles and components": 1,
-    "This work needs a design system": 1
-  },
-  "scripts/probe-kit/specs/extra-usage-setting.ts": {
-    "its extra usage is used only when no account has plan room": 1,
-    "moves whole to": 1,
-    "says to keep going on extra usage at a plan limit": 1
   },
   "scripts/probe-kit/specs/fallback-refusals.ts": {
     "before the hub's welcome": 1,
@@ -194,11 +79,6 @@
     "could not parse": 1,
     "could not write": 1,
     "sync refused": 1
-  },
-  "scripts/probe-kit/specs/find-tool.ts": {
-    "Example: {\"query\"": 1,
-    "is deferred:": 1,
-    "query is empty": 1
   },
   "scripts/probe-kit/specs/fleet-basics.ts": {
     "could not write": 1,
@@ -208,32 +88,6 @@
     "setting up": 1,
     "sync refused": 2,
     "timed out after": 1
-  },
-  "scripts/probe-kit/specs/fleet-mcp-install.ts": {
-    "[fleet-mcp] installed": 1,
-    "[fleet-mcp] retired": 1
-  },
-  "scripts/probe-kit/specs/fleet-mcp-parity.ts": {
-    ": fleet MCP": 1,
-    "[fleet] sync from the hub": 1,
-    "a place changed": 1,
-    "applied via process restart": 2,
-    "fleet MCP pass: generation": 1,
-    "fleet MCP read again later": 1,
-    "OpenCode held it failed": 1
-  },
-  "scripts/probe-kit/specs/fleet-onboarding.ts": {
-    "[fleet] delta rev": 1,
-    "[fleet] no delta for": 1,
-    "[fleet] sync from the hub": 2,
-    "Not started:": 1,
-    "timed out after": 1
-  },
-  "scripts/probe-kit/specs/fork-ownership.ts": {
-    "Restarting session": 1
-  },
-  "scripts/probe-kit/specs/gate-row.ts": {
-    "Edit gate.md": 1
   },
   "scripts/probe-kit/specs/git-door.ts": {
     "cawco: git over ssh did not run here": 1,
@@ -267,27 +121,6 @@
     "the hub at": 1,
     "the hub says this is its own computer": 1
   },
-  "scripts/probe-kit/specs/ios-long-ask.ts": {
-    "'s sessions": 2
-  },
-  "scripts/probe-kit/specs/ios-project-offer.ts": {
-    "project offer": 1
-  },
-  "scripts/probe-kit/specs/ios-scroll-up.ts": {
-    "in place": 1
-  },
-  "scripts/probe-kit/specs/ios-seen.ts": {
-    "active on": 2,
-    "landed late": 1,
-    "landed late; dropped": 1
-  },
-  "scripts/probe-kit/specs/ios-unreadable-event.ts": {
-    "backlog for": 1
-  },
-  "scripts/probe-kit/specs/ios-web-gaps.ts": {
-    "couldn't list": 1,
-    "didn't answer": 1
-  },
   "scripts/probe-kit/specs/keeper-custody-stall.ts": {
     "[opencode] retire": 1,
     "not listed": 3,
@@ -296,63 +129,15 @@
   "scripts/probe-kit/specs/landing-cutoff.ts": {
     "Nothing to land": 2
   },
-  "scripts/probe-kit/specs/limit-admission.ts": {
-    "moves from": 1
-  },
-  "scripts/probe-kit/specs/limit-pick.ts": {
-    "[hub] send": 1,
-    "a command was running and was ended by the move": 1,
-    "at its limit until": 1,
-    "couldn't move to": 1,
-    "it moves to": 1,
-    "moves from": 1,
-    "moves to": 1,
-    "No account can take it now": 1,
-    "No other account has room": 2,
-    "Stopped at": 1,
-    "Stopped at its limit": 1,
-    "Waiting for": 1,
-    "waiting for work in flight": 1,
-    "was interrupted": 1,
-    "work in flight": 1,
-    "would re-read it cold too": 1
-  },
-  "scripts/probe-kit/specs/limit-stall.ts": {
-    "[hub] send": 1,
-    "moves to": 1,
-    "Stopped at": 2
-  },
   "scripts/probe-kit/specs/link-under-load.ts": {
     "input(s) written": 1
   },
   "scripts/probe-kit/specs/mac-wait.ts": {
     "This item changes": 1
   },
-  "scripts/probe-kit/specs/mcp-slow-start.ts": {
-    "fleet MCP read again later:": 1
-  },
-  "scripts/probe-kit/specs/memory-facts.ts": {
-    ", replaced by": 2,
-    "(before facts)": 2,
-    "(not yet fact lines)": 1,
-    "[jev off]": 1,
-    "## Project context": 2,
-    "## The inbox": 2,
-    "## What the files ask": 1,
-    "fall under two descriptions": 1,
-    "Jev is off": 1,
-    "Jev is off: sort each note against its lines yourself.": 1,
-    "only splits": 1
-  },
   "scripts/probe-kit/specs/move-settled.ts": {
     ", and none was. Choose one, then start it again. Nothing was started.": 1,
     "git init": 1
-  },
-  "scripts/probe-kit/specs/native-compact.ts": {
-    "Open items": 1,
-    "process ended before it took its": 1,
-    "was interrupted": 2,
-    "What was sent to it meanwhile goes now": 2
   },
   "scripts/probe-kit/specs/own-lane.ts": {
     "earlier commit": 1,
@@ -360,21 +145,6 @@
   },
   "scripts/probe-kit/specs/place-repo-home.ts": {
     "Workspace create on": 1
-  },
-  "scripts/probe-kit/specs/plan-changes-host.ts": {
-    "your delegate": 1
-  },
-  "scripts/probe-kit/specs/plan-changes.ts": {
-    "cannot go on": 1,
-    "Open items": 1
-  },
-  "scripts/probe-kit/specs/presence.ts": {
-    ": held at the desk, not sent": 1,
-    ": shown on tab": 1,
-    "[CawCo presence]": 1,
-    "did not answer its desk alert": 2,
-    "no narration": 1,
-    "no tab at the desk can show it, so it goes to the phone": 1
   },
   "scripts/probe-kit/specs/preview-burst.ts": {
     "<meta name=\"": 1
@@ -392,23 +162,10 @@
   "scripts/probe-kit/specs/project-origin.ts": {
     "What this card showed is gone.": 1
   },
-  "scripts/probe-kit/specs/relay-journey.ts": {
-    "Proven from outside by": 1,
-    "Works from here": 1
-  },
-  "scripts/probe-kit/specs/resend-once.ts": {
-    "Added to AGENTS.md": 1
-  },
-  "scripts/probe-kit/specs/restart-rules.ts": {
-    "[full send: answered]": 2
-  },
   "scripts/probe-kit/specs/room-held.ts": {
     ": start waits:": 2,
     "did not start within": 1,
     "stopped while it waited for its machine's memory": 2
-  },
-  "scripts/probe-kit/specs/send-once.ts": {
-    "handed over again, taken already: no turn": 1
   },
   "scripts/probe-kit/specs/session-sheet.ts": {
     "code other stories may share": 1,
@@ -416,16 +173,6 @@
     "is outside": 1,
     "is the hub's to send": 1,
     "sheet stage": 1
-  },
-  "scripts/probe-kit/specs/setup-on-ask.ts": {
-    "decision page named": 1,
-    "in thread": 1
-  },
-  "scripts/probe-kit/specs/skill-updates.ts": {
-    ": the fleet's copy changed": 1,
-    "[fleet] delta rev": 1,
-    "[fleet] no delta for": 1,
-    "an overwrite of skill": 1
   },
   "scripts/probe-kit/specs/source-burst.ts": {
     "launch credential installed": 1,
@@ -460,14 +207,6 @@
   "scripts/probe-kit/specs/tailnet-https.ts": {
     "Run it once in a terminal on": 1
   },
-  "scripts/probe-kit/specs/template-types.ts": {
-    "No delegate type": 1
-  },
-  "scripts/probe-kit/specs/tracker-sync.ts": {
-    "GitHub Issues": 1,
-    "PRIVATE KEY": 1,
-    "Sync now": 1
-  },
   "scripts/probe-kit/specs/two-pane-perf.ts": {
     "the frame": 4
   },
@@ -489,68 +228,18 @@
     "The owner denied": 1,
     "this machine's git sign-in": 1
   },
-  "scripts/probe-kit/specs/usage-accounts.ts": {
-    "At its limit": 2,
-    "Hasn’t reported": 1,
-    "Moved to": 1
-  },
-  "scripts/probe-kit/specs/web/caw-guided.ts": {
-    "Caw · could not start": 1,
-    "Message Caw…": 1,
-    "What’s next for": 2
-  },
   "scripts/probe-kit/specs/web/hub-states.ts": {
     "Searching the hub…": 1,
     "The hub didn't answer (502).": 2
   },
-  "scripts/probe-kit/specs/web/layer-stack.ts": {
-    "Open session": 1
-  },
   "scripts/probe-kit/specs/web/machine-away.ts": {
     "Fetched. The machines": 1
-  },
-  "scripts/probe-kit/specs/web/project-details.ts": {
-    "can't be removed": 1,
-    "From the folder's remote": 1,
-    "Let him finish": 1,
-    "no longer recorded": 2,
-    "Pull request": 2
   },
   "scripts/probe-kit/specs/web/safari-blurs.ts": {
     "How long is the trial?": 1
   },
-  "scripts/probe-kit/specs/web/session-mention.ts": {
-    "[cawco] naming": 1,
-    "Report from": 2
-  },
   "scripts/probe-kit/specs/web/ssr-hub-reads.ts": {
     "[cawco] reading artifact": 1
-  },
-  "scripts/probe-kit/specs/web/stream-relay-step.ts": {
-    "(DNS only, no proxy)": 1
-  },
-  "scripts/probe-kit/specs/web/strip-new-session.ts": {
-    "A permission mode must be chosen": 3,
-    "Nothing was started": 2
-  },
-  "scripts/probe-kit/specs/web/tabs-region-errors.ts": {
-    "[object Error]": 1
-  },
-  "scripts/probe-kit/specs/web/thinking-traffic.ts": {
-    "0px 0px 0px 0px": 1
-  },
-  "scripts/probe-kit/specs/web/work-outlives.ts": {
-    "Caw is off": 2,
-    "Delete hook": 1,
-    "did not run": 1,
-    "didn't allow": 1,
-    "It stays a draft": 1,
-    "stays as it was": 1,
-    "The turn was not stopped:": 1,
-    "was not kept": 1,
-    "was not shown": 1,
-    "wasn't removed": 1,
-    "were not read": 1
   },
   "scripts/probe-kit/specs/workspace-excluded.ts": {
     "nothing was deleted": 2

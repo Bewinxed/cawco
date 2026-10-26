@@ -632,6 +632,7 @@ const run = async (kit: Kit) => {
 };
 
 export default {
+  group: "Workspaces and what agents may touch",
   name: "landing-recut",
   host: "it delegates, so its fleet cuts workspaces",
   run,

@@ -610,6 +610,7 @@ const run = async (kit: Kit) => {
 };
 
 export default {
+  group: "Workspaces and what agents may touch",
   name: "user-bun",
   host: "it delegates and starts stages, so its fleet cuts workspaces",
   run,
