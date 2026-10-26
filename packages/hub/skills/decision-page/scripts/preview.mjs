@@ -10,26 +10,19 @@
 // scratch folder) and a Chromium; set CHROMIUM to its binary if Playwright
 // cannot find one.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { kit, mockup, playwright } from "./mockup.mjs";
 
-const kit = join(dirname(fileURLToPath(import.meta.url)), "..", "kit");
 const [workArg, name] = process.argv.slice(2);
 const reduced = process.argv.includes("--reduced");
 if (!(workArg && name)) {
   console.error("usage: preview.mjs <work-dir> <mockup-id> [--reduced]");
   process.exit(1);
 }
-const { chromium } = createRequire(join(process.cwd(), "/"))("playwright-core");
+const { chromium } = playwright();
 const work = resolve(workArg);
-const css =
-  readFileSync(join(kit, "tokens.css"), "utf8") +
-  readFileSync(join(kit, "page.css"), "utf8");
-const body = readFileSync(
-  join(work, "mockups", `${name}.html`),
-  "utf8"
-).replaceAll('src="caw/', `src="${pathToFileURL(join(kit, "caw"))}/`);
+const { css, body } = mockup(work, name);
 const declared = Number(body.match(/\bdata-mk-width="(\d+)"/u)?.[1] ?? 0);
 const live =
   "<script>document.querySelectorAll('.mk').forEach(function(el){el.classList.add('is-live');el.dispatchEvent(new CustomEvent('mk:live'));});</script>";

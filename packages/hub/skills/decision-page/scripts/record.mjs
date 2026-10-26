@@ -3,12 +3,11 @@
 // Writes <work-dir>/out/<mockup>-<light|dark>.webm: the mockup centred on the
 // page background at the given size, playing its loop from the start.
 // Needs playwright-core where you run it and a Chromium (CHROMIUM=<binary>).
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { mockup, playwright } from "./mockup.mjs";
 
-const kit = join(dirname(fileURLToPath(import.meta.url)), "..", "kit");
 const args = process.argv.slice(2);
 const [workArg, name] = args;
 const flag = (key, fallback) => {
@@ -21,19 +20,13 @@ if (!(workArg && name)) {
   );
   process.exit(1);
 }
-const { chromium } = createRequire(join(process.cwd(), "/"))("playwright-core");
+const { chromium } = playwright();
 const work = resolve(workArg);
 const dark = args.includes("--dark");
 const seconds = Number(flag("--seconds", "12"));
 const [width, height] = flag("--size", "1080x1080").split("x").map(Number);
 const scale = Number(flag("--scale", "2"));
-const css =
-  readFileSync(join(kit, "tokens.css"), "utf8") +
-  readFileSync(join(kit, "page.css"), "utf8");
-const body = readFileSync(
-  join(work, "mockups", `${name}.html`),
-  "utf8"
-).replaceAll('src="caw/', `src="${pathToFileURL(join(kit, "caw"))}/`);
+const { css, body } = mockup(work, name);
 const harness = join(work, `_record-${name}.html`);
 writeFileSync(
   harness,
