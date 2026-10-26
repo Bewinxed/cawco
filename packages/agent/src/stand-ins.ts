@@ -18,7 +18,9 @@
  * - When the workspace closes, each stand-in still exactly as it was made goes
  *   once no mount namespace holds it ({@link removeStandIns}).
  * - The clone's `info/exclude` lists each stand-in that is CawCo's, and only
- *   those ({@link listStandIns}).
+ *   those ({@link listStandIns}), from CawCo's own record of them, and
+ *   lists them again whenever another writer drops the block while the
+ *   boundary runs ({@link keepStandInsListed}).
  *
  * A path git tracks is the project's own and is never touched.
  *
@@ -31,10 +33,11 @@
  * workspace's archive takes it away whole; anything else in such a folder
  * is saved to a carry first, or keeps it ({@link straysIn}).
  */
-import type { Stats } from "node:fs";
+import { type Stats, watch } from "node:fs";
 import {
   chmod,
   lstat,
+  mkdir,
   readdir,
   readFile,
   realpath,
@@ -42,14 +45,20 @@ import {
   rmdir,
   writeFile,
 } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
 import { isGitDir } from "@cawco/core/git-dir";
 import { mountedAnywhere } from "@cawco/core/mount-table";
-import { projectClaudeDir } from "@cawco/core/paths";
+import { projectClaudeDir, workspaceStateDir } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
-import { excludedStandIns, excludeStandIns, gitIn } from "./checkout-exclude";
+import {
+  excludedStandIns,
+  excludeStandIns,
+  gitIn,
+  infoExcludeOf,
+} from "./checkout-exclude";
 
 /**
  * A mount point a sandbox left on the host, as the host tests it
@@ -164,17 +173,61 @@ const asMade = async ({ path, empty, found }: Found): Promise<boolean> => {
 };
 
 /**
+ * The stand-ins CawCo last listed for workspace `id`, relative to its clone:
+ * the record in its state dir, which nothing inside the boundary writes and
+ * no other tool knows of. It, never the clone's `info/exclude`, says what is
+ * listed: any tool rewrites that file (Impeccable's hook writes it whole,
+ * read then written in place, `crates/hook/src/hook_lib.rs`
+ * `ensure_hook_git_excludes`).
+ */
+const listedFileOf = (id: string): string =>
+  join(workspaceStateDir(id), "stand-ins.json");
+
+/**
+ * What {@link listedFileOf} holds; for a workspace listed before the record
+ * was kept, CawCo's block in its `info/exclude` as it stands, read this once.
+ */
+const listedOf = async (id: string, clone: string): Promise<string[]> => {
+  const text = await readFile(listedFileOf(id), "utf8").catch(() => undefined);
+  return text === undefined
+    ? await excludedStandIns(clone)
+    : (JSON.parse(text) as string[]);
+};
+
+/** Each workspace's listing under way ({@link listStandIns}), by its id: one at a time. */
+const listings = new Map<string, Promise<void>>();
+
+/**
  * Lists the stand-ins in the clone that are CawCo's, each by its own anchored
  * line in CawCo's block of the clone's `info/exclude` (`excludeStandIns`), so
  * git never sees them, and a user's own untracked `.vscode` or `.mcp.json`
  * is never hidden. A deny path at the clone's root that git does not track is
  * CawCo's when it is missing and `willStandIn` (the boundary's host makes it
  * before the sandbox starts: Linux), a mount point a sandbox left, already
- * listed (a harness may have written it since), or its stand-in as made
- * ({@link asMade}); else it is someone else's. The clone's
- * `.git` dir is no part of its status.
+ * listed (a harness may have written it since: {@link listedOf}), or its
+ * stand-in as made ({@link asMade}); else it is someone else's. The clone's
+ * `.git` dir is no part of its status. One listing of a workspace runs at a
+ * time, each after the one before.
  */
-export const listStandIns = async (
+export const listStandIns = (
+  ref: WorkspaceRef,
+  willStandIn: boolean
+): Promise<void> => {
+  const next = (listings.get(ref.id) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => listNow(ref, willStandIn));
+  listings.set(ref.id, next);
+  next
+    .finally(() => {
+      if (listings.get(ref.id) === next) {
+        listings.delete(ref.id);
+      }
+    })
+    .catch(() => undefined);
+  return next;
+};
+
+const listNow = async (
   ref: WorkspaceRef,
   willStandIn: boolean
 ): Promise<void> => {
@@ -184,7 +237,8 @@ export const listStandIns = async (
   if (!(await statOf(join(clone, ".git")))) {
     return;
   }
-  const listed = new Set(await excludedStandIns(clone));
+  const before = await listedOf(ref.id, clone);
+  const listed = new Set(before);
   const own: string[] = [];
   for (const one of entries) {
     const name = relative(clone, one.path);
@@ -201,7 +255,59 @@ export const listStandIns = async (
       own.push(name);
     }
   }
+  const record = JSON.stringify(own);
+  if (record !== JSON.stringify(before)) {
+    await writeStateFile(listedFileOf(ref.id), record);
+  }
   await excludeStandIns(clone, own);
+};
+
+/** How long after the last change to a clone's `info/exclude` its stand-ins are listed again ({@link keepStandInsListed}): past a writer's own truncate and write. */
+const EXCLUDE_SETTLE_MS = 200;
+
+/**
+ * Keeps CawCo's block in the `info/exclude` of workspace `ref`'s clone for as
+ * long as its boundary runs: every change to that file (a tool in the
+ * session rewriting it, an agent's own edit) lists its stand-ins again once
+ * the change settles, from CawCo's own record ({@link listedOf}). The block
+ * written back changes the file once more, and that listing finds nothing to
+ * write. Answers what stops it.
+ */
+export const keepStandInsListed = async (
+  ref: WorkspaceRef
+): Promise<() => void> => {
+  const exclude = await infoExcludeOf(ref.path);
+  if (!exclude) {
+    return () => undefined;
+  }
+  const dir = dirname(exclude);
+  await mkdir(dir, { recursive: true });
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  const relist = (): void => {
+    clearTimeout(settle);
+    settle = setTimeout(() => {
+      listStandIns(ref, false).catch((error: unknown) => {
+        console.warn(
+          `[workspace] ${ref.id}: its clone's stand-ins could not be listed again in its info/exclude: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    }, EXCLUDE_SETTLE_MS);
+    settle.unref();
+  };
+  const watcher = watch(dir, (_event, name) => {
+    if (name === null || name === basename(exclude)) {
+      relist();
+    }
+  }).on("error", (error) => {
+    console.warn(
+      `[workspace] ${ref.id}: ${dir} could not be watched for its stand-ins: ${error.message}`
+    );
+  });
+  relist();
+  return () => {
+    clearTimeout(settle);
+    watcher.close();
+  };
 };
 
 /**

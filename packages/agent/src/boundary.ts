@@ -245,6 +245,7 @@ import { endSandbox } from "./sandbox-end";
 import type { SessiondClient } from "./sessiond-client";
 import {
   hasLeftDirs,
+  keepStandInsListed,
   listStandIns,
   removeStandIns,
   rewriteLeftFiles,
@@ -925,6 +926,7 @@ const watchHost = async (
   const { client } = proc;
   watchedHosts.set(procId, client);
   watchCloneOf(id, held);
+  keepListed(id, held);
   let stop = (): void => undefined;
   stop = client.subscribe(
     procId,
@@ -955,6 +957,8 @@ const watchHost = async (
         }
         stop();
         unwatchCloneOf(procId);
+        standInWatches.get(procId)?.();
+        standInWatches.delete(procId);
         client.release(procId, pid);
         // A macOS boundary the agent stopped as its folder went exits as the
         // host's gone exit does ({@link watchCloneOf}).
@@ -977,6 +981,41 @@ const watchHost = async (
     },
     afterSeq
   );
+};
+
+/** Each boundary's watch of its clone's `info/exclude` ({@link keepListed}), by its proc id: what ends it. */
+const standInWatches = new Map<string, () => void>();
+
+/**
+ * Keeps CawCo's stand-ins listed in the `info/exclude` of a workspace's own
+ * clone for as long as boundary `held` runs (stand-ins.ts
+ * `keepStandInsListed`), whatever else writes that file; a place, or a
+ * folder a Linux view overlays, has none listed.
+ */
+const keepListed = (id: string, held: Pick<Held, "gen" | "path">): void => {
+  const procId = boundaryProcId(id, held.gen);
+  if (
+    standInWatches.has(procId) ||
+    isPlace(id) ||
+    !ownFolderSync(id, held.path)
+  ) {
+    return;
+  }
+  standInWatches.set(procId, () => undefined);
+  keepStandInsListed({ id, path: held.path })
+    .then((end) => {
+      if (standInWatches.has(procId)) {
+        standInWatches.set(procId, end);
+      } else {
+        end();
+      }
+    })
+    .catch((error: unknown) => {
+      standInWatches.delete(procId);
+      console.warn(
+        `[workspace] ${id}: its clone's info/exclude could not be watched for its stand-ins: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
 };
 
 /** Each macOS boundary's watch of the folder it holds ({@link watchCloneOf}), by its proc id: what ends it. */
