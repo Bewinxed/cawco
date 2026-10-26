@@ -4,56 +4,8 @@
  * lets the hub say so instead of the user finding out through a protocol error.
  */
 
-import { resolve } from "node:path";
 import type { BuildInfo } from "@cawco/core";
-import {
-  protocolRange,
-  runtimeCommit,
-  runtimeVersion,
-  standalone,
-} from "@cawco/core/runtime";
-import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
-import { hostEnvironment } from "@cawco/core/session-env";
-
-/** The checkout this daemon runs out of — up from `packages/agent/src`. */
-const REPO_ROOT = resolve(
-  Bun.fileURLToPath(new URL("../../..", import.meta.url))
-);
-
-/** When this process started, which is what "the build a machine is on" means. */
-const STARTED_AT = Date.now();
-
-/** What git said, or nothing: a checkout that is not a git one is not a failure. */
-const git = async (args: string[]): Promise<string | undefined> => {
-  const ran = await Bun.$`git ${SAFE_GIT_FLAGS} -C ${REPO_ROOT} ${args}`
-    .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
-    .quiet()
-    .nothrow();
-  return ran.exitCode === 0 ? ran.stdout.toString().trim() : undefined;
-};
-
-const read = async (): Promise<BuildInfo> => {
-  if (standalone) {
-    return {
-      version: runtimeVersion,
-      commit: runtimeCommit,
-      protocol: protocolRange,
-      dirty: false,
-      startedAt: STARTED_AT,
-    };
-  }
-  const manifest = (await Bun.file(
-    Bun.fileURLToPath(new URL("../package.json", import.meta.url))
-  ).json()) as { version: string };
-  const commit = await git(["rev-parse", "--short", "HEAD"]);
-  const status = commit ? await git(["status", "--porcelain"]) : undefined;
-  return {
-    version: manifest.version,
-    ...(commit ? { commit, dirty: Boolean(status) } : {}),
-    protocol: protocolRange,
-    startedAt: STARTED_AT,
-  };
-};
+import { readBuildInfo } from "@cawco/core/build-info";
 
 let reported: Promise<BuildInfo> | undefined;
 
@@ -62,6 +14,11 @@ let reported: Promise<BuildInfo> | undefined;
  * checkout under it moves on. Learning that it moved is what an update is for.
  */
 export const buildInfo = (): Promise<BuildInfo> => {
-  reported ??= read();
+  reported ??= readBuildInfo(async () => {
+    const manifest = (await Bun.file(
+      Bun.fileURLToPath(new URL("../package.json", import.meta.url))
+    ).json()) as { version: string };
+    return manifest.version;
+  });
   return reported;
 };

@@ -1,8 +1,8 @@
 import "@cawco/core/no-huge-pages";
+import { readBuildInfo } from "@cawco/core/build-info";
 import { DatabaseHeld, lockDatabase } from "@cawco/core/db-lock";
 import { detach } from "@cawco/core/detach";
 import { Effect, Layer } from "effect";
-import { buildInfo } from "./build";
 import {
   BIND_HOST,
   DB_PATH,
@@ -31,7 +31,10 @@ const main = Effect.gen(function* () {
   // its route waits on, lifts the timer for its request (binary-updates.ts).
   // Before `listen`: every dashboard's first frame names this commit (see
   // `HubServices.build`), and two git calls are not worth a socket without it.
-  const build = yield* Effect.promise(buildInfo);
+  // Read once, at boot: a running hub is whatever it started as.
+  const build = yield* Effect.promise(() =>
+    readBuildInfo(async () => HUB_VERSION)
+  );
   const server = createServer({
     build,
     registry,
