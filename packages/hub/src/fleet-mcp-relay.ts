@@ -1,5 +1,9 @@
 import { readWithin } from "@cawco/core/bounded";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/hop-headers";
+import {
+  type JsonRpcMessage,
+  JsonRpcMessageSchema,
+} from "@cawco/core/json-rpc";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -105,15 +109,6 @@ export interface KeptSessions {
   touch: (id: string) => void;
 }
 
-const MessageSchema = z.object({
-  error: z.unknown().optional(),
-  id: z.union([z.number(), z.string()]).nullable().optional(),
-  method: z.string().optional(),
-  params: z.record(z.string(), z.unknown()).optional(),
-  result: z.record(z.string(), z.unknown()).optional(),
-});
-type Message = z.infer<typeof MessageSchema>;
-
 /** The upstream's own answer to a request the hub made for every session: relayed to whoever asked. */
 class Refused extends Error {
   readonly status: number;
@@ -198,7 +193,7 @@ const encoder = new TextEncoder();
 const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 
 /** A response with its body read whole, so it can be read again later. */
-const whole = async (response: Response): Promise<Response> =>
+export const wholeResponse = async (response: Response): Promise<Response> =>
   new Response(
     NULL_BODY.has(response.status) ? null : await response.arrayBuffer(),
     {
@@ -225,10 +220,10 @@ const namedWait = (headers: Headers): number | undefined => {
   return Number.isFinite(reset) && reset >= 0 ? reset * 1000 : undefined;
 };
 
-const parse = (text: string): Message | Message[] | undefined => {
+const parse = (text: string): JsonRpcMessage | JsonRpcMessage[] | undefined => {
   try {
     return z
-      .union([MessageSchema, z.array(MessageSchema)])
+      .union([JsonRpcMessageSchema, z.array(JsonRpcMessageSchema)])
       .parse(JSON.parse(text));
   } catch {
     return undefined;
@@ -248,7 +243,7 @@ const refused = async (response: Response) =>
 /** The `initialize` result of an answer, or the upstream's refusal of it. */
 const initialized = async (
   response: Response,
-  reply: Message | undefined
+  reply: JsonRpcMessage | undefined
 ): Promise<Record<string, unknown>> => {
   if (!response.ok) {
     throw await refused(response);
@@ -262,7 +257,7 @@ const initialized = async (
 };
 
 const rpcAnswer = (
-  id: Message["id"],
+  id: JsonRpcMessage["id"],
   answer: { result: unknown } | { error: unknown },
   headers?: Record<string, string>
 ) => Response.json({ jsonrpc: "2.0", id, ...answer }, { status: 200, headers });
@@ -384,7 +379,7 @@ export class FleetMcpRelay {
             capabilities: {},
             clientInfo: { name: "CawCo fleet", version: "1" },
           },
-        } as Message
+        }
       );
       const result = await initialized(response, reply);
       const session = response.headers.get("Mcp-Session-Id");
@@ -397,7 +392,7 @@ export class FleetMcpRelay {
         state,
         upstream,
         { session, protocol },
-        { jsonrpc: "2.0", method: "notifications/initialized" } as Message
+        { jsonrpc: "2.0", method: "notifications/initialized" }
       );
       await told.response.body?.cancel();
       const lister = { session, protocol, result };
@@ -476,7 +471,7 @@ export class FleetMcpRelay {
           id: this.#nextId(),
           method,
           params: cursor === undefined ? {} : { cursor },
-        } as Message
+        }
       );
       if (response.status === 404 && lister.session && !again) {
         await response.body?.cancel();
@@ -536,7 +531,7 @@ export class FleetMcpRelay {
             capabilities: {},
             clientInfo: { name: "CawCo fleet", version: "1" },
           },
-        } as Message
+        }
       );
       const result = await initialized(response, reply);
       const session = response.headers.get("Mcp-Session-Id");
@@ -551,7 +546,7 @@ export class FleetMcpRelay {
               ? result.protocolVersion
               : undefined,
         },
-        { jsonrpc: "2.0", method: "notifications/initialized" } as Message
+        { jsonrpc: "2.0", method: "notifications/initialized" }
       );
       await told.response.body?.cancel();
       return session;
@@ -633,7 +628,7 @@ export class FleetMcpRelay {
     name: string,
     state: ServerState,
     upstream: Upstream,
-    single: Message
+    single: JsonRpcMessage
   ): Promise<Response> {
     let lister: Lister;
     try {
@@ -675,7 +670,7 @@ export class FleetMcpRelay {
     state: ServerState,
     upstream: Upstream,
     downstream: Downstream,
-    single: Message
+    single: JsonRpcMessage
   ): Promise<Response | undefined> {
     const { method, id } = single;
     if (method && id === undefined) {
@@ -704,7 +699,7 @@ export class FleetMcpRelay {
     state: ServerState,
     upstream: Upstream,
     method: string,
-    id: Message["id"]
+    id: JsonRpcMessage["id"]
   ): Promise<Response> {
     let listed: Listed;
     try {
@@ -913,8 +908,8 @@ async function upstreamRpc(
   state: ServerState,
   upstream: Upstream,
   lister: { session: string | null; protocol?: string },
-  message: Message
-): Promise<{ response: Response; reply?: Message }> {
+  message: JsonRpcMessage
+): Promise<{ response: Response; reply?: JsonRpcMessage }> {
   const headers = new Headers({
     Accept: "application/json, text/event-stream",
     "Content-Type": "application/json",
@@ -937,7 +932,7 @@ async function upstreamRpc(
       }
       if (!response.ok) {
         // Its refusal is read later (`refused`): read whole now, inside the time.
-        return { response: await whole(response) };
+        return { response: await wholeResponse(response) };
       }
       if (!(
         response.headers.get("Content-Type")?.includes("text/event-stream") &&
@@ -1004,14 +999,14 @@ async function replyOn(
   name: string,
   state: ServerState,
   body: ReadableStream<Uint8Array>,
-  id: Message["id"]
-): Promise<Message | undefined> {
+  id: JsonRpcMessage["id"]
+): Promise<JsonRpcMessage | undefined> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let data: string[] = [];
   /** One event's data, ended by its blank line. */
-  const event = (line: string): Message | undefined => {
+  const event = (line: string): JsonRpcMessage | undefined => {
     if (line.startsWith("data:")) {
       data.push(line.slice(5).trimStart());
       return;
@@ -1120,7 +1115,7 @@ function listChanged(name: string, state: ServerState, method: string): void {
 }
 
 /** The upstream's own refusal of a request made for every session, or its silence, answered to this one. */
-function refusalFor(error: unknown, id: Message["id"]): Response {
+function refusalFor(error: unknown, id: JsonRpcMessage["id"]): Response {
   if (error instanceof NoAnswer) {
     return new Response(error.message, { status: 504 });
   }

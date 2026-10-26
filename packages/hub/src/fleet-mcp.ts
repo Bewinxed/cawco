@@ -21,7 +21,7 @@ import { OAuthError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { DbShape } from "./db";
-import { type Exchange, FleetMcpRelay } from "./fleet-mcp-relay";
+import { type Exchange, FleetMcpRelay, wholeResponse } from "./fleet-mcp-relay";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
@@ -226,9 +226,6 @@ const bearerWords = (response: Response): string => {
   );
 };
 
-/** Statuses whose Response carries no body (Fetch: "null body status"). */
-const NULL_BODY = new Set([101, 103, 204, 205, 304]);
-
 /**
  * A fetch whose failure to get the server's own answer is told apart from what
  * that answer said. A 5xx is no answer either: it is what an edge or a proxy in
@@ -273,20 +270,9 @@ const reachWithin = async (
   }
 };
 
-/** A response with its whole body read, inside the deadline that read it. */
-const readWhole = async (response: Response): Promise<Response> =>
-  new Response(
-    NULL_BODY.has(response.status) ? null : await response.arrayBuffer(),
-    {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    }
-  );
-
 /** {@link reachWithin} with the whole body read: the SDK's discovery fetches. */
 const reach = (input: string | URL, init?: RequestInit): Promise<Response> =>
-  reachWithin(input, init, readWhole);
+  reachWithin(input, init, wholeResponse);
 
 /**
  * {@link reach} for the token endpoint: its own long deadline
@@ -305,7 +291,7 @@ const reachToken =
           throw new Unreachable(`HTTP ${response.status}.`);
         }
         heard(response.status);
-        return await readWhole(response);
+        return await wholeResponse(response);
       },
       TOKEN_DEADLINE_MS
     );

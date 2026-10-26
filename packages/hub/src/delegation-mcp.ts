@@ -157,6 +157,41 @@ const listedFor =
   });
 
 /**
+ * `response` with its `body` relayed as it is read, `ended` run once it
+ * ends, fails or is cancelled.
+ */
+const endingWith = (
+  response: Response,
+  body: ReadableStream<Uint8Array>,
+  ended: () => Promise<void>
+): Response => {
+  const reader = body.getReader();
+  return new Response(
+    new ReadableStream({
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            await ended();
+          } else {
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          controller.error(error);
+          await ended();
+        }
+      },
+      async cancel(reason) {
+        await reader.cancel(reason);
+        await ended();
+      },
+    }),
+    { status: response.status, headers: response.headers }
+  );
+};
+
+/**
  * Tools that act on the caller's project: a session in none is never listed
  * them, as a leaf is never listed the spawning tools. `todo_write` stays: its
  * plan scope is the session's own.
@@ -1264,30 +1299,7 @@ export function createDelegationMcp(options: {
         await server.close();
       }
     };
-    const reader = response.body.getReader();
-    return new Response(
-      new ReadableStream({
-        async pull(controller) {
-          try {
-            const { done, value } = await reader.read();
-            if (done) {
-              controller.close();
-              await ended();
-            } else {
-              controller.enqueue(value);
-            }
-          } catch (error) {
-            controller.error(error);
-            await ended();
-          }
-        },
-        async cancel(reason) {
-          await reader.cancel(reason);
-          await ended();
-        },
-      }),
-      { status: response.status, headers: response.headers }
-    );
+    return endingWith(response, response.body, ended);
   };
 
   const handle = async (
@@ -1319,30 +1331,7 @@ export function createDelegationMcp(options: {
       await server.close();
       return response;
     }
-    const reader = response.body.getReader();
-    return new Response(
-      new ReadableStream({
-        async pull(controller) {
-          try {
-            const { done, value } = await reader.read();
-            if (done) {
-              controller.close();
-              await server.close();
-            } else {
-              controller.enqueue(value);
-            }
-          } catch (error) {
-            controller.error(error);
-            await server.close();
-          }
-        },
-        async cancel(reason) {
-          await reader.cancel(reason);
-          await server.close();
-        },
-      }),
-      { status: response.status, headers: response.headers }
-    );
+    return endingWith(response, response.body, () => server.close());
   };
   /** What a session is listed, for the REST door (`cawco tools`); without one, the superset. */
   /** `own`: the session's own harness listing it (pi's host), remembered like a `tools/list`. */

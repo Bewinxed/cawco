@@ -76,6 +76,7 @@
  * needs, and runs outside the boundary its sessions' own processes run in.
  * It ends with the gate's last session ({@link McpHost.leaveGate}).
  */
+
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -83,6 +84,10 @@ import { join } from "node:path";
 import type { FleetMcpConfig } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
+import {
+  type JsonRpcMessage,
+  JsonRpcMessageSchema,
+} from "@cawco/core/json-rpc";
 import {
   cawcoDataDir,
   sessionIdentityDir,
@@ -163,16 +168,6 @@ const INVALID_REQUEST = -32_600;
 const METHOD_NOT_FOUND = -32_601;
 /** An implementation error of the host's own: the server could not answer. */
 const SERVER_ERROR = -32_000;
-
-const MessageSchema = z.object({
-  error: z.unknown().optional(),
-  id: z.union([z.number(), z.string()]).nullable().optional(),
-  jsonrpc: z.string().optional(),
-  method: z.string().optional(),
-  params: z.record(z.string(), z.unknown()).optional(),
-  result: z.record(z.string(), z.unknown()).optional(),
-});
-type Message = z.infer<typeof MessageSchema>;
 
 /** What a server said the last time it ran, kept for its config. */
 const KeptSchema = z.object({
@@ -261,10 +256,14 @@ export const mcpGateOf = (gateId: string): McpGate => ({
 });
 
 const rpcError = (
-  id: Message["id"],
+  id: JsonRpcMessage["id"],
   code: number,
   message: string
-): Message => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
+): JsonRpcMessage => ({
+  jsonrpc: "2.0",
+  id: id ?? null,
+  error: { code, message },
+});
 
 /** The pids and starts of the processes this host started, for the next agent to end any left. */
 const started = new Map<number, string>();
@@ -282,7 +281,10 @@ class Child {
   readonly #proc: Bun.Subprocess<"pipe", "pipe", "pipe">;
   readonly #pending = new Map<
     number,
-    { resolve: (message: Message) => void; reject: (error: Error) => void }
+    {
+      resolve: (message: JsonRpcMessage) => void;
+      reject: (error: Error) => void;
+    }
   >();
   readonly #stderr: string[] = [];
   readonly #changed: (method: string) => void;
@@ -339,9 +341,9 @@ class Child {
 
   /** One message from the server: an answer to the host, a notification, or a request of its own. */
   #take(text: string): void {
-    let message: Message;
+    let message: JsonRpcMessage;
     try {
-      message = MessageSchema.parse(JSON.parse(text));
+      message = JsonRpcMessageSchema.parse(JSON.parse(text));
     } catch {
       // Not JSON-RPC: a server's stray stdout line is no message.
       return;
@@ -376,7 +378,7 @@ class Child {
     );
   }
 
-  #send(message: Message): void {
+  #send(message: JsonRpcMessage): void {
     this.#proc.stdin.write(`${JSON.stringify(message)}\n`);
     this.#proc.stdin.flush();
   }
@@ -392,13 +394,13 @@ class Child {
     method: string,
     params: Record<string, unknown> | undefined,
     signal?: AbortSignal
-  ): Promise<Message> {
+  ): Promise<JsonRpcMessage> {
     if (this.#ended !== undefined) {
       return Promise.reject(new Error(this.#ended));
     }
     const id = this.#next;
     this.#next += 1;
-    return new Promise<Message>((resolve, reject) => {
+    return new Promise<JsonRpcMessage>((resolve, reject) => {
       const cancel = () => {
         if (this.#pending.delete(id)) {
           this.notify("notifications/cancelled", {
@@ -465,8 +467,8 @@ async function readLines(
 const within = async (
   name: string,
   what: string,
-  ask: (signal: AbortSignal) => Promise<Message>
-): Promise<Message> => {
+  ask: (signal: AbortSignal) => Promise<JsonRpcMessage>
+): Promise<JsonRpcMessage> => {
   const read = await readWithin(MCP_CONNECT_MS, ask);
   switch (read.kind) {
     case "answered":
@@ -483,7 +485,7 @@ const within = async (
 };
 
 /** A server's error answer to a request the host made, as an Error. */
-const failed = (name: string, what: string, message: Message): Error =>
+const failed = (name: string, what: string, message: JsonRpcMessage): Error =>
   new Error(
     `The ${name} MCP server refused ${what}: ${JSON.stringify(message.error)}`
   );
@@ -678,9 +680,9 @@ class Hosted {
    * A notification is answered with nothing.
    */
   async answer(
-    message: Message,
+    message: JsonRpcMessage,
     signal: AbortSignal
-  ): Promise<Message | undefined> {
+  ): Promise<JsonRpcMessage | undefined> {
     const { id, method } = message;
     if (method === undefined) {
       // A session's answer to a request of the server's: the host makes none.
@@ -756,7 +758,9 @@ const quiet = (capabilities: unknown): Record<string, unknown> => {
 /** The JSON-RPC message or batch a POST carries, or why it carries none. */
 const messagesOf = (
   body: string
-): { batch: boolean; messages: Message[] } | { error: Message } => {
+):
+  | { batch: boolean; messages: JsonRpcMessage[] }
+  | { error: JsonRpcMessage } => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -777,7 +781,7 @@ const messagesOf = (
       ),
     };
   }
-  return { batch, messages: messages as Message[] };
+  return { batch, messages: messages as JsonRpcMessage[] };
 };
 
 /** The machine's shared servers, by name. */
@@ -1007,7 +1011,7 @@ const serve = async (hosted: Hosted, request: Request): Promise<Response> => {
       read.messages.map((message) =>
         hosted
           .answer(message, request.signal)
-          .catch((error: unknown): Message =>
+          .catch((error: unknown): JsonRpcMessage =>
             rpcError(
               message.id,
               SERVER_ERROR,
@@ -1016,7 +1020,7 @@ const serve = async (hosted: Hosted, request: Request): Promise<Response> => {
           )
       )
     )
-  ).filter((answer): answer is Message => answer !== undefined);
+  ).filter((answer): answer is JsonRpcMessage => answer !== undefined);
   if (answers.length === 0) {
     return new Response(null, { status: 202 });
   }

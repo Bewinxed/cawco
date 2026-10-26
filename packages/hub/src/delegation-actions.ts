@@ -1554,332 +1554,348 @@ export const handoffActions = ({
   fleet,
   instancesByShortId,
   threads,
-}: HandoffDeps): HandoffActions => ({
-  async delegateList(query) {
-    if (!delegateList) {
-      throw new Error(
-        "delegate_list is read by the hub, which is not wired here."
-      );
-    }
-    return await delegateList(query);
-  },
-  async openItems() {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/open-items`
+}: HandoffDeps): HandoffActions => {
+  /** A running delegate of the caller's that `target` names, through any continuation it was followed by. */
+  const runningDelegate = (target: string) => {
+    const { peers } = roster(fleet, instanceId);
+    const followed = formerOf(formerIds(), target);
+    const peer = resolveDelegate(
+      peers,
+      followed?.now ?? target,
+      instanceId,
+      ledBy,
+      forkOrigins()
     );
-    return await hubText(response);
-  },
-  async continueSession(input) {
-    const { rows, hosts } = fleetInstances(fleet);
-    const target = formerOf(formerIds(), input.session)?.now ?? input.session;
-    const source = resolve(
-      rows.map((row) => toPeer(row, hosts)),
-      target
-    ).row.id;
-    if (source === instanceId) {
-      throw new Error(
-        "continue_session continues another session, never this one. If your context is too big, say so in one line: the person compacts it with Claude Code's own /compact."
-      );
-    }
-    // The new session answers permissions as the caller does, where its
-    // harness has modes; the hub settles it, never the machine's default.
-    const fallbackPermissionMode = callerMode(rows, instanceId);
-    const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...continuedFrom(input),
-          target: {
-            harness: input.target_harness,
-            model: input.target_model,
-            ...(input.target_permission_mode
-              ? { permissionMode: input.target_permission_mode }
-              : {}),
-            ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
-          },
-          askedBy: instanceId,
-          ...(input.note ? { note: input.note } : {}),
-        }),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    const { continuationId, targetInstanceId, waiting } =
-      (await response.json()) as {
-        continuationId: string;
-        targetInstanceId: string;
-        waiting?: { since: number | null; until: number; why: string };
-      };
-    // Its source holds work in flight that ending it would lose: the job
-    // waits for that and goes on by itself, which the caller hears now.
-    if (waiting) {
-      return {
-        summariserInstanceId: null,
-        targetInstanceId,
-        text: waitingAnswer(source, targetInstanceId, waiting),
-      };
-    }
-    // The hub runs the continuation as its own job; this waits for its report.
-    const outcome = await fetch(
-      `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`
-    );
-    if (!outcome.ok) {
-      throw new Error(await outcome.text());
-    }
-    const done = (await outcome.json()) as {
-      summariserInstanceId: string | null;
-      targetInstanceId: string;
-      opening: string;
-    };
-    return {
-      summariserInstanceId: done.summariserInstanceId,
-      targetInstanceId: done.targetInstanceId,
-      text:
-        `Continued session ${source} in a new ${input.target_harness} session ` +
-        `${done.targetInstanceId} on ${input.target_model}. ` +
-        openedOnWords(input, done.summariserInstanceId) +
-        `It is the same session from here, under ${done.targetInstanceId}: the source's process is ended, its work item and delegates go on in the new one, and what is sent to the source's id reaches it. ` +
-        `The new session opened with:\n\n${done.opening}`,
-    };
-  },
-  async generateImage(request) {
-    const read = await readWithin(
-      IMAGE_GENERATION_TIMEOUT_MS + 60_000,
-      async (signal) => {
-        const response = await fetch(
-          `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/generate-image`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(request),
-            signal,
-          }
+    return { peer, followed };
+  };
+  return {
+    async delegateList(query) {
+      if (!delegateList) {
+        throw new Error(
+          "delegate_list is read by the hub, which is not wired here."
         );
-        if (!response.ok) {
-          throw new Error(await response.text());
+      }
+      return await delegateList(query);
+    },
+    async openItems() {
+      const response = await fetch(
+        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/open-items`
+      );
+      return await hubText(response);
+    },
+    async continueSession(input) {
+      const { rows, hosts } = fleetInstances(fleet);
+      const target = formerOf(formerIds(), input.session)?.now ?? input.session;
+      const source = resolve(
+        rows.map((row) => toPeer(row, hosts)),
+        target
+      ).row.id;
+      if (source === instanceId) {
+        throw new Error(
+          "continue_session continues another session, never this one. If your context is too big, say so in one line: the person compacts it with Claude Code's own /compact."
+        );
+      }
+      // The new session answers permissions as the caller does, where its
+      // harness has modes; the hub settles it, never the machine's default.
+      const fallbackPermissionMode = callerMode(rows, instanceId);
+      const response = await fetch(
+        `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...continuedFrom(input),
+            target: {
+              harness: input.target_harness,
+              model: input.target_model,
+              ...(input.target_permission_mode
+                ? { permissionMode: input.target_permission_mode }
+                : {}),
+              ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
+            },
+            askedBy: instanceId,
+            ...(input.note ? { note: input.note } : {}),
+          }),
         }
-        return (await response.json()) as GeneratedImage;
+      );
+      if (!response.ok) {
+        throw new Error(await response.text());
       }
-    );
-    switch (read.kind) {
-      case "answered":
-        return read.value;
-      case "unanswered":
-        throw new Error(
-          `The hub did not answer within ${Math.round(read.after / 1000)} s with the image.`
-        );
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      const { continuationId, targetInstanceId, waiting } =
+        (await response.json()) as {
+          continuationId: string;
+          targetInstanceId: string;
+          waiting?: { since: number | null; until: number; why: string };
+        };
+      // Its source holds work in flight that ending it would lose: the job
+      // waits for that and goes on by itself, which the caller hears now.
+      if (waiting) {
+        return {
+          summariserInstanceId: null,
+          targetInstanceId,
+          text: waitingAnswer(source, targetInstanceId, waiting),
+        };
       }
-    }
-  },
-  async forgePost(ask) {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/forge-post`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(ask),
+      // The hub runs the continuation as its own job; this waits for its report.
+      const outcome = await fetch(
+        `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`
+      );
+      if (!outcome.ok) {
+        throw new Error(await outcome.text());
       }
-    );
-    const text = (await response.text()).trim();
-    if (!response.ok) {
-      throw new Error(text);
-    }
-    return text;
-  },
-  async artifactCall(method, path, body) {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/artifacts${path}`,
-      {
-        method,
-        ...(body === undefined
-          ? {}
-          : {
+      const done = (await outcome.json()) as {
+        summariserInstanceId: string | null;
+        targetInstanceId: string;
+        opening: string;
+      };
+      return {
+        summariserInstanceId: done.summariserInstanceId,
+        targetInstanceId: done.targetInstanceId,
+        text:
+          `Continued session ${source} in a new ${input.target_harness} session ` +
+          `${done.targetInstanceId} on ${input.target_model}. ` +
+          openedOnWords(input, done.summariserInstanceId) +
+          `It is the same session from here, under ${done.targetInstanceId}: the source's process is ended, its work item and delegates go on in the new one, and what is sent to the source's id reaches it. ` +
+          `The new session opened with:\n\n${done.opening}`,
+      };
+    },
+    async generateImage(request) {
+      const read = await readWithin(
+        IMAGE_GENERATION_TIMEOUT_MS + 60_000,
+        async (signal) => {
+          const response = await fetch(
+            `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/generate-image`,
+            {
+              method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify(body),
-            }),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return response.json();
-  },
-  async listDelegateTypes() {
-    const types = await fetchDelegateTypes(projectId);
-    return { types };
-  },
-  listSessions(): string {
-    const { peers, own } = roster(fleet, instanceId);
-    const machines = fleet.machines();
-    /** "paused until 00:57" for a paused machine, by id. */
-    const pauses = new Map(
-      machines.flatMap((machine) =>
-        machine.pausedUntil
-          ? [
-              [
-                machine.machineId,
-                `paused until ${pauseClock(machine.pausedUntil)}`,
-              ] as const,
-            ]
-          : []
-      )
-    );
-    const paused = machines
-      .filter((machine) => pauses.has(machine.machineId))
-      .map(
-        (machine) =>
-          `${machineCalled(machine.machineId, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
+              body: JSON.stringify(request),
+              signal,
+            }
+          );
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+          return (await response.json()) as GeneratedImage;
+        }
       );
-    const online = machines.filter((machine) => machine.status === "online");
-    const where = [
-      `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`,
-      ...(online.length > 0
-        ? [
-            `To name one to the person: ${online.map((machine) => machineLink(machine.machineId, machineCalled(machine.machineId, machines))).join(", ")}.`,
-          ]
-        : []),
-      ...paused,
-    ].join(" ");
-    if (peers.length === 0) {
-      return `No other sessions are running.\n\n${where}`;
-    }
-    const listed = peers
-      .map((peer) => {
-        const facts = [
-          peer.host,
-          peer.row.model ?? "default model",
-          ageOf(peer.row.updatedAt),
-          ...(peer.row.kind === "scratch" ? ["spin-off"] : []),
-          ...(pauses.has(peer.row.machineId)
-            ? [pauses.get(peer.row.machineId) as string]
-            : []),
-          ...(peer.row.parentInstanceId === instanceId
-            ? [peer.row.workItemId ? "your delegate" : "you started it"]
-            : []),
-          ...(own?.parentInstanceId && own.parentInstanceId === peer.row.id
-            ? ["your parent session"]
-            : []),
-        ];
-        return `- ${sessionLink(peer.row.id, peer.title)} (${peer.label}) — ${peer.dir} · ${facts.join(" · ")}`;
-      })
-      .join("\n");
-    return `${listed}\n\n${where}`;
-  },
+      switch (read.kind) {
+        case "answered":
+          return read.value;
+        case "unanswered":
+          throw new Error(
+            `The hub did not answer within ${Math.round(read.after / 1000)} s with the image.`
+          );
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    },
+    async forgePost(ask) {
+      const response = await fetch(
+        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/forge-post`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(ask),
+        }
+      );
+      const text = (await response.text()).trim();
+      if (!response.ok) {
+        throw new Error(text);
+      }
+      return text;
+    },
+    async artifactCall(method, path, body) {
+      const response = await fetch(
+        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/artifacts${path}`,
+        {
+          method,
+          ...(body === undefined
+            ? {}
+            : {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(body),
+              }),
+        }
+      );
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    },
+    async listDelegateTypes() {
+      const types = await fetchDelegateTypes(projectId);
+      return { types };
+    },
+    listSessions(): string {
+      const { peers, own } = roster(fleet, instanceId);
+      const machines = fleet.machines();
+      /** "paused until 00:57" for a paused machine, by id. */
+      const pauses = new Map(
+        machines.flatMap((machine) =>
+          machine.pausedUntil
+            ? [
+                [
+                  machine.machineId,
+                  `paused until ${pauseClock(machine.pausedUntil)}`,
+                ] as const,
+              ]
+            : []
+        )
+      );
+      const paused = machines
+        .filter((machine) => pauses.has(machine.machineId))
+        .map(
+          (machine) =>
+            `${machineCalled(machine.machineId, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
+        );
+      const online = machines.filter((machine) => machine.status === "online");
+      const where = [
+        `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`,
+        ...(online.length > 0
+          ? [
+              `To name one to the person: ${online.map((machine) => machineLink(machine.machineId, machineCalled(machine.machineId, machines))).join(", ")}.`,
+            ]
+          : []),
+        ...paused,
+      ].join(" ");
+      if (peers.length === 0) {
+        return `No other sessions are running.\n\n${where}`;
+      }
+      const listed = peers
+        .map((peer) => {
+          const facts = [
+            peer.host,
+            peer.row.model ?? "default model",
+            ageOf(peer.row.updatedAt),
+            ...(peer.row.kind === "scratch" ? ["spin-off"] : []),
+            ...(pauses.has(peer.row.machineId)
+              ? [pauses.get(peer.row.machineId) as string]
+              : []),
+            ...(peer.row.parentInstanceId === instanceId
+              ? [peer.row.workItemId ? "your delegate" : "you started it"]
+              : []),
+            ...(own?.parentInstanceId && own.parentInstanceId === peer.row.id
+              ? ["your parent session"]
+              : []),
+          ];
+          return `- ${sessionLink(peer.row.id, peer.title)} (${peer.label}) — ${peer.dir} · ${facts.join(" · ")}`;
+        })
+        .join("\n");
+      return `${listed}\n\n${where}`;
+    },
 
-  async handoff(
-    target: string,
-    message: string,
-    inputs?: unknown[]
-  ): Promise<string> {
-    const { peers, asleep, own, hosts, rows } = roster(fleet, instanceId);
-    // A thread (`thread#1a2b3c4d`, or its id): Caw is handed it there.
-    const thread = threadOf(threads, target, [...peers, ...asleep]);
-    if (thread) {
-      if (!threads) {
-        throw new Error(
-          "Threads are not reachable from here; nothing was handed."
+    async handoff(
+      target: string,
+      message: string,
+      inputs?: unknown[]
+    ): Promise<string> {
+      const { peers, asleep, own, hosts, rows } = roster(fleet, instanceId);
+      // A thread (`thread#1a2b3c4d`, or its id): Caw is handed it there.
+      const thread = threadOf(threads, target, [...peers, ...asleep]);
+      if (thread) {
+        if (!threads) {
+          throw new Error(
+            "Threads are not reachable from here; nothing was handed."
+          );
+        }
+        return threads.hand(
+          thread.id,
+          { instanceId, name: senderName(own, cwd) },
+          message
         );
       }
-      return threads.hand(
-        thread.id,
-        { instanceId, name: senderName(own, cwd) },
-        message
+      // A session named by a former id is reached by its id now; one a
+      // continuation took the work item of, by its continuation's.
+      const followed =
+        formerOf(formerIds(), target) ??
+        continuedOf(rows, target, instanceById);
+      const addressed = followed?.now ?? target;
+      const unlisted =
+        followed && ![...peers, ...asleep].some((p) => p.row.id === addressed)
+          ? instanceById(addressed)
+          : undefined;
+      // A short id the board no longer lists (a session stopped a day ago):
+      // still the session it names, woken to read it like any asleep one.
+      const beyond = beyondBoard(
+        instancesByShortId,
+        addressed,
+        [...peers, ...asleep],
+        instanceId
       );
-    }
-    // A session named by a former id is reached by its id now; one a
-    // continuation took the work item of, by its continuation's.
-    const followed =
-      formerOf(formerIds(), target) ?? continuedOf(rows, target, instanceById);
-    const addressed = followed?.now ?? target;
-    const unlisted =
-      followed && ![...peers, ...asleep].some((p) => p.row.id === addressed)
-        ? instanceById(addressed)
-        : undefined;
-    // A short id the board no longer lists (a session stopped a day ago):
-    // still the session it names, woken to read it like any asleep one.
-    const beyond = beyondBoard(
-      instancesByShortId,
-      addressed,
-      [...peers, ...asleep],
-      instanceId
-    );
-    const sleeping = [
-      ...asleep,
-      ...(unlisted ? [toPeer(unlisted, hosts)] : []),
-      ...beyond.map((row) => toPeer(row, hosts)),
-    ];
-    const peer = resolveHandoff(peers, sleeping, addressed, own);
-    // A fork's copied history names its origin's delegates; they are not its.
-    const owner = forkOwner(forkOrigins(), peer.row, own);
-    if (owner) {
-      throw new Error(forkOwnedWords(peer, owner));
-    }
-    if (peer.row.id !== own?.parentInstanceId) {
-      await checkCold(peer.row.id, undefined, instanceId, message);
-    }
-    const whose =
-      peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
-    const from = senderName(own, cwd);
-    // In its $TMPDIR before the message that names them reaches it.
-    const landed = inputs?.length
-      ? await handInputs(authorization, instanceId, peer.row.id, inputs)
-      : [];
-    const body = withInputsLine(
-      `${handoffMarker(from, instanceId)}${message}`,
-      landed
-    );
-    const payload = peerSend(peer.row.id, instanceId, from, body, {
-      shouldQuery: false,
-    });
-    // Delivered now, so the answer says what the hub did with it, not what
-    // the roster suggested before it went.
-    const delivery = await deliver({
-      verb: "send",
-      machineId: peer.row.machineId,
-      instanceId: peer.row.id,
-      payload,
-    });
-    const continues = continuesWords(followed);
-    const handed = `Handed to ${sessionLink(peer.row.id, peer.title)}, ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
-    return `${handed} ${deliveryWords(delivery)}`;
-  },
+      const sleeping = [
+        ...asleep,
+        ...(unlisted ? [toPeer(unlisted, hosts)] : []),
+        ...beyond.map((row) => toPeer(row, hosts)),
+      ];
+      const peer = resolveHandoff(peers, sleeping, addressed, own);
+      // A fork's copied history names its origin's delegates; they are not its.
+      const owner = forkOwner(forkOrigins(), peer.row, own);
+      if (owner) {
+        throw new Error(forkOwnedWords(peer, owner));
+      }
+      if (peer.row.id !== own?.parentInstanceId) {
+        await checkCold(peer.row.id, undefined, instanceId, message);
+      }
+      const whose =
+        peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
+      const from = senderName(own, cwd);
+      // In its $TMPDIR before the message that names them reaches it.
+      const landed = inputs?.length
+        ? await handInputs(authorization, instanceId, peer.row.id, inputs)
+        : [];
+      const body = withInputsLine(
+        `${handoffMarker(from, instanceId)}${message}`,
+        landed
+      );
+      const payload = peerSend(peer.row.id, instanceId, from, body, {
+        shouldQuery: false,
+      });
+      // Delivered now, so the answer says what the hub did with it, not what
+      // the roster suggested before it went.
+      const delivery = await deliver({
+        verb: "send",
+        machineId: peer.row.machineId,
+        instanceId: peer.row.id,
+        payload,
+      });
+      const continues = continuesWords(followed);
+      const handed = `Handed to ${sessionLink(peer.row.id, peer.title)}, ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
+      return `${handed} ${deliveryWords(delivery)}`;
+    },
 
-  async startSession(
-    workdir: string,
-    prompt: string,
-    title: string,
-    { spinOff = false, type: typeName, model: modelName, machine, ...opts }
-  ): Promise<HandoffResult> {
-    // Named: that machine, which must be online. Unnamed: "" is the caller's
-    // own, which the hub's forwarder fills in.
-    const target = machine
-      ? resolveMachine(fleet.machines(), machine)
-      : undefined;
-    const machineId = target?.machineId ?? "";
-    // Nothing is left to the machine's defaults: the type (or `medium`) says
-    // what runs, and the caller's own mode is how it answers permissions.
-    // The caller's project's catalog: its own types shadow the fleet's.
-    const types = await fetchDelegateTypes(projectId);
-    const { rows } = fleetInstances(fleet);
-    const { type, harness, model } = resolveSpawnType(types, {
-      type: typeName,
-      model: modelName,
-    });
-    const id = crypto.randomUUID();
-    const from = senderName(
-      rows.find((row) => row.id === instanceId),
-      cwd
-    );
-    // The mode asked for, if any, and the caller's own to fall back on; the
-    // hub settles them by the harness's modes (none at all for pi).
-    const payload: SpawnPayload & { fallbackPermissionMode?: PermissionMode } =
-      {
+    async startSession(
+      workdir: string,
+      prompt: string,
+      title: string,
+      { spinOff = false, type: typeName, model: modelName, machine, ...opts }
+    ): Promise<HandoffResult> {
+      // Named: that machine, which must be online. Unnamed: "" is the caller's
+      // own, which the hub's forwarder fills in.
+      const target = machine
+        ? resolveMachine(fleet.machines(), machine)
+        : undefined;
+      const machineId = target?.machineId ?? "";
+      // Nothing is left to the machine's defaults: the type (or `medium`) says
+      // what runs, and the caller's own mode is how it answers permissions.
+      // The caller's project's catalog: its own types shadow the fleet's.
+      const types = await fetchDelegateTypes(projectId);
+      const { rows } = fleetInstances(fleet);
+      const { type, harness, model } = resolveSpawnType(types, {
+        type: typeName,
+        model: modelName,
+      });
+      const id = crypto.randomUUID();
+      const from = senderName(
+        rows.find((row) => row.id === instanceId),
+        cwd
+      );
+      // The mode asked for, if any, and the caller's own to fall back on; the
+      // hub settles them by the harness's modes (none at all for pi).
+      const payload: SpawnPayload & {
+        fallbackPermissionMode?: PermissionMode;
+      } = {
         instanceId: id,
         cwd: workdir,
         title,
@@ -1901,320 +1917,307 @@ export const handoffActions = ({
         // tool's error rather than a "Started" for a session that never was.
         requestId: crypto.randomUUID(),
       };
-    // Held until the session is in place; answers the folder it runs in, as
-    // the hub settled it (`~` resolved, normalised), not the words typed.
-    const settled = await spawn({
-      verb: "spawn",
-      machineId,
-      instanceId: id,
-      payload,
-    });
-    // The marker prefix survives SDK storage (which strips `origin`) so that
-    // the transcript builder (`sentRow`, @cawco/core) can still detect the
-    // opening prompt as a peer message and render it as `user.peer` instead of
-    // the reader's own words — the same marker `handoff()` already uses.
-    const body = `${handoffMarker(from, instanceId)}${prompt}`;
-    const opening = peerSend(id, instanceId, from, body);
-    emit({ verb: "send", machineId, instanceId: id, payload: opening });
-    const on = target
-      ? ` on ${machineCalled(target.machineId, fleet.machines())}`
-      : "";
-    return {
-      id,
-      title,
-      text:
-        `Started ${sessionLink(id, title)} (${leafOf(settled)})${spinOff ? " as a spin-off" : ""}${on} in ${settled}, ` +
-        `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
-        `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
-        "It is in the sidebar now, under this session, and the user can open its transcript. " +
-        `Hand it more work later with handoff("${leafOf(settled)}#${id.slice(0, 8)}", ...).`,
-    };
-  },
+      // Held until the session is in place; answers the folder it runs in, as
+      // the hub settled it (`~` resolved, normalised), not the words typed.
+      const settled = await spawn({
+        verb: "spawn",
+        machineId,
+        instanceId: id,
+        payload,
+      });
+      // The marker prefix survives SDK storage (which strips `origin`) so that
+      // the transcript builder (`sentRow`, @cawco/core) can still detect the
+      // opening prompt as a peer message and render it as `user.peer` instead of
+      // the reader's own words — the same marker `handoff()` already uses.
+      const body = `${handoffMarker(from, instanceId)}${prompt}`;
+      const opening = peerSend(id, instanceId, from, body);
+      emit({ verb: "send", machineId, instanceId: id, payload: opening });
+      const on = target
+        ? ` on ${machineCalled(target.machineId, fleet.machines())}`
+        : "";
+      return {
+        id,
+        title,
+        text:
+          `Started ${sessionLink(id, title)} (${leafOf(settled)})${spinOff ? " as a spin-off" : ""}${on} in ${settled}, ` +
+          `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
+          `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
+          "It is in the sidebar now, under this session, and the user can open its transcript. " +
+          `Hand it more work later with handoff("${leafOf(settled)}#${id.slice(0, 8)}", ...).`,
+      };
+    },
 
-  async delegate(prompt, opts) {
-    const { machine, ...request } = opts;
-    const target = machine
-      ? resolveMachine(fleet.machines(), machine)
-      : undefined;
-    if (opts.workspace) {
-      await checkCold(undefined, opts.workspace, instanceId, prompt);
-    }
-    const response = await postToHub(
-      "/api/work-items",
-      {
-        ...request,
-        machineId: target?.machineId,
-        parentInstanceId: instanceId,
-        prompt,
-      },
-      authorization,
-      {
-        // A fresh remote fetch and, on failure, its acknowledged discard take minutes.
-        timeout: false,
+    async delegate(prompt, opts) {
+      const { machine, ...request } = opts;
+      const target = machine
+        ? resolveMachine(fleet.machines(), machine)
+        : undefined;
+      if (opts.workspace) {
+        await checkCold(undefined, opts.workspace, instanceId, prompt);
       }
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    const started = (await response.json()) as DelegateResult;
-    return target
-      ? {
-          ...started,
-          text: `${started.text} It runs on ${machineCalled(target.machineId, fleet.machines())}.`,
+      const response = await postToHub(
+        "/api/work-items",
+        {
+          ...request,
+          machineId: target?.machineId,
+          parentInstanceId: instanceId,
+          prompt,
+        },
+        authorization,
+        {
+          // A fresh remote fetch and, on failure, its acknowledged discard take minutes.
+          timeout: false,
         }
-      : started;
-  },
-
-  async finishItem(request) {
-    const response = await postToHub(
-      "/api/work-items/finish",
-      { ...request, instanceId },
-      authorization,
-      {
-        // The landing gate may run for an hour (an iOS build behind others); Bun's fetch would drop a
-        // response silent for five minutes.
-        timeout: false,
-      }
-    );
-    return await hubText(response);
-  },
-
-  async waitItem(minutes, reason) {
-    return hubText(
-      await postToHub(
-        "/api/work-items/wait",
-        { instanceId, minutes, reason },
-        authorization
-      )
-    );
-  },
-
-  async discardWorkspace(workspace: string): Promise<string> {
-    return hubText(
-      await postToHub(
-        `/api/workspaces/${encodeURIComponent(workspace.trim())}/discard`,
-        { from: instanceId },
-        authorization
-      )
-    );
-  },
-
-  async stopDelegate(asked: string): Promise<string> {
-    // A queued delegate has no session yet: it is withdrawn from the queue.
-    const withdrawn = await postToHub(
-      "/api/work-items/queued/withdraw",
-      { from: instanceId, target: asked },
-      authorization
-    );
-    if (withdrawn.ok) {
-      return ((await withdrawn.json()) as { text: string }).text;
-    }
-    if (withdrawn.status !== 404) {
-      throw new Error(await withdrawn.text());
-    }
-    const { peers } = roster(fleet, instanceId);
-    const followed = formerOf(formerIds(), asked);
-    const target = followed?.now ?? asked;
-    // An id, full or short, names a session in any state: asleep, failed,
-    // its conversation gone. Only a name is looked up among the running.
-    const { rows, hosts } = fleetInstances(fleet);
-    const ended =
-      instanceById(handleId(target)) ??
-      resolveById(
-        rows
-          .filter((row) => row.id !== instanceId)
-          .map((row) => toPeer(row, hosts)),
-        target
-      )?.row;
-    const peer = resolveDelegate(
-      ended ? [toPeer(ended, new Map())] : peers,
-      target,
-      instanceId,
-      ledBy,
-      forkOrigins()
-    );
-    // The hub walks its tree (tree-stops.ts): what is under it ends first.
-    const response = await postToHub(
-      "/api/work-items/stop",
-      { from: instanceId, instanceId: peer.row.id },
-      authorization
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    const { under } = (await response.json()) as { under: number };
-    const stopping = workWords.stopAsked(
-      `${peer.label}${continuesWords(followed)}`,
-      under
-    );
-    if (!peer.row.workItemId) {
-      return stopping;
-    }
-    const read = await fetch(
-      `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}/unlanded`
-    );
-    const unlanded = read.ok
-      ? (
-          (await read.json()) as {
-            unlanded: Unlanded | { error: string } | null;
-          }
-        ).unlanded
-      : { error: await read.text() };
-    const item = await fetch(
-      `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}`
-    );
-    if (!item.ok) {
-      throw new Error(await item.text());
-    }
-    const { workspaceId } = (await item.json()) as WorkItemView;
-    return `${stopping} ${stoppedHoldWords(workspaceId, unlanded)}`;
-  },
-
-  interruptDelegate(target: string): string {
-    const { peers } = roster(fleet, instanceId);
-    const followed = formerOf(formerIds(), target);
-    const peer = resolveDelegate(
-      peers,
-      followed?.now ?? target,
-      instanceId,
-      ledBy,
-      forkOrigins()
-    );
-    emit({
-      verb: "control",
-      machineId: peer.row.machineId,
-      instanceId: peer.row.id,
-      payload: {
-        instanceId: peer.row.id,
-        requestId: crypto.randomUUID(),
-        method: "interrupt",
-        args: [],
-        from: instanceId,
-      },
-    });
-    return (
-      `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state, ` +
-      `and stays idle: no reminder, wait or merge check outcome wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
-    );
-  },
-
-  async machinePause(machine, minutes, resume = false) {
-    const machines = fleet.machines();
-    const found = resolveMachine(machines, machine, true);
-    const name = machineCalled(found.machineId, machines);
-    if (resume === (minutes !== undefined)) {
-      throw new Error(
-        "Pass minutes to pause the machine, or resume: true to end its pause."
       );
-    }
-    const path = `/api/machines/${encodeURIComponent(found.machineId)}/${resume ? "resume" : "pause"}`;
-    const response = await postToHub(
-      path,
-      resume
-        ? {}
-        : {
-            until: new Date(Date.now() + (minutes ?? 0) * 60_000).toISOString(),
-            // Its own turn, when the machine is its own, is cut once this
-            // call is answered, never under it (hub machine-pause.ts
-            // `PauseCaller`).
-            ...(callId ? { call: callId } : {}),
-          },
-      authorization
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    const row = (await response.json()) as {
-      pausedUntil: number | null;
-      pauseStopped: string | null;
-    };
-    return row.pausedUntil === null
-      ? `${name} is not paused: what was kept for it goes now.`
-      : `Paused ${name} until ${pauseClock(row.pausedUntil)}: its running turns were stopped${row.pauseStopped ? `, it ${row.pauseStopped}` : ""}, and nothing starts there until then. Work for it waits and runs when the pause ends.`;
-  },
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const started = (await response.json()) as DelegateResult;
+      return target
+        ? {
+            ...started,
+            text: `${started.text} It runs on ${machineCalled(target.machineId, fleet.machines())}.`,
+          }
+        : started;
+    },
 
-  answerDelegate(
-    target: string,
-    requestId: string,
-    answers?: Record<string, string>,
-    deny = false
-  ): string {
-    const { peers } = roster(fleet, instanceId);
-    const followed = formerOf(formerIds(), target);
-    const peer = resolveDelegate(
-      peers,
-      followed?.now ?? target,
-      instanceId,
-      ledBy,
-      forkOrigins()
-    );
-    // The answers alone are all this side has: the delegate's tool call never
-    // came here, only the question text and its options did. A question's
-    // `updatedInput` has to carry the whole call back or the harness refuses it
-    // for the `questions` it is missing, so the harness that parked the ask
-    // folds these into the input it kept (settledQuestionResult in
-    // @cawco/core, mirroring the dashboard's questionAnswer). A denial says so
-    // in words for the same reason: the model is told why, not merely that.
-    let result: PermissionResult;
-    if (deny) {
-      result = { behavior: "deny", message: QUESTION_DISMISSED };
-    } else if (answers) {
-      result = { behavior: "allow", updatedInput: { answers } };
-    } else {
-      result = { behavior: "allow" };
-    }
-    emit({
-      verb: "control",
-      machineId: peer.row.machineId,
-      instanceId: peer.row.id,
-      requestId,
-      payload: {
+    async finishItem(request) {
+      const response = await postToHub(
+        "/api/work-items/finish",
+        { ...request, instanceId },
+        authorization,
+        {
+          // The landing gate may run for an hour (an iOS build behind others); Bun's fetch would drop a
+          // response silent for five minutes.
+          timeout: false,
+        }
+      );
+      return await hubText(response);
+    },
+
+    async waitItem(minutes, reason) {
+      return hubText(
+        await postToHub(
+          "/api/work-items/wait",
+          { instanceId, minutes, reason },
+          authorization
+        )
+      );
+    },
+
+    async discardWorkspace(workspace: string): Promise<string> {
+      return hubText(
+        await postToHub(
+          `/api/workspaces/${encodeURIComponent(workspace.trim())}/discard`,
+          { from: instanceId },
+          authorization
+        )
+      );
+    },
+
+    async stopDelegate(asked: string): Promise<string> {
+      // A queued delegate has no session yet: it is withdrawn from the queue.
+      const withdrawn = await postToHub(
+        "/api/work-items/queued/withdraw",
+        { from: instanceId, target: asked },
+        authorization
+      );
+      if (withdrawn.ok) {
+        return ((await withdrawn.json()) as { text: string }).text;
+      }
+      if (withdrawn.status !== 404) {
+        throw new Error(await withdrawn.text());
+      }
+      const { peers } = roster(fleet, instanceId);
+      const followed = formerOf(formerIds(), asked);
+      const target = followed?.now ?? asked;
+      // An id, full or short, names a session in any state: asleep, failed,
+      // its conversation gone. Only a name is looked up among the running.
+      const { rows, hosts } = fleetInstances(fleet);
+      const ended =
+        instanceById(handleId(target)) ??
+        resolveById(
+          rows
+            .filter((row) => row.id !== instanceId)
+            .map((row) => toPeer(row, hosts)),
+          target
+        )?.row;
+      const peer = resolveDelegate(
+        ended ? [toPeer(ended, new Map())] : peers,
+        target,
+        instanceId,
+        ledBy,
+        forkOrigins()
+      );
+      // The hub walks its tree (tree-stops.ts): what is under it ends first.
+      const response = await postToHub(
+        "/api/work-items/stop",
+        { from: instanceId, instanceId: peer.row.id },
+        authorization
+      );
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const { under } = (await response.json()) as { under: number };
+      const stopping = workWords.stopAsked(
+        `${peer.label}${continuesWords(followed)}`,
+        under
+      );
+      if (!peer.row.workItemId) {
+        return stopping;
+      }
+      const read = await fetch(
+        `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}/unlanded`
+      );
+      const unlanded = read.ok
+        ? (
+            (await read.json()) as {
+              unlanded: Unlanded | { error: string } | null;
+            }
+          ).unlanded
+        : { error: await read.text() };
+      const item = await fetch(
+        `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}`
+      );
+      if (!item.ok) {
+        throw new Error(await item.text());
+      }
+      const { workspaceId } = (await item.json()) as WorkItemView;
+      return `${stopping} ${stoppedHoldWords(workspaceId, unlanded)}`;
+    },
+
+    interruptDelegate(target: string): string {
+      const { peer, followed } = runningDelegate(target);
+      emit({
+        verb: "control",
+        machineId: peer.row.machineId,
+        instanceId: peer.row.id,
+        payload: {
+          instanceId: peer.row.id,
+          requestId: crypto.randomUUID(),
+          method: "interrupt",
+          args: [],
+          from: instanceId,
+        },
+      });
+      return (
+        `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state, ` +
+        `and stays idle: no reminder, wait or merge check outcome wakes it. Resume or redirect it with handoff("${peer.row.id}", ...).`
+      );
+    },
+
+    async machinePause(machine, minutes, resume = false) {
+      const machines = fleet.machines();
+      const found = resolveMachine(machines, machine, true);
+      const name = machineCalled(found.machineId, machines);
+      if (resume === (minutes !== undefined)) {
+        throw new Error(
+          "Pass minutes to pause the machine, or resume: true to end its pause."
+        );
+      }
+      const path = `/api/machines/${encodeURIComponent(found.machineId)}/${resume ? "resume" : "pause"}`;
+      const response = await postToHub(
+        path,
+        resume
+          ? {}
+          : {
+              until: new Date(
+                Date.now() + (minutes ?? 0) * 60_000
+              ).toISOString(),
+              // Its own turn, when the machine is its own, is cut once this
+              // call is answered, never under it (hub machine-pause.ts
+              // `PauseCaller`).
+              ...(callId ? { call: callId } : {}),
+            },
+        authorization
+      );
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const row = (await response.json()) as {
+        pausedUntil: number | null;
+        pauseStopped: string | null;
+      };
+      return row.pausedUntil === null
+        ? `${name} is not paused: what was kept for it goes now.`
+        : `Paused ${name} until ${pauseClock(row.pausedUntil)}: its running turns were stopped${row.pauseStopped ? `, it ${row.pauseStopped}` : ""}, and nothing starts there until then. Work for it waits and runs when the pause ends.`;
+    },
+
+    answerDelegate(
+      target: string,
+      requestId: string,
+      answers?: Record<string, string>,
+      deny = false
+    ): string {
+      const { peer, followed } = runningDelegate(target);
+      // The answers alone are all this side has: the delegate's tool call never
+      // came here, only the question text and its options did. A question's
+      // `updatedInput` has to carry the whole call back or the harness refuses it
+      // for the `questions` it is missing, so the harness that parked the ask
+      // folds these into the input it kept (settledQuestionResult in
+      // @cawco/core, mirroring the dashboard's questionAnswer). A denial says so
+      // in words for the same reason: the model is told why, not merely that.
+      let result: PermissionResult;
+      if (deny) {
+        result = { behavior: "deny", message: QUESTION_DISMISSED };
+      } else if (answers) {
+        result = { behavior: "allow", updatedInput: { answers } };
+      } else {
+        result = { behavior: "allow" };
+      }
+      emit({
+        verb: "control",
+        machineId: peer.row.machineId,
         instanceId: peer.row.id,
         requestId,
-        method: "resolvePermission",
-        args: [requestId, result],
-        from: instanceId,
-      },
-    });
-    return deny
-      ? `Denied your delegate ${peer.label}${continuesWords(followed)}'s ask (${requestId}).`
-      : `Answered your delegate ${peer.label}${continuesWords(followed)}'s ask (${requestId}).`;
-  },
+        payload: {
+          instanceId: peer.row.id,
+          requestId,
+          method: "resolvePermission",
+          args: [requestId, result],
+          from: instanceId,
+        },
+      });
+      return deny
+        ? `Denied your delegate ${peer.label}${continuesWords(followed)}'s ask (${requestId}).`
+        : `Answered your delegate ${peer.label}${continuesWords(followed)}'s ask (${requestId}).`;
+    },
 
-  // biome-ignore lint/suspicious/useAwait: the declared Promise return type is what the tool awaits; a refusal throws, which the async body turns into a rejection
-  async sendToUser(message: string, attachments?: string[]): Promise<string> {
-    const refusal = shownRefusal?.("send_to_user", attachments ?? []);
-    if (refusal) {
-      throw new Error(`${refusal} Nothing was sent.`);
-    }
-    sendToUser(message);
-    const shown = attachments?.length
-      ? `Shown to the user in this session's transcript, with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
-      : "Shown to the user in this session's transcript";
-    return `${shown}; their paired devices get a push unless they have this session open.`;
-  },
-
-  showImage(path) {
-    const refusal = shownRefusal?.("show_image", [path]);
-    if (refusal) {
-      throw new Error(refusal);
-    }
-    return `Shown in the transcript: ${path}. If the file is missing or later moves, the user sees that instead.`;
-  },
-
-  async setTitle(title) {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/title`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title }),
+    // biome-ignore lint/suspicious/useAwait: the declared Promise return type is what the tool awaits; a refusal throws, which the async body turns into a rejection
+    async sendToUser(message: string, attachments?: string[]): Promise<string> {
+      const refusal = shownRefusal?.("send_to_user", attachments ?? []);
+      if (refusal) {
+        throw new Error(`${refusal} Nothing was sent.`);
       }
-    );
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(text);
-    }
-    return text;
-  },
-});
+      sendToUser(message);
+      const shown = attachments?.length
+        ? `Shown to the user in this session's transcript, with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
+        : "Shown to the user in this session's transcript";
+      return `${shown}; their paired devices get a push unless they have this session open.`;
+    },
+
+    showImage(path) {
+      const refusal = shownRefusal?.("show_image", [path]);
+      if (refusal) {
+        throw new Error(refusal);
+      }
+      return `Shown in the transcript: ${path}. If the file is missing or later moves, the user sees that instead.`;
+    },
+
+    async setTitle(title) {
+      const response = await fetch(
+        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/title`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title }),
+        }
+      );
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(text);
+      }
+      return text;
+    },
+  };
+};
