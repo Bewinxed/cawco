@@ -291,6 +291,7 @@ import {
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { pinName } from "../../../packages/core/src/pin-name";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { shellWords } from "../../../packages/core/src/words/shell";
@@ -1995,10 +1996,8 @@ const askPage = async (
       throw new Error(
         `the page did not answer ${type} within ${read.after} ms`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

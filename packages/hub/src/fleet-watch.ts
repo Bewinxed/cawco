@@ -66,6 +66,7 @@ import {
 } from "@cawco/core";
 import { Gone, readWithin } from "@cawco/core/bounded";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import type { CawEvent } from "./caw";
 import type { DbShape } from "./db";
@@ -538,10 +539,8 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
             deps.line(row.id, `${signals} · ${words}, so no triage ran`);
             return;
           }
-          default: {
-            const unhandled: never = asking;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", asking);
         }
         const result = asking.value;
         const { noul } = result.answers.stuck;
@@ -668,10 +667,8 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
               `it did not end its turn within ${Math.round(outcome.after / 60_000)} min`
             );
             return;
-          default: {
-            const unhandled: never = outcome;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", outcome);
         }
       },
       () => {

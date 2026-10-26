@@ -35,6 +35,7 @@ import type {
 import { writeWrapper } from "@cawco/core/binary-wrapper";
 import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
+import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { askYes, closeAsking } from "./ask";
 import { awaitJoined } from "./await-joined";
@@ -87,10 +88,8 @@ async function runAllowed(id: string): Promise<boolean> {
     case "not asked":
       console.log(`${id}: skipped. CawCo works without it.`);
       return false;
-    default: {
-      const unhandled: never = yes;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", yes);
   }
 }
 

@@ -18,6 +18,7 @@
  * its forge.
  */
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import { decideWrite, type UpstreamRule } from "@cawco/core/upstream-guard";
 import {
   changeRequestWords,
@@ -216,10 +217,8 @@ const write = (client: ForgeClient, one: ForgeWrite): Promise<ForgeMade> => {
       return client.pullRequest(one);
     case "comment":
       return client.comment(one);
-    default: {
-      const unhandled: never = one;
-      throw new Error(`unhandled forge write: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("forge write", one);
   }
 };
 
@@ -232,10 +231,8 @@ const whatOf = (forge: Forge, one: ForgeWrite, repo: string): string => {
       return `open a ${changeRequestWords(forge)} on ${repo}`;
     case "comment":
       return `comment on ${one.on === "issue" ? "issue" : changeRequestWords(forge)} ${one.number} of ${repo}`;
-    default: {
-      const unhandled: never = one;
-      throw new Error(`unhandled forge write: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("forge write", one);
   }
 };
 
@@ -329,9 +326,7 @@ export const forgePost = async (
           : `this machine's ${FORGE_NAMES[forge]} sign-in`,
       };
     }
-    default: {
-      const unhandled: never = decision;
-      throw new Error(`unhandled decision: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("decision", decision);
   }
 };

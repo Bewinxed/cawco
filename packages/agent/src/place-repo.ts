@@ -42,6 +42,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { refuseShortOfWorkspace } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import { configEnv } from "./git-credential";
@@ -146,10 +147,8 @@ const within = async <T>(
       throw new Error(
         `${what} did not finish within ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`
       );
-    default: {
-      const unhandled: never = ran;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", ran);
   }
 };
 

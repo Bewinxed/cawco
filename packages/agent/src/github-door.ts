@@ -27,6 +27,7 @@ import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceDoorDir, workspaceUpstreamRuleFile } from "@cawco/core/paths";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   decideWrite,
   GITHUB_API,
@@ -341,10 +342,8 @@ const serve = async (id: string, request: Request): Promise<Response> => {
         `[github-door] ${id}: refused ${request.method} ${host}${url.pathname}`
       );
       return refused(graphql, decision.why);
-    default: {
-      const unhandled: never = decision;
-      throw new Error(`unhandled decision: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("decision", decision);
   }
 };
 

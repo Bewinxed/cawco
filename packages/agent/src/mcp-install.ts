@@ -32,6 +32,7 @@ import { fleetMcpInstallsDir } from "@cawco/core/paths";
 import { runCaptured } from "@cawco/core/run-captured";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { toolEnv } from "./tools";
 
@@ -192,10 +193,8 @@ const npmWithin = async (
       return read.value;
     case "unanswered":
       return { timedOut: ms };
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

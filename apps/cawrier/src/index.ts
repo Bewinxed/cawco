@@ -13,6 +13,7 @@
  */
 
 import { readWithin } from "../../../packages/core/src/bounded";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import {
   type ApnsAnswer,
   type ApnsEnvironment,
@@ -393,10 +394,8 @@ const forward = async (env: Env, raw: string, uuid: string): Promise<void> => {
           `forward ${uuid}: Yield did not answer within ${sent.after} ms (${sent.reason})`
         );
         break;
-      default: {
-        const unhandled: never = sent;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", sent);
     }
   } catch (error) {
     console.log(

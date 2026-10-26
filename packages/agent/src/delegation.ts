@@ -6,6 +6,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
+import { unhandled } from "@cawco/core/unhandled";
 import { hubAnswer } from "./hub-away";
 
 export const MCP_SERVER_NAME = "cawco";
@@ -144,9 +145,7 @@ export async function callDelegationTool(
       throw new Error(
         `CawCo tool ${name}: the hub did not answer within ${ms / 1000} s`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 }

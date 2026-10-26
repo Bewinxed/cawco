@@ -7,6 +7,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { unhandled } from "@cawco/core/unhandled";
 import { Bonjour, type Service } from "bonjour-service";
 import { readConfig, writeConfig } from "./config";
 
@@ -99,10 +100,8 @@ const joinedHubAt =
           `[rediscover] ${httpUrl} did not answer within ${PROBE_TIMEOUT_MS / 1000} s: not taken`
         );
         return false;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
   };
 
@@ -119,10 +118,8 @@ export const probeHub = async (httpUrl: string): Promise<boolean> => {
       return read.value !== undefined;
     case "unanswered":
       return false;
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -342,10 +339,8 @@ const walkRungs = async (
         `[rediscover/mdns] no hub answered on the local link within ${MDNS_BROWSE_MS / 1000} s`
       );
       break;
-    default: {
-      const unhandled: never = advertised;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", advertised);
   }
 
   const peers = await findTailscale(port);

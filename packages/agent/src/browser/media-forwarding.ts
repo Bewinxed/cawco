@@ -33,6 +33,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { parse } from "yaml";
 import { MediaMeasurementSchema } from "../stored-shapes";
 import type { Runtime } from "./runtime";
@@ -75,10 +76,8 @@ export const mediaProtocols = (media: MediaPath): ("udp" | "tcp")[] => {
       return ["tcp"];
     case "none":
       return [];
-    default: {
-      const unhandled: never = media;
-      throw new Error(`unhandled media: ${String(unhandled)}`);
-    }
+    default:
+      unhandled("media", media);
   }
 };
 

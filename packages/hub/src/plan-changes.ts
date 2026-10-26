@@ -36,6 +36,7 @@ import {
   sessionLink,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import type { DbShape, PlanChangeRow } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -276,10 +277,8 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         case "ended":
           await goOn(rowOf(to.instanceId), told.reason, text, ids);
           break;
-        default: {
-          const unhandled: never = told;
-          throw new Error(`unhandled outcome: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("outcome", told);
       }
       plansMoved(rows);
     });

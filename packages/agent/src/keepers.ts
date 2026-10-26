@@ -15,6 +15,7 @@ import {
   machineEndpoint,
 } from "@cawco/core/keepers";
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   ensureSessiond,
   KEEPER_WELCOME_MS,
@@ -408,10 +409,8 @@ export async function withEachKeeper<T>(
               : "its connection ended before its welcome",
         });
         break;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
   }
   try {

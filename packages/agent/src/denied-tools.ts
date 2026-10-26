@@ -33,6 +33,7 @@
 import { clockWords, OWN_LIST_DENIED, opencodeToolsFor } from "@cawco/core";
 import { userLayerPath } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 
 /** Every `claude` this user starts reads it, daemon-spawned or not. */
 const SETTINGS = userLayerPath("settings.json");
@@ -207,10 +208,8 @@ const resolvedFleetDenials = async (): Promise<FleetDenials> => {
       );
     case "unreadable":
       throw new FleetDenialsRefused(read.reason);
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

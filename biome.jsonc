@@ -15,6 +15,8 @@
     "./scripts/lint/no-exit-code.grit",
     "./scripts/lint/uncaught-handlers-exit.grit",
     "./scripts/lint/stored-json.grit",
+    // An exhaustive switch ends with unhandled() (packages/core/src/unhandled.ts).
+    "./scripts/lint/no-hand-unhandled.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

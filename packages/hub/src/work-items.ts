@@ -130,6 +130,7 @@ import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   CONTROL_FORGE_POST,
   type ForgeVerdict,
@@ -1198,10 +1199,8 @@ export const blockWords = (block: ItemBlock): string => {
       return workWords.missingMachine(block.name);
     case "account":
       return workWords.missingAccount(block.name);
-    default: {
-      const unhandled: never = block.kind;
-      throw new Error(`unhandled block: ${String(unhandled)}`);
-    }
+    default:
+      unhandled("block", block.kind);
   }
 };
 
@@ -2181,8 +2180,9 @@ const versionWords = (version: ChangeVersion): string => {
     case "gone":
       return " deleted";
     default: {
-      const unhandled: never = version;
-      return String(unhandled);
+      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a version it does not know is shown as it is rather than fail the read.
+      const unmatched: never = version;
+      return String(unmatched);
     }
   }
 };

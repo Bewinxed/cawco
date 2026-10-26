@@ -9,6 +9,7 @@
  * port comes within 15 s.
  */
 import { Gone, readWithin } from "../../packages/core/src/bounded";
+import { unhandled } from "../../packages/core/src/unhandled";
 
 const [, , hub, instanceId] = Bun.argv;
 const WAIT_MS = 15_000;
@@ -63,8 +64,6 @@ switch (port.kind) {
     );
     process.exit(1);
     break;
-  default: {
-    const unhandled: never = port;
-    throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-  }
+  default:
+    unhandled("read", port);
 }

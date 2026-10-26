@@ -37,6 +37,7 @@ import {
   userLayerPath,
 } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { unhandled } from "@cawco/core/unhandled";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
@@ -380,10 +381,8 @@ const readAccount = async (
         ...(status.identity ? { identity: status.identity } : {}),
       };
     }
-    default: {
-      const unhandled: never = status;
-      throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("status", status);
   }
 };
 
@@ -505,10 +504,8 @@ const loginLocked = async (): Promise<boolean> => {
       throw new Gone(
         `the login keychain's lock read (${read.reason}, after ${read.after} ms)`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -618,10 +615,8 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
         );
       }
       break;
-    default: {
-      const unhandled: never = away;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", away);
   }
   const handle = query({
     prompt: idle,
@@ -647,10 +642,8 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
       case "answered":
         init = read.value;
         break;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
     // Who it is, keyed on its organization's id, which only `auth status`
     // names: read now, so the id is this login's ({@link dirIdentity}).

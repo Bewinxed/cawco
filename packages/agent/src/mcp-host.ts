@@ -97,6 +97,7 @@ import { processStart } from "@cawco/core/process-identity";
 import { identifiedPid, signal as sendSignal } from "@cawco/core/signal";
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { harnessMcpUrl } from "./delegation";
 import { fleetMcpAt, readFleetMcpSet } from "./fleet-mcp-set";
@@ -477,10 +478,8 @@ const within = async (
       throw new Error(
         `The ${name} MCP server did not answer ${what} within ${Math.round(read.after / 1000)} s.`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

@@ -29,6 +29,7 @@
    */
   import { accessLabel } from "@cawco/core/connect-ask";
   import type { ConnectAnswer } from "@cawco/core/frames";
+  import { unhandled } from "@cawco/core/unhandled";
   import { askWords } from "@cawco/core/words/asks";
   import { configureWords } from "@cawco/core/words/configure";
   import { shellWords } from "@cawco/core/words/shell";
@@ -231,10 +232,8 @@
           next: askWords.connectRefusedNext(asker),
           details: fault.reason,
         };
-      default: {
-        const unhandled: never = fault;
-        throw new Error(`unhandled fault: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("fault", fault);
     }
   }
   const failed = $derived(

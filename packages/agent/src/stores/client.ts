@@ -16,6 +16,7 @@
  */
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { standalone } from "@cawco/core/runtime";
+import { unhandled } from "@cawco/core/unhandled";
 import type {
   StoreAnswer,
   StoreArg,
@@ -82,10 +83,8 @@ const started = (): Worker => {
           })
         );
         return;
-      default: {
-        const unhandled: never = said;
-        throw new Error(`unhandled answer: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("answer", said);
     }
   };
   made.addEventListener("error", (event) => lost(made, event.message));

@@ -1,4 +1,5 @@
 /** Browser-neutral release policy and machine state consumed by API clients. */
+import { unhandled } from "./unhandled";
 import { updatesWords } from "./words/updates";
 
 export interface BinaryUpdatePolicy {
@@ -228,10 +229,8 @@ export const hubWaitWords = (version: string, wait: HubWait): string => {
       return updatesWords.waitsForHubToAnswer(version);
     case "trial":
       return updatesWords.waitsForHubTrial(version);
-    default: {
-      const unhandled: never = wait;
-      throw new Error(`unhandled hub wait: ${String(unhandled)}`);
-    }
+    default:
+      unhandled("hub wait", wait);
   }
 };
 

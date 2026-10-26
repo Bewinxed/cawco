@@ -16,6 +16,7 @@ import {
   stepWords,
   targetHost,
 } from "@cawco/core";
+import { unhandled } from "@cawco/core/unhandled";
 
 /** An IPv4 or IPv6 address, which has no first label to name a machine by. */
 const ADDRESS = /^[\d.]+$|:/u;
@@ -262,10 +263,8 @@ export function problemWords(
         fix: "",
         next: "Retry runs the whole install again.",
       };
-    default: {
-      const unhandled: never = problem;
-      throw new Error(`unhandled problem: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("problem", problem);
   }
 }
 

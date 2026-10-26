@@ -53,6 +53,7 @@ import {
   sessiondEndpoint,
 } from "@cawco/core/sessiond";
 import { SessiondServerMessageSchema } from "@cawco/core/stored-shapes";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { KeeperRefused } from "./harness";
 import { parseProcId } from "./proc-id";
@@ -292,10 +293,8 @@ export const ensureSessiond = async (
       throw new Error(
         `[sessiond] ${endpoint} did not complete a connect within ${DIAL_TIMEOUT_MS} ms; no keeper was started in its place`
       );
-    default: {
-      const unhandled: never = there;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", there);
   }
   if (serviceManaged(env)) {
     throw new SessiondUnavailableError(endpoint);
@@ -321,10 +320,8 @@ export const ensureSessiond = async (
       case "unanswered":
         // Not bound yet as far as this one try saw: the next try asks again.
         break;
-      default: {
-        const unhandled: never = bound;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", bound);
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }

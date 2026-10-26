@@ -34,6 +34,7 @@
  * drawn and the probe scrubs it. With reduced motion each fades
  * (`--dur-fade`) and nothing travels.
  */
+import { unhandled } from "@cawco/core/unhandled";
 import { tick } from "svelte";
 import {
   type CanvasExport,
@@ -1311,10 +1312,8 @@ async function reached(
         throw new Error(
           `the hub didn't answer for it within ${Math.ceil(read.after / 1000)} s`
         );
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
     const drawn = out.file.elements.filter((el) => !el.isDeleted).length;
     if (stage.link === "synced" && drawn === stage.drawn) {

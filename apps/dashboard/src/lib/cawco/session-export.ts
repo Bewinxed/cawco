@@ -10,6 +10,7 @@
  * (real money) stay in their own columns, never one.
  */
 import { accountsWords, machineLabel, type UsageSummaryRow } from "@cawco/core";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   type ContextRead,
   cawco,
@@ -94,10 +95,8 @@ function contextCell(read: ContextRead): string {
       return `${Math.round(read.usage.percentage)}%`;
     case "unread":
       return read.why ?? "";
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 }
 

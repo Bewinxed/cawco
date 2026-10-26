@@ -32,6 +32,7 @@ import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { delegationHubUrl } from "../delegation";
 
 /** Where OpenCode 2.0.28 reads its catalog from (`models.url`, else its own `https://models.opencode.ai`). */
@@ -141,10 +142,8 @@ class OpencodeModels {
       case "unanswered":
         // The held copy stays: the caller says this read failed and keeps it.
         throw new Error(`no answer within ${Math.round(read.after / 1000)} s`);
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
     const file = opencodeModelsFile();
     if (response.status === 304 && this.#catalog) {

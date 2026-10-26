@@ -41,6 +41,7 @@ import {
   sessionIdentityDir,
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import type {
@@ -393,10 +394,8 @@ const githubIdentity = async (
       throw new Error(
         `GitHub (${domain}) did not answer within ${GITHUB_IDENTITY_MS / 1000} s when asked who the Copilot sign-in is.`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
   if (typeof user.login !== "string" || !user.login) {
     throw new Error(
@@ -587,10 +586,8 @@ const borrowFresh = (
               throw new Error(
                 `The hub did not bring a fresh sign-in for account ${accountId} from its lender within ${LEND_WAIT_MS / 1000} s.`
               );
-            default: {
-              const unhandled: never = read;
-              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-            }
+            default:
+              unhandled("read", read);
           }
         })
       : Promise.reject(new Error("The agent is not connected to the hub yet."))
@@ -867,10 +864,8 @@ export const completeProviderLogin = async (
       return signIn.expiresAt === null || Date.now() < signIn.expiresAt
         ? { state: "pending" }
         : { state: "expired" };
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
   signIns.delete(accountId);
   if (outcome === "expired") {
@@ -1001,10 +996,8 @@ const answered = <T>(read: Bounded<T>): T => {
       throw new Error(
         `OpenCode's own sign-ins were not read within ${Math.round(read.after / 1000)} s (${read.reason})`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

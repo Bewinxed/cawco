@@ -37,6 +37,7 @@
  */
 import { hostname, userInfo } from "node:os";
 import type { Bounded } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { firstLine, type Heard, type Ran, runTailscale } from "./tailscale-cli";
 
@@ -119,10 +120,8 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
           state: "wanted",
           reason: `${noAnswer(`Tailscale on ${host}`, asked.after)} with its Funnel status`,
         };
-      default: {
-        const unhandled: never = asked;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", asked);
     }
     const ran = asked.value;
     if (ran.missing) {
@@ -261,10 +260,8 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
                 reason: `${noAnswer(`tailscale funnel on ${host}`, ran.after)}: ${firstLine(`${heard.stdout}\n${heard.stderr}`)}`,
               };
         }
-        default: {
-          const unhandled: never = ran;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", ran);
       }
     },
 
@@ -289,10 +286,8 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
           break;
         case "unanswered":
           return noAnswer(`tailscale funnel on ${host}`, ran.after);
-        default: {
-          const unhandled: never = ran;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", ran);
       }
       if (ran.value.code === 0) {
         console.log(`[relay] Funnel's ${FUNNEL_MOUNT} mount on ${at} is off`);

@@ -62,6 +62,7 @@ import {
   readRecordSync,
   writeStateFileSync,
 } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { InstallsRecordSchema } from "./db/stored-shapes";
 import {
   ASKPASS_ENV,
@@ -356,10 +357,8 @@ const legacyRefusal = (
       return `${refusal.step} (${refusal.said})`;
     case undefined:
       return lastStep(outcome.lines) ?? SIGN_IN_STEP;
-    default: {
-      const unhandled: never = refusal;
-      throw new Error(`unhandled refusal: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("refusal", refusal);
   }
 };
 
@@ -772,10 +771,8 @@ export const createInstalls = (deps: InstallsDeps) => {
         return { kind: "sign-in", said: refusal.said };
       case undefined:
         return { kind: "sign-in", said: sshSaid(outcome.lines) };
-      default: {
-        const unhandled: never = refusal;
-        throw new Error(`unhandled refusal: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("refusal", refusal);
     }
   };
 

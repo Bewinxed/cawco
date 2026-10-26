@@ -2,6 +2,7 @@ import type { NeutralMessage, Rule, RuleFacts } from "@cawco/core";
 import { ruleInScope } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
 import type { JevResult } from "@cawco/core/jev";
+import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, jevAccess } from "./jev";
@@ -170,10 +171,8 @@ export class MeaningJudge {
           break;
         case "unanswered":
           return asking;
-        default: {
-          const unhandled: never = asking;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", asking);
       }
     } catch (error) {
       console.error(

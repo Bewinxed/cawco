@@ -17,6 +17,7 @@
  * the probe asserts no element's text holds a card id.
  */
 import { readWithin } from "../../packages/core/src/bounded";
+import { unhandled } from "../../packages/core/src/unhandled";
 import type { Fleet } from "../scratch-fleet";
 
 interface SeedOption {
@@ -517,10 +518,8 @@ const hub = async <T>(
       throw new Error(
         `${method} ${path}: the hub did not answer within ${read.after} ms (${read.reason})`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

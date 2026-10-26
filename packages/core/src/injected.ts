@@ -20,6 +20,7 @@
  */
 import type { ArtifactKind, CarryRestored } from "./index";
 import { artifactLink, stepLink } from "./references";
+import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
 
 /** One marker's tag, read: its kind, its fields, and the text after the tag's line. */
@@ -370,10 +371,8 @@ export const withDashboardLine = (
         text,
         "The hub knows no address of its dashboard that your browser reaches, so your browser tools can't open the live dashboard."
       );
-    default: {
-      const unhandled: never = reach;
-      throw new Error(`unhandled reach: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("reach", reach);
   }
 };
 

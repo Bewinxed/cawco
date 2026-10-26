@@ -74,8 +74,9 @@ const messageLine = (message: ThreadLine, now: number): string => {
     case "event":
       return `- event, ${ago(message.at, now)}: ${message.noteTitle}${message.body ? `: ${quote(message.body, 600)}` : ""}`;
     default: {
-      const unhandled: never = message;
-      return String(unhandled);
+      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a presenter prints a message it does not know rather than fail the read.
+      const unmatched: never = message;
+      return String(unmatched);
     }
   }
 };

@@ -131,6 +131,7 @@ import {
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   completeLines,
   lineRecords,
@@ -3472,10 +3473,8 @@ class ClaudeSession implements HarnessSession {
             };
           case "unanswered":
             return { taskId, ...task, outputUnread: { after: read.after } };
-          default: {
-            const unhandled: never = read;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", read);
         }
       })
     );
@@ -4340,10 +4339,8 @@ class ClaudeSession implements HarnessSession {
           `[claude] ${this.instanceId}: its turn still ran ${settled.after} ms after the interrupt; the stop closes it`
         );
         break;
-      default: {
-        const unhandled: never = settled;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", settled);
     }
     // The interrupted turn's end read the effort: it lands while the query
     // is open. A CLI that answers nothing within the turn's own wait gets
@@ -4359,10 +4356,8 @@ class ClaudeSession implements HarnessSession {
           `[claude] ${this.instanceId}: its effort read was still unanswered ${read.after} ms into the stop; the stop closes it`
         );
         break;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
     this.#input.end();
     this.#handle.close();

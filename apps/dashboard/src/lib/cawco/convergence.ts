@@ -13,6 +13,7 @@ import {
   type FleetSyncReport,
 } from "@cawco/core";
 import { type ProjectPart, projectItemOf } from "@cawco/core/fleet-items";
+import { unhandled } from "@cawco/core/unhandled";
 
 /** Whether a machine's own reported build is level with the hub's. */
 export type BuildConvergence = "unknown" | "current" | "behind";
@@ -133,10 +134,8 @@ export function syncNotice(
       return `${reading.failed.length} of ${reading.total} not set up`;
     case "converged":
       return null;
-    default: {
-      const unhandled: never = reading;
-      throw new Error(`unhandled reading: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("reading", reading);
   }
 }
 

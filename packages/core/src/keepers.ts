@@ -40,6 +40,7 @@ import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "./binary-installation";
 import { type Bounded, readWithin } from "./bounded";
 import { sessiondEndpoint } from "./sessiond";
+import { unhandled } from "./unhandled";
 
 /** The machine's endpoint's own name: what names the current keeper. */
 export const MACHINE_ENDPOINT = "sessiond.sock";
@@ -240,10 +241,8 @@ export async function publishKeeper(
         throw new Error(
           `${machine} did not answer a connect within ${live.after} ms: whether a keeper still holds it is not known, so it is neither replaced nor set aside`
         );
-      default: {
-        const unhandled: never = live;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", live);
     }
   }
   if (checkout && checkoutVersion === undefined) {

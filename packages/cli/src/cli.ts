@@ -5,6 +5,7 @@
 // moment it loads. A `cawco hub` holding that could not be stopped while its
 // event loop was busy (nightly 2069, killed by systemd after 90s). The daemon
 // and the harnesses load inside the verbs that run them.
+import { unhandled } from "@cawco/core/unhandled";
 import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
@@ -450,10 +451,8 @@ const status = async (args: Args): Promise<number> => {
       }
       printFleet(z.array(AgentRowSchema).parse(JSON.parse(asked.value.said)));
       return 0;
-    default: {
-      const unhandled: never = asked;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", asked);
   }
 };
 

@@ -88,6 +88,7 @@ import {
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { StageErrorSchema } from "@cawco/core/stored-shapes";
+import { unhandled } from "@cawco/core/unhandled";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { agentServerStarted, ensureBoundary, shellQuote } from "./boundary";
@@ -762,10 +763,8 @@ async function answerOf<T>(
       return read.value;
     case "unanswered":
       throw new Error(`The stage did not ${what} within ${waitMs / 1000} s.`);
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 }
 
@@ -897,10 +896,8 @@ function watch(stage: Stage): void {
           `it did not answer ${where} within ${HEALTH_WAIT_MS / 1000} s`
         );
         break;
-      default: {
-        const unhandled: never = look;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", look);
     }
   }, STAGE_HEALTH_MS);
 }
@@ -1014,10 +1011,8 @@ const letGo = async (stage: Stage, waitMs: number): Promise<boolean> => {
       case "unanswered":
         // Something holds the port and has not answered: not free.
         break;
-      default: {
-        const unhandled: never = look;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", look);
     }
     if (Date.now() > deadline) {
       return false;
@@ -1225,10 +1220,8 @@ async function start(stage: Stage): Promise<void> {
       failedStart(stage, why);
       throw new Error(why);
     }
-    default: {
-      const unhandled: never = ready;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", ready);
   }
 }
 

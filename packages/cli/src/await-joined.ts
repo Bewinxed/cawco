@@ -23,6 +23,7 @@ import {
   readMachineKey,
   refusalSince,
 } from "@cawco/core/machine-key";
+import { unhandled } from "@cawco/core/unhandled";
 
 const JOIN_TIMEOUT_MS = INSTALL_LIST_LIMIT_MS;
 const LOCAL_NETWORK_URL =
@@ -98,10 +99,8 @@ export async function awaitJoined(hubUrl: string): Promise<void> {
           return;
         }
         break;
-      default: {
-        const unhandled: never = answer;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", answer);
     }
     const refused = refusalSince(since);
     if (refused) {

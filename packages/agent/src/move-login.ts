@@ -17,6 +17,7 @@ import {
 } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import {
   accountEnv,
@@ -91,10 +92,8 @@ const signinIn = async (
       throw new Error(status.why);
     case "signin":
       return status;
-    default: {
-      const unhandled: never = status;
-      throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("status", status);
   }
 };
 
@@ -165,10 +164,8 @@ const security = async (
       );
     case "answered":
       return read.value;
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

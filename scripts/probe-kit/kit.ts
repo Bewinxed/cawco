@@ -34,6 +34,7 @@ import {
   tryShare,
   unlock,
 } from "../../packages/core/src/flock";
+import { unhandled } from "../../packages/core/src/unhandled";
 import {
   type Fleet,
   type HubAddress,
@@ -1703,10 +1704,8 @@ export async function settle(page: Page, ms = 150, rounds = 4): Promise<void> {
       }
       break;
     }
-    default: {
-      const unhandled: never = landed;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", landed);
   }
   await page.waitForTimeout(ms);
   // A finite run that began after the wait looked (a page's reveal once its

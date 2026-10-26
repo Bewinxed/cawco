@@ -5,6 +5,7 @@
     parseAgentFrontMatter,
   } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import { unhandled } from "@cawco/core/unhandled";
   import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
   import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
   import { deleteAgent } from "#lib/cawco/config/deletes.js";
@@ -80,10 +81,8 @@
                   `[cawco] subagents on ${machine.machineId}: ${didntAnswer(machine.machineId, read, { missed: "its list of subagents didn't come back", again: "It's asked again when this page next reads its machines." })}`
                 );
                 break;
-              default: {
-                const unhandled: never = read;
-                throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-              }
+              default:
+                unhandled("read", read);
             }
           })
           .finally(() => delete reading[machine.machineId]),

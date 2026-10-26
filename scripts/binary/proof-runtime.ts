@@ -13,6 +13,7 @@ import {
 import { runtimeTree } from "../../packages/core/src/runtime";
 import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
 import { REPORT_PATH, type RenderReport } from "../../packages/core/src/stage";
+import { unhandled } from "../../packages/core/src/unhandled";
 import { parseMany } from "../../packages/jsonl-parser/src/pool";
 import { welcomed } from "../lib/keeper-dial";
 
@@ -94,10 +95,8 @@ if (verb === "proof-stack") {
           `live hub unreachable: did not answer within ${live.after} ms (${live.reason})`
         );
         break;
-      default: {
-        const unhandled: never = live;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", live);
     }
   } catch (error) {
     if (String(error).includes("Live hub reachable")) {

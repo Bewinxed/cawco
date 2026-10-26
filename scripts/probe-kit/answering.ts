@@ -5,6 +5,7 @@
  */
 import type { Page } from "playwright-core";
 import { Gone, readWithin } from "../../packages/core/src/bounded";
+import { unhandled } from "../../packages/core/src/unhandled";
 
 /** How long the page is given to answer one question; one it never answers counts as this. */
 const ANSWER_MS = 10_000;
@@ -37,10 +38,8 @@ export async function answering<T>(
         case "unanswered":
           longest = Math.max(longest, ANSWER_MS);
           return;
-        default: {
-          const unhandled: never = asked;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", asked);
       }
       await Bun.sleep(250);
     }

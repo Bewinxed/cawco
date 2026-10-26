@@ -160,6 +160,7 @@ import {
 } from "@cawco/core/sessiond";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { getToolGlance } from "@cawco/core/transcript-rules";
+import { unhandled } from "@cawco/core/unhandled";
 import { turnWords } from "@cawco/core/words/turns";
 import { Effect } from "effect";
 import { recordAgentState } from "./agent-state";
@@ -2416,10 +2417,8 @@ export class SessionSupervisor {
           };
         }
         return;
-      default: {
-        const unhandled: never = copied;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", copied);
     }
     console.info(
       `[carry] files of ${go.length} session(s) moved in ${Date.now() - copyAt} ms (${Date.now() - began} ms in)`
@@ -2550,10 +2549,8 @@ export class SessionSupervisor {
           `[carry] ${instanceId}: ${carryLate("ending its Claude Code process", CARRY_STOP_MS, stopped)}`
         );
         break;
-      default: {
-        const unhandled: never = stopped;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", stopped);
     }
     // The stop did not finish: the conversation moves only once its keeper
     // reports no live process writing it.
@@ -6621,10 +6618,8 @@ async function carryHeld(): Promise<
         `[carry] ${carryLate("reading what its keepers hold", CARRY_KEEPERS_MS, read)}`
       );
       return undefined;
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
   const alive = new Set<string>();
   const listed = new Set<string>();
@@ -6728,10 +6723,8 @@ async function listSessions(args: unknown[]): Promise<{
             after: HARNESS_LISTING_MS,
           });
           return [];
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
     })
   );

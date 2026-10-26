@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ToolPolicy, ToolSpec } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
+  import { unhandled } from "@cawco/core/unhandled";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -70,10 +71,8 @@
             again: TRY_AGAIN,
           });
           break;
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
     } catch (err) {
       refused[key] = message(err);

@@ -84,6 +84,7 @@ import { isAlive, listedPid } from "@cawco/core/signal";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { ModelInfoSchema, SignInFaultSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import type {
   CredentialCreateInput,
   SessionInfo,
@@ -746,10 +747,8 @@ const announceOpencodeServer = async (
       throw new Error(
         `[opencode] no "server listening" line from ${procId} within ${timeoutMs}ms`
       );
-    default: {
-      const unhandled: never = announcement;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", announcement);
   }
 };
 
@@ -1226,10 +1225,8 @@ const v1Decision = async (
         return false;
       }
       return undefined;
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -1252,10 +1249,8 @@ const sessionsOnMachine = async (
       throw new Error(
         `OpenCode's sessions were not read within ${Math.round(read.after / 1000)} s (${read.reason})`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -1748,10 +1743,8 @@ const standaloneRead = async <S extends z.ZodType>(
       throw new Error(
         `\`${command}\` did not answer within ${Math.round(read.after / 1000)} s`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -3921,10 +3914,8 @@ export class OpencodeHarness implements Harness {
         }
         return { state: "unknown" };
       }
-      default: {
-        const unhandled: never = checked;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", checked);
     }
   }
 
@@ -4768,10 +4759,8 @@ export class OpencodeHarness implements Harness {
             }
             break;
           }
-          default: {
-            const unhandled: never = first;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", first);
         }
       } catch {
         // The feed ended or dropped; reconnect below unless stopped.
@@ -5418,10 +5407,8 @@ export class OpencodeHarness implements Harness {
           throw new ReattachUnanswered(
             notAnswered(`session ${resume.sessionKey}`, read)
           );
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
       const activity = this.#activity(identity);
       activity.bind(resume.sessionKey, ctx.instanceId);
@@ -5789,10 +5776,8 @@ export class OpencodeHarness implements Harness {
           throw new Error(
             notAnswered(`session ${sessionKey} to resume`, found)
           );
-        default: {
-          const unhandled: never = found;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", found);
       }
       sessionId = sessionKey;
     } else {
@@ -6418,10 +6403,8 @@ export class OpencodeHarness implements Harness {
           state: "pending",
           detail: `OpenCode had not loaded its new config ${CONFIG_SETTLE_TIMEOUT_MS / 1000} s after it was written.`,
         };
-      default: {
-        const unhandled: never = settled;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", settled);
     }
   }
 
@@ -6952,10 +6935,8 @@ async function settledMcpList(client: OpencodeClient, names: string[]) {
         return last;
       }
       throw new Error(notAnswered("its MCP server list", settled));
-    default: {
-      const unhandled: never = settled;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", settled);
   }
 }
 

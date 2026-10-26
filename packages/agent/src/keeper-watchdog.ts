@@ -48,6 +48,7 @@ import {
 import { type Ran, runInC } from "@cawco/core/run-captured";
 import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { type KeeperJob, KeeperKept, keeperJob } from "./keeper-jobs";
 import { dialKeeper, KEEPER_WELCOME_MS } from "./sessiond-client";
 
@@ -363,10 +364,8 @@ export class KeeperWatchdog {
           ? `accepted, no welcome in ${dial.after}ms`
           : `connect did not complete in ${dial.after}ms`;
         break;
-      default: {
-        const unhandled: never = dial;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", dial);
     }
     // A new keeper starts a new count: a restart is not the same silence.
     let streak = this.#streaks.get(found.endpoint);
@@ -460,10 +459,8 @@ export class KeeperWatchdog {
         case "unanswered":
           // No welcome within this try's 2 s: the next try asks again.
           break;
-        default: {
-          const unhandled: never = dial;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", dial);
       }
       if (!answered) {
         await Bun.sleep(500);

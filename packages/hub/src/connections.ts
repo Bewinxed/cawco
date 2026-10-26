@@ -73,6 +73,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { HOUR_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import { LinearClient } from "@linear/sdk";
 import {
   auth,
@@ -1066,10 +1067,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
               case "unanswered":
                 // It never connected: the SDK closed it when it was let go.
                 return;
-              default: {
-                const unhandled: never = connected;
-                throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-              }
+              default:
+                unhandled("read", connected);
             }
           })
           .catch(() => undefined),
@@ -1275,10 +1274,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
         case "unanswered":
           release();
           return;
-        default: {
-          const unhandled: never = connected;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", connected);
       }
     }, release);
     return connecting;
@@ -1317,10 +1314,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
           break;
         case "unanswered":
           return connected;
-        default: {
-          const unhandled: never = connected;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", connected);
       }
       const answer = await readWithin(ms, (signal) =>
         use(connected.value, signal)
@@ -1331,10 +1326,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
           return answer;
         case "unanswered":
           return answer;
-        default: {
-          const unhandled: never = answer;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", answer);
       }
     };
     const reused = clients.has(r.id);
@@ -1452,10 +1445,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
           `[connections] ${r.name}: its tools were not listed, the last list stands: ${unanswered(r, listing.after).message}`
         );
         throw unanswered(r, listing.after);
-      default: {
-        const unhandled: never = listing;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", listing);
     }
   };
 
@@ -1484,10 +1475,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
         break;
       case "unanswered":
         throw unanswered(r, called.after);
-      default: {
-        const unhandled: never = called;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", called);
     }
     const text = JSON.stringify(result);
     const clean = scrub(r, text);
@@ -1546,10 +1535,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
             kind: "unknown",
             error: unanswered(r, called.after).message,
           };
-        default: {
-          const unhandled: never = called;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", called);
       }
       const text = JSON.stringify(result);
       const clean = scrub(r, text);

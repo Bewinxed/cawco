@@ -17,6 +17,7 @@
  */
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   errorText,
   notAnswered,
@@ -177,10 +178,8 @@ export class OpencodeActivity {
               kind: "unanswered",
               reason: `OpenCode active sessions: ${notAnswered("which sessions run", active)}`,
             };
-          default: {
-            const unhandled: never = active;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", active);
         }
       } catch (error) {
         return {

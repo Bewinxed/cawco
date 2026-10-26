@@ -29,6 +29,7 @@ import type {
   JevResult,
   JevText,
 } from "@cawco/core/jev";
+import { unhandled } from "@cawco/core/unhandled";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
 import {
   PLACE_QUESTION,
@@ -121,10 +122,8 @@ export async function askRow<
       );
       throw new JevFailed(`${said} (${named}).`);
     }
-    default: {
-      const unhandled: never = asking;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", asking);
   }
 }
 

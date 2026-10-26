@@ -64,6 +64,7 @@ import {
   wordsOf,
 } from "@cawco/core/find-match";
 import { DAY_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import { status, t } from "elysia";
 import { checkoutOf, type DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
@@ -1640,10 +1641,8 @@ const partWhy = (part: ArtifactNeedNoticePart, name: string): string => {
       return artifactWords.newAnswers(part.count);
     case "ended":
       return noticePartWords(part, name);
-    default: {
-      const unhandled: never = part;
-      throw new Error(`unhandled notice: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("notice", part);
   }
 };
 

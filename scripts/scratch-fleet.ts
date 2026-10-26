@@ -62,6 +62,7 @@ import {
   spawnedPid,
 } from "../packages/core/src/signal";
 import { DAY_MS } from "../packages/core/src/time";
+import { unhandled } from "../packages/core/src/unhandled";
 import { startedPath } from "../packages/core/src/workspace-needs";
 import { installDeps } from "./lib/deps";
 import { requireDiskRoom } from "./lib/disk-room";
@@ -2461,10 +2462,8 @@ async function standUp(
         throw new Error(
           `${path}: the hub did not answer within ${read.after} ms (${read.reason})`
         );
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
   };
   let socket: WebSocket | undefined;
@@ -2546,10 +2545,8 @@ async function standUp(
           throw new Error(
             `${method}: no control_result within ${read.after} ms (${read.reason})`
           );
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
     } finally {
       ws.removeEventListener("message", heard);
@@ -2595,10 +2592,8 @@ async function standUp(
           throw new Error(
             `no fleet.fetch frame landed within ${landed.after} ms`
           );
-        default: {
-          const unhandled: never = landed;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", landed);
       }
     } finally {
       ws.removeEventListener("message", heard);

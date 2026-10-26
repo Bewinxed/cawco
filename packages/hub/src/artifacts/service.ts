@@ -149,6 +149,7 @@ import {
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
@@ -3565,10 +3566,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       case "unanswered":
         // Not known yet, not failed: it is in the panel and opens when a dashboard does.
         return { opened: false, why: NO_VIEW, started: true };
-      default: {
-        const unhandled: never = shown;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", shown);
     }
     if (!ack.ok) {
       return {

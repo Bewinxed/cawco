@@ -17,6 +17,7 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { unhandled } from "@cawco/core/unhandled";
 import { type PinMove, pinMoveWords, putOnPins } from "./tools";
 
 interface PinRecord {
@@ -127,9 +128,7 @@ export async function runBinaryPins(
       throw new Error(
         `${from}'s binary-pins did not answer within ${PINS_MS / 60_000} minutes`
       );
-    default: {
-      const unhandled: never = ran;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", ran);
   }
 }

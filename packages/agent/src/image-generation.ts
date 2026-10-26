@@ -11,6 +11,7 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { credentialAccountIds } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { chatgptBaseUrl, chatgptClaims } from "@cawco/core/usage/chatgpt";
 import { z } from "zod";
 import { freshen, readHeld } from "./provider-accounts";
@@ -280,10 +281,8 @@ async function requestImage(
       throw new Error(
         `ChatGPT did not answer within ${IMAGE_GENERATION_TIMEOUT_MS / 60_000} minutes. No PNG was published and no automatic retry was submitted.`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 }
 

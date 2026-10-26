@@ -1,6 +1,7 @@
 import type { JevResult } from "@cawco/core/jev";
 import type { SuggestCandidate } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
@@ -153,10 +154,8 @@ export async function suggest(
         console.warn(`[suggest] route=${access.route}: ${words}`);
         return { error: words };
       }
-      default: {
-        const unhandled: never = asking;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", asking);
     }
   } catch (error) {
     const words = error instanceof Error ? error.message : String(error);

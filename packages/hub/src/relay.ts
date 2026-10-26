@@ -64,6 +64,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { machineId } from "@cawco/core/machine-id";
 import { octokitAnswer } from "@cawco/core/octokit-answer";
+import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
@@ -631,10 +632,8 @@ export const createRelay = ({
             state: "wanted",
             reason: `${githubSilent(asked.after)} to register the webhook, so it may or may not be there. The hub tries again.`,
           };
-        default: {
-          const unhandled: never = asked;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", asked);
       }
       const answer = asked.value;
       if (answer.status >= 200 && answer.status < 300) {
@@ -684,10 +683,8 @@ export const createRelay = ({
           break;
         case "unanswered":
           return `${githubSilent(asked.after)} to delete webhook ${row.hookId}, so it may still be there; delete it at https://github.com/${repo}/settings/hooks`;
-        default: {
-          const unhandled: never = asked;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", asked);
       }
       const answer = asked.value;
       if (

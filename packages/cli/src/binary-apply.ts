@@ -101,6 +101,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
@@ -197,10 +198,8 @@ const svc = async (
       throw new Error(
         unansweredService(`${action} ${ids.join(", ")}`, done.after)
       );
-    default: {
-      const unhandled: never = done;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", done);
   }
 };
 
@@ -352,10 +351,8 @@ async function awaitWelcome(endpoint: string, job: KeeperJob): Promise<void> {
               ? `no welcome within ${read.after} ms`
               : "its connection ended before its welcome";
           break;
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
     } catch (error) {
       last = message(error);
@@ -481,10 +478,8 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
       );
       keepJob = true;
       break;
-    default: {
-      const unhandled: never = listening;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", listening);
   }
   try {
     await say(`keeper ${to}: units: ${await writeKeeperUnits(to, job.file)}`);
@@ -1051,10 +1046,8 @@ async function stopHub(version: string): Promise<void> {
           return say(
             `roll back ${version}: ${unansweredService("stopping the hub", stopped.after)}`
           );
-        default: {
-          const unhandled: never = stopped;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", stopped);
       }
     })
     .catch((error) =>

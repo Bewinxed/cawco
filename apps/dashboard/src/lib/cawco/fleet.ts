@@ -33,6 +33,7 @@ import type {
   McpSSEServerConfig,
 } from "@cawco/core/harness";
 import type { FleetHook } from "@cawco/core/hooks";
+import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
 import { awayOf, hubCall, hubSaid } from "#lib/cawco/hub-read.js";
@@ -890,10 +891,8 @@ export async function discoverAgents(
       return listed;
     case "answered":
       break;
-    default: {
-      const unhandled: never = listed;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", listed);
   }
   const entries = listed.value;
 
@@ -922,10 +921,8 @@ export async function discoverAgents(
             .map((entry) => `${root}/${dir.name}/${entry.name}`)
         );
         break;
-      default: {
-        const unhandled: never = nested;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", nested);
     }
   }
 
@@ -942,10 +939,8 @@ export async function discoverAgents(
           case "answered":
             content = got.value;
             break;
-          default: {
-            const unhandled: never = got;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", got);
         }
         const front = parseAgentFrontMatter(content);
         // A markdown file with no `name` is not a subagent — it is a note

@@ -16,6 +16,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { delegationHubUrl } from "./delegation";
 import { provenFetch } from "./hub-proof";
 
@@ -70,10 +71,8 @@ async function deliverFile(
         file,
         `the hub did not answer within ${FETCH_TIMEOUT_MS / 1000} s`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
   await writeStateFile(path, bytes);
   return attachedFileLine(path, {

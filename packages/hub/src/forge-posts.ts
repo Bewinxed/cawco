@@ -10,6 +10,7 @@
  * made once, by the same machine, when they approve it.
  */
 import type { InstanceRow } from "@cawco/core";
+import { unhandled } from "@cawco/core/unhandled";
 import type { UpstreamRule } from "@cawco/core/upstream-guard";
 import type {
   ForgeAsk,
@@ -84,10 +85,8 @@ export const createForgePosts = (deps: ForgePostsDeps) => ({
             verdict.account
           ),
         };
-      default: {
-        const unhandled: never = verdict;
-        throw new Error(`unhandled verdict: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("verdict", verdict);
     }
   },
 });

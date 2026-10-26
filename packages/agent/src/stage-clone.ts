@@ -75,6 +75,7 @@ import {
   type StageCloneFrame,
 } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
@@ -179,10 +180,8 @@ const gitRaw = async (
       throw new Error(
         `git ${args[0]} in ${dir} did not finish within ${STAGE_CLONE_GIT_MS / 1000}s`
       );
-    default: {
-      const unhandled: never = ran;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", ran);
   }
 };
 
@@ -522,10 +521,8 @@ const frozenInstall = (install: Install): string => {
       return install.major >= 2
         ? "yarn install --immutable"
         : "yarn install --frozen-lockfile";
-    default: {
-      const unhandled: never = install.manager;
-      throw new Error(`unhandled manager: ${String(unhandled)}`);
-    }
+    default:
+      unhandled("manager", install.manager);
   }
 };
 

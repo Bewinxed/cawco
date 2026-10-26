@@ -36,6 +36,7 @@
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { unreportedHarnessRefusal } from "../../../packages/hub/src/placement";
 import { ACCOUNT, type Fleet, MACHINE } from "../../scratch-fleet";
@@ -182,10 +183,8 @@ const refusedWith = (said: Bounded<string>, expected: string): boolean => {
       return said.value === expected;
     case "unanswered":
       return false;
-    default: {
-      const unhandled: never = said;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", said);
   }
 };
 
@@ -196,10 +195,8 @@ const heard = (said: Bounded<string>): string => {
       return said.value;
     case "unanswered":
       return `(nothing within ${said.after} ms)`;
-    default: {
-      const unhandled: never = said;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", said);
   }
 };
 
@@ -372,10 +369,8 @@ const timeouts = async ({
           `no frame within ${after.said.after} ms; the hub's row: ${JSON.stringify(fleet.instance(after.id) ?? null)}`
         );
         break;
-      default: {
-        const unhandled: never = after.said;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", after.said);
     }
 
     // (e) Slow again: the next read runs out of time.

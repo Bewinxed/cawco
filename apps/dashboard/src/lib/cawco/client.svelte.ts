@@ -139,6 +139,7 @@ import type {
   TranscriptPageBranch,
   TranscriptTail,
 } from "@cawco/core/transcript-types";
+import { unhandled } from "@cawco/core/unhandled";
 import type { UpstreamPosts, WriteMethod } from "@cawco/core/upstream-guard";
 import { UPSTREAM_POST_TOOL } from "@cawco/core/upstream-post";
 import type {
@@ -4040,8 +4041,9 @@ function failureNotice(record: CommandRecord): string {
     case "send":
       return `Your message was not sent: ${why}.`;
     default: {
-      const unhandled: never = record.kind;
-      return `That didn't go through: ${why}. (${String(unhandled)})`;
+      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a refused command of a kind this build does not know still gets its line, not a throw.
+      const unmatched: never = record.kind;
+      return `That didn't go through: ${why}. (${String(unmatched)})`;
     }
   }
 }
@@ -4101,10 +4103,8 @@ function againOf(
     case "send.withdraw":
     case "send":
       return;
-    default: {
-      const unhandled: never = asked.kind;
-      throw new Error(`No Try again for command kind ${String(unhandled)}.`);
-    }
+    default:
+      unhandled("Try again command kind", asked.kind);
   }
 }
 
@@ -6083,10 +6083,8 @@ async function waitForHub(timeoutMs = 5000): Promise<void> {
       throw new Error(
         `Could not reach the hub within ${Math.round(opened.after / 1000)} s. Check that it is running, then try again.`
       );
-    default: {
-      const unhandled: never = opened;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", opened);
   }
 }
 
@@ -6211,10 +6209,8 @@ async function start({
       return taken;
     case "answered":
       break;
-    default: {
-      const unhandled: never = taken;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", taken);
   }
   const created = session(instanceId);
   created.machineId = machineId;
@@ -6288,10 +6284,8 @@ export async function spawnSession({
       return started;
     case "answered":
       break;
-    default: {
-      const unhandled: never = started;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", started);
   }
   sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
   detach(refresh(), "refresh");
@@ -6400,10 +6394,8 @@ export async function forkSession({
       sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
       detach(refresh(), "refresh");
       return { kind: "answered", value: started.value.instanceId };
-    default: {
-      const unhandled: never = started;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", started);
   }
 }
 
@@ -6518,10 +6510,8 @@ export async function stopSession(
         return stopped;
       case "unanswered":
         return stopped;
-      default: {
-        const unhandled: never = stopped;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", stopped);
     }
   } finally {
     detach(refresh(), "refresh");
@@ -6552,10 +6542,8 @@ export async function discardSession(
         return discarded;
       case "unanswered":
         return discarded;
-      default: {
-        const unhandled: never = discarded;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", discarded);
     }
   } finally {
     await refresh();
@@ -7718,10 +7706,8 @@ export function answeredOr<T>(
       throw new Error(
         didntAnswer(machineId, read, { outcome, again: TRY_AGAIN })
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 }
 
@@ -7816,10 +7802,8 @@ export async function loadCatalog(machineId: string): Promise<void> {
         catalogLeftOut = { ...catalogLeftOut, [machineId]: said };
         break;
       }
-      default: {
-        const unhandled: never = listed;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", listed);
     }
   } catch (error) {
     console.error(`[cawco] listSessions on ${machineId} failed:`, error);
@@ -8642,10 +8626,8 @@ async function readContext(
         return { kind: "unread", why: target.contextError };
       case "answered":
         break;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
     const usage = read.value;
     const context: ContextUsage = {
@@ -8740,10 +8722,8 @@ export async function refreshCommands(
         return;
       case "answered":
         break;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
     const commands = read.value;
     target.commands.names = commands.map((command) => command.name);
@@ -8823,10 +8803,8 @@ export async function loadMcpServers(
       case "answered":
         target.mcp = read.value;
         break;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
   } catch (error) {
     if (!isCustodyRefusal(error)) {
@@ -8913,10 +8891,8 @@ export async function relaunchSession(
         return relaunched;
       case "answered":
         return relaunched;
-      default: {
-        const unhandled: never = relaunched;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", relaunched);
     }
   } catch (error) {
     target.permissionMode = previous;
@@ -9137,10 +9113,8 @@ export async function editAndResend(
       case "answered":
         submitCommand(instanceId, machineId, "send", { text: content });
         return rewound;
-      default: {
-        const unhandled: never = rewound;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", rewound);
     }
   } finally {
     target.relaunching = false;

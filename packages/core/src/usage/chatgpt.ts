@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { readWithin } from "../bounded";
+import { unhandled } from "../unhandled";
 import type { LimitWindow } from "./types";
 
 /**
@@ -149,10 +150,8 @@ export const readChatgptUsage = async (
         console.warn(`[usage] ${error}; the last reading stands`);
         return { ok: false, status: null, error };
       }
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
   } catch (error) {
     return {

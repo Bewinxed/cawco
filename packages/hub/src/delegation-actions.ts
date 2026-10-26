@@ -41,6 +41,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
+import { unhandled } from "@cawco/core/unhandled";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateList, DelegateListQuery } from "./delegation-tree";
@@ -104,10 +105,8 @@ async function fetchDelegateTypes(projectId?: string): Promise<DelegateType[]> {
       console.warn(`[cawco] ${message}`);
       throw new Error(message);
     }
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 }
 
@@ -1402,10 +1401,8 @@ async function measuredContext(id: string): Promise<number | null> {
       case "unanswered":
         // The size stays unknown; the refusal says so as it always has.
         return null;
-      default: {
-        const unhandled: never = measured;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", measured);
     }
   } catch {
     // A context read cannot keep a cold-session refusal waiting on an offline machine.
@@ -1449,10 +1446,8 @@ async function readFollowupState(
       throw new Error(
         `The hub did not answer within ${Math.round(read.after / 1000)} s whether that session's cache is warm, so nothing was sent. Retry.`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
   return read.value;
 }
@@ -1685,10 +1680,8 @@ export const handoffActions = ({
           throw new Error(
             `The hub did not answer within ${Math.round(read.after / 1000)} s with the image.`
           );
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
     },
     async forgePost(ask) {

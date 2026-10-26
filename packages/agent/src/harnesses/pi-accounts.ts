@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { configurePage, mcpGatewayPort } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { accountCredentialPath, credentialAccountIds } from "@cawco/core/paths";
+import { unhandled } from "@cawco/core/unhandled";
 import type {
   AuthOperationOptions,
   Credential,
@@ -104,10 +105,8 @@ const askFresh = async (accountId: string): Promise<void> => {
       throw new Error(
         `The agent did not answer the refresh of the account's sign-in within ${Math.round(asked.after / 1000)} s.`
       );
-    default: {
-      const unhandled: never = asked;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", asked);
   }
 };
 

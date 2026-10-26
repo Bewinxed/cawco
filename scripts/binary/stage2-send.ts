@@ -9,6 +9,7 @@
  * says nothing within 15 s.
  */
 import { readWithin } from "../../packages/core/src/bounded";
+import { unhandled } from "../../packages/core/src/unhandled";
 
 const [, , hub, machineId, instanceId, text] = Bun.argv;
 const commandId = crypto.randomUUID();
@@ -73,8 +74,6 @@ switch (ack.kind) {
     );
     process.exit(1);
     break;
-  default: {
-    const unhandled: never = ack;
-    throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-  }
+  default:
+    unhandled("read", ack);
 }

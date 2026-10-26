@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { FsEntry } from "@cawco/core";
   import type { Bounded } from "@cawco/core/bounded";
+  import { unhandled } from "@cawco/core/unhandled";
   import { failureWords } from "#lib/cawco/hub-read.js";
 
   /** Where the picker reads a machine's folders: the fleet's socket, or an artifact tab's own. */
@@ -134,10 +135,8 @@
           entries = [];
           errorMessage = folders.unanswered(machineId, read);
           break;
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
     } catch (err) {
       if (path !== next) {

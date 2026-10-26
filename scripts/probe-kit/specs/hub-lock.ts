@@ -19,6 +19,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { identifiedPid, signal } from "../../../packages/core/src/signal";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import { leasePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -92,10 +93,8 @@ const spec: Spec = {
           `it did not exit within ${ended.after} ms`
         );
         break;
-      default: {
-        const unhandled: never = ended;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", ended);
     }
     const said = await new Response(second.stderr).text();
     kit.check(

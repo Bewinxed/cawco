@@ -11,6 +11,7 @@
 import type { BinaryInstallation } from "./binary-installation";
 import { type Bounded, readWithin } from "./bounded";
 import { machineFetch } from "./machine-key";
+import { unhandled } from "./unhandled";
 
 /** How long one request of a probe is waited on. */
 const PROBE_TIMEOUT_MS = 3000;
@@ -85,10 +86,8 @@ async function ask<T>(
         ...(value === undefined ? {} : { value }),
       };
     }
-    default: {
-      const unhandled: never = got;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", got);
   }
 }
 
@@ -134,10 +133,8 @@ async function probeHubMachine(
       return `the hub does not answer (${health.said})`;
     case "answered":
       break;
-    default: {
-      const unhandled: never = health;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", health);
   }
   if (health.value?.ok !== true) {
     return `the hub does not answer ok (${health.said})`;
@@ -161,10 +158,8 @@ async function probeHubMachine(
       return dashboard.value === true
         ? undefined
         : `the dashboard does not answer ok (${dashboard.said})`;
-    default: {
-      const unhandled: never = dashboard;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", dashboard);
   }
 }
 
@@ -188,10 +183,8 @@ async function probeAgentRow(options: {
       return `this machine's agent is not registered with the hub on the new build (the hub did not answer for its row; ${asked.said})`;
     case "answered":
       break;
-    default: {
-      const unhandled: never = asked;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", asked);
   }
   const row = asked.value;
   if (

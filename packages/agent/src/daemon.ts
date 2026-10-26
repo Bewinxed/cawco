@@ -154,6 +154,7 @@ import {
   type RelayCertifyArgs,
   type RelayStartArgs,
 } from "@cawco/core/stream-relay";
+import { unhandled } from "@cawco/core/unhandled";
 import { readUpstreamRule } from "@cawco/core/upstream-guard";
 import {
   CONTROL_FORGE_POST,
@@ -598,10 +599,8 @@ async function awaitGrant(
         `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
       );
       return granted;
-    default: {
-      const unhandled: never = first;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", first);
   }
 }
 
@@ -693,10 +692,8 @@ const readPart = async <T>(
         `[agent] ${part} was not read within ${MACHINE_PART_MS / 1000} s; the hub keeps its last copy, and it is read again on the next beat`
       );
       return;
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", answer);
   }
 };
 
@@ -1447,10 +1444,8 @@ const open = (url: string) =>
                 )
               );
               break;
-            default: {
-              const unhandled: never = read;
-              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-            }
+            default:
+              unhandled("read", read);
           }
         },
         (error: unknown) => {

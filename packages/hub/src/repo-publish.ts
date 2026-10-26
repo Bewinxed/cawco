@@ -25,6 +25,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import { unhandled } from "@cawco/core/unhandled";
 import { startedPath } from "@cawco/core/workspace-needs";
 import type { Connections } from "./connections";
 import type { ProjectRow } from "./db";
@@ -201,10 +202,8 @@ export const createRepoPublish = ({
         throw new Error(
           `The hub's push to ${url} did not finish within ${Math.round(ran.after / 1000)} s; the repository may hold part of it.`
         );
-      default: {
-        const unhandled: never = ran;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", ran);
     }
     const { stderr, code } = ran.value;
     if (code !== 0) {
@@ -255,10 +254,8 @@ export const createRepoPublish = ({
         throw new Error(
           `GitHub did not answer within ${Math.round(asked.after / 1000)} s about creating ${change.name}, so it may or may not exist: look on GitHub before you retry.`
         );
-      default: {
-        const unhandled: never = asked;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", asked);
     }
     const { made, refused } = asked.value;
     if (!made) {

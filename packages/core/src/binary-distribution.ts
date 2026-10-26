@@ -10,6 +10,7 @@ import {
   downloadResumably,
   fileMatches,
 } from "./resumable-download";
+import { unhandled } from "./unhandled";
 import { downloadWords } from "./words/downloads";
 
 export interface SignedRelease {
@@ -72,10 +73,8 @@ async function fromReleaseHost<T>(
       throw new Error(
         `The release host did not answer ${what} within ${Math.round(got.after / 1000)}s`
       );
-    default: {
-      const unhandled: never = got;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", got);
   }
 }
 

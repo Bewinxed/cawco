@@ -26,6 +26,7 @@ import {
   readRecordSync,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import type { Subprocess } from "bun";
 import type { z } from "zod";
 import {
@@ -385,10 +386,8 @@ const beginSignIn = async (
     case "unanswered":
       failure = noLink(current, "timeout");
       break;
-    default: {
-      const unhandled: never = shown;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", shown);
   }
   const [url] = links;
   if (failure !== undefined || !url) {
@@ -451,10 +450,8 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
       throw new Error(
         `Claude Code on this machine didn't finish signing in within ${EXCHANGE_TIMEOUT_MS / 1000} s, so the sign-in stopped. ${screen}`
       );
-    default: {
-      const unhandled: never = exited;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", exited);
   }
   // Signed in is what the dir's `claude auth status` says, not the screen.
   const dir = accountConfigDir(account);
@@ -473,10 +470,8 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
     case "unread":
     case "locked":
       throw new Error(status.why);
-    default: {
-      const unhandled: never = status;
-      throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("status", status);
   }
 };
 
@@ -528,10 +523,8 @@ const logout = async (account: string): Promise<void> => {
       throw new Error(
         `\`claude auth logout\` did not answer within ${LOGOUT_MS / 1000} s; whether the account signed out is not known.`
       );
-    default: {
-      const unhandled: never = ran;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", ran);
   }
 };
 

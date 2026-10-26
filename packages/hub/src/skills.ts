@@ -15,6 +15,7 @@ import { hashFiles } from "@cawco/core/file-hash";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { $ } from "bun";
 import { skillMdName } from "./fleet-versions";
 
@@ -192,10 +193,8 @@ export const get = async (url: string): Promise<Response> => {
       throw new Error(
         `${url} did not answer within ${Math.round(asked.after / 1000)} s`
       );
-    default: {
-      const unhandled: never = asked;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", asked);
   }
 };
 
@@ -290,10 +289,8 @@ export const downloadRepo = async (
         throw new Error(
           `git ${step} for ${slug} did not finish within ${Math.round(ran.after / 1000)} s`
         );
-      default: {
-        const unhandled: never = ran;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", ran);
     }
     const { code, stderr } = ran.value;
     if (code !== 0) {

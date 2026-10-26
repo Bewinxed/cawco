@@ -51,6 +51,7 @@ import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { unhandled } from "@cawco/core/unhandled";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -443,10 +444,8 @@ const refusalWords = (refusal: TunnelRefusal): string => {
       return `its sshd binds a forward on ${refusal.bound.join(", ")}, beyond its loopback (GatewayPorts)`;
     case "failed":
       return `${refusal.step}: ${refusal.said}`;
-    default: {
-      const unhandled: never = refusal;
-      throw new Error(`unhandled refusal: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("refusal", refusal);
   }
 };
 

@@ -80,6 +80,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   refuseShortOfWorkspace,
   systemProgram,
@@ -212,10 +213,8 @@ export const gitUntil =
         return ran.value;
       case "unanswered":
         throw new Error(late);
-      default: {
-        const unhandled: never = ran;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", ran);
     }
   };
 

@@ -57,6 +57,7 @@ import {
   type PlanStep,
   stepWaitsOnArtifact,
 } from "@cawco/core";
+import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactRow } from "../db/artifacts";
 
 /**
@@ -235,10 +236,8 @@ const stopOf = (
     case "unopened":
     case undefined:
       return { top: true };
-    default: {
-      const unhandled: never = reason;
-      throw new Error(`unhandled reason: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("reason", reason);
   }
 };
 

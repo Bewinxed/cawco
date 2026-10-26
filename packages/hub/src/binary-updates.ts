@@ -48,6 +48,7 @@ import {
   writeStateFileSync,
 } from "@cawco/core/state-file";
 import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
+import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { hidden } from "./hidden";
@@ -415,10 +416,8 @@ export function createBinaryUpdates(options: Options) {
               502,
               `The hub could not fetch this build from its release host: ${archive.error}`
             );
-          default: {
-            const unhandled: never = archive;
-            throw new Error(`unhandled archive: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("archive", archive);
         }
       }
     );

@@ -1,0 +1,12 @@
+language js
+
+// An exhaustive switch ends in one place: unhandled() in
+// packages/core/src/unhandled.ts, which throws with what was unhandled and
+// its value (imported from @cawco/core/unhandled, by relative path in
+// scripts/ and apps/cawrier). A hand-written `const x: never = value` and its
+// throw is refused anywhere else; a switch that falls back to a value instead
+// of throwing says why in its biome-ignore.
+`const $name: never = $value` as $hit where {
+  $filename <: not includes "packages/core/src/unhandled.ts",
+  register_diagnostic(span=$hit, message="End an exhaustive switch with unhandled() from @cawco/core/unhandled.")
+}

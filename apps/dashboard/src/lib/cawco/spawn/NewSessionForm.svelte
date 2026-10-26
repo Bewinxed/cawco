@@ -22,6 +22,7 @@
   } from "@cawco/core";
   import type { Bounded } from "@cawco/core/bounded";
   import { detach } from "@cawco/core/detach";
+  import { unhandled } from "@cawco/core/unhandled";
   import { tick, untrack } from "svelte";
   import { z } from "zod";
   import { awayOf, failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
@@ -1640,10 +1641,8 @@
               return { kind: "answered", value: false };
             case "unanswered":
               return read;
-            default: {
-              const unhandled: never = read;
-              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-            }
+            default:
+              unhandled("read", read);
           }
         },
         (cause: unknown): Bounded<boolean> => {
@@ -1666,10 +1665,8 @@
           outcome: spawnWords.form.folderUnknown,
           again: TRY_AGAIN,
         });
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
   }
   /**

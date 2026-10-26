@@ -100,6 +100,7 @@ import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { movedLine } from "../../../packages/core/src/injected";
 import { signal as signalPid } from "../../../packages/core/src/signal";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -136,10 +137,8 @@ const requestWithin = async (
       throw new Error(
         `${init.method ?? "GET"} ${url} did not answer within ${read.after} ms (${read.reason})`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

@@ -28,6 +28,7 @@ import {
   projectItemOf,
   reportKeyOf,
 } from "@cawco/core/fleet-items";
+import { unhandled } from "@cawco/core/unhandled";
 
 /** What a delta moved: the items it changed or forced, the ones it took away, and whether the policy is among them. */
 export interface DeltaApplied {
@@ -200,10 +201,8 @@ const reported = (
     case "projectCheckout":
       // No report names them: written as asked.
       return;
-    default: {
-      const unhandled: never = kind;
-      throw new Error(`unhandled kind: ${String(unhandled)}`);
-    }
+    default:
+      unhandled("kind", kind);
   }
 };
 

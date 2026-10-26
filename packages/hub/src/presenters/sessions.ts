@@ -52,8 +52,9 @@ const stateWords = (node: DelegateNode, now: number): string => {
     case "running":
       return `${node.state} for ${lasted(now - started)}`;
     default: {
-      const unhandled: never = node.state;
-      return String(unhandled);
+      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a presenter prints a state it does not know rather than fail the read.
+      const unmatched: never = node.state;
+      return String(unmatched);
     }
   }
 };

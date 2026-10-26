@@ -46,6 +46,7 @@
  */
 import type { WaitTarget } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import type { GitHubCursor, GitHubResource } from "./db/schema";
@@ -1001,10 +1002,8 @@ export const pollRepo = async (input: {
         case "unanswered":
           out.unanswered = polled.after;
           break;
-        default: {
-          const unhandled: never = polled;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", polled);
       }
       break;
     } catch (error) {

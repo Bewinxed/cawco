@@ -105,6 +105,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { DAY_MS } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
+import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import type {
   DbShape,
@@ -791,10 +792,8 @@ const post = async (
         return asked.value;
       case "unanswered":
         return { status: 0, reason: cawrierSilent(asked.after) };
-      default: {
-        const unhandled: never = asked;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", asked);
     }
   } catch {
     return { status: 0, reason: null };
@@ -842,10 +841,8 @@ const removeDevice = async (
       case "unanswered":
         refusal = cawrierSilent(asked.after);
         break;
-      default: {
-        const unhandled: never = asked;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", asked);
     }
   } catch (error) {
     refusal = `Cawrier not reached: ${error instanceof Error ? error.message : String(error)}`;

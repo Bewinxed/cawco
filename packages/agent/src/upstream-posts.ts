@@ -16,6 +16,7 @@ import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { octokitAnswer } from "@cawco/core/octokit-answer";
 import { repositoryConfigProblem } from "@cawco/core/safe-git";
+import { unhandled } from "@cawco/core/unhandled";
 import { GITHUB_API, isWriteMethod } from "@cawco/core/upstream-guard";
 import {
   FORGE_NAMES,
@@ -160,10 +161,8 @@ const makeHttp = async (post: HttpPost): Promise<PostMade> => {
         ok: false,
         said: `GitHub did not answer within ${Math.round(read.after / 1000)} s, so the request may or may not have posted.`,
       };
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

@@ -23,6 +23,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { standalone } from "@cawco/core/runtime";
+import { unhandled } from "@cawco/core/unhandled";
 import { searchWords } from "@cawco/core/words/search";
 import type {
   SearchAnswer,
@@ -178,10 +179,8 @@ export class SearchProcess {
       case "failed":
         this.#settle(said);
         return;
-      default: {
-        const unhandled: never = said;
-        throw new Error(`unhandled line: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("line", said);
     }
   }
 

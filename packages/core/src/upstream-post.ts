@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { unhandled } from "./unhandled";
 
 /**
  * A post to another person's repository held for the person's answer, under
@@ -238,10 +239,8 @@ const forgeDescribed = (
         body: write.body,
         command: `comment on ${write.on === "issue" ? "issue" : changeRequestWords(post.forge)} ${write.number} of ${post.repo}`,
       };
-    default: {
-      const unhandled: never = write;
-      throw new Error(`unhandled forge write: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("forge write", write);
   }
 };
 

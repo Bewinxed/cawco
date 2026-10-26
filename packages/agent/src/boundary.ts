@@ -181,6 +181,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { PolicySchema } from "@cawco/core/stored-shapes";
+import { unhandled } from "@cawco/core/unhandled";
 import type { UpstreamRule, UpstreamRules } from "@cawco/core/upstream-guard";
 import type { Policy } from "@cawco/core/workspace-judge";
 import {
@@ -6843,10 +6844,8 @@ const judgeWords = (read: Bounded<string>): string => {
       return read.value;
     case "unanswered":
       return `no answer within ${HOOK_LIMIT_S} s`;
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 

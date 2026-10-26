@@ -14,6 +14,7 @@ import type {
   TranscriptTurnsQuery,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import { inFlight } from "../loop-watch";
 import { SearchProcess } from "./process";
 
@@ -237,10 +238,8 @@ export class TranscriptSearchService {
       case "unanswered":
         // Still syncing: answered from what is indexed so far.
         return;
-      default: {
-        const unhandled: never = outcome;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", outcome);
     }
   }
 

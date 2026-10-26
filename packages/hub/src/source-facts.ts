@@ -9,6 +9,7 @@
  */
 import type { FleetMarketplace, SourceFacts } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import { Octokit } from "@octokit/rest";
 import { parseSkillSource } from "./skills";
 import { GITHUB_API } from "./upstreams";
@@ -113,10 +114,8 @@ const githubFacts = async (
         break;
       case "unanswered":
         return { at, unknown: unanswered(asked.after) };
-      default: {
-        const unhandled: never = asked;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", asked);
     }
     const found = asked.value;
     return {
@@ -144,20 +143,16 @@ const npmFacts = async (pkg: string): Promise<SourceFacts> => {
         break;
       case "unanswered":
         return { at, unknown: unanswered(documentRead.after) };
-      default: {
-        const unhandled: never = documentRead;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", documentRead);
     }
     switch (downloadsRead.kind) {
       case "answered":
         break;
       case "unanswered":
         return { at, unknown: unanswered(downloadsRead.after) };
-      default: {
-        const unhandled: never = downloadsRead;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", downloadsRead);
     }
     const document = documentRead.value as { time?: { created?: string } };
     const downloads = downloadsRead.value as { downloads?: number };

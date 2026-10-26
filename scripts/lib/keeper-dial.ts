@@ -1,4 +1,5 @@
 import type { Bounded } from "../../packages/core/src/bounded";
+import { unhandled } from "../../packages/core/src/unhandled";
 
 /**
  * A probe's connection to a keeper (`SessiondClient.connect`'s answer): the
@@ -15,9 +16,7 @@ export const welcomed = <C>(endpoint: string, read: Bounded<C>): C => {
           ? `the keeper at ${endpoint} gave no welcome within ${read.after} ms`
           : `the keeper at ${endpoint} ended before its welcome`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };

@@ -38,6 +38,7 @@
  */
 
 import { readFile, readlink } from "node:fs/promises";
+import { unhandled } from "@cawco/core/unhandled";
 import { loopWords } from "@cawco/core/words/loop";
 import { BEAT, LEFT, SECTION, type WatchdogMessage } from "./loop-watch-shared";
 
@@ -423,9 +424,7 @@ self.onmessage = (event: MessageEvent<WatchdogMessage>) => {
     case "state":
       ({ phase, flying } = message);
       return;
-    default: {
-      const unhandled: never = message;
-      throw new Error(`unhandled message: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("message", message);
   }
 };

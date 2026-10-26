@@ -23,6 +23,7 @@
     type InstallStep,
     installName,
   } from "@cawco/core";
+  import { unhandled } from "@cawco/core/unhandled";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import {
     machineHue,
@@ -113,10 +114,8 @@
         return "done" as const;
       case "running":
         return "current" as const;
-      default: {
-        const unhandled: never = install.state;
-        throw new Error(`unhandled state: ${unhandled}`);
-      }
+      default:
+        unhandled("state", install.state);
     }
   });
 

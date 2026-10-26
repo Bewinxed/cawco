@@ -54,6 +54,7 @@ import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
@@ -89,10 +90,8 @@ const output = async (
         `[join] ${argv.join(" ")} did not answer within ${Math.round(ran.after / 1000)} s; what it would answer is not had`
       );
       return;
-    default: {
-      const unhandled: never = ran;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", ran);
   }
 };
 

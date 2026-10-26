@@ -10,6 +10,7 @@ import {
   accountConfigDir,
 } from "../../packages/core/src/paths";
 import { WIRE_PROTOCOL } from "../../packages/core/src/stream";
+import { unhandled } from "../../packages/core/src/unhandled";
 import { loopWords } from "../../packages/core/src/words/loop";
 import { SECTION, SHORT_HOLD_MS } from "./proof-loop-held";
 
@@ -278,10 +279,8 @@ async function openDashboard() {
       throw new Error(
         `Dashboard websocket did not answer within ${opened.after} ms (${opened.reason})`
       );
-    default: {
-      const unhandled: never = opened;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", opened);
   }
 }
 async function until(what: string, ready: () => boolean, ms = 15_000) {
@@ -604,10 +603,8 @@ try {
         throw new Error(
           `Request during real service restart did not answer within ${res.after} ms (${res.reason})`
         );
-      default: {
-        const unhandled: never = res;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", res);
     }
     if (!res.value.ok) {
       throw new Error(
@@ -633,10 +630,8 @@ try {
         throw new Error(
           `Queued restart request did not answer within ${res.after} ms (${res.reason})`
         );
-      default: {
-        const unhandled: never = res;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", res);
     }
     if (!res.value.ok) {
       throw new Error("Queued restart request failed");
@@ -653,10 +648,8 @@ try {
       throw new Error(
         `Old worker websocket did not drain within ${drained.after} ms`
       );
-    default: {
-      const unhandled: never = drained;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", drained);
   }
   const replacement = await openDashboard();
   replacement.close();
@@ -698,10 +691,8 @@ try {
             /* The child exited during the grace period. */
           }
           break;
-        default: {
-          const unhandled: never = exited;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", exited);
       }
     })
   );

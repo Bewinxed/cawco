@@ -7,6 +7,7 @@ import {
   type MachineFleetConfig,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import {
   discoverAuthorizationServerMetadata,
@@ -263,10 +264,8 @@ const reachWithin = async (
       throw new Unreachable(
         `No answer within ${Math.round(reached.after / 1000)} s.`
       );
-    default: {
-      const unhandled: never = reached;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", reached);
   }
 };
 

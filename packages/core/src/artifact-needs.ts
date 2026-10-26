@@ -18,6 +18,7 @@
  */
 import type { HarnessKind } from "./harness";
 import type { ArtifactKind } from "./index";
+import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
 import { artifactWords } from "./words/artifacts";
 
@@ -195,10 +196,8 @@ export const reasonWords = (reason: ArtifactReason, alone = false): string => {
       return alone && reason.count === 1
         ? artifactWords.newAnswerOn(reason.pin)
         : artifactWords.newAnswers(reason.count);
-    default: {
-      const unhandled: never = reason;
-      throw new Error(`unhandled reason: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("reason", reason);
   }
 };
 
@@ -218,10 +217,8 @@ export const reasonShort = (reason: ArtifactReason): string => {
     case "unsent":
     case "answer":
       return reasonWords(reason);
-    default: {
-      const unhandled: never = reason;
-      throw new Error(`unhandled reason: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("reason", reason);
   }
 };
 
@@ -236,10 +233,8 @@ const neverDone = (reason: ArtifactReason, name: string): string => {
       return artifactWords.neverSent(reason.count, name);
     case "answer":
       return artifactWords.neverRead(reason.count, name);
-    default: {
-      const unhandled: never = reason;
-      throw new Error(`unhandled reason: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("reason", reason);
   }
 };
 
@@ -260,9 +255,7 @@ export const noticePartWords = (
           : artifactWords.itsSession,
         neverDone(part.reason, name)
       );
-    default: {
-      const unhandled: never = part;
-      throw new Error(`unhandled notice: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("notice", part);
   }
 };

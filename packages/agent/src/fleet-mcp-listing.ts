@@ -1,4 +1,5 @@
 import { readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { harnessMcpUrl } from "./delegation";
 
@@ -143,10 +144,8 @@ export const proxiedToolCount = (name: string): Promise<number | undefined> => {
             `[fleet-mcp] the hub's relay did not list ${name}'s tools within ${READING_MS / 1000} s; nothing is decided on it`
           );
           return;
-        default: {
-          const unhandled: never = reading;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", reading);
       }
     },
     () => undefined

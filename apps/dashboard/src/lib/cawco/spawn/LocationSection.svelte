@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { unhandled } from "@cawco/core/unhandled";
   /** Where a session works, as the Location form edits it. */
   export interface LocationFields {
     dir: string;
@@ -119,10 +120,8 @@
             again: TRY_AGAIN,
           });
           return;
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
       path = next;
       folders = rows

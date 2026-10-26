@@ -14,6 +14,7 @@ import {
   ruleMatches,
 } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import type { DbShape } from "./db";
 import { jevUnanswered } from "./jev";
 import type { MeaningJudge } from "./meaning";
@@ -399,10 +400,8 @@ export class RuleEngine {
               `[rules] ${instanceId}: meaning rules ${rules.map((rule) => rule.id).join(", ")} not judged: ${jevUnanswered(judged.after)}`
             );
             return false;
-          default: {
-            const unhandled: never = judged;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", judged);
         }
       })
       .catch((error) => {

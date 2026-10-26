@@ -69,6 +69,7 @@ import {
   VENDOR_MARKETPLACES_DIR,
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { resolveClaudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
@@ -612,10 +613,8 @@ const askVersion = async (path: string): Promise<string | undefined> => {
         `[fleet] ${path} --version did not answer in ${VERSION_TIMEOUT_MS / 1000} s; its version is not known`
       );
       return undefined;
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -734,10 +733,8 @@ const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
         output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s`,
         timedOut: true,
       };
-    default: {
-      const unhandled: never = ran;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", ran);
   }
 };
 
@@ -2444,10 +2441,8 @@ const scriptParseError = async (
     case "unanswered":
       // Not known to parse: never registered on a parse nobody finished.
       return `${shell} -n did not answer within ${PARSE_TIMEOUT_MS / 1000}s`;
-    default: {
-      const unhandled: never = parsed;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", parsed);
   }
 };
 

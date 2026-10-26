@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { AuthState } from "@cawco/core";
   import { configurePage, machineWords } from "@cawco/core";
+  import { unhandled } from "@cawco/core/unhandled";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -120,10 +121,8 @@
               }),
             };
             break;
-          default: {
-            const unhandled: never = read;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", read);
         }
       }
     } catch (error) {

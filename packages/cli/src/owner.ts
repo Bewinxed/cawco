@@ -13,6 +13,7 @@
 import type { PairingPoll, PairingStart } from "@cawco/core";
 import { OWNER_SCHEME } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 
 /** This run's approval, once the person gave it. */
 let token: string | undefined;
@@ -63,10 +64,8 @@ const approve = async (origin: string, command: string): Promise<string> => {
       }
       ({ pairing } = started.value);
       break;
-    default: {
-      const unhandled: never = started;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", started);
   }
   console.error(
     `This hub requires paired devices. Approve code ${pairing.userCode} on a paired device (Needs you) to run ${command}. Waiting…`
@@ -92,10 +91,8 @@ const approve = async (origin: string, command: string): Promise<string> => {
       case "answered":
         answer = polled.value;
         break;
-      default: {
-        const unhandled: never = polled;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", polled);
     }
     if (answer.status === "approved" && answer.token) {
       return answer.token;
@@ -159,10 +156,8 @@ export const ownerFetch = async (
       }
       token = await approve(new URL(url).origin, command);
       return send();
-    default: {
-      const unhandled: never = first;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", first);
   }
 };
 
@@ -196,9 +191,7 @@ export const ownerAsk = async (
       throw new Fail(unanswered(Math.round(answer.after / 1000)));
     case "answered":
       return answer.value;
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", answer);
   }
 };

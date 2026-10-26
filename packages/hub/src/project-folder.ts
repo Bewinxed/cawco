@@ -44,6 +44,7 @@ import { hubProjectsDir } from "@cawco/core/paths";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, status, t } from "elysia";
 
 /**
@@ -360,10 +361,8 @@ const run = async (root: string, args: string[]): Promise<Ran> => {
         504,
         `git ${args[0]} did not finish within ${Math.round(ran.after / 1000)} s in the project folder.`
       );
-    default: {
-      const unhandled: never = ran;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", ran);
   }
 };
 

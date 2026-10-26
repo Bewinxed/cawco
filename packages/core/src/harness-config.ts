@@ -10,6 +10,7 @@
  * checkout, and none of the person's own `claude`, `opencode` or `pi`.
  */
 import type { FleetPlacement } from "./fleet";
+import { unhandled } from "./unhandled";
 
 /** The three kinds, by the name the machine's report and the hub's rows use. */
 export const HARNESS_CONFIG_KINDS = [
@@ -69,10 +70,8 @@ export const harnessConfigLabel = (kind: HarnessConfigKind): string => {
       return "OpenCode plugin";
     case "piExtensions":
       return "pi extension";
-    default: {
-      const unhandled: never = kind;
-      throw new Error(`unhandled kind: ${String(unhandled)}`);
-    }
+    default:
+      unhandled("kind", kind);
   }
 };
 

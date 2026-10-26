@@ -69,6 +69,7 @@ import {
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   askRefusal,
   decideWrite,
@@ -1404,10 +1405,8 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
         );
         return;
       }
-      default: {
-        const unhandled: never = target;
-        throw new Error(`unhandled target: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("target", target);
     }
   };
   socket.on("data", onData);

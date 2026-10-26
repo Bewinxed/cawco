@@ -17,6 +17,7 @@ import {
   Gone,
   readWithin,
 } from "../../packages/core/src/bounded";
+import { unhandled } from "../../packages/core/src/unhandled";
 
 const [, , hub, machineId, prefix] = Bun.argv;
 const POLL_MS = 20;
@@ -44,10 +45,8 @@ function said(read: Bounded<string | undefined>): string {
       return read.value ?? "no phase";
     case "unanswered":
       return `no answer from the hub within ${read.after} ms (${read.reason})`;
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 }
 
@@ -165,10 +164,8 @@ while (Date.now() < DEADLINE) {
         gone = left >= 3;
       }
       break;
-    default: {
-      const unhandled: never = before;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", before);
   }
   if (gone) {
     break;

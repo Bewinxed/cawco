@@ -22,6 +22,7 @@
     machineLabel,
     type SpinOffHeld,
   } from "@cawco/core";
+  import { unhandled } from "@cawco/core/unhandled";
   import type { Snippet } from "svelte";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
@@ -296,10 +297,8 @@
             : "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.";
         break;
       }
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
     await asker.ask({
       at: instance.id,

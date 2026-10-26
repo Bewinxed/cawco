@@ -21,6 +21,7 @@ import {
   signal as signalPid,
 } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { readJson } from "../fleet";
 import { launchGateForm } from "../gate-form";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
@@ -162,10 +163,8 @@ export const readV1Activity = async (
       return read.value;
     case "unanswered":
       return { kind: "unanswered", after: read.after };
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -275,10 +274,8 @@ const startedServer = (
       return launched.value;
     case "unanswered":
       throw startUnanswered("its start", launched.after, whose);
-    default: {
-      const unhandled: never = launched;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", launched);
   }
 };
 
@@ -903,10 +900,8 @@ export class OpencodeServerOwner {
               SERVER_CUTOVER_TIMEOUT_MS,
               this.#words.whose
             );
-          default: {
-            const unhandled: never = verified;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", verified);
         }
         const retired = this.#record.retired.filter(
           (row) => row.procId !== candidate.procId

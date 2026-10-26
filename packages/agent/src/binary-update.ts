@@ -82,6 +82,7 @@ import {
 import { runtimeVersion } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { ArchiveFetchingShape } from "@cawco/core/stored-shapes";
+import { unhandled } from "@cawco/core/unhandled";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 import { leaveRetiringKeepers } from "./boundary";
@@ -398,10 +399,8 @@ const askHub = async <T>(
       throw new HubUnreachable(
         `the hub did not answer ${what} within ${ms / 1000} s; nothing was done on it, and it is asked again on the next tick`
       );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -1084,10 +1083,8 @@ export class BinaryUpdater {
                 `[update] ${found.endpoint} did not answer a connect within ${live.after} ms; it is kept, as whether a keeper holds it is not known`
               );
               break;
-            default: {
-              const unhandled: never = live;
-              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-            }
+            default:
+              unhandled("read", live);
           }
         })
     );

@@ -14,6 +14,7 @@ import {
   CAWCO_MDNS_TYPE,
   readEnv,
 } from "@cawco/core";
+import { unhandled } from "@cawco/core/unhandled";
 
 /** Which rung of the ladder answered. */
 type HubSource = "flag" | "env" | "config" | "mdns" | "tailscale" | "localhost";
@@ -53,10 +54,8 @@ export const findExistingHub = async (): Promise<string | undefined> => {
         // No hub answered on the link in the browse's window: only the
         // tailnet's are probed.
         break;
-      default: {
-        const unhandled: never = advertised;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", advertised);
     }
   }
   return await firstToAnswer([...lan, ...tailnet]);
@@ -156,10 +155,8 @@ export const discoverHub = async ({
         `[3/5] no hub answered on the local link within ${MDNS_BROWSE_MS}ms`
       );
       break;
-    default: {
-      const unhandled: never = advertised;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", advertised);
   }
 
   // 4. Different network — the tailnet is the only rung that gets there.

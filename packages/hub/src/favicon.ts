@@ -27,6 +27,7 @@ import { isPublicDestination } from "@cawco/core/public-address";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { DAY_MS } from "@cawco/core/time";
 import { faviconReachable } from "@cawco/core/tool-presentation";
+import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { DB_PATH } from "./config";
@@ -178,10 +179,8 @@ const fetchCapped = async (
       break;
     case "unanswered":
       return asked;
-    default: {
-      const unhandled: never = asked;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", asked);
   }
   const answer = asked.value;
   if (answer?.kind === "body") {
@@ -278,10 +277,8 @@ const fetchIcon = async (host: string): Promise<Bounded<Icon | undefined>> => {
     case "unanswered":
       silent = pageRead;
       break;
-    default: {
-      const unhandled: never = pageRead;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", pageRead);
   }
   const candidates = page?.type.includes("html")
     ? iconLinks(new TextDecoder().decode(page.bytes), page.url)
@@ -306,10 +303,8 @@ const fetchIcon = async (host: string): Promise<Bounded<Icon | undefined>> => {
       case "unanswered":
         silent ??= iconRead;
         break;
-      default: {
-        const unhandled: never = iconRead;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", iconRead);
     }
   }
   return silent ?? { kind: "answered", value: undefined };
@@ -383,10 +378,8 @@ const iconFor = (host: string): Promise<Bounded<Icon | null>> => {
           `[favicon] ${host}: did not answer within ${Math.round(fetched.after / 1000)} s; nothing kept`
         );
         return fetched;
-      default: {
-        const unhandled: never = fetched;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", fetched);
     }
     const icon = fetched.value;
     await remember(host, icon).catch((error: unknown) =>
@@ -425,10 +418,8 @@ export const faviconRoutes = () =>
             );
           }
           break;
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
       if (!icon) {
         return status(404, "That site has no icon this hub could read.");

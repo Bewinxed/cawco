@@ -15,6 +15,7 @@
  */
 import { type ToolSpec, toolSpec } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { toolBinary } from "../tools";
 
@@ -36,10 +37,8 @@ export const answerOf = <T>(read: Bounded<T>, what: string): T => {
       return read.value;
     case "unanswered":
       throw new Error(notAnswered(what, read));
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", read);
   }
 };
 
@@ -226,10 +225,8 @@ export const assertPluginLoaded = async (
       throw new Error(
         `OpenCode at ${directory} has not loaded CawCo's plugin (${CAWCO_PLUGIN_ID}) within ${timeoutMs / 1000} s, so it takes no session: its workspace judge, credential stamp and bounded shell would not run.`
       );
-    default: {
-      const unhandled: never = loaded;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", loaded);
   }
 };
 
@@ -397,9 +394,7 @@ export const waitForMcp = async (
           : `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds.`
       );
     }
-    default: {
-      const unhandled: never = settled;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", settled);
   }
 };

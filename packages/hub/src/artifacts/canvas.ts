@@ -27,6 +27,7 @@ import {
   canvasHostPage,
 } from "@cawco/core/canvas-host";
 import { injectOverlay } from "@cawco/core/preview-proxy";
+import { unhandled } from "@cawco/core/unhandled";
 import { Map as YMap } from "yjs";
 import { type ArtifactDocs, elementsOf } from "./docs";
 import { ArtifactRefusal } from "./service";
@@ -147,10 +148,8 @@ export const convertOnScreen = async (
           504,
           `The canvas wasn't changed: no screen drew it within ${Math.round(drawn.after / 1000)} s. Open it on a dashboard (artifact_show), then try again.`
         );
-      default: {
-        const unhandled: never = drawn;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", drawn);
     }
     if ("error" in result) {
       throw new ArtifactRefusal(

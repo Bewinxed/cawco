@@ -9,6 +9,7 @@
  * extension's config is read here and no request is made to any proxy.
  */
 import { readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 /** How often pi's word on its sign-in is read again beside the watch on its agent dir (daemon.ts). */
@@ -52,9 +53,7 @@ export async function checkPiCredential(
         state: "unknown",
         reason: `pi: ${name} sign-in status unknown — ${checked.error}`,
       };
-    default: {
-      const unhandled: never = checked;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", checked);
   }
 }

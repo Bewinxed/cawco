@@ -21,6 +21,7 @@ import {
 } from "@cawco/core";
 import { workspaceSpillDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
@@ -386,12 +387,8 @@ class PiRemoteSession implements HarnessSession {
       case "permission_resolved":
         this.#ctx.permissionResolved?.(event.requestId, event.outcome);
         return;
-      default: {
-        const unhandled: never = event;
-        throw new Error(
-          `unhandled pi host event: ${JSON.stringify(unhandled)}`
-        );
-      }
+      default:
+        unhandled("pi host event", event);
     }
   }
 

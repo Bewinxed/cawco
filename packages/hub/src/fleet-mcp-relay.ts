@@ -5,6 +5,7 @@ import {
   JsonRpcMessageSchema,
 } from "@cawco/core/json-rpc";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
@@ -1236,10 +1237,8 @@ async function attemptUpstream<T>(
         break;
       case "unanswered":
         throw new NoAnswer(outcome.after);
-      default: {
-        const unhandled: never = outcome;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", outcome);
     }
   }
   if ("taken" in attempted) {

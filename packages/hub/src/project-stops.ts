@@ -31,6 +31,7 @@
  */
 import type { ProjectStopFrame, SessionPulse } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape } from "./lifetime";
 
@@ -238,10 +239,8 @@ export const createProjectStops = (ports: {
               fail(id, noAnswer(outcome.after));
             }
             return;
-          default: {
-            const unhandled: never = outcome;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", outcome);
         }
       },
       () => {

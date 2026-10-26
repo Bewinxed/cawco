@@ -79,6 +79,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import type {
   FormInfo,
   ModelInfo as OpencodeModel,
@@ -352,10 +353,8 @@ const mcpFence = async (
       throw new Error(
         `A fenced session runs no turn without its fence: ${notAnswered("the location's MCP servers", listed)}`
       );
-    default: {
-      const unhandled: never = listed;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", listed);
   }
 };
 
@@ -1086,10 +1085,8 @@ export class OpencodeSession implements HarnessSession {
         throw new Error(
           notAnswered("the session's model, agent and permissions", applied)
         );
-      default: {
-        const unhandled: never = applied;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", applied);
     }
   }
 
@@ -1160,10 +1157,8 @@ export class OpencodeSession implements HarnessSession {
         throw new Error(
           notAnswered("the session's instruction entries", synced)
         );
-      default: {
-        const unhandled: never = synced;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", synced);
     }
   }
 
@@ -2086,10 +2081,8 @@ export class OpencodeSession implements HarnessSession {
           case "unanswered":
             missed(notAnswered(`the session's pending ${kind}s`, read));
             break;
-          default: {
-            const unhandled: never = read;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", read);
         }
       } catch (error) {
         if (this.#lifetime.signal.aborted) {
@@ -2160,10 +2153,8 @@ export class OpencodeSession implements HarnessSession {
                 `[opencode] permission reply failed: ${notAnswered(`the reply to ${requestId}`, replied)}`
               );
               return;
-            default: {
-              const unhandled: never = replied;
-              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-            }
+            default:
+              unhandled("read", replied);
           }
         },
         (error: unknown) =>
@@ -2229,10 +2220,8 @@ export class OpencodeSession implements HarnessSession {
             )
           );
           return;
-        default: {
-          const unhandled: never = replied;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", replied);
       }
     } catch (error) {
       if (errorTag(error) === "FormAlreadySettledError") {
@@ -2610,10 +2599,8 @@ export class OpencodeSession implements HarnessSession {
       case "unanswered":
         // The turn stays as it is; the caller says why.
         throw new Error(notAnswered("the session's last messages", read));
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
     if (!this.#snapshotCurrent(revision)) {
       return;
@@ -3138,10 +3125,8 @@ export class OpencodeSession implements HarnessSession {
           break;
         case "unanswered":
           throw new Error(notAnswered(`the skill “${name}”`, loaded));
-        default: {
-          const unhandled: never = loaded;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", loaded);
       }
     }
   }
@@ -3433,10 +3418,8 @@ export class OpencodeSession implements HarnessSession {
           throw new Error(
             notAnswered(`the note that ${server.name} didn't connect`, written)
           );
-        default: {
-          const unhandled: never = written;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", written);
       }
       console.warn(`[opencode] ${this.instanceId}: ${line}`);
       this.#ctx.frame({

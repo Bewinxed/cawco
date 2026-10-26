@@ -6,6 +6,7 @@ import {
   mcpFleetState,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { claudeHomeEnv } from "./tools";
@@ -173,10 +174,8 @@ export const readMcpRuntime = async (
       case "unanswered":
         unanswered = `Claude Code did not start within ${START_TIMEOUT_MS / 1000} seconds, so no MCP server was read.`;
         return report();
-      default: {
-        const unhandled: never = first;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", first);
     }
     if (settledFor(first.value)) {
       return report();
@@ -201,10 +200,8 @@ export const readMcpRuntime = async (
       case "unanswered":
         unanswered = `Claude Code had not settled this server ${(connectMs + VERDICT_MARGIN_MS) / 1000} seconds after it started, past its own ${connectMs / 1000} second connect timeout.`;
         break;
-      default: {
-        const unhandled: never = settledRead;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", settledRead);
     }
     return report();
   } catch (error) {

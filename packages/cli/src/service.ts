@@ -30,6 +30,7 @@ import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 
 /**
@@ -568,10 +569,8 @@ const probeHub = async (): Promise<string> => {
       return health.value.ok
         ? `${hubOrigin()} answers /health (hub ${health.value.value.version})`
         : `${url} answered ${health.value.said}`;
-    default: {
-      const unhandled: never = health;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", health);
   }
 };
 
@@ -584,10 +583,8 @@ const probeDashboard = async (): Promise<string> => {
       return noAnswer(url, answer);
     case "answered":
       return `${url} answers (HTTP ${answer.value})`;
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", answer);
   }
 };
 
@@ -632,10 +629,8 @@ const ownRow = async (hub: string): Promise<AgentRow | null | string> => {
       return self.value.ok
         ? self.value.value
         : `${hub} answered ${self.value.said} for this machine's row`;
-    default: {
-      const unhandled: never = self;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", self);
   }
 };
 
@@ -723,10 +718,8 @@ export const awaitFirstMachineReady = async (
             return health.value.value.ok === true
               ? undefined
               : `${url} answered not ok`;
-          default: {
-            const unhandled: never = health;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", health);
         }
       },
     ],
@@ -763,10 +756,8 @@ export const awaitFirstMachineReady = async (
             return answer.value >= 200 && answer.value < 300
               ? undefined
               : `${url} answered HTTP ${answer.value}`;
-          default: {
-            const unhandled: never = answer;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+          default:
+            unhandled("read", answer);
         }
       },
     ],
@@ -1925,10 +1916,8 @@ const sessionsMidTurn = async (): Promise<Cut> => {
         ? [`${report.busy} session${report.busy === 1 ? "" : "s"} mid-turn`]
         : [];
     }
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", answer);
   }
 };
 
@@ -1969,10 +1958,8 @@ const agentCut = async (fenceMs?: number): Promise<Cut> => {
       return Array.isArray(answer.value.value.holds)
         ? holdPhrases(answer.value.value.holds)
         : { unknown: `${url} answered without saying what it holds` };
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", answer);
   }
 };
 

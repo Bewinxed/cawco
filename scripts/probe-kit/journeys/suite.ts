@@ -29,6 +29,7 @@ import type { ConsoleMessage, Locator, Page } from "playwright-core";
 import type { ArtifactNeedsFrame } from "../../../packages/core/src/artifact-needs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { PRESENCE_ONBOARDING_SKIPPED } from "../../../packages/core/src/presence-onboarding";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import type { SpecGroup } from "../groups";
 import {
@@ -522,10 +523,8 @@ async function runLeg(
         break;
       case "unanswered":
         throw new Unmet(`the leg ran past ${LEG_MS / 60_000} minutes`);
-      default: {
-        const unhandled: never = ran;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", ran);
     }
   } catch (error) {
     failure = `${current}: ${measuredBy(error)}`;

@@ -1,4 +1,5 @@
 import { readWithin } from "../bounded";
+import { unhandled } from "../unhandled";
 import type { LimitWindow, OpenCodeGoLimits } from "./types";
 
 /**
@@ -142,10 +143,8 @@ export async function fetchOpenCodeGoLimits(
           `[usage] OpenCode Go's usage endpoint: ${error}; the last reading stands`
         );
         break;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", read);
     }
   } catch (cause) {
     error = cause instanceof Error ? cause.message : String(cause);

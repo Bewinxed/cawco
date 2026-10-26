@@ -41,6 +41,7 @@ import type {
   FleetSyncReport,
 } from "../../../packages/core/src/index";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { noAccountRefusal } from "../../../packages/hub/src/placement";
 import { MACHINE, until } from "../../scratch-fleet";
@@ -218,10 +219,8 @@ const spec: Spec = {
           `the hub did not answer the start within ${said.after} ms`
         );
         break;
-      default: {
-        const unhandled: never = said;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+      default:
+        unhandled("read", said);
     }
     const held = (await fleet.heldProcs()).filter(({ procId }) =>
       procId.includes(instanceId)

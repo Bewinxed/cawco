@@ -25,6 +25,7 @@ import type {
 } from "./fleet";
 import type { FleetHarnessConfig } from "./harness-config";
 import type { FleetHook } from "./hooks";
+import { unhandled } from "./unhandled";
 
 /**
  * What a machine's harnesses converge an item into, one converge pass each.
@@ -224,10 +225,8 @@ export const reportKeyOf = (id: string): string | undefined => {
     case "pluginPayload":
     case "projectCheckout":
       return;
-    default: {
-      const unhandled: never = kind;
-      throw new Error(`unhandled kind: ${String(unhandled)}`);
-    }
+    default:
+      unhandled("kind", kind);
   }
 };
 
@@ -316,10 +315,8 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
           value as FleetHarnessConfig
         );
         break;
-      default: {
-        const unhandled: never = kind;
-        throw new Error(`unhandled kind: ${String(unhandled)}`);
-      }
+      default:
+        unhandled("kind", kind);
     }
   }
   config.memory = main ? { ...main, docs } : null;

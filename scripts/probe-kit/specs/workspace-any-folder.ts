@@ -210,8 +210,9 @@ const commandOf = (tag: Tag): string => {
     case "P":
       return `cat ${at}/${PI_FILE} && echo "DONE-""P"`;
     default: {
-      const unhandled: never = tag;
-      return unhandled;
+      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: an unknown tag is its own command text.
+      const unmatched: never = tag;
+      return unmatched;
     }
   }
 };

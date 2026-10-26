@@ -59,6 +59,7 @@ import {
   TREE_STORE_DIR,
 } from "../../../packages/core/src/claude-dirs";
 import type { HarnessKind } from "../../../packages/core/src/harness";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import {
   MACHINE,
   MODEL,
@@ -546,10 +547,8 @@ const spec: Spec = {
             `the hub did not answer within ${read.after} ms (${read.reason})`
           );
           break;
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
+        default:
+          unhandled("read", read);
       }
     };
     const boot = async () => {

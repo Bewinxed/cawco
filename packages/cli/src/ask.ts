@@ -8,6 +8,7 @@
  */
 import { createInterface, type Interface } from "node:readline";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 
 const ANSWER_TIMEOUT_MS = 60_000;
 
@@ -73,10 +74,8 @@ async function ask(
     case "unanswered":
       process.stdout.write("\n");
       return answer;
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", answer);
   }
 }
 
@@ -100,9 +99,7 @@ export async function askYes(text: string): Promise<Asked<boolean>> {
     case "unanswered":
     case "not asked":
       return answer;
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("read", answer);
   }
 }

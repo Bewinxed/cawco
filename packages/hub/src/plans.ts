@@ -40,6 +40,7 @@ import {
   waitTarget,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape, PlanChangeRow } from "./db";
@@ -150,10 +151,8 @@ const undoes = (steps: WrittenStep[], change: PlanChangeRow): boolean => {
     // spec §5.2 "The plan model", point 3), and the write's order stands.
     case "move":
       return false;
-    default: {
-      const unhandled: never = change.kind;
-      throw new Error(`unhandled plan change: ${String(unhandled)}`);
-    }
+    default:
+      unhandled("plan change", change.kind);
   }
 };
 
@@ -425,10 +424,8 @@ const applyEdit = (steps: PlanStep[], edit: PlanEdit, at: Date): Applied => {
       return tick(steps, edit);
     case "move":
       return move(steps, edit);
-    default: {
-      const unhandled: never = edit;
-      throw new Error(`unhandled edit: ${JSON.stringify(unhandled)}`);
-    }
+    default:
+      unhandled("edit", edit);
   }
 };
 
