@@ -45,12 +45,14 @@ import {
 import {
   goneOf,
   isSendControl,
+  lostReplies,
   type MarkPictures,
   PIN_MAPS,
   type Pin,
+  type RefusedReplies,
   readPins,
+  replyAgain,
   replyToPin,
-  type ThreadEntry,
   writePin,
 } from "@cawco/core/comments";
 import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
@@ -361,11 +363,6 @@ const REFUSED_KEY = (id: string) => `cawco-refused-pins:${id}`;
 /** The page's own key: a page the dashboard proxies shares its origin, whose `cawco-refused-replies:` are the pane's. */
 const REPLIES_KEY = (id: string) => `cawco-refused-page-replies:${id}`;
 let refusedPins: Pin[] = [];
-/** A pin's replies the hub refused: each entry as written, and the hub's reason. */
-export type RefusedReplies = Record<
-  string,
-  { entries: ThreadEntry[]; why: string }
->;
 let refusedReplies: RefusedReplies = {};
 /** A refusal's comments, until the hub's doc is in to tell which it doesn't hold. */
 let refusing: { pins: Record<string, Pin>; why: string } | null = null;
@@ -426,28 +423,16 @@ const keepRefused = () => {
     (pin) => pin.by === "person" && !held.has(pin.id) && !gone.has(pin.id)
   );
   const replies = { ...refusedReplies };
-  let repliesLost = false;
-  for (const pin of Object.values(pins)) {
-    const now = held.get(pin.id);
-    if (!now) {
-      continue;
-    }
-    const has = new Set(now.thread.map((entry) => entry.id));
-    const entries = pin.thread.filter(
-      (entry) => entry.by === "person" && !has.has(entry.id)
-    );
-    if (entries.length === 0) {
-      continue;
-    }
+  const lostThreads = lostReplies(Object.values(pins), held);
+  for (const { pin, entries } of lostThreads) {
     const ids = new Set(entries.map((entry) => entry.id));
-    const was = replies[pin.id]?.entries ?? [];
-    replies[pin.id] = {
+    const was = replies[pin]?.entries ?? [];
+    replies[pin] = {
       entries: [...was.filter((entry) => !ids.has(entry.id)), ...entries],
       why,
     };
-    repliesLost = true;
   }
-  if (lost.length === 0 && !repliesLost) {
+  if (lost.length === 0 && lostThreads.length === 0) {
     return;
   }
   const ids = new Set(lost.map((pin) => pin.id));
@@ -743,27 +728,12 @@ export const artifact = {
       writePin(mirror, again);
       return true;
     }
-    const kept = refusedReplies[id];
-    if (!kept) {
+    if (!refusedReplies[id]) {
       return false;
     }
-    const left: ThreadEntry[] = [];
-    let why: string | null = null;
-    for (const entry of kept.entries) {
-      const refused = replyToPin(mirror, id, {
-        text: entry.text,
-        ...(entry.attachments ? { attachments: entry.attachments } : {}),
-      });
-      if (refused) {
-        left.push(entry);
-        why = refused;
-      }
-    }
-    const { [id]: _done, ...rest } = refusedReplies;
-    refusedReplies =
-      left.length > 0
-        ? { ...rest, [id]: { entries: left, why: why ?? kept.why } }
-        : rest;
+    refusedReplies = replyAgain(refusedReplies, id, (said) =>
+      replyToPin(mirror, id, said)
+    ).left;
     storeRefused();
     return true;
   },

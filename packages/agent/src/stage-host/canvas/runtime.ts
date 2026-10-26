@@ -20,7 +20,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
-  CANVAS_AWAY,
+  awaySaid,
   CANVAS_EMBED_FETCHED,
   CANVAS_EMBED_SIZE,
   CANVAS_GRAPH_FETCHED,
@@ -453,11 +453,12 @@ function holdWhileAway(): void {
     cancel(real ?? id);
   };
   addEventListener("message", (event) => {
-    const said = event.data as { away?: unknown; type?: unknown } | null;
-    if (event.source !== window.parent || said?.type !== CANVAS_AWAY) {
+    const said =
+      event.source === window.parent ? awaySaid(event.data) : undefined;
+    if (said === undefined) {
       return;
     }
-    away = said.away === true;
+    away = said;
     rest();
     if (away) {
       return;

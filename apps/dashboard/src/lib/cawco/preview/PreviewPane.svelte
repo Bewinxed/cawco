@@ -24,6 +24,7 @@
     type PreviewMode,
     pinProblem,
     previewMode,
+    replyAgain,
     type ThreadEntry,
   } from "@cawco/core/comments";
   import { detach } from "@cawco/core/detach";
@@ -1626,25 +1627,11 @@
         "The pane lost the page's document, so the reply wasn't kept. Reload, then try again."
       );
     }
-    const left: ThreadEntry[] = [];
-    let why: string | null = null;
-    for (const entry of kept.entries) {
-      const refused = doc.reply(id, {
-        text: entry.text,
-        ...(entry.attachments ? { attachments: entry.attachments } : {}),
-      });
-      if (refused) {
-        left.push(entry);
-        why = refused;
-      }
-    }
-    const { [id]: _done, ...rest } = refusedReplies;
-    keepReplies(
-      artifactKey,
-      left.length > 0
-        ? { ...rest, [id]: { entries: left, why: why ?? kept.why } }
-        : rest
+    const live = doc;
+    const { left, why } = replyAgain(refusedReplies, id, (said) =>
+      live.reply(id, said)
     );
+    keepReplies(artifactKey, left);
     if (why) {
       throw new Error(why);
     }

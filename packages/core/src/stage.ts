@@ -128,6 +128,12 @@ export const CANVAS_EMBED_FETCHED = "cawco:embed-fetched";
  */
 export const CANVAS_AWAY = "cawco:away";
 
+/** Whether a {@link CANVAS_AWAY} message says the pane is away; undefined for any other message. */
+export const awaySaid = (data: unknown): boolean | undefined => {
+  const said = data as { away?: unknown; type?: unknown } | null;
+  return said?.type === CANVAS_AWAY ? said.away === true : undefined;
+};
+
 /** The canvas page's count of its preloads (stage-host host.ts `serveCanvas`), read by the runtime. */
 export interface CanvasGraph {
   /** Its share's preloads: the whole graph on a page of its own, the page's {@link CANVAS_EMBED_GO} in a Preview (unknown until then). */

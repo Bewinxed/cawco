@@ -1361,6 +1361,68 @@ function personEntry(
  * until their Send; the refusal's sentence when they were not kept, and
  * nothing was written.
  */
+/** A pin's replies the hub refused, by pin: each entry as written, and the hub's reason. */
+export type RefusedReplies = Record<
+  string,
+  { entries: ThreadEntry[]; why: string }
+>;
+
+/**
+ * What a refused write lost of the person's replies: their entries in each
+ * of `pins`' threads that `held` (the hub's pins after it) still has the pin
+ * of but not the entry. A pin the hub holds none of is lost whole, not here.
+ */
+export const lostReplies = (
+  pins: Iterable<Pin>,
+  held: Map<string, Pin>
+): { entries: ThreadEntry[]; pin: string }[] =>
+  [...pins].flatMap((pin) => {
+    const now = held.get(pin.id);
+    if (!now) {
+      return [];
+    }
+    const has = new Set(now.thread.map((entry) => entry.id));
+    const entries = pin.thread.filter(
+      (entry) => entry.by === "person" && !has.has(entry.id)
+    );
+    return entries.length > 0 ? [{ pin: pin.id, entries }] : [];
+  });
+
+/**
+ * Pin `id`'s refused replies sent again by `reply`: answers the refused
+ * replies left (pin `id`'s only those refused again) and the last refusal's
+ * words, null when every one went.
+ */
+export const replyAgain = (
+  refused: RefusedReplies,
+  id: string,
+  reply: (said: Said) => string | null
+): { left: RefusedReplies; why: string | null } => {
+  const { [id]: kept, ...rest } = refused;
+  if (!kept) {
+    return { left: refused, why: null };
+  }
+  const again: ThreadEntry[] = [];
+  let why: string | null = null;
+  for (const entry of kept.entries) {
+    const refusal = reply({
+      text: entry.text,
+      ...(entry.attachments ? { attachments: entry.attachments } : {}),
+    });
+    if (refusal) {
+      again.push(entry);
+      why = refusal;
+    }
+  }
+  return {
+    left:
+      again.length > 0
+        ? { ...rest, [id]: { entries: again, why: why ?? kept.why } }
+        : rest,
+    why,
+  };
+};
+
 export function replyToPin(
   doc: MapDoc,
   pin: string,

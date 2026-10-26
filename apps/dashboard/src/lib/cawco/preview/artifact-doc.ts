@@ -6,6 +6,7 @@ import {
   deletePin,
   goneOf,
   honourDeletions,
+  lostReplies,
   type Pin,
   readPins,
   replyToPin,
@@ -237,20 +238,8 @@ export interface RefusedEntries {
  * the hub still holds. A pin the hub holds none of is the page's to keep
  * (overlay artifact.ts `keepRefused`), or deleted.
  */
-const lostEntries = (pins: Record<string, Pin>, doc: Doc): RefusedEntries[] => {
-  const held = readPins(doc);
-  return Object.values(pins).flatMap((pin) => {
-    const now = held.get(pin.id);
-    if (!now) {
-      return [];
-    }
-    const has = new Set(now.thread.map((entry) => entry.id));
-    const entries = pin.thread.filter(
-      (entry) => entry.by === "person" && !has.has(entry.id)
-    );
-    return entries.length > 0 ? [{ pin: pin.id, entries }] : [];
-  });
-};
+const lostEntries = (pins: Record<string, Pin>, doc: Doc): RefusedEntries[] =>
+  lostReplies(Object.values(pins), readPins(doc));
 
 /**
  * Joins the artifact's doc: `changed` hears every view of it, each sync's
