@@ -130,6 +130,8 @@ export * from "./stream-relay";
 // HTTPS on the hub machine's tailnet name: its state, and a preview's origin there.
 export * from "./tailnet-https";
 export * from "./task-history";
+// A project's tasks and stages as the hub answers them and the dashboard reads them.
+export * from "./task-views";
 // A project's threads with its Caw: rows, messages and their frames.
 export * from "./threads";
 // The tool catalog and its status/policy shapes (NEW.md §10).

@@ -68,7 +68,6 @@
   import {
     crossOut,
     dur,
-    motionOk,
     reveal,
     revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
@@ -653,15 +652,7 @@
    * or a drawn view leaves as it stood and is torn down once, after.
    */
   const swap = new ListSwap<never>();
-  function leave(node: HTMLElement): TransitionConfig {
-    node.style.position = "absolute";
-    node.style.inset = "0 0 auto";
-    node.style.pointerEvents = "none";
-    node.inert = true;
-    node.setAttribute("aria-hidden", "true");
-    node.style.animation = swap.leaveAnim(0);
-    return { duration: motionOk.current ? ListSwap.leaveEnd(0) : 0 };
-  }
+  const leave = swap.leaveView;
   /** What the pane shows: a view, or the wait for one the URL names. */
   const shown = $derived(awaiting ? "awaiting" : current);
   function choose(next: string) {
@@ -802,7 +793,14 @@
       type: task.type,
       todos: todoProgress(task.todos),
       createdAt: task.createdAt,
+      createdBy: task.createdBy,
       updatedAt: task.updatedAt,
+      updatedBy: task.updatedBy,
+      startedAt: task.startedAt,
+      completedAt: task.completedAt,
+      droppedAt: task.droppedAt,
+      archivedAt: task.archivedAt,
+      closeReason: task.closeReason,
       attempts: task.attempts,
       waits: task.waits,
       unblocks: task.unblocks,

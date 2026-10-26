@@ -36,17 +36,14 @@
   import {
     cawco,
     clearReadFault,
-    clearRestore,
     commandFault,
     faultMessage,
     keepServedAway,
     keepServedPage,
-    latestCommandFor,
     loadMcpServers,
     machineConnected,
     openSession,
     type PendingPermission,
-    pendingRestore,
     type ReadCause,
     type ReadFault,
     readFaultOf,
@@ -92,6 +89,7 @@
   import ConnectNeedsChip from "./transcript/ConnectNeedsChip.svelte";
   import {
     ComposerDraft,
+    followSends,
     paneDrafts,
   } from "./transcript/composer-draft.svelte";
   import { composerFleet } from "./transcript/composer-fleet";
@@ -980,13 +978,7 @@
     draft.putBack();
   });
 
-  // The hub took the send: the message it carried needs no keeping.
-  $effect(() => {
-    const stage = latestCommandFor(viewId, "send")?.stage;
-    if (stage === "accepted" || stage === "applied") {
-      untrack(() => draft.settle());
-    }
-  });
+  const sends = followSends(draft, () => viewId);
 
   /**
    * Why this session's last send failed, said over its composer's field; or
@@ -1001,30 +993,6 @@
   );
   const faultAgain = $derived(
     sendFailureNotice(viewId) ? undefined : failedCommand?.again
-  );
-
-  /**
-   * "Edit" on a message that never sent: the store parks the whole payload in
-   * this session's restore slot and the pane spends it here, back into the
-   * draft. The row offering Edit is two components away from `draft`, so the
-   * store is the channel; this is the far end of it.
-   */
-  $effect(() => {
-    const slot = pendingRestore(viewId);
-    if (!slot) {
-      return;
-    }
-    const id = viewId;
-    untrack(() => {
-      draft.restore(slot.text, slot.extras);
-      clearRestore(id);
-    });
-  });
-
-  /** Whether this session's last message is out of this tab but not yet taken. */
-  const sending = $derived(
-    latestCommandFor(viewId, "send")?.stage === "submitted" &&
-      !latestCommandFor(viewId, "send")?.waiting
   );
 
   async function onsubmit(
@@ -1113,7 +1081,7 @@
       return session?.busy ?? false;
     },
     get sending() {
-      return sending;
+      return sends.sending;
     },
     get sendError() {
       return sendFailure;
@@ -1399,7 +1367,7 @@
             recallOf={viewId}
             sendError={sendFailure}
             {faultAgain}
-            {sending}
+            sending={sends.sending}
             showing={viewId}
             {suggest}
             trayRows={[{ delegatesOf: viewId, id: viewId, prompts: offer }]}

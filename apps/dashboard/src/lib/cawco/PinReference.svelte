@@ -16,18 +16,13 @@
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { pinNamed } from "./artifact-names.svelte";
   import { dur } from "./motion/curves.svelte";
   import PinMark, { markState } from "./preview/PinMark.svelte";
   import PinPeek from "./preview/PinPeek.svelte";
-  import RowFault from "./RowFault.svelte";
-  import { openReference } from "./reference-open.svelte";
-  import { refusals } from "./refusals.svelte";
-  import { sessionHere } from "./session-here";
+  import ReferenceChip from "./ReferenceChip.svelte";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
-  const here = sessionHere();
 
   const named = $derived(pinReference(id));
   const pin = $derived(pinNamed(id));
@@ -84,62 +79,36 @@
     }
     return `Pin ${number} on ${words}`;
   });
-  /** Where the last press's refusal is said: beside the chip, kept through a reload. */
-  const refKey = $derived(`ref:${id}:pin`);
-  async function press(): Promise<void> {
-    if (!named) {
-      return;
-    }
-    const key = refKey;
-    const refused = await openReference(
-      named.artifact,
-      { pin: named.number },
-      here?.()
-    );
-    if (refused) {
-      refusals.set(key, { reason: refused });
-    } else {
-      refusals.delete(key);
-    }
-  }
 </script>
 
 <!-- The chip stands in a line of text as a word does (ui/chip `inline`). -->
-<button
+<ReferenceChip
   aria-label={unread ? `${title}, ${commentWords.newAnswer}` : title}
-  class={chipVariants({ variant: "inline" })}
+  artifact={named?.artifact}
+  at={{ pin: named?.number ?? 0 }}
   data-pin-chip={id}
   data-state={pin ? markState(pin) : undefined}
   data-unread={unread || undefined}
   onblur={leave}
-  onclick={() => {
-    leave();
-    return press();
-  }}
   onpointerenter={rest}
   onpointerleave={leave}
-  type="button"
-  bind:this={chip}
+  onpress={leave}
+  refKey="ref:{id}:pin"
+  {words}
+  bind:ref={chip}
 >
-  <span data-slot="mark" class="inline-flex flex-none" data-box>
-    <PinMark
-      dot={unread ? "unread" : null}
-      gone={!!pin?.movedAt}
-      number={named?.number ?? null}
-      size="inline"
-      state={pin ? markState(pin) : "sent"}
-    />
-  </span>
-  <span data-slot="label">{words}</span>
-</button>
-<!-- A press the hub refused, said beside the chip in the sentence it
-     stands in, with Try again. -->
-<RowFault
-  again={press}
-  class="inline-block max-w-full align-baseline"
-  data-reference-refused
-  reason={refusals.reason(refKey)}
-/><Portal>
+  {#snippet mark()}
+    <span data-slot="mark" class="inline-flex flex-none" data-box>
+      <PinMark
+        dot={unread ? "unread" : null}
+        gone={!!pin?.movedAt}
+        number={named?.number ?? null}
+        size="inline"
+        state={pin ? markState(pin) : "sent"}
+      />
+    </span>
+  {/snippet}
+</ReferenceChip><Portal>
   {#if peekAt && pin}
     <!-- The viewport is its room: a transcript's rows clip what stands inside them. -->
     <div

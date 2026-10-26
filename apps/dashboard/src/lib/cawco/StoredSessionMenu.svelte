@@ -15,7 +15,6 @@
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
     IconArrowRight,
-    IconColumns,
     IconExternal,
     IconFork,
     IconPenLine,
@@ -27,11 +26,8 @@
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
   import { startFork } from "./spawn/new-session.svelte";
-  import {
-    canOpenBeside,
-    focusAfterMenu,
-    openBeside,
-  } from "./workspace/open-beside.svelte";
+  import OpenItems from "./workspace/OpenItems.svelte";
+  import { focusAfterMenu } from "./workspace/open-beside.svelte";
 
   let {
     asker,
@@ -134,23 +130,15 @@
   {/snippet}
 
   <ContextMenu.Content onCloseAutoFocus={closeFocus}>
-    <ContextMenu.Item onSelect={() => goto(href)}>
-      <IconExternal />
-      <span>Open</span>
-    </ContextMenu.Item>
-    {#if canOpenBeside(info.sessionId)}
-      <ContextMenu.Item
-        onSelect={() =>
-          openBeside(info.sessionId, {
-            machine: machineId,
-            cwd: info.cwd ?? "",
-            harness: info.harness,
-          })}
-      >
-        <IconColumns />
-        <span>Open in split view</span>
-      </ContextMenu.Item>
-    {/if}
+    <OpenItems
+      context={{
+        machine: machineId,
+        cwd: info.cwd ?? "",
+        harness: info.harness,
+      }}
+      {href}
+      sessionId={info.sessionId}
+    />
     <ContextMenu.Item
       onSelect={() =>
         continueInNewSession({

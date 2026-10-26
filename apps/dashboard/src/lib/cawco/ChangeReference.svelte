@@ -12,60 +12,22 @@
    * (reference-open.svelte.ts, PreviewPane's open at a change).
    */
   import { changeReference, commentWords } from "@cawco/core";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconRefresh } from "#lib/icons.js";
-  import RowFault from "./RowFault.svelte";
-  import { openReference } from "./reference-open.svelte";
-  import { refusals } from "./refusals.svelte";
-  import { sessionHere } from "./session-here";
+  import ReferenceChip from "./ReferenceChip.svelte";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
-  const here = sessionHere();
 
   const named = $derived(changeReference(id));
   const words = $derived(label || commentWords.changed);
-  /** Where the last press's refusal is said: beside the chip, kept through a reload. */
-  const refKey = $derived(`ref:${id}:change`);
-  async function press(): Promise<void> {
-    if (!named) {
-      return;
-    }
-    const key = refKey;
-    const refused = await openReference(
-      named.artifact,
-      { change: named.anchor },
-      here?.()
-    );
-    if (refused) {
-      refusals.set(key, { reason: refused });
-    } else {
-      refusals.delete(key);
-    }
-  }
 </script>
 
-<button
+<ReferenceChip
   aria-label={commentWords.changeChip(words)}
-  class={chipVariants({ variant: "inline" })}
+  artifact={named?.artifact}
+  at={{ change: named?.anchor ?? "" }}
   data-change-chip={id}
-  onclick={press}
-  type="button"
->
-  <span
-    data-slot="mark"
-    aria-hidden="true"
-    class="grid size-c-row-mark flex-none place-items-center text-c-change-ring"
-    data-box
-  >
-    <IconRefresh class="block size-icon-sm" />
-  </span>
-  <span data-slot="label">{words}</span>
-</button>
-<!-- A press the hub refused, said beside the chip in the sentence it
-     stands in, with Try again. -->
-<RowFault
-  again={press}
-  class="inline-block max-w-full align-baseline"
-  data-reference-refused
-  reason={refusals.reason(refKey)}
+  glyph={IconRefresh}
+  refKey="ref:{id}:change"
+  tone="text-c-change-ring"
+  {words}
 />

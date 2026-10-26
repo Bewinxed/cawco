@@ -101,6 +101,23 @@ export interface Rule {
 /** A rule as it arrives from the dashboard, before the hub gives it an id. */
 export type RuleDraft = Omit<Rule, "id" | "createdAt">;
 
+/** What a rule says and does, without its scope or its record (an editor's draft, the hub's row). */
+export type RuleSettings = Omit<RuleDraft, "scope">;
+
+/** A rule's {@link RuleSettings}, read off it field by field. */
+export const ruleSettings = (rule: RuleSettings): RuleSettings => ({
+  name: rule.name,
+  enabled: rule.enabled,
+  pattern: rule.pattern,
+  matchKind: rule.matchKind,
+  caseSensitive: rule.caseSensitive,
+  wholeWord: rule.wholeWord,
+  watch: rule.watch,
+  reply: rule.reply,
+  timing: rule.timing,
+  repeat: rule.repeat,
+});
+
 /** Where one rule stands with one session. */
 export interface RuleState {
   /** When a turn last ended without matching the rule again, re-arming it. */

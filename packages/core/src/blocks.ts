@@ -163,3 +163,28 @@ export const viewBlock = (name: string): string => `${VIEW_BLOCK}${name}`;
 /** The view a block id names, or null for a built-in block. */
 export const viewOfBlock = (block: string): string | null =>
   block.startsWith(VIEW_BLOCK) ? block.slice(VIEW_BLOCK.length) : null;
+
+/**
+ * A page's blocks in order: `stored`, as the person arranged them, less a
+ * view no longer kept (`kept` answers for a view's name), then any of the
+ * page's own (`BLOCK_BUILT_INS`) the record lacks, one a later build added,
+ * at its own width. The hub counts a proposed block's place among these and
+ * the dashboard draws them, so both count alike.
+ */
+export function placesWithBuiltIns(
+  page: BlockPage,
+  stored: BlockPlace[],
+  kept: (view: string) => boolean
+): BlockPlace[] {
+  const shown = stored.filter((place) => {
+    const view = viewOfBlock(place.block);
+    return view === null || kept(view);
+  });
+  const named = new Set(shown.map((place) => place.block));
+  return [
+    ...shown,
+    ...BLOCK_BUILT_INS[page]
+      .filter((own) => !named.has(own.block))
+      .map((own) => ({ block: own.block, width: own.width, hidden: false })),
+  ];
+}

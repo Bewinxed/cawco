@@ -10,16 +10,11 @@
    * (reference-open.svelte.ts).
    */
   import { decisionReference } from "@cawco/core";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconDecisions } from "#lib/icons.js";
   import { artifactMarks } from "./artifact-names.svelte";
-  import RowFault from "./RowFault.svelte";
-  import { openReference } from "./reference-open.svelte";
-  import { refusals } from "./refusals.svelte";
-  import { sessionHere } from "./session-here";
+  import ReferenceChip from "./ReferenceChip.svelte";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
-  const here = sessionHere();
 
   const named = $derived(decisionReference(id));
   const picked = $derived.by(() => {
@@ -39,48 +34,14 @@
   const title = $derived(
     picked === null ? words : `${words} · ${picked ? "picked" : "not picked"}`
   );
-  /** Where the last press's refusal is said: beside the chip, kept through a reload. */
-  const refKey = $derived(`ref:${id}:card`);
-  async function press(): Promise<void> {
-    if (!named) {
-      return;
-    }
-    const key = refKey;
-    const refused = await openReference(
-      named.artifact,
-      { card: named.card },
-      here?.()
-    );
-    if (refused) {
-      refusals.set(key, { reason: refused });
-    } else {
-      refusals.delete(key);
-    }
-  }
 </script>
 
-<button
-  class={chipVariants({ variant: "inline" })}
+<ReferenceChip
+  artifact={named?.artifact}
+  at={{ card: named?.card ?? "" }}
   data-decision-chip={id}
-  onclick={press}
+  glyph={IconDecisions}
+  refKey="ref:{id}:card"
   {title}
-  type="button"
->
-  <span
-    data-slot="mark"
-    aria-hidden="true"
-    class="grid size-c-row-mark flex-none place-items-center text-ink-muted"
-    data-box
-  >
-    <IconDecisions class="block size-icon-sm" />
-  </span>
-  <span data-slot="label">{words}</span>
-</button>
-<!-- A press the hub refused, said beside the chip in the sentence it
-     stands in, with Try again. -->
-<RowFault
-  again={press}
-  class="inline-block max-w-full align-baseline"
-  data-reference-refused
-  reason={refusals.reason(refKey)}
+  {words}
 />

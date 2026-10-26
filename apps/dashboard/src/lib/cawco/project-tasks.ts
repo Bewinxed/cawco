@@ -1,7 +1,7 @@
 /**
  * A project's tasks and stages, as the hub serves them under
- * `/api/projects/:id/tasks` and `/api/projects/:id/stages` (the hub's
- * `tasks.ts` and `stages.ts` own the shapes; these mirror them). Fetch
+ * `/api/projects/:id/tasks` and `/api/projects/:id/stages` (the shapes
+ * the hub answers in are core's, task-views.ts). Fetch
  * wrappers in the shape `rules.ts` and `delegate-types.ts` set: a refusal from
  * the hub is a bare sentence, and every call throws it whole, so the caller
  * prints the hub's own words (a refused move names the moves that are open).
@@ -10,14 +10,20 @@
  * the hub's too, held in the client by `plan.ts`.
  */
 import type {
+  AttemptStart,
   LandsMode,
-  Mover,
+  Stage,
   StageKind,
   StagesTemplate,
-  TaskFileState,
-  TaskHistoryKind,
-  taskLinkWords,
-  WaitKind,
+  StagesView,
+  TaskAttempt,
+  TaskFlags,
+  TaskHistory,
+  TaskHistoryActor,
+  TaskList,
+  TaskSummary,
+  TaskTimes,
+  TaskWait,
   WorkItemState,
 } from "@cawco/core";
 import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
@@ -31,62 +37,32 @@ import type {
   GithubProjectsView,
   IssueTracker,
   TaskIssueLink,
-  Tracker,
   TrackerTarget,
   TrackerView,
 } from "@cawco/core/trackers";
 import {
   HUB_UNREACHABLE,
   HubUnreachable,
-  hubFailure,
+  hubSaid,
   noAnswer,
   unreachedAnswer,
 } from "./hub-read";
 
-interface StageHooks {
-  after?: string;
-  afterMs?: number;
-  by?: Mover;
-  runs?: string;
-  until?: string;
-}
-
-export interface Stage {
-  hooks: StageHooks;
-  kind: StageKind;
-  name: string;
-}
-
-interface StageMove {
-  /** A stage, or `*` for any. */
-  from: string;
-  /** A stage, or `*` for any. */
-  to: string;
-  who: Mover[];
-}
-
-export interface StagesView {
-  /** What an empty Decisions tab offers to ask Caw for: the project's open choices (hub project-starters.ts); none while Jev is off. */
-  decisionStarters: ProjectStarter[];
-  moves: StageMove[];
-  problems: string[];
-  /** What an empty Routines page offers to ask Caw for: what the project repeats or waits on (hub project-starters.ts); none while Jev is off. */
-  routineStarters: ProjectStarter[];
-  /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
-  source: "file" | "template";
-  stages: Stage[];
-  /**
-   * What an empty board and Caw's panel offer to say to him, written for the
-   * project from what it holds now (hub project-starters.ts), in the hub's
-   * order; none while Jev is off. `starters.changed` brings a new set.
-   */
-  starters: ProjectStarter[];
-  template: StagesTemplate | null;
-  views: { by: string | null; name: string }[];
-}
-
 /** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); StarterCards draws its glyph. */
-export type { ProjectStarter, StarterGlyph, StarterPlace } from "@cawco/core";
+export type {
+  AttemptStart,
+  ProjectStarter,
+  Stage,
+  StagesView,
+  StarterGlyph,
+  StarterPlace,
+  TaskAttempt,
+  TaskHistory,
+  TaskHistoryEvent,
+  TaskList,
+  TaskSummary,
+  TaskWait,
+} from "@cawco/core";
 
 /**
  * A sentence to Caw a press puts in the composer, and its glyph: what
@@ -101,28 +77,6 @@ export interface Starter {
 export interface StagesTemplateView {
   name: StagesTemplate;
   stages: Stage[];
-}
-
-/** One try at a task (attempt): a work item whose task it is. */
-export interface TaskAttempt {
-  /** When it ended, ms epoch; null while it is live. */
-  endedAt: number | null;
-  /**
-   * How it ended when it did not land, as the hub words it: the first line
-   * of why it failed, or `Stopped by <who>` (`Stopped` when the hub did not
-   * hear who). Null while live and once done.
-   */
-  endedHow: string | null;
-  /** What its session said it did, in one or two sentences; null until it finished that way. */
-  headline: string | null;
-  /** The session running it. */
-  instanceId: string;
-  /** What its session handed in (`task_result`); null while it has not. */
-  result: AttemptResult | null;
-  /** When it was filed, ms epoch. */
-  startedAt: number;
-  state: WorkItemState;
-  workItemId: string;
 }
 
 /**
@@ -184,126 +138,6 @@ export function reviewOf(
   };
 }
 
-/**
- * One wait of a task, its own or its whole's (the hub's `TaskWait`, settled
- * by its one resolver, task-waits.ts): a task, a decision card, a pin, a
- * pull request, an Actions run or a session.
- */
-export interface TaskWait {
-  /** Why it is blocked until someone removes or re-points it (`closed unmerged`); null when it is not. */
-  flag: string | null;
-  /** Where it opens: its `cawco:` reference, or the pull request's or run's page. */
-  href: string;
-  kind: WaitKind;
-  /** A task's title, a card's question, what a pin stands on, `PR #418`. */
-  label: string;
-  settled: boolean;
-  /** Where it stands: `doing`, `open`, `picked`, `merged`, `red`. */
-  state: string;
-  /** The wait as the task's file keeps it: what a link write takes out. */
-  target: string;
-  /** The whole it is inherited from; null for the task's own. */
-  via: string | null;
-}
-
-/** A card or pin a done task was built on that moved since (the hub's `BuiltOn`). */
-interface BuiltOn {
-  href: string;
-  label: string;
-  since:
-    typeof taskLinkWords.decidedDifferently | typeof taskLinkWords.reopened;
-  target: string;
-}
-
-/** What the hub works out per task from its attempts and edges, on every read. */
-interface TaskFlags {
-  /** Newest first. */
-  attempts: TaskAttempt[];
-  /** A done task's cards and pins that moved since its attempt was dispatched on them. */
-  builtOn: BuiltOn[];
-  /** The whole whose live coordinator holds it from the hub's dispatch; null when none. */
-  heldBy: string | null;
-  /**
-   * Its newest attempt failed, and it is not done or dropped since: its
-   * starter's business, never Needs you.
-   */
-  lastAttemptFailed: boolean;
-  /** Its newest attempt was stopped (cancelled), and it is not done or dropped since: no failure. */
-  lastAttemptStopped: boolean;
-  /** An attempt at it is starting or running. */
-  liveAttempt: boolean;
-  /** Its parts: the tasks part of it, by id. */
-  parts: string[];
-  /** Its stage's `runs:` hook asked for an attempt, which waits for a slot. */
-  queuedStart: boolean;
-  /** In a to-do stage, every wait settled, no live attempt, no coordinator holding it. */
-  ready: boolean;
-  /** Why the hub could not start an attempt the last time it tried. */
-  startProblem: string | null;
-  /** The tasks that wait on it, by id. */
-  unblocks: string[];
-  /** Every wait, its own and its whole's, unsettled first. */
-  waits: TaskWait[];
-}
-
-/**
- * What a started attempt answers (the hub's `AttemptStart`); `queued` while
- * it waits for files a live item owns, its ids null until it starts.
- */
-export interface AttemptStart {
-  instanceId: string | null;
-  lands: LandsMode;
-  queued: boolean;
-  stage: string;
-  task: string;
-  text: string;
-  type: string | null;
-  workItemId: string | null;
-  workspaceId: string | null;
-}
-
-/** One task as a list shows it: the hub's index row. */
-export interface TaskSummary extends TaskFlags, TaskTimes {
-  /** The task it repeats (`duplicate_of`); null when none. */
-  duplicateOf: string | null;
-  /** The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written. */
-  fields: Record<string, string>;
-  /** The task or pin it was found in (`found_in`), as kept; null when none. */
-  foundIn: string | null;
-  id: string;
-  kind: StageKind | null;
-  labels: string[];
-  needsYou: boolean;
-  number: number;
-  /** The project folder files its work produces (`outputs:`). */
-  outputs: string[];
-  /** The whole it is a part of (`part_of`); null when none. */
-  partOf: string | null;
-  path: string;
-  problem: string | null;
-  rank: string | null;
-  stage: string;
-  title: string;
-  /** Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered ones are left out. */
-  todos: { done: number; total: number };
-  type: string | null;
-  /** What it waits on (`waits_on`), as its file keeps it. */
-  waitsOn: string[];
-}
-
-/** When a task was made and last changed, ms epoch, from its file's commits (the hub's `TaskTimes`). */
-interface TaskTimes {
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface TaskList {
-  problems: string[];
-  stagesProblems: string[];
-  tasks: TaskSummary[];
-  tracker: Tracker;
-}
-
 /** One to-do, flat in file order; `depth` nests it. */
 export interface Todo {
   depth: number;
@@ -358,45 +192,12 @@ export interface TaskView extends TaskFlags, TaskTimes {
   waitsOn: string[];
 }
 
-/** Who wrote a comment or made a change (the hub's `TaskHistoryActor`). */
-interface TaskActor {
-  /** The session's instance id, or the approved action's; null when none. */
-  id: string | null;
-  /** The mover it was checked as (`you`, `lead`, `session`, …); null for a hand edit. */
-  mover: string | null;
-  /** You, Caw, the session's title as it was, hub, approved action. */
-  name: string;
-}
-
 /** One entry of a task's `## Comments` (the hub's `TaskComment`). */
 export interface TaskComment {
   at: number;
-  author: TaskActor;
+  author: TaskHistoryActor;
   /** Its markdown, as written. */
   text: string;
-}
-
-/** One commit to a task's file (the hub's `TaskHistoryEvent`). */
-export interface TaskHistoryEvent {
-  actor: TaskActor;
-  at: number;
-  commit: string;
-  kind: TaskHistoryKind;
-  path: string;
-  /** Why, when the change said: a close reason, the hub's cause. */
-  reason: string | null;
-  /** The stage it went from and to; null when the stage did not move. */
-  stage: { from: string | null; to: string } | null;
-  /** What changed, in the commit's words: `update title`, `tick td-2`. */
-  what: string;
-}
-
-/** A task's history: every commit to its file, oldest first (the hub's `TaskHistory`). */
-export interface TaskHistory {
-  events: TaskHistoryEvent[];
-  id: string;
-  path: string;
-  state: TaskFileState;
 }
 
 export interface TaskPatch {
@@ -420,11 +221,6 @@ export interface TaskLinks {
   waitsOn?: string[];
 }
 
-/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
-async function said(response: Response): Promise<string> {
-  return (await hubFailure(response)).detail;
-}
-
 /**
  * A hub read or change, the page's one way to ask the hub: its answer when it
  * is ok and says it is JSON; otherwise the hub's sentence, thrown as it is (it
@@ -438,7 +234,7 @@ export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
   if (!response.ok) {
-    throw new Error(`${await said(response)}.`);
+    throw new Error(`${await hubSaid(response)}.`);
   }
   if (!response.headers.get("content-type")?.includes("application/json")) {
     throw new Error(`${noAnswer(response.status)}.`);
@@ -797,7 +593,7 @@ export async function readOutputText(
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
   if (!response.ok) {
-    throw new Error(`${await said(response)}.`);
+    throw new Error(`${await hubSaid(response)}.`);
   }
   return response.text();
 }

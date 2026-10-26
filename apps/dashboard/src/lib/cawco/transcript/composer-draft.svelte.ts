@@ -11,9 +11,15 @@
  */
 import type { StarterPlace } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/cawco/hub-read.js";
-import type { SendExtras } from "../client.svelte";
+import {
+  clearRestore,
+  latestCommandFor,
+  pendingRestore,
+  type SendExtras,
+} from "../client.svelte";
 import type { DraftContent } from "../draft-store";
 import { newId } from "../id";
 import { uploadFile } from "./file-upload";
@@ -584,4 +590,45 @@ export class ComposerDraft {
     }));
     this.focusWanted = true;
   }
+}
+
+/**
+ * A pane's draft following its conversation's sends, set up with the pane:
+ * once the hub takes a send, the message it carried needs no keeping; "Edit"
+ * on a message that never sent puts its words back (the restore slot,
+ * client.svelte.ts: the row offering Edit is two components away from the
+ * draft, so the store is the channel and this is its far end). `sending`:
+ * whether the conversation's last message is out of this tab but not yet
+ * taken.
+ */
+export function followSends(
+  draft: ComposerDraft,
+  viewId: () => string
+): { readonly sending: boolean } {
+  $effect(() => {
+    const stage = latestCommandFor(viewId(), "send")?.stage;
+    if (stage === "accepted" || stage === "applied") {
+      untrack(() => draft.settle());
+    }
+  });
+  $effect(() => {
+    const id = viewId();
+    const slot = pendingRestore(id);
+    if (!slot) {
+      return;
+    }
+    untrack(() => {
+      draft.restore(slot.text, slot.extras);
+      clearRestore(id);
+    });
+  });
+  const sending = $derived.by(() => {
+    const send = latestCommandFor(viewId(), "send");
+    return send?.stage === "submitted" && !send.waiting;
+  });
+  return {
+    get sending() {
+      return sending;
+    },
+  };
 }

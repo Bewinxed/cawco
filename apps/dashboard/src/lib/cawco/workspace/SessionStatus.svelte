@@ -1,9 +1,7 @@
 <script lang="ts">
-  import type { TransitionConfig } from "svelte/transition";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { dur, easeOut, motionOk, popScale } from "../motion/curves.svelte";
-  import { sessionStatusOf } from "./session-status";
+  import { glyphIn, glyphOut, sessionStatusOf } from "./session-status";
 
   let {
     sessionId = "",
@@ -13,27 +11,6 @@
     compact?: boolean;
   } = $props();
   const status = $derived(sessionStatusOf(sessionId));
-
-  /**
-   * A new glyph cross-fades over the old one at the control tier, coming up
-   * from the pop scale; the old one only fades. With less motion, only the
-   * fade.
-   */
-  function glyphIn(_node: Element): TransitionConfig {
-    const scale = motionOk.current ? popScale() : 1;
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
-    };
-  }
-  function glyphOut(_node: Element): TransitionConfig {
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
-  }
 </script>
 
 <span

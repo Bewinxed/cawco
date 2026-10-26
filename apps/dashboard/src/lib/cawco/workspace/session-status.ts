@@ -5,6 +5,7 @@
  * state: call it inside a `$derived` or a template.
  */
 import type { Component } from "svelte";
+import type { TransitionConfig } from "svelte/transition";
 import {
   IconNeedsYou as Attention,
   IconError as Failed,
@@ -15,6 +16,7 @@ import {
 } from "#lib/icons.js";
 import { STOPPED_LABEL, STOPPING_LABEL } from "../activity";
 import { cawco, isFailed, isStale } from "../client.svelte";
+import { dur, easeOut, motionOk, popScale } from "../motion/curves.svelte";
 import { type NamedSession, sessionAnswer } from "../session-names.svelte";
 import { STALLED_LABEL } from "../session-status";
 
@@ -80,4 +82,25 @@ export function sessionStatusOf(sessionId: string): SessionStatusOf {
       : { label: "Stored", icon: Pause, tone: "quiet" };
   }
   return { label: "Idle", icon: Pause, tone: "quiet" };
+}
+
+/**
+ * A change of the status glyph (SessionStatus, StopTray): the new glyph
+ * cross-fades over the old one at the control tier, coming up from the pop
+ * scale; the old one only fades. With less motion, only the fade.
+ */
+export function glyphIn(_node: Element): TransitionConfig {
+  const scale = motionOk.current ? popScale() : 1;
+  return {
+    duration: dur("--dur-control"),
+    easing: easeOut,
+    css: (t) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
+  };
+}
+export function glyphOut(_node: Element): TransitionConfig {
+  return {
+    duration: dur("--dur-control"),
+    easing: easeOut,
+    css: (t) => `opacity: ${t}`,
+  };
 }

@@ -1,5 +1,5 @@
 import type { DelegateType, Deleted } from "@cawco/core";
-import { hubFailure } from "#lib/cawco/hub-read.js";
+import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
 
 /**
  * The dashboard's side of delegate types: fetch wrappers in the shape
@@ -49,39 +49,17 @@ export interface ProjectTypes {
   types: ProjectDelegateType[];
 }
 
-/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
-async function said(response: Response): Promise<string> {
-  return (await hubFailure(response)).detail;
-}
-
-async function send<T>(
-  url: string,
-  init: RequestInit,
-  attempt: string
-): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    throw new Error(`Could not ${attempt}. ${await said(response)}.`);
-  }
-  return (await response.json()) as T;
-}
-
-const json = (body: unknown): RequestInit => ({
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
-
 /** Create and edit are the same route on the hub — `PUT` upserts by name. */
 export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
-  send<DelegateType>(
+  hubCall<DelegateType>(
     `/api/delegate-types/${encodeURIComponent(draft.name)}`,
-    { method: "PUT", ...json(draft) },
+    { method: "PUT", ...jsonBody(draft) },
     `save ${draft.name || "the delegate type"}`
   );
 
 /** Deletes a type, into the hub's trash for its Undo (config/undo.ts). */
 export const removeDelegateType = (name: string): Promise<Deleted> =>
-  send<Deleted>(
+  hubCall<Deleted>(
     `/api/delegate-types/${encodeURIComponent(name)}`,
     { method: "DELETE" },
     `delete ${name}`

@@ -21,6 +21,7 @@
  * The keyframes are global (app.css): the rows name them from an inline
  * style, which a component's scoped <style> cannot rewrite.
  */
+import type { TransitionConfig } from "svelte/transition";
 import { ease, motionOk } from "./curves.svelte";
 
 const OUT_MS = 200;
@@ -170,4 +171,19 @@ export class ListSwap<T> {
     }
     return `${this.dir > 0 ? "ns-out-l" : "ns-out-r"} ${OUT_MS}ms var(--ease-out) both ${Math.min(i, STAGGER_CAP) * OUT_STAGGER}ms`;
   }
+
+  /**
+   * The outro of a whole view swapped for the next (a project's views, the
+   * decisions list and a page): the view itself, held where it stood over
+   * the pane's top, inert, leaves as the first leaving row does.
+   */
+  leaveView = (node: HTMLElement): TransitionConfig => {
+    node.style.position = "absolute";
+    node.style.inset = "0 0 auto";
+    node.style.pointerEvents = "none";
+    node.inert = true;
+    node.setAttribute("aria-hidden", "true");
+    node.style.animation = this.leaveAnim(0);
+    return { duration: motionOk.current ? ListSwap.leaveEnd(0) : 0 };
+  };
 }

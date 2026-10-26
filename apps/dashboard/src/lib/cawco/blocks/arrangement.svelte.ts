@@ -12,13 +12,12 @@
  * a change as it lands.
  */
 import {
-  BLOCK_BUILT_INS,
   type BlockArrangement,
   type BlockPlace,
+  placesWithBuiltIns,
   SHOWN_BLOCK_PAGES,
   type ShownBlockPage,
   viewBlock,
-  viewOfBlock,
 } from "@cawco/core";
 import { failureWords } from "../hub-read";
 import { json, send } from "../project-tasks";
@@ -60,25 +59,16 @@ export class ProjectBlocks {
   }
 
   /**
-   * A page's blocks in order: as the person arranged them, then any of the
-   * page's own the record lacks (one a later build added), at its own
-   * width. The page's own are core's (`BLOCK_BUILT_INS`), the list the hub
-   * counts a proposed block's place among, so both count it alike. A view no longer kept is left out; a block this build does not
-   * know keeps its place.
+   * A page's blocks in order (core `placesWithBuiltIns`): a view no longer
+   * kept is left out; a block this build does not know keeps its place.
    */
   placesOf(page: ShownBlockPage): BlockPlace[] {
     const kept = this.#kept();
-    const stored = (this.arrangement?.pages[page] ?? []).filter((place) => {
-      const view = viewOfBlock(place.block);
-      return view === null || kept === null || kept.includes(view);
-    });
-    const named = new Set(stored.map((place) => place.block));
-    return [
-      ...stored,
-      ...BLOCK_BUILT_INS[page]
-        .filter((own) => !named.has(own.block))
-        .map((own) => ({ block: own.block, width: own.width, hidden: false })),
-    ];
+    return placesWithBuiltIns(
+      page,
+      this.arrangement?.pages[page] ?? [],
+      (view) => kept === null || kept.includes(view)
+    );
   }
 
   /** The page a custom view stands on as a block, or null: it is its own tab. */

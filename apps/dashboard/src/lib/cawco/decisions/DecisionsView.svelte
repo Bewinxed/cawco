@@ -13,7 +13,6 @@
   import { decisionsWords as words } from "@cawco/core";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
@@ -90,15 +89,7 @@
       was = next;
     }
   });
-  function leave(node: HTMLElement): TransitionConfig {
-    node.style.position = "absolute";
-    node.style.inset = "0 0 auto";
-    node.style.pointerEvents = "none";
-    node.inert = true;
-    node.setAttribute("aria-hidden", "true");
-    node.style.animation = swap.leaveAnim(0);
-    return { duration: motionOk.current ? ListSwap.leaveEnd(0) : 0 };
-  }
+  const leave = swap.leaveView;
 </script>
 
 <div

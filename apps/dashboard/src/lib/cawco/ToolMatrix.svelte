@@ -20,8 +20,7 @@
   import { didntAnswer, type Machine } from "./client.svelte";
   import NoMachines from "./config/NoMachines.svelte";
   import { EMPTY_LINES } from "./empty-asks";
-  import { machineOs } from "./machine";
-  import OsMark from "./OsMark.svelte";
+  import MachineLedger from "./MachineLedger.svelte";
   import { installTool, policyFor, setPolicy } from "./tools";
   import { TRY_AGAIN } from "./unanswered";
 
@@ -105,6 +104,21 @@
        not its one version) is the probe's, and carries that version; an
        attempt that failed carries none (agent tools.ts). -->
   {@const outdated = toolStatus?.state === "failed" && !!toolStatus.version}
+  <!-- The act that installs the tool on the machine: an outlined button, or
+       a quiet ghost one beside a state that already says enough. -->
+  {#snippet installAct(label: string, pendingLabel: string, quiet: boolean)}
+    <Button
+      disabled={!online}
+      {failed}
+      {label}
+      onclick={() => install(machine, spec)}
+      {pending}
+      {pendingLabel}
+      size="xs"
+      tone={quiet ? "muted" : undefined}
+      variant={quiet ? "ghost" : "outline"}
+    />
+  {/snippet}
 
   {#if shown === "installed"}
     <!-- Installed is the quiet state: the check and the version in ink, no
@@ -121,17 +135,7 @@
       <span
         class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 hover-hover:opacity-0"
       >
-        <Button
-          disabled={!online}
-          {failed}
-          label="Reinstall"
-          onclick={() => install(machine, spec)}
-          {pending}
-          pendingLabel="Installing…"
-          size="xs"
-          tone="muted"
-          variant="ghost"
-        />
+        {@render installAct("Reinstall", "Installing…", true)}
       </span>
     </span>
   {:else if shown === "installing"}
@@ -140,16 +144,7 @@
       <span>Installing…</span>
     </Badge>
   {:else if shown === "missing"}
-    <Button
-      disabled={!online}
-      {failed}
-      label="Install"
-      onclick={() => install(machine, spec)}
-      {pending}
-      pendingLabel="Installing…"
-      size="xs"
-      variant="outline"
-    />
+    {@render installAct("Install", "Installing…", false)}
   {:else if shown === "failed"}
     <span class="flex items-center gap-space-1">
       <Popover.Root>
@@ -204,30 +199,19 @@
             </p>
           {/if}
           <footer class="border-t border-border-hairline px-space-3 py-space-2">
-            <Button
-              disabled={!online}
-              {failed}
-              label={outdated ? "Update" : "Retry"}
-              onclick={() => install(machine, spec)}
-              {pending}
-              pendingLabel={outdated ? "Updating…" : "Installing…"}
-              size="xs"
-              variant="outline"
-            />
+            {@render installAct(
+              outdated ? "Update" : "Retry",
+              outdated ? "Updating…" : "Installing…",
+              false
+            )}
           </footer>
         </Popover.Content>
       </Popover.Root>
-      <Button
-        disabled={!online}
-        {failed}
-        label={outdated ? "Update" : "Retry"}
-        onclick={() => install(machine, spec)}
-        {pending}
-        pendingLabel={outdated ? "Updating…" : "Installing…"}
-        size="xs"
-        tone="muted"
-        variant="ghost"
-      />
+      {@render installAct(
+        outdated ? "Update" : "Retry",
+        outdated ? "Updating…" : "Installing…",
+        true
+      )}
     </span>
   {:else if shown === "unsupported"}
     <Popover.Root>
@@ -355,62 +339,25 @@
           again={() => requireEverywhere(spec, !policy.required)}
           reason={policyRefused[spec.id]}
         />
-        <Table.Root
-          layout="ledger"
-          stacks="phone"
-          style="--card-cols: minmax(0, 1fr) auto"
+        <MachineLedger
+          {machines}
+          online={(machine) => machine.status === "online"}
+          rowClass="group/cell"
         >
-          <Table.Header>
-            <Table.Row variant="band">
-              <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head scope="col" variant="band">Machine</Table.Head>
-              <Table.Head class="w-c-matrix-col-w" scope="col" variant="band"
-                >State</Table.Head
-              >
-              <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {#each machines as machine (machine.machineId)}
-              {@const os = machineOs(machine.os)}
-              {@const online = machine.status === "online"}
-              <Table.Row class="group/cell" variant="stacks">
-                <Table.Cell variant="ledger-stacks">
-                  <span class="flex min-w-0 items-center gap-space-2">
-                    <OsMark
-                      class="size-icon-md shrink-0 text-ink-muted"
-                      os={machine.os}
-                    />
-                    <span class="flex min-w-0 flex-col">
-                      <span
-                        class="mark-line flex min-w-0 items-center gap-space-2"
-                      >
-                        <span
-                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-row"
-                          >{machineLabel(machine.hostname)}</span
-                        >
-                        <span
-                          data-box
-                          class="size-(--status-dot-size) shrink-0 rounded-pill {online
-                            ? 'bg-presence-online'
-                            : 'bg-presence-off'}"
-                        ></span>
-                      </span>
-                      <span class="truncate type-meta text-ink-muted"
-                        >{os.label}{online ? "" : " · offline"}</span
-                      >
-                    </span>
-                  </span>
-                </Table.Cell>
-                <Table.Cell variant="ledger-stacks">
-                  <div class="flex flex-col gap-space-1 whitespace-normal">
-                    {@render cell(machine, spec, online)}
-                  </div>
-                </Table.Cell>
-              </Table.Row>
-            {/each}
-          </Table.Body>
-        </Table.Root>
+          {#snippet heads()}
+            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <Table.Head class="w-c-matrix-col-w" scope="col" variant="band"
+              >State</Table.Head
+            >
+          {/snippet}
+          {#snippet cells(machine: Machine, online: boolean)}
+            <Table.Cell variant="ledger-stacks">
+              <div class="flex flex-col gap-space-1 whitespace-normal">
+                {@render cell(machine, spec, online)}
+              </div>
+            </Table.Cell>
+          {/snippet}
+        </MachineLedger>
       </section>
     {/each}
   </div>

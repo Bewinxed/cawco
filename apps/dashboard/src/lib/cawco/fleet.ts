@@ -35,7 +35,7 @@ import type {
 import type { FleetHook } from "@cawco/core/hooks";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
-import { awayOf, hubFailure } from "#lib/cawco/hub-read.js";
+import { awayOf, hubCall, hubSaid } from "#lib/cawco/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
@@ -298,28 +298,8 @@ export function formatBytes(bytes: number): string {
 /** A machine's own words' closing stops, dropped so they sit inside a sentence of ours. */
 const TRAILING_STOPS = /\.+$/u;
 
-/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
-async function said(response: Response): Promise<string> {
-  return (await hubFailure(response)).detail;
-}
-
-async function send<T>(
-  url: string,
-  init: RequestInit,
-  attempt: string
-): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    throw (
-      (await awayOf(response)) ??
-      new Error(`Could not ${attempt}. ${await said(response)}.`)
-    );
-  }
-  return (await response.json()) as T;
-}
-
 const put = <T>(url: string, body: unknown, attempt: string): Promise<T> =>
-  send<T>(
+  hubCall<T>(
     url,
     {
       method: "PUT",
@@ -341,7 +321,7 @@ const erase = (
   attempt: string,
   body?: unknown
 ): Promise<Deleted> =>
-  send<Deleted>(
+  hubCall<Deleted>(
     url,
     {
       method: "DELETE",
@@ -405,7 +385,7 @@ export const signInToMcp = async (
   let authorizationUrl: string;
   let expiresAt: number;
   try {
-    ({ authorizationUrl, expiresAt } = await send<{
+    ({ authorizationUrl, expiresAt } = await hubCall<{
       authorizationUrl: string;
       expiresAt: number;
     }>(
@@ -441,7 +421,7 @@ export const completeMcpSignIn = (
   state: string,
   iss: string | null
 ): Promise<{ name: string }> =>
-  send(
+  hubCall(
     "/api/fleet/mcp/oauth/complete",
     {
       method: "POST",
@@ -524,7 +504,7 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
     (frame) =>
       frame.marketplace?.source === source ? frame.marketplace : undefined,
     () =>
-      send<MarketplaceRead>(
+      hubCall<MarketplaceRead>(
         `/api/fleet/marketplace-read?${new URLSearchParams({ source })}`,
         {},
         `read ${source}`
@@ -549,7 +529,7 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
  */
 export const linkMarketplace = (wanted: string): Promise<MarketplaceLink> => {
   const source = wanted.trim();
-  return send<MarketplaceLink>(
+  return hubCall<MarketplaceLink>(
     "/api/fleet/marketplace-links",
     {
       method: "POST",
@@ -562,7 +542,7 @@ export const linkMarketplace = (wanted: string): Promise<MarketplaceLink> => {
 
 /** Lets a refused link go: it leaves the marketplace list. */
 export const dropMarketplaceLink = (source: string): Promise<unknown> =>
-  send(
+  hubCall(
     `/api/fleet/marketplace-links?${new URLSearchParams({ source })}`,
     { method: "DELETE" },
     `let go of ${source}`
@@ -640,7 +620,7 @@ export const installPlugin = (id: string): Promise<FleetPlugin> =>
   );
 
 const switchRow = <T>(path: string, enabled: boolean, what: string) =>
-  send<T>(
+  hubCall<T>(
     path,
     {
       method: "PATCH",
@@ -684,7 +664,7 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
     `refresh ${id}`,
     (frame) => (frame.plugin?.id === id ? frame.plugin : undefined),
     () =>
-      send(
+      hubCall(
         `/api/fleet/plugins/${encodeURIComponent(id)}/refresh`,
         { method: "POST" },
         `refresh ${id}`
@@ -712,7 +692,7 @@ export const inspectMachine = (
   machineId: string,
   cwd?: string
 ): Promise<ConfigInspection> =>
-  send(
+  hubCall(
     `/api/agents/${encodeURIComponent(machineId)}/inspect`,
     {
       method: "POST",
@@ -742,7 +722,7 @@ export const adoptSkill = (
  * its edited copy aside before it writes the fleet's.
  */
 export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
-  send(
+  hubCall(
     `/api/fleet/skills/${encodeURIComponent(name)}/push`,
     {
       method: "POST",
@@ -758,7 +738,7 @@ export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
  * machine's edited copy an overwrite replaced.
  */
 export const skillHistory = (name: string): Promise<ListedVersion[]> =>
-  send(
+  hubCall(
     `/api/fleet/skills/history?name=${encodeURIComponent(name)}`,
     {},
     "load this skill’s history"
@@ -766,7 +746,7 @@ export const skillHistory = (name: string): Promise<ListedVersion[]> =>
 
 /** Writes a past version back as the fleet's copy, keeping what it replaces. */
 export const restoreSkillVersion = (id: number): Promise<FleetSkillMeta> =>
-  send(
+  hubCall(
     "/api/fleet/skills/restore",
     {
       method: "POST",
@@ -786,7 +766,7 @@ export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
     `refresh ${name}`,
     (frame) => (frame.skill?.name === name ? frame.skill : undefined),
     () =>
-      send(
+      hubCall(
         `/api/fleet/skills/${encodeURIComponent(name)}/refresh`,
         { method: "POST" },
         `refresh ${name}`
@@ -803,7 +783,11 @@ export const checkForUpdates = (): Promise<{ fetching: boolean }> =>
     "check for updates",
     (frame) => frame.check,
     () =>
-      send("/api/fleet/updates/check", { method: "POST" }, "check for updates")
+      hubCall(
+        "/api/fleet/updates/check",
+        { method: "POST" },
+        "check for updates"
+      )
   );
 
 /**
@@ -853,7 +837,7 @@ export const removeAgent = (name: string): Promise<Deleted> =>
 
 /** Writes the subagents again, at every machine that is online. */
 export const pushAgents = (): Promise<{ unpushable: Record<string, string> }> =>
-  send(
+  hubCall(
     "/api/fleet/agents/push",
     { method: "POST" },
     "push the subagents to the machines"
@@ -1023,7 +1007,7 @@ export async function saveMemory(
     return { ok: false, latest: (await response.json()) as FleetMemoryRow };
   }
   if (!response.ok) {
-    throw new Error(`Could not save the memory. ${await said(response)}.`);
+    throw new Error(`Could not save the memory. ${await hubSaid(response)}.`);
   }
   return { ok: true, memory: (await response.json()) as FleetMemoryRow };
 }
@@ -1046,7 +1030,7 @@ export async function peekMemory(
     throw (
       (await awayOf(response)) ??
       new Error(
-        `Could not read this machine's memory. ${await said(response)}.`
+        `Could not read this machine's memory. ${await hubSaid(response)}.`
       )
     );
   }
@@ -1061,7 +1045,7 @@ export async function peekMemory(
  * document at a time: a `path` for a linked one, the main file without.
  */
 export const memoryHistory = (path?: string): Promise<FleetMemoryVersion[]> =>
-  send(
+  hubCall(
     path === undefined
       ? "/api/fleet/memory/history"
       : `/api/fleet/memory/history?path=${encodeURIComponent(path)}`,
@@ -1072,16 +1056,16 @@ export const memoryHistory = (path?: string): Promise<FleetMemoryVersion[]> =>
 export const memoryVersion = (
   id: number
 ): Promise<FleetMemoryVersion & { content: string }> =>
-  send(`/api/fleet/memory/history/${id}`, {}, "read that version");
+  hubCall(`/api/fleet/memory/history/${id}`, {}, "read that version");
 
 /** The memory's documents as they stand now, files and all (`GET /api/fleet`'s `memoryDocs`). */
 export const memoryDocsNow = async (): Promise<FleetMemoryDocRow[]> =>
-  (await send<FleetSnapshot>("/api/fleet", {}, "read the memory documents"))
+  (await hubCall<FleetSnapshot>("/api/fleet", {}, "read the memory documents"))
     .memoryDocs;
 
 /** Undo: the version becomes the fleet's, and what it replaced joins the history. */
 export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
-  send(
+  hubCall(
     "/api/fleet/memory/restore",
     {
       method: "POST",
@@ -1119,7 +1103,7 @@ export async function saveMemoryDoc(
     return { ok: false, latest: (await response.json()) as FleetMemoryDocRow };
   }
   if (!response.ok) {
-    throw new Error(`Could not save ${path}. ${await said(response)}.`);
+    throw new Error(`Could not save ${path}. ${await hubSaid(response)}.`);
   }
   return { ok: true, doc: (await response.json()) as FleetMemoryDocRow };
 }
@@ -1134,7 +1118,7 @@ export const removeMemoryDoc = (path: string): Promise<Deleted> =>
  * that drifted has its version win.
  */
 export const adoptMemory = (machineId: string): Promise<FleetMemoryRow> =>
-  send(
+  hubCall(
     "/api/fleet/memory/adopt",
     {
       method: "POST",
@@ -1149,7 +1133,7 @@ export const adoptMemoryDoc = (
   machineId: string,
   path: string
 ): Promise<FleetMemoryDocRow> =>
-  send(
+  hubCall(
     "/api/fleet/memory/adopt",
     {
       method: "POST",
@@ -1168,7 +1152,7 @@ export const pushMemory = (
   machineId: string,
   path?: string
 ): Promise<unknown> =>
-  send(
+  hubCall(
     "/api/fleet/memory/push",
     {
       method: "POST",
@@ -1195,7 +1179,7 @@ export async function peekHook(
     throw (
       (await awayOf(response)) ??
       new Error(
-        `Could not read this machine's script. ${await said(response)}.`
+        `Could not read this machine's script. ${await hubSaid(response)}.`
       )
     );
   }
@@ -1207,7 +1191,7 @@ export async function peekHook(
 
 /** Takes one machine's edited script for a hook as the fleet's. */
 export const adoptHook = (machineId: string, id: string): Promise<FleetHook> =>
-  send(
+  hubCall(
     "/api/fleet/hooks/adopt",
     {
       method: "POST",
@@ -1219,7 +1203,7 @@ export const adoptHook = (machineId: string, id: string): Promise<FleetHook> =>
 
 /** The other direction: the fleet's script over a machine's edited one. */
 export const pushHook = (machineId: string, id: string): Promise<unknown> =>
-  send(
+  hubCall(
     "/api/fleet/hooks/push",
     {
       method: "POST",
@@ -1234,7 +1218,7 @@ export const retryFleetItems = (
   machineId: string,
   ids: readonly string[]
 ): Promise<unknown> =>
-  send(
+  hubCall(
     "/api/fleet/items/retry",
     {
       method: "POST",
@@ -1250,7 +1234,7 @@ export const retryFleetItems = (
  * machine that was asleep when one happened.
  */
 export const syncFleet = (machineId?: string): Promise<unknown> =>
-  send(
+  hubCall(
     "/api/fleet/sync",
     {
       method: "POST",
@@ -1274,7 +1258,7 @@ export const marketplaceCatalog = async (
     (frame) =>
       frame.marketplace?.source === row.source ? frame.marketplace : undefined,
     () =>
-      send<MarketplaceRead>(
+      hubCall<MarketplaceRead>(
         `/api/fleet/marketplace-read?${new URLSearchParams({ source: row.source })}`,
         {},
         `read ${row.name}`

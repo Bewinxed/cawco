@@ -16,6 +16,7 @@ import type {
   InstanceRow,
   NamedSpawn,
   PreviewSettings,
+  ProjectOfferAccepted,
   SendPayload,
   SessionPulse,
   SessionTooling,
@@ -7025,17 +7026,6 @@ export async function decideAction(
   if (!response.ok) {
     throw await hubRefusal(response);
   }
-}
-
-/** What "Create project" did: the project, and the plan items it filed as proposed tasks. */
-export interface ProjectOfferAccepted {
-  joined: boolean;
-  project: { id: string; name: string };
-  sessions: string[];
-  /** A new project's Setup thread, where its Caw sets it up; none when the folder joined one. */
-  setupThread?: ThreadSummary;
-  tasks: { id: string; title: string }[];
-  unfiled: { title: string; why: string }[];
 }
 
 /**

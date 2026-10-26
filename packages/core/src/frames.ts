@@ -778,6 +778,20 @@ export interface ProjectOfferSummary {
   reason: ProjectOfferReason;
 }
 
+/** What "Create project" on an offer did (hub project-offers.ts): the project, and the plan items it filed as proposed tasks. */
+export interface ProjectOfferAccepted {
+  /** True when the session's folder joined a project that already had its repository. */
+  joined: boolean;
+  project: { id: string; name: string };
+  /** The sessions moved into it: this one, then its delegates. */
+  sessions: string[];
+  /** A new project's Setup thread, where its Caw sets it up; none when the folder joined one. */
+  setupThread?: ThreadSummary;
+  /** Plan items filed as proposed tasks, and the ones the project refused. */
+  tasks: { id: string; title: string }[];
+  unfiled: { title: string; why: string }[];
+}
+
 export interface ProjectOfferFrame {
   instanceId: string;
   /** Hub-originated: the session's standing offer, or null once it was answered. */

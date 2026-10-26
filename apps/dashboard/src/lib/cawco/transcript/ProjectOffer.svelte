@@ -6,16 +6,16 @@
    * attention hue, one sentence naming why, and two answers. Either answer is
    * the last word: a session is never offered again.
    */
-  import { offerWords, type ProjectOfferSummary } from "@cawco/core";
+  import {
+    offerWords,
+    type ProjectOfferAccepted,
+    type ProjectOfferSummary,
+  } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose, IconFolder } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import {
-    answerProjectOffer,
-    dismissProjectJoin,
-    type ProjectOfferAccepted,
-  } from "../client.svelte";
+  import { answerProjectOffer, dismissProjectJoin } from "../client.svelte";
   import RowFault from "../RowFault.svelte";
   import { threadHref } from "../thread-tabs";
 

@@ -68,7 +68,8 @@ export interface GrabValue {
   now: number;
 }
 
-const boxOf = (el: Element): Box => {
+/** An element's box on the screen, as a stage keeps one. */
+export const boxOf = (el: Element): Box => {
   const r = el.getBoundingClientRect();
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 };

@@ -4,7 +4,7 @@ import type {
   FleetItemState,
   HookDraft,
 } from "@cawco/core";
-import { hubFailure } from "#lib/cawco/hub-read.js";
+import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
 import type { Machine } from "./client.svelte";
 
 /**
@@ -49,38 +49,16 @@ export type HookFleetReport = Record<string, FleetItemState>;
 export const hooksOf = (machine: Machine): HookFleetReport | undefined =>
   machine.fleet?.hooks;
 
-/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
-async function said(response: Response): Promise<string> {
-  return (await hubFailure(response)).detail;
-}
-
-async function send<T>(
-  url: string,
-  init: RequestInit,
-  attempt: string
-): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    throw new Error(`Could not ${attempt}. ${await said(response)}.`);
-  }
-  return (await response.json()) as T;
-}
-
-const json = (body: unknown): RequestInit => ({
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
-
 /** Only the fields the hub's schema accepts — `force`/`cwd` are the hub's own to
  *  set. The hub merges a PUT over the stored hook, so an optional field the
  *  draft leaves empty goes as `null`, which clears it; an absent one would keep
  *  the stored value. */
 export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
-  send<FleetHook>(
+  hubCall<FleetHook>(
     `/api/fleet/hooks/${encodeURIComponent(id)}`,
     {
       method: "PUT",
-      ...json({
+      ...jsonBody({
         name: draft.name,
         enabled: draft.enabled,
         event: draft.event,
@@ -96,7 +74,7 @@ export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
 
 /** Deletes a hook everywhere, into the hub's trash for its Undo (config/undo.ts). */
 export const removeHook = (id: string, name: string): Promise<Deleted> =>
-  send<Deleted>(
+  hubCall<Deleted>(
     `/api/fleet/hooks/${encodeURIComponent(id)}`,
     { method: "DELETE" },
     `delete ${name}`
@@ -105,7 +83,7 @@ export const removeHook = (id: string, name: string): Promise<Deleted> =>
 /** What this hook used to be, newest first — the hub keeps a version on every
  *  save or delete over one that already existed. */
 export const loadHookVersions = (hookId: string): Promise<HookVersion[]> =>
-  send<HookVersion[]>(
+  hubCall<HookVersion[]>(
     `/api/fleet/hooks/history?hookId=${encodeURIComponent(hookId)}`,
     {},
     "load this hook’s history"
@@ -114,9 +92,9 @@ export const loadHookVersions = (hookId: string): Promise<HookVersion[]> =>
 /** Writes a past version back as the current one — through the same save door,
  *  so restoring keeps what it replaces, same as any other edit. */
 export const restoreHookVersion = (versionId: number): Promise<FleetHook> =>
-  send<FleetHook>(
+  hubCall<FleetHook>(
     "/api/fleet/hooks/restore",
-    { method: "POST", ...json({ id: versionId }) },
+    { method: "POST", ...jsonBody({ id: versionId }) },
     "restore that version"
   );
 

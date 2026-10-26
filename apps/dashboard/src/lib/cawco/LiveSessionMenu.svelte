@@ -28,8 +28,6 @@
     IconArchive,
     IconArrowRight,
     IconCheck,
-    IconColumns,
-    IconExternal,
     IconFork,
     IconPenLine,
     IconStop,
@@ -66,11 +64,8 @@
   import { sessionName } from "./session-name";
   import { startFork } from "./spawn/new-session.svelte";
   import { TRY_AGAIN } from "./unanswered";
-  import {
-    canOpenBeside,
-    focusAfterMenu,
-    openBeside,
-  } from "./workspace/open-beside.svelte";
+  import OpenItems from "./workspace/OpenItems.svelte";
+  import { focusAfterMenu } from "./workspace/open-beside.svelte";
 
   interface Props {
     /** The row's questions: its `<AskHere at={instance.id}>` draws them under it. */
@@ -331,16 +326,7 @@
   {/snippet}
 
   <ContextMenu.Content onCloseAutoFocus={closeFocus}>
-    <ContextMenu.Item onSelect={() => goto(href)}>
-      <IconExternal />
-      <span>Open</span>
-    </ContextMenu.Item>
-    {#if canOpenBeside(instance.id)}
-      <ContextMenu.Item onSelect={() => openBeside(instance.id)}>
-        <IconColumns />
-        <span>Open in split view</span>
-      </ContextMenu.Item>
-    {/if}
+    <OpenItems {href} sessionId={instance.id} />
     <ContextMenu.PendingItem
       disabled={!(forkable && machine)}
       icon={IconFork}

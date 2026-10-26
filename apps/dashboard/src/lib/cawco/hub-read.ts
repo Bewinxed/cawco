@@ -139,6 +139,37 @@ export async function hubRefusal(
   );
 }
 
+/** What the hub said went wrong, in one sentence without its stop ({@link hubFailure}). */
+export async function hubSaid(response: Response): Promise<string> {
+  return (await hubFailure(response)).detail;
+}
+
+/**
+ * A Configure read or write: the hub's JSON answer; refused, "Could not
+ * `attempt`. The hub's words." thrown, or the {@link MachineAwayError} when
+ * the hub says the machine it asked is away ({@link awayOf}).
+ */
+export async function hubCall<T>(
+  url: string,
+  init: RequestInit,
+  attempt: string
+): Promise<T> {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    throw (
+      (await awayOf(response)) ??
+      new Error(`Could not ${attempt}. ${await hubSaid(response)}.`)
+    );
+  }
+  return (await response.json()) as T;
+}
+
+/** A request's JSON body and its type, spread into a {@link hubCall}'s init. */
+export const jsonBody = (body: unknown): RequestInit => ({
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
 /**
  * A refused read as a sentence with its stop: the hub's words with their
  * status after them for support (DESIGN.md, Voice, Error formula), or that it

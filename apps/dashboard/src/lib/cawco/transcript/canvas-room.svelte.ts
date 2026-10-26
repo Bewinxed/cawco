@@ -45,6 +45,7 @@ import {
 } from "../artifact-api";
 import {
   type Box,
+  boxOf,
   type GrabValue,
   type Handle,
   type handBack,
@@ -167,11 +168,6 @@ function atRest<T>(read: () => T): T {
   });
   return value;
 }
-
-const boxOf = (el: Element): Box => {
-  const r = el.getBoundingClientRect();
-  return { left: r.left, top: r.top, width: r.width, height: r.height };
-};
 
 export class CanvasRoom {
   /** The canvas stands over the field (growing, grown or folding). */

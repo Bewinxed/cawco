@@ -47,7 +47,6 @@
    * sessions." at the end, a line taller for a failure.
    */
   import { untrack } from "svelte";
-  import type { TransitionConfig } from "svelte/transition";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -67,13 +66,7 @@
   import { resolveSessionTitle } from "./links";
   import { markHue, sessionSprite } from "./mark";
   import { nestFrom } from "./motion/branch.svelte";
-  import {
-    CURVE,
-    dur,
-    easeOut,
-    motionOk,
-    popScale,
-  } from "./motion/curves.svelte";
+  import { CURVE, dur, motionOk } from "./motion/curves.svelte";
   import { echoBeat } from "./motion/echo.svelte";
   import { fold, unfold } from "./motion/fold.svelte";
   import { departBox, land } from "./motion/share.svelte";
@@ -87,6 +80,7 @@
     wordsOf,
   } from "./stop-work.svelte";
   import TreeMark from "./TreeMark.svelte";
+  import { glyphIn, glyphOut } from "./workspace/session-status";
 
   let {
     class: className,
@@ -486,30 +480,8 @@
     return row.state === "running" && since ? span(Date.now() - since) : "";
   }
 
-  /** A new glyph comes up from the pop scale as the old one fades (SessionStatus). */
-  function glyphIn(_node: Element): TransitionConfig {
-    const scale = motionOk.current ? popScale() : 1;
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
-    };
-  }
-  function glyphOut(_node: Element): TransitionConfig {
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
-  }
-  /** A landed tile fades into the ring. */
-  function intoRing(_node: Element): TransitionConfig {
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
-  }
+  /** A landed tile fades into the ring, as an old glyph fades. */
+  const intoRing = glyphOut;
 </script>
 
 {#snippet branch(parentId: string | null)}

@@ -5,8 +5,9 @@ import {
   type RuleDraft,
   type RuleRow,
   routinesWords,
+  ruleSettings,
 } from "@cawco/core";
-import { hubFailure } from "#lib/cawco/hub-read.js";
+import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -47,53 +48,31 @@ export interface RuleActivity {
 export const loadRuleActivity = (
   id: string
 ): Promise<{ activity: RuleActivity[] }> =>
-  send<{ activity: RuleActivity[] }>(
+  hubCall<{ activity: RuleActivity[] }>(
     `/api/rules/${encodeURIComponent(id)}/activity`,
     {},
     "load what this rule has caught"
   );
 
-/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
-async function said(response: Response): Promise<string> {
-  return (await hubFailure(response)).detail;
-}
-
-async function send<T>(
-  url: string,
-  init: RequestInit,
-  attempt: string
-): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    throw new Error(`Could not ${attempt}. ${await said(response)}.`);
-  }
-  return (await response.json()) as T;
-}
-
-const json = (body: unknown): RequestInit => ({
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
-
 /** Create: the hub mints the id and answers with the whole rule. */
 export const createRule = (draft: RuleDraft): Promise<Rule> =>
-  send<Rule>(
+  hubCall<Rule>(
     "/api/rules",
-    { method: "POST", ...json(draft) },
+    { method: "POST", ...jsonBody(draft) },
     `save ${draft.name || "the rule"}`
   );
 
 /** Edit: strictly an existing id — the hub 404s anything it never minted. */
 export const saveRule = (id: string, draft: RuleDraft): Promise<Rule> =>
-  send<Rule>(
+  hubCall<Rule>(
     `/api/rules/${encodeURIComponent(id)}`,
-    { method: "PUT", ...json(draft) },
+    { method: "PUT", ...jsonBody(draft) },
     `save ${draft.name || "the rule"}`
   );
 
 /** Delete: the rule stops at once, into the hub's trash for its Undo (config/undo.ts). */
 export const removeRule = (id: string, name: string): Promise<Deleted> =>
-  send<Deleted>(
+  hubCall<Deleted>(
     `/api/rules/${encodeURIComponent(id)}`,
     { method: "DELETE" },
     `delete ${name}`
@@ -118,16 +97,7 @@ export const blankRule = (): RuleDraft => ({
 
 /** Strips a saved rule back to a draft, so the editor holds one shape either way. */
 export const draftOf = (rule: Rule): RuleDraft => ({
-  name: rule.name,
-  enabled: rule.enabled,
-  pattern: rule.pattern,
-  matchKind: rule.matchKind,
-  caseSensitive: rule.caseSensitive,
-  wholeWord: rule.wholeWord,
-  watch: rule.watch,
-  reply: rule.reply,
-  timing: rule.timing,
-  repeat: rule.repeat,
+  ...ruleSettings(rule),
   scope: { ...rule.scope },
 });
 

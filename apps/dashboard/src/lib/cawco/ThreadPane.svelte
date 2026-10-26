@@ -55,10 +55,7 @@
   import {
     type BlockedRequest,
     cawco,
-    clearRestore,
     commandFault,
-    latestCommandFor,
-    pendingRestore,
     readTranscript,
     type SendExtras,
     sendFailureNotice,
@@ -98,7 +95,10 @@
     type ComposerAsk,
     type ComposerFoot,
   } from "./transcript/Composer.svelte";
-  import { ComposerDraft } from "./transcript/composer-draft.svelte";
+  import {
+    ComposerDraft,
+    followSends,
+  } from "./transcript/composer-draft.svelte";
   import { composerFleet } from "./transcript/composer-fleet";
   import FootFade, { footFadeRun } from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
@@ -462,31 +462,7 @@
 
   const draft = untrack(() => docked?.draft) ?? new ComposerDraft();
 
-  // The hub took the send: the message it carried needs no keeping.
-  $effect(() => {
-    const stage = latestCommandFor(viewId, "send")?.stage;
-    if (stage === "accepted" || stage === "applied") {
-      untrack(() => draft.settle());
-    }
-  });
-  // "Edit" on a message that never sent: its words back into the draft.
-  $effect(() => {
-    const slot = pendingRestore(viewId);
-    if (!slot) {
-      return;
-    }
-    const id = viewId;
-    untrack(() => {
-      draft.restore(slot.text, slot.extras);
-      clearRestore(id);
-    });
-  });
-
-  /** Whether this thread's last message is out of this tab but not yet taken. */
-  const sending = $derived(
-    latestCommandFor(viewId, "send")?.stage === "submitted" &&
-      !latestCommandFor(viewId, "send")?.waiting
-  );
+  const sends = followSends(draft, () => viewId);
 
   // --- the hero: a thread with nothing said yet ---------------------------------
 
@@ -589,7 +565,7 @@
       return thread?.status === "working";
     },
     get sending() {
-      return sending;
+      return sends.sending;
     },
     get sendError() {
       return composerError;
@@ -941,10 +917,7 @@
       </div>
       <HeadFade />
     {/if}
-    <!-- The skeleton stands in for rows still on their way and hands its
-         place to them in its reveal (motion/curves `reveal`) once they are
-         drawn: its blur carries its rows into the real ones, which fall
-         elsewhere. -->
+    <!-- The skeleton hands its place to the rows as SessionPane's does. -->
     {#if fade}
       <FootFade solid={fade.solid} />
     {/if}
@@ -1017,7 +990,7 @@
             recallOf={viewId}
             {faultAgain}
             sendError={composerError}
-            {sending}
+            sending={sends.sending}
             suggest={binding.suggest}
           />
         </RegionBoundary>
