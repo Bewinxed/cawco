@@ -16,7 +16,6 @@
   } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import {
-    appear,
     crossIn,
     crossOut,
     dur,
@@ -36,7 +35,6 @@
   } from "#lib/icons.js";
   import { page } from "$app/state";
   import { cawco } from "../../client.svelte";
-  import { failureWords as message } from "../../hub-read";
   import RuleActivity from "../../RuleActivity.svelte";
   import RuleTester from "../../RuleTester.svelte";
   import { blankRule, createRule, draftOf, saveRule } from "../../rules";

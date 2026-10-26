@@ -7,7 +7,6 @@
     type FleetVersioned,
     isLoopbackSource,
     type MarketplacePluginInfo,
-    machineLabel,
     skillsWords as words,
   } from "@cawco/core";
   import { detach } from "@cawco/core/detach";

@@ -2,7 +2,6 @@
   import { projectWords } from "@cawco/core";
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
   import { flagsOf, type TaskSummary } from "#lib/cawco/project-tasks.js";
-  import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { isRetry } from "#lib/cawco/tasks/retry.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   /**

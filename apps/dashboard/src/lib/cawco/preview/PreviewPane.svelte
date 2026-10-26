@@ -1783,7 +1783,6 @@
   const cardPin = $derived(pins.find((pin) => pin.id === drawnPin) ?? null);
   /** The open thread's element's nearest parent, as the page names its chain (`cawco:pin-chain`). */
   let cardParent = $state<{ id: string; name: string | null } | null>(null);
-  let pinRoom = $state<HTMLDivElement>();
   /**
    * The comment being written: what the press may stand on (innermost
    * first, out to the whole page), the one chosen, where its hollow pill
@@ -4461,7 +4460,6 @@
     data-slot="pin-room"
     class="@container absolute inset-0 pointer-events-none"
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
-    bind:this={pinRoom}
     {@attach measureRoom}
   >
     {#if composing && kit && nextDraft}

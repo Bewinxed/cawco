@@ -52,12 +52,6 @@
     return "calm";
   });
 
-  const _FILL: Record<string, string> = {
-    calm: "bg-ink-muted/60",
-    warn: "bg-warning-9",
-    critical: "bg-error-9",
-  };
-
   /** The app's own ramp, by position — the SDK's `color` is not a CSS colour. */
   const SWATCH = [
     "var(--chart-2)",

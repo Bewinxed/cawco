@@ -201,13 +201,3 @@ export function catalogTitle(
     instanceForSession(index, info.sessionId, { machineId, cwd: info.cwd })
   );
 }
-
-/**
- * The fleet-wide handle for a delegate: repo leaf plus the first eight of its
- * instance id — the same name its reports carry ("Report from delegate
- * cawco#3c872de1"), so the rail and the transcript agree on what to call it.
- */
-export function delegateHandle(row: { id: string; cwd: string }): string {
-  const leaf = row.cwd.split("/").filter(Boolean).pop() ?? "session";
-  return `${leaf}#${row.id.slice(0, 8)}`;
-}

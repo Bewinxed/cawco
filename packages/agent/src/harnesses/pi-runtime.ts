@@ -950,7 +950,6 @@ class PiSession implements HarnessSession {
   readonly #shells: PiShells;
   /** A project's Caw's gate: his shell and edit calls, each put to the hub. */
   readonly #gate: PiLeadGate | undefined;
-  #busy = false;
   readonly #unread: string[] = [];
   #reading: string | undefined;
   /** What the turn's requests spent so far: its answers' and any compaction's. */
@@ -1006,7 +1005,6 @@ class PiSession implements HarnessSession {
   }
 
   #setBusy(active: boolean): void {
-    this.#busy = active;
     this.#ctx.busy(active);
     if (active) {
       piOpenTurns.add(this.#session.sessionId);

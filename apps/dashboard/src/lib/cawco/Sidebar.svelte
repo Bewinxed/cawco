@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { machineLabel, sidebarWords, topsIn } from "@cawco/core";
+  import { sidebarWords, topsIn } from "@cawco/core";
   import type { Activity } from "@cawco/core/activity";
   /**
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives

@@ -11,7 +11,6 @@
     stageLabel,
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
-  import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as Table from "#lib/components/ui/table/index.js";

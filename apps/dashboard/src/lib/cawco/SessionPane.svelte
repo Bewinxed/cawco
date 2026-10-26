@@ -61,9 +61,9 @@
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
   import { frameSize } from "./frame-observer";
-  import { instanceTitle, projectOfRow } from "./home/home-state.svelte";
+  import { instanceTitle } from "./home/home-state.svelte";
   import { deadlineIn } from "./hub-read";
-  import { delegateHandle, rowHref } from "./links";
+  import { rowHref } from "./links";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
   import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
@@ -84,7 +84,7 @@
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
-  import { inLists, threadIdOf, threadTabId } from "./thread-tabs";
+  import { threadTabId } from "./thread-tabs";
   import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
   import ConnectNeedsChip from "./transcript/ConnectNeedsChip.svelte";
   import {

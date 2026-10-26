@@ -88,11 +88,11 @@
 
   /** Reads of the page so far: only the newest one's answer is kept. */
   let reads = 0;
-  async function load() {
+  async function load(page: string) {
     reads += 1;
     const ticket = reads;
     try {
-      const next = await readDecision(projectId, name);
+      const next = await readDecision(projectId, page);
       if (ticket === reads) {
         read = next;
         unread = null;
@@ -106,10 +106,10 @@
 
   // Read on arrival, and again whenever the hub says its pages or tasks moved.
   $effect(() => {
-    const _moves =
-      cawco.decisionsChangedOf(projectId) + cawco.tasksChangedOf(projectId);
-    const _page = name;
-    untrack(() => load());
+    cawco.decisionsChangedOf(projectId);
+    cawco.tasksChangedOf(projectId);
+    const page = name;
+    untrack(() => load(page));
   });
 
   /** Its record shows while it is decided; a page its session asked again is picked on live, its record kept. */
@@ -195,7 +195,7 @@
       } else {
         read = await makeDecisionTasks(projectId, name);
       }
-      await load();
+      await load(name);
     } catch (error) {
       failed = true;
       refusal = failureWords(error);
@@ -214,7 +214,7 @@
     try {
       await sendDecision(projectId, name, said);
       note = "";
-      await load();
+      await load(name);
     } catch (error) {
       refusal = failureWords(error);
     } finally {

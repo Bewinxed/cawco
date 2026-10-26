@@ -14,7 +14,14 @@
   // scripts/resolution-check.ts fails on any module resolved outside the
   // checkout; a name it reports is declared in the root package.json and
   // mapped here.
+  //
+  // It also holds the checks every project makes: an unused local, import
+  // or parameter fails the type check, .svelte files included (Golar's
+  // codegen). A parameter a callback's position requires takes a leading
+  // underscore.
   "compilerOptions": {
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "paths": {
       // Node's builtins, named bare by @types/node, bun-types and others.
       "buffer": ["./node_modules/buffer"],

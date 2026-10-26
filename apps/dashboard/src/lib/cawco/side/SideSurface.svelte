@@ -363,8 +363,6 @@
   // That frame's layout then reports what the write changed, once.
   $effect(() => {
     const el = head;
-    // Read so a pane's items arriving re-observes its controls.
-    const _count = all.length;
     if (!el) {
       return;
     }
@@ -378,8 +376,18 @@
     if (identity) {
       seen.observe(identity);
     }
+    // Each of the pane's controls by its key, so a pane's items arriving
+    // re-observes them.
+    for (const one of all) {
+      const child = el.querySelector(
+        `:scope > [data-head-item="${CSS.escape(one.key)}"]`
+      );
+      if (child) {
+        seen.observe(child);
+      }
+    }
     for (const child of el.querySelectorAll(
-      ':scope > [data-head-item], :scope > [data-slot="identity"] > *'
+      ':scope > [data-slot="identity"] > *'
     )) {
       seen.observe(child);
     }

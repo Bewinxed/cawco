@@ -222,7 +222,7 @@
             class="invisible col-start-1 row-start-1 grid justify-items-start ps-(--ps)"
             style:--ps={"calc(var(--bars) * var(--space-1) - var(--space-row) + var(--space-1))"}
           >
-            {#each efforts as level, i (level)}
+            {#each efforts as level (level)}
               <span class="col-start-1 row-start-1">{level}</span>
             {/each}
           </span>

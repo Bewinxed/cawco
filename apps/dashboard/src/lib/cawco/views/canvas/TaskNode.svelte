@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { StageKind } from "@cawco/core";
   /**
    * A task on the Canvas: the board's own card, with its live footer and,
    * waiting on you, the `you` column's wash around it. A click opens its
