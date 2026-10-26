@@ -30,6 +30,7 @@ import type { ArtifactNeedsFrame } from "../../../packages/core/src/artifact-nee
 import { readWithin } from "../../../packages/core/src/bounded";
 import { PRESENCE_ONBOARDING_SKIPPED } from "../../../packages/core/src/presence-onboarding";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
+import type { SpecGroup } from "../groups";
 import {
   type Engine,
   type Kit,
@@ -197,6 +198,8 @@ export interface Journey {
   clean?: (fleet: KitFleet) => Promise<void>;
   /** What the journey proves, from JOURNEY.md. */
   flow: string;
+  /** The group it stands in (groups.ts): one the owner kept, never one he cut (scripts/probe-groups-check.ts). */
+  group: SpecGroup;
   /**
    * Why the journey runs on the host, when it does: a step of it starts a
    * workspace boundary (a delegate's, a routine run's, a place's), which no
@@ -394,6 +397,7 @@ export interface Narrow {
 export function journeySpec(journey: Journey, narrow: Narrow): Spec {
   return {
     name: journey.name,
+    group: journey.group,
     host: journey.host,
     command: `bun scripts/probe-kit/run.ts journeys ${journey.name}`,
     run: async (kit) => {

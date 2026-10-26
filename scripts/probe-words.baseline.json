@@ -1,16 +1,4 @@
 {
-  "scripts/probe-kit/journeys/j3-spawn.ts": {
-    "in its own view": 1
-  },
-  "scripts/probe-kit/journeys/j5-task-review.ts": {
-    "Send back": 1,
-    "Send back →": 1,
-    "What should change": 1
-  },
-  "scripts/probe-kit/journeys/j6-decisions.ts": {
-    "Caw, lead of": 1,
-    "Decision page:": 1
-  },
   "scripts/probe-kit/journeys/j7-comments.ts": {
     "Comments on": 1
   },

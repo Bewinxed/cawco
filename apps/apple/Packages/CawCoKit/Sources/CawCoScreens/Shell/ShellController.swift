@@ -611,16 +611,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 MainActor.assumeIsolated { self?.probeShell() }
             }
         }
-        if AskProbe.on, !askProbed {
-            askProbed = true
-            AskProbe.start(shell: self, home: home)
-        }
         #endif
     }
 
     #if DEBUG
     private var shellProbe: Timer?
-    private var askProbed = false
 
     /// The split's rail and the panes' screens.
     var probeRail: SidebarViewController { rail }

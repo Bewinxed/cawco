@@ -1,6 +1,7 @@
 import CawCoAPI
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
 
 // A machine's keychain unlock, under its row (UnlockKeychain.svelte), and
@@ -285,7 +286,7 @@ final class UnlockKeychainView: UIView, UITextFieldDelegate {
 
     #if DEBUG
     static func probe(_ line: String) {
-        AskProbe.log.notice("machine \(line, privacy: .public)")
+        Logger(subsystem: "dev.cawco.app", category: "Machines").notice("machine \(line, privacy: .public)")
     }
 
     /// The password typed and Unlock pressed.

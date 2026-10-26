@@ -971,7 +971,7 @@ private final class PinField: UITextView {
 }
 
 #if DEBUG
-/// `-preview-probe` (scripts/probe-ios-preview-touch.ts): the preview's
+/// `-preview-probe`: the preview's
 /// state as `Probe` lines, each control as its centre in the window's
 /// points, where a simulator touch lands.
 enum PreviewProbe {

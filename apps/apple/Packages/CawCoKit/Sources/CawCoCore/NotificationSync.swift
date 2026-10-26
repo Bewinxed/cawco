@@ -52,14 +52,6 @@ public enum NotificationSync {
 
     /// (b) One sweep at a time; a sweep asked during one runs once after it.
     public static func sweep(_ why: String) async {
-        #if DEBUG
-        // PushProbe's stand-in for the extension (`-push-probe-arrive`) runs
-        // at launch; held, this launch's sweep can't reconcile before it.
-        if ProcessInfo.processInfo.arguments.contains("-push-probe-hold-sweep") {
-            log.notice("sweep (\(why, privacy: .public)) held for the probe")
-            return
-        }
-        #endif
         guard !sweeping else {
             sweepAgain = true
             return

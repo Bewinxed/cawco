@@ -46,7 +46,7 @@ public enum Toast {
         layer.add(message, description: description, kind: kind, action: action, sticky: sticky, id: id)
         UIAccessibility.post(notification: .announcement, argument: message)
         #if DEBUG
-        // Every toast, for a simulator pass to count (probe-ios-catchup.ts).
+        // Every toast, for a simulator pass to count.
         Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("toast shown: \(message, privacy: .public). \(description ?? "", privacy: .public)\(id.map { " id \($0)" } ?? "", privacy: .public)")
         #endif
     }

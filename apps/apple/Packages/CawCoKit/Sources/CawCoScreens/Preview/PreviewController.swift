@@ -2280,7 +2280,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     #if DEBUG
-    // MARK: The simulator probe (scripts/probe-ios-preview-touch.ts)
+    // MARK: The simulator probe
 
     /// The header as the probe reads it: what toggles Comment and its centre
     /// ("Comment" at Comment's segment, or while commenting "Interact" at

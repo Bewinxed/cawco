@@ -196,7 +196,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     /// When the finger the swipe is watching came down.
     private var swipeTouchedAt: CFTimeInterval = 0
     #if DEBUG
-    /// A simulator pass reads the swipe's decisions here (scripts/probe-ios-composer.ts).
+    /// A simulator pass reads the swipe's decisions here.
     private static let swipeLog = Logger(subsystem: "dev.cawco.app", category: "Swipe")
     #endif
 
@@ -427,14 +427,6 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         // canvas's), a pointer or a trackpad's scroll.
         swipeUp.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         penSwipe.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
-        #if DEBUG
-        if CanvasDebug.pencil {
-            // The simulator has no pencil: for this run a finger is one, and the wheel takes none.
-            swipeUp.allowedTouchTypes = []
-            penSwipe.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
-            CanvasDebug.log.notice("probe pencil: a finger's swipe on the pill is the pencil's")
-        }
-        #endif
         for recognizer in [swipeUp, penSwipe] as [UIPanGestureRecognizer] {
             recognizer.allowedScrollTypesMask = []
             recognizer.maximumNumberOfTouches = 1
@@ -523,11 +515,6 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         attachments = next.attachments
         render(next)
         reopenCanvas()
-        #if DEBUG
-        RecallProbe.arm(self)
-        CanvasProbe.arm(self)
-        SendProbe.arm(self)
-        #endif
     }
 
     /// What the pane changed: its action, whether it can be written to, its
@@ -1529,41 +1516,6 @@ extension ComposerView {
 
 #if DEBUG
 extension ComposerView {
-    /// The `-recall-probe`: the wheel brought up as a swipe brings it (the
-    /// keyboard left as it is).
-    func probeOpenWheel() {
-        guard let binding, wheel == nil, edit == nil else { return }
-        endFlight()
-        closeMenu(animated: false)
-        (superview ?? self).layoutIfNeeded()
-        let wheel = RecallWheel(composer: self, entries: binding.recall(), draft: field.text ?? "", caret: field.selectedRange, keys: false)
-        self.wheel = wheel
-        wheel.open()
-        renderAction(animated: true)
-    }
-
-    /// What the session sent here, newest first.
-    var probeEntries: [RecallEntry] {
-        binding?.recall() ?? []
-    }
-
-    /// Why the canvas's last make, read or send did not go, and whether one is under way.
-    var probeCanvasNote: String? { canvasNote }
-    var probeCanvasWorking: Bool { canvasWorking }
-
-    /// The touch types the wheel's swipe and the pencil's take.
-    var probeTouchTypes: (wheel: [Int], pen: [Int]) {
-        ((swipeUp.allowedTouchTypes.map(\.intValue)), penSwipe.allowedTouchTypes.map(\.intValue))
-    }
-
-    /// What Attach's menu offers, its inline groups opened out, in order.
-    var probeAttachMenu: [String] {
-        func titles(_ elements: [UIMenuElement]) -> [String] {
-            elements.flatMap { element in (element as? UIMenu).map { titles($0.children) } ?? [element.title] }
-        }
-        return titles(attach.menu?.children ?? [])
-    }
-
     /// Words in the field, as typing puts them there.
     func probeType(_ words: String) {
         field.text = words
@@ -1575,37 +1527,6 @@ extension ComposerView {
         guard actionBox.isEnabled, actionBox.isUserInteractionEnabled, !actionBox.isHidden else { return false }
         actionBox.sendActions(for: .primaryActionTriggered)
         return true
-    }
-
-    /// Return on the keyboard: the field's own insert of a line break.
-    func probeReturn() {
-        field.insertText("\n")
-    }
-
-    /// The action box's face now, and whether it draws anything: its glyph's
-    /// image, or the spinner's inked stroke, on a box and a face not faded out.
-    var probeGlyph: (face: String, drawn: Bool, detail: String) {
-        guard let glyph else { return ("none", false, "no face") }
-        // As the frame's commit lays it out: a face swapped in since the last one is read as it will be drawn.
-        glyph.layoutIfNeeded()
-        let face = switch glyph.face {
-        case let .glyph(one): one == Glyph.send ? "send" : one == .stop ? "stop" : one == .warning ? "warning" : "glyph"
-        case .spinner: "spinner"
-        }
-        let ink = glyph.probeInk
-        let shown = !actionBox.isHidden && actionBox.alpha > 0.01 && glyph.alpha > 0.01 && glyph.superview === actionBox
-        return (face, shown && ink.drawn, "\(ink.detail), box alpha \(String(format: "%.2f", actionBox.alpha)), face alpha \(String(format: "%.2f", glyph.alpha))")
-    }
-
-    /// Every button in the pill, by what VoiceOver calls it.
-    var probeButtons: [String] {
-        var found: [String] = []
-        var views: [UIView] = [pill]
-        while let view = views.popLast() {
-            if let button = view as? UIButton { found.append(button.accessibilityLabel ?? button.accessibilityIdentifier ?? "unlabelled") }
-            views += view.subviews
-        }
-        return found.sorted()
     }
 }
 #endif
@@ -2351,7 +2272,7 @@ final class ComposerField: UITextView {
 
 /// The composer's swipe up: a pan. A DEBUG build logs each state it goes
 /// through, `.failed` too, which its target never hears
-/// (scripts/probe-ios-composer.ts reads them off the simulator).
+/// (a simulator pass reads them).
 final class SwipeUpRecognizer: UIPanGestureRecognizer {
     #if DEBUG
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Swipe")
@@ -2493,19 +2414,6 @@ final class SwapGlyph: UIView {
             self.transform = rest
         }.startAnimation()
     }
-
-    #if DEBUG
-    /// Whether the face draws anything: the glyph's sharp image, or the spinner's inked stroke.
-    var probeInk: (drawn: Bool, detail: String) {
-        switch face {
-        case .glyph:
-            (sharp.image != nil && sharp.alpha > 0.01, "image \(sharp.image != nil), sharp alpha \(String(format: "%.2f", sharp.alpha))")
-        case .spinner:
-            (spinner.probeStroke.width > 0 && spinner.probeStroke.inked && spinner.bounds.width > 0,
-             "stroke \(String(format: "%.2f", spinner.probeStroke.width))pt inked \(spinner.probeStroke.inked), box \(String(format: "%.0f", spinner.bounds.width))pt")
-        }
-    }
-    #endif
 
     func swapOut(animated: Bool) {
         guard animated, !UIAccessibility.isReduceMotionEnabled else {

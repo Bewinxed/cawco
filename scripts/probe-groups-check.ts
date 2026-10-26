@@ -3,18 +3,23 @@
  * in (kit.ts `Spec.group`), and none stands in a group the owner cut
  * (scripts/probe-kit/groups.ts `CUT_GROUPS`, with when and where he cut
  * each). A spec named `ios-…` is the app's, a group he cut, whatever it
- * names. After 2026-10-16 the groups he cut whole filled up again, spec by
- * spec, because nothing refused one: this does.
+ * names. A journey (scripts/probe-kit/journeys/j<n>-….ts, `Journey.group`)
+ * is held to the same. A standalone `scripts/probe-ios-*` probe is the
+ * app's too, and refused outright. After 2026-10-16 the groups he cut whole
+ * filled up again, spec by spec, because nothing refused one: this does.
  *
  *   bun scripts/probe-groups-check.ts
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import ts from "typescript";
 import { CUT_GROUPS, KEPT_GROUPS } from "./probe-kit/groups";
 
 const ROOT = join(import.meta.dir, "..");
 const SPECS = join(ROOT, "scripts/probe-kit/specs");
+const JOURNEYS = join(ROOT, "scripts/probe-kit/journeys");
+const JOURNEY_FILE = /^j\d+-.+\.ts$/u;
+const IOS_PROBE = /^probe-ios-/u;
 const TS_FILE = /\.ts$/u;
 const APP = CUT_GROUPS.find((one) => one.group === "The iPhone and iPad app");
 
@@ -82,7 +87,7 @@ const groupOf = (spec: ts.ObjectLiteralExpression): string | undefined => {
 
 /** Why `file` may not stand in the kit, or nothing. */
 export const refusalOf = (file: string, text: string): string | undefined => {
-  const name = relative(SPECS, file).replace(TS_FILE, "");
+  const name = basename(file).replace(TS_FILE, "");
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const spec = specObject(source);
   if (!spec) {
@@ -91,7 +96,7 @@ export const refusalOf = (file: string, text: string): string | undefined => {
   const group = groupOf(spec);
   const cut =
     CUT_GROUPS.find((one) => one.group === group) ??
-    (name.split("/").at(-1)?.startsWith("ios-") ? APP : undefined);
+    (name.startsWith("ios-") ? APP : undefined);
   if (cut) {
     return `stands in "${cut.group}", a group the owner cut on ${cut.cut} (${cut.by}). A spec there goes to him first, not into the kit.`;
   }
@@ -104,16 +109,28 @@ export const refusalOf = (file: string, text: string): string | undefined => {
 };
 
 if (import.meta.main) {
-  const files = specsUnder(SPECS);
+  const files = [
+    ...specsUnder(SPECS),
+    ...readdirSync(JOURNEYS)
+      .filter((name) => JOURNEY_FILE.test(name))
+      .map((name) => join(JOURNEYS, name)),
+  ];
   const refused = files.flatMap((file) => {
     const why = refusalOf(file, readFileSync(file, "utf8"));
     return why ? [`${relative(ROOT, file)}: ${why}`] : [];
   });
+  for (const name of readdirSync(join(ROOT, "scripts"))) {
+    if (IOS_PROBE.test(name) && APP) {
+      refused.push(
+        `scripts/${name}: an iOS probe, the app's "${APP.group}", a group the owner cut on ${APP.cut} (${APP.by}). It goes to him first, not into the repository.`
+      );
+    }
+  }
   if (refused.length > 0) {
     console.error(`probe-groups-check:\n${refused.join("\n")}`);
     process.exit(1);
   }
   console.log(
-    `probe-groups-check: ${files.length} specs, each in a group the owner kept`
+    `probe-groups-check: ${files.length} specs and journeys, each in a group the owner kept; no iOS probe`
   );
 }

@@ -36,7 +36,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         Pro.shared.start()
         #if DEBUG
         PushRegistry.shared.launch(environment: .sandbox)
-        PushProbe.run()
         PushTaps.probe()
         #else
         PushRegistry.shared.launch(environment: .production)

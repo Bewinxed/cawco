@@ -195,8 +195,7 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
     }
 
     #if DEBUG
-    /// A simulator pass reads the body's window here
-    /// (scripts/probe-ios-question-keyboard.ts): the accessibility tree gives
+    /// A simulator pass reads the body's window here: the accessibility tree gives
     /// each chip's frame, never where the body clips it. In the card's own
     /// points, with its last button's frame to place them on screen by.
     private static let layoutLog = Logger(subsystem: "dev.cawco.app", category: "PromptCard")

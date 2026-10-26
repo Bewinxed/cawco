@@ -471,21 +471,6 @@ public final class PushRegistry {
         authorization = await NotificationCentre.authorization()
     }
 
-    #if DEBUG
-    /// `PushProbe`: this device's pairing and push key registered with the
-    /// kept hub as a launch registers them, without Cawrier's enrolment (a
-    /// simulator has no purchase). Nil, or the reason it didn't register.
-    func probeRegister() async -> String? {
-        guard let hub = HubConnection.keptAddress else { return "No hub is kept on this device." }
-        do {
-            let pairing = try Pairing.kept()
-            return await register(hub: hub, pairing: pairing, quiet: nil)
-        } catch {
-            return String(describing: error)
-        }
-    }
-    #endif
-
     /// Registers the pairing with `hub`; `quiet` is sent only from the toggle,
     /// so a launch's registration keeps what the operator set. Nil, or the hub's reason.
     private func register(hub: URL, pairing: Pairing, quiet next: Bool?) async -> String? {

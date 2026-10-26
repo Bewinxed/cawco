@@ -157,6 +157,7 @@ async function walk(leg: Leg): Promise<void> {
 
 const journey: Journey = {
   name: "j7-comments",
+  group: "Previews, pages and comments",
   flow: "Previews and comments: open a preview, comment on it, the agent receives it by itself",
   respond: (seen: Seen) =>
     seen.tools && seen.last.includes(NOTICE)

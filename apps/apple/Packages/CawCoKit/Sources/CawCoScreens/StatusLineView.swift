@@ -150,7 +150,7 @@ final class StatusLineView: UIView {
         // New words or a new action: whether the two fit on one line is asked again.
         setNeedsLayout()
         #if DEBUG
-        // What the line says, for a simulator pass to read (probe-ios-catchup.ts `--local-network`).
+        // What the line says, for a simulator pass to read.
         let said = "\(words.text ?? "")|\(down ? action : "")"
         if said != lastSaid {
             lastSaid = said

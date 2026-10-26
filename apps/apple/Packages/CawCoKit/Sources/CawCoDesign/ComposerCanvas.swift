@@ -111,31 +111,8 @@ enum CanvasMeasure {
 
 #if DEBUG
 enum CanvasDebug {
-    /// `-cawcoProbePencil`: the simulator has no pencil, so for this run the
-    /// canvas's swipe takes a finger as a pencil, and the wheel's takes none.
-    static let pencil = ProcessInfo.processInfo.arguments.contains("-cawcoProbePencil")
-    /// The canvas's decisions, which a simulator pass reads (scripts/probe-ios-composer-canvas.ts).
+    /// The canvas's decisions, in the app's log.
     static let log = Logger(subsystem: "dev.cawco.app", category: "Canvas")
-    /// The mode a canvas page's sync gate starts in as the page is made, or
-    /// no gate. `-canvas-probe-sync`: refused (the probe opens it, and cuts
-    /// it, with `cawco:probe-sync`); `-send-probe-busy`: open, until the
-    /// probe sets `hang` for the canvas it makes next.
-    @MainActor static var gateStart: String? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("-canvas-probe-sync") { return "refuse" }
-        if arguments.contains("-send-probe-busy") { return "open" }
-        return nil
-    }()
-    /// `-canvas-probe-enter`: the next entry's ticket is spoiled, so the hub refuses it as forged.
-    @MainActor static var spoilNextTicket = false
-
-    /// The address a canvas page's load goes to: its ticket spoiled when the probe asked.
-    @MainActor static func loading(_ url: URL) -> URL {
-        guard spoilNextTicket, url.path() == "/__cawco/enter",
-              let spoiled = URL(string: url.absoluteString.replacingOccurrences(of: "ticket=", with: "ticket=spoiled")) else { return url }
-        spoilNextTicket = false
-        return spoiled
-    }
 }
 #endif
 
@@ -247,9 +224,6 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         #if DEBUG
         configuration.userContentController.addUserScript(WKUserScript(source: Self.errors, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.addUserScript(WKUserScript(source: Self.railFirst, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        if let start = CanvasDebug.gateStart {
-            configuration.userContentController.addUserScript(WKUserScript(source: Self.gate(start: start), injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        }
         #endif
         web = WKWebView(frame: .zero, configuration: configuration)
         super.init()
@@ -322,12 +296,9 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
             }
             guard !Task.isCancelled else { return }
             #if DEBUG
-            let load = CanvasDebug.loading(url)
-            CanvasDebug.log.notice("canvas page loads \(load.absoluteString, privacy: .public)")
-            web.load(URLRequest(url: load))
-            #else
-            web.load(URLRequest(url: url))
+            CanvasDebug.log.notice("canvas page loads \(url.absoluteString, privacy: .public)")
             #endif
+            web.load(URLRequest(url: url))
         }
     }
 
@@ -595,61 +566,6 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     })
     """
 
-    /// The page's artifact sockets go through a gate, starting in `start`
-    /// (CanvasDebug `gateStart`). Refused, a socket asks for a path beside
-    /// its own that the listener upgrades nothing on (it answers 404), so the
-    /// handshake fails as a refused upgrade does. Hung, it is a socket that
-    /// never answers: connecting until it is closed. `cawco:probe-sync` with
-    /// `open` lets the next one through; with `cut` it closes every open one
-    /// and refuses again.
-    private static func gate(start: String) -> String {
-        """
-        (() => {
-          const Native = window.WebSocket;
-          let mode = "\(start)";
-          const open = new Set();
-          const ARTIFACT = /\\/__cawco\\/artifact\\/[0-9a-f-]{36}$/;
-          const Hung = (url) => {
-            const socket = new EventTarget();
-            Object.assign(socket, {
-              url: String(url), readyState: 0, protocol: "", extensions: "", bufferedAmount: 0, binaryType: "blob",
-              onopen: null, onmessage: null, onerror: null, onclose: null,
-              send() {},
-              close() {
-                if (socket.readyState === 3) return;
-                socket.readyState = 3;
-                setTimeout(() => {
-                  const closed = new CloseEvent("close", { code: 1006, wasClean: false });
-                  socket.onclose?.(closed);
-                  socket.dispatchEvent(closed);
-                }, 0);
-              },
-            });
-            return socket;
-          };
-          function Gate(url, protocols) {
-            const at = new URL(String(url), location.href);
-            if (!ARTIFACT.test(at.pathname)) return new Native(url, protocols);
-            if (mode === "hang") return Hung(at);
-            if (mode !== "open") at.pathname += "/probe-refused";
-            const socket = new Native(at.toString(), protocols);
-            open.add(socket);
-            socket.addEventListener("close", () => open.delete(socket));
-            return socket;
-          }
-          Gate.prototype = Native.prototype;
-          Object.assign(Gate, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
-          window.WebSocket = Gate;
-          window.addEventListener("message", (event) => {
-            if (event.data?.type !== "cawco:probe-sync") return;
-            if (event.data.mode === "open") { mode = "open"; return; }
-            mode = "refuse";
-            for (const socket of open) socket.close();
-          });
-        })();
-        """
-    }
-
     /// One pen stroke through Excalidraw's own pointer path: the rail's Pen,
     /// then a pen's down, moves and up on the canvas. Answers how many
     /// elements the page's doc holds after it, drawn and not deleted.
@@ -851,11 +767,6 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         guard let said, let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Double],
               let left = read["left"], let top = read["top"], let width = read["width"] else { return nil }
         return (left, top, width)
-    }
-
-    /// The probe's gate on the page's sync socket: `open`, or `cut`.
-    func probeSync(_ mode: String) {
-        deliver(["type": "cawco:probe-sync", "mode": mode])
     }
 
     /// A pen stroke on the page; the page's doc's count after it.

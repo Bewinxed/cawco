@@ -600,28 +600,6 @@ final class RecallRow: UIView {
     /// Counts the copies let go (the row was resized or changed appearance):
     /// a copy landing for an older one is dropped.
     private var generation = 0
-    #if DEBUG
-    /// How much of its blurred copy shows (the `-recall-probe` reads it).
-    var softShown: Double { Double(soft.alpha) }
-    /// Its words' and its time's boxes, in its own space, by the ink they
-    /// are drawn in now (the probe's contrast as drawn).
-    var probeBoxes: [(name: String, box: CGRect)] {
-        let ink = switch kind {
-        case .none: "muted"
-        case .draft: text.isEmpty ? "subtle" : "strong"
-        case .sent: picked ? "selected" : "strong"
-        }
-        let box = words.frame.width > 0 ? [(ink, words.frame)] : []
-        guard showsMeta, time.frame.width > 0 else { return box }
-        return box + [(picked ? "selected time" : "muted time", time.frame)]
-    }
-
-    /// Its words and time drawn sharp at full strength, in its appearance,
-    /// `pad` points of room around them (the probe's blur sweep).
-    func probeSharp() -> UIImage {
-        draw()
-    }
-    #endif
 
     init(kind: Kind, text: String, marks: Set<[UInt16]> = [], date: Date? = nil, queued: Bool = false, showsMeta: Bool, faces: RecallFaces) {
         self.kind = kind
@@ -1073,13 +1051,6 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private var swipeOrigin = 0.0
     private var scrolled = 0.0
 
-    #if DEBUG
-    /// The `-recall-probe` hears how long each drawn frame's rows took, how
-    /// many rows it built and how many blurred copies it began.
-    var probeCost: ((Double, Int, Int) -> Void)?
-    private var probeBuilt = 0
-    private var probeBlurs = 0
-    #endif
 
     init(composer: ComposerView, entries: [RecallEntry], draft: String, caret: NSRange, keys: Bool) {
         self.composer = composer
@@ -1421,10 +1392,6 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     /// Every row where `p` puts it. Landing on another entry is a detent the
     /// reader feels and hears; overshooting past either end is not.
     private func draw(_ p: Double) {
-        #if DEBUG
-        let began = CACurrentMediaTime()
-        defer { probeCost?(CACurrentMediaTime() - began, probeBuilt, probeBlurs) }
-        #endif
         // A frame's work is bounded however fast it rolls: four rows built at
         // most, nearest the line first (a row flying past for a frame is not
         // seen), and two blurred copies begun at most, each at the blur its
@@ -1488,10 +1455,6 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         if blurred.count > 3 * (high - low + 5) {
             blurred = blurred.filter { $0.key.row >= low - 2 && $0.key.row <= high + 2 }
         }
-        #if DEBUG
-        probeBuilt = built
-        probeBlurs = blurs
-        #endif
         // Standing still with rows still to build or blur: a frame at a time until none is left.
         if unfinished, !spring.running { finishWhenStill() }
         // Nearing the oldest entry read (within a shape's rows of it), the
@@ -1739,62 +1702,6 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     }
 }
 
-#if DEBUG
-/// What the `-recall-probe` reads off the wheel: its measures, and every
-/// row in view as last drawn.
-struct RecallProbeState {
-    struct Row {
-        let index: Int
-        let off: Double
-        let depth: Double
-        let blur: Double
-        let softShown: Double
-        let alpha: Double
-        /// Soft, at the shape's width, and its blurred copy not showing.
-        let pending: Bool
-        let view: RecallRow
-    }
-
-    /// The grown shape's top, in the window.
-    let top: Double
-    let floor: Double
-    let above: Int
-    let depth: Int
-    let open: Double
-    let matches: Int
-    let rows: [Row]
-    /// The shape's sides and the query chip's box, in the window.
-    let shape: CGRect
-    let chip: CGRect?
-    /// The pill's padding: a row stands this far in from each side of the shape.
-    let pad: Double
-}
-
-extension RecallWheel {
-    var probeState: RecallProbeState {
-        let top = halo.map { Double($0.convert($0.bounds, to: nil).minY) } ?? .nan
-        let rows = rows.keys.sorted().compactMap { k in
-            self.rows[k].map {
-                RecallProbeState.Row(index: k, off: Double(k) - shown, depth: $0.depth, blur: $0.blur, softShown: $0.softShown, alpha: Double($0.alpha),
-                                     pending: $0.blurPending, view: $0)
-            }
-        }
-        let shape = halo.map { $0.convert($0.bounds, to: nil) } ?? .null
-        let chip = chip.flatMap { $0.isHidden ? nil : $0.convert($0.bounds, to: nil) }
-        return RecallProbeState(top: top, floor: foot, above: above, depth: depth, open: halo?.open ?? 0, matches: list.count, rows: rows,
-                                shape: shape, chip: chip, pad: field.minX)
-    }
-
-    /// The spring is still rolling it.
-    var probeRolling: Bool {
-        spring.running
-    }
-
-    func probeSpin(to index: Double) {
-        spin(to: index)
-    }
-}
-#endif
 
 /// Hears every touch that begins in the window, and lets each go on to
 /// whatever it was for: the wheel's "tap outside dismisses". `onTouch` gets

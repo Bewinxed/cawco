@@ -8,12 +8,6 @@ public import UserNotifications
 /// only that and a safe alert. A question the hub let be answered inline
 /// carries its options sealed too, and leaves with a category of its own
 /// that offers them, to be registered before the push is handed back.
-///
-/// One function for the extension and for the app's simulator probe
-/// (CawCoCore `PushProbe`, DEBUG): a simulator never hands a `simctl push` to
-/// the extension (Xcode 11.4 release notes, 55822721: "Notification Service
-/// Extensions do not work in simulated push notifications"), so the probe
-/// runs this same opening on the delivered push from the app.
 public enum PushOpening {
     public struct Opened {
         /// The push with its sealed alert in place.

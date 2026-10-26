@@ -878,7 +878,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     /// The running reply as this view holds it: the newest assistant row and
     /// the live tail, each as its length, its first and its last characters,
-    /// for a simulator pass to read (probe-ios-queued.ts). Said when it changes.
+    /// for a simulator pass to read. Said when it changes.
     private func sayReply() {
         guard let transcript else { return }
         func part(_ text: String) -> String { "\(text.count) \"\(text.prefix(16))…\(text.suffix(16))\"" }
@@ -892,7 +892,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     #if DEBUG
     /// Every send this view has drawn waiting (this device's, or the hub's
-    /// queue), oldest first, for a simulator pass to follow (probe-ios-queued.ts).
+    /// queue), oldest first, for a simulator pass to follow.
     private var sendsSeen: [String] = []
     private var sendsSaid = ""
 
@@ -2467,7 +2467,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         Toast.show(title, description: description, kind: .error, in: self)
     }
 
-    /// The dock's own word on what it told the reader, for a simulator pass to read (probe-ios-catchup.ts).
+    /// The dock's own word on what it told the reader, for a simulator pass to read.
     private static let dockLog = Logger(subsystem: "dev.cawco.app", category: "Transcript")
 
     #if DEBUG
@@ -2813,7 +2813,7 @@ extension TranscriptView {
 /// and top (the compacting pill): raised, hairline, --shadow-overlay; they
 /// rise in over --dur-panel and out over --dur-exit.
 final class DockPill: UIControl {
-    /// Each pill's coming and going, for a simulator pass to count (probe-ios-catchup.ts).
+    /// Each pill's coming and going, for a simulator pass to count.
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Transcript")
     private let beat = Dot(Size.txBeatLg, color: Palette.statusLiveInk)
     private var shown = false
