@@ -1,11 +1,14 @@
 /**
  * `cawco view-mount`: the mounts of a Linux view of a folder (layer.ts),
  * made inside it. The agent runs it by `nsenter` into the view holder's user
- * and mount namespaces (layer.ts `viewArgv`), which the distro's bwrap made
+ * and mount namespaces (layer.ts `mountArgv`), which the distro's bwrap made
  * and holds; joining a user namespace grants every capability in it
  * (setns(2)), and nsenter makes that join single-threaded, which the agent
  * itself cannot (a multithreaded process may not setns into a user
- * namespace). It reads the view's mounts as JSON on stdin and makes each in
+ * namespace). The exec that follows drops them, the uid being the
+ * person's, not 0 (capabilities(7), "Capabilities and execution of programs
+ * by root"), unless nsenter keeps them as ambient ones (`--keep-caps`,
+ * util-linux 2.40). It reads the view's mounts as JSON on stdin and makes each in
  * order with mount(2) itself: util-linux `mount` refuses any caller whose
  * real uid is not 0 (libmount context.c `restricted`), and the uid here stays
  * the person's (`--preserve-credentials`).
@@ -22,6 +25,7 @@
  * names its cause and what fixes it, and exit 1.
  */
 import { dlopen, FFIType, read } from "bun:ffi";
+import { readFileSync } from "node:fs";
 import { constants, release } from "node:os";
 
 /** One mount of a view: an overlay of `overlay` (its lower dir and mount point), or `bind` bound onto itself from the host's tree. */
@@ -76,15 +80,37 @@ const kernelBelowFloor = (): boolean => {
   return major < floorMajor || (major === floorMajor && minor < floorMinor);
 };
 
-/** The sentence for mount(2)'s `errno` at `at`: its cause and what fixes it. */
+/** CAP_SYS_ADMIN, which mount(2) needs in the mount namespace's user namespace (linux/capability.h). */
+const CAP_SYS_ADMIN = 21n;
+
+const STATUS_CAP_EFF = /^CapEff:\s*([0-9a-f]+)$/mu;
+
+/** Whether this process holds CAP_SYS_ADMIN, by its effective set in /proc/self/status (proc(5)). */
+const mayMount = (): boolean => {
+  const found = STATUS_CAP_EFF.exec(readFileSync("/proc/self/status", "utf8"));
+  const effective = BigInt(`0x${found?.[1] ?? "0"}`);
+  // biome-ignore lint/suspicious/noBitwiseOperators: one bit of the capability mask
+  const bit = (effective >> CAP_SYS_ADMIN) & 1n;
+  return bit === 1n;
+};
+
+/**
+ * The sentence for mount(2)'s `errno` at `at`: its cause and what fixes it.
+ * EPERM is read in order: no capability held, then a kernel too old for an
+ * overlay of its user's own; only with both in place is it a security
+ * module's refusal.
+ */
 const refusal = (at: string, errno: string, overlay: boolean): string => {
   const instead =
     "or delegate in a git repository, whose workspace is a clone of its own";
+  if (errno === "EPERM" && !mayMount()) {
+    return `${at} could not be mounted in the view: CawCo's mounter entered it without the capability to mount (CAP_SYS_ADMIN), which nsenter's \`--keep-caps\` keeps as it starts the mounter. This is CawCo's fault, not the machine's: report it, ${instead}.`;
+  }
   if (errno === "EPERM" && overlay && kernelBelowFloor()) {
     return `${at} could not be layered: this machine runs Linux ${release()}, and a user's own overlay mount needs Linux ${USERNS_OVERLAY.join(".")} or later. Upgrade the kernel, ${instead}.`;
   }
   if (errno === "EPERM") {
-    return `${at} could not be mounted in the view: Linux ${release()} refused CawCo's mount in the view's user namespace: a security module (AppArmor, SELinux) or a seccomp filter on the agent denies mount(2) there. Allow the agent's user to mount in a user namespace of its own, ${instead}.`;
+    return `${at} could not be mounted in the view: Linux ${release()} refused CawCo's mount in the view's user namespace, though the mounter held the capability to mount there: a security module (AppArmor, SELinux) or a seccomp filter on the agent denies mount(2) there. Allow the agent's user to mount in a user namespace of its own, ${instead}.`;
   }
   if (errno === "ENODEV" && overlay) {
     return `${at} could not be layered: this machine's kernel has no overlay filesystem. Load it with \`sudo modprobe overlay\` (and name \`overlay\` in /etc/modules-load.d to keep it), ${instead}.`;

@@ -544,7 +544,7 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
 
 /**
  * `mounts` made in the view whose holder is `pid`, by CawCo's own
- * `view-mount` entered into its namespaces ({@link viewArgv}); its
+ * `view-mount` entered into its namespaces ({@link mountArgv}); its
  * refusal's words when it refused, none when all are made.
  */
 const mountView = async (
@@ -556,7 +556,7 @@ const mountView = async (
     "view-mount",
     join(import.meta.dir, "view-mount.ts")
   );
-  const mounter = Bun.spawn(viewArgv(pid, "/", [command, ...args]), {
+  const mounter = Bun.spawn(mountArgv(pid, [command, ...args]), {
     env,
     stdin: new Blob([JSON.stringify(mounts)]),
     stdout: "ignore",
@@ -594,29 +594,50 @@ const openWorkDirs = async (layer: Layer): Promise<void> => {
 };
 
 /**
- * `argv` run in workspace `id`'s view, in `cwd` there: `nsenter` into its
- * member `pid`'s mount namespace (which starts it at the namespace's root),
- * and its user namespace when that is not ours (an agent run as root makes
- * none), keeping our uid (`--preserve-credentials`); then `cwd` is entered
- * as the view has it ({@link VIEW_CD}) and `argv` replaces that shell.
+ * `nsenter` into member `pid`'s mount namespace (which starts it at the
+ * namespace's root), and its user namespace when that is not ours (an agent
+ * run as root makes none), keeping our uid (`--preserve-credentials`), with
+ * `options` of its own; the program follows.
  */
-export const viewArgv = (
-  pid: number,
-  cwd: string,
-  argv: readonly string[]
-): string[] => [
+const enterView = (pid: number, options: readonly string[]): string[] => [
   systemTool("nsenter"),
   "-t",
   String(pid),
   ...(nsOf(pid, "user") === nsOf(process.pid, "user") ? [] : ["-U"]),
   "-m",
   "--preserve-credentials",
+  ...options,
   "--",
+];
+
+/**
+ * `argv` run in workspace `id`'s view, in `cwd` there ({@link enterView}),
+ * with no capability in it: `cwd` is entered as the view has it
+ * ({@link VIEW_CD}) and `argv` replaces that shell.
+ */
+export const viewArgv = (
+  pid: number,
+  cwd: string,
+  argv: readonly string[]
+): string[] => [
+  ...enterView(pid, []),
   "/bin/sh",
   "-c",
   VIEW_CD,
   "cawco-view",
   cwd,
+  ...argv,
+];
+
+/**
+ * `argv` run in the view whose member is `pid` with the capabilities that
+ * joining its user namespace grants (setns(2)), for view-mount.ts alone:
+ * the exec after the join drops them, our uid being no root there
+ * (capabilities(7)), unless nsenter keeps them as ambient ones
+ * (`--keep-caps`, {@link KEEP_CAPS}).
+ */
+const mountArgv = (pid: number, argv: readonly string[]): string[] => [
+  ...enterView(pid, ["--keep-caps"]),
   ...argv,
 ];
 
@@ -810,6 +831,37 @@ export const ownModules = (id: string): Promise<void> => {
 
 // --------------------------------------------------------------- the making
 
+/** The util-linux whose nsenter first keeps the capabilities a join grants ("nsenter: add --keep-caps", v2.40 release notes). */
+const KEEP_CAPS = "2.40";
+
+/**
+ * Refuses a Linux view of `folder` where this machine's nsenter has no
+ * `--keep-caps` ({@link mountArgv}), before anything of the layer is made,
+ * in words naming util-linux and the release it needs. Asked of nsenter
+ * itself: `--keep-caps --version` answers 0 only where the option is known.
+ */
+const refuseNsenterWithoutKeepCaps = (folder: string): void => {
+  const env = { ...hostEnvironment(), PATH: SYSTEM_PATH };
+  const ask = (argv: string[]) => {
+    try {
+      return Bun.spawnSync([systemTool("nsenter"), ...argv], {
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch {
+      // No nsenter at all: it keeps nothing.
+    }
+  };
+  if (ask(["--keep-caps", "--version"])?.exitCode === 0) {
+    return;
+  }
+  const has = ask(["--version"])?.stdout.toString().trim();
+  throw new Error(
+    `${folder} is no git repository, so its workspace is a private view of it, which CawCo mounts through nsenter's --keep-caps, new in util-linux ${KEEP_CAPS}; this machine has ${has || "no nsenter"}. Install util-linux ${KEEP_CAPS} or later, or delegate in a git repository, whose workspace is a clone of its own.`
+  );
+};
+
 /**
  * Workspace `id`'s layer of `folder`, made: on Linux its view's dirs and
  * record, nothing copied, and its view mounted; on macOS the clone at
@@ -824,6 +876,7 @@ export const makeLayer = async (
   const kind: WorkspaceKind = "folder";
   const started = Date.now();
   if (process.platform === "linux") {
+    refuseNsenterWithoutKeepCaps(folder);
     const dir = layerDir(id);
     const mounts = [folder, ...mountsUnder(folder).layered].map((at, n) => ({
       at,
