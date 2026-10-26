@@ -117,6 +117,7 @@ import {
   toolNameOf,
   toolResultOf,
 } from "./opencode-transcript";
+import { z } from "zod";
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 const RECOVERY_TIMEOUT_MS = 10_000;
@@ -412,7 +413,7 @@ const OPEN_TURNS_PATH = join(OPENCODE_DIR, "cawco-open-turns.json");
 let openTurns: Set<string> | undefined;
 
 const loadOpenTurns = (): Set<string> => {
-  openTurns ??= new Set(readRecordSync<string[]>(OPEN_TURNS_PATH) ?? []);
+  openTurns ??= new Set(readRecordSync(OPEN_TURNS_PATH, z.array(z.string())) ?? []);
   return openTurns;
 };
 
@@ -451,7 +452,7 @@ let backgroundJobs: Map<string, readonly string[]> | undefined;
 const loadBackground = (): Map<string, readonly string[]> => {
   backgroundJobs ??= new Map(
     Object.entries(
-      readRecordSync<Record<string, string[]>>(BACKGROUND_PATH) ?? {}
+      readRecordSync(BACKGROUND_PATH, z.record(z.string(), z.array(z.string()))) ?? {}
     )
   );
   return backgroundJobs;

@@ -81,6 +81,7 @@ import { expandHome } from "./fs";
 import { runHubCommand } from "./hub-command";
 import { removeTree } from "./remove-tree";
 import { copyOwnSecrets, gitUntil } from "./workspace";
+import { z } from "zod";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
 export const MIRROR_MS = 1000;
@@ -96,17 +97,18 @@ export interface StageClone {
 const FORM = 2;
 
 /** What the agent keeps of a stage clone beside its `create.json`, written once its cut is whole. */
-interface Kept {
-  form?: number;
+const KeptSchema = z.object({
+  form: z.number().optional(),
   /** The checkout's HEAD the clone is at. */
-  head: string;
+  head: z.string(),
   /** Each folder the stage installed, from the clone's root, with what it installed from ({@link installAt}). */
-  installed?: Record<string, string>;
+  installed: z.record(z.string(), z.string()).optional(),
   /** The paths the checkout's status named at the last mirror, from the repository's root. */
-  mirrored: string[];
+  mirrored: z.array(z.string()),
   /** The checkout's repository root it was cut from, as a real path. */
-  repo: string;
-}
+  repo: z.string(),
+});
+type Kept = z.infer<typeof KeptSchema>;
 
 const KEPT = "stage-clone.json";
 
@@ -339,7 +341,7 @@ const mirrorOne = async (
 
 /** The clone's record, or nothing when its cut never finished. */
 const keptOf = async (id: string): Promise<Kept | undefined> =>
-  await readRecord<Kept>(join(workspaceStateDir(id), KEPT)).catch(
+  await readRecord(join(workspaceStateDir(id), KEPT), KeptSchema).catch(
     () => undefined
   );
 
@@ -689,8 +691,9 @@ const repoOf = async (folder: string): Promise<string> => {
 /** The clone's root as its `create.json` names it, or nothing. */
 const recordedPath = async (id: string): Promise<string | undefined> =>
   (
-    await readRecord<{ path?: string }>(
-      join(workspaceStateDir(id), "create.json")
+    await readRecord(
+      join(workspaceStateDir(id), "create.json"),
+      z.object({ path: z.string().optional() })
     ).catch(() => undefined)
   )?.path;
 

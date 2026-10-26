@@ -18,6 +18,7 @@ import {
 import { isPlace } from "@cawco/core/workspace-policy";
 import { reportDamaged } from "./damaged-records";
 import { ownFolderSync } from "./layer";
+import { z } from "zod";
 
 interface Scan {
   refs: WorkspaceRef[];
@@ -51,8 +52,10 @@ const pathOf = async (
   let damage: DamagedRecord | undefined;
   for (const name of ["create.json", "boundary.json", "place.json"]) {
     try {
-      const record = await readRecord<{ path?: unknown }>(
-        join(workspacesDir(), id, name)
+      // biome-ignore lint/performance/noAwaitInLoops: the first of the records that names the clone
+      const record = await readRecord(
+        join(workspacesDir(), id, name),
+        z.object({ path: z.unknown() })
       );
       if (typeof record?.path === "string") {
         return record.path;

@@ -28,6 +28,7 @@ import { isDamagedRecord, readRecord } from "@cawco/core/state-file";
 import { toHttpBase } from "./discovery";
 import { provenFetch } from "./hub-proof";
 import { type DeclaredLfs, holdDeclaredSecret, sameEndpoint } from "./move";
+import { z } from "zod";
 
 /** How long the hub may take to say where a project's large files live. Our choice. */
 const HUB_MS = 15_000;
@@ -95,14 +96,14 @@ const askHub = async (
 export const workspaceProjectOf = async (
   id: string
 ): Promise<string | undefined> => {
-  const kept = await readRecord<unknown>(workspaceProjectFile(id)).catch(
+  const kept = await readRecord(workspaceProjectFile(id), z.string()).catch(
     (error: unknown) => {
       if (!isDamagedRecord(error)) {
         throw error;
       }
     }
   );
-  return typeof kept === "string" && kept ? kept : undefined;
+  return kept || undefined;
 };
 
 /** The endpoint values `git config <source> --get-regexp` reads from one `.lfsconfig`; none when it names none or is not there. */

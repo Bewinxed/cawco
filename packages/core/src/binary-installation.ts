@@ -3,25 +3,31 @@ import type { Dirent } from "node:fs";
 import { mkdir, readdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
 import { versionsInUse } from "./live-processes";
 import { hubDbPath } from "./paths";
-import { markerIsLive } from "./process-identity";
+import { markerIsLive, ProcessMarkerSchema } from "./process-identity";
 import type { ReleaseManifest } from "./release-manifest";
 import { runtimeVersion } from "./runtime";
 import { readRecord, writeStateFile } from "./state-file";
+import {
+  BinaryUpdateStateSchema,
+  ReleaseManifestSchema,
+} from "./stored-shapes";
 
-export interface BinaryInstallation {
+export const BinaryInstallationSchema = z.object({
   /** Where this machine's dashboard answers, when it runs one. */
-  dashboardUrl?: string;
-  hubUrl: string;
-  installedVersion: string;
+  dashboardUrl: z.string().optional(),
+  hubUrl: z.string(),
+  installedVersion: z.string(),
   /** Where releases come from, when not GitHub; recorded by the installer. */
-  releaseHost?: string;
-  role: "hub" | "agent";
-  root: string;
-}
+  releaseHost: z.string().optional(),
+  role: z.enum(["hub", "agent"]),
+  root: z.string(),
+});
+export type BinaryInstallation = z.infer<typeof BinaryInstallationSchema>;
 
 /**
  * The binary install of the data dir this process runs with, and the only
@@ -77,14 +83,15 @@ export async function writeJsonAtomic(
 }
 
 export const readInstallation = (): Promise<BinaryInstallation | undefined> =>
-  readRecord<BinaryInstallation>(installationPath());
+  readRecord(installationPath(), BinaryInstallationSchema);
 export const readUpdateState = (): Promise<BinaryUpdateState | undefined> =>
-  readRecord<BinaryUpdateState>(updateStatePath());
+  readRecord(updateStatePath(), BinaryUpdateStateSchema);
 
 /** The signed manifest of the build this process is running, as the installer or the updater staged it. */
 export async function readRunningManifest(): Promise<ReleaseManifest> {
-  const manifest = await readRecord<ReleaseManifest>(
-    join(versionDirectory(runtimeVersion), "release.json")
+  const manifest = await readRecord(
+    join(versionDirectory(runtimeVersion), "release.json"),
+    ReleaseManifestSchema
   );
   if (!manifest) {
     throw new Error(
@@ -104,32 +111,33 @@ export async function readRunningManifest(): Promise<ReleaseManifest> {
  * launches one from the previous build at any unit's start (a reboot, a
  * crash loop). Nothing but a decider acts on it.
  */
-export interface TrialMarker {
+export const TrialMarkerSchema = z.object({
   /** The hub database copy a rollback restores, when the schema changed. */
-  dbBackup?: string;
-  dbPath?: string;
+  dbBackup: z.string().optional(),
+  dbPath: z.string().optional(),
   /** A rollback has put the database copy in place: a resumed one does not do it again over the previous build's writes. */
-  dbRestored?: boolean;
+  dbRestored: z.boolean().optional(),
   /** Unix seconds by which the build must be healthy, or it is rolled back. A migration moves it. */
-  decideBy?: number;
+  decideBy: z.number().optional(),
   /**
    * Written before either is carried out, so a decider that resumes finishes
    * the one already begun rather than deciding again.
    */
-  decision?: "confirm" | "roll-back";
+  decision: z.enum(["confirm", "roll-back"]).optional(),
   /** The keeper handover is done and the state says installed: a resumed helper does not hand it over again. */
-  keeperDone?: boolean;
-  previous: string;
+  keeperDone: z.boolean().optional(),
+  previous: z.string(),
   /** Why a rollback was decided: the problem that stood at the deadline. */
-  reason?: string;
-  role: BinaryInstallation["role"];
+  reason: z.string().optional(),
+  role: BinaryInstallationSchema.shape.role,
   /** Unix seconds: units started after this run the trial build. */
-  swappedAt: number;
-  version: string;
-}
+  swappedAt: z.number(),
+  version: z.string(),
+});
+export type TrialMarker = z.infer<typeof TrialMarkerSchema>;
 export const trialPath = (): string => join(binaryRoot(), "trial.json");
 export const readTrial = (): Promise<TrialMarker | undefined> =>
-  readRecord<TrialMarker>(trialPath());
+  readRecord(trialPath(), TrialMarkerSchema);
 /**
  * The whole stack, as four services a machine can run, in the order they
  * come up (cli service.ts installs each). A machine runs whichever of them
@@ -187,9 +195,10 @@ const linkedVersion = async (path: string): Promise<string | undefined> => {
  * while the process it names is still the one that wrote it.
  */
 export async function liveHelper(): Promise<{ version?: string } | undefined> {
-  const lock = await readRecord<
-    { version?: string } & Parameters<typeof markerIsLive>[0]
-  >(lockFilePath());
+  const lock = await readRecord(
+    lockFilePath(),
+    ProcessMarkerSchema.extend({ version: z.string().optional() })
+  );
   return lock !== undefined && (await markerIsLive(lock)) ? lock : undefined;
 }
 
@@ -228,7 +237,7 @@ const KEPT_INSTALLS = 3;
 export const installOrderPath = (): string =>
   join(binaryRoot(), "install-order.json");
 const readInstallOrder = async (): Promise<string[]> =>
-  (await readRecord<string[]>(installOrderPath())) ?? [];
+  (await readRecord(installOrderPath(), z.array(z.string()))) ?? [];
 
 /**
  * `version` goes to the end of the install order, and the order keeps its

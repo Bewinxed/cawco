@@ -165,6 +165,7 @@ import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { workspaceModulesRoot } from "./workspace-modules";
 import { cloneHolding } from "./workspace-records";
+import { z } from "zod";
 
 type Git = (root: string, ...args: string[]) => Promise<string>;
 
@@ -1503,7 +1504,10 @@ export const workspaceBoundary = async (ref: unknown): Promise<number> =>
 const createdPath = async (id: string): Promise<string | undefined> => {
   try {
     return (
-      await readRecord<CreateRecord>(join(workspacesDir(), id, "create.json"))
+      await readRecord(
+        join(workspacesDir(), id, "create.json"),
+        CreateRecordSchema
+      )
     )?.path;
   } catch (error) {
     if (!isDamagedRecord(error)) {
@@ -1529,10 +1533,11 @@ const strayEntries = async (path: string): Promise<string[]> =>
  * was cut from, as this host read it from the source (a clone a build before
  * this cut has none).
  */
-interface CreateRecord {
-  origin?: string;
-  path?: string;
-}
+const CreateRecordSchema = z.object({
+  origin: z.string().optional(),
+  path: z.string().optional(),
+});
+type CreateRecord = z.infer<typeof CreateRecordSchema>;
 
 /** A branch name taken into a refspec: no option, no second refspec, no `:`. */
 const BRANCH_NAME = /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/u;
@@ -1558,8 +1563,9 @@ const refreshBase = async (
   if (!(base && BRANCH_NAME.test(base))) {
     return;
   }
-  const record = await readRecord<CreateRecord>(
-    join(workspacesDir(), workspace.id, "create.json")
+  const record = await readRecord(
+    join(workspacesDir(), workspace.id, "create.json"),
+    CreateRecordSchema
   ).catch(() => undefined);
   const origin = record?.origin;
   const clone = await lstat(access.at(join(workspace.path, ".git"))).catch(

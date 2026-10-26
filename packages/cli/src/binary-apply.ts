@@ -99,6 +99,7 @@ import {
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
 import { service, stopService } from "./service";
+import { ProcessMarkerSchema } from "@cawco/core/process-identity";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;
@@ -140,9 +141,7 @@ async function takeLock(version: string): Promise<boolean> {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
       }
-      const held = await readRecord<Parameters<typeof markerIsLive>[0]>(
-        lockPath()
-      ).catch(async (damage: unknown) => {
+      const held = await readRecord(lockPath(), ProcessMarkerSchema).catch(async (damage: unknown) => {
         if (!isDamagedRecord(damage)) {
           throw damage;
         }
@@ -218,9 +217,7 @@ async function migrationRunning(db: string | undefined): Promise<boolean> {
   }
   // Every marker is written whole: a damaged one is from before a crash, and
   // names no migration still running.
-  const marker = await readRecord<Parameters<typeof markerIsLive>[0]>(
-    `${db}.migrating`
-  ).catch((error: unknown) => {
+  const marker = await readRecord(`${db}.migrating`, ProcessMarkerSchema).catch((error: unknown) => {
     if (!isDamagedRecord(error)) {
       throw error;
     }

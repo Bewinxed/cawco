@@ -26,6 +26,7 @@ import { bootId } from "./process-identity";
 import { runInC } from "./run-captured";
 import { isDamagedRecord, readRecord } from "./state-file";
 import { systemProgram } from "./workspace-needs";
+import { z } from "zod";
 
 /** Every CawCo job's label: `dev.cawco.<name>`, `<name>` its service's. */
 const CAWCO_LABEL = /^dev\.cawco\.(.+)$/u;
@@ -169,11 +170,12 @@ export interface LaunchdJob extends LaunchdRow {
 }
 
 /** A job's start record, as {@link launchdProgram}'s shell writes it. */
-interface LaunchdStart {
-  bootId?: string;
-  pid?: number;
-  startedAt?: number;
-}
+const LaunchdStartSchema = z.object({
+  bootId: z.string().optional(),
+  pid: z.number().optional(),
+  startedAt: z.number().optional(),
+});
+type LaunchdStart = z.infer<typeof LaunchdStartSchema>;
 
 /** Where the job `label`'s start record is. */
 export const launchdStartPath = (label: string): string =>
@@ -221,7 +223,10 @@ export const forgetLaunchdStart = (label: string): Promise<void> =>
 
 /** Whether the job's process ran since it was last started: a start record written since the machine booted. */
 const ranSinceStart = async (label: string): Promise<boolean> => {
-  const record = await readRecord<LaunchdStart>(launchdStartPath(label)).catch(
+  const record = await readRecord(
+    launchdStartPath(label),
+    LaunchdStartSchema
+  ).catch(
     (error: unknown): LaunchdStart => {
       // Written whole: a damaged one is a crash's, from a run that began.
       if (isDamagedRecord(error)) {

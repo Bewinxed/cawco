@@ -87,6 +87,7 @@ import {
   type TunnelOpen,
   type TunnelOutcome,
 } from "./ssh-tunnels";
+import { InstallsRecordSchema } from "./db/stored-shapes";
 
 /** Output kept per install. The steps are a dozen lines; a package manager's is the bulk. */
 const MAX_LINES = 2000;
@@ -176,7 +177,7 @@ interface Run {
   tunnel: TunnelOpen | null;
 }
 
-interface InstallsRecord {
+export interface InstallsRecord {
   draft: InstallDraft | null;
   /** `keys` is absent from a record written before the hub kept it: none known. */
   installs: (Omit<Install, "keys"> & {
@@ -466,7 +467,7 @@ export const createInstalls = (deps: InstallsDeps) => {
 
   // What a restart left: a running install is lost, its code void.
   try {
-    const record = readRecordSync<InstallsRecord>(path);
+    const record = readRecordSync(path, InstallsRecordSchema);
     draft = record?.draft ?? null;
     for (const entry of record?.installs ?? []) {
       const { code: _code, keys, ...rest } = entry;

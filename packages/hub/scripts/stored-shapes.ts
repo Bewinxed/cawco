@@ -30,6 +30,10 @@ const ROOT = resolve(HUB, "../..");
 const SCHEMA = join(HUB, "src/db/schema.ts");
 const HUB_OUT = join(HUB, "src/db/stored-shapes.ts");
 const CORE_OUT = join(ROOT, "packages/core/src/stored-shapes.ts");
+const AGENT_OUT = join(ROOT, "packages/agent/src/stored-shapes.ts");
+const AGENT_SRC = join(ROOT, "packages/agent/src/");
+/** Every generated file: core's first, which the others import. */
+const OUTS = [CORE_OUT, HUB_OUT, AGENT_OUT];
 const HUB_SRC = join(HUB, "src/");
 const CORE_SRC = join(ROOT, "packages/core/src/");
 const SDK =
@@ -91,14 +95,16 @@ const listed = Bun.spawnSync(["git", "ls-files", "packages"], { cwd: ROOT })
   .split("\n")
   .filter((path) => path.endsWith(".ts") && !TEST_FILE.test(path))
   .map((path) => join(ROOT, path))
-  .filter((path) => path !== HUB_OUT && path !== CORE_OUT);
+  .filter((path) => !OUTS.includes(path));
 const roots = new Set<string>();
-const coreFiles: string[] = [];
+/** Core's files, and every file that reads a schema: the program the types are read from. */
+const programFiles: string[] = [];
 for (const file of listed) {
-  if (file.startsWith(CORE_SRC)) {
-    coreFiles.push(file);
+  const matches = [...readFileSync(file, "utf8").matchAll(SHAPES_IMPORT)];
+  if (file.startsWith(CORE_SRC) || matches.length > 0) {
+    programFiles.push(file);
   }
-  for (const match of readFileSync(file, "utf8").matchAll(SHAPES_IMPORT)) {
+  for (const match of matches) {
     for (const named of (match[1] ?? "").split(",")) {
       const [imported = ""] = named.trim().split(" as ");
       if (SCHEMA_SUFFIX.test(imported)) {
@@ -108,7 +114,7 @@ for (const file of listed) {
   }
 }
 
-const program = ts.createProgram([SCHEMA, ...coreFiles, ...SDK_TYPES], {
+const program = ts.createProgram([SCHEMA, ...programFiles, ...SDK_TYPES], {
   ...config.options,
   composite: false,
   noEmit: true,
@@ -256,7 +262,10 @@ for (const root of roots) {
 /** Which file a declaration's schema is written to: the hub's own types, and the MCP SDK's it alone depends on, to the hub's. */
 const outOf = (declaration: ts.Node): string => {
   const file = declaration.getSourceFile().fileName;
-  return file.startsWith(HUB_SRC) || SDK.test(file) ? HUB_OUT : CORE_OUT;
+  if (file.startsWith(HUB_SRC) || SDK.test(file)) {
+    return HUB_OUT;
+  }
+  return file.startsWith(AGENT_SRC) ? AGENT_OUT : CORE_OUT;
 };
 
 /** What one generated file imports: values its schemas read, and the types it proves them against, by declaring file. */
@@ -264,10 +273,9 @@ interface Needs {
   types: Map<string, Set<string>>;
   values: Map<string, Set<string>>;
 }
-const needs = new Map<string, Needs>([
-  [CORE_OUT, { types: new Map(), values: new Map() }],
-  [HUB_OUT, { types: new Map(), values: new Map() }],
-]);
+const needs = new Map<string, Needs>(
+  OUTS.map((out) => [out, { types: new Map(), values: new Map() }])
+);
 /** The file whose schemas are being made. */
 let target = CORE_OUT;
 const add = (kind: keyof Needs, file: string, name: string): void => {
@@ -293,7 +301,7 @@ const specifierOf = (file: string, out: string): string => {
   if (sdk) {
     return `@modelcontextprotocol/sdk/${sdk[1]}.js`;
   }
-  if (file.startsWith(CORE_SRC) && out === HUB_OUT) {
+  if (file.startsWith(CORE_SRC) && out !== CORE_OUT) {
     const sub = `./${file.slice(CORE_SRC.length).replace(TS_FILE, "")}`;
     return coreExports.includes(sub)
       ? `@cawco/core/${sub.slice(2)}`
@@ -676,14 +684,8 @@ const declarationSchema = (declaration: Declaration): string => {
 };
 
 /** Each file's schemas, in order, and the core schemas the hub's read. */
-const made = new Map<string, string[]>([
-  [CORE_OUT, []],
-  [HUB_OUT, []],
-]);
-const proved = new Map<string, string[]>([
-  [CORE_OUT, []],
-  [HUB_OUT, []],
-]);
+const made = new Map<string, string[]>(OUTS.map((out) => [out, []]));
+const proved = new Map<string, string[]>(OUTS.map((out) => [out, []]));
 const coreNames = new Set(
   order.filter((d) => outOf(d) === CORE_OUT).map((d) => `${d.name.text}Schema`)
 );
@@ -695,7 +697,7 @@ for (const declaration of order) {
     proved.get(target)?.push(name);
   }
   const schema = declarationSchema(declaration);
-  if (target === HUB_OUT) {
+  if (target !== CORE_OUT) {
     for (const [used] of schema.matchAll(SCHEMA_NAME)) {
       if (coreNames.has(used)) {
         add("values", CORE_OUT, used);
@@ -713,11 +715,14 @@ for (const declaration of order) {
  * write, and a field the schema requires and the type does not would refuse
  * rows the code writes.
  */
-const PROOF = `/** Each property, through every level, as a plain object type. */
+const PROOF = `/**
+ * Each property, through every level, as a plain object type. \`readonly\`
+ * goes: it says what code may do with a value, not what a record holds.
+ */
 type Flat<T> = T extends readonly unknown[]
-  ? { [K in keyof T]: Flat<T[K]> }
+  ? { -readonly [K in keyof T]: Flat<T[K]> }
   : T extends object
-    ? { [K in keyof T]: Flat<T[K]> }
+    ? { -readonly [K in keyof T]: Flat<T[K]> }
     : T;
 /** Whether A and B are the same type, once flattened. */
 type Same<A, B> =
@@ -804,7 +809,7 @@ if (
 }
 const { formatText } = fmt;
 const outputs = await Promise.all(
-  [CORE_OUT, HUB_OUT].map(async (out) => {
+  OUTS.map(async (out) => {
     const formatted: unknown = await formatText(out, textOf(out));
     if (typeof formatted !== "string") {
       throw new Error("stored-shapes: formatText answered no text");

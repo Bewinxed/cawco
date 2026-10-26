@@ -20,6 +20,7 @@ import { dlopen, FFIType, read as readMemory } from "bun:ffi";
 import { readFileSync } from "node:fs";
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { hostEnvironment } from "./session-env";
+import { z } from "zod";
 
 // ── macOS: libSystem ─────────────────────────────────────────────────────
 
@@ -1232,12 +1233,16 @@ export async function listeningPorts(pid: number): Promise<number[]> {
   return [...ports];
 }
 
+/** A process a record names as its writer: its pid, its start, and the boot it ran in. */
+export const ProcessMarkerSchema = z.object({
+  bootId: z.string().optional(),
+  pid: z.number().optional(),
+  procStart: z.string().optional(),
+});
+export type ProcessMarker = z.infer<typeof ProcessMarkerSchema>;
+
 /** Whether a marker's process is the one that wrote it and is still running. */
-export async function markerIsLive(marker: {
-  bootId?: string;
-  pid?: number;
-  procStart?: string;
-}): Promise<boolean> {
+export async function markerIsLive(marker: ProcessMarker): Promise<boolean> {
   if (marker.pid === undefined || marker.procStart === undefined) {
     return false;
   }

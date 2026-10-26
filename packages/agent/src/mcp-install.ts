@@ -33,6 +33,7 @@ import { runCaptured } from "@cawco/core/run-captured";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { toolEnv } from "./tools";
+import { z } from "zod";
 
 /** What a row's npx command line asks for: one package, the bin it runs, and that bin's arguments. */
 export interface NpxRun {
@@ -235,10 +236,10 @@ const installDir = (name: string, version: string): string =>
 /** Where an install is made before it takes its name: whole there, or not there at all. */
 const STAGING = ".installing-";
 
-interface PackageJson {
-  bin?: string | Record<string, string>;
-  version?: string;
-}
+const PackageJsonSchema = z.object({
+  bin: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+  version: z.string().optional(),
+});
 
 /** Whether `path` is there. */
 const exists = async (path: string): Promise<boolean> => {
@@ -251,9 +252,12 @@ const exists = async (path: string): Promise<boolean> => {
 };
 
 /** The JSON record at `file`; none when it is missing or does not parse. */
-const readOrNone = async <T>(file: string): Promise<T | undefined> => {
+const readOrNone = async <S extends z.ZodType>(
+  file: string,
+  schema: S
+): Promise<z.output<S> | undefined> => {
   try {
-    return await readRecord<T>(file);
+    return await readRecord(file, schema);
   } catch {
     return undefined;
   }
@@ -285,7 +289,7 @@ const binOf = async (
   version: string
 ): Promise<string | undefined> => {
   const root = join(dir, "node_modules", run.name);
-  const pkg = await readOrNone<PackageJson>(join(root, "package.json"));
+  const pkg = await readOrNone(join(root, "package.json"), PackageJsonSchema);
   if (pkg?.version !== version) {
     return;
   }
@@ -397,10 +401,11 @@ export const installed = async (
 };
 
 /** What a dir no row names any more waits on: the sessions live when it stopped being named. */
-interface Retiring {
-  sessions: string[];
-  since: number;
-}
+const RetiringSchema = z.object({
+  sessions: z.array(z.string()),
+  since: z.number(),
+});
+type Retiring = z.infer<typeof RetiringSchema>;
 
 const RETIRING = ".cawco-retiring.json";
 
@@ -537,7 +542,7 @@ const retireOne = async (
     await rm(marker, { force: true });
     return "kept";
   }
-  const held = await readOrNone<Retiring>(marker);
+  const held = await readOrNone(marker, RetiringSchema);
   const waitsOn = held?.sessions ?? [...sessions];
   if (!held) {
     await writeStateFile(

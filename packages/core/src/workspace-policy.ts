@@ -84,6 +84,7 @@ import { hostEnvironment } from "./session-env";
 import { DamagedRecord, readRecord } from "./state-file";
 import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
 import { findProgram, startedPath } from "./workspace-needs";
+import { z } from "zod";
 
 /**
  * What CawCo writes into a clone and keeps out of its status itself, by path
@@ -889,10 +890,7 @@ const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
  */
 const accountLayers = async (id: string): Promise<string[]> => {
   const file = workspaceAccountsFile(id);
-  const listed = (await readRecord<unknown>(file)) ?? [];
-  if (!Array.isArray(listed)) {
-    throw new DamagedRecord(file, "it is not a list");
-  }
+  const listed = (await readRecord(file, z.array(z.unknown()))) ?? [];
   return listed
     .filter(
       (account): account is string =>
@@ -958,8 +956,9 @@ const isSpillDir = (id: string, dir: string): boolean => {
  * with none.
  */
 const linkedModules = async (id: string): Promise<string[]> => {
-  const layer = await readRecord<{ folder?: unknown; form?: unknown }>(
-    join(workspacesDir(), id, "layer.json")
+  const layer = await readRecord(
+    join(workspacesDir(), id, "layer.json"),
+    z.object({ folder: z.unknown(), form: z.unknown() })
   ).catch(() => undefined);
   if (!(
     layer?.form === "copy" &&
@@ -984,10 +983,7 @@ const spillDirs = async (id: string): Promise<string[]> =>
  */
 export const workspaceSpills = async (id: string): Promise<string[]> => {
   const file = workspaceSpillsFile(id);
-  const listed = (await readRecord<unknown>(file)) ?? [];
-  if (!Array.isArray(listed)) {
-    throw new DamagedRecord(file, "it is not a list");
-  }
+  const listed = (await readRecord(file, z.array(z.unknown()))) ?? [];
   return listed.filter(
     (dir): dir is string => typeof dir === "string" && isSpillDir(id, dir)
   );
@@ -1003,14 +999,11 @@ const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
  */
 const projectFolder = async (id: string): Promise<string[]> => {
   const file = workspaceProjectFile(id);
-  const project = await readRecord<unknown>(file);
-  if (project === undefined) {
-    return [];
-  }
-  if (typeof project !== "string" || !PROJECT_ID.test(project)) {
-    throw new DamagedRecord(file, "it is not a project id");
-  }
-  return projectFolderOf(project);
+  const project = await readRecord(
+    file,
+    z.string().regex(PROJECT_ID, "a project id")
+  );
+  return project === undefined ? [] : projectFolderOf(project);
 };
 
 /**

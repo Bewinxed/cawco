@@ -259,46 +259,54 @@ import {
 import { linkWorkspaceModules } from "./workspace-modules";
 import { workspaceRecords } from "./workspace-records";
 import { GIT_MOVE, gitShim, shimPaths } from "./worktree-guard";
+import { z } from "zod";
+import { PolicySchema } from "@cawco/core/stored-shapes";
 
 /** A running boundary, as a harness uses it. */
-export interface Boundary {
+const BoundaryShape = z.object({
   /** The temp root its sessions' Claude Code CLIs run with (`CLAUDE_CODE_TMPDIR`, core `workspaceClaudeTmpDir`): written on the host, read inside, so a background task's output is there for the session's shell. */
-  readonly claudeTmp: string;
+  claudeTmp: z.string(),
   /** `exec [--session [--cwd-out FILE] | --claude] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}), and FILE gets the directory it ended in; `--claude` is a claude session's shell prefix's ({@link execScript}). */
-  readonly exec: string;
+  exec: z.string(),
   /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
-  readonly hook: string;
+  hook: z.string(),
   /** The process sessiond holds: the srt host (Linux) or the runner (macOS). */
-  readonly pid: number;
+  pid: z.number(),
   /** The workspace's policy file, which every harness judges its file tools by (`workspace-policy.ts`). */
-  readonly policy: string;
+  policy: z.string(),
   /** A claude session's shell prefix, `CLAUDE_CODE_SHELL_PREFIX` ({@link claudePrefixScript}): every shell command, shell-form hook and stdio MCP start of its CLI runs through it, inside the boundary. */
-  readonly prefix: string;
+  prefix: z.string(),
   /** The workspace's scratch dir, its commands' `TMPDIR` (on macOS by its short name, `workspaceTmpDir`): `~/.cawco/tmp/<id8>` (`workspaceScratchDir`), on disk and outside the clone. */
-  readonly scratch: string;
-}
+  scratch: z.string(),
+});
+export type Boundary = Readonly<z.infer<typeof BoundaryShape>>;
+
+/** A form's parts, each by name with its own hash ({@link Plan.parts}). */
+const FormPartsSchema = z.record(z.string(), z.string()).readonly();
+type FormParts = z.infer<typeof FormPartsSchema>;
 
 /** What `boundary.json` keeps: the boundary, and what proves it is still the one this machine started. */
-interface Held extends Boundary {
+const HeldSchema = BoundaryShape.extend({
   /**
    * The form it was started in ({@link formOf}). One of another form, or of
    * none, is handed over ({@link handOver}).
    */
-  readonly form?: string;
+  form: z.string().optional(),
   /**
    * Its generation: its sessiond id, its files in the state dir, its FIFO and
    * srt's temp dir are its own ({@link generationDir}), so an older one runs
    * on beside it.
    */
-  readonly gen: string;
+  gen: z.string(),
   /**
    * What its form was made of, part by part ({@link Plan.parts}), so a move
    * names what moved ({@link movedParts}). None on one an earlier build
    * started.
    */
-  readonly parts?: FormParts;
-  readonly path: string;
-}
+  parts: FormPartsSchema.optional(),
+  path: z.string(),
+}).readonly();
+type Held = z.infer<typeof HeldSchema>;
 
 /**
  * An older boundary still running beside the current one ({@link handOver}):
@@ -347,7 +355,7 @@ const grantedOf = (id: string, gen: string): string =>
 
 /** The policy generation `gen` of workspace `id` started with ({@link grantedOf}); undefined when none is on record. */
 const grantedPolicy = (id: string, gen: string): Promise<Policy | undefined> =>
-  readRecord<Policy>(grantedOf(id, gen)).catch(() => undefined);
+  readRecord(grantedOf(id, gen), PolicySchema).catch(() => undefined);
 
 /**
  * Lines for a workspace's next session command, which its executor shows on
@@ -1678,12 +1686,10 @@ const ruleFor = async (
   id: string,
   rules: UpstreamRules
 ): Promise<UpstreamRule> => {
-  const project = await readRecord<unknown>(workspaceProjectFile(id)).catch(
+  const project = await readRecord(workspaceProjectFile(id), z.string()).catch(
     () => undefined
   );
-  return (
-    (typeof project === "string" && rules.projects[project]) || rules.fleet
-  );
+  return (project !== undefined && rules.projects[project]) || rules.fleet;
 };
 
 /** Writes workspace `id`'s upstream rule under the rules held, when it changed; nothing while none is held. */
@@ -2174,8 +2180,9 @@ const readWorkspaces = async (): Promise<{
     }
     const created = isPlace(id)
       ? undefined
-      : await readRecord<{ path?: string }>(
-          join(stateDir(id), "create.json")
+      : await readRecord(
+          join(stateDir(id), "create.json"),
+          z.object({ path: z.string().optional() })
         ).catch(() => undefined);
     const cli =
       created?.path !== undefined &&
@@ -2471,12 +2478,7 @@ const addListed = async (
   item: string
 ): Promise<void> => {
   const listed = await reported(
-    readRecord<unknown>(file).then((record = []) => {
-      if (!Array.isArray(record)) {
-        throw new DamagedRecord(file, "it is not a list");
-      }
-      return record as string[];
-    })
+    readRecord(file, z.array(z.string())).then((record = []) => record)
   );
   if (listed.includes(item)) {
     return;
@@ -2557,7 +2559,7 @@ export const setProject = async (
 ): Promise<void> => {
   const file = workspaceProjectFile(id);
   // A damaged record is written over with the project the hub names now.
-  const kept = await readRecord<unknown>(file).catch((error: unknown) => {
+  const kept = await readRecord(file, z.unknown()).catch((error: unknown) => {
     if (!isDamagedRecord(error)) {
       throw error;
     }
@@ -2673,7 +2675,7 @@ const reported = async <T>(read: Promise<T>): Promise<T> => {
  */
 const readHeld = (id: string): Promise<Held | undefined> =>
   reported(
-    readRecord<Held>(join(stateDir(id), "boundary.json")).catch(
+    readRecord(join(stateDir(id), "boundary.json"), HeldSchema).catch(
       (error: unknown): Promise<Held | undefined> =>
         isDamagedRecord(error)
           ? Promise.reject(error)
@@ -3675,9 +3677,6 @@ interface Plan {
   readonly parts: FormParts;
   readonly spec: ProcSpec;
 }
-
-/** A form's parts, each by name with its own hash ({@link Plan.parts}). */
-type FormParts = Readonly<Record<string, string>>;
 
 /** The part of a Linux form that is what the fleet sync writes ({@link syncedPresence}). */
 const SYNCED_PART = "synced";
@@ -5872,7 +5871,7 @@ const readRetiring = async (id: string): Promise<Retiring[]> => {
     names
       .filter((name) => RETIRING_FILE.test(name))
       .map((name) =>
-        reported(readRecord<Retiring>(join(stateDir(id), name))).catch(
+        reported(readRecord(join(stateDir(id), name), HeldSchema)).catch(
           () => undefined
         )
       )
@@ -6908,8 +6907,9 @@ const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
       const path =
         (await readHeld(id).catch(() => undefined))?.path ??
         (
-          await readRecord<{ path?: string }>(
-            join(stateDir(id), "create.json")
+          await readRecord(
+            join(stateDir(id), "create.json"),
+            z.object({ path: z.string().optional() })
           ).catch(() => undefined)
         )?.path;
       if (!(path && inUse(id, path, procs, commands))) {

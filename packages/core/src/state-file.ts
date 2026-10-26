@@ -37,6 +37,7 @@ import {
 } from "node:fs";
 import { link, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { z } from "zod";
 import { isAlive, listedPid } from "./signal-wall";
 
 export interface StateWriteOptions {
@@ -246,14 +247,24 @@ const textProblem = (text: string): string | undefined => {
   }
 };
 
-/** `text`, a JSON record read from `file`, parsed; a {@link DamagedRecord} when it does not parse. */
-const parseRecord = <T>(file: string, text: string): T => {
+/**
+ * `text`, a JSON record read from `file`, parsed and checked against
+ * `schema`; a {@link DamagedRecord} when it does not parse or is not that
+ * shape. The record's type is the schema's output: nothing is read back as
+ * a type it was not checked against.
+ */
+export const parseRecord = <S extends z.ZodType>(
+  file: string,
+  text: string,
+  schema: S
+): z.output<S> => {
   const problem = textProblem(text);
   if (problem) {
     throw new DamagedRecord(file, problem);
   }
+  let value: unknown;
   try {
-    return JSON.parse(text) as T;
+    value = JSON.parse(text);
   } catch (error) {
     // biome-ignore lint/style/useErrorCause: the cause is passed, in the options third argument
     throw new DamagedRecord(
@@ -262,6 +273,14 @@ const parseRecord = <T>(file: string, text: string): T => {
       { cause: error }
     );
   }
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    // biome-ignore lint/style/useErrorCause: the cause is passed, in the options third argument
+    throw new DamagedRecord(file, z.prettifyError(parsed.error), {
+      cause: parsed.error,
+    });
+  }
+  return parsed.data;
 };
 
 /** `text`, a one-value text record (a pid, an id), checked whole. */
@@ -277,11 +296,14 @@ const absent = (error: unknown): boolean =>
   (error as NodeJS.ErrnoException).code === "ENOENT";
 
 /**
- * The JSON record at `file`: undefined when there is none, a
- * {@link DamagedRecord} when there is one that does not parse, and any other
- * read failure as it is.
+ * The JSON record at `file`, checked against `schema`: undefined when there
+ * is none, a {@link DamagedRecord} when there is one that does not parse or
+ * is not that shape, and any other read failure as it is.
  */
-export const readRecord = async <T>(file: string): Promise<T | undefined> => {
+export const readRecord = async <S extends z.ZodType>(
+  file: string,
+  schema: S
+): Promise<z.output<S> | undefined> => {
   let text: string;
   try {
     text = await readFile(file, "utf8");
@@ -291,11 +313,14 @@ export const readRecord = async <T>(file: string): Promise<T | undefined> => {
     }
     throw error;
   }
-  return parseRecord<T>(file, text);
+  return parseRecord(file, text, schema);
 };
 
 /** {@link readRecord}, synchronously. */
-export const readRecordSync = <T>(file: string): T | undefined => {
+export const readRecordSync = <S extends z.ZodType>(
+  file: string,
+  schema: S
+): z.output<S> | undefined => {
   let text: string;
   try {
     text = readFileSync(file, "utf8");
@@ -305,7 +330,7 @@ export const readRecordSync = <T>(file: string): T | undefined => {
     }
     throw error;
   }
-  return parseRecord<T>(file, text);
+  return parseRecord(file, text, schema);
 };
 
 /** The one-value text record at `file` ({@link checkTextRecord}); undefined when there is none. */

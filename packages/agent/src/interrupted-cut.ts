@@ -24,7 +24,6 @@
 import type { Stats } from "node:fs";
 import { lstat, readdir, readFile, readlink, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { WorkspaceCut } from "@cawco/core";
 import { isGitDir } from "@cawco/core/git-dir";
 import { isSecretFileName, workspacesDir } from "@cawco/core/paths";
 import { repositoryConfigProblem } from "@cawco/core/safe-git";
@@ -32,13 +31,17 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { placedAsMade } from "./fleet";
 import { hostGit } from "./host-git";
 import { straysAmong } from "./stand-ins";
+import { z } from "zod";
+import type { WorkspaceCut } from "@cawco/core";
+import { WorkspaceCutSchema } from "@cawco/core/stored-shapes";
 
 /** A cut under way: the clone's path, the repository it is cut from, and the commit a cut again starts at (none for a first cut). */
-export interface CutMark {
-  at: WorkspaceCut | null;
-  path: string;
-  source: string;
-}
+export const CutMarkSchema = z.object({
+  at: WorkspaceCutSchema.nullable(),
+  path: z.string(),
+  source: z.string(),
+});
+export type CutMark = z.infer<typeof CutMarkSchema>;
 
 const markOf = (id: string): string => join(workspacesDir(), id, "cut.json");
 
@@ -52,7 +55,7 @@ export const cutMade = (id: string): Promise<void> =>
 
 /** Workspace `id`'s cut under way, as its mark says; nothing when none is. */
 export const cutMark = (id: string): Promise<CutMark | undefined> =>
-  readRecord<CutMark>(markOf(id));
+  readRecord(markOf(id), CutMarkSchema);
 
 /**
  * The path workspace `id`'s `create.json` names for its clone, written
@@ -61,10 +64,11 @@ export const cutMark = (id: string): Promise<CutMark | undefined> =>
  */
 export const createdAt = async (id: string): Promise<string | undefined> =>
   (
-    await readRecord<{ path?: unknown }>(
-      join(workspacesDir(), id, "create.json")
+    await readRecord(
+      join(workspacesDir(), id, "create.json"),
+      z.object({ path: z.string().optional() })
     ).catch(() => undefined)
-  )?.path as string | undefined;
+  )?.path;
 
 /** Up to {@link NAMED} entries by name, and how many there are. */
 const NAMED = 5;

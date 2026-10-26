@@ -42,6 +42,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { BrowserRecordSchema } from "../stored-shapes";
 
 /** What a browser's record keeps between processes. */
 export interface BrowserRecord {
@@ -204,7 +205,7 @@ export const readBrowser = async (
   key: BrowserKey
 ): Promise<BrowserRecord | undefined> => {
   try {
-    return await readRecord<BrowserRecord>(recordFile(key));
+    return await readRecord(recordFile(key), BrowserRecordSchema);
   } catch (error) {
     if (isDamagedRecord(error)) {
       console.warn(`[browser] ${error.message}; ${key} starts afresh`);

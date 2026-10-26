@@ -62,6 +62,7 @@ import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { Server, ServerWebSocket } from "bun";
 import { browserDir } from "./state";
+import { z } from "zod";
 
 /** What a refusal says, one sentence each. */
 const GATE_WORDS = {
@@ -270,11 +271,10 @@ export const keyOfWorkspace = async (
   id: string,
   machine: string
 ): Promise<BrowserKey> => {
-  const project = await readRecord<unknown>(workspaceProjectFile(id)).catch(
+  const project = await readRecord(workspaceProjectFile(id), z.string()).catch(
     () => undefined
   );
-  return typeof project === "string" && project
-    ? `project:${project}`
+  return project ? `project:${project}`
     : `machine:${machine}`;
 };
 
@@ -363,10 +363,11 @@ export interface GateDeps {
 }
 
 /** Who owns what, as kept in the browser's dir. */
-interface Owners {
-  contexts: Record<string, string>;
-  targets: Record<string, string>;
-}
+const OwnersSchema = z.object({
+  contexts: z.record(z.string(), z.string()),
+  targets: z.record(z.string(), z.string()),
+});
+type Owners = z.infer<typeof OwnersSchema>;
 
 interface LinkData {
   link: Link;
@@ -569,9 +570,9 @@ export class Gate {
   }
 
   #load(): Promise<void> {
-    this.#loaded ??= readRecord<Owners>(this.#ownersFile())
+    this.#loaded ??= readRecord(this.#ownersFile(), OwnersSchema)
       .then((kept) => {
-        if (kept?.targets && kept.contexts) {
+        if (kept) {
           this.#owners = kept;
         }
       })

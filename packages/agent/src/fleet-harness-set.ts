@@ -28,6 +28,7 @@ import {
 import { fleetHarnessSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { within } from "./fleet-mcp-set";
+import { FleetHarnessSetSchema } from "./stored-shapes";
 
 /** One hook as a session runs it: a command hook's `command` is its script's path on this machine. */
 export interface SetHook {
@@ -99,8 +100,9 @@ const EMPTY: FleetHarnessSet = {
 /** The set the last sync wrote; none before the first, or when it cannot be read (said on the log). */
 export const readFleetHarnessSet = async (): Promise<FleetHarnessSet> => {
   try {
-    const stored = await readRecord<Partial<FleetHarnessSet>>(
-      fleetHarnessSetFile()
+    const stored = await readRecord(
+      fleetHarnessSetFile(),
+      FleetHarnessSetSchema.partial()
     );
     return { ...EMPTY, ...stored };
   } catch (error) {

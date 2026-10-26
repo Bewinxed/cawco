@@ -5,6 +5,7 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
 import { hidden } from "./hidden";
+import { z } from "zod";
 
 /**
  * What the Apple app's MetricKit hands over: its diagnostic payloads (hangs,
@@ -27,21 +28,22 @@ const KINDS = {
 
 type Kind = (typeof KINDS)[keyof typeof KINDS];
 
-interface Stored {
-  appVersion: string;
-  build: string;
-  device: string | null;
+const StoredSchema = z.object({
+  appVersion: z.string(),
+  build: z.string(),
+  device: z.string().nullable(),
   /** MetricKit's diagnostic, whole. */
-  diagnostic: Record<string, unknown>;
+  diagnostic: z.record(z.string(), z.unknown()),
   /** The payload's window, as MetricKit dated it. */
-  from: string | null;
-  id: string;
-  kind: Kind;
-  os: string;
+  from: z.string().nullable(),
+  id: z.string(),
+  kind: z.enum([KINDS.hangDiagnostics, KINDS.crashDiagnostics, KINDS.cpuExceptionDiagnostics]),
+  os: z.string(),
   /** When the hub received it, ms epoch. */
-  receivedAt: number;
-  to: string | null;
-}
+  receivedAt: z.number(),
+  to: z.string().nullable(),
+});
+type Stored = z.infer<typeof StoredSchema>;
 
 interface Frame {
   address?: number;
@@ -109,7 +111,7 @@ async function readAll(): Promise<Stored[]> {
       .filter((name) => name.endsWith(".json"))
       .map(async (name) => {
         try {
-          return (await readRecord<Stored>(join(DIR, name))) ?? null;
+          return (await readRecord(join(DIR, name), StoredSchema)) ?? null;
         } catch (error) {
           // One damaged diagnostic is said and left out; the rest are listed.
           console.warn(

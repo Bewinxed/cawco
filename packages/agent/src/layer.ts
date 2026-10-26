@@ -86,52 +86,57 @@ import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { removeTree } from "./remove-tree";
+import { z } from "zod";
+import { WorkspaceKindSchema } from "@cawco/core/stored-shapes";
 
 /**
  * How a workspace holds its private copy on its machine: a folder's view of
  * it (`overlay`, Linux) or APFS clone (`copy`, macOS), or a repository's git
  * clone of its own (`clone`).
  */
-export type LayerForm = "overlay" | "copy" | "clone";
+export const LayerFormSchema = z.enum(["overlay", "copy", "clone"]);
+export type LayerForm = z.infer<typeof LayerFormSchema>;
 
 /** One overlay of a Linux view: a filesystem at or under F, its upper and work dirs. */
-interface LayerMount {
+const LayerMountSchema = z.object({
   /** Where it is mounted in the view: F, or a mount point under F. */
-  at: string;
-  upper: string;
-  work: string;
-}
+  at: z.string(),
+  upper: z.string(),
+  work: z.string(),
+});
+export type LayerMount = z.infer<typeof LayerMountSchema>;
 
 /**
  * A workspace's layer, as `layer.json` in its state dir records it: written
  * before anything of the copy is made (`made` false), and again once it is
  * whole.
  */
-export interface Layer {
+export const LayerSchema = z.object({
   /** Copy: the folder's start, an APFS clone the change set is read against. Absent for a clone. */
-  base?: string;
+  base: z.string().optional(),
   /** The folder the workspace was made from, at its real path; none on record for a clone. */
-  folder: string;
-  form: LayerForm;
+  folder: z.string(),
+  form: LayerFormSchema,
   /** `folder` for a layer, `repo` for a clone (core `WorkspaceKind`). */
-  kind: WorkspaceKind;
+  kind: WorkspaceKindSchema,
   /** Whether the copy is whole: one that is not was cut short, and is cleared. */
-  made: boolean;
+  made: z.boolean(),
   /** Copy: whether the root `node_modules` is still F's, by a link ({@link LINKED_MODULES}). */
-  modules?: "linked" | "own";
+  modules: z.enum(["linked", "own"]).optional(),
   /** Overlay: each filesystem's layers. */
-  mounts?: LayerMount[];
+  mounts: z.array(LayerMountSchema).optional(),
   /** Where the delegate works: F itself (overlay), or the clone (copy). */
-  path: string;
+  path: z.string(),
   /**
    * Overlay: each path of F whose conflict the delegate was shown, with F's
    * ctime then: F as it stood then is what the delegate answered, so it is
    * no conflict again until F changes once more ({@link noteSeen}).
    */
-  seen?: Record<string, number>;
+  seen: z.record(z.string(), z.number()).optional(),
   /** When the delegate's view of F began (epoch ms): the line a conflict is read from. */
-  started: number;
-}
+  started: z.number(),
+});
+export type Layer = z.infer<typeof LayerSchema>;
 
 /** The folder a workspace's layer keeps its own files in. */
 export const layerDir = (id: string): string =>
@@ -145,7 +150,7 @@ const viewFile = (id: string): string => join(layerDir(id), "view");
 
 /** Workspace `id`'s layer, when it has one on record. */
 export const readLayer = (id: string): Promise<Layer | undefined> =>
-  readRecord<Layer>(layerFile(id));
+  readRecord(layerFile(id), LayerSchema);
 
 /** Writes workspace `id`'s layer record. */
 const writeLayer = (id: string, layer: Layer): Promise<void> =>

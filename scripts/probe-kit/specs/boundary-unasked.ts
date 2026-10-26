@@ -43,6 +43,7 @@ import { readRecord } from "../../../packages/core/src/state-file";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
+import { z } from "zod";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = "PROBE-UNASKED";
@@ -220,8 +221,9 @@ const run = async (kit: Kit) => {
     60_000
   );
   const held = () =>
-    readRecord<{ gen: string; pid: number }>(
-      join(home, ".cawco", "workspaces", workspace, "boundary.json")
+    readRecord(
+      join(home, ".cawco", "workspaces", workspace, "boundary.json"),
+      z.object({ gen: z.string(), pid: z.number() })
     ).catch(() => undefined);
   /** The agent's decisions of the workspace's boundary since `from` (ms since the epoch). */
   const decidedSince = async (from: number) =>

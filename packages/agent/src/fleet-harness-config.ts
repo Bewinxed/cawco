@@ -24,6 +24,7 @@ import { fleetPlacedDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { SetHarnessConfig } from "./fleet-harness-set";
 import { resolveBin, toolEnv } from "./tools";
+import { z } from "zod";
 
 /** How long one package's `npm install` gets: a first install of a package with its dependencies, as an MCP server's (mcp-install.ts). */
 const NPM_INSTALL_MS = 180_000;
@@ -101,16 +102,20 @@ const install = async (
 };
 
 /** A package's `package.json`, as far as its entry needs it. */
-interface PackageJson {
-  exports?: unknown;
-  main?: string;
-  module?: string;
-  version?: string;
-}
+const PackageJsonSchema = z.object({
+  exports: z.unknown(),
+  main: z.string().optional(),
+  module: z.string().optional(),
+  version: z.string().optional(),
+});
+type PackageJson = z.infer<typeof PackageJsonSchema>;
 
 /** The file an ES module import of the package at `root` loads: its `exports["."]` (`import`, else `default`), `module`, `main`, else `index.js`. */
 const packageEntry = async (root: string): Promise<string> => {
-  const pkg = (await readRecord<PackageJson>(join(root, "package.json"))) ?? {};
+  const pkg: PackageJson =
+    (await readRecord(join(root, "package.json"), PackageJsonSchema)) ?? {
+      exports: undefined,
+    };
   const dot =
     typeof pkg.exports === "string"
       ? pkg.exports
@@ -141,7 +146,7 @@ const installedPackage = async (
   const dir = packageDir(pkg.name, pkg.version);
   kept.add(dir);
   const root = join(dir, "node_modules", pkg.name);
-  const held = await readRecord<PackageJson>(join(root, "package.json")).catch(
+  const held = await readRecord(join(root, "package.json"), PackageJsonSchema).catch(
     () => undefined
   );
   if (held?.version !== pkg.version) {

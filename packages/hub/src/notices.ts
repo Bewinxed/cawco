@@ -24,6 +24,7 @@ import {
   writeStateFileSync,
 } from "@cawco/core/state-file";
 import { Elysia, t } from "elysia";
+import { z } from "zod";
 
 /**
  * Ids kept, newest last. An event's notice is over once a newer one of its
@@ -37,14 +38,7 @@ type NoticesRecord = { seen: string[] } | { damaged: DamagedHubRecord };
 /** The record at `path`: its ids, none on a first run, or what is wrong with it. */
 const load = (path: string): NoticesRecord => {
   try {
-    const kept = readRecordSync<unknown>(path);
-    if (kept === undefined) {
-      return { seen: [] };
-    }
-    if (!(Array.isArray(kept) && kept.every((id) => typeof id === "string"))) {
-      throw new DamagedRecord(path, "it is not a list of notice ids");
-    }
-    return { seen: kept };
+    return { seen: readRecordSync(path, z.array(z.string())) ?? [] };
   } catch (error) {
     if (!isDamagedRecord(error)) {
       throw error;

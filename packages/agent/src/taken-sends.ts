@@ -28,6 +28,7 @@ import {
   readRecordSync,
   writeStateFileSync,
 } from "@cawco/core/state-file";
+import { z } from "zod";
 
 /** How many of a session's sends are kept as taken, the latest. */
 const TAKEN_KEPT = 128;
@@ -48,10 +49,7 @@ const takenBy = (instanceId: string): string[] => {
     return held;
   }
   const file = fileOf(instanceId);
-  const kept = readRecordSync<unknown>(file) ?? [];
-  if (!(Array.isArray(kept) && kept.every((id) => typeof id === "string"))) {
-    throw new DamagedRecord(file, "it is not a list of send ids");
-  }
+  const kept = readRecordSync(file, z.array(z.string())) ?? [];
   known.set(instanceId, kept);
   return kept;
 };

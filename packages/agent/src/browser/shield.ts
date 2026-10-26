@@ -64,6 +64,7 @@ import {
   withBrowser,
   writeBrowser,
 } from "./state";
+import { z } from "zod";
 
 /** How often a take-over's views are counted against {@link TAKEOVER_UNWATCHED_MS}. */
 const WATCH_MS = 5000;
@@ -72,16 +73,17 @@ const WATCH_MS = 5000;
 const NEKO_MS = 5000;
 
 /** A take-over as the browser's dir keeps it. */
-interface Kept {
-  origin?: string;
-  requestId?: string;
-  since: number;
+const KeptSchema = z.object({
+  origin: z.string().optional(),
+  requestId: z.string().optional(),
+  since: z.number(),
   /** The page brought to the front: the one handed back reloads. */
-  targetId?: string;
+  targetId: z.string().optional(),
   /** The person's neko session given control (container host). */
-  viewer?: string;
-  workspaceId?: string;
-}
+  viewer: z.string().optional(),
+  workspaceId: z.string().optional(),
+});
+type Kept = z.infer<typeof KeptSchema>;
 
 /** A take-over this process holds. */
 interface Held extends Kept {
@@ -122,8 +124,9 @@ const why = (error: unknown): string =>
 
 /** Who owns which page, as the gate keeps it (gate.ts `gate.json`). */
 const pageOwners = async (key: BrowserKey): Promise<Record<string, string>> => {
-  const kept = await readRecord<{ targets?: Record<string, string> }>(
-    join(browserDir(key), "gate.json")
+  const kept = await readRecord(
+    join(browserDir(key), "gate.json"),
+    z.object({ targets: z.record(z.string(), z.string()).optional() })
   ).catch(() => undefined);
   return kept?.targets ?? {};
 };
@@ -511,7 +514,9 @@ const release = async (
 };
 
 const keptOf = async (key: BrowserKey): Promise<Held | undefined> => {
-  const kept = await readRecord<Kept>(shieldFile(key)).catch(() => undefined);
+  const kept = await readRecord(shieldFile(key), KeptSchema).catch(
+    () => undefined
+  );
   return kept ? { ...kept, hubViewers: 0 } : undefined;
 };
 

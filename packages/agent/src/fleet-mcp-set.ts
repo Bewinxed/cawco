@@ -17,6 +17,7 @@ import {
 } from "@cawco/core";
 import { fleetMcpSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { FleetMcpSetSchema } from "./stored-shapes";
 
 /** One project's server, placed at one of its folders on this machine. */
 interface PlacedFleetMcp {
@@ -45,7 +46,10 @@ const EMPTY: FleetMcpSet = { servers: {}, placed: {}, signedOut: [] };
 /** The set the last sync wrote; none before the first, or when it cannot be read (said on the log). */
 export const readFleetMcpSet = async (): Promise<FleetMcpSet> => {
   try {
-    const stored = await readRecord<Partial<FleetMcpSet>>(fleetMcpSetFile());
+    const stored = await readRecord(
+      fleetMcpSetFile(),
+      FleetMcpSetSchema.partial()
+    );
     return { ...EMPTY, ...stored };
   } catch (error) {
     console.warn(

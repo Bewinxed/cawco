@@ -27,6 +27,28 @@ import type {
   TextAttachment as TextAttachmentType,
 } from "./attachments";
 import type {
+  BinaryDownload as BinaryDownloadType,
+  BinaryUpdateLanding as BinaryUpdateLandingType,
+  BinaryUpdatePhase as BinaryUpdatePhaseType,
+  BinaryUpdatePolicy as BinaryUpdatePolicyType,
+  BinaryUpdateState as BinaryUpdateStateType,
+  HubWait as HubWaitType,
+  KeptProcess as KeptProcessType,
+  RestartHoldReason as RestartHoldReasonType,
+  RestartHold as RestartHoldType,
+  RetiringKeeper as RetiringKeeperType,
+} from "./binary-updates";
+import { BINARY_UPDATE_PHASES } from "./binary-updates";
+import type {
+  BrowserHostKind as BrowserHostKindType,
+  BrowserKey as BrowserKeyType,
+  BrowserPorts as BrowserPortsType,
+  BrowserRelayReach as BrowserRelayReachType,
+  BrowserRelay as BrowserRelayType,
+  BrowserRow as BrowserRowType,
+  BrowserState as BrowserStateType,
+} from "./browser";
+import type {
   MachineCapabilities as MachineCapabilitiesType,
   MachineCapability as MachineCapabilityType,
   MediaPath as MediaPathType,
@@ -86,12 +108,17 @@ import type {
   UserQuestion as UserQuestionType,
   WorkspaceCut as WorkspaceCutType,
   WorkspaceHolding as WorkspaceHoldingType,
+  WorkspaceKind as WorkspaceKindType,
 } from "./harness";
+import type { HarnessConfigKind as HarnessConfigKindType } from "./harness-config";
+import { HARNESS_CONFIG_KINDS } from "./harness-config";
 import type {
   HookAgentHandler as HookAgentHandlerType,
   HookCommandHandler as HookCommandHandlerType,
+  HookEvent as HookEventType,
   HookHandler as HookHandlerType,
   HookHttpHandler as HookHttpHandlerType,
+  HookMatchTest as HookMatchTestType,
   HookMcpToolHandler as HookMcpToolHandlerType,
   HookPromptHandler as HookPromptHandlerType,
 } from "./hooks";
@@ -110,6 +137,18 @@ import type {
   Verb as VerbType,
 } from "./index";
 import type { CheckoutMove as CheckoutMoveType } from "./injected";
+import type {
+  InstallCheck as InstallCheckType,
+  InstallDraft as InstallDraftType,
+  InstallMark as InstallMarkType,
+  InstallProblem as InstallProblemType,
+  InstallRoute as InstallRouteType,
+  InstallSignIn as InstallSignInType,
+  InstallState as InstallStateType,
+  InstallStep as InstallStepType,
+  Install as InstallType,
+} from "./install";
+import { COMMAND_STEPS, INSTALL_CHECKS, SSH_STEPS } from "./install";
 import type { MachinePath as MachinePathType } from "./machine-path";
 import { isMachinePath } from "./machine-path";
 import type {
@@ -133,6 +172,7 @@ import type {
   PlanWait as PlanWaitType,
 } from "./plan";
 import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "./plan";
+import type { ReleaseManifest as ReleaseManifestType } from "./release-manifest";
 import type {
   RelayPortHealth as RelayPortHealthType,
   RelayPortName as RelayPortNameType,
@@ -159,6 +199,315 @@ import type {
   LimitWindow as LimitWindowType,
   OpenCodeGoLimits as OpenCodeGoLimitsType,
 } from "./usage/types";
+import type { Policy as PolicyType } from "./workspace-judge";
+
+export const PolicySchema = z.object({
+  allowRead: z.array(z.string()).readonly(),
+  allowWrite: z.array(z.string()).readonly(),
+  clone: z.string(),
+  denyRead: z.array(z.string()).readonly(),
+  denyWrite: z.array(z.string()).readonly(),
+  home: z.string(),
+  protectConfig: z.boolean().optional(),
+  scratch: z.string(),
+});
+
+export const MediaPathSchema = z.enum(["udp+tcp", "tcp", "none"]);
+
+export const BrowserPortsSchema = z.object({
+  devtools: z.number(),
+  http: z.number().optional(),
+  media: z.number().optional(),
+});
+
+export const BrowserHostKindSchema = z.enum(["container", "local"]);
+
+export const BrowserKeySchema = z.union([
+  z.templateLiteral(["project:", z.string()]),
+  z.templateLiteral(["machine:", z.string()]),
+]);
+
+export const BrowserRelayReachSchema = z.object({
+  lan: z.array(z.string()),
+  machineId: z.string(),
+  tailnet: z.array(z.string()),
+});
+
+export const BrowserRelaySchema = z.object({
+  credential: z.string(),
+  reach: BrowserRelayReachSchema.optional(),
+  urls: z.array(z.string()),
+  username: z.string(),
+});
+
+export const BrowserStateSchema = z.enum([
+  "pulling",
+  "building",
+  "starting",
+  "live",
+  "stopping",
+  "asleep",
+  "failed",
+]);
+
+export const BrowserRowSchema = z.object({
+  host: BrowserHostKindSchema,
+  key: BrowserKeySchema,
+  lastUsedAt: z.number(),
+  name: z.string(),
+  origin: z.string().optional(),
+  ports: BrowserPortsSchema.optional(),
+  progress: z
+    .object({ done: z.number(), total: z.number(), what: z.literal("image") })
+    .optional(),
+  state: BrowserStateSchema,
+  takeover: z
+    .object({
+      by: z.string().nullable(),
+      since: z.number(),
+      requestId: z.string().optional(),
+    })
+    .nullable(),
+  viewers: z.number(),
+  why: z.string().optional(),
+});
+
+export const HarnessConfigKindSchema = z.enum(HARNESS_CONFIG_KINDS);
+
+export const HookEventSchema = z.enum([
+  "SessionStart",
+  "Setup",
+  "InstructionsLoaded",
+  "UserPromptSubmit",
+  "UserPromptExpansion",
+  "MessageDisplay",
+  "PreToolUse",
+  "PermissionRequest",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "PostToolBatch",
+  "PermissionDenied",
+  "Notification",
+  "SubagentStart",
+  "SubagentStop",
+  "TaskCreated",
+  "TaskCompleted",
+  "Stop",
+  "StopFailure",
+  "TeammateIdle",
+  "ConfigChange",
+  "CwdChanged",
+  "DirectoryAdded",
+  "FileChanged",
+  "WorktreeCreate",
+  "WorktreeRemove",
+  "PreCompact",
+  "PostCompact",
+  "SessionEnd",
+  "Elicitation",
+  "ElicitationResult",
+]);
+
+export const HookHandlerBaseSchema = z.object({
+  if: z.string().optional(),
+  statusMessage: z.string().optional(),
+  timeout: z.number().optional(),
+});
+
+export const HookCommandHandlerSchema = HookHandlerBaseSchema.extend({
+  args: z.array(z.string()).optional(),
+  async: z.boolean().optional(),
+  asyncRewake: z.boolean().optional(),
+  command: z.string().optional(),
+  shell: z.enum(["bash", "powershell"]).optional(),
+  type: z.literal("command"),
+});
+
+export const HookHttpHandlerSchema = HookHandlerBaseSchema.extend({
+  type: z.literal("http"),
+  url: z.string(),
+});
+
+export const HookMcpToolHandlerSchema = HookHandlerBaseSchema.extend({
+  mcp_server_name: z.string(),
+  tool_name: z.string(),
+  type: z.literal("mcp_tool"),
+});
+
+export const HookPromptHandlerSchema = HookHandlerBaseSchema.extend({
+  prompt: z.string(),
+  type: z.literal("prompt"),
+});
+
+export const HookAgentHandlerSchema = HookHandlerBaseSchema.extend({
+  agent: z.string().optional(),
+  prompt: z.string(),
+  type: z.literal("agent"),
+});
+
+export const HookHandlerSchema = z.union([
+  HookCommandHandlerSchema,
+  HookHttpHandlerSchema,
+  HookMcpToolHandlerSchema,
+  HookPromptHandlerSchema,
+  HookAgentHandlerSchema,
+]);
+
+export const HookMatchTestSchema = z.union([
+  z.object({ all: z.literal(true) }),
+  z.object({ exact: z.array(z.string()) }),
+  z.object({ regex: z.string() }),
+]);
+
+export const McpStdioServerConfigSchema = z.object({
+  alwaysLoad: z.boolean().optional(),
+  args: z.array(z.string()).optional(),
+  command: z.string(),
+  env: z.record(z.string(), z.string()).optional(),
+  timeout: z.number().optional(),
+  type: z.literal("stdio").optional(),
+});
+
+export const McpSSEServerConfigSchema = z.object({
+  alwaysLoad: z.boolean().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  timeout: z.number().optional(),
+  type: z.literal("sse"),
+  url: z.string(),
+});
+
+export const McpHttpServerConfigSchema = z.object({
+  alwaysLoad: z.boolean().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  timeout: z.number().optional(),
+  type: z.literal("http"),
+  url: z.string(),
+});
+
+export const FleetMcpConfigSchema = z.union([
+  McpSSEServerConfigSchema,
+  McpHttpServerConfigSchema,
+  McpStdioServerConfigSchema,
+]);
+
+export const WorkspaceCutSchema = z.object({
+  branch: z.string(),
+  carry: z.string().optional(),
+  commit: z.string(),
+});
+
+export const WorkspaceKindSchema = z.enum(["repo", "folder"]);
+
+export const BinaryUpdatePolicySchema = z.object({
+  autoUpdate: z.boolean(),
+  channel: z.enum(["stable", "nightly"]),
+});
+
+export const RestartHoldReasonSchema = z.enum([
+  "custody",
+  "starting",
+  "image",
+  "workspace",
+  "command",
+  "tool-call",
+  "hub-tool-call",
+  "write",
+  "opencode",
+  "opencode-send",
+  "wake-up",
+  "wake-ups-unknown",
+]);
+
+export const RestartHoldSchema = z.object({
+  ids: z.array(z.string()),
+  reason: RestartHoldReasonSchema,
+});
+
+export const BinaryDownloadSchema = z.object({
+  received: z.number(),
+  total: z.number(),
+});
+
+export const HubWaitSchema = z.enum(["behind", "unanswered", "trial"]);
+
+export const BinaryUpdateLandingSchema = z.object({
+  at: z.number(),
+  notes: z.string().optional(),
+  outcome: z.enum(["installed", "rolled-back"]),
+  version: z.string(),
+});
+
+export const BinaryUpdatePhaseSchema = z.enum(BINARY_UPDATE_PHASES);
+
+export const KeptProcessSchema = z.object({
+  command: z.string(),
+  pid: z.number(),
+});
+
+export const RetiringKeeperSchema = z.object({
+  kept: z.array(KeptProcessSchema).optional(),
+  notAnswering: z.literal(true).optional(),
+  sessions: z.number(),
+  version: z.string(),
+});
+
+export const BinaryUpdateStateSchema = z.object({
+  availableVersion: z.string().optional(),
+  channel: BinaryUpdatePolicySchema.shape.channel,
+  commands: z.array(z.string()).optional(),
+  cut: z.array(RestartHoldSchema).optional(),
+  download: BinaryDownloadSchema.optional(),
+  error: z.string().optional(),
+  failedVersion: z.string().optional(),
+  heldChildren: z.number().optional(),
+  hostsHub: z.boolean(),
+  hubFetch: BinaryDownloadSchema.optional(),
+  hubWait: HubWaitSchema.optional(),
+  installedVersion: z.string(),
+  keeperFailedVersion: z.string().optional(),
+  keeperRestart: z
+    .object({
+      at: z.number(),
+      children: z.number(),
+      diagnostics: z.string(),
+      dials: z.number(),
+      pid: z.number(),
+      retiring: z.literal(true).optional(),
+      silentForMs: z.number(),
+    })
+    .optional(),
+  landed: BinaryUpdateLandingSchema.optional(),
+  notes: z.string().optional(),
+  phase: BinaryUpdatePhaseSchema,
+  retiringKeepers: z.array(RetiringKeeperSchema).optional(),
+  sessiondKept: z.array(KeptProcessSchema).optional(),
+  sessiondVersion: z.string().optional(),
+  updatedAt: z.number(),
+  waitingOn: z.array(RestartHoldSchema).optional(),
+  waitingSince: z.number().optional(),
+});
+
+export const ReleaseManifestSchema = z.object({
+  artifacts: z.array(
+    z.object({
+      target: z.string(),
+      archive: z.string(),
+      sha256: z.string(),
+      size: z.number(),
+      binarySha256: z.string(),
+      binarySize: z.number(),
+    })
+  ),
+  channel: z.enum(["stable", "nightly"]),
+  commit: z.string(),
+  notes: z.string(),
+  protocol: z.object({ min: z.number(), max: z.number() }),
+  schemaVersion: z.number(),
+  sequence: z.number(),
+  sessiondProtocol: z.string(),
+  testSigned: z.boolean(),
+  version: z.string(),
+});
 
 export const CompactStageSchema = z.enum([
   "filing",
@@ -458,37 +807,6 @@ export const FleetItemStatusSchema = z.object({
   state: FleetConvergeStateSchema,
 });
 
-export const McpStdioServerConfigSchema = z.object({
-  alwaysLoad: z.boolean().optional(),
-  args: z.array(z.string()).optional(),
-  command: z.string(),
-  env: z.record(z.string(), z.string()).optional(),
-  timeout: z.number().optional(),
-  type: z.literal("stdio").optional(),
-});
-
-export const McpSSEServerConfigSchema = z.object({
-  alwaysLoad: z.boolean().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  timeout: z.number().optional(),
-  type: z.literal("sse"),
-  url: z.string(),
-});
-
-export const McpHttpServerConfigSchema = z.object({
-  alwaysLoad: z.boolean().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  timeout: z.number().optional(),
-  type: z.literal("http"),
-  url: z.string(),
-});
-
-export const FleetMcpConfigSchema = z.union([
-  McpSSEServerConfigSchema,
-  McpHttpServerConfigSchema,
-  McpStdioServerConfigSchema,
-]);
-
 export const FleetRefreshSchema = z.object({
   at: z.number(),
   error: z.string().optional(),
@@ -738,53 +1056,6 @@ export const HarnessReportSchema = z.object({
   unreadAccounts: z.array(z.string()).optional(),
   version: z.string().optional(),
 });
-
-export const HookHandlerBaseSchema = z.object({
-  if: z.string().optional(),
-  statusMessage: z.string().optional(),
-  timeout: z.number().optional(),
-});
-
-export const HookCommandHandlerSchema = HookHandlerBaseSchema.extend({
-  args: z.array(z.string()).optional(),
-  async: z.boolean().optional(),
-  asyncRewake: z.boolean().optional(),
-  command: z.string().optional(),
-  shell: z.enum(["bash", "powershell"]).optional(),
-  type: z.literal("command"),
-});
-
-export const HookHttpHandlerSchema = HookHandlerBaseSchema.extend({
-  type: z.literal("http"),
-  url: z.string(),
-});
-
-export const HookMcpToolHandlerSchema = HookHandlerBaseSchema.extend({
-  mcp_server_name: z.string(),
-  tool_name: z.string(),
-  type: z.literal("mcp_tool"),
-});
-
-export const HookPromptHandlerSchema = HookHandlerBaseSchema.extend({
-  prompt: z.string(),
-  type: z.literal("prompt"),
-});
-
-export const HookAgentHandlerSchema = HookHandlerBaseSchema.extend({
-  agent: z.string().optional(),
-  prompt: z.string(),
-  type: z.literal("agent"),
-});
-
-export const HookHandlerSchema = z.union([
-  HookCommandHandlerSchema,
-  HookHttpHandlerSchema,
-  HookMcpToolHandlerSchema,
-  HookPromptHandlerSchema,
-  HookAgentHandlerSchema,
-]);
-
-export const MediaPathSchema = z.enum(["udp+tcp", "tcp", "none"]);
 
 export const WorkspaceToolSchema = z.object({
   command: z.string(),
@@ -1246,12 +1517,6 @@ export const ThreadQuestionSchema = z.object({
   toolUseId: z.string().optional(),
 });
 
-export const WorkspaceCutSchema = z.object({
-  branch: z.string(),
-  carry: z.string().optional(),
-  commit: z.string(),
-});
-
 export const WorkspaceHoldingSchema = z.object({
   ahead: z.number(),
   bytes: z.number(),
@@ -1413,11 +1678,99 @@ export const ModeAskSchema = z.object({
   refused: PermissionModeSchema.optional(),
 });
 
-/** Each property, through every level, as a plain object type. */
+export const InstallRouteSchema = z.enum(["ssh", "command"]);
+
+export const InstallSignInSchema = z.enum(["key", "password", "by-hand"]);
+
+export const InstallDraftSchema = z.object({
+  address: z.string().nullable(),
+  code: z.string().nullable().optional(),
+  port: z.string(),
+  route: InstallRouteSchema.nullable(),
+  signIn: InstallSignInSchema,
+  target: z.string(),
+});
+
+export const InstallCheckSchema = z.enum(INSTALL_CHECKS);
+
+export const InstallProblemSchema = z.union([
+  z.object({ kind: z.literal("unreachable"), detail: z.string() }),
+  z.object({ kind: z.literal("host-key"), host: z.string() }),
+  z.object({ kind: z.literal("penalized") }),
+  z.object({ kind: z.literal("sign-in"), said: z.string() }),
+  z.object({ kind: z.literal("forwarding") }),
+  z.object({ kind: z.literal("exposed"), bound: z.array(z.string()) }),
+  z.object({ kind: z.literal("port-held"), port: z.number() }),
+  z.object({ kind: z.literal("key"), said: z.string() }),
+  z.object({ kind: z.literal("download") }),
+  z.object({ kind: z.literal("unsigned") }),
+  z.object({ kind: z.literal("offer"), said: z.string() }),
+  z.object({
+    kind: z.literal("check"),
+    check: InstallCheckSchema,
+    said: z.string(),
+    user: z.string().nullable(),
+  }),
+  z.object({ kind: z.literal("step"), said: z.string() }),
+  z.object({
+    kind: z.literal("never-online"),
+    mac: z.boolean(),
+    local: z.boolean(),
+    keyRefused: z.boolean(),
+  }),
+  z.object({ kind: z.literal("lost") }),
+]);
+
+export const InstallStepSchema = z.union([
+  z.enum(SSH_STEPS),
+  z.enum(COMMAND_STEPS),
+]);
+
+export const InstallStateSchema = z.enum([
+  "running",
+  "failed",
+  "stopped",
+  "lost",
+  "joined",
+]);
+
+export const InstallMarkSchema = z.object({
+  endedAt: z.number().nullable(),
+  startedAt: z.number(),
+  step: InstallStepSchema,
+});
+
+export const InstallSchema = z.object({
+  address: z.string().nullable(),
+  checks: z.array(z.object({ check: InstallCheckSchema, passed: z.boolean() })),
+  command: z.string().nullable(),
+  endedAt: z.number().nullable(),
+  hostname: z.string().nullable(),
+  id: z.string(),
+  keys: z.object({ hub: z.boolean(), machine: z.boolean() }),
+  machineId: z.string().nullable(),
+  port: z.number().nullable(),
+  problem: InstallProblemSchema.nullable(),
+  problemStep: InstallStepSchema.nullable(),
+  returning: z.string().nullable(),
+  route: InstallRouteSchema,
+  signedIn: z.boolean(),
+  signIn: InstallSignInSchema.nullable(),
+  startedAt: z.number(),
+  state: InstallStateSchema,
+  steps: z.array(InstallMarkSchema),
+  tail: z.array(z.string()),
+  target: z.string(),
+});
+
+/**
+ * Each property, through every level, as a plain object type. `readonly`
+ * goes: it says what code may do with a value, not what a record holds.
+ */
 type Flat<T> = T extends readonly unknown[]
-  ? { [K in keyof T]: Flat<T[K]> }
+  ? { -readonly [K in keyof T]: Flat<T[K]> }
   : T extends object
-    ? { [K in keyof T]: Flat<T[K]> }
+    ? { -readonly [K in keyof T]: Flat<T[K]> }
     : T;
 /** Whether A and B are the same type, once flattened. */
 type Same<A, B> =
@@ -1429,6 +1782,41 @@ type Same<A, B> =
 
 /** Every schema of an exported type, proved against that type. */
 export const proved: [
+  Same<z.output<typeof PolicySchema>, PolicyType>,
+  Same<z.output<typeof MediaPathSchema>, MediaPathType>,
+  Same<z.output<typeof BrowserPortsSchema>, BrowserPortsType>,
+  Same<z.output<typeof BrowserHostKindSchema>, BrowserHostKindType>,
+  Same<z.output<typeof BrowserKeySchema>, BrowserKeyType>,
+  Same<z.output<typeof BrowserRelayReachSchema>, BrowserRelayReachType>,
+  Same<z.output<typeof BrowserRelaySchema>, BrowserRelayType>,
+  Same<z.output<typeof BrowserStateSchema>, BrowserStateType>,
+  Same<z.output<typeof BrowserRowSchema>, BrowserRowType>,
+  Same<z.output<typeof HarnessConfigKindSchema>, HarnessConfigKindType>,
+  Same<z.output<typeof HookEventSchema>, HookEventType>,
+  Same<z.output<typeof HookCommandHandlerSchema>, HookCommandHandlerType>,
+  Same<z.output<typeof HookHttpHandlerSchema>, HookHttpHandlerType>,
+  Same<z.output<typeof HookMcpToolHandlerSchema>, HookMcpToolHandlerType>,
+  Same<z.output<typeof HookPromptHandlerSchema>, HookPromptHandlerType>,
+  Same<z.output<typeof HookAgentHandlerSchema>, HookAgentHandlerType>,
+  Same<z.output<typeof HookHandlerSchema>, HookHandlerType>,
+  Same<z.output<typeof HookMatchTestSchema>, HookMatchTestType>,
+  Same<z.output<typeof McpStdioServerConfigSchema>, McpStdioServerConfigType>,
+  Same<z.output<typeof McpSSEServerConfigSchema>, McpSSEServerConfigType>,
+  Same<z.output<typeof McpHttpServerConfigSchema>, McpHttpServerConfigType>,
+  Same<z.output<typeof FleetMcpConfigSchema>, FleetMcpConfigType>,
+  Same<z.output<typeof WorkspaceCutSchema>, WorkspaceCutType>,
+  Same<z.output<typeof WorkspaceKindSchema>, WorkspaceKindType>,
+  Same<z.output<typeof BinaryUpdatePolicySchema>, BinaryUpdatePolicyType>,
+  Same<z.output<typeof RestartHoldReasonSchema>, RestartHoldReasonType>,
+  Same<z.output<typeof RestartHoldSchema>, RestartHoldType>,
+  Same<z.output<typeof BinaryDownloadSchema>, BinaryDownloadType>,
+  Same<z.output<typeof HubWaitSchema>, HubWaitType>,
+  Same<z.output<typeof BinaryUpdateLandingSchema>, BinaryUpdateLandingType>,
+  Same<z.output<typeof BinaryUpdatePhaseSchema>, BinaryUpdatePhaseType>,
+  Same<z.output<typeof KeptProcessSchema>, KeptProcessType>,
+  Same<z.output<typeof RetiringKeeperSchema>, RetiringKeeperType>,
+  Same<z.output<typeof BinaryUpdateStateSchema>, BinaryUpdateStateType>,
+  Same<z.output<typeof ReleaseManifestSchema>, ReleaseManifestType>,
   Same<z.output<typeof CompactStageSchema>, CompactStageType>,
   Same<z.output<typeof AccountHueSchema>, AccountHueType>,
   Same<z.output<typeof NamedAccountSchema>, NamedAccountType>,
@@ -1454,10 +1842,6 @@ export const proved: [
   Same<z.output<typeof EnvelopeSchema>, EnvelopeType>,
   Same<z.output<typeof FleetConvergeStateSchema>, FleetConvergeStateType>,
   Same<z.output<typeof FleetItemStatusSchema>, FleetItemStatusType>,
-  Same<z.output<typeof McpStdioServerConfigSchema>, McpStdioServerConfigType>,
-  Same<z.output<typeof McpSSEServerConfigSchema>, McpSSEServerConfigType>,
-  Same<z.output<typeof McpHttpServerConfigSchema>, McpHttpServerConfigType>,
-  Same<z.output<typeof FleetMcpConfigSchema>, FleetMcpConfigType>,
   Same<z.output<typeof FleetRefreshSchema>, FleetRefreshType>,
   Same<z.output<typeof FleetSyncOutcomeSchema>, FleetSyncOutcomeType>,
   Same<z.output<typeof FleetFaultCauseSchema>, FleetFaultCauseType>,
@@ -1481,13 +1865,6 @@ export const proved: [
   Same<z.output<typeof ModelInfoSchema>, ModelInfoType>,
   Same<z.output<typeof SignInFaultSchema>, SignInFaultType>,
   Same<z.output<typeof HarnessReportSchema>, HarnessReportType>,
-  Same<z.output<typeof HookCommandHandlerSchema>, HookCommandHandlerType>,
-  Same<z.output<typeof HookHttpHandlerSchema>, HookHttpHandlerType>,
-  Same<z.output<typeof HookMcpToolHandlerSchema>, HookMcpToolHandlerType>,
-  Same<z.output<typeof HookPromptHandlerSchema>, HookPromptHandlerType>,
-  Same<z.output<typeof HookAgentHandlerSchema>, HookAgentHandlerType>,
-  Same<z.output<typeof HookHandlerSchema>, HookHandlerType>,
-  Same<z.output<typeof MediaPathSchema>, MediaPathType>,
   Same<z.output<typeof WorkspaceToolSchema>, WorkspaceToolType>,
   Same<z.output<typeof MachineCapabilitySchema>, MachineCapabilityType>,
   Same<z.output<typeof MachineCapabilitiesSchema>, MachineCapabilitiesType>,
@@ -1542,7 +1919,6 @@ export const proved: [
   Same<z.output<typeof ThreadEventSchema>, ThreadEventType>,
   Same<z.output<typeof ThreadImageSchema>, ThreadImageType>,
   Same<z.output<typeof ThreadQuestionSchema>, ThreadQuestionType>,
-  Same<z.output<typeof WorkspaceCutSchema>, WorkspaceCutType>,
   Same<z.output<typeof WorkspaceHoldingSchema>, WorkspaceHoldingType>,
   Same<z.output<typeof SentMessageSchema>, SentMessageType>,
   Same<z.output<typeof SendPayloadSchema>, SendPayloadType>,
@@ -1559,7 +1935,48 @@ export const proved: [
   Same<z.output<typeof ExtractedSchema>, ExtractedType>,
   Same<z.output<typeof SendRefusalSchema>, SendRefusalType>,
   Same<z.output<typeof ModeAskSchema>, ModeAskType>,
+  Same<z.output<typeof InstallRouteSchema>, InstallRouteType>,
+  Same<z.output<typeof InstallSignInSchema>, InstallSignInType>,
+  Same<z.output<typeof InstallDraftSchema>, InstallDraftType>,
+  Same<z.output<typeof InstallCheckSchema>, InstallCheckType>,
+  Same<z.output<typeof InstallProblemSchema>, InstallProblemType>,
+  Same<z.output<typeof InstallStepSchema>, InstallStepType>,
+  Same<z.output<typeof InstallStateSchema>, InstallStateType>,
+  Same<z.output<typeof InstallMarkSchema>, InstallMarkType>,
+  Same<z.output<typeof InstallSchema>, InstallType>,
 ] = [
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
   true,
   true,
   true,

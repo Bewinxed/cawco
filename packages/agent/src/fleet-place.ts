@@ -36,6 +36,7 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { ownFolderSync } from "./layer";
 import { workspaceRefs } from "./workspace-records";
+import { z } from "zod";
 
 /** One place of a project on this machine: a checkout the hub named, or a clone this agent cut. */
 export interface FleetPlace {
@@ -96,8 +97,9 @@ export const placesNow = async (
     (await workspaceRefs())
       .filter((ref) => !isPlace(ref.id) && ownFolderSync(ref.id, ref.path))
       .map(async (ref): Promise<FleetPlace | undefined> => {
-        const projectId = await readRecord<unknown>(
-          workspaceProjectFile(ref.id)
+        const projectId = await readRecord(
+          workspaceProjectFile(ref.id),
+          z.string()
         ).catch(() => undefined);
         return typeof projectId === "string" &&
           projects[projectId] &&
@@ -143,7 +145,8 @@ export const placedConfig = (
 };
 
 /** The project items this agent holds, by id, as {@link keepProjectRows} keeps them. */
-type ProjectItems = Record<string, unknown>;
+const ProjectItemsSchema = z.record(z.string(), z.unknown());
+type ProjectItems = z.infer<typeof ProjectItemsSchema>;
 
 /** The project rows the items `items` carry. */
 const projectRowsOf = (items: ProjectItems): Record<string, FleetProjectRows> =>
@@ -170,6 +173,6 @@ export const keptProjectRows = async (): Promise<
   Record<string, FleetProjectRows>
 > => {
   await writing;
-  const items = await readRecord<ProjectItems>(fleetProjectRowsFile());
-  return items && typeof items === "object" ? projectRowsOf(items) : {};
+  const items = await readRecord(fleetProjectRowsFile(), ProjectItemsSchema);
+  return items ? projectRowsOf(items) : {};
 };

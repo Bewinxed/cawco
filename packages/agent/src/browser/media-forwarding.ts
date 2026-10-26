@@ -36,6 +36,7 @@ import {
 import { parse } from "yaml";
 import type { Runtime } from "./runtime";
 import { browsersDir } from "./state";
+import { MediaMeasurementSchema } from "../stored-shapes";
 
 /** What the runtime forwards to a browser's media port, and when that is short of both, what to tell the person. */
 export interface MediaForwarding {
@@ -248,7 +249,7 @@ const measurementOf = async (
   endpoint: string
 ): Promise<MediaMeasurement | undefined> => {
   const [kept, socket] = await Promise.all([
-    readRecord<MediaMeasurement>(measurementFile(endpoint)).catch(
+    readRecord(measurementFile(endpoint), MediaMeasurementSchema).catch(
       (error: unknown) => {
         if (isDamagedRecord(error)) {
           console.warn(`[browser] ${error.message}; media is measured afresh`);

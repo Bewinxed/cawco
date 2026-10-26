@@ -50,6 +50,7 @@ import {
 import { Elysia, t } from "elysia";
 import { hidden } from "./hidden";
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
+import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
 
 /** How long a discovered release is served before the host is asked again. */
 const RELEASE_TTL_MS = 15 * 60_000;
@@ -106,14 +107,6 @@ const FIRST_POLICY: BinaryUpdatePolicy = {
   autoUpdate: false,
 };
 
-const isPolicy = (value: unknown): value is BinaryUpdatePolicy => {
-  const { channel, autoUpdate } = (value ?? {}) as Record<string, unknown>;
-  return (
-    (channel === "stable" || channel === "nightly") &&
-    typeof autoUpdate === "boolean"
-  );
-};
-
 /**
  * The policy at `path`: the first one on a hub with none yet, or what is
  * wrong with it. A damaged record does not stop the hub: updates are off,
@@ -124,7 +117,7 @@ const loadPolicy = (
   path: string
 ): { policy: BinaryUpdatePolicy } | { damaged: DamagedHubRecord } => {
   try {
-    const kept = readRecordSync<unknown>(path);
+    const kept = readRecordSync(path, BinaryUpdatePolicySchema);
     if (kept === undefined) {
       // Said at every start without one: a lost record shows in the journal
       // the moment the hub runs on the first policy in its place.
@@ -132,9 +125,6 @@ const loadPolicy = (
         `[updates] no update policy at ${path}: running the first policy (${FIRST_POLICY.channel}, auto-update off) until one is saved`
       );
       return { policy: FIRST_POLICY };
-    }
-    if (!isPolicy(kept)) {
-      throw new DamagedRecord(path, "it is not an update policy");
     }
     return { policy: { channel: kept.channel, autoUpdate: kept.autoUpdate } };
   } catch (error) {

@@ -32,6 +32,8 @@ import {
   removeAccountDir,
 } from "./accounts";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
+import { z } from "zod";
+import { ProcessMarkerSchema } from "@cawco/core/process-identity";
 
 /**
  * Signing an account in on a machine from the dashboard, over the tunnel, in
@@ -124,17 +126,14 @@ export const endSignIns = (): void => {
  * daemon that was killed or crashed ends no login; the next one to start
  * reads these and ends each that is still the same process.
  */
-interface LoginMarker {
-  bootId?: string;
-  pid: number;
-  procStart?: string;
-}
+const LoginMarkerSchema = ProcessMarkerSchema.required({ pid: true });
+type LoginMarker = z.infer<typeof LoginMarkerSchema>;
 
 const markerFile = (account: string): string =>
   join(accountsRoot(), account, "login.pid");
 
 const readMarker = (account: string): LoginMarker | undefined =>
-  readRecordSync<LoginMarker>(markerFile(account));
+  readRecordSync(markerFile(account), LoginMarkerSchema);
 
 const markLogin = async (account: string, pid: number): Promise<void> => {
   const [procStart, boot] = await Promise.all([processStart(pid), bootId()]);

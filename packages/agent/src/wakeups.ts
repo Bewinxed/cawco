@@ -6,6 +6,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { z } from "zod";
 
 /**
  * The wake-ups a Claude session has scheduled for itself, as its last turn
@@ -19,10 +20,11 @@ import {
  * self-paced wake-up (`ScheduleWakeup`) is a one-shot that the list can't
  * tell apart from CronCreate's.
  */
-export interface Wakeups {
-  all: number;
-  once: number;
-}
+const WakeupsSchema = z.object({
+  all: z.int().nonnegative(),
+  once: z.int().nonnegative(),
+});
+export type Wakeups = z.infer<typeof WakeupsSchema>;
 
 const fileOf = (instanceId: string): string =>
   join(sessionWakeupsDir(), instanceId);
@@ -36,9 +38,6 @@ export const keepWakeups = async (
   await writeStateFile(fileOf(instanceId), JSON.stringify(wakeups));
 };
 
-const isCount = (value: unknown): value is number =>
-  Number.isInteger(value) && (value as number) >= 0;
-
 /**
  * The wake-ups kept for `instanceId`'s process; undefined when none were. A
  * record that is there and is not two counts is a {@link DamagedRecord}.
@@ -47,14 +46,7 @@ export const keptWakeups = async (
   instanceId: string
 ): Promise<Wakeups | undefined> => {
   const file = fileOf(instanceId);
-  const kept = await readRecord<{ all?: unknown; once?: unknown }>(file);
-  if (kept === undefined) {
-    return;
-  }
-  if (!(isCount(kept.all) && isCount(kept.once))) {
-    throw new DamagedRecord(file, "it is not two counts");
-  }
-  return { all: kept.all, once: kept.once };
+  return await readRecord(file, WakeupsSchema);
 };
 
 /** Its process ended: what was kept for it goes (a new one schedules its own). */

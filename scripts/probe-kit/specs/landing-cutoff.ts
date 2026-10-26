@@ -93,6 +93,7 @@ import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
+import { z } from "zod";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-CUTOFF-([ABCDEFG])/u;
@@ -410,8 +411,9 @@ const boundaryOf = async (
   id: string
 ): Promise<Boundary | undefined> => {
   const state = join(home, ".cawco", "workspaces", id);
-  const held = await readRecord<{ gen: string; pid: number }>(
-    join(state, "boundary.json")
+  const held = await readRecord(
+    join(state, "boundary.json"),
+    z.object({ gen: z.string(), pid: z.number() })
   ).catch(() => undefined);
   if (!held) {
     return;

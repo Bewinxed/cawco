@@ -37,6 +37,7 @@ import {
   readRecord,
   readTextRecord,
 } from "@cawco/core/state-file";
+import { z } from "zod";
 
 interface Known extends DamagedRecordReport {
   /** When the file was last written as the damage was found: written since, it is read again. */
@@ -133,6 +134,9 @@ export const damagedRecords = async (): Promise<DamagedRecordReport[]> => {
 };
 
 /** Reads one record; a damaged one is reported, a missing one or one that cannot be read at all is left. */
+/** A record read for whether it parses at all: its own reader checks its shape. */
+const anyRecord = (file: string): Promise<unknown> => readRecord(file, z.unknown());
+
 const check = async (
   file: string,
   read: (file: string) => Promise<unknown>
@@ -186,7 +190,7 @@ export const sweepRecords = async (): Promise<void> => {
     const dir = join(workspacesDir(), id);
     for (const name of await withoutTemporaries(dir)) {
       if (WORKSPACE_RECORD.test(name)) {
-        checks.push(check(join(dir, name), readRecord));
+        checks.push(check(join(dir, name), anyRecord));
       } else if (WORKSPACE_TEXT.test(name)) {
         checks.push(check(join(dir, name), readTextRecord));
       }
@@ -194,14 +198,14 @@ export const sweepRecords = async (): Promise<void> => {
   }
   for (const dir of [sessionWakeupsDir(), sessionTakenDir()]) {
     for (const name of await withoutTemporaries(dir)) {
-      checks.push(check(join(dir, name), readRecord));
+      checks.push(check(join(dir, name), anyRecord));
     }
   }
   for (const account of await namesIn(accountsRoot())) {
     const dir = join(accountsRoot(), account);
     for (const name of await withoutTemporaries(dir)) {
       if (name === "credential.json" || name === "login.pid") {
-        checks.push(check(join(dir, name), readRecord));
+        checks.push(check(join(dir, name), anyRecord));
       }
     }
   }

@@ -7,6 +7,8 @@ import {
   EffortLevelSchema,
   ExtractedSchema,
   HarnessKindSchema,
+  InstallDraftSchema,
+  InstallSchema,
   MachinePathSchema,
   ModeAskSchema,
   MoveAskSchema,
@@ -49,6 +51,7 @@ import type {
   ContinueRequest as ContinueRequestType,
   PreparedContinuation as PreparedContinuationType,
 } from "../continuation";
+import type { InstallsRecord as InstallsRecordType } from "../installs";
 import type { MoveState as MoveStateType } from "../moves";
 import type {
   ConnectionAppSecret as ConnectionAppSecretType,
@@ -325,11 +328,24 @@ export const WorkspaceFromSchema = z.object({
   workspace: z.string(),
 });
 
-/** Each property, through every level, as a plain object type. */
+export const InstallsRecordSchema = z.object({
+  draft: InstallDraftSchema.nullable(),
+  installs: z.array(
+    InstallSchema.omit({ keys: true }).extend({
+      code: z.string().nullable().optional(),
+      keys: InstallSchema.shape.keys.optional(),
+    })
+  ),
+});
+
+/**
+ * Each property, through every level, as a plain object type. `readonly`
+ * goes: it says what code may do with a value, not what a record holds.
+ */
 type Flat<T> = T extends readonly unknown[]
-  ? { [K in keyof T]: Flat<T[K]> }
+  ? { -readonly [K in keyof T]: Flat<T[K]> }
   : T extends object
-    ? { [K in keyof T]: Flat<T[K]> }
+    ? { -readonly [K in keyof T]: Flat<T[K]> }
     : T;
 /** Whether A and B are the same type, once flattened. */
 type Same<A, B> =
@@ -390,7 +406,9 @@ export const proved: [
   Same<z.output<typeof WorkItemSubmissionSchema>, WorkItemSubmissionType>,
   Same<z.output<typeof WorkLandingSchema>, WorkLandingType>,
   Same<z.output<typeof WorkspaceFromSchema>, WorkspaceFromType>,
+  Same<z.output<typeof InstallsRecordSchema>, InstallsRecordType>,
 ] = [
+  true,
   true,
   true,
   true,
