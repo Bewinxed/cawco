@@ -1,6 +1,4 @@
 <script lang="ts" module>
-  const HOUR = 3_600_000;
-  const DAY = 24 * HOUR;
   /** How many days ahead the hub tells a routine's runs (hub routines.ts `nextRunsOf`). */
   const WEEK_DAYS = 7;
   /** How many runs it tells at most (hub routines.ts `NEXT_RUNS_MAX`). */
@@ -28,17 +26,17 @@
     if (ahead.length === 0) {
       return null;
     }
-    const days = new Set(ahead.map((at) => Math.floor(at / DAY)));
+    const days = new Set(ahead.map((at) => Math.floor(at / DAY_MS)));
     const daily =
       runs.length >= RUNS_MAX ||
       Array.from({ length: WEEK_DAYS }, (_, day) => day).every((day) =>
         days.has(day)
       );
     if (!daily) {
-      return { kind: "week", runs: ahead, span: WEEK_DAYS * DAY };
+      return { kind: "week", runs: ahead, span: WEEK_DAYS * DAY_MS };
     }
     const last = ahead.at(-1) ?? 0;
-    const span = runs.length >= RUNS_MAX && last < DAY ? last : DAY;
+    const span = runs.length >= RUNS_MAX && last < DAY_MS ? last : DAY_MS;
     return { kind: "day", runs: ahead.filter((at) => at <= span), span };
   }
 </script>
@@ -54,6 +52,7 @@
    * begins, or every six hours on a day's strip, in the measured-figure
    * face; "now" at its start. The words are its accessible name and tooltip.
    */
+  import { DAY_MS, HOUR_MS } from "@cawco/core/time";
   import { barPlace } from "#lib/cawco/usage/bar-place.js";
 
   let {
@@ -94,16 +93,16 @@
     const out = [{ at: 0, text: "now" }];
     if (kind === "day") {
       for (const hours of [6, 12, 18]) {
-        if (hours * HOUR < span) {
-          out.push({ at: hours * HOUR, text: `+${hours}h` });
+        if (hours * HOUR_MS < span) {
+          out.push({ at: hours * HOUR_MS, text: `+${hours}h` });
         }
       }
-      out.push({ at: span, text: span === DAY ? "+24h" : "" });
+      out.push({ at: span, text: span === DAY_MS ? "+24h" : "" });
       return out.filter((mark) => mark.text);
     }
     const midnight = new Date(now);
     midnight.setHours(24, 0, 0, 0);
-    for (let at = midnight.getTime() - now; at < span; at += DAY) {
+    for (let at = midnight.getTime() - now; at < span; at += DAY_MS) {
       // A day beginning within a twentieth of the strip's start would sit on "now".
       if (at > span / 20) {
         out.push({ at, text: WEEKDAY.format(now + at) });

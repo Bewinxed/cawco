@@ -35,6 +35,7 @@ import { Database } from "bun:sqlite";
 import { appendFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
+import { HOUR_MS } from "../packages/core/src/time";
 import { TranscriptIndex } from "../packages/jsonl-parser/src/fts5";
 import { ensureDeps } from "./lib/deps";
 
@@ -327,7 +328,7 @@ const writeHistory = async (projects: string): Promise<number> => {
     const dir = join(projects, projectOf(i));
     // biome-ignore lint/performance/noAwaitInLoops: one transcript written at a time
     await mkdir(dir, { recursive: true });
-    const one = session(1000 + i, projectOf(i), SEED_BASE + i * 3_600_000);
+    const one = session(1000 + i, projectOf(i), SEED_BASE + i * HOUR_MS);
     const steps = 50 + Math.floor(rng(5000 + i)() * 200);
     let text = "";
     for (let s = 0; s < steps; s += 1) {

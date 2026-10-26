@@ -3,6 +3,8 @@
  * (USAGE-SPEC.md §4.1). Pure types only; no runtime imports.
  */
 
+import { HOUR_MS } from "../time";
+
 export type UsageHarness = "claude" | "opencode";
 
 export interface UsageTokens {
@@ -83,7 +85,7 @@ export interface OpenCodeGoLimits {
  * moves, so a turn with none confirms the reading). Past this it is stale:
  * use from anywhere else (claude.ai, another client) goes unseen.
  */
-export const CLAUDE_READING_CURRENT_MS = 60 * 60_000;
+export const CLAUDE_READING_CURRENT_MS = HOUR_MS;
 
 /**
  * A Claude account's limits, as its sessions' Claude Code reported them

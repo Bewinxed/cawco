@@ -29,6 +29,7 @@ import {
   workspaceScratchRoot,
   workspacesDir,
 } from "../packages/core/src/paths";
+import { HOUR_MS } from "../packages/core/src/time";
 
 const json = process.argv.includes("--json");
 const sizes = !process.argv.includes("--no-sizes");
@@ -100,7 +101,7 @@ const list = (dir: string): Promise<string[]> =>
 
 const ageHours = async (path: string): Promise<number> => {
   const info = await stat(path).catch(() => undefined);
-  return info ? (Date.now() - info.mtimeMs) / 3_600_000 : 0;
+  return info ? (Date.now() - info.mtimeMs) / HOUR_MS : 0;
 };
 
 interface Found {
@@ -289,7 +290,7 @@ for (const row of liveRows) {
     itemStates: of?.states ?? "",
     idleHours:
       of && of.open === 0 && of.last_end
-        ? (Date.now() - of.last_end) / 3_600_000
+        ? (Date.now() - of.last_end) / HOUR_MS
         : null,
     ...(there && sizes
       ? await cloneSize(row.path)

@@ -67,6 +67,7 @@ import type {
 } from "@cawco/core";
 import { LANDS_MODES } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
 import { Elysia, status, t } from "elysia";
@@ -112,7 +113,7 @@ export const AUTOMATION_FAILED = "AUTOMATION_FAILED";
 const EVENT_SLOT = "event:";
 
 /** How long an agent's routine lives unless kept. */
-const AGENT_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const AGENT_LIFETIME_MS = 7 * DAY_MS;
 /** The longest the scheduler sleeps between looks: expiry and a machine coming back are seen within it. */
 const NAP_MS = 15_000;
 /** The soonest the scheduler looks again. */
@@ -130,7 +131,7 @@ const CAW_OFF = "Caw is off, so only your words wake him";
 /** A run the inbox's mark started (memory.ts): slot `inbox:<time>`. */
 const INBOX_SLOT = "inbox:";
 /** The soonest a full inbox runs the curator again after its last run began. */
-const INBOX_REST_MS = 60 * 60_000;
+const INBOX_REST_MS = HOUR_MS;
 const CURATOR_NAME = "Memory curator";
 /** The curator's schedule: daily, early, in the hub's own zone. */
 const CURATOR_CRON = "0 6 * * *";
@@ -373,7 +374,7 @@ const newestDue = (cron: Cron.Cron, now: number): Date =>
   Cron.prev(cron, new Date(now + 1000));
 
 /** How far ahead a routine's runs are told: a week, the dashboard's strip. */
-const NEXT_RUNS_SPAN_MS = 7 * 24 * 60 * 60 * 1000;
+const NEXT_RUNS_SPAN_MS = 7 * DAY_MS;
 /**
  * At most this many: one day of a routine that runs every five minutes
  * (12 an hour × 24), so the strip draws a whole day of any schedule as

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { HOUR_MS } from "../packages/core/src/time";
 /**
  * Restore probe: a session whose turn was running when its process died is
  * back mid-turn once the hub restores it, handed that turn back exactly once.
@@ -248,7 +249,7 @@ async function phaseC(): Promise<void> {
   // and item-gone as the migration leaves a row from before this fix: the
   // turn it had open unrecorded, so their transcripts decide; item-gone's
   // workspace is gone. item-open keeps the open turn this hub recorded.
-  const twoHoursAgo = Date.now() - 2 * 60 * 60_000;
+  const twoHoursAgo = Date.now() - 2 * HOUR_MS;
   const byName = (name: string) => items.find((item) => item.name === name);
   const open = byName("item-open");
   const recorded = open ? instance(open.instanceId)?.turn_open_at : undefined;

@@ -12,6 +12,7 @@
  * The words are core's (`routinesWords`), which the app reads as `Words.Routines`.
  */
 import { routinesWords as words } from "@cawco/core";
+import { DAY_MS } from "@cawco/core/time";
 
 const DAY_NAMES = words.dayNames;
 
@@ -92,7 +93,7 @@ function dayIn(zone: string | undefined, at: number): number {
   }).formatToParts(at);
   const get = (type: string) =>
     Number(parts.find((part) => part.type === type)?.value);
-  return Date.UTC(get("year"), get("month") - 1, get("day")) / 86_400_000;
+  return Date.UTC(get("year"), get("month") - 1, get("day")) / DAY_MS;
 }
 
 /**
@@ -172,7 +173,7 @@ const dayOf = (at: number) => new Date(at).setHours(0, 0, 0, 0);
 
 /** "Today 09:00", "Tomorrow 09:00", "Yesterday 23:30", "Mon 09:00", "3 Oct 09:00", in the reader's zone. */
 export function whenOf(at: number): string {
-  const days = Math.round((dayOf(at) - dayOf(Date.now())) / 86_400_000);
+  const days = Math.round((dayOf(at) - dayOf(Date.now())) / DAY_MS);
   const time = TIME.format(at);
   if (days === 0) {
     return words.today(time);

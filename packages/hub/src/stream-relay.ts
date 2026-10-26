@@ -53,6 +53,7 @@ import {
   STREAM_RELAY_WORDS,
   streamRelayUrls,
 } from "@cawco/core/stream-relay";
+import { DAY_MS } from "@cawco/core/time";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
@@ -62,7 +63,7 @@ const STUN_MS = 3000;
 /** How often the relay's ports are asked. */
 const HEALTH_MS = 60_000;
 /** How often a relay with a DNS name is asked to renew its certificate (certbot decides). */
-const RENEW_MS = 24 * 60 * 60_000;
+const RENEW_MS = DAY_MS;
 /** How long a relay start may take: a pull of coturn's image and its bind. */
 const START_MS = 240_000;
 /** How long a certificate's issue may take: certbot's pull and its challenge. */

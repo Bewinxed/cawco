@@ -58,6 +58,7 @@ import {
   machinePath,
 } from "@cawco/core/machine-path";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import { DAY_MS } from "@cawco/core/time";
 import { hubRemoteIdentity, normaliseRemote } from "@cawco/core/upstream-guard";
 import { checkoutOf, type DbShape, type MoveRow, type ProjectRow } from "./db";
 import { bareRepoPath } from "./git-remote";
@@ -201,7 +202,7 @@ export class MoveRefused extends Error {
 }
 
 /** How long a step may take before the hub stops waiting on its answer. */
-const STEP_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const STEP_TIMEOUT_MS = DAY_MS;
 const INSPECT_TIMEOUT_MS = 60_000;
 /** How long a started or cancelled job is kept for a screen that was away. */
 const SETTLED_KEPT_MS = 10 * 60 * 1000;

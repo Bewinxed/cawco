@@ -59,6 +59,7 @@ import {
   signal as signalPid,
   spawnedPid,
 } from "../packages/core/src/signal";
+import { DAY_MS } from "../packages/core/src/time";
 import { startedPath } from "../packages/core/src/workspace-needs";
 import { installDeps } from "./lib/deps";
 import { requireDiskRoom } from "./lib/disk-room";
@@ -2059,7 +2060,7 @@ async function standUp(
         claudeAiOauth: {
           accessToken: "sk-ant-oat01-fake-scratch-fleet",
           refreshToken: "sk-ant-ort01-fake-scratch-fleet",
-          expiresAt: Date.now() + 365 * 24 * 60 * 60_000,
+          expiresAt: Date.now() + 365 * DAY_MS,
           scopes: ["user:inference", "user:profile"],
           subscriptionType: "max",
         },

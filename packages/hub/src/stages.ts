@@ -46,6 +46,7 @@
  */
 
 import { STAGE_KINDS as KINDS, type StageKind } from "@cawco/core";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind), core's: a view binds to them too. */
 export type { StageKind } from "@cawco/core";
@@ -123,9 +124,9 @@ const STAGES_LIMIT = 32;
 
 const MS: Record<string, number> = {
   m: 60_000,
-  h: 3_600_000,
-  d: 86_400_000,
-  w: 604_800_000,
+  h: HOUR_MS,
+  d: DAY_MS,
+  w: 7 * DAY_MS,
 };
 
 const isKind = (word: string): word is StageKind =>

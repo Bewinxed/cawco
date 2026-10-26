@@ -54,6 +54,7 @@ import {
   type StarterPlace,
   type StartersChangedFrame,
 } from "@cawco/core";
+import { DAY_MS } from "@cawco/core/time";
 import { Elysia, t } from "elysia";
 import type { DbShape, WorkItemRow } from "./db";
 import { designShaped } from "./design-offers";
@@ -73,8 +74,6 @@ import {
 } from "./starter-asks";
 import type { TaskEvent, TaskSummary, Tasks } from "./tasks";
 import { STARTERS_GAP_MS, STARTERS_QUIET_MS } from "./upstreams";
-
-const DAY_MS = 86_400_000;
 
 /** Quiet before a project's starters are written: 60 s with no other ask. */
 export const QUIET_MS = STARTERS_QUIET_MS;

@@ -9,6 +9,7 @@
    * (dragToDismiss), as × and a press on the scrim do. The story's control
    * stands folded under the screen.
    */
+  import { HOUR_MS } from "@cawco/core/time";
   import { onDestroy, untrack } from "svelte";
   import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
   import NeedsRow from "#lib/cawco/home/NeedsRow.svelte";
@@ -46,9 +47,9 @@
       onCap: "quiet",
       period: "day",
       reached: true,
-      resetsAt: Date.now() + 6 * 3_600_000,
+      resetsAt: Date.now() + 6 * HOUR_MS,
       spentUsd: 12.4,
-      startsAt: Date.now() - 18 * 3_600_000,
+      startsAt: Date.now() - 18 * HOUR_MS,
       usd: 10,
     },
     title: "cockpit",

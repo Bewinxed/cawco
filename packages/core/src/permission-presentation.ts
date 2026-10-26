@@ -15,6 +15,7 @@ import { type MemoryScope, scopeWords } from "./fleet";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./frames";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
+import { DAY_MS } from "./time";
 import { UPSTREAM_POST_TOOL } from "./upstream-post";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
@@ -464,7 +465,6 @@ function mcpTarget(config: Record<string, unknown>): string | undefined {
   return cut([command, ...args].join(" "), COMMAND_CAP);
 }
 
-const DAY_MS = 86_400_000;
 const COUNT = new Intl.NumberFormat("en");
 const DAY = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",

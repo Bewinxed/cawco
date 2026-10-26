@@ -24,13 +24,13 @@ import type { LookupFunction } from "node:net";
 import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { writeStateFile } from "@cawco/core/state-file";
+import { DAY_MS } from "@cawco/core/time";
 import { faviconReachable } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
 
 const DIR = join(dirname(DB_PATH), "favicons");
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const ICON_KEPT_MS = 7 * DAY_MS;
 const MISS_KEPT_MS = DAY_MS;
 const TIMEOUT_MS = 5000;

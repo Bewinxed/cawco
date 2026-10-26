@@ -38,6 +38,7 @@ import {
   type ViewToolName,
   viewTitle,
 } from "@cawco/core";
+import { DAY_MS } from "@cawco/core/time";
 import { viewToolInput } from "@cawco/core/views-library";
 import { Elysia, t } from "elysia";
 import type { Blocks } from "./blocks";
@@ -64,7 +65,6 @@ const EXT = ".oui";
 /** An ISO 8601 date, or a date and time: a task file's field that places it on a calendar. */
 const ISO_DATE =
   /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/u;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const nameOf = (raw: string): string =>
   VIEW_NAME.test(raw)

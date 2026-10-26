@@ -10,6 +10,7 @@ import {
   type SendPayload,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { HOUR_MS } from "@cawco/core/time";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
@@ -41,13 +42,12 @@ export const promptCacheExpiresAt = (
   }
   if (row.cacheTtl && row.lastRequestAt) {
     return (
-      row.lastRequestAt.getTime() +
-      (row.cacheTtl === "1h" ? 3_600_000 : 300_000)
+      row.lastRequestAt.getTime() + (row.cacheTtl === "1h" ? HOUR_MS : 300_000)
     );
   }
   // Without a measurement, only the longest Claude lifetime proves expiry.
   return row.harness === "claude" && lastTurnAt
-    ? new Date(lastTurnAt).getTime() + 3_600_000
+    ? new Date(lastTurnAt).getTime() + HOUR_MS
     : null;
 };
 

@@ -76,6 +76,7 @@ import {
   presenceLogWords,
 } from "@cawco/core";
 import { plainAddress } from "@cawco/core/public-address";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { Elysia, t } from "elysia";
 import type { AwayStretch, DbShape, PresenceClientRow } from "./db";
 import { addressOf } from "./hub-auth";
@@ -92,7 +93,7 @@ const SWEEP_MS = 10_000;
  */
 const SAME_INPUT_MS = 2000;
 /** How long a client silent since is kept, unknown: a day. */
-const CLIENT_KEPT_MS = 24 * 60 * 60_000;
+const CLIENT_KEPT_MS = DAY_MS;
 /**
  * How long a session's last moment in front is kept: far longer than any
  * outlet takes from an item landing to offering it (a turn's grace, a task's
@@ -100,11 +101,11 @@ const CLIENT_KEPT_MS = 24 * 60 * 60_000;
  */
 const FRONT_KEPT_MS = 10 * 60_000;
 /** How far back a push's `cawco.cleared` reaches, and how many it carries. */
-const CARRIED_MS = 24 * 60 * 60_000;
+const CARRIED_MS = DAY_MS;
 const CARRIED_IDS = 50;
 /** How long sends and clears are kept. */
-const KEPT_MS = 3 * 24 * 60 * 60_000;
-const PRUNE_MS = 60 * 60_000;
+const KEPT_MS = 3 * DAY_MS;
+const PRUNE_MS = HOUR_MS;
 /**
  * How far a device's clock may run behind the hub's: a dismissal's
  * `deliveredAt` is the device's time, `sent_at` the hub's.

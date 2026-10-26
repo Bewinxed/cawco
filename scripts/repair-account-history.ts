@@ -32,6 +32,7 @@ import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { DatabaseHeld, lockDatabase } from "../packages/core/src/db-lock";
+import { MINUTE_MS } from "../packages/core/src/time";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -53,8 +54,6 @@ if (!(dbPath && values.account && values.identity && Number.isFinite(since))) {
 const accountId = values.account;
 const identity = values.identity.toLowerCase();
 const dryRun = values["dry-run"];
-
-const MINUTE_MS = 60_000;
 
 interface HistoryRow {
   account_id: string;

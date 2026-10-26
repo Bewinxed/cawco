@@ -46,6 +46,7 @@ import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { HOUR_MS } from "@cawco/core/time";
 import type { Subprocess } from "bun";
 import { hubOriginOf, useHubCredentialHelper } from "./git-credential";
 import { notAProject, placeSettled, placeTurn } from "./place-repo";
@@ -489,7 +490,7 @@ interface Run {
 const runs = new Map<string, Run>();
 /** What each job's steps answered, kept so a hub that missed the answer hears it. */
 const answered = new Map<string, { at: number; result: unknown }>();
-const ANSWER_KEPT_MS = 60 * 60 * 1000;
+const ANSWER_KEPT_MS = HOUR_MS;
 
 const runStep = <T>(
   jobId: string,

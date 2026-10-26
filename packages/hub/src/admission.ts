@@ -1,4 +1,5 @@
 import { accountNameAmong, costForUsage } from "@cawco/core";
+import { DAY_MS } from "@cawco/core/time";
 import type { LimitRow } from "./at-limit";
 import type { DbShape } from "./db";
 import { usdPerPercent } from "./forecast";
@@ -41,7 +42,7 @@ import { SESSION_WINDOW_MS } from "./placement";
 export const NEXT_TURN_ALLOWANCE_USD = 0.42;
 
 /** How far back an account's dollars per percent is measured: a weekly window and a day, as the forecast reads. */
-const LOOKBACK_MS = 8 * 24 * 3_600_000;
+const LOOKBACK_MS = 8 * DAY_MS;
 /** How long one account's measured dollars per percent is kept between reads. */
 const PER_PCT_FOR_MS = 60_000;
 

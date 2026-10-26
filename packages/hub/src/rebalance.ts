@@ -16,6 +16,7 @@ import {
   windowWords,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { NEXT_TURN_ALLOWANCE_USD, usdWords } from "./admission";
 import {
   type AtLimitPorts,
@@ -58,8 +59,6 @@ import { type Arrival, SESSION_WINDOW_MS, WINDOW_MS } from "./placement";
  * which accounts run out and which of their sessions burn the most.
  */
 
-const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
 /** How far back a pass reads: a weekly window, and a day over for its opening reading. */
 const LOOKBACK_MS = 8 * DAY_MS;
 /** The shortest span a burn is measured over, so one turn just taken is not an hour's rate. */

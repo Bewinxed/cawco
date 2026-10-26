@@ -1,4 +1,5 @@
 import type { JevResult } from "@cawco/core/jev";
+import { DAY_MS } from "@cawco/core/time";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
@@ -21,7 +22,6 @@ export const SUGGEST_MAX = 4;
 export const SUGGEST_CANDIDATE_LIMIT = 50;
 /** A skill installed this recently is always asked about, so it can earn usage. */
 const NEW_SKILL_DAYS = 7;
-const DAY_MS = 86_400_000;
 
 /** Tools every session has and never needs pointing at. */
 export const NEVER_SUGGEST_TOOLS = new Set([

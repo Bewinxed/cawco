@@ -15,6 +15,7 @@ import {
   listClaudeFiles,
   opencodeDatabases,
 } from "@cawco/core/paths";
+import { DAY_MS } from "@cawco/core/time";
 import { parseClaudeLine } from "./scan-claude";
 import { scanOpencode } from "./scan-opencode";
 import type { ScannedRecord } from "./types";
@@ -65,7 +66,7 @@ const SCANNER_VERSION = 3;
  * incremental scans leave: a replaced message's stale window edge
  * (`#takeBack`) and a transcript that was deleted.
  */
-const HEAL_MS = 24 * 60 * 60 * 1000;
+const HEAL_MS = DAY_MS;
 
 const TABLES = [
   "meta",

@@ -88,6 +88,7 @@ import {
   PREVIEW_PORT_PASS_COOKIE,
   type PreviewTicket,
 } from "@cawco/core";
+import { DAY_MS } from "@cawco/core/time";
 import type { PreviewPassesDb, PreviewPassRow } from "./db/preview-passes";
 import { hubSecrets } from "./secret-box";
 
@@ -99,7 +100,7 @@ export const TICKET_MS = 60_000;
  * absolute timeout). Past it the next load is locked, and the dashboard or
  * the app enters again with a new ticket, unseen.
  */
-const PASS_MS = 30 * 24 * 60 * 60 * 1000;
+const PASS_MS = 30 * DAY_MS;
 /**
  * How long a session's pass stands from its ticket's minting, however it is
  * used: 15 minutes, absolute (the orchestrator's call; a session mints

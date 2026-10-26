@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import type { NeutralMessage } from "@cawco/core";
 import { listClaudeFiles } from "@cawco/core/paths";
+import { DAY_MS } from "@cawco/core/time";
 import type { DbShape } from "./db";
 
 /**
@@ -29,7 +30,6 @@ export const USAGE_HALF_LIFE_DAYS = 14;
 const BACKFILL_DAYS = 30;
 /** Rows older than this weigh under 0.3% at a 14-day half-life, so they are not read. */
 const SCORE_WINDOW_DAYS = 120;
-const DAY_MS = 86_400_000;
 
 const COMMAND_NAME = /<command-name>\/?([^<\s]+)<\/command-name>/u;
 

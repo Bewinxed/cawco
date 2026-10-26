@@ -61,6 +61,7 @@ import { join, resolve } from "node:path";
 import { machinePath } from "../packages/core/src/machine-path";
 import { processStart } from "../packages/core/src/process-identity";
 import { identifiedPid, type Pid, signal } from "../packages/core/src/signal";
+import { HOUR_MS } from "../packages/core/src/time";
 import {
   startedPath,
   systemProgram,
@@ -168,7 +169,7 @@ if (role === "sessiond") {
   );
   const sqlite = new Database(process.env.CAWCO_DB_PATH);
   migrate(drizzle(sqlite), { migrationsFolder: folder });
-  const t0 = Date.now() - 6 * 3_600_000;
+  const t0 = Date.now() - 6 * HOUR_MS;
   const at = (minutes: number) => t0 + minutes * 60_000;
   const ids = {
     r: crypto.randomUUID(),
@@ -485,7 +486,7 @@ if (role === "sessiond") {
             db.accounts.setBench(
               account,
               null,
-              Date.now() + (ms ?? 4 * 3_600_000)
+              Date.now() + (ms ?? 4 * HOUR_MS)
             );
             return { ok: true };
           })
@@ -515,7 +516,7 @@ if (role === "sessiond") {
             // reset, and that pace carried to another account lasts there.
             const { account } = body as { account: string };
             const now = Date.now();
-            const resetsAt = new Date(now + 4 * 3_600_000).toISOString();
+            const resetsAt = new Date(now + 4 * HOUR_MS).toISOString();
             const reading = (percent: number) => ({
               windows: [
                 {
@@ -2091,7 +2092,7 @@ if (role === "sessiond") {
         "go",
         () => Promise.resolve(existsSync(join(dir, "go"))),
         Boolean,
-        3_600_000
+        HOUR_MS
       );
       await writeFile(join(dir, `limit-${a}`), "at its limit");
       await api("/proof/limit", { account: a });
@@ -2110,7 +2111,7 @@ if (role === "sessiond") {
         "stop",
         () => Promise.resolve(existsSync(join(dir, "stop"))),
         Boolean,
-        3_600_000
+        HOUR_MS
       );
     }
     console.log("\nPROOF PASSED");

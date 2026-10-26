@@ -37,6 +37,8 @@
  * a doc the hub says is gone ({@link ARTIFACT_GONE}) is let go at once.
  */
 
+import { DAY_MS } from "./time";
+
 /** The hub's close code for an artifact removed while a doc is joined (hub artifacts/sync.ts). */
 export const ARTIFACT_GONE = 4410;
 
@@ -44,7 +46,7 @@ export const ARTIFACT_GONE = 4410;
 export const deviceDocName = (id: string): string => `cawco-artifact:${id}`;
 
 /** How long a device keeps the doc of an artifact no one opened there, ms: 30 days. Our call. */
-export const DEVICE_DOC_MS = 30 * 24 * 60 * 60 * 1000;
+export const DEVICE_DOC_MS = 30 * DAY_MS;
 
 /** Where a device notes when it last opened artifact `id`'s doc (localStorage, beside its database). */
 const usedKey = (id: string) => `cawco-artifact-used:${id}`;

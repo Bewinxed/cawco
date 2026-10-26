@@ -1,4 +1,5 @@
 import type { ModelTurnUsage } from "../harness";
+import { DAY_MS, HOUR_MS } from "../time";
 import snapshot from "./pricing-snapshot.json";
 import type { UsageTokens } from "./types";
 
@@ -48,7 +49,7 @@ export interface PricingSnapshot {
 }
 
 const PER_MILLION = 1_000_000;
-const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const REFRESH_INTERVAL_MS = DAY_MS;
 const MODELS_DEV_URL = "https://models.dev/api.json";
 
 /**
@@ -130,7 +131,7 @@ const CHINESE_HOLIDAYS: readonly (readonly [string, string])[] = [
 
 /** China's date (UTC+8) at `at`, `YYYY-MM-DD`. */
 const chinaDate = (at: number): string =>
-  new Date(at + 8 * 3_600_000).toISOString().slice(0, 10);
+  new Date(at + 8 * HOUR_MS).toISOString().slice(0, 10);
 
 const chineseHoliday = (at: number): boolean => {
   const day = chinaDate(at);

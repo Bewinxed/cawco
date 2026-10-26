@@ -9,6 +9,7 @@
    * press outside put it back where it came from; its work goes on, and the
    * row says where it stands.
    */
+  import { HOUR_MS } from "@cawco/core/time";
   import { onDestroy, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
@@ -50,9 +51,9 @@
       onCap: "quiet",
       period: "day",
       reached: true,
-      resetsAt: Date.now() + 6 * 3_600_000,
+      resetsAt: Date.now() + 6 * HOUR_MS,
       spentUsd: 12.4,
-      startsAt: Date.now() - 18 * 3_600_000,
+      startsAt: Date.now() - 18 * HOUR_MS,
       usd: 10,
     },
     title: "cockpit",

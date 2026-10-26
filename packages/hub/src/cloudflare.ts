@@ -15,13 +15,14 @@
 import { BlockList, isIPv4 } from "node:net";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { DAY_MS } from "@cawco/core/time";
 
 const API = "https://api.cloudflare.com/client/v4";
 const IPS = "https://www.cloudflare.com/ips-v4/";
 /** How long Cloudflare has to answer one request. */
 const CALL_MS = 15_000;
 /** How long a read of Cloudflare's ranges serves before it is read again. */
-const RANGES_MS = 24 * 60 * 60_000;
+const RANGES_MS = DAY_MS;
 
 /** Cloudflare's v4 envelope. */
 interface Envelope<T> {

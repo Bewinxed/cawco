@@ -57,6 +57,7 @@ import {
   type WaitTarget,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { HOUR_MS } from "@cawco/core/time";
 import { Elysia, status, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
@@ -434,7 +435,7 @@ export interface IngressDeps {
 }
 
 /** How long a pull request or run nobody has asked about stays on the poll's list. Our choice. */
-const WAIT_ASKED_MS = 60 * 60_000;
+const WAIT_ASKED_MS = HOUR_MS;
 /** The states a wait on GitHub keeps for good: the poll stops asking. */
 const FINAL_WAITS: ReadonlySet<GitHubWaitState> = new Set(["merged", "green"]);
 

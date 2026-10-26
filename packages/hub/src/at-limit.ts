@@ -27,6 +27,7 @@ import {
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
+import { MINUTE_MS } from "@cawco/core/time";
 import {
   type Admission,
   type Ledger,
@@ -160,8 +161,6 @@ export interface Kept {
 }
 
 /* ------------------------------------------ the decision, one pure pass — */
-
-const MINUTE_MS = 60_000;
 
 /**
  * Who waits on a stopped session: a person (`watched`: a question or

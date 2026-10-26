@@ -34,6 +34,7 @@ import {
   type StoppedCommands,
   stoppedWords,
 } from "@cawco/core";
+import { DAY_MS } from "@cawco/core/time";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
@@ -120,7 +121,7 @@ export const whenStopped = (stop: AbortSignal | undefined): Promise<void> =>
   });
 
 /** The longest a single timer is armed for; a later end is armed again from there. */
-const TIMER_MAX_MS = 24 * 60 * 60 * 1000;
+const TIMER_MAX_MS = DAY_MS;
 
 /**
  * The session whose own tool call asked for a pause, and that call by its

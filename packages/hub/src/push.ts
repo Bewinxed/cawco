@@ -102,6 +102,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import { DAY_MS } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
 import type {
@@ -142,7 +143,7 @@ const QUIET_MS = 10_000;
 /** And at most this long from its first: nothing held waits longer for the owner. */
 const BURST_MS = 30_000;
 /** How long a burst's push is kept for clearing once every item it named has cleared. */
-const COVER_KEPT_MS = 24 * 60 * 60_000;
+const COVER_KEPT_MS = DAY_MS;
 /** An undelivered push is worth nothing after a day. */
 const EXPIRY_S = 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 10_000;

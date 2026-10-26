@@ -147,6 +147,7 @@ import {
   type StoryOp,
 } from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
+import { DAY_MS } from "@cawco/core/time";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
@@ -7563,7 +7564,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * a person who has moved on.
      */
     resumeMarks: (): void => {
-      for (const row of db.touchedSince(new Date(Date.now() - 86_400_000))) {
+      for (const row of db.touchedSince(new Date(Date.now() - DAY_MS))) {
         marked(row.id);
       }
     },

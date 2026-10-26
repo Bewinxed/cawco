@@ -128,6 +128,7 @@ import {
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
+import { DAY_MS } from "@cawco/core/time";
 import {
   CONTROL_FORGE_POST,
   type ForgeVerdict,
@@ -1161,7 +1162,7 @@ const SLEEP_WAKES = 2;
  * session asleep a day is work nobody is waiting on, and the obelisk storm's
  * (2026-10-23) had slept for weeks.
  */
-const ASLEEP_WAKE_LIMIT_MS = 24 * 60 * 60_000;
+const ASLEEP_WAKE_LIMIT_MS = DAY_MS;
 
 /** The longest `item`'s session may sleep and be woken: its budget's minutes, else {@link ASLEEP_WAKE_LIMIT_MS}. */
 const asleepLimit = (item: WorkItemRow): { ms: number; words: string } => {

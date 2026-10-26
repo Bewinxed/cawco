@@ -1,4 +1,5 @@
 import { readWithin } from "@cawco/core/bounded";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -39,9 +40,9 @@ const LISTER_TIMEOUT_MS = 30_000;
 /** A session the hub has not heard from in this long, with no stream open, is forgotten. */
 const IDLE_MS = 30 * 60_000;
 /** A kept session's use is written at most this often. */
-const TOUCH_MS = 60 * 60_000;
+const TOUCH_MS = HOUR_MS;
 /** A kept session unused this long is dropped from the store (CawCo's own bound: rows are small, sessions can rest for days). */
-const SESSION_TTL_MS = 30 * 24 * 60 * 60_000;
+const SESSION_TTL_MS = 30 * DAY_MS;
 const BACKOFF_FIRST_MS = 1000;
 const BACKOFF_MAX_MS = 60_000;
 
@@ -289,7 +290,7 @@ export class FleetMcpRelay {
     const dropped = this.#kept.prune(new Date(now - SESSION_TTL_MS));
     if (dropped > 0) {
       console.info(
-        `[fleet-mcp] dropped ${dropped} relay session(s) unused for ${SESSION_TTL_MS / 86_400_000} days`
+        `[fleet-mcp] dropped ${dropped} relay session(s) unused for ${SESSION_TTL_MS / DAY_MS} days`
       );
     }
   }

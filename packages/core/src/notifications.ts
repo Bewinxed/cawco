@@ -16,6 +16,8 @@
  * id.
  */
 
+import { HOUR_MS } from "./time";
+
 /** Which client reports presence. */
 export type PresenceClient = "web" | "ios" | "mac";
 
@@ -122,14 +124,14 @@ export const AWAY_AFTER_DEFAULT_MS = 5 * 60_000;
 /** The shortest away clock the person can set. Our call. */
 export const AWAY_AFTER_MIN_MS = 60_000;
 /** The longest away clock the person can set. Our call. */
-export const AWAY_AFTER_MAX_MS = 4 * 60 * 60_000;
+export const AWAY_AFTER_MAX_MS = 4 * HOUR_MS;
 /** The away clocks the presence menu offers, ms. Our call, the default among them. */
 export const AWAY_AFTER_CHOICES_MS = [
   5 * 60_000,
   10 * 60_000,
   15 * 60_000,
   30 * 60_000,
-  60 * 60_000,
+  HOUR_MS,
 ] as const;
 
 /** `POST /api/person/away-clock`: the person's away clock, ms. */

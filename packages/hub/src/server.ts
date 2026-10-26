@@ -470,6 +470,7 @@ import {
   storiesKey,
 } from "@cawco/core/stage";
 import type { RelayFrame } from "@cawco/core/stream-relay";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { decideWrite, type UpstreamRules } from "@cawco/core/upstream-guard";
 import {
   CONTROL_FORGE_POST,
@@ -1082,7 +1083,7 @@ const findCaller = (request: Request): string => {
 /** How long a states file's read in its workspace may take before a handed input is refused: a `cat` of one source file. Our call. */
 const WORKSPACE_READ_MS = 15_000;
 /** How often the hub reads every skill's and plugin's source for an update. */
-const UPDATE_CHECK_MS = 6 * 60 * 60_000;
+const UPDATE_CHECK_MS = 6 * HOUR_MS;
 
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5000;
@@ -26864,7 +26865,7 @@ export const createServer = (
     }
   };
   pruneTurnUsage();
-  lifetime.every(86_400_000, pruneTurnUsage);
+  lifetime.every(DAY_MS, pruneTurnUsage);
 
   const keepAliveScheduler = createKeepAliveScheduler({
     lifetime,
@@ -28393,7 +28394,7 @@ export const createServer = (
    * a refresh that succeeded since ("the refresh token is rotated on use",
    * github.com/anthropics/claude-code/issues/52202).
    */
-  const SIGNIN_PROVEN_MS = 8 * 60 * 60_000;
+  const SIGNIN_PROVEN_MS = 8 * HOUR_MS;
 
   /**
    * The tokens one request to `row`'s model may send, as the fleet knows it
@@ -33808,7 +33809,7 @@ export const createServer = (
           const readings = db.accounts.readings();
           const history = accounts.flatMap((account) =>
             db.accounts
-              .history({ accountId: account.id, since: now - 7 * 86_400_000 })
+              .history({ accountId: account.id, since: now - 7 * DAY_MS })
               .map((row) => ({
                 accountId: row.accountId,
                 kind: row.kind,
@@ -35600,7 +35601,7 @@ export const createServer = (
                   }
                   const hours = (
                     (Date.now() - row.updatedAt.getTime()) /
-                    3_600_000
+                    HOUR_MS
                   ).toFixed(1);
                   const note = custodyReason(hours);
                   heldSessions.set(row.id, {

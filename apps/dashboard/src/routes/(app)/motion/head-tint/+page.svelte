@@ -21,6 +21,7 @@
    * navigate to the session.
    */
   import type { PulseFrame, SessionPulse } from "@cawco/core";
+  import { HOUR_MS } from "@cawco/core/time";
   import { onMount, untrack } from "svelte";
   import { blankSession } from "#lib/cawco/client.svelte.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
@@ -96,7 +97,7 @@
 
   /** One session's history, read back: every turn in hand. */
   function history(id: string): Message[] {
-    const at = new Date(Date.now() - 3_600_000).getTime();
+    const at = new Date(Date.now() - HOUR_MS).getTime();
     const rows: Message[] = [];
     let n = 0;
     const stamp = () => new Date(at + n * 20_000).toISOString();

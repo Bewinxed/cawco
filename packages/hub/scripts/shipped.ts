@@ -9,6 +9,8 @@
  * commit this clone lacks is fetched by its id.
  */
 
+import { DAY_MS } from "@cawco/core/time";
+
 /**
  * How long a TestFlight build stays installable: "Your build becomes
  * unavailable for testers after 90 days"
@@ -16,7 +18,6 @@
  * One expired early by hand is still counted, the safe side.
  */
 const TESTFLIGHT_DAYS = 90;
-const DAY_MS = 86_400_000;
 /**
  * TestFlight builds the hub no longer serves, `<platform> <build>`, though
  * still inside their 90 days: no hub built from here is held to what they

@@ -9,6 +9,7 @@ import type {
   ProjectCap,
   UsageSpend,
 } from "@cawco/core";
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start
@@ -20,7 +21,7 @@ export function hubMidnight(
   spend: Pick<UsageSpend, "todayStart" | "timeZone">,
   days: number
 ): number {
-  const guess = spend.todayStart - days * 24 * HOUR_MS;
+  const guess = spend.todayStart - days * DAY_MS;
   const hour = Number(
     new Intl.DateTimeFormat("en-US", {
       timeZone: spend.timeZone,
@@ -86,10 +87,6 @@ export const totalTokensOf = (r: {
 }): number => r.input + r.output + r.cacheCreation + r.cacheRead + r.reasoning;
 
 /* ---- Limit windows (DESIGN.md, Limit bar) ------------------------------- */
-
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
 
 /** "5-hour", "Week", "Week · Fable", "Month". */
 export function windowLabel(w: LimitWindow): string {

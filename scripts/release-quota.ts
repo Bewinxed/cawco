@@ -15,12 +15,12 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { DAY_MS } from "../packages/core/src/time";
 
 /** Apple's limit per day. */
 export const NOTARIZATIONS_PER_DAY = 75;
 /** What one release submits: darwin-arm64 and darwin-x64. */
 export const NOTARIZATIONS_PER_RELEASE = 2;
-const DAY_MS = 24 * 60 * 60_000;
 
 /** The ledger: one JSON line per submission, `{ at, target, version }`. */
 export const notarizationLedger = (): string =>

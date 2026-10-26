@@ -9,6 +9,7 @@ import type {
   WindowForecast,
   WindowRef,
 } from "@cawco/core";
+import { HOUR_MS } from "@cawco/core/time";
 import { place } from "./placement";
 
 /**
@@ -18,7 +19,6 @@ import { place } from "./placement";
  * every reader (the usage screen, the at-limit logic) gets the same answer.
  */
 
-const HOUR_MS = 3_600_000;
 /** How far the carry sequence looks ahead: one 5-hour window. */
 export const HORIZON_MS = 5 * HOUR_MS;
 

@@ -11,6 +11,7 @@ import {
   type PermissionPresentation,
   presentPermission,
 } from "@cawco/core/permission-presentation";
+import { HOUR_MS } from "@cawco/core/time";
 import {
   describePost,
   UPSTREAM_POST_TOOL,
@@ -165,9 +166,9 @@ export const Budget = {
         onCap: "quiet",
         period: "day",
         reached: true,
-        resetsAt: Date.now() + 6 * 3_600_000,
+        resetsAt: Date.now() + 6 * HOUR_MS,
         spentUsd: 12.4,
-        startsAt: Date.now() - 18 * 3_600_000,
+        startsAt: Date.now() - 18 * HOUR_MS,
         usd: 10,
       },
       title: "cockpit",

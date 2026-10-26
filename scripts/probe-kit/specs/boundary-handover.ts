@@ -74,6 +74,7 @@ import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
+import { HOUR_MS } from "../../../packages/core/src/time";
 import {
   envOf,
   MACHINE,
@@ -762,7 +763,7 @@ const deletedStops = async (
   const folder = await realpath(projectFolderOf(fleet, h.project));
   const before = Date.now();
   await fleet.stop("agent");
-  fleet.launch("agent", [], { CAWCO_NARROW_LOOK_MS: "3600000" });
+  fleet.launch("agent", [], { CAWCO_NARROW_LOOK_MS: String(HOUR_MS) });
   await fleet.agentUp();
   await startedSince(fleet.env, before);
   const from = fleet.seen.length;

@@ -40,6 +40,7 @@ import {
 import type { MediaPath } from "@cawco/core/capabilities";
 import { machineId } from "@cawco/core/machine-id";
 import { stunServer } from "@cawco/core/stream-relay";
+import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
 import { ensureImage } from "./image";
 import {
@@ -85,7 +86,7 @@ const LIVE_MS = 90_000;
 const LIVE_POLL_MS = 250;
 
 /** A browser whose relay credential lapses within this is started with a fresh one. */
-export const RELAY_RENEW_MS = 24 * 60 * 60_000;
+export const RELAY_RENEW_MS = DAY_MS;
 
 /** How long neko has to answer a login. */
 const LOGIN_MS = 5000;

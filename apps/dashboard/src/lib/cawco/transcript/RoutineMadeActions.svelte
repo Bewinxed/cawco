@@ -5,6 +5,7 @@
    * the routine as it stands now, so a routine kept or turned off since says
    * so, and acts through `/api/routines/:id`.
    */
+  import { DAY_MS } from "@cawco/core/time";
   import { untrack } from "svelte";
   import {
     changeRoutine,
@@ -18,8 +19,6 @@
 
   let { routine }: { routine: NonNullable<MessageMetadata["routineMade"]> } =
     $props();
-
-  const DAY_MS = 24 * 60 * 60 * 1000;
 
   let now = $state<RoutineState | null>(null);
   let problem = $state<string | null>(null);

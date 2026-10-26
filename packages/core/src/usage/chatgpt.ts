@@ -50,7 +50,7 @@ interface UsageRaw {
 }
 
 const FIVE_HOURS_S = 18_000;
-const WEEK_S = 604_800;
+const WEEK_WINDOW_S = 604_800;
 
 /** The window kind and group a window of this length is, or nothing for a length CawCo has no window for. */
 const shapeOf = (
@@ -59,7 +59,7 @@ const shapeOf = (
   if (seconds === FIVE_HOURS_S) {
     return { kind: "session", group: "session" };
   }
-  if (seconds === WEEK_S) {
+  if (seconds === WEEK_WINDOW_S) {
     return { kind: "weekly_all", group: "weekly" };
   }
   return undefined;

@@ -46,6 +46,7 @@ import {
   RELAY_HEADER,
 } from "@cawco/core/preview-proxy";
 import { stunServer } from "@cawco/core/stream-relay";
+import { HOUR_MS } from "@cawco/core/time";
 import type { ServerWebSocket } from "bun";
 import { Elysia } from "elysia";
 import { answered, BrowserRefusal } from "./browsers";
@@ -55,7 +56,7 @@ import type { Caller } from "./hub-auth";
 import type { RelayCall } from "./stream-relay";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
-export const VIEWER_RELAY_TTL_MS = 12 * 60 * 60_000;
+export const VIEWER_RELAY_TTL_MS = 12 * HOUR_MS;
 
 /** How long a viewer's session may take: its browser may be woken, its image built first. */
 const VIEWER_MS = 15 * 60_000;

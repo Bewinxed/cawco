@@ -16,6 +16,7 @@
  */
 
 import { RESTART_WAIT_CAP_MS } from "./binary-updates";
+import { MINUTE_MS } from "./time";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
 import { configurePage } from "./words/configure";
@@ -1348,11 +1349,9 @@ export const windowWords = (
   return "weekly";
 };
 
-const MINUTE = 60_000;
-
 /** "12 min", "2h 10m", "3d 4h": a span ahead, rounded up to the minute. */
 export const spanWords = (ms: number): string => {
-  const minutes = Math.max(1, Math.ceil(ms / MINUTE));
+  const minutes = Math.max(1, Math.ceil(ms / MINUTE_MS));
   if (minutes < 60) {
     return `${minutes} min`;
   }

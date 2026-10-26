@@ -8,11 +8,11 @@
    * date. In the reader's theme.
    */
   import type { LimitWindow } from "@cawco/core";
+  import { HOUR_MS } from "@cawco/core/time";
   import LimitBar from "#lib/cawco/usage/LimitBar.svelte";
   import ProviderLimit from "#lib/cawco/usage/ProviderLimit.svelte";
   import { fillState, firstToStop, limitRows } from "#lib/cawco/usage.js";
 
-  const HOUR = 3_600_000;
   const now = Date.now();
   /** A 5-hour window `used` percent through, resetting in `resetsIn`. */
   const five = (used: number, resetsIn: number): LimitWindow => ({
@@ -28,25 +28,25 @@
     {
       id: "calm",
       say: "38% used, 2h of 5 gone",
-      window: five(38, 3 * HOUR),
+      window: five(38, 3 * HOUR_MS),
       stale: false,
     },
     {
       id: "fast",
       say: "75% used, 2h of 5 gone",
-      window: five(75, 3 * HOUR),
+      window: five(75, 3 * HOUR_MS),
       stale: false,
     },
     {
       id: "limit",
       say: "at its limit",
-      window: five(100, 1.2 * HOUR),
+      window: five(100, 1.2 * HOUR_MS),
       stale: false,
     },
     {
       id: "stale",
       say: "out of date",
-      window: five(54, 2.5 * HOUR),
+      window: five(54, 2.5 * HOUR_MS),
       stale: true,
     },
   ];

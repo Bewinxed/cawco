@@ -4,12 +4,10 @@
  * with its noun. An absence is said, never left as a gap.
  */
 
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+
 /** An id's short handle: its first eight characters, what every tool taking that id takes back (handles.ts). */
 export const handle = (id: string): string => id.slice(0, 8);
-
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
 
 const dateOf = (at: Date | string | number): number =>
   at instanceof Date ? at.getTime() : new Date(at).getTime();
@@ -27,20 +25,20 @@ export const ago = (at: Date | string | number, now = Date.now()): string => {
   if (past < 0) {
     return ahead(ms, now);
   }
-  if (past < MINUTE) {
+  if (past < MINUTE_MS) {
     return "just now";
   }
-  if (past < HOUR) {
-    return `${Math.round(past / MINUTE)} min ago`;
+  if (past < HOUR_MS) {
+    return `${Math.round(past / MINUTE_MS)} min ago`;
   }
-  if (past < DAY) {
-    return `${Math.round(past / HOUR)} h ago`;
+  if (past < DAY_MS) {
+    return `${Math.round(past / HOUR_MS)} h ago`;
   }
-  if (past < 2 * DAY) {
+  if (past < 2 * DAY_MS) {
     return "yesterday";
   }
-  return past < 30 * DAY
-    ? `${Math.round(past / DAY)} days ago`
+  return past < 30 * DAY_MS
+    ? `${Math.round(past / DAY_MS)} days ago`
     : `on ${dayOf(ms)}`;
 };
 
@@ -54,16 +52,16 @@ export const ahead = (at: Date | string | number, now = Date.now()): string => {
   if (left <= 0) {
     return ago(ms, now);
   }
-  if (left < MINUTE) {
+  if (left < MINUTE_MS) {
     return "in under a minute";
   }
-  if (left < HOUR) {
-    return `in ${Math.round(left / MINUTE)} min`;
+  if (left < HOUR_MS) {
+    return `in ${Math.round(left / MINUTE_MS)} min`;
   }
-  if (left < DAY) {
-    return `in ${Math.round(left / HOUR)} h`;
+  if (left < DAY_MS) {
+    return `in ${Math.round(left / HOUR_MS)} h`;
   }
-  if (left < 2 * DAY) {
+  if (left < 2 * DAY_MS) {
     return "tomorrow";
   }
   return `on ${dayOf(ms)}`;
@@ -71,12 +69,12 @@ export const ahead = (at: Date | string | number, now = Date.now()): string => {
 
 /** A span as long as it lasted: "25 min", "3 h", "2 days". */
 export const lasted = (ms: number): string => {
-  if (ms < HOUR) {
-    return `${Math.max(1, Math.round(ms / MINUTE))} min`;
+  if (ms < HOUR_MS) {
+    return `${Math.max(1, Math.round(ms / MINUTE_MS))} min`;
   }
-  return ms < DAY
-    ? `${Math.round(ms / HOUR)} h`
-    : `${Math.round(ms / DAY)} days`;
+  return ms < DAY_MS
+    ? `${Math.round(ms / HOUR_MS)} h`
+    : `${Math.round(ms / DAY_MS)} days`;
 };
 
 /** A count with its noun: "1 pin", "3 pins". */

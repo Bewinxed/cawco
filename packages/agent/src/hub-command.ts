@@ -28,6 +28,7 @@ import {
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { DAY_MS } from "@cawco/core/time";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import {
   agentCommandStarted,
@@ -47,7 +48,7 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 const KILL_GRACE_MS = 5000;
 
 /** How long a cancel for a run not running yet is kept for that run to come up. */
-const EARLY_CANCEL_KEPT_MS = 24 * 60 * 60 * 1000;
+const EARLY_CANCEL_KEPT_MS = DAY_MS;
 
 /** Why the runner ended a command itself. */
 type Stop = "expired" | "overflowed" | "cancelled";

@@ -22,6 +22,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { machinePath } from "@cawco/core/machine-path";
+import { HOUR_MS } from "@cawco/core/time";
 import { hubInProcess } from "./hub-in-process";
 import { newestNightly } from "./shipped";
 
@@ -160,7 +161,7 @@ function seedTasksAndThreads(db: HubDb, projects: string[]): void {
         todosTotal: 3,
         problem: null,
         hash: Bun.hash(`${projectId}-${t}`).toString(16),
-        updatedAt: new Date(Date.UTC(2026, 9, 2) + t * 3_600_000),
+        updatedAt: new Date(Date.UTC(2026, 9, 2) + t * HOUR_MS),
       }))
     );
     for (let t = 0; t < 4; t += 1) {

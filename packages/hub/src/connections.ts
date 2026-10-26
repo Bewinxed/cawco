@@ -72,6 +72,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import { HOUR_MS } from "@cawco/core/time";
 import { LinearClient } from "@linear/sdk";
 import {
   auth,
@@ -153,7 +154,7 @@ export const GITHUB_APP_PERMISSIONS = {
  */
 const DEVICE_SCOPE = "repo read:org";
 /** "You must complete all three steps in the GitHub App Manifest flow within one hour" (docs.github.com). */
-const MANIFEST_MS = 60 * 60_000;
+const MANIFEST_MS = HOUR_MS;
 /** A gh token read this long ago is read from its machine again. Our choice: a re-login there is found within it. */
 const GH_FRESH_MS = 60_000;
 /** A GitHub organization's login: letters, digits and single hyphens, up to 39 characters. */

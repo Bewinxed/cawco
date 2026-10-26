@@ -31,6 +31,7 @@ import {
 } from "@cawco/core";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { DAY_MS } from "@cawco/core/time";
 import { normaliseRemote } from "@cawco/core/upstream-guard";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
@@ -42,7 +43,6 @@ import type { TaskActor, Tasks } from "./tasks";
 
 /** Open plan items at a turn's end that make a plan worth a project. */
 export const PLAN_ITEMS = 5;
-const DAY_MS = 86_400_000;
 /** The label a task filed from a session's plan carries until someone takes it up. */
 export const PROPOSED_LABEL = "proposed";
 /** Task titles are one line of at most 200 characters (tasks.ts). */

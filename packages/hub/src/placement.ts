@@ -15,6 +15,7 @@ import {
   type StrategyChoice,
   spanWords,
 } from "@cawco/core";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import type { AccountPaces } from "./forecast";
 
 /**
@@ -117,14 +118,13 @@ const used = (window: LimitWindow | undefined, now: number): number => {
 
 const pct = (value: number): string => `${Math.round(value)}%`;
 
-const HOUR_MS = 3_600_000;
 /** A 5-hour window's length: one not open yet opens at the session's first use. */
 export const SESSION_WINDOW_MS = 5 * HOUR_MS;
 /** How long each window kind runs: when the current one opened, from its reset. */
 export const WINDOW_MS: Record<string, number> = {
   session: SESSION_WINDOW_MS,
-  weekly_all: 7 * 24 * HOUR_MS,
-  weekly_scoped: 7 * 24 * HOUR_MS,
+  weekly_all: 7 * DAY_MS,
+  weekly_scoped: 7 * DAY_MS,
 };
 
 /**

@@ -80,6 +80,7 @@ import { serverEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { HOUR_MS } from "@cawco/core/time";
 import type {
   CredentialCreateInput,
   SessionInfo,
@@ -1828,7 +1829,7 @@ export const OPENCODE_REPORTED_FILES: readonly string[] = [
 const SIGN_IN_FAULTS = join(OPENCODE_DIR, "cawco-sign-in-faults.json");
 
 /** How often the machine's own sign-ins are checked when none changed, and the least time between two requests for one key. Ours: an hour, so a check spends at most one request per key an hour. */
-const SIGN_IN_CHECK_MS = 60 * 60_000;
+const SIGN_IN_CHECK_MS = HOUR_MS;
 
 /** How long a key's check request may take. Ours: a list of models answers in well under a second; past this it says nothing. */
 const KEY_CHECK_TIMEOUT_MS = 20_000;

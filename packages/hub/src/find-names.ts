@@ -19,6 +19,7 @@ import {
   type ThreadSummary,
 } from "@cawco/core";
 import { field, KIND_WORDS, type MatchEntry } from "@cawco/core/find-match";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import type { ProjectRow } from "./db";
 import type {
   FindArtifactRow,
@@ -40,7 +41,7 @@ const recencyPoints = (at: number | null, now: number): number => {
   if (at === null) {
     return 0;
   }
-  const hours = Math.max(0, now - at) / 3_600_000;
+  const hours = Math.max(0, now - at) / HOUR_MS;
   return 30 * Math.exp(-hours / 36);
 };
 
@@ -280,7 +281,7 @@ export const conversationEntry = (
       ...KIND_WORDS.conversation,
       ...(delegated ? KIND_WORDS.delegate : []),
     ]),
-    kin: kinOf(row, parent, sources.now - 24 * 3_600_000),
+    kin: kinOf(row, parent, sources.now - DAY_MS),
     fields: [
       ...field("title", title),
       ...field(

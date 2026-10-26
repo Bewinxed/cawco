@@ -29,6 +29,7 @@
 import { Database } from "bun:sqlite";
 import { readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { DAY_MS, HOUR_MS } from "../../packages/core/src/time";
 import { MACHINE, type Reply, type Seen, until } from "../scratch-fleet";
 import { writeClaudeTranscript } from "./claude-transcripts";
 import type { Kit, KitFleet } from "./kit";
@@ -46,7 +47,7 @@ const STOPPED = 35;
 /** Ended after the owner last looked: what Finished lists. */
 const UNSEEN = 8;
 /** How far back the seeded rows were started. */
-const HISTORY_MS = 40 * 24 * 60 * 60 * 1000;
+const HISTORY_MS = 40 * DAY_MS;
 /** A row's chance to be a delegate of a row started shortly before it. */
 const DELEGATE_SHARE = 0.7;
 /** How deep a tree goes. */
@@ -224,7 +225,7 @@ function seedBoard(
     const status = statusOf(n, sleeping);
     // Started in order over the history, the newest last.
     const created = now - HISTORY_MS + Math.floor((HISTORY_MS * n) / count);
-    const moved = created + Math.floor(random() * 2 * 60 * 60 * 1000);
+    const moved = created + Math.floor(random() * 2 * HOUR_MS);
     // A delegate of a row started shortly before, unless that tree is deep.
     const parentAt = n - 1 - Math.floor(random() * 50);
     const parent =

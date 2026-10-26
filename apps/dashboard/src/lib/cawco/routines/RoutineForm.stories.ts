@@ -7,13 +7,12 @@
  * as the hub refuses one; and a create that never ends (Saving). The
  * meta's args are every story's; a story's own args are what it changes.
  */
+
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { routinesWords } from "@cawco/core/words/routines";
 import RoutineForm from "./RoutineForm.svelte";
 import type { RoutineFormHub } from "./routines-api";
 import { choiceOf } from "./when";
-
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
 
 /**
  * A common schedule's runs over the next week, on the reader's clock, as
@@ -26,7 +25,7 @@ const runsOf = (expression: string): number[] => {
     const next = new Date();
     next.setMinutes(60, 0, 0);
     for (let hour = 0; hour < 7 * 24; hour += 1) {
-      runs.push(next.getTime() + hour * HOUR);
+      runs.push(next.getTime() + hour * HOUR_MS);
     }
     return runs;
   }
@@ -34,7 +33,7 @@ const runsOf = (expression: string): number[] => {
   const start = new Date();
   start.setHours(hour, minute, 0, 0);
   for (let day = 0; day <= 7; day += 1) {
-    const at = start.getTime() + day * DAY;
+    const at = start.getTime() + day * DAY_MS;
     const weekday = new Date(at).getDay();
     const runsThatDay =
       when.repeat === "day" ||
@@ -59,7 +58,7 @@ const twiceWeekdays = (timeZone: string) => {
     const start = new Date();
     start.setHours(hour, 0, 0, 0);
     for (let day = 0; day <= 7; day += 1) {
-      const at = start.getTime() + day * DAY;
+      const at = start.getTime() + day * DAY_MS;
       const weekday = new Date(at).getDay();
       if (at > Date.now() && weekday !== 0 && weekday !== 6) {
         runs.push(at);

@@ -129,6 +129,7 @@ import {
 } from "@cawco/core/paths";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { isDamagedRecord } from "@cawco/core/state-file";
+import { HOUR_MS } from "@cawco/core/time";
 import {
   completeLines,
   lineRecords,
@@ -1189,7 +1190,7 @@ const STOP_HOOK_TIMEOUT_S = 5;
  * hasn't expired", code.claude.com/docs/en/scheduled-tasks), so a session
  * put to sleep runs it once it is woken.
  */
-const WAKEUPS_DECIDED_MS = 25 * 3_600_000;
+const WAKEUPS_DECIDED_MS = 25 * HOUR_MS;
 
 /** How long a move's stop waits for the CLI to read one background task's output before it ends the process ({@link ClaudeSession.endedForMove}). */
 const TASK_OUTPUT_READ_MS = 3000;

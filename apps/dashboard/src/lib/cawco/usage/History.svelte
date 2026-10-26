@@ -7,6 +7,7 @@
    * a month. Table swaps both charts for their figures.
    */
   import type { UsageSummary } from "@cawco/core";
+  import { HOUR_MS } from "@cawco/core/time";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
@@ -55,7 +56,6 @@
     since: Record<Harness, number | null>;
   }
 
-  const HOUR_MS = 3_600_000;
   const cache = new Map<string, UsageSummary>();
   let shown = $state<Shown | null>(null);
   let failed = $state(false);

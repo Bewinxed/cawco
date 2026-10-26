@@ -125,6 +125,7 @@ import type {
   ThreadSummary,
 } from "@cawco/core/threads";
 import { capHolds } from "@cawco/core/threads";
+import { HOUR_MS } from "@cawco/core/time";
 import type {
   ToolGlance,
   TranscriptBlock,
@@ -8873,7 +8874,7 @@ export async function loadMcpServers(
  * machine gives it once that turn has ended and the session runs again, and
  * a turn may run long.
  */
-const RELAUNCH_AT_TURN_END_MS = 60 * 60_000;
+const RELAUNCH_AT_TURN_END_MS = HOUR_MS;
 
 /**
  * `bypassPermissions` is a launch decision — the SDK refuses to switch a running

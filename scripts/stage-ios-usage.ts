@@ -30,6 +30,7 @@ import {
   type StagedData,
   stagedData,
 } from "../apps/dashboard/src/routes/(app)/motion/usage-relay/stage-data";
+import { HOUR_MS } from "../packages/core/src/time";
 import { ensureDeps } from "./lib/deps";
 
 // The dependencies first (lib/deps.ts): what needs them loads after.
@@ -285,7 +286,7 @@ function web(now: number) {
     head: group.org ?? (i > 0 ? "Other" : null),
     cells: ranked(group.accounts).map((r) => cell(r, claude)),
   }));
-  const end = now + 5 * 3_600_000;
+  const end = now + 5 * HOUR_MS;
   const byId = new Map(claude.accounts.map((r) => [r.id, r]));
   let at = now;
   const bands: string[] = [];
@@ -314,7 +315,7 @@ function web(now: number) {
     now,
     stop: stopFigure(claude, now, nameOf),
     caption: plain(caption(claude, now, nameOf)),
-    stopInside: claude.stopAt !== null && claude.stopAt - now < 5 * 3_600_000,
+    stopInside: claude.stopAt !== null && claude.stopAt - now < 5 * HOUR_MS,
     groups,
     go: cell(go, null),
     bands,

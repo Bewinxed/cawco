@@ -63,6 +63,7 @@ import { cpus, getPriority, setPriority, totalmem } from "node:os";
 import { join } from "node:path";
 import { openLockFile, tryLock, unlock } from "./flock";
 import { workspaceCacheDir } from "./paths";
+import { HOUR_MS } from "./time";
 
 /** Where the machine's heavy-work slots and their queue are kept. */
 export const HEAVY_SLOTS_DIR = join(workspaceCacheDir(), "heavy-slots");
@@ -167,7 +168,7 @@ export const machineSlots = (): number =>
   );
 
 /** The longest a run waits for a slot before it fails, saying who held them. */
-const WAIT_MS = 60 * 60_000;
+const WAIT_MS = HOUR_MS;
 /** How often a waiting run looks again. */
 const POLL_MS = 1000;
 /** How often a waiting run says again what it waits on, when nothing changed. */

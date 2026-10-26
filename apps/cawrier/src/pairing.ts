@@ -9,11 +9,11 @@
  * when it ends, and an active buyer, re-enrolling on every launch, never lapses.
  */
 import { DurableObject } from "cloudflare:workers";
+import { DAY_MS } from "../../../packages/core/src/time";
 import type { ApnsEnvironment } from "./apns";
 import type { TransactionEnvironment } from "./storekit";
 
-const LIFE_MS = 30 * 24 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+const LIFE_MS = 30 * DAY_MS;
 /** Home Assistant's companion relay allows the same per day. */
 const PUSHES_PER_DAY = 500;
 

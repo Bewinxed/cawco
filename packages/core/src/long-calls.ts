@@ -1,4 +1,5 @@
 import { FLEET_WATCH_WAITS } from "./fleet-watch";
+import { DAY_MS } from "./time";
 
 /**
  * The hard wall clock on any CawCo tool call, in every harness: finish_item
@@ -8,7 +9,7 @@ import { FLEET_WATCH_WAITS } from "./fleet-watch";
  * delegation.ts), OpenCode as the server's `timeout.execution` (agent
  * harnesses/opencode.ts), pi's tool door as its read deadline. Our call.
  */
-export const LONG_CALL_WALL_MS = 24 * 60 * 60 * 1000;
+export const LONG_CALL_WALL_MS = DAY_MS;
 
 /** Tools that run for minutes, and what the hub's progress heartbeat says meanwhile. */
 export const LONG_CALLS: Readonly<Record<string, string>> = {

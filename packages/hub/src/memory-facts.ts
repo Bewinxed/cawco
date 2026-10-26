@@ -47,6 +47,7 @@
  * date's commit (`git show`). No tool is needed for either.
  */
 import { createHash } from "node:crypto";
+import { DAY_MS } from "@cawco/core/time";
 
 export const KNOWLEDGE_DIR = "knowledge";
 /** Where fact lines go once archived: `knowledge/archive/<topic>.md`, kept by git. */
@@ -933,7 +934,7 @@ export const unusedFacts = (
   days: number
 ): FactLine[][] => {
   const cutoff = dayOf(
-    new Date(Date.parse(`${today}T00:00:00Z`) - days * 86_400_000)
+    new Date(Date.parse(`${today}T00:00:00Z`) - days * DAY_MS)
   );
   return file.facts
     .filter(

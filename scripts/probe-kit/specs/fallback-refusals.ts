@@ -43,6 +43,7 @@ import {
   OWN_LIST_DENIED,
 } from "../../../packages/core/src/index";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { HOUR_MS } from "../../../packages/core/src/time";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { FleetSync } from "../../../packages/hub/src/fleet-sync";
 import type { HubLifetimeShape } from "../../../packages/hub/src/lifetime";
@@ -342,7 +343,7 @@ process.exit(0);`,
     // (d) Every account at its limit.
     const now = Date.parse("2026-10-18T12:00:00Z");
     const soon = now + 90 * 60_000;
-    const later = now + 3 * 3_600_000;
+    const later = now + 3 * HOUR_MS;
     const account = (id: string, order: number) => ({
       id,
       order,

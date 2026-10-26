@@ -31,6 +31,7 @@
 import { Database } from "bun:sqlite";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DAY_MS, MINUTE_MS } from "../packages/core/src/time";
 import { ensureDeps } from "./lib/deps";
 import type { Reply, Seen } from "./scratch-fleet";
 
@@ -195,7 +196,6 @@ const patch = async (id: string, body: object) => {
     throw new Error(`PATCH ${id}: ${response.status} ${await response.text()}`);
   }
 };
-const MINUTE = 60_000;
 
 try {
   fleet.launch("sessiond");
@@ -398,7 +398,7 @@ try {
     prompt: "PROBE-ROUTINE-silent: ticked.",
   });
   const due = new Date(routineOf(ticked.id)?.next_slot ?? 0);
-  const next = new Date(due.getTime() + 365 * 24 * 60 * MINUTE);
+  const next = new Date(due.getTime() + 365 * DAY_MS);
   const sqlite = new Database(join(fleet.sandbox, "hub", "hub.db"));
   sqlite.exec("PRAGMA busy_timeout = 15000");
   const store = routinesDb(drizzle(sqlite));
@@ -468,7 +468,7 @@ try {
       )[0]?.created_at ?? 0);
     check(
       "6: a routine a session makes names it and expires in 7 days",
-      agentMade.created_by === worker && lifetime === 7 * 24 * 60 * MINUTE,
+      agentMade.created_by === worker && lifetime === 7 * DAY_MS,
       `created_by ${agentMade.created_by}, lifetime ${lifetime} ms`
     );
     fleet.write(
@@ -511,13 +511,13 @@ try {
     console.log(`stopping the hub after slot ${s1.slot}`);
     await fleet.stop("hub");
     // Down across the next slot, back before the one after.
-    const back = s1At + MINUTE + 15_000;
+    const back = s1At + MINUTE_MS + 15_000;
     await Bun.sleep(Math.max(0, back - Date.now()));
     const restartedAt = Date.now();
     fleet.launch("hub");
     await fleet.hubUp();
-    const s2 = new Date(s1At + MINUTE).toISOString();
-    const s3 = new Date(s1At + 2 * MINUTE).toISOString();
+    const s2 = new Date(s1At + MINUTE_MS).toISOString();
+    const s3 = new Date(s1At + 2 * MINUTE_MS).toISOString();
     for (const slot of [s2, s3]) {
       // biome-ignore lint/performance/noAwaitInLoops: the catch-up's slot, then the one after
       await until(
@@ -538,7 +538,7 @@ try {
     const consecutive = slots.every(
       (slot, index) =>
         index === 0 ||
-        Date.parse(slot) - Date.parse(slots[index - 1] ?? "") === MINUTE
+        Date.parse(slot) - Date.parse(slots[index - 1] ?? "") === MINUTE_MS
     );
     check(
       "1: every slot has exactly one run, across the restart",

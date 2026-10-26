@@ -7,6 +7,7 @@
  * (§5.3 lead authority).
  */
 import type { InstanceRow } from "@cawco/core";
+import { HOUR_MS } from "@cawco/core/time";
 import type { DbShape, WorkItemRow } from "./db";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
@@ -29,7 +30,7 @@ export interface DelegateListQuery {
 }
 
 /** How long an ended item stays in a `live` read. */
-const ENDED_LIVE_MS = 3_600_000;
+const ENDED_LIVE_MS = HOUR_MS;
 
 export interface DelegateNode {
   cacheWarm: boolean;

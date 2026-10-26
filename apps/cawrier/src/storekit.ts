@@ -8,6 +8,7 @@
  */
 import { Buffer } from "node:buffer";
 import type { SignedDataVerifier } from "@apple/app-store-server-library";
+import { DAY_MS } from "../../../packages/core/src/time";
 
 /** https://www.apple.com/certificateauthority/AppleRootCA-G3.cer, sha256 63343abf…3e9179. */
 const APPLE_ROOT_CA_G3 = Buffer.from(
@@ -19,8 +20,6 @@ const APPLE_ROOT_CA_G3 = Buffer.from(
 const MAX_JWS_CHARS = 16_384;
 
 export type TransactionEnvironment = "Production" | "Sandbox";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type Purchase =
   | {

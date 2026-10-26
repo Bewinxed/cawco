@@ -62,6 +62,7 @@ import {
   wordHit,
   wordsOf,
 } from "@cawco/core/find-match";
+import { DAY_MS } from "@cawco/core/time";
 import { status, t } from "elysia";
 import { checkoutOf, type DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
@@ -1585,7 +1586,7 @@ export const createFind = (deps: FindDeps) => {
      */
     async waiting(): Promise<WaitingAnswer> {
       const now = Date.now();
-      const from = now - WAITING_DAYS * 24 * 3_600_000;
+      const from = now - WAITING_DAYS * DAY_MS;
       const held = namesNow(now);
       const lookedAt = db.find.lookedAt();
       const titleOf = (id: string) => {

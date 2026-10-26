@@ -15,9 +15,7 @@ import type {
   ProviderForecast,
   ProviderRouting,
 } from "@cawco/core";
-
-const MIN = 60_000;
-const HOUR = 60 * MIN;
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 
 /**
  * Each account's stored hue, as the owner's were assigned when there were
@@ -46,50 +44,50 @@ const SIX: Seed[] = [
   {
     email: "design@petralab.ai",
     five: 71,
-    fiveResets: 1.6 * HOUR,
+    fiveResets: 1.6 * HOUR_MS,
     week: 38,
-    weekResets: 52 * HOUR,
-    seenAgo: 2 * MIN,
+    weekResets: 52 * HOUR_MS,
+    seenAgo: 2 * MINUTE_MS,
   },
   {
     email: "bewinxed@petralab.ai",
     five: 22,
-    fiveResets: 3.2 * HOUR,
+    fiveResets: 3.2 * HOUR_MS,
     week: 54,
-    weekResets: 75 * HOUR,
-    seenAgo: 4 * MIN,
+    weekResets: 75 * HOUR_MS,
+    seenAgo: 4 * MINUTE_MS,
   },
   {
     email: "jude@petralab.ai",
     five: 35,
-    fiveResets: 2.4 * HOUR,
+    fiveResets: 2.4 * HOUR_MS,
     week: 41,
-    weekResets: 98 * HOUR,
-    seenAgo: 100 * MIN,
+    weekResets: 98 * HOUR_MS,
+    seenAgo: 100 * MINUTE_MS,
   },
   {
     email: "marketing@petralab.ai",
     five: 8,
-    fiveResets: 4.1 * HOUR,
+    fiveResets: 4.1 * HOUR_MS,
     week: 63,
-    weekResets: 30 * HOUR,
-    seenAgo: 9 * MIN,
+    weekResets: 30 * HOUR_MS,
+    seenAgo: 9 * MINUTE_MS,
   },
   {
     email: "rand@petralab.ai",
     five: 100,
-    fiveResets: 4 * HOUR + 50 * MIN,
+    fiveResets: 4 * HOUR_MS + 50 * MINUTE_MS,
     week: 72,
-    weekResets: 120 * HOUR,
-    seenAgo: 6 * MIN,
+    weekResets: 120 * HOUR_MS,
+    seenAgo: 6 * MINUTE_MS,
   },
   {
     email: "bewinxed@gmail.com",
     five: 12,
-    fiveResets: 2.9 * HOUR,
+    fiveResets: 2.9 * HOUR_MS,
     week: 93,
-    weekResets: 26 * HOUR,
-    seenAgo: 12 * MIN,
+    weekResets: 26 * HOUR_MS,
+    seenAgo: 12 * MINUTE_MS,
     // Its one session spends a week with 7% left: the week binds it.
     weekPace: 2,
   },
@@ -98,10 +96,10 @@ const SIX: Seed[] = [
 const extra = (i: number): Seed => ({
   email: `ops${i + 1}@petralab.ai`,
   five: (i * 17) % 90,
-  fiveResets: ((i % 5) + 1) * HOUR,
+  fiveResets: ((i % 5) + 1) * HOUR_MS,
   week: (i * 23) % 85,
-  weekResets: (24 + i * 7) * HOUR,
-  seenAgo: (5 + i) * MIN,
+  weekResets: (24 + i * 7) * HOUR_MS,
+  seenAgo: (5 + i) * MINUTE_MS,
 });
 
 /** Six: Petralab's five and Omar Al Matar's one; then Northwind's four, Acme's two, and Petralab. */
@@ -168,7 +166,7 @@ function relayOf(
   forecasts: AccountForecast[],
   now: number
 ): CarrySpan[] {
-  const horizon = now + 5 * HOUR;
+  const horizon = now + 5 * HOUR_MS;
   const burn = forecasts.reduce(
     (sum, one) =>
       sum + (one.windows.find((w) => w.kind === "session")?.pace ?? 0),
@@ -192,7 +190,7 @@ function relayOf(
     reset.forEach((at, i) => {
       if (at <= t) {
         use[i] = 0;
-        reset[i] = at + 5 * HOUR;
+        reset[i] = at + 5 * HOUR_MS;
       }
     });
     const back = Math.min(
@@ -211,12 +209,12 @@ function relayOf(
     }
     const from = use[carrier] ?? 0;
     const runsOut =
-      burn > 0 ? t + ((100 - from) / burn) * HOUR : Number.POSITIVE_INFINITY;
+      burn > 0 ? t + ((100 - from) / burn) * HOUR_MS : Number.POSITIVE_INFINITY;
     const until = Math.min(horizon, runsOut, back);
     push(carrier, t, until);
-    use[carrier] = from + (burn * (until - t)) / HOUR;
+    use[carrier] = from + (burn * (until - t)) / HOUR_MS;
     if (until === runsOut && runsOut < horizon) {
-      out.push({ i: carrier, until: reset[carrier] ?? until + 5 * HOUR });
+      out.push({ i: carrier, until: reset[carrier] ?? until + 5 * HOUR_MS });
     }
     t = until;
   }
@@ -252,13 +250,19 @@ export function stagedData(
     ...Array.from({ length: n - SIX.length }, (_, i) => extra(i)),
   ].map((seed) => {
     if (stop === "1") {
-      return { ...seed, five: Math.max(seed.five, 92), fiveResets: 4.5 * HOUR };
+      return {
+        ...seed,
+        five: Math.max(seed.five, 92),
+        fiveResets: 4.5 * HOUR_MS,
+      };
     }
-    return stop === "2" ? { ...seed, five: 100, fiveResets: 2 * HOUR } : seed;
+    return stop === "2"
+      ? { ...seed, five: 100, fiveResets: 2 * HOUR_MS }
+      : seed;
   });
   const iso = (ms: number) => new Date(now + ms).toISOString();
   const accounts: Account[] = seeds.map((seed, i) => ({
-    createdAt: now - 30 * 24 * HOUR,
+    createdAt: now - 30 * DAY_MS,
     email: seed.email,
     hue: HUES[i % HUES.length],
     id: `acc-${i}`,
@@ -282,7 +286,7 @@ export function stagedData(
     pace: number | null
   ) => {
     const out =
-      pace && pace > 0 ? now + ((100 - used) / pace) * HOUR : undefined;
+      pace && pace > 0 ? now + ((100 - used) / pace) * HOUR_MS : undefined;
     return {
       kind,
       pace,
@@ -336,7 +340,7 @@ export function stagedData(
   );
   const forecast: ProviderForecast = {
     accounts: forecasts,
-    delegates: [{ accountId: `acc-${spreadTo}`, from: now, to: now + HOUR }],
+    delegates: [{ accountId: `acc-${spreadTo}`, from: now, to: now + HOUR_MS }],
     provider: "anthropic",
     yours,
   };
@@ -365,7 +369,7 @@ export function stagedData(
       isActive: true,
       kind: "rolling",
       percent: 100,
-      resetsAt: iso(72 * MIN),
+      resetsAt: iso(72 * MINUTE_MS),
       scopeLabel: null,
       severity: "critical",
     },
@@ -374,7 +378,7 @@ export function stagedData(
       isActive: true,
       kind: "weekly",
       percent: 64,
-      resetsAt: iso(80 * HOUR),
+      resetsAt: iso(80 * HOUR_MS),
       scopeLabel: null,
       severity: "normal",
     },
@@ -383,7 +387,7 @@ export function stagedData(
       isActive: true,
       kind: "monthly",
       percent: 40,
-      resetsAt: iso(18 * 24 * HOUR),
+      resetsAt: iso(18 * DAY_MS),
       scopeLabel: null,
       severity: "normal",
     },

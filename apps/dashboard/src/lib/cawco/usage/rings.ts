@@ -27,10 +27,9 @@ import {
   type ProviderRouting,
   type WindowForecast,
 } from "@cawco/core";
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { readMeter } from "../usage";
 
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
 /** How far the carry answer looks ahead: one 5-hour window. */
 export const HORIZON_MS = 5 * HOUR_MS;
 /** A word in a sentence: plain, emphasised, or an account's name led by its dot. */
@@ -225,7 +224,7 @@ const DATE_TIME = new Intl.DateTimeFormat(undefined, {
 });
 /** A week's reset as a day and a time ("Tue 09:00"), the date past a week. */
 export const dayTime = (at: number, now: number): string =>
-  (at - now < 7 * 24 * HOUR_MS ? WEEKDAY_TIME : DATE_TIME)
+  (at - now < 7 * DAY_MS ? WEEKDAY_TIME : DATE_TIME)
     .format(at)
     .replace(",", "");
 

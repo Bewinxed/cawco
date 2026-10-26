@@ -21,6 +21,7 @@
  */
 
 import { CLAUDE_PROVIDER } from "./accounts";
+import { HOUR_MS } from "./time";
 import { harnessWords } from "./words/harness";
 
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
@@ -2788,7 +2789,7 @@ export const QUEUE_SLOTS = {
 export type QueueSlot = keyof typeof QUEUE_SLOTS;
 
 /** The most a command waits in slot queues, all its waits together: past it, it fails. */
-export const QUEUE_WAIT_MAX_MS = 3 * 60 * 60 * 1000;
+export const QUEUE_WAIT_MAX_MS = 3 * HOUR_MS;
 
 /**
  * The run a {@link CONTROL_RUN_COMMAND} names: the id its

@@ -13,11 +13,13 @@
  * (DELEGATE_WINDOW): one session starts a hundred in a day, and a day's
  * worth listed whole is the four thousand pixels of rail the fold is for.
  */
+
+import { DAY_MS } from "@cawco/core/time";
 import { type BoardRow, cawco } from "./client.svelte";
 import { sessionStatus } from "./session-status";
 
 /** A project lists every session that moved in the last day. */
-export const PROJECT_WINDOW = 24 * 60 * 60 * 1000;
+export const PROJECT_WINDOW = DAY_MS;
 /** A session lists its newest delegates, however lately the rest moved. */
 export const DELEGATE_WINDOW = 0;
 /** Rows a parent lists unfolded, and its older box shows before it scrolls. */

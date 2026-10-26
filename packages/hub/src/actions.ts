@@ -36,6 +36,7 @@
 import { createHash } from "node:crypto";
 import type { ApprovedActionView, InstanceRow, SessionRole } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { DAY_MS } from "@cawco/core/time";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
 import { Elysia, status, t } from "elysia";
@@ -66,7 +67,7 @@ const ARGS_MAX = 64 * 1024;
 /** How much of the service's answer is kept. Our choice. */
 const RESULT_MAX = 16 * 1024;
 /** How far ahead a run may be set. Our choice. */
-const AHEAD_MAX_MS = 366 * 24 * 60 * 60 * 1000;
+const AHEAD_MAX_MS = 366 * DAY_MS;
 /** A time this far past is a typo, not "now". Our choice. */
 const PAST_GRACE_MS = 60_000;
 const REASON_MAX = 300;

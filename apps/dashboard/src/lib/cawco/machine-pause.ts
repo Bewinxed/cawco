@@ -3,6 +3,7 @@
  * machine-pause.ts): the menu's few ends, and the row's "paused until 00:57".
  */
 import { type AgentRow, pauseClock } from "@cawco/core";
+import { HOUR_MS } from "@cawco/core/time";
 
 /** The hour a morning pause ends at, on this browser's clock. */
 const MORNING_HOUR = 8;
@@ -33,8 +34,8 @@ export const pauseChoices = (now: Date): PauseChoice[] => {
     clock: pauseClock(until.getTime(), now.getTime()),
   });
   return [
-    at(new Date(now.getTime() + 60 * 60_000), "1 hour"),
-    at(new Date(now.getTime() + 3 * 60 * 60_000), "3 hours"),
+    at(new Date(now.getTime() + HOUR_MS), "1 hour"),
+    at(new Date(now.getTime() + 3 * HOUR_MS), "3 hours"),
     at(morning, today ? "This morning" : "Tomorrow morning"),
   ];
 };

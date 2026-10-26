@@ -19,6 +19,8 @@
  * default; https lives only at the long name; the clipboard only on https.
  */
 
+import { DAY_MS } from "@cawco/core/time";
+
 export type Network = "tailscale" | "headscale" | "netbird";
 
 /** Where the tray was opened from. */
@@ -171,10 +173,9 @@ export function viewsOn(network: Network): ViewId[] {
 
 /** The time the set-up's sign-in happened, for the expiry line: 23 Oct 2026. */
 const SIGNED_IN = Date.UTC(2026, 9, 23);
-const DAY = 86_400_000;
 /** A person's sign-in expires after 180 days (facts §4). */
 export const EXPIRY_DAYS = 180;
-export const EXPIRES = SIGNED_IN + EXPIRY_DAYS * DAY;
+export const EXPIRES = SIGNED_IN + EXPIRY_DAYS * DAY_MS;
 /** "21 Apr 2027". */
 export const dateOf = (at: number): string =>
   new Intl.DateTimeFormat("en-GB", {

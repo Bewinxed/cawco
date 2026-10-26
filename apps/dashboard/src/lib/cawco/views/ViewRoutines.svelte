@@ -4,6 +4,7 @@
     connectWords,
     routinesWords as words,
   } from "@cawco/core";
+  import { DAY_MS } from "@cawco/core/time";
   import { untrack } from "svelte";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
   import BlockPage, {
@@ -415,7 +416,6 @@
     paused: { glyph: IconPause, said: words.leadPaused },
     expiring: { glyph: IconHourglass, said: words.leadExpiring },
   } as const;
-  const DAY = 86_400_000;
 
   /**
    * The schedule's line: its words on your clock, one clock with Next run,
@@ -432,7 +432,7 @@
         ? (() => {
             const days = Math.max(
               1,
-              Math.round((routine.expiresAt - Date.now()) / DAY)
+              Math.round((routine.expiresAt - Date.now()) / DAY_MS)
             );
             return words.offIn(days);
           })()

@@ -62,6 +62,7 @@ import {
   withWords,
   wordsOf,
 } from "@cawco/core/find-match";
+import { DAY_MS } from "@cawco/core/time";
 import { z } from "zod";
 import {
   cursorAt,
@@ -692,8 +693,6 @@ const pick = (
 /** One call that works, with `field` set to `value`, for a refusal to give. */
 const exampleWith = (input: FindInput, field: string, value: string) =>
   `{"query": "${clip(input.query ?? "deploy", 40)}", "${field}": "${value}"}`;
-
-const DAY_MS = 86_400_000;
 
 /** A day field (`since`, `before`) read as its day's first ms epoch, or the refusal. */
 const dayOf = (

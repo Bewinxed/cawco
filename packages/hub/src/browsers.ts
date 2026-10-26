@@ -59,6 +59,7 @@ import {
   type ListedBrowser,
   SHIELD_WORDS,
 } from "@cawco/core/browser";
+import { DAY_MS } from "@cawco/core/time";
 import { Elysia, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
@@ -79,7 +80,7 @@ export const BROWSER_ARTIFACT_NAME = "browser";
 const CALL_MS = 15 * 60_000;
 
 /** How long a browser's own stream relay credential lasts (Projects spec item 4). */
-const RELAY_TTL_MS = 7 * 24 * 60 * 60_000;
+const RELAY_TTL_MS = 7 * DAY_MS;
 
 /** What a machine says of a browser now, kept from its latest frame (core `BrowserRow`). */
 export type LiveBrowserFacts = Pick<BrowserRow, "why" | "progress" | "origin">;
