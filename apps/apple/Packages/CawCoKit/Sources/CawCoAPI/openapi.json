@@ -33245,10 +33245,6 @@
         "description": "Where a session's preview is served, as the hub reports it: its own port,\nwhich the hub listens on in either mode, and in host mode the whole origin\nthe fleet's pattern names it by too. Which one a client loads is its own\nchoice, by where it reached the hub ({@link previewRoute}).",
         "type": "object",
         "properties": {
-          "host": {
-            "description": "Unsent: host mode's `name[:port]` from before `origin`. TestFlight ios\n20261018 (installable until 2027-01-16) declares it, so it stays\ndeclared until then (a declared-only BRIDGE, hub scripts/wire-compat.ts);\nthe hub never sends it, and that build reads `origin` (Previews.swift).",
-            "type": "string"
-          },
           "origin": {
             "description": "Host mode's whole origin for the session.",
             "type": "string"
@@ -35054,41 +35050,11 @@
               "null",
               "number"
             ]
-          },
-          "after": {
-            "description": "Its waits on tasks (`waitsOn`'s tasks).",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "blockedBy": {
-            "description": "Its unsettled waits on tasks, its own and its whole's.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "parent": {
-            "description": "Its whole (`partOf`).",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "related": {
-            "description": "Always empty: related links are See also comments now.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
-          "after",
           "archivedAt",
           "attempts",
-          "blockedBy",
           "builtOn",
           "closeReason",
           "completedAt",
@@ -35106,7 +35072,6 @@
           "needsYou",
           "number",
           "outputs",
-          "parent",
           "partOf",
           "parts",
           "path",
@@ -35114,7 +35079,6 @@
           "queuedStart",
           "rank",
           "ready",
-          "related",
           "stage",
           "startProblem",
           "startedAt",
@@ -35804,43 +35768,13 @@
               "null",
               "number"
             ]
-          },
-          "after": {
-            "description": "Its waits on tasks (`waitsOn`'s tasks).",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "blockedBy": {
-            "description": "Its unsettled waits on tasks, its own and its whole's.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "parent": {
-            "description": "Its whole (`partOf`).",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "related": {
-            "description": "Always empty: related links are See also comments now.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
           "acceptance",
           "accounts",
-          "after",
           "archivedAt",
           "attempts",
-          "blockedBy",
           "buildsFrom",
           "builtOn",
           "checks",
@@ -35866,7 +35800,6 @@
           "number",
           "outputs",
           "owns",
-          "parent",
           "partOf",
           "parts",
           "path",
@@ -35874,7 +35807,6 @@
           "queuedStart",
           "rank",
           "ready",
-          "related",
           "runsOn",
           "sections",
           "stage",
@@ -40699,13 +40631,9 @@
           "status": {
             "$ref": "#/components/schemas/PlanStepStatus"
           },
-          "wait": {
+          "waitsOn": {
             "description": "What it waits on, set by the session (`todo_write`'s `waitsOn`): a\ntask, a card, a pin, a pull request, a run or a session, as a task's\n`waits_on` keeps it (wait-targets.ts), settled by the hub's one resolver\n(hub task-waits.ts). The hub drops it once it settles.",
             "type": "string"
-          },
-          "waitsOn": {
-            "$ref": "#/components/schemas/PlanWait",
-            "description": "Sent for TestFlight ios 20261018 alone, which reads a step's wait in\nthis shape (hub wire-compat.ts BRIDGES): a card wait, or the page whole.\nThe hub fills it from `wait` and `waitsOnPage` as it sends a plan;\nnothing reads it. It goes once that build is no longer installable,\n2027-01-16."
           },
           "waitsOnPage": {
             "description": "The page it waits on the person on, whole, by its artifact id: set by\nthe hub on the session's current step when its `artifact_create` or\n`artifact_update` with `does: pick` or `judge` returns (hub plans.ts\n`waitOn`), gone once nothing on the page waits on the person (core\nartifact-needs.ts). While it waits, the page's Needs-you item stands.",
@@ -40742,23 +40670,6 @@
           "completed",
           "in_progress",
           "pending"
-        ]
-      },
-      "PlanWait": {
-        "description": "A page, or one card of it, a build builds from (`builds_from`, a work\nitem's `buildsFrom`): its landing waits on the person's picks there.",
-        "type": "object",
-        "properties": {
-          "artifactId": {
-            "description": "The artifact's id.",
-            "type": "string"
-          },
-          "card": {
-            "description": "The decision's id on the page (`data-cawco-choice`, an OpenUI `Decision`'s id); absent, the whole artifact.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "artifactId"
         ]
       },
       "DispatchView": {
@@ -41574,10 +41485,6 @@
             "description": "What happened, opened like a fold; absent when the title says it all.",
             "type": "string"
           },
-          "designOffer": {
-            "$ref": "#/components/schemas/DesignOfferEvent",
-            "description": "Unsent: `event` carries it as `design-offer`.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it (a declared-only\nBRIDGE, hub scripts/wire-compat.ts)."
-          },
           "event": {
             "description": "What happened, as typed data; null on a note stored before events were typed.",
             "anyOf": [
@@ -42004,10 +41911,6 @@
             "description": "One line: source and what, like \"Routine · Triage issues · 09:00\". The\ntime is not in it: a reader draws `createdAt` in their own time zone.",
             "type": "string"
           },
-          "routineMade": {
-            "$ref": "#/components/schemas/RoutineMadeEvent",
-            "description": "Unsent: `event` carries it as `routine-made`.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it (a declared-only\nBRIDGE, hub scripts/wire-compat.ts)."
-          },
           "createdAt": {
             "type": "number"
           },
@@ -42024,31 +41927,6 @@
           "id",
           "noteTitle",
           "threadId"
-        ]
-      },
-      "DesignOfferEvent": {
-        "description": "Caw asking first, once per project, whether to build a design system\n(hub design-offers.ts): a design-shaped task entered an active stage in a\nproject with none. Build and Not now act on the project through\n`/api/projects/:id/design-offer`.",
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string"
-          },
-          "sources": {
-            "description": "What the build would read, in words: \"the repository's styles and components\", \"the brand kit\".",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "taskId": {
-            "description": "The task whose move raised it.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "projectId",
-          "sources",
-          "taskId"
         ]
       },
       "RoutineSchedule": {
@@ -42135,7 +42013,7 @@
             ]
           },
           "by": {
-            "$ref": "#/components/schemas/RoutineMadeEventBy",
+            "$ref": "#/components/schemas/RoutineMadeInBy",
             "description": "`caw`: the project's Caw made it; `delegate` or `session`: another session."
           },
           "expiresAt": {
@@ -42207,52 +42085,6 @@
           "projectId",
           "sources",
           "taskId"
-        ]
-      },
-      "RoutineMadeEvent": {
-        "description": "A session made a routine with `routine_create` (routines.ts `announce`):\nthe notice in the thread its maker's turn was in, or the routine's own\nthread when it was in none. Keep, Turn off and Open act on `routineId`\nthrough `/api/routines/:id`.",
-        "type": "object",
-        "properties": {
-          "by": {
-            "$ref": "#/components/schemas/RoutineMadeEventBy",
-            "description": "`caw`: the project's Caw made it; `delegate` or `session`: another session."
-          },
-          "expiresAt": {
-            "description": "When it turns itself off unless kept, ms epoch; null when it was kept as it was made.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "instanceId": {
-            "description": "The session that made it.",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "routineId": {
-            "type": "string"
-          },
-          "schedule": {
-            "$ref": "#/components/schemas/RoutineSchedule"
-          },
-          "why": {
-            "description": "What the making turn said just before the call, one paragraph; null when it said nothing.",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "by",
-          "expiresAt",
-          "instanceId",
-          "name",
-          "routineId",
-          "schedule",
-          "why"
         ]
       },
       "ThreadRead": {
@@ -42484,7 +42316,7 @@
         "type": "object",
         "properties": {
           "by": {
-            "$ref": "#/components/schemas/RoutineMadeEventBy"
+            "$ref": "#/components/schemas/RoutineMadeInBy"
           },
           "instanceId": {
             "type": "string"
@@ -48478,10 +48310,6 @@
           },
           "trigger": {
             "$ref": "#/components/schemas/BlockMetadataTrigger"
-          },
-          "workflowEvent": {
-            "description": "Unsent: there is no run engine.\nTestFlight ios 20261018 (installable until 2027-01-16) declares it, so\nit stays declared until then; the hub never sends it (a declared-only\nBRIDGE, hub scripts/wire-compat.ts).",
-            "type": "string"
           }
         }
       },
@@ -51377,6 +51205,23 @@
           "waitUntil"
         ]
       },
+      "PlanWait": {
+        "description": "A page, or one card of it, a build builds from (`builds_from`, a work\nitem's `buildsFrom`): its landing waits on the person's picks there.",
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "description": "The artifact's id.",
+            "type": "string"
+          },
+          "card": {
+            "description": "The decision's id on the page (`data-cawco-choice`, an OpenUI `Decision`'s id); absent, the whole artifact.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId"
+        ]
+      },
       "ToolSpec": {
         "type": "object",
         "properties": {
@@ -54219,32 +54064,6 @@
               "$ref": "#/components/schemas/AccountLimits"
             }
           },
-          "machines": {
-            "description": "BRIDGE (hub scripts/wire-compat.ts) for TestFlight ios 20261018, which\nrequires and reads limits per machine (Claude's there the first account\nsigned in on it). Goes once that build is no longer installable,\n2027-01-16.",
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "hostname": {
-                  "type": "string"
-                },
-                "limits": {
-                  "$ref": "#/components/schemas/ClaudeLimits"
-                },
-                "machineId": {
-                  "type": "string"
-                },
-                "openCodeGo": {
-                  "$ref": "#/components/schemas/OpenCodeGoLimits"
-                }
-              },
-              "required": [
-                "hostname",
-                "limits",
-                "machineId"
-              ]
-            }
-          },
           "openCodeGo": {
             "type": "array",
             "items": {
@@ -54254,7 +54073,6 @@
         },
         "required": [
           "claude",
-          "machines",
           "openCodeGo"
         ]
       },
@@ -54356,6 +54174,26 @@
           "resetsAt"
         ]
       },
+      "MachineGoLimits": {
+        "description": "One machine's OpenCode Go plan, read with that machine's Go key.",
+        "type": "object",
+        "properties": {
+          "hostname": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/OpenCodeGoLimits"
+          }
+        },
+        "required": [
+          "hostname",
+          "machineId",
+          "plan"
+        ]
+      },
       "OpenCodeGoLimits": {
         "description": "The OpenCode Go plan's three windows, read from\n`GET https://opencode.ai/zen/go/v1/usage` with the machine's `opencode-go`\nkey. Absent (null) on a machine with no Go key. `stale` is set when a read\nfailed and the last good windows are served with the error attached.",
         "type": "object",
@@ -54383,26 +54221,6 @@
           "error",
           "fetchedAt",
           "windows"
-        ]
-      },
-      "MachineGoLimits": {
-        "description": "One machine's OpenCode Go plan, read with that machine's Go key.",
-        "type": "object",
-        "properties": {
-          "hostname": {
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "plan": {
-            "$ref": "#/components/schemas/OpenCodeGoLimits"
-          }
-        },
-        "required": [
-          "hostname",
-          "machineId",
-          "plan"
         ]
       },
       "UsageSpend": {
@@ -54883,10 +54701,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "host": {
-            "description": "Unsent: {@link PreviewAddress} `host`.",
-            "type": "string"
           },
           "instanceId": {
             "type": "string"
@@ -58025,20 +57839,6 @@
               }
             ]
           },
-          "workflowRunId": {
-            "description": "Unsent: there is no run engine. TestFlight ios 20261018 (installable\nuntil 2027-01-16) declares it, so it stays declared until then (a\ndeclared-only BRIDGE, hub scripts/wire-compat.ts); the hub never sends\nit, and that build shows no runs.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "workflowStepId": {
-            "description": "Unsent, as {@link workflowRunId}.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "workItemId": {
             "description": "The work item this session runs: every delegate is one, and a session\nnever runs more than one. Null on a session nobody delegated, and on a\ndelegate from before work items existed.",
             "type": [
@@ -58698,13 +58498,6 @@
               "usage"
             ]
           },
-          "limits": {
-            "description": "BRIDGE (hub scripts/wire-compat.ts): limits per machine, which TestFlight\nios 20261018 requires and reads (HubConnection.swift). Goes once that\nbuild is no longer installable, 2027-01-16.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UsageLimitsReading"
-            }
-          },
           "openCodeGo": {
             "type": "array",
             "items": {
@@ -58718,43 +58511,8 @@
         "required": [
           "claude",
           "kind",
-          "limits",
           "openCodeGo",
           "spend"
-        ]
-      },
-      "UsageLimitsReading": {
-        "description": "One machine's line in a `kind: 'usage'` frame's `limits`, a BRIDGE (hub\nscripts/wire-compat.ts) for TestFlight ios 20261018, which reads limits\nper machine: its OpenCode Go plan, and the limits of the first Claude\naccount signed in there. Goes once that build is no longer installable,\n2027-01-16.",
-        "type": "object",
-        "properties": {
-          "fetchedAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "openCodeGo": {
-            "$ref": "#/components/schemas/OpenCodeGoLimits"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/ClaudeLimits"
-          }
-        },
-        "required": [
-          "fetchedAt",
-          "machineId",
-          "payload"
         ]
       },
       "StoppedFrame": {
@@ -60779,7 +60537,7 @@
           "unresolved"
         ]
       },
-      "RoutineMadeEventBy": {
+      "RoutineMadeInBy": {
         "type": "string",
         "enum": [
           "caw",

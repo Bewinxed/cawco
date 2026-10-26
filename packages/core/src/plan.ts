@@ -86,15 +86,7 @@ export interface PlanStep {
    * `waits_on` keeps it (wait-targets.ts), settled by the hub's one resolver
    * (hub task-waits.ts). The hub drops it once it settles.
    */
-  wait?: string;
-  /**
-   * Sent for TestFlight ios 20261018 alone, which reads a step's wait in
-   * this shape (hub wire-compat.ts BRIDGES): a card wait, or the page whole.
-   * The hub fills it from `wait` and `waitsOnPage` as it sends a plan;
-   * nothing reads it. It goes once that build is no longer installable,
-   * 2027-01-16.
-   */
-  waitsOn?: PlanWait;
+  waitsOn?: string;
   /**
    * The page it waits on the person on, whole, by its artifact id: set by
    * the hub on the session's current step when its `artifact_create` or
@@ -112,7 +104,7 @@ export const stepWaitsOnArtifact = (
 ): boolean =>
   step.status !== "completed" &&
   (step.waitsOnPage === artifactId ||
-    (step.wait !== undefined && waitArtifact(step.wait) === artifactId));
+    (step.waitsOn !== undefined && waitArtifact(step.waitsOn) === artifactId));
 
 /** The person's changes to a plan, by what they do. */
 export const PLAN_EDIT_KINDS = [

@@ -501,7 +501,6 @@ import {
   reconcileAccounts,
   sessionLimitsReader,
   uncompared,
-  usageFrameLimits,
   usageLimits,
   withOrgIdFrom,
 } from "./accounts";
@@ -5290,7 +5289,7 @@ export const createServer = (
       machineId,
       payload: {
         kind: "usage",
-        ...usageFrameLimits(db),
+        ...usageLimits(db),
         spend: spendNow(),
       },
     });
@@ -9253,7 +9252,8 @@ export const createServer = (
    */
   const waitingOn = (session: string, steps: readonly PlanStep[]): AwayWait[] =>
     steps.flatMap((step) => {
-      const pageId = step.waitsOnPage ?? (step.wait && waitArtifact(step.wait));
+      const pageId =
+        step.waitsOnPage ?? (step.waitsOn && waitArtifact(step.waitsOn));
       const page = pageId ? db.artifacts.get(pageId) : undefined;
       return page && step.status !== "completed"
         ? [

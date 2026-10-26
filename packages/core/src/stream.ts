@@ -144,12 +144,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    (`open-ports`) is gone; a journey view carries the hub's `revision`,
  *    and a page keeps none older than the one it holds. A page built for 28
  *    would offer a press the hub no longer takes, so it reloads first.
+ * 30: task links are one blocking edge: a task carries `waitsOn`, `partOf`
+ *    and its settled `waits`, `unblocks`, `parts` and `ready`, where it
+ *    carried `after`, `parent`, `related` and `blockedBy`; a plan step's
+ *    `waitsOn` is a wait as a task keeps it (a string), and the hub's own
+ *    wait on a page whole is `waitsOnPage`. A page built for 29 would read
+ *    links the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 29;
+export const WIRE_PROTOCOL = 30;
 
 /**
  * What a session's stream carries: the changes each frame made to its

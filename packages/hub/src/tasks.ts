@@ -363,36 +363,6 @@ export interface TaskFlags {
   waits: TaskWait[];
 }
 
-/**
- * The links TestFlight ios 20261018 reads in their old shape, sent beside the
- * new ones and filled from them (wire-compat.ts BRIDGES): nothing in the
- * hub, the dashboard or the tools reads them. They go once that build is no
- * longer installable, 2027-01-16.
- */
-export interface BridgedLinks {
-  /** Its waits on tasks (`waitsOn`'s tasks). */
-  after: string[];
-  /** Its unsettled waits on tasks, its own and its whole's. */
-  blockedBy: string[];
-  /** Its whole (`partOf`). */
-  parent: string | null;
-  /** Always empty: related links are See also comments now. */
-  related: string[];
-}
-
-/** {@link BridgedLinks} from a task's new links and flags. */
-const bridgedLinks = (
-  task: { partOf: string | null; waitsOn: string[] },
-  flags: Pick<TaskFlags, "waits">
-): BridgedLinks => ({
-  after: task.waitsOn.filter((target) => taskTarget(target) === target),
-  blockedBy: flags.waits
-    .filter((wait) => !wait.settled && wait.kind === "task")
-    .map((wait) => wait.target),
-  parent: task.partOf,
-  related: [],
-});
-
 /** Its waits that are not settled: what it still waits on. */
 export const unsettledWaits = (task: Pick<TaskFlags, "waits">): TaskWait[] =>
   task.waits.filter((wait) => !wait.settled);
@@ -573,7 +543,7 @@ export interface TaskTimes extends TaskLife {
 }
 
 /** One task as a list shows it: the index's row, and what its attempts and edges say. */
-export interface TaskSummary extends TaskFlags, TaskTimes, BridgedLinks {
+export interface TaskSummary extends TaskFlags, TaskTimes {
   /** The task it repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
   /** The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written. */
@@ -658,7 +628,7 @@ export interface StagesTemplateView {
 }
 
 /** One task, its file read whole, and what its attempts and edges say. */
-export interface TaskView extends TaskFlags, TaskTimes, BridgedLinks {
+export interface TaskView extends TaskFlags, TaskTimes {
   acceptance: string;
   /** The accounts its attempts may run on; empty: every account. */
   accounts: string[];
@@ -1256,7 +1226,6 @@ const summaryOf = (
     kind,
     needsYou: kind === "you",
     ...flags,
-    ...bridgedLinks(row, flags),
     type: row.type,
     waitsOn: row.waitsOn,
     partOf: row.partOf,
@@ -1293,7 +1262,6 @@ const viewOf = (
   kind: kindIn(stages, parsed.fields.stage ?? ""),
   needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
   ...flags,
-  ...bridgedLinks(parsed.fields, flags),
   result,
   type: parsed.fields.type,
   waitsOn: parsed.fields.waitsOn,

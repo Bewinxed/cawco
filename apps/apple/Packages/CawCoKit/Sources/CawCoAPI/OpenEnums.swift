@@ -6593,8 +6593,8 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/RoutineMadeEventBy`.
-    public enum RoutineMadeEventBy: OpenEnum {
+    /// `#/components/schemas/RoutineMadeInBy`.
+    public enum RoutineMadeInBy: OpenEnum {
         case caw
         case delegate
         case session

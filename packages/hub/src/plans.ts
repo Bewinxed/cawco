@@ -80,27 +80,9 @@ const CHANGES_SHOWN = 20;
  */
 export type WrittenStep = Omit<
   PlanStep,
-  "comments" | "wait" | "waitsOn" | "waitsOnPage"
+  "comments" | "waitsOn" | "waitsOnPage"
 > & {
-  wait?: string | null;
-};
-
-/**
- * A step as a plan is sent: with `waitsOn` in the shape TestFlight ios
- * 20261018 reads (wire-compat.ts BRIDGES), filled from its card wait or its
- * whole-page wait. Nothing reads it back; it goes with that build.
- */
-const bridgedWait = (step: PlanStep): PlanStep => {
-  const target = step.wait ? waitTarget(step.wait) : undefined;
-  if (target?.kind === "card") {
-    return {
-      ...step,
-      waitsOn: { artifactId: target.artifactId, card: target.card },
-    };
-  }
-  return step.waitsOnPage
-    ? { ...step, waitsOn: { artifactId: step.waitsOnPage } }
-    : step;
+  waitsOn?: string | null;
 };
 
 /** The receiver's key, as `plan_changes.receiver` holds it. */
@@ -248,8 +230,8 @@ export const stepLines = (
         .map((step) => {
           const box = BOX[step.status];
           let wait = "";
-          if (step.wait) {
-            wait = ` (waiting on ${waitWords(db, step.wait)})`;
+          if (step.waitsOn) {
+            wait = ` (waiting on ${waitWords(db, step.waitsOn)})`;
           } else if (step.waitsOnPage) {
             wait = ` (waiting on the person on ${pageNamed(db, step.waitsOnPage)})`;
           }
@@ -501,7 +483,7 @@ export const createPlans = (deps: PlansDeps) => {
         ? { awayUnseen: { since: away.since } }
         : {}),
       source: "cawco",
-      steps: (own?.steps ?? []).map(bridgedWait),
+      steps: own?.steps ?? [],
       ...(changes.length > 0 ? { changes } : {}),
       ...(own?.spec && own.specAt
         ? { spec: { markdown: own.spec, at: own.specAt.toISOString() } }
@@ -532,7 +514,7 @@ export const createPlans = (deps: PlansDeps) => {
   const dropSettled = async (row: InstanceRow): Promise<void> => {
     const own = db.sessionPlan(row.id);
     const waits = [
-      ...new Set(own?.steps.flatMap((step) => step.wait ?? []) ?? []),
+      ...new Set(own?.steps.flatMap((step) => step.waitsOn ?? []) ?? []),
     ];
     if (!own || waits.length === 0) {
       return;
@@ -547,8 +529,8 @@ export const createPlans = (deps: PlansDeps) => {
     if (settled.size > 0) {
       db.putSessionSteps(
         row.id,
-        own.steps.map(({ wait, ...step }) =>
-          wait && !settled.has(wait) ? { ...step, wait } : step
+        own.steps.map(({ waitsOn, ...step }) =>
+          waitsOn && !settled.has(waitsOn) ? { ...step, waitsOn } : step
         )
       );
     }
@@ -662,13 +644,13 @@ export const createPlans = (deps: PlansDeps) => {
         }
         db.putSessionSteps(
           row.id,
-          steps.map(({ wait: given, ...step }) => {
+          steps.map(({ waitsOn: given, ...step }) => {
             const kept = before.find((one) => one.id === step.id);
-            const wait = given === undefined ? kept?.wait : given;
+            const wait = given === undefined ? kept?.waitsOn : given;
             return {
               ...step,
               ...(kept?.comments ? { comments: kept.comments } : {}),
-              ...(wait ? { wait } : {}),
+              ...(wait ? { waitsOn: wait } : {}),
               ...(kept?.waitsOnPage ? { waitsOnPage: kept.waitsOnPage } : {}),
             };
           })
@@ -729,7 +711,8 @@ export const createPlans = (deps: PlansDeps) => {
         if (
           plan.steps.some(
             (step) =>
-              step.wait !== undefined && waitArtifact(step.wait) === artifactId
+              step.waitsOn !== undefined &&
+              waitArtifact(step.waitsOn) === artifactId
           )
         ) {
           settleQuietly(instanceId);
@@ -753,7 +736,7 @@ export const createPlans = (deps: PlansDeps) => {
         return waiting.id;
       }
       const current = steps.find((step) => step.status === "in_progress");
-      if (!current || current.wait || current.waitsOnPage) {
+      if (!current || current.waitsOn || current.waitsOnPage) {
         return null;
       }
       db.putSessionSteps(

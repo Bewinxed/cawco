@@ -245,18 +245,6 @@ export interface MachineGoLimits {
  */
 export interface UsageLimitsResponse {
   claude: AccountLimits[];
-  /**
-   * BRIDGE (hub scripts/wire-compat.ts) for TestFlight ios 20261018, which
-   * requires and reads limits per machine (Claude's there the first account
-   * signed in on it). Goes once that build is no longer installable,
-   * 2027-01-16.
-   */
-  machines: {
-    hostname: string;
-    limits: ClaudeLimits;
-    machineId: string;
-    openCodeGo: OpenCodeGoLimits | null;
-  }[];
   openCodeGo: MachineGoLimits[];
 }
 

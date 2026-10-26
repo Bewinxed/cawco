@@ -186,11 +186,6 @@ public struct ProjectTasks: Sendable {
     public enum Edge: Sendable, CaseIterable {
         case after, parent, related, foundIn, duplicateOf
 
-        /// The ones a person may write: the hub's links are waitsOn, partOf and
-        /// duplicateOf since 2026-10-26, it writes found_in itself, and related
-        /// links are gone; their rows stand only for what a task already holds.
-        public static let allCases: [Edge] = [.after, .parent, .duplicateOf]
-
         /// What its row is called.
         public var name: String {
             switch self {
@@ -204,18 +199,15 @@ public struct ProjectTasks: Sendable {
     }
 
     public func link(_ taskId: String, edge: Edge, to: String, remove: Bool = false) async throws -> TaskView {
-        // The hub's links are waitsOn, partOf and duplicateOf since 2026-10-26;
-        // the hub writes found_in itself, and related links are gone.
-        let wire: Operations.PostApiProjectsByIdTasksByTaskIdLinks.Input.Body.JsonPayload
-        switch edge {
-        case .after: wire = .init(waitsOn: [to], remove: remove)
-        case .parent: wire = .init(partOf: to, remove: remove)
-        case .duplicateOf: wire = .init(duplicateOf: to, remove: remove)
-        case .related, .foundIn:
-            throw TaskRefusal(message: "\(edge.name) is no longer a link: link the task with Waits on, Part of or Duplicate of.")
+        let wire: Operations.PostApiProjectsByIdTasksByTaskIdLinks.Input.Body.JsonPayload.EdgePayload = switch edge {
+        case .after: .after
+        case .parent: .parent
+        case .related: .related
+        case .foundIn: .foundIn
+        case .duplicateOf: .duplicateOf
         }
         let output = try await client.postApiProjectsByIdTasksByTaskIdLinks(path: .init(id: projectId, taskId: taskId),
-            body: .json(wire))
+            body: .json(.init(edge: wire, to: to, remove: remove)))
         if case let .ok(ok) = output { return try ok.body.json }
         throw await TaskRefusal.reading(output)
     }

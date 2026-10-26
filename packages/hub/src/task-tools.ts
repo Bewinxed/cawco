@@ -279,7 +279,7 @@ const stepsOf = async (
       status: step.status,
       depth,
       ...(step.priority ? { priority: step.priority } : {}),
-      ...(step.waitsOn === undefined ? {} : { wait: waits[index] ?? null }),
+      ...(step.waitsOn === undefined ? {} : { waitsOn: waits[index] ?? null }),
     };
   });
 };
