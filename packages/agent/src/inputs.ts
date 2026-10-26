@@ -30,7 +30,7 @@ import {
   type InputsAdmitted,
   type InputsRead,
 } from "@cawco/core";
-import { workspaceScratchDir } from "@cawco/core/paths";
+import { workspaceClaudeTmpDir, workspaceScratchDir } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   inputDenial,
@@ -73,6 +73,8 @@ interface Admitted {
  * clone, its scratch dir and `opened`.
  */
 interface Reach {
+  /** The temp root its Claude Code CLIs run with (core `workspaceClaudeTmpDir`), for a parent bound to a workspace. */
+  cliTmp?: string;
   opened: string[];
   roots: string[] | undefined;
 }
@@ -86,12 +88,18 @@ interface Reach {
 const gate = (
   named: string,
   real: string,
-  { opened, roots }: Reach
-): string | undefined =>
-  inputDenial(named, real, opened) ??
-  (roots && !roots.some((root) => within(real, root))
-    ? `${named} is outside your clone and your $TMPDIR; you run inside a workspace's boundary, so you hand on only files of your own`
-    : undefined);
+  { cliTmp, opened, roots }: Reach
+): string | undefined => {
+  const denied = inputDenial(named, real, opened);
+  if (denied || !roots || roots.some((root) => within(real, root))) {
+    return denied;
+  }
+  // The harness's own copy of a picture sent to the session (Claude Code's
+  // `[Image: source: …]`): the picture goes by the name its turn gave it.
+  return cliTmp && within(real, cliTmp)
+    ? `${named} is your harness's own copy, which only your session reads; hand a picture you were sent on by the name its "Attached picture:" line gives it, as { attachment: "<name>" }`
+    : `${named} is outside your clone and your $TMPDIR; you run inside a workspace's boundary, so you hand on only files of your own`;
+};
 
 /**
  * Why `realpath(named)` failed, from its error code: no file there, a link
@@ -322,7 +330,13 @@ const admitAll = async (
         ...opened,
       ]
     : undefined;
-  const reach = { opened, roots };
+  const reach = {
+    opened,
+    roots,
+    ...(isWorkspaceRef(bound)
+      ? { cliTmp: resolveAsFar(workspaceClaudeTmpDir(bound.id)) }
+      : {}),
+  };
   const tally: Tally = { admitted: [], named: new Map(), bytes: 0 };
   for (const path of paths as string[]) {
     const files = await admit(path, reach);

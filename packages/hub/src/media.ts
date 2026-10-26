@@ -44,10 +44,24 @@ let ready = false;
  */
 const writing = new Map<string, Buffer>();
 
+/** The name a picture's bytes are kept under: `<sha256>.<ext>`. */
+const nameOf = (type: string, bytes: Buffer): string =>
+  `${createHash("sha256").update(bytes).digest("hex")}.${EXTENSIONS[type]}`;
+
+/**
+ * The name a picture is kept under ({@link MEDIA_NAME}), base64 as a send
+ * carries it, whether or not it is stored yet; undefined for a type the
+ * store does not keep.
+ */
+export function mediaNameOf(type: string, data: string): string | undefined {
+  return type in EXTENSIONS
+    ? nameOf(type, Buffer.from(data, "base64"))
+    : undefined;
+}
+
 function store(type: string, data: string): string {
   const bytes = Buffer.from(data, "base64");
-  const hash = createHash("sha256").update(bytes).digest("hex");
-  const name = `${hash}.${EXTENSIONS[type]}`;
+  const name = nameOf(type, bytes);
   const path = join(MEDIA_DIR, name);
   if (!ready) {
     mkdirSync(MEDIA_DIR, { recursive: true });

@@ -329,6 +329,52 @@ export const withInputsLine = (
       );
 
 /**
+ * Where a delegate's browser opens the live dashboard (hub dashboard-url.ts
+ * `reachableDashboardUrl`): its browser runs in a container whose loopback
+ * is its own, so only an address off the hub's machine reaches it.
+ * - `open`: at `url`, as any device of the person's network does;
+ * - `paired`: at `url`, which lets in only the person's paired devices
+ *   (hub-auth.ts, "Require paired devices");
+ * - `none`: the hub knows no such address.
+ */
+export type DashboardReach =
+  | { kind: "open"; url: string }
+  | { kind: "paired"; url: string }
+  | { kind: "none" };
+
+/**
+ * `text` with the line that says where its delegate's browser tools open the
+ * live dashboard right after any hand-off marker, so a brief never has it
+ * guess `127.0.0.1`.
+ */
+export const withDashboardLine = (
+  text: string,
+  reach: DashboardReach
+): string => {
+  switch (reach.kind) {
+    case "open":
+      return afterMarker(
+        text,
+        `Your browser tools open the live dashboard at ${reach.url}; 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
+      );
+    case "paired":
+      return afterMarker(
+        text,
+        `The live dashboard at ${reach.url} lets in only the person's paired devices, so your browser tools can't open it.`
+      );
+    case "none":
+      return afterMarker(
+        text,
+        "The hub knows no address of its dashboard that your browser reaches, so your browser tools can't open the live dashboard."
+      );
+    default: {
+      const unhandled: never = reach;
+      throw new Error(`unhandled reach: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
+/**
  * How CawCo moved a workspace's checkout under the session that goes on in
  * it, untold until the next message handed to that session:
  * - `recut`: the workspace retired while its session slept and was cut again

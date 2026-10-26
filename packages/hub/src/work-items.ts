@@ -95,6 +95,7 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
+  type DashboardReach,
   decisionLink,
   handoffMarker,
   holdingWords,
@@ -108,6 +109,7 @@ import {
   todoLink,
   WORK_ITEM_ORIGIN,
   type WorkspaceLanding,
+  withDashboardLine,
   withHostLine,
   withInputsLine,
   withLandingLine,
@@ -857,6 +859,15 @@ export interface WorkItemDeps {
    * never heard. False while the machine is away or does not answer.
    */
   readonly between: (row: InstanceRow) => Promise<boolean>;
+  /**
+   * Where a delegate's browser tools open the live dashboard, for a session
+   * on `machineId` in `projectId` (server.ts): undefined when the fleet's
+   * chrome-devtools does not reach it, so its brief says nothing of it.
+   */
+  readonly browserDashboard: (
+    machineId: string,
+    projectId: string | null
+  ) => DashboardReach | undefined;
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
   readonly call: (
     machineId: string,
@@ -2357,6 +2368,7 @@ const TRAY_HOLD_MS = 6000;
 export const createWorkItems = ({
   projectReached,
   awaitsSend,
+  browserDashboard,
   call,
   command,
   custodyPending,
@@ -6348,10 +6360,16 @@ export const createWorkItems = ({
     }
     /** Its first message, which names its inputs: sent once they are in. */
     const brief = (): void => {
-      const content = withInputsLine(
+      const asked = withInputsLine(
         `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
         inputs.files
       );
+      // Its browser's loopback is its own: it is told where the dashboard is.
+      const dashboard = browserDashboard(
+        workspace.machineId,
+        item.projectId ?? null
+      );
+      const content = dashboard ? withDashboardLine(asked, dashboard) : asked;
       send(
         messageOf(
           instanceId,

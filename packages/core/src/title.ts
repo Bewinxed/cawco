@@ -16,12 +16,14 @@ const COMMAND_ECHO =
 const ANY_TAG = /<[^>]+>/gu;
 const WHITESPACE_RUN = /\s+/gu;
 /**
- * The attached files' lines (core `attachedFileLine`) and all after them: a
- * turn carries them after its typed words. Matched from the first one to the
- * end, not line by line, because a harness's session list reports its first
- * prompt folded onto one line and cut short (claude's `firstPrompt`).
+ * The attached files' and pictures' lines (core `attachedFileLine`,
+ * `attachedPictureLine`) and all after them: a turn carries them after its
+ * typed words. Matched from the first one to the end, not line by line,
+ * because a harness's session list reports its first prompt folded onto one
+ * line and cut short (claude's `firstPrompt`).
  */
-const ATTACHED_TAIL = /\s*Attached file: [~/][\s\S]*$/u;
+const ATTACHED_TAIL =
+  /\s*Attached (?:file: [~/]|picture: picture-[a-f0-9])[\s\S]*$/u;
 
 /**
  * A session's first message as a title. A slash command's first message is the
@@ -32,7 +34,7 @@ const ATTACHED_TAIL = /\s*Attached file: [~/][\s\S]*$/u;
  */
 export function deriveTitleFromFirstMessage(raw: string): string {
   const command = COMMAND_ECHO.exec(raw)?.[1]?.trim();
-  // A file's line names where the machine put it, not what the session is about.
+  // A file's or picture's line names what rode with the words, not what the session is about.
   const typed = raw.replace(ATTACHED_TAIL, "");
   const cleaned = (command ?? typed.replace(ANY_TAG, " "))
     .replace(WHITESPACE_RUN, " ")

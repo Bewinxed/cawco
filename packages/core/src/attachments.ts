@@ -128,6 +128,44 @@ export function attachedFiles(text: string): {
   return files.length ? { typed: typed.trimEnd(), files } : { typed: text };
 }
 
+/** How many hex characters of a picture's hash its name keeps: plenty to tell one session's pictures apart. */
+const PICTURE_HASH_CHARS = 12;
+
+const PICTURE_NAME = /^picture-([a-f0-9]{12})\.(png|jpg|gif|webp)$/u;
+
+/**
+ * A picture's name as a session is told it and hands it on by (hub
+ * handed-inputs.ts `{ attachment }`): `picture-<its hash>.<ext>`, from the
+ * hub's media store name for its bytes (hub media.ts, `<sha256>.<ext>`).
+ */
+export const pictureName = (mediaName: string): string =>
+  `picture-${mediaName.slice(0, PICTURE_HASH_CHARS)}${mediaName.slice(mediaName.lastIndexOf("."))}`;
+
+/** A {@link pictureName}: the start of its hash and its extension, or null for any other string. */
+export const pictureNamed = (
+  name: string
+): { hash: string; extension: string } | null => {
+  const match = PICTURE_NAME.exec(name.trim().toLowerCase());
+  return match ? { hash: match[1], extension: match[2] } : null;
+};
+
+/**
+ * The line a turn carries for each picture it carries, after its words and
+ * its files' lines: the one name the session reads it by, and hands it on
+ * by as `{ attachment: "<name>" }`.
+ */
+export const attachedPictureLine = (name: string): string =>
+  `Attached picture: ${name}`;
+
+const ATTACHED_PICTURE =
+  /\n*^Attached picture: picture-[a-f0-9]{12}\.(?:png|jpg|gif|webp)$/gmu;
+
+/** A user turn's words without its {@link attachedPictureLine}s: the picture shows as itself. */
+export const withoutPictureLines = (text: string): string => {
+  const typed = text.replace(ATTACHED_PICTURE, "");
+  return typed === text ? text : typed.trimEnd();
+};
+
 /** The clips a machine's file reader serves (agent fs.ts `MEDIA_TYPES`). */
 export const VIDEO_FILE = /\.(mp4|mov|webm)$/iu;
 

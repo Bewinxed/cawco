@@ -22,6 +22,7 @@ import {
   type InstanceRow,
   type SessionAttachment,
 } from "@cawco/core";
+import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
 import { type HeldInput, inputFileName } from "@cawco/core/handed-input";
 import {
@@ -61,6 +62,12 @@ export interface HandedInputDeps {
   outputsFolder: (item: WorkItemRow) => string;
   /** The work items the caller reads, newest first: those of its delegation tree and of its project. */
   reachable: (caller: InstanceRow) => WorkItemRow[];
+  /**
+   * The pictures the hub handed a session, by their media store names
+   * (media.ts `<sha256>.<ext>`): its send records', which keep the bytes
+   * as sent, whatever copy its harness stored.
+   */
+  sentPictures: (instanceId: string) => string[];
   /** The sessions of the caller's delegation tree (delegation-tree.ts `treeSessions`). */
   tree: (caller: InstanceRow) => Set<string>;
   /** A text file of a workspace, by path from its clone's root, read inside its boundary; throws in the machine's words. */
@@ -367,6 +374,44 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     return `attachment-${inputFileName(one.name)}${extension}`;
   };
 
+  /**
+   * A picture by the name its turn's line gave it (core `pictureName`):
+   * one the hub handed `holder`, read out of the media store.
+   */
+  const namedPicture = (
+    holder: InstanceRow,
+    own: boolean,
+    picture: { hash: string; extension: string },
+    entry: string
+  ): HandedFile[] => {
+    const name = deps
+      .sentPictures(holder.id)
+      .find(
+        (one) =>
+          one.startsWith(picture.hash) && one.endsWith(`.${picture.extension}`)
+      );
+    const where = own ? "your session" : `session ${short(holder.id)}`;
+    if (!name) {
+      throw new HandedInputRefusal(
+        `${entry}: no picture by that name was sent to ${where}; use a name an "Attached picture:" line gave`
+      );
+    }
+    const bytes = mediaBytes(name);
+    if (!bytes) {
+      throw new HandedInputRefusal(
+        `${entry}: the picture was sent to ${where}, but the hub's media store no longer holds its bytes`
+      );
+    }
+    return [
+      {
+        name: `attachment-${pictureName(name)}`,
+        bytes: Buffer.from(bytes),
+        // Read by the receiver: the caller is its parent.
+        from: `a picture sent to ${own ? "your parent" : `session ${short(holder.id)}`}`,
+      },
+    ];
+  };
+
   const attachment = async (
     caller: InstanceRow,
     named: string,
@@ -374,6 +419,10 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
   ): Promise<HandedFile[]> => {
     const entry = `{ attachment: "${named}"${session ? `, session: "${session}"` : ""} }`;
     const holder = attachmentHolder(caller, session, entry);
+    const picture = pictureNamed(named);
+    if (picture) {
+      return namedPicture(holder, holder.id === caller.id, picture, entry);
+    }
     const one = await attachmentNamed(
       holder,
       holder.id === caller.id,

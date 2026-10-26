@@ -23,6 +23,20 @@ export const noteTailnetDashboard = (url: string | null): void => {
 };
 
 /**
+ * The dashboard's address a browser off the hub's machine opens, or null
+ * when the hub knows none: {@link dashboardUrl} without its guess. A
+ * delegate's browser runs in a container (agent browser/container-host.ts),
+ * whose loopback is its own, so it is told this address, never 127.0.0.1
+ * (work-items.ts, core injected.ts `withDashboardLine`). The guess is no
+ * such address: a hostname the container's resolver may not know.
+ */
+export const reachableDashboardUrl = (registry: RegistryShape): string | null =>
+  DASHBOARD_URL_OVERRIDE ??
+  tailnetDashboard ??
+  registry.dashboardOrigin() ??
+  null;
+
+/**
  * Where a link the hub hands out (a session's page, the app's web dashboard)
  * sends the reader.
  *
@@ -43,10 +57,7 @@ export const noteTailnetDashboard = (url: string | null): void => {
  * dashboard has ever connected to, and better than no link at all.
  */
 export const dashboardUrl = (registry: RegistryShape): string =>
-  DASHBOARD_URL_OVERRIDE ??
-  tailnetDashboard ??
-  registry.dashboardOrigin() ??
-  `http://${hostname()}:${DASHBOARD_PORT}`;
+  reachableDashboardUrl(registry) ?? `http://${hostname()}:${DASHBOARD_PORT}`;
 
 /**
  * The dashboard's https address, or null when none is known: where a sign-in

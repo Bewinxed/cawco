@@ -216,7 +216,7 @@ const inputsParameter = () =>
     .array(handedInputSchema(false))
     .optional()
     .describe(
-      'Files for its $TMPDIR/inputs/: a path to a file, or to a folder (copied as inputs/<folder>/…, every file counted). Or what the hub holds, named by full id, short id or handle like cockpit#5a167bde: report or assets (an item\'s outputs with their folders) by item or session; an artifact as its files and picture; attachment by id or a name like "Picture 2"; blob: base64.'
+      'Files for its $TMPDIR/inputs/: a path to a file, or to a folder (copied as inputs/<folder>/…, every file counted). Or what the hub holds, named by full id, short id or handle like cockpit#5a167bde: report or assets (an item\'s outputs with their folders) by item or session; an artifact as its files and picture; attachment by id, a name like "Picture 2", or the name an "Attached picture:" line gives a picture you were sent; blob: base64.'
     );
 
 /** `handoff`'s call: the message, with the inputs of a session that may delegate. */

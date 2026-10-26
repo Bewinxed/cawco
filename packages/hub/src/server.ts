@@ -157,6 +157,7 @@ import {
   atProviderLimit,
   attachedFileLine,
   attachedFileName,
+  attachedPictureLine,
   awayNotesOf,
   BOUNDARY_RELAUNCH,
   byPerson,
@@ -334,6 +335,7 @@ import {
   parseArtifactResponses,
   pauseClock,
   permissionModeNamed,
+  pictureName,
   previewEnterUrl,
   previewRoute,
   providerChoices,
@@ -612,6 +614,7 @@ import { dashboardErrorsRoutes } from "./dashboard-errors";
 import {
   dashboardUrl,
   noteTailnetDashboard,
+  reachableDashboardUrl,
   secureDashboardUrl,
 } from "./dashboard-url";
 import type {
@@ -755,6 +758,7 @@ import {
   mediaBase64,
   mediaContentType,
   mediaFilePath,
+  mediaNameOf,
   mediaWriting,
   storedFilePath,
   storeFile,
@@ -1095,6 +1099,10 @@ const BUSY_TIMEOUT_MS = 5000;
 
 /** A `Range: bytes=a-b` header (one range, either end open). */
 const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/u;
+/** The fleet's browser tool, by its fleet name (agent browser/door.ts `CHROME_DEVTOOLS`). */
+const CHROME_DEVTOOLS = "chrome-devtools";
+/** A picture's address in the media store (media.ts), its name after it. */
+const MEDIA_ADDRESS = /^\/api\/media\//u;
 
 /** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
 const MODEL_ID_WORD = /[-.]/u;
@@ -9131,6 +9139,63 @@ export const createServer = (
   };
 
   /**
+   * A send with each picture it carries named in its words, after what it
+   * says (core `attachedPictureLine`): the name the session hands it on by
+   * (handed-inputs.ts `{ attachment }`), from the bytes, so every harness
+   * reads it as its words. A picture reaches a session as bytes alone
+   * otherwise, and the only name it had was Files' "Picture N", which the
+   * hub mints by reading the whole transcript and no session sees. A send
+   * already naming them (the same send handed on again) is as it was.
+   */
+  const picturesNamed = (
+    envelope: Envelope<SendPayload>
+  ): Envelope<SendPayload> => {
+    const { images = [], message } = envelope.payload;
+    const said = message.message.content;
+    // Its pictures as the payload carries them, and those its content holds
+    // (an artifact event's, `artifactEventPayload`).
+    const carried = [
+      ...images,
+      ...(typeof said === "string" ? [] : said).flatMap((block) =>
+        block.type === "image" && block.source.type === "base64"
+          ? [{ mediaType: block.source.media_type, data: block.source.data }]
+          : []
+      ),
+    ];
+    const lines = carried.flatMap(({ mediaType, data }) => {
+      const name = mediaNameOf(mediaType, data);
+      return name ? [attachedPictureLine(pictureName(name))] : [];
+    });
+    const words =
+      typeof said === "string"
+        ? said
+        : said
+            .flatMap((block) => (block.type === "text" ? [block.text] : []))
+            .join("\n");
+    const added = [...new Set(lines)].filter((line) => !words.includes(line));
+    if (added.length === 0) {
+      return envelope;
+    }
+    const named = added.join("\n");
+    return {
+      ...envelope,
+      payload: {
+        ...envelope.payload,
+        message: {
+          ...message,
+          message: {
+            ...message.message,
+            content:
+              typeof said === "string"
+                ? `${said}\n\n${named}`
+                : [...said, { type: "text" as const, text: named }],
+          },
+        },
+      },
+    };
+  };
+
+  /**
    * THE ONE PATH A MESSAGE TAKES INTO A SESSION, whoever sent it — a reader, a
    * rule, fleet watch's nudge, a delegate's report, another session's hand-off.
    * A session whose process is gone is woken first ({@link wakeForSend}), so
@@ -9187,7 +9252,7 @@ export const createServer = (
     }
     tellForkFirst(envelope);
     tellPlanFirst(envelope);
-    return deliverToSession(envelope, ahead);
+    return deliverToSession(picturesNamed(envelope), ahead);
   };
 
   /**
@@ -21543,7 +21608,7 @@ export const createServer = (
     }
     // Each session's chrome-devtools reaches its own browser door (the
     // agent's browser/door.ts `CHROME_DEVTOOLS`), its page state its own.
-    if (name === "chrome-devtools") {
+    if (name === CHROME_DEVTOOLS) {
       return "chrome-devtools reaches each session's own browser door, so it cannot be shared.";
     }
     return projectId
@@ -24023,6 +24088,31 @@ export const createServer = (
     }
   };
   const workItems = createWorkItems({
+    // A delegate whose tools reach the fleet's chrome-devtools is told the
+    // dashboard's address off this machine (core `withDashboardLine`).
+    browserDashboard: (machineId, projectId) => {
+      const browser = db.getMcpServer(CHROME_DEVTOOLS);
+      const machine = db
+        .listAgents()
+        .find((agentRow) => agentRow.machineId === machineId);
+      if (!(
+        browser?.enabled &&
+        (browser.projectId === null || browser.projectId === projectId) &&
+        mcpRunsOn(
+          { platforms: browser.platforms ?? undefined },
+          machine ? machinePlatform(machine) : undefined
+        )
+      )) {
+        return;
+      }
+      const url = reachableDashboardUrl(registry);
+      if (!url) {
+        return { kind: "none" };
+      }
+      return hubAuth.mode() === "pairing"
+        ? { kind: "paired", url }
+        : { kind: "open", url };
+    },
     // Undecided while the machine is away or has not read its custody since
     // it came back, and while it holds the session's process alive: neither
     // proves the session gone.
@@ -26248,6 +26338,22 @@ export const createServer = (
           ].map((item) => [item.id, item])
         ).values(),
       ].toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    // Every picture a send that reached the session carried, as its record
+    // keeps it: a media store address (`sentFrame`, `externalizeImages`).
+    sentPictures: (instanceId) =>
+      db.sendsIn(instanceId, ["pending", "read"]).flatMap((row) => {
+        const { content } = row.body.message;
+        return typeof content === "string"
+          ? []
+          : content.flatMap((block) => {
+              const { source } = block as { source?: { url?: unknown } };
+              return block.type === "image" &&
+                typeof source?.url === "string" &&
+                MEDIA_ADDRESS.test(source.url)
+                ? [source.url.replace(MEDIA_ADDRESS, "")]
+                : [];
+            });
+      }),
     tree: (caller) => treeSessions(db, caller),
     // Read inside the workspace's boundary, as its own sessions read it.
     workspaceText: async (workspaceId, path) => {

@@ -10,7 +10,7 @@
  */
 
 import { accountMoveWords } from "./accounts";
-import { attachedFiles } from "./attachments";
+import { attachedFiles, withoutPictureLines } from "./attachments";
 import type {
   CompactionFailure,
   HarnessNote,
@@ -1499,8 +1499,11 @@ function pastedText(text: string): {
     name: match[1],
     content: match[2],
   }));
+  // A picture's line names it for the session alone: the picture shows as itself.
   const { typed, files = [] } = attachedFiles(
-    texts.length ? text.replace(PASTED_TEXT, "").trimEnd() : text
+    withoutPictureLines(
+      texts.length ? text.replace(PASTED_TEXT, "").trimEnd() : text
+    )
   );
   const attachments = [...texts, ...files];
   return attachments.length ? { typed, attachments } : { typed };

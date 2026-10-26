@@ -18,8 +18,10 @@
  * - `pins`: an artifact's pins, each with its thread;
  * - `find`: a `find` hit's ref, as the turns around it;
  * - `attachment`: a file or picture a session's messages carried, by its id
- *   or its name as Files lists it ("Picture 2"), the caller's own session's
- *   unless `session` names another of its tree;
+ *   or its name as Files lists it ("Picture 2"), or a picture the hub sent
+ *   it by the name its turn's line gave it (attachments.ts
+ *   `attachedPictureLine`), the caller's own session's unless `session`
+ *   names another of its tree;
  * - `assets`: the files an item's `outputs` put in its project's folder, at
  *   any depth and landing with their folders, by its item id or its
  *   session's;
@@ -76,7 +78,7 @@ export type HeldInput = Exclude<HandedInput, string>;
 
 /** Every entry's shape, in the words a refusal shows. */
 const HANDED_SHAPES =
-  "an absolute path to a file or folder, or one of { report: id }, { artifact: id }, { pins: artifact id }, { find: ref }, { attachment: id or name, session?: id }, { assets: item id }, { text, name }, { blob: base64, name }";
+  "an absolute path to a file or folder, or one of { report: id }, { artifact: id }, { pins: artifact id }, { find: ref }, { attachment: id, name or picture-<hash>.<ext>, session?: id }, { assets: item id }, { text, name }, { blob: base64, name }";
 
 /**
  * `value` as {@link HandedInput}s, or why it is none: each entry's place
