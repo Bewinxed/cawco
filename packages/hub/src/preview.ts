@@ -22,6 +22,7 @@ import {
   cachePreview,
   causeOf,
   compressed,
+  decodedHeaders,
   downResponse,
   folderKey,
   IMMUTABLE,
@@ -670,12 +671,7 @@ const upstreamHeaders = (request: Request, direct: boolean): Headers => {
  * in front, so a module the app would have revalidated is never stored.
  */
 const downstreamHeaders = (response: Response, direct: boolean): Headers => {
-  const headers = proxyHeaders(response.headers);
-  // Same as the daemon hop: the body is already decoded here.
-  if (headers.has("content-encoding")) {
-    headers.delete("content-encoding");
-    headers.delete("content-length");
-  }
+  const headers = decodedHeaders(response.headers);
   cachePreview(headers, response.status, direct);
   const set = headers.getSetCookie();
   if (set.length > 0) {

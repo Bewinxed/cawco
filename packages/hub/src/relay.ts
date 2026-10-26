@@ -63,6 +63,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { machineId } from "@cawco/core/machine-id";
+import { octokitAnswer } from "@cawco/core/octokit-answer";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
@@ -570,20 +571,9 @@ export const createRelay = ({
       signal: AbortSignal;
     }) => Promise<{ data: T; status: number }>
   ): Promise<Bounded<{ data: unknown; status: number }>> =>
-    readWithin(GITHUB_MS, async (signal) => {
-      try {
-        return await call({ redirect: "error", signal });
-      } catch (error) {
-        const refused = error as {
-          response?: { data?: unknown };
-          status?: unknown;
-        } | null;
-        if (typeof refused?.status === "number" && refused.response) {
-          return { status: refused.status, data: refused.response.data };
-        }
-        throw error;
-      }
-    });
+    readWithin(GITHUB_MS, (signal) =>
+      octokitAnswer(() => call({ redirect: "error", signal }))
+    );
 
   /** "GitHub did not answer within N s". */
   const githubSilent = (after: number): string =>

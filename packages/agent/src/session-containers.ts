@@ -100,6 +100,7 @@ import { join } from "node:path";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { machineId } from "@cawco/core/machine-id";
 import { cawcoDataDir, darwinSocketRoot } from "@cawco/core/paths";
+import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { containerWords } from "@cawco/core/words/containers";
 import { parseAllDocuments } from "yaml";
@@ -197,16 +198,8 @@ const said = (error: unknown): string =>
 
 /** Runs `argv` with the host's environment; its stdout, or undefined when it fails. */
 const output = async (argv: string[]): Promise<string | undefined> => {
-  const child = Bun.spawn(argv, {
-    stdout: "pipe",
-    stderr: "ignore",
-    env: hostEnvironment(),
-  });
-  const [text, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    child.exited,
-  ]);
-  return code === 0 ? text.trim() : undefined;
+  const ran = await runCaptured(argv, { env: hostEnvironment() });
+  return ran.code === 0 ? ran.stdout.trim() : undefined;
 };
 
 /** One reason a runtime got no door, said once per agent. */
@@ -594,6 +587,13 @@ const serveConnection = (
       pending = Buffer.alloc(0);
     }
   };
+  /** Up to `bytes` of what has come, taken off its front. */
+  const taken = (bytes: number): Buffer => {
+    const take = pending.subarray(0, bytes);
+    pending = pending.subarray(take.length);
+    return take;
+  };
+
   /** Reads what has come, as far as it goes. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one reader for HTTP/1.1's three body framings, passed through or held for a create
   const pump = (): void => {
@@ -611,8 +611,7 @@ const serveConnection = (
           }
           return;
         }
-        const raw = pending.subarray(0, end + 4);
-        pending = pending.subarray(end + 4);
+        const raw = taken(end + 4);
         const [first = "", ...rest] = raw
           .subarray(0, end)
           .toString("latin1")
@@ -651,8 +650,7 @@ const serveConnection = (
         continue;
       }
       if (reading.at === "length") {
-        const take = pending.subarray(0, reading.left);
-        pending = pending.subarray(take.length);
+        const take = taken(reading.left);
         send(take);
         reading.left -= take.length;
         if (reading.left > 0) {
@@ -663,8 +661,7 @@ const serveConnection = (
       }
       if (reading.at === "chunked") {
         if (reading.left > 0) {
-          const take = pending.subarray(0, reading.left);
-          pending = pending.subarray(take.length);
+          const take = taken(reading.left);
           send(take);
           reading.left -= take.length;
           if (reading.left > 0) {
@@ -684,8 +681,7 @@ const serveConnection = (
       // A create: its body held whole, then sent stamped.
       const create = reading;
       if (!create.chunked) {
-        const take = pending.subarray(0, create.left);
-        pending = pending.subarray(take.length);
+        const take = taken(create.left);
         create.body.push(take);
         create.size += take.length;
         create.left -= take.length;
@@ -693,8 +689,7 @@ const serveConnection = (
           return;
         }
       } else if (create.left > 0) {
-        const take = pending.subarray(0, create.left);
-        pending = pending.subarray(take.length);
+        const take = taken(create.left);
         // Each chunk's own CRLF, its last two bytes, is framing, not body.
         const data = take.subarray(0, Math.max(0, create.left - 2));
         create.left -= take.length;

@@ -512,6 +512,19 @@ const accessOf = async (
   };
 };
 
+/** The project's rows placed in workspace `id`'s `path`; a failure is said, and its sessions start without them. */
+const placeProjectRows = (
+  id: string,
+  path: string,
+  projectId: string,
+  placeRows: CreateAsked["placeRows"]
+): Promise<void> =>
+  placeRows(path, projectId).catch((error: unknown) =>
+    console.warn(
+      `[workspace] ${id}: its project's rows were not placed in ${path}, so its sessions start without them: ${error instanceof Error ? error.message : String(error)}`
+    )
+  );
+
 /**
  * What workspace `id`'s boundary reads from its first start, cut at `path`:
  * the user layer of `account`, the Claude account its first session launches
@@ -1016,11 +1029,7 @@ const cutClone = async (
     // and first session start: nothing is asked of the hub, and the
     // boundary's form has them from its start.
     if (typeof projectId === "string" && projectId) {
-      await placeRows(path, projectId).catch((error: unknown) =>
-        console.warn(
-          `[workspace] ${id}: its project's rows were not placed in ${path}, so its sessions start without them: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      await placeProjectRows(id, path, projectId, placeRows);
     }
     const boundary = await ensureBoundary({ id, path });
     const restored = await applyCarried({ id, path }, carried);
@@ -1083,11 +1092,7 @@ const makeFolderLayer = async (
     // boundary and first session start. A view writes nothing into the
     // person's folder.
     if (typeof projectId === "string" && projectId && layer.form === "copy") {
-      await placeRows(path, projectId).catch((error: unknown) =>
-        console.warn(
-          `[workspace] ${id}: its project's rows were not placed in ${path}, so its sessions start without them: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      await placeProjectRows(id, path, projectId, placeRows);
     }
     const boundary = await ensureBoundary(workspace);
     await markMade(id);
@@ -2057,14 +2062,12 @@ const writeCarry = async (
   skip: readonly string[]
 ): Promise<{ carry: string; left: string[] }> => {
   await closedCloneGit(workspace, access);
-  const carry = carryFolder(workspace.id);
-  await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
-  const ran = await runInCopy(access, workspace.path, [
-    "sh",
-    "-c",
-    `${SAFE_GIT_SHELL}${carrySteps(shellQuote(carry), held, skip, "clone")}`,
-  ]);
-  try {
+  return await intoCarry(workspace.id, async (carry) => {
+    const ran = await runInCopy(access, workspace.path, [
+      "sh",
+      "-c",
+      `${SAFE_GIT_SHELL}${carrySteps(shellQuote(carry), held, skip, "clone")}`,
+    ]);
     if (ran.exitCode !== 0) {
       throw new Error(ran.stderr.trim() || `exit ${ran.exitCode}`);
     }
@@ -2077,14 +2080,8 @@ const writeCarry = async (
         )
       : [];
     await ownFilesOnly(carry);
-    return { carry, left };
-  } catch (error) {
-    await rm(carry, { recursive: true, force: true });
-    throw new Error(
-      `Workspace ${workspace.id} was not archived: its carry could not be written, so nothing was deleted. ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error }
-    );
-  }
+    return left;
+  });
 };
 
 /**
@@ -2093,17 +2090,27 @@ const writeCarry = async (
  * host (carry.ts `copyStrays`), and those not copied. One that could not be
  * written whole is taken away again, and nothing is deleted.
  */
-const carryStrays = async (
+const carryStrays = (
   id: string,
   path: string
+): Promise<{ carry: string; left: string[] }> =>
+  intoCarry(id, async (carry) =>
+    copyStrays(path, await strayEntries(path), carry)
+  );
+
+/**
+ * Workspace `id`'s carry written by `fill`, which answers what it left
+ * behind. One that could not be written whole is taken away again, and the
+ * archive refuses: nothing is deleted.
+ */
+const intoCarry = async (
+  id: string,
+  fill: (carry: string) => Promise<string[]>
 ): Promise<{ carry: string; left: string[] }> => {
   const carry = carryFolder(id);
   await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
   try {
-    return {
-      carry,
-      left: await copyStrays(path, await strayEntries(path), carry),
-    };
+    return { carry, left: await fill(carry) };
   } catch (error) {
     await rm(carry, { recursive: true, force: true });
     throw new Error(
@@ -2120,13 +2127,11 @@ const carryStrays = async (
  * One that could not be written whole is taken away again, and nothing is
  * deleted.
  */
-const carryChanged = async (
+const carryChanged = (
   id: string,
   layer: Layer
-): Promise<{ carry: string; left: string[] }> => {
-  const carry = carryFolder(id);
-  await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
-  try {
+): Promise<{ carry: string; left: string[] }> =>
+  intoCarry(id, async (carry) => {
     const changed = await changesOf(layer);
     const written = changed
       .filter((each) => each.change === "write")
@@ -2143,15 +2148,8 @@ const carryChanged = async (
         .map((each) => `${each.path}\n`)
         .join("")
     );
-    return { carry, left };
-  } catch (error) {
-    await rm(carry, { recursive: true, force: true });
-    throw new Error(
-      `Workspace ${id} was not archived: its carry could not be written, so nothing was deleted. ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error }
-    );
-  }
-};
+    return left;
+  });
 
 /**
  * {@link CONTROL_WORKSPACE_ARCHIVE}: the boundary killed first with

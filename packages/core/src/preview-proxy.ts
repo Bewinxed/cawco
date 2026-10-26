@@ -862,6 +862,21 @@ export function proxyHeaders(input: Headers): Headers {
   return headers;
 }
 
+/**
+ * A fetched response's headers as they go on down ({@link proxyHeaders}):
+ * fetch has already decoded the body, so a `content-encoding` left on the
+ * way down would label plain bytes as gzip and the browser refuses them;
+ * the encoding and its length go.
+ */
+export function decodedHeaders(input: Headers): Headers {
+  const headers = proxyHeaders(input);
+  if (headers.has("content-encoding")) {
+    headers.delete("content-encoding");
+    headers.delete("content-length");
+  }
+  return headers;
+}
+
 export interface PreviewSocket {
   closed: boolean;
   headers: Headers;

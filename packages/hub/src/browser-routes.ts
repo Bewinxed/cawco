@@ -40,6 +40,7 @@ import {
 import { detach } from "@cawco/core/detach";
 import {
   causeOf,
+  decodedHeaders,
   type PreviewSocket,
   previewWebSocket,
   proxyHeaders,
@@ -554,13 +555,8 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     if (response.status === 401) {
       forgetViewer(viewerId);
     }
-    const answer = proxyHeaders(response.headers);
+    const answer = decodedHeaders(response.headers);
     answer.delete("set-cookie");
-    // fetch has already decoded the body.
-    if (answer.has("content-encoding")) {
-      answer.delete("content-encoding");
-      answer.delete("content-length");
-    }
     return new Response(response.body, {
       status: response.status,
       headers: answer,

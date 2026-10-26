@@ -10,6 +10,7 @@ import {
 import {
   cachePreview,
   causeOf,
+  decodedHeaders,
   downResponse,
   type FolderWeight,
   folderGone,
@@ -497,15 +498,9 @@ async function toNeko(
     );
     return refused(502, `${key}'s neko didn't answer: ${causeOf(error)}`);
   }
-  const answer = proxyHeaders(response.headers);
-  // fetch has already decoded the body.
-  if (answer.has("content-encoding")) {
-    answer.delete("content-encoding");
-    answer.delete("content-length");
-  }
   return new Response(response.body, {
     status: response.status,
-    headers: answer,
+    headers: decodedHeaders(response.headers),
   });
 }
 
@@ -894,13 +889,7 @@ async function start(
           },
         });
       }
-      const headers = proxyHeaders(response.headers);
-      // fetch has already decoded the body; a `content-encoding` left on the
-      // way down would label plain bytes as gzip and the browser refuses them.
-      if (headers.has("content-encoding")) {
-        headers.delete("content-encoding");
-        headers.delete("content-length");
-      }
+      const headers = decodedHeaders(response.headers);
       for (const name of [
         "x-frame-options",
         "content-security-policy",

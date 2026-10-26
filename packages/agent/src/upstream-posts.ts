@@ -14,6 +14,7 @@
 import { join } from "node:path";
 import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { octokitAnswer } from "@cawco/core/octokit-answer";
 import { repositoryConfigProblem } from "@cawco/core/safe-git";
 import { GITHUB_API, isWriteMethod } from "@cawco/core/upstream-guard";
 import {
@@ -132,9 +133,9 @@ const makeHttp = async (post: HttpPost): Promise<PostMade> => {
     baseUrl: `https://${post.host}`,
     userAgent: "CawCo",
   });
-  const read = await readWithin(MAKE_MS, async (signal) => {
-    try {
-      const answer = await octokit.request({
+  const read = await readWithin(MAKE_MS, (signal) =>
+    octokitAnswer(() =>
+      octokit.request({
         method: post.method,
         url: `${post.path}${post.search}`.replace(TEMPLATE_MARKS, (mark) =>
           encodeURIComponent(mark)
@@ -142,21 +143,9 @@ const makeHttp = async (post: HttpPost): Promise<PostMade> => {
         headers: post.contentType ? { "content-type": post.contentType } : {},
         ...(post.body === undefined ? {} : { data: post.body }),
         request: { redirect: "manual", signal },
-      });
-      return { status: answer.status, data: answer.data as unknown };
-    } catch (error) {
-      // Octokit throws GitHub's own answer for any status of 300 or more
-      // (@octokit/request-error `RequestError`: its `status` and `response`).
-      const refused = error as {
-        response?: { data?: unknown };
-        status?: unknown;
-      } | null;
-      if (typeof refused?.status === "number" && refused.response) {
-        return { status: refused.status, data: refused.response.data };
-      }
-      throw error;
-    }
-  });
+      })
+    )
+  );
   switch (read.kind) {
     case "answered": {
       const { status, data } = read.value;

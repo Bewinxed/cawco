@@ -52,6 +52,7 @@ import {
 } from "@cawco/core/install-script";
 import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
+import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Elysia, t } from "elysia";
@@ -73,18 +74,11 @@ const output = async (
   ms = OUTPUT_MS
 ): Promise<string | undefined> => {
   const ran = await readWithin(ms, async (signal) => {
-    const child = Bun.spawn(argv, {
+    const { code, stdout } = await runCaptured(argv, {
       env: hostEnvironment(),
-      stdout: "pipe",
-      stderr: "ignore",
-      stdin: "ignore",
       signal,
     });
-    const [text, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    return code === 0 ? text.trim() : undefined;
+    return code === 0 ? stdout.trim() : undefined;
   });
   switch (ran.kind) {
     case "answered":

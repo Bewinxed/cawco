@@ -7,6 +7,7 @@
     "./runtime": "./src/runtime.ts",
     "./build-info": "./src/build-info.ts",
     "./run-captured": "./src/run-captured.ts",
+    "./octokit-answer": "./src/octokit-answer.ts",
     "./activity": "./src/activity.ts",
     "./artifact-kinds": "./src/artifact-kinds.ts",
     "./find-match": "./src/find-match.ts",

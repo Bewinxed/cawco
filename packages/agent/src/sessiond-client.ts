@@ -35,6 +35,7 @@ import { fileURLToPath } from "node:url";
 import type { SessionLimits } from "@cawco/core";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import { answers } from "@cawco/core/keepers";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
 import { standalone } from "@cawco/core/runtime";
@@ -164,37 +165,6 @@ class SessiondUnavailableError extends Error {
 }
 
 /**
- * Does something answer on this endpoint? The dial half of the §9 probe:
- * answered true when a connect completes, answered false when it is refused
- * (nothing listens), unanswered when it did not complete within `timeoutMs`.
- */
-const probeEndpoint = (
-  endpoint: string,
-  timeoutMs = DIAL_TIMEOUT_MS
-): Promise<Bounded<boolean>> =>
-  readWithin(
-    timeoutMs,
-    (signal) =>
-      new Promise<boolean>((resolve) => {
-        // Constructed unconnected, listeners first, THEN dialled: an `ENOENT`
-        // on a socket with no `error` listener yet is an uncaught exception,
-        // and the absent-endpoint case is the one this function exists to
-        // answer.
-        const socket = new Socket();
-        const settle = (answer: boolean): void => {
-          socket.destroy();
-          resolve(answer);
-        };
-        signal.addEventListener("abort", () => socket.destroy(), {
-          once: true,
-        });
-        socket.once("connect", () => settle(true));
-        socket.once("error", () => settle(false));
-        socket.connect(endpoint);
-      })
-  );
-
-/**
  * What one dial learned of the keeper: whether its `welcome` came, and if not,
  * how far the dial got. The keeper writes its welcome in the same turn of its
  * loop as the accept, so any answer but a welcome, from a keeper the service
@@ -225,7 +195,7 @@ export const dialKeeper = async (
     timeoutMs,
     (signal) =>
       new Promise<KeeperDial>((resolve) => {
-        // Listeners before the dial, as in {@link probeEndpoint}.
+        // Listeners before the dial, as in core `answers`.
         const socket = new Socket();
         const lines = new LineSplitter();
         const settle = (welcomed: boolean, detail: string): void => {
@@ -306,7 +276,7 @@ export const ensureSessiond = async (
   endpoint: string = sessiondEndpoint(),
   env: NodeJS.ProcessEnv = process.env
 ): Promise<void> => {
-  const there = await probeEndpoint(endpoint);
+  const there = await answers(endpoint, DIAL_TIMEOUT_MS);
   switch (there.kind) {
     case "answered":
       if (there.value) {
@@ -339,7 +309,7 @@ export const ensureSessiond = async (
 
   const deadline = Date.now() + ADHOC_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const bound = await probeEndpoint(endpoint, 250);
+    const bound = await answers(endpoint, 250);
     switch (bound.kind) {
       case "answered":
         if (bound.value) {
@@ -604,7 +574,7 @@ export class SessiondClient {
    */
   static dial(endpoint: string, signal?: AbortSignal): Promise<SessiondClient> {
     return new Promise((resolve, reject) => {
-      // Same ordering rule as {@link probeEndpoint}: listeners before dial.
+      // Same ordering rule as core `answers`: listeners before dial.
       const socket = new Socket();
       signal?.addEventListener("abort", () => socket.destroy(), {
         once: true,

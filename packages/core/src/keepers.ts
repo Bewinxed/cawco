@@ -109,6 +109,9 @@ export const answers = (
     timeoutMs,
     (signal) =>
       new Promise<boolean>((resolve) => {
+        // Constructed unconnected, listeners first, THEN dialled: an `ENOENT`
+        // on a socket with no `error` listener yet is an uncaught exception,
+        // and the absent-endpoint case is the one this exists to answer.
         const socket = new Socket();
         const settle = (answer: boolean): void => {
           socket.destroy();

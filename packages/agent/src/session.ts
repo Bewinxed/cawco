@@ -158,6 +158,7 @@ import {
   type SessiondLimit,
 } from "@cawco/core/sessiond";
 import { isDamagedRecord } from "@cawco/core/state-file";
+import { getToolGlance } from "@cawco/core/transcript-rules";
 import { turnWords } from "@cawco/core/words/turns";
 import { Effect } from "effect";
 import { recordAgentState } from "./agent-state";
@@ -638,33 +639,6 @@ const IDLE_SLEEP_MS = 30 * 60_000;
 
 /** How often the sessions at rest are looked at. Ours: a minute is as fine as half an hour is read. */
 const IDLE_SWEEP_MS = 60_000;
-
-/** The one readable field of a tool call, for the rail's glance line. */
-const glanceOf = (input: Record<string, unknown> | undefined): string => {
-  if (!input) {
-    return "";
-  }
-  if (input.file_path) {
-    return String(input.file_path).split("/").slice(-2).join("/");
-  }
-  if (input.path) {
-    return String(input.path).split("/").slice(-2).join("/");
-  }
-  if (input.command) {
-    const cmd = String(input.command);
-    return cmd.length > 40 ? `${cmd.slice(0, 40)}...` : cmd;
-  }
-  if (input.pattern) {
-    return `/${input.pattern}/`;
-  }
-  if (input.glob) {
-    return String(input.glob);
-  }
-  if (input.description) {
-    return String(input.description);
-  }
-  return "";
-};
 
 /**
  * {@link CONTROL_GIT_CHANGES}: exactly two read-only git commands in `cwd`.
@@ -1638,19 +1612,13 @@ export class SessionSupervisor {
           });
         }
       });
-    this.#queues.set(key, queue);
-    detach(
-      queue.then(() => {
-        if (imageRequest) {
-          this.#imageRequests.delete(imageRequest);
-        }
-        if (this.#queues.get(key) === queue) {
-          this.#queues.delete(key);
-        }
-      }),
-      "then"
-    );
-    return queue;
+    if (imageRequest) {
+      detach(
+        queue.then(() => this.#imageRequests.delete(imageRequest)),
+        "then"
+      );
+    }
+    return this.#hold(key, queue);
   }
 
   /** The sessions running right now — what `register` reconciles the hub against. */
@@ -2255,6 +2223,20 @@ export class SessionSupervisor {
   /** The {@link CLI_OUTDATED} lines said, by their uuid: each once. */
   readonly #outdatedSaid = new Set<string>();
 
+  /** Holds `queue` as `key`'s queue until it settles, unless a later one took its place by then. */
+  #hold(key: string, queue: Promise<void>): Promise<void> {
+    this.#queues.set(key, queue);
+    detach(
+      queue.then(() => {
+        if (this.#queues.get(key) === queue) {
+          this.#queues.delete(key);
+        }
+      }),
+      "then"
+    );
+    return queue;
+  }
+
   /**
    * RETIRES A PROCESS ON AN OLD VERSION ({@link HarnessSession.outdated}):
    * put to sleep the moment it is at rest ({@link sleep} with `retire`),
@@ -2299,15 +2281,7 @@ export class SessionSupervisor {
           `putting ${instanceId} to sleep for its old version failed: ${error}`
         )
       );
-    this.#queues.set(instanceId, queue);
-    detach(
-      queue.then(() => {
-        if (this.#queues.get(instanceId) === queue) {
-          this.#queues.delete(instanceId);
-        }
-      }),
-      "then"
-    );
+    this.#hold(instanceId, queue);
   }
 
   /**
@@ -2638,15 +2612,7 @@ export class SessionSupervisor {
         .catch((error: unknown) =>
           warn(`putting ${instanceId} to sleep failed: ${error}`)
         );
-      this.#queues.set(instanceId, queue);
-      detach(
-        queue.then(() => {
-          if (this.#queues.get(instanceId) === queue) {
-            this.#queues.delete(instanceId);
-          }
-        }),
-        "then"
-      );
+      this.#hold(instanceId, queue);
     }
   }
 
@@ -2705,7 +2671,7 @@ export class SessionSupervisor {
         }
         this.#pulseTool.set(instanceId, {
           name: block.name,
-          glance: glanceOf(block.input as Record<string, unknown>),
+          glance: getToolGlance(block.input as Record<string, unknown>),
           toolId: block.id,
         });
         this.#emitPulse(instanceId, false);
@@ -4018,15 +3984,7 @@ export class SessionSupervisor {
           this.#attaching.delete(instanceId);
         }
       });
-    this.#queues.set(instanceId, job);
-    detach(
-      job.then(() => {
-        if (this.#queues.get(instanceId) === job) {
-          this.#queues.delete(instanceId);
-        }
-      }),
-      "then"
-    );
+    this.#hold(instanceId, job);
   }
 
   /** {@link #holdChild}'s attach, run from the session's queue. */
@@ -5130,15 +5088,7 @@ export class SessionSupervisor {
         const run = (this.#queues.get(instanceId) ?? Promise.resolve()).then(
           () => this.#endWork(instanceId, "finished", undefined, workspace)
         );
-        this.#queues.set(instanceId, run);
-        detach(
-          run.then(() => {
-            if (this.#queues.get(instanceId) === run) {
-              this.#queues.delete(instanceId);
-            }
-          }),
-          "then"
-        );
+        this.#hold(instanceId, run);
         return run;
       })
     ).then(() => undefined);

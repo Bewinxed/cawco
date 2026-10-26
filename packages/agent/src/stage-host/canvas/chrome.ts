@@ -854,12 +854,11 @@ export class Chrome {
     if (!this.#flags.phone) {
       return;
     }
-    const all = this.#frames();
-    const shown = all.find((one) => one.key === this.#current) ?? all[0];
-    if (!shown) {
+    const now = this.#shownFrame();
+    if (!now) {
       return;
     }
-    const frame = shown.section.frames.get(shown.key);
+    const { all, shown, frame } = now;
     const stories = [
       ...new Set(
         all
@@ -937,14 +936,22 @@ export class Chrome {
     }
   }
 
-  /** The story before or after on a phone; the move between them plays when one is declared. */
-  #step(by: 1 | -1): void {
+  /** The frame shown now (the first, when none is current) and every frame; none when there is none. */
+  #shownFrame() {
     const all = this.#frames();
     const shown = all.find((one) => one.key === this.#current) ?? all[0];
-    if (!shown) {
+    return shown
+      ? { all, shown, frame: shown.section.frames.get(shown.key) }
+      : undefined;
+  }
+
+  /** The story before or after on a phone; the move between them plays when one is declared. */
+  #step(by: 1 | -1): void {
+    const now = this.#shownFrame();
+    if (!now) {
       return;
     }
-    const frame = shown.section.frames.get(shown.key);
+    const { shown, frame } = now;
     const stories = shown.section.mod?.SHEET.stories ?? [];
     const at = stories.findIndex((one) => one.name === frame?.story.name);
     const next = stories[at + by];
