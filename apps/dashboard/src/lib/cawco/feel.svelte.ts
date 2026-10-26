@@ -17,6 +17,7 @@
 
 import { detach } from "@cawco/core/detach";
 import { MediaQuery } from "svelte/reactivity";
+import { z } from "zod";
 import { readJson, writeJson } from "./storage";
 
 type Cuelume = typeof import("cuelume");
@@ -25,7 +26,7 @@ type Haptics = InstanceType<typeof import("web-haptics").WebHaptics>;
 const KEY = "cawco-sound";
 
 /** The reader's sound setting, read once and kept in step with the switch. */
-export const sound = $state({ on: readJson<boolean>(KEY, false) === true });
+export const sound = $state({ on: readJson(KEY, z.boolean(), false) });
 
 const CAW_LOOP_KEY = "cawco-caw-loop";
 
@@ -34,7 +35,7 @@ const CAW_LOOP_KEY = "cawco-caw-loop";
  * (on, as the owner chose), or he holds its still. Kept in this browser.
  */
 export const cawLoop = $state({
-  on: readJson<boolean>(CAW_LOOP_KEY, true) !== false,
+  on: readJson(CAW_LOOP_KEY, z.boolean(), true),
 });
 
 /** Lets Caw move, or hold still, while the lead works; here and later. */

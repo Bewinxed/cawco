@@ -9,6 +9,7 @@
  * property of the fleet.
  */
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
+import { VisitSchema } from "#lib/cawco/stored-shapes.js";
 import { store, stored } from "./storage";
 import { workspace } from "./workspace/workspace.svelte";
 
@@ -56,12 +57,12 @@ const parse = (raw: string | null | undefined): Visit[] => {
     return [];
   }
   try {
-    const parsed = JSON.parse(raw) as Visit[];
+    const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed)
-      ? parsed.filter(
-          (visit) =>
-            typeof visit?.id === "string" && typeof visit?.at === "number"
-        )
+      ? parsed.flatMap((one: unknown) => {
+          const visit = VisitSchema.safeParse(one);
+          return visit.success ? [visit.data] : [];
+        })
       : [];
   } catch {
     return [];

@@ -151,7 +151,12 @@ export const sendApns = async (
     const text = await response.text();
     let reason: string | null = null;
     try {
-      reason = (JSON.parse(text) as { reason?: string }).reason ?? null;
+      const said: unknown = JSON.parse(text);
+      const field =
+        typeof said === "object" && said !== null
+          ? Reflect.get(said, "reason")
+          : undefined;
+      reason = typeof field === "string" ? field : null;
     } catch {
       reason = text.slice(0, 200) || null;
     }

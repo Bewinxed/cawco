@@ -17,6 +17,7 @@ import {
   threadTarget,
   threadTargetOf,
 } from "@cawco/core";
+import { z } from "zod";
 import type { ProjectRow } from "./client.svelte";
 import { newId } from "./id";
 import type { BoardRow } from "./links";
@@ -40,7 +41,7 @@ const MINTED_KEY = "cawco.threads.minted";
 
 /** The threads this browser minted, by view id: their project, until the hub has made them. */
 const minted = (): Record<string, string> =>
-  readJson<Record<string, string>>(MINTED_KEY, {}, "session");
+  readJson(MINTED_KEY, z.record(z.string(), z.string()), {}, "session");
 
 /**
  * A new thread of `projectId`'s: its id minted here, as a send's is, so

@@ -109,6 +109,7 @@
         "y-protocols": "1.0.7",
         "y-websocket": "3.1.0",
         "yjs": "13.6.33",
+        "zod": "4.6.5",
       },
       "devDependencies": {
         "@iconify-json/logos": "^1.2.15",

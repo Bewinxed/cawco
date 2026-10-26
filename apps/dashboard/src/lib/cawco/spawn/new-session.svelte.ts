@@ -16,6 +16,7 @@
  * kept; reopened by a reload it hangs from the rail's Start session.
  */
 import type { Bounded } from "@cawco/core/bounded";
+import { KeptFormSchema } from "#lib/cawco/stored-shapes.js";
 import { page } from "$app/state";
 import {
   type ForkSource,
@@ -50,14 +51,15 @@ export const FORM_SIZES = ["data-stepped", "data-pair"] as const;
 /** Where the tab keeps whether the form is open, and on what. */
 const KEY = "cawco:new-session";
 
-interface KeptForm {
+export interface KeptForm {
   open: boolean;
   prefill?: SpawnPrefill;
   shown: string | null;
 }
 
-const keptForm = readJson<KeptForm>(
+const keptForm = readJson(
   KEY,
+  KeptFormSchema,
   { open: false, shown: null },
   "session"
 );

@@ -5,6 +5,7 @@
  * read the one answer. Working, and the first few, until the reader picks.
  */
 import { SvelteSet } from "svelte/reactivity";
+import { z } from "zod";
 import { readJson, writeJson } from "../storage";
 
 export type WorkTab = "working" | "finished";
@@ -12,8 +13,12 @@ export type WorkTab = "working" | "finished";
 const KEY = "cawco-home-tab";
 const ALL_KEY = "cawco-home-tab-all";
 
-const stored = readJson<unknown>(KEY, "working");
-const storedAll = readJson<Partial<Record<WorkTab, unknown>>>(ALL_KEY, {});
+const stored = readJson(KEY, z.unknown(), "working");
+const storedAll = readJson(
+  ALL_KEY,
+  z.partialRecord(z.enum(["working", "finished"]), z.unknown()),
+  {}
+);
 /** A tab's machines shown whole, as stored: a list of machine ids. */
 const machinesOf = (value: unknown): SvelteSet<string> =>
   new SvelteSet(

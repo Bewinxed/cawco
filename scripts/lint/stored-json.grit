@@ -16,7 +16,7 @@ or {
     register_diagnostic(span=$hit, message="A JSON column is storedJson(schema) from @cawco/core/stored-json, checked against its schema on every read and write; $type<T>() only labels what JSON.parse returns.")
   },
   `JSON.parse($_) as $type` as $hit where {
-    $filename <: includes "packages/",
+    $filename <: or { includes "packages/", includes "apps/" },
     $filename <: not includes "packages/core/src/stored-json.ts",
     $filename <: not includes "packages/core/src/state-file.ts",
     $type <: not `unknown`,

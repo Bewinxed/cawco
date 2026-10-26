@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { CacheSnapshot } from "virtua";
+  import { z } from "zod";
 
   /**
    * virtua's measured sizes for each conversation, by session id, so a pane
@@ -23,10 +24,12 @@
    * the conversation was opened at (`?at=`, open-at.svelte.ts), centred:
    * never kept, it is the address's.
    */
-  type Landing =
-    | { tail: true }
-    | { tail: false; block: string; into: number }
-    | { tail: false; at: string };
+  const LandingSchema = z.union([
+    z.object({ tail: z.literal(true) }),
+    z.object({ tail: z.literal(false), block: z.string(), into: z.number() }),
+    z.object({ tail: z.literal(false), at: z.string() }),
+  ]);
+  type Landing = z.infer<typeof LandingSchema>;
   const LANDING = "cawco:landing:";
 </script>
 
@@ -1244,8 +1247,9 @@
    * a row the rows do not hold yet — a reload, whose first rows are the
    * newest page — is read back to, a page at a time (see the reveal).
    */
-  let resume: Landing | null = readJson<Landing | null>(
+  let resume: Landing | null = readJson(
     LANDING + untrack(() => session.instanceId),
+    LandingSchema.nullable(),
     null,
     "session"
   );

@@ -24,6 +24,7 @@ import type { ArtifactSummary, SessionAttachment } from "@cawco/core";
 import { field, KIND_WORDS, matchOf, parse } from "@cawco/core/find-match";
 import { machineCalled, machineFaultWords } from "@cawco/core/machine-names";
 import { SvelteMap } from "svelte/reactivity";
+import { z } from "zod";
 import { listAttachments, listFiles } from "../artifact-api";
 import { cawco, storedReadWaits } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
@@ -411,7 +412,7 @@ export type ArtifactsView = "thumbnails" | "list";
 const VIEW_KEY = "cawco-files-view";
 const view = $state<{ shown: ArtifactsView }>({
   shown:
-    readJson<unknown>(VIEW_KEY, "thumbnails") === "list"
+    readJson(VIEW_KEY, z.unknown(), "thumbnails") === "list"
       ? "list"
       : "thumbnails",
 });

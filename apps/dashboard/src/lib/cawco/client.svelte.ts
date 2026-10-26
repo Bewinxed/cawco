@@ -195,7 +195,7 @@ import { type HeldPlan, handlePlanMessage } from "./plan";
 import { presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
-import { type Refusal, refusals } from "./refusals.svelte";
+import { type CommandRefusal, refusals } from "./refusals.svelte";
 import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
 import { checkServedBuild, newerBuild } from "./served-build.svelte";
 import type {
@@ -4114,7 +4114,7 @@ export interface CommandFault {
   words: string;
 }
 
-const faultOf = (sessionId: string, said: Refusal): CommandFault => {
+const faultOf = (sessionId: string, said: CommandRefusal): CommandFault => {
   const asked = said.asked as CommandAsked;
   return {
     kind: asked.kind,

@@ -4,6 +4,7 @@
  * Both are kept across reloads.
  */
 
+import { z } from "zod";
 import { identityHue } from "./identity";
 import { readJson, writeJson } from "./storage";
 
@@ -15,18 +16,20 @@ interface FolderPref {
 const KEY = "cawco-folder-prefs";
 
 function read(): Record<string, FolderPref> {
-  const stored = readJson<unknown>(KEY, {});
-  // `stored` is unknown at runtime — localStorage can hold a corrupted or non-object JSON value.
-  return stored && typeof stored === "object"
-    ? (stored as Record<string, FolderPref>)
-    : {};
+  return readJson(
+    KEY,
+    z.record(z.string(), z.object({ hue: z.number().optional() })),
+    {}
+  );
 }
 
 // Module scope, so every surface that draws a folder — rail, board, peek pane,
 // tabs — is reading the same answer rather than its own copy of it.
 const prefs = $state<Record<string, FolderPref>>(read());
 const PROJECT_KEY = "cawco-project-folds";
-const folds = $state<Record<string, true>>(readJson(PROJECT_KEY, {}));
+const folds = $state<Record<string, true>>(
+  readJson(PROJECT_KEY, z.record(z.string(), z.literal(true)), {})
+);
 
 const save = (): void => {
   writeJson(KEY, prefs);

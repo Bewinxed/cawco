@@ -32,8 +32,17 @@ const HUB_OUT = join(HUB, "src/db/stored-shapes.ts");
 const CORE_OUT = join(ROOT, "packages/core/src/stored-shapes.ts");
 const AGENT_OUT = join(ROOT, "packages/agent/src/stored-shapes.ts");
 const AGENT_SRC = join(ROOT, "packages/agent/src/");
+/**
+ * `--dashboard`: the dashboard's own stored types (what a tab keeps in its
+ * browser's storage), written whole to its own file, core's types among them:
+ * the page never loads `@cawco/core/stored-shapes`, which reaches the
+ * machine-side modules.
+ */
+const DASHBOARD = process.argv.includes("--dashboard");
+const DASH_SRC = join(ROOT, "apps/dashboard/src/");
+const DASH_OUT = join(DASH_SRC, "lib/cawco/stored-shapes.ts");
 /** Every generated file: core's first, which the others import. */
-const OUTS = [CORE_OUT, HUB_OUT, AGENT_OUT];
+const OUTS = DASHBOARD ? [DASH_OUT] : [CORE_OUT, HUB_OUT, AGENT_OUT];
 const HUB_SRC = join(HUB, "src/");
 const CORE_SRC = join(ROOT, "packages/core/src/");
 const SDK =
@@ -44,7 +53,7 @@ const TS_FILE = /\.ts$/u;
 const SCHEMA_SUFFIX = /(?:Schema|Shape)$/u;
 const SHAPE_NAME = /\b\w+Shape\b/gu;
 const SHAPES_IMPORT =
-  /import\s*\{([^}]*)\}\s*from\s*"(?:@cawco\/core|\.{1,2}(?:\/[\w.-]+)*)\/stored-shapes"/gu;
+  /import\s*\{([^}]*)\}\s*from\s*"(?:@cawco\/core|#lib(?:\/[\w.-]+)*|\.{1,2}(?:\/[\w.-]+)*)\/stored-shapes(?:\.js)?"/gu;
 const TEST_FILE = /\.test\.ts$/u;
 const ZOD_OUTPUT = /^z\.(?:infer|output)$/u;
 
@@ -90,10 +99,14 @@ const SDK_TYPES = ["shared/auth.js", "client/auth.js"].map((path) =>
 
 /* ---------------------------------------------------------- the roots */
 
-const listed = Bun.spawnSync(["git", "ls-files", "packages"], { cwd: ROOT })
+const SCANNED = DASHBOARD ? /\.(?:ts|svelte)$/u : /\.ts$/u;
+const listed = Bun.spawnSync(
+  ["git", "ls-files", DASHBOARD ? "apps/dashboard/src" : "packages"],
+  { cwd: ROOT }
+)
   .stdout.toString()
   .split("\n")
-  .filter((path) => path.endsWith(".ts") && !TEST_FILE.test(path))
+  .filter((path) => SCANNED.test(path) && !TEST_FILE.test(path))
   .map((path) => join(ROOT, path))
   .filter((path) => !OUTS.includes(path));
 const roots = new Set<string>();
@@ -101,7 +114,10 @@ const roots = new Set<string>();
 const programFiles: string[] = [];
 for (const file of listed) {
   const matches = [...readFileSync(file, "utf8").matchAll(SHAPES_IMPORT)];
-  if (file.startsWith(CORE_SRC) || matches.length > 0) {
+  if (
+    file.endsWith(".ts") &&
+    (file.startsWith(CORE_SRC) || matches.length > 0)
+  ) {
     programFiles.push(file);
   }
   for (const match of matches) {
@@ -114,11 +130,20 @@ for (const file of listed) {
   }
 }
 
-const program = ts.createProgram([SCHEMA, ...programFiles, ...SDK_TYPES], {
-  ...config.options,
-  composite: false,
-  noEmit: true,
-});
+const program = ts.createProgram(
+  DASHBOARD ? programFiles : [SCHEMA, ...programFiles, ...SDK_TYPES],
+  {
+    ...config.options,
+    composite: false,
+    noEmit: true,
+    ...(DASHBOARD
+      ? {
+          // The page's DOM; `#lib/*` resolves by the dashboard's package.json `imports`.
+          lib: ["lib.esnext.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
+        }
+      : {}),
+  }
+);
 const checker = program.getTypeChecker();
 
 /** Every exported type declaration in the program's packages, by name; a name declared twice is refused when asked for. */
@@ -131,7 +156,8 @@ const isExported = (node: ts.Node): boolean =>
 for (const file of program.getSourceFiles()) {
   const inPackages =
     !file.fileName.includes("node_modules") &&
-    file.fileName.startsWith(`${ROOT}/packages/`);
+    (file.fileName.startsWith(`${ROOT}/packages/`) ||
+      file.fileName.startsWith(DASH_SRC));
   if (!(inPackages || SDK.test(file.fileName))) {
     continue;
   }
@@ -218,6 +244,18 @@ const where = (node: ts.Node): string => {
   return `${relative(ROOT, file.fileName)}:${file.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
 };
 
+/** Types a schema is written for here ({@link referenceOf}), whatever declares them (TypeScript's lib, bun's types). */
+const BUILT_IN = new Set([
+  "Array",
+  "ReadonlyArray",
+  "Record",
+  "Partial",
+  "Omit",
+  "Pick",
+  "Date",
+  "Blob",
+]);
+
 /** The name a type reference, a heritage clause or an `import("…").X` names. */
 const referenceName = (node: ts.Node): ts.Node | undefined => {
   if (ts.isTypeReferenceNode(node)) {
@@ -244,7 +282,7 @@ const reach = (declaration: Declaration): void => {
   if (!zodSource(declaration)) {
     const visit = (node: ts.Node): void => {
       const name = referenceName(node);
-      if (name) {
+      if (name && !BUILT_IN.has(name.getText())) {
         for (const found of declarationsOf(name)) {
           // TypeScript's own (Record, Partial, Omit) are read as zod's.
           if (!program.isSourceFileDefaultLibrary(found.getSourceFile())) {
@@ -267,6 +305,9 @@ for (const root of roots) {
 
 /** Which file a declaration's schema is written to: the hub's own types, and the MCP SDK's it alone depends on, to the hub's. */
 const outOf = (declaration: ts.Node): string => {
+  if (DASHBOARD) {
+    return DASH_OUT;
+  }
   const file = declaration.getSourceFile().fileName;
   if (file.startsWith(HUB_SRC) || SDK.test(file)) {
     return HUB_OUT;
@@ -533,6 +574,9 @@ const referenceOf = (
     // JSON carries a date as its ISO text: read back as a Date.
     case "Date":
       return "z.coerce.date()";
+    // A browser's stored record (IndexedDB) keeps a Blob as one.
+    case "Blob":
+      return "z.instanceof(Blob)";
     case "Omit":
     case "Pick":
       return `${schemaOf(arg(0), scope)}.${name.toLowerCase()}({ ${literalKeys(
@@ -589,13 +633,20 @@ const templateOf = (node: ts.TemplateLiteralTypeNode, scope: Scope): string => {
   return `z.templateLiteral([${parts.join(", ")}])`;
 };
 
+/** `left & { … }`: an object's shape with more keys; any keys at all (`Record<string, unknown>`) with these known. */
+const extended = (left: string, right: string): string =>
+  left === OPEN_RECORD
+    ? `z.looseObject(${right.slice("z.object(".length, -1)})`
+    : `${left}.extend(${right.slice("z.object(".length, -1)})`;
+const OPEN_RECORD = "z.record(z.string(), z.unknown())";
+
 const intersectionOf = (node: ts.IntersectionTypeNode, scope: Scope): string =>
   node.types
     .map((t) => ({ node: t, schema: schemaOf(t, scope) }))
     .reduce((left, right) => ({
       node: right.node,
       schema: ts.isTypeLiteralNode(right.node)
-        ? `${left.schema}.extend(${right.schema.slice("z.object(".length, -1)})`
+        ? extended(left.schema, right.schema)
         : `z.intersection(${left.schema}, ${right.schema})`,
     })).schema;
 

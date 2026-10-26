@@ -1,3 +1,4 @@
+import type { z } from "zod";
 /**
  * The one way to reach the browser's storage, `localStorage` (`"local"`) and
  * `sessionStorage` (`"session"`); lint refuses both globals everywhere else
@@ -55,16 +56,24 @@ export function unstore(area: Area, key: string): void {
 }
 
 /**
- * `key`'s value parsed as JSON, in localStorage unless `area` says
- * otherwise: `fallback` when nothing is stored, or it was stored badly.
+ * `key`'s value parsed as JSON and checked against `schema`, in localStorage
+ * unless `area` says otherwise: `fallback` when nothing is stored, it was
+ * stored badly, or it is a shape this build no longer reads (a tab kept it
+ * before an update).
  */
-export function readJson<T>(key: string, fallback: T, area: Area = "local"): T {
+export function readJson<S extends z.ZodType>(
+  key: string,
+  schema: S,
+  fallback: z.output<S>,
+  area: Area = "local"
+): z.output<S> {
   const raw = stored(area, key);
   if (raw === null) {
     return fallback;
   }
   try {
-    return JSON.parse(raw) as T;
+    const read = schema.safeParse(JSON.parse(raw));
+    return read.success ? read.data : fallback;
   } catch {
     return fallback;
   }

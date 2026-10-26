@@ -23,7 +23,9 @@
   import type { Bounded } from "@cawco/core/bounded";
   import { detach } from "@cawco/core/detach";
   import { tick, untrack } from "svelte";
+  import { z } from "zod";
   import { awayOf, failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
+  import { SessionDraftSchema } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
   import {
     Alert,
@@ -230,11 +232,12 @@
   /** Where the tab keeps the form's picks while it is open on no start. */
   const FORM_KEY = "cawco:new-session-form";
   /** The form's picks as kept: what it was opened with, the picks, and whether step 2 stood. */
-  interface KeptPicks {
-    opening: string;
-    picks: SessionDraft;
-    step: boolean;
-  }
+  const KeptPicksSchema = z.object({
+    opening: z.string(),
+    picks: SessionDraftSchema,
+    step: z.boolean(),
+  });
+  type KeptPicks = z.infer<typeof KeptPicksSchema>;
   const STILL_UPLOADING = spawnWords.held.uploading;
   /** The reading line's words while the machine is still read: beside the live dot. */
   const READING = spawnWords.form.reading;
@@ -1151,7 +1154,12 @@
   }
   /** The picks the form was left on, when it is opened again with the same: a reload, a dismissal. */
   function keptPicks(): KeptPicks | null {
-    const kept = readJson<KeptPicks | null>(FORM_KEY, null, "session");
+    const kept = readJson(
+      FORM_KEY,
+      KeptPicksSchema.nullable(),
+      null,
+      "session"
+    );
     return kept?.opening === openingKey() ? kept : null;
   }
   /**

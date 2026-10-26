@@ -7,6 +7,8 @@
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { CanvasShapes } from "@cawco/core/stage";
 import { SvelteMap } from "svelte/reactivity";
+import { z } from "zod";
+import { MediaArtifactSchema } from "#lib/cawco/stored-shapes.js";
 
 /**
  * Who hears a media well's real width (Well.svelte `picture`: its piece's
@@ -55,10 +57,18 @@ export const served = $state<{
   media: Record<string, MediaArtifact>;
 }>({ files: {}, media: {} });
 
-/** The JSON in one of the page's script tags; `fallback` when it is missing or not JSON. */
-const jsonIn = <T>(doc: Document, id: string, fallback: T): T => {
+/** The JSON in one of the page's script tags, as `schema`'s shape; `fallback` when it is missing, not JSON, or not that shape. */
+const jsonIn = <S extends z.ZodType>(
+  doc: Document,
+  id: string,
+  schema: S,
+  fallback: z.output<S>
+): z.output<S> => {
   try {
-    return JSON.parse(doc.getElementById(id)?.textContent ?? "") as T;
+    const read = schema.safeParse(
+      JSON.parse(doc.getElementById(id)?.textContent ?? "")
+    );
+    return read.success ? read.data : fallback;
   } catch {
     return fallback;
   }
@@ -73,8 +83,18 @@ export const programIn = (doc: Document): string =>
 
 /** What the page carries beside its program, taken in. */
 export const takeServed = (doc: Document): void => {
-  served.files = jsonIn(doc, "cawco-files", {});
-  served.media = jsonIn(doc, "cawco-media", {});
+  served.files = jsonIn(
+    doc,
+    "cawco-files",
+    z.record(z.string(), z.string()),
+    {}
+  );
+  served.media = jsonIn(
+    doc,
+    "cawco-media",
+    z.record(z.string(), MediaArtifactSchema),
+    {}
+  );
 };
 
 /** The bridge, once the overlay put it on the window; null where CawCo does not show the page. */

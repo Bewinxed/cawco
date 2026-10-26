@@ -12,11 +12,13 @@
  * again; a closure can't be kept.
  */
 import { SvelteMap } from "svelte/reactivity";
+import { z } from "zod";
+import { CommandRefusalSchema } from "#lib/cawco/stored-shapes.js";
 import { readJson, writeJson } from "./storage";
 
 const KEPT = "cawco:refusals";
 
-export interface Refusal {
+export interface CommandRefusal {
   /** What was asked, as data, for Try again to ask again. */
   asked?: unknown;
   /** The words said: what did not happen, why, what stands. */
@@ -24,16 +26,21 @@ export interface Refusal {
 }
 
 class Refusals {
-  readonly #said: SvelteMap<string, Refusal>;
+  readonly #said: SvelteMap<string, CommandRefusal>;
 
   constructor() {
     this.#said = new SvelteMap(
-      readJson<[string, Refusal][]>(KEPT, [], "session")
+      readJson(
+        KEPT,
+        z.array(z.tuple([z.string(), CommandRefusalSchema])),
+        [],
+        "session"
+      )
     );
   }
 
   /** The refusal said at `key`, or undefined. */
-  get(key: string): Refusal | undefined {
+  get(key: string): CommandRefusal | undefined {
     return this.#said.get(key);
   }
 
@@ -43,11 +50,11 @@ class Refusals {
   }
 
   /** Every refusal whose key starts with `prefix`, by key. */
-  under(prefix: string): [string, Refusal][] {
+  under(prefix: string): [string, CommandRefusal][] {
     return [...this.#said].filter(([key]) => key.startsWith(prefix));
   }
 
-  set(key: string, refusal: Refusal): void {
+  set(key: string, refusal: CommandRefusal): void {
     this.#said.set(key, refusal);
     this.#keep();
   }

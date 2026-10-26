@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   /**
    * One strategy figure in its stage (figure.ts). It is built for the
@@ -85,14 +86,13 @@
   // place in the loop it had reached.
   $effect(() => {
     const node = stage;
-    const spec = JSON.parse(key) as {
-      board: Board;
-      lanes: Lane[];
-      limits: boolean;
-      pin?: number;
-      policy?: Policy;
-      width: number;
-    };
+    // Rebuilt when what it is drawn from changes, by value (`key`), never
+    // for a new object holding the same.
+    // biome-ignore lint/complexity/noVoid: a read-only dependency
+    void key;
+    const spec = untrack(() =>
+      $state.snapshot({ board, lanes, limits, pin, policy, width })
+    );
     if (!node || spec.width === 0 || spec.lanes.length === 0) {
       return;
     }

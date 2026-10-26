@@ -22,6 +22,8 @@ import { artifactStopOf } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import { SvelteSet } from "svelte/reactivity";
+import { z } from "zod";
+import { SessionContextSchema } from "#lib/cawco/stored-shapes.js";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
@@ -196,9 +198,24 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
       v: 1,
       root,
       focusedLeaf,
-      // Each session's context as the tab last kept it; read as it was kept.
+      // Each session's context as the tab last kept it, those still its shape.
       ...(typeof ctx === "object" && ctx !== null
-        ? { ctx: ctx as Record<string, SessionContext> }
+        ? {
+            ctx: z
+              .record(
+                z.string(),
+                SessionContextSchema.optional().catch(undefined)
+              )
+              .transform((all) =>
+                Object.fromEntries(
+                  Object.entries(all).filter(
+                    (entry): entry is [string, SessionContext] =>
+                      entry[1] !== undefined
+                  )
+                )
+              )
+              .parse(ctx),
+          }
         : {}),
     };
   } catch {

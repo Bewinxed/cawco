@@ -5,6 +5,7 @@ import {
   type InstanceRow,
   type SessionPulse,
 } from "@cawco/core";
+import { z } from "zod";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
 import {
@@ -80,11 +81,22 @@ interface BranchNode {
   t: "b";
 }
 type PaneNode = LeafNode | BranchNode;
-interface SessionContext {
-  cwd: string;
-  harness: string;
-  machine: string | null;
-}
+const SessionContextSchema = z.object({
+  cwd: z.string(),
+  harness: z.string(),
+  machine: z.string().nullable(),
+});
+type SessionContext = z.infer<typeof SessionContextSchema>;
+/** Each session's kept context that is still its shape. */
+const CONTEXTS = z
+  .record(z.string(), SessionContextSchema.optional().catch(undefined))
+  .transform((all) =>
+    Object.fromEntries(
+      Object.entries(all).filter(
+        (entry): entry is [string, SessionContext] => entry[1] !== undefined
+      )
+    )
+  );
 export interface WorkspaceV1 {
   ctx?: Record<string, SessionContext>;
   focusedLeaf: string;
@@ -135,9 +147,8 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
       v: 1,
       root,
       focusedLeaf,
-      // Each session's context as the tab last kept it; read as it was kept.
       ...(typeof ctx === "object" && ctx !== null
-        ? { ctx: ctx as Record<string, SessionContext> }
+        ? { ctx: CONTEXTS.parse(ctx) }
         : {}),
     };
   } catch {
@@ -149,7 +160,7 @@ function parseCtx(
   raw: string | null | undefined
 ): Record<string, SessionContext> {
   try {
-    return JSON.parse(raw ?? "{}") as Record<string, SessionContext>;
+    return CONTEXTS.catch({}).parse(JSON.parse(raw ?? "{}"));
   } catch {
     return {};
   }

@@ -6,6 +6,9 @@
  * task beside; the session's address stays the workspace's own (it rewrites
  * a session tab's URL, query and all: workspace.svelte.ts `project`).
  */
+
+import { z } from "zod";
+import { BesideSchema } from "#lib/cawco/stored-shapes.js";
 import { goto } from "$app/navigation";
 import { rowHref } from "../links";
 import { readJson, writeJson } from "../storage";
@@ -18,7 +21,7 @@ export interface Beside {
 const KEY = "cawco.task-beside";
 
 let held = $state<Record<string, Beside>>(
-  readJson<Record<string, Beside>>(KEY, {}, "session")
+  readJson(KEY, z.record(z.string(), BesideSchema), {}, "session")
 );
 
 const keep = () => writeJson(KEY, held, "session");

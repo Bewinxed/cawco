@@ -4,6 +4,8 @@
  * hostname are the fleet's opinion, this is theirs — so both are persisted
  * here, in one document, because they are the same kind of claim.
  */
+
+import { RailLayoutShape } from "#lib/cawco/stored-shapes.js";
 import type { Machine } from "./client.svelte";
 import { readJson, writeJson } from "./storage";
 
@@ -26,7 +28,7 @@ interface Pin {
   kind: "project";
 }
 
-interface RailLayout {
+export interface RailLayout {
   /**
    * Whether delegate sessions are listed at all. Off by default: a session that
    * fans out ten delegates puts eleven rows in the rail, ten of which are work
@@ -47,7 +49,11 @@ const isPin = (value: Pin | undefined): value is Pin =>
   typeof value?.id === "string" && value.kind === "project";
 
 function read(): RailLayout {
-  const kept = readJson<Partial<RailLayout> | null>(RAIL_LAYOUT_KEY, null);
+  const kept = readJson(
+    RAIL_LAYOUT_KEY,
+    RailLayoutShape.partial().nullable(),
+    null
+  );
   const stored = kept && typeof kept === "object" ? kept : {};
   return {
     pins: Array.isArray(stored.pins) ? stored.pins.filter(isPin) : [],

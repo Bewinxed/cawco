@@ -7,6 +7,7 @@
  */
 import type { PlanDelta, PlanSnapshot, SessionPlan } from "@cawco/core";
 import { applyPatch, type Operation } from "rfc6902";
+import { SessionPlanSchema } from "#lib/cawco/stored-shapes.js";
 
 /** A session's plan as this tab holds it, and the revision it is at. */
 export interface HeldPlan {
@@ -55,7 +56,8 @@ export function handlePlanMessage(
     gap(instanceId, resync);
     return true;
   }
-  const next = JSON.parse(JSON.stringify(held.plan)) as SessionPlan;
+  // A plain copy of the held plan, which may be the store's proxy, to patch.
+  const next = SessionPlanSchema.parse(JSON.parse(JSON.stringify(held.plan)));
   if (applyPatch(next, patch as Operation[]).some((error) => error !== null)) {
     gap(instanceId, resync);
     return true;

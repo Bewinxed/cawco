@@ -5,6 +5,7 @@
  * because only it says how far an upload has gone.
  */
 import type { FileAttachment } from "@cawco/core";
+import { z } from "zod";
 
 export function uploadFile(
   blob: Blob,
@@ -31,9 +32,9 @@ export function uploadFile(
         reject(new Error(request.responseText || `HTTP ${request.status}`));
         return;
       }
-      const { ref, size, mediaType } = JSON.parse(
-        request.responseText
-      ) as FileAttachment;
+      const { ref, size, mediaType } = z
+        .object({ ref: z.string(), size: z.number(), mediaType: z.string() })
+        .parse(JSON.parse(request.responseText));
       resolve({ kind: "file", name, ref, size, mediaType });
     };
     request.onerror = () => reject(new Error("The hub could not be reached."));

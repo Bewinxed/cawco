@@ -13,6 +13,7 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { updatesWords } from "@cawco/core/words/updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { failureClause, hubFailure, hubRefusal } from "#lib/cawco/hub-read.js";
+import { KeptUpdatesSchema } from "#lib/cawco/stored-shapes.js";
 import { newId } from "../id";
 import { readJson, writeJson } from "../storage";
 import { installable, type Refusal, type UpdateMachine } from "./model";
@@ -39,7 +40,7 @@ interface SettingRefusal {
  */
 const KEPT = "cawco:update-commands";
 
-interface Kept {
+export interface KeptUpdates {
   commanded: string[];
   refused: [string, Refusal][];
   settings?: [UpdateSetting, SettingRefusal][];
@@ -74,8 +75,9 @@ class Updates {
   readonly settingRefused: SvelteMap<UpdateSetting, SettingRefusal>;
 
   constructor() {
-    const kept = readJson<Kept>(
+    const kept = readJson(
       KEPT,
+      KeptUpdatesSchema,
       { commanded: [], refused: [] },
       "session"
     );

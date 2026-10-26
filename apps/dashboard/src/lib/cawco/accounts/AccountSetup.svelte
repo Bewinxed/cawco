@@ -44,6 +44,7 @@
   import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
+  import { z } from "zod";
   import {
     cawco,
     createAccount,
@@ -65,6 +66,10 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
+  import {
+    AtLimitSchema,
+    StrategyChoiceSchema,
+  } from "#lib/cawco/stored-shapes.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -101,7 +106,6 @@
     harnessWords,
     machineName,
     machineOnline,
-    machinesFor,
     nameOf,
     nextHue,
     providerLimits,
@@ -355,14 +359,25 @@
    * tab for the account they are for: the nickname, and a second account's
    * routing as picked and dragged.
    */
-  const kept = new TabDraft("cawco:account-setup", () => ({
-    accountId: null as string | null,
-    nickname: "",
-    yours: null as StrategyChoice | null,
-    delegates: null as StrategyChoice | null,
-    atLimit: null as typeof atLimit | null,
-    dragged: null as string[] | null,
-  }));
+  const kept = new TabDraft(
+    "cawco:account-setup",
+    z.object({
+      accountId: z.string().nullable(),
+      nickname: z.string(),
+      yours: StrategyChoiceSchema.nullable(),
+      delegates: StrategyChoiceSchema.nullable(),
+      atLimit: AtLimitSchema.nullable(),
+      dragged: z.array(z.string()).nullable(),
+    }),
+    () => ({
+      accountId: null,
+      nickname: "",
+      yours: null,
+      delegates: null,
+      atLimit: null,
+      dragged: null,
+    })
+  );
 
   // A setup taken up again stands where it was left: its row, its account's
   // colour and name, the routing it was given, at the step the hub kept.

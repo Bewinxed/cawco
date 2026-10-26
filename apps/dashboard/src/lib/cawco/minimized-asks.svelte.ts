@@ -1,4 +1,5 @@
 import { SvelteSet } from "svelte/reactivity";
+import { z } from "zod";
 import { readJson, writeJson } from "./storage";
 
 /**
@@ -13,7 +14,9 @@ import { readJson, writeJson } from "./storage";
  */
 const KEY = "cawco:minimized-asks";
 
-const minimized = new SvelteSet<string>(readJson<string[]>(KEY, [], "session"));
+const minimized = new SvelteSet<string>(
+  readJson(KEY, z.array(z.string()), [], "session")
+);
 
 export const minimizedAsks = {
   has: (requestId: string): boolean => minimized.has(requestId),

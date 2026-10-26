@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * A read from the hub that says how it ended: the value, or the status the
  * hub answered and its own words. Loads use it so a failed read is carried to
@@ -172,7 +173,10 @@ function parsed(text: string): {
   type?: string;
 } | null {
   try {
-    const body = JSON.parse(text) as Record<string, unknown>;
+    const body = z
+      .record(z.string(), z.unknown())
+      .catch({})
+      .parse(JSON.parse(text));
     const field = (key: string) =>
       typeof body[key] === "string" && body[key] !== ""
         ? (body[key] as string)

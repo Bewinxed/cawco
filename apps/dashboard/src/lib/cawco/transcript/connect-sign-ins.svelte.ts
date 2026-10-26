@@ -13,6 +13,8 @@
  */
 import type { ConnectAccess } from "@cawco/core";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { z } from "zod";
+import { ConnectSignInSchema } from "#lib/cawco/stored-shapes.js";
 import { signInToMcp } from "../fleet";
 import { failureWords } from "../hub-read";
 import { readJson, writeJson } from "../storage";
@@ -57,7 +59,7 @@ const TAB_POLL_MS = 500;
 
 const signIns = new SvelteMap<string, ConnectSignIn>(
   Object.entries(
-    readJson<Record<string, ConnectSignIn>>(KEY, {}, "session")
+    readJson(KEY, z.record(z.string(), ConnectSignInSchema), {}, "session")
   ).filter(([, kept]) => kept.stage === "waiting" || kept.stage === "failed")
 );
 /** Each waiting sign-in's watch on its tab and its page's expiry, stopped once it is over. */

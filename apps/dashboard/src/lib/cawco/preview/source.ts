@@ -1,6 +1,7 @@
 import type { ArtifactKind, PreviewSource } from "@cawco/core";
 import { parseReference } from "@cawco/core/references";
 import { pathLeaf, resultField } from "@cawco/core/tool-presentation";
+import { CalledArtifactShape } from "#lib/cawco/stored-shapes.js";
 
 /** A short name for where a preview's page is, for the panel's head. */
 export const previewPlace = (source: PreviewSource): string => {
@@ -49,7 +50,9 @@ export const calledArtifact = (
     return;
   }
   try {
-    const answer = JSON.parse(text) as Partial<CalledArtifact>;
+    const answer = CalledArtifactShape.partial()
+      .catch({})
+      .parse(JSON.parse(text));
     return typeof answer.id === "string" && UUID.test(answer.id)
       ? {
           id: answer.id,

@@ -9,6 +9,7 @@
 
 import type { ModelInfo } from "@cawco/core";
 import { isEffortLevel, machineLabel } from "@cawco/core";
+import { z } from "zod";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { cawco } from "./client.svelte";
 import { type HarnessModel, modelsForHarness } from "./model-catalog";
@@ -43,7 +44,11 @@ const store = $state({
 
 // Read once as the module loads rather than from a getter — a read that
 // writes is a render that mutates. Nothing to read on the server.
-store.recent = readJson<Record<string, string[]>>(RECENT_KEY, {});
+store.recent = readJson(
+  RECENT_KEY,
+  z.record(z.string(), z.array(z.string())),
+  {}
+);
 
 /**
  * What the machines themselves report they can run. A harness whose catalog

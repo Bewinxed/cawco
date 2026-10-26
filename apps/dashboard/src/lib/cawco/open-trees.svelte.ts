@@ -5,6 +5,7 @@
  * starts folded; opening one is remembered per browser, per list.
  */
 import { SvelteSet } from "svelte/reactivity";
+import { z } from "zod";
 import { readJson, writeJson } from "./storage";
 
 /**
@@ -31,10 +32,7 @@ const LISTS: readonly TreeList[] = [
 const keyOf = (list: TreeList): string => `cawco-open-trees:${list}`;
 
 function storedIds(list: TreeList): string[] {
-  const stored = readJson<unknown>(keyOf(list), []);
-  return Array.isArray(stored)
-    ? stored.filter((id): id is string => typeof id === "string")
-    : [];
+  return readJson(keyOf(list), z.array(z.string()), []);
 }
 
 const open = Object.fromEntries(

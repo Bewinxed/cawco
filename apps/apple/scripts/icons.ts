@@ -6,6 +6,7 @@
 // Run from the repo root: bun apps/apple/scripts/icons.ts
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 
 const ROOT = resolve(import.meta.dir, "../../..");
 const SOLAR = join(
@@ -246,15 +247,26 @@ const DRAWN: Record<string, string> = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path fill="#000" d="M7.6 2.5 15 1.4v6.1H7.6ZM6.9 2.6v4.9H1V3.4ZM6.9 8.5v4.9L1 12.6V8.5ZM7.6 8.5H15v6.1L7.6 13.5Z"/></svg>',
 };
 
-interface IconSet {
+/** An Iconify set's JSON, the parts read here. */
+const IconSetSchema = z.object({
   /** Names that draw another icon as it is (iconify's alias form). */
-  aliases?: Record<string, { parent: string; [transform: string]: unknown }>;
-  height?: number;
-  icons: Record<string, { body: string; height?: number; width?: number }>;
-  width?: number;
-}
+  aliases: z
+    .record(z.string(), z.looseObject({ parent: z.string() }))
+    .optional(),
+  height: z.number().optional(),
+  icons: z.record(
+    z.string(),
+    z.object({
+      body: z.string(),
+      height: z.number().optional(),
+      width: z.number().optional(),
+    })
+  ),
+  width: z.number().optional(),
+});
+type IconSet = z.infer<typeof IconSetSchema>;
 
-const set = JSON.parse(readFileSync(SOLAR, "utf8")) as IconSet;
+const set = IconSetSchema.parse(JSON.parse(readFileSync(SOLAR, "utf8")));
 
 /** The icon a name draws, through a plain alias; a transforming alias is refused. */
 function solar(name: string) {
@@ -306,7 +318,10 @@ for (const [asset, [setName, name]] of Object.entries(BRANDS)) {
     `apps/dashboard/node_modules/@iconify-json/${setName}/icons.json`
   );
   if (!sets.has(setName)) {
-    sets.set(setName, JSON.parse(readFileSync(file, "utf8")) as IconSet);
+    sets.set(
+      setName,
+      IconSetSchema.parse(JSON.parse(readFileSync(file, "utf8")))
+    );
   }
   const from = sets.get(setName) as IconSet;
   const icon = from.icons[from.aliases?.[name]?.parent ?? name];

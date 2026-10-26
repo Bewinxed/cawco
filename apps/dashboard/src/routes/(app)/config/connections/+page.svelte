@@ -97,6 +97,7 @@
   } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
+  import { z } from "zod";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import Choice from "#lib/cawco/config/Choice.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -146,9 +147,11 @@
    * (DESIGN.md, The Work Outlives Its Surface Rule: a failure stands until
    * the reader acts on it).
    */
-  const kept = new TabDraft("cawco:connection-problems", () => ({
-    byName: {} as Record<string, string>,
-  }));
+  const kept = new TabDraft(
+    "cawco:connection-problems",
+    z.object({ byName: z.record(z.string(), z.string()) }),
+    () => ({ byName: {} })
+  );
   const problems = kept.value.byName;
 
   const path = (name: string) => `/api/connections/${encodeURIComponent(name)}`;
@@ -459,18 +462,31 @@
    * the refusal it last showed. Never a key or a secret: the form asks for
    * those again and says why (`secretTyped`).
    */
-  const addDraft = new TabDraft("cawco:connection-add", () => ({
-    service: null as string | null,
-    way: null as string | null,
-    account: "",
-    address: "",
-    /** A GitHub App's organization, empty for the person's own account. */
-    organization: "",
-    clientId: "",
-    /** A key or secret was typed before the page went away. */
-    secretTyped: false,
-    problem: null as string | null,
-  }));
+  const addDraft = new TabDraft(
+    "cawco:connection-add",
+    z.object({
+      service: z.string().nullable(),
+      way: z.string().nullable(),
+      account: z.string(),
+      address: z.string(),
+      /** A GitHub App's organization, empty for the person's own account. */
+      organization: z.string(),
+      clientId: z.string(),
+      /** A key or secret was typed before the page went away. */
+      secretTyped: z.boolean(),
+      problem: z.string().nullable(),
+    }),
+    () => ({
+      service: null,
+      way: null,
+      account: "",
+      address: "",
+      organization: "",
+      clientId: "",
+      secretTyped: false,
+      problem: null,
+    })
+  );
   const typed = addDraft.value;
   const adding = $derived(
     SERVICES.find((each) => each.service === typed.service) ?? null

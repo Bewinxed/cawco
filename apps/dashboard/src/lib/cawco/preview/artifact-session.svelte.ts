@@ -20,6 +20,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ListedBrowser } from "@cawco/core/browser";
+import { ArtifactSessionHeardSchema } from "#lib/cawco/stored-shapes.js";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { deletePreview } from "../artifact-api";
@@ -48,7 +49,7 @@ interface Waiter {
 }
 
 /** What the hub sends on this socket: the frame, a beat's answer, and an `fs` ask's reply or refusal. */
-type Heard =
+export type ArtifactSessionHeard =
   | ArtifactSessionFrame
   | { type: "heartbeat" }
   | {
@@ -175,7 +176,12 @@ export class ArtifactSession implements PaneFleet {
     });
     socket.addEventListener("message", (event) => {
       this.#lastHeard = Date.now();
-      this.#take(JSON.parse(String(event.data)) as Heard);
+      const heard = ArtifactSessionHeardSchema.safeParse(
+        JSON.parse(String(event.data))
+      );
+      if (heard.success) {
+        this.#take(heard.data);
+      }
     });
     socket.addEventListener("close", (event) => {
       clearInterval(this.#beat);
@@ -196,7 +202,7 @@ export class ArtifactSession implements PaneFleet {
     });
   }
 
-  #take(heard: Heard): void {
+  #take(heard: ArtifactSessionHeard): void {
     if ("type" in heard) {
       if (heard.type === "artifact.session") {
         this.#heard = heard;

@@ -21,6 +21,8 @@ import {
   toolRuns,
   toolSpec,
 } from "@cawco/core/tools";
+import { z } from "zod";
+import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
 import {
   cawco,
   didntAnswer,
@@ -185,11 +187,11 @@ export const harnessWords = {
 } as const;
 
 /** A start again that was refused, kept for the session's own surface to say. */
-interface RelaunchRefused {
-  harness: HarnessKind;
-  machineId: string;
-  said: string;
-}
+const RelaunchRefusedSchema = z.object({
+  harness: HarnessKindSchema,
+  machineId: z.string(),
+  said: z.string(),
+});
 
 /**
  * What this tab pressed and still follows, kept across a reload: the
@@ -198,11 +200,18 @@ interface RelaunchRefused {
  * their machine's harness runs (`relaunch`, by instance id); and a start
  * again that was refused, by instance id, until it is retried.
  */
-const followed = new TabDraft("cawco:harness-fix", () => ({
-  brought: [] as string[],
-  relaunch: {} as Record<string, { harness: HarnessKind; machineId: string }>,
-  refused: {} as Record<string, RelaunchRefused>,
-}));
+const followed = new TabDraft(
+  "cawco:harness-fix",
+  z.object({
+    brought: z.array(z.string()),
+    relaunch: z.record(
+      z.string(),
+      z.object({ harness: HarnessKindSchema, machineId: z.string() })
+    ),
+    refused: z.record(z.string(), RelaunchRefusedSchema),
+  }),
+  () => ({ brought: [], relaunch: {}, refused: {} })
+);
 
 const keyOf = (machineId: string, harness: HarnessKind): string =>
   `${machineId}:${harness}`;

@@ -25,6 +25,7 @@
    */
   import { type Account, accountsWords as words } from "@cawco/core";
   import { SvelteMap } from "svelte/reactivity";
+  import { z } from "zod";
   import { cawco, signOutOn } from "#lib/cawco/client.svelte.js";
   import RowMenu from "#lib/cawco/config/RowMenu.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -77,9 +78,11 @@
    * The row whose popover is open, kept in this tab: a reload opens it
    * again on the same sign-in (The Work Outlives Its Surface Rule).
    */
-  const shown = new TabDraft("cawco:account-signin", () => ({
-    on: null as string | null,
-  }));
+  const shown = new TabDraft(
+    "cawco:account-signin",
+    z.object({ on: z.string().nullable() }),
+    () => ({ on: null })
+  );
   const openOn = $derived(
     shown.value.on?.startsWith(`${account.id}:`)
       ? shown.value.on.slice(account.id.length + 1)

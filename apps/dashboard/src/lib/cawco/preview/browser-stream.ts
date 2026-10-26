@@ -19,6 +19,7 @@
  * Neither keeps anything of the page: the frames are drawn and dropped.
  */
 import { BROWSER_VIEW_MOVED } from "@cawco/core/browser";
+import { z } from "zod";
 
 /** Where the stream stands, for the well to say. */
 export type StreamState =
@@ -154,10 +155,11 @@ const NEKO_OP = {
   buttonUp: 6,
 } as const;
 
-interface NekoMessage {
-  event: string;
-  payload?: Record<string, unknown>;
-}
+const NekoMessageSchema = z.object({
+  event: z.string(),
+  payload: z.record(z.string(), z.unknown()).optional(),
+});
+type NekoMessage = z.infer<typeof NekoMessageSchema>;
 
 /** neko's stream into `video`, with its input on the data channel. */
 export const nekoStream = (
@@ -341,7 +343,7 @@ export const nekoStream = (
     socket = at;
     at.onmessage = (event) => {
       try {
-        heard(JSON.parse(String(event.data)) as NekoMessage);
+        heard(NekoMessageSchema.parse(JSON.parse(String(event.data))));
       } catch {
         // Not neko's JSON: nothing to act on.
       }

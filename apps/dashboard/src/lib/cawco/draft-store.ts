@@ -13,6 +13,7 @@
  * written.
  */
 
+import { DraftRecordSchema } from "#lib/cawco/stored-shapes.js";
 import { newId } from "./id";
 import { database, done, result, DRAFTS as STORE } from "./idb";
 import type {
@@ -23,14 +24,17 @@ import type {
 } from "./transcript/composer-draft.svelte";
 
 /** A file as a stored draft keeps it: the hub's reference, or its bytes to upload again. */
-type StoredFile = Pick<PendingFile, "name" | "mediaType" | "size" | "ref"> & {
+export type StoredFile = Pick<
+  PendingFile,
+  "name" | "mediaType" | "size" | "ref"
+> & {
   blob?: Blob;
 };
 
 /** The most the stored drafts may weigh together, in bytes. */
 const CAP_BYTES = 50 * 1024 * 1024;
 
-interface DraftRecord {
+export interface DraftRecord {
   /** The canvas the message carries; absent on a record stored before canvases. */
   canvas?: DraftCanvas | null;
   /** Absent on a record stored before files could be attached. */
@@ -83,9 +87,11 @@ export async function loadDraft(
   sessionId: string
 ): Promise<DraftContent | null> {
   const db = await database();
-  const record = await result<DraftRecord | undefined>(
-    db.transaction(STORE).objectStore(STORE).get(sessionId)
-  );
+  const record = DraftRecordSchema.optional()
+    .catch(undefined)
+    .parse(
+      await result(db.transaction(STORE).objectStore(STORE).get(sessionId))
+    );
   if (!record) {
     return null;
   }
@@ -176,7 +182,10 @@ export async function saveDraft(
   };
   store.put(record);
   // Over the cap, the drafts edited longest ago go first; never this one.
-  const all = await result<DraftRecord[]>(store.getAll());
+  const all = (await result(store.getAll())).flatMap((one: unknown) => {
+    const read = DraftRecordSchema.safeParse(one);
+    return read.success ? [read.data] : [];
+  });
   let total = all.reduce((sum, each) => sum + each.size, 0);
   for (const old of all
     .filter((each) => each.sessionId !== sessionId)

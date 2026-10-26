@@ -6,6 +6,8 @@
  * Never a toast. Kept per tab in sessionStorage, so a reload says it again.
  */
 import { SvelteMap } from "svelte/reactivity";
+import { z } from "zod";
+import { RoutineRefusalSchema } from "#lib/cawco/stored-shapes.js";
 import { readJson, writeJson } from "../storage";
 
 export type RoutineAct = "run" | "pause" | "resume" | "keep" | "remove";
@@ -19,7 +21,12 @@ export interface RoutineRefusal {
 const KEY = "cawco:routine-refusals";
 
 const refusals = new SvelteMap<string, RoutineRefusal>(
-  readJson<[string, RoutineRefusal][]>(KEY, [], "session")
+  readJson(
+    KEY,
+    z.array(z.tuple([z.string(), RoutineRefusalSchema])),
+    [],
+    "session"
+  )
 );
 
 const keep = () => writeJson(KEY, [...refusals], "session");

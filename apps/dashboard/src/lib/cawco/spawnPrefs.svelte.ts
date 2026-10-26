@@ -5,6 +5,8 @@ import {
   harnessNamed,
   type PermissionMode,
 } from "@cawco/core";
+import { z } from "zod";
+import { SpawnPrefsShape } from "#lib/cawco/stored-shapes.js";
 import { MODEL_DEFAULT } from "./models.svelte";
 import { readJson, writeJson } from "./storage";
 
@@ -21,7 +23,7 @@ import { readJson, writeJson } from "./storage";
 const KEY = "cawco-spawn-prefs";
 const MACHINE_KEY = "cawco-spawn-machine";
 
-interface SpawnPrefs {
+export interface SpawnPrefs {
   /**
    * `null` is a choice too, and the one to start from: only the model knows
    * which stops it has, so a form that opened on a level would be asserting one
@@ -47,7 +49,7 @@ const FALLBACK: SpawnPrefs = {
 };
 
 const load = (): SpawnPrefs => {
-  const parsed = readJson<Partial<SpawnPrefs> | null>(KEY, null);
+  const parsed = readJson(KEY, SpawnPrefsShape.partial().nullable(), null);
   if (!parsed || typeof parsed !== "object") {
     return FALLBACK;
   }
@@ -100,7 +102,7 @@ export function rememberSpawn(prefs: SpawnPrefs): void {
  * opens on next; null when it has started none. Read as the form opens.
  */
 export const rememberedMachine = (): string | null => {
-  const id = readJson<unknown>(MACHINE_KEY, null);
+  const id = readJson(MACHINE_KEY, z.unknown(), null);
   return typeof id === "string" && id ? id : null;
 };
 

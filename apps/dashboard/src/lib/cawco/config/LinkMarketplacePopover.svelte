@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { z } from "zod";
   import { TabDraft } from "../tab-draft.svelte";
 
   /**
@@ -12,16 +13,27 @@
    * Rule): open or not, what was typed, and the source whose link it asked
    * for. The link itself is the hub's (the snapshot's `links`, then its row).
    */
-  const draft = new TabDraft("cawco:link-marketplace", () => ({
-    open: false,
-    at: "head" as Where,
-    name: "",
-    source: "",
-    /** The source this popover asked the hub to link, until it lands. */
-    asked: null as string | null,
-    /** Why the hub refused the ask itself. */
-    refused: null as string | null,
-  }));
+  const draft = new TabDraft(
+    "cawco:link-marketplace",
+    z.object({
+      open: z.boolean(),
+      at: z.string(),
+      name: z.string(),
+      source: z.string(),
+      /** The source this popover asked the hub to link, until it lands. */
+      asked: z.string().nullable(),
+      /** Why the hub refused the ask itself. */
+      refused: z.string().nullable(),
+    }),
+    () => ({
+      open: false,
+      at: "head",
+      name: "",
+      source: "",
+      asked: null,
+      refused: null,
+    })
+  );
 
   /** The popovers mounted on the page, by where: one put away opens in the header's when its own is gone. */
   const mounted = $state<Record<Where, number>>({});

@@ -45,7 +45,12 @@
   } from "@cawco/core/stage";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { z } from "zod";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
+  import {
+    ComposeTargetSchema,
+    ThreadEntrySchema,
+  } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -397,8 +402,14 @@
    */
   const keepKey = $derived(`cawco-preview-at:${instanceId}`);
   function keptAt(): string | null {
-    const kept = readJson<{ at?: unknown; revision?: unknown } | null>(
+    const kept = readJson(
       keepKey,
+      z
+        .object({
+          at: z.unknown().optional(),
+          revision: z.unknown().optional(),
+        })
+        .nullable(),
       null
     );
     return kept?.revision === preview?.revision &&
@@ -1472,7 +1483,14 @@
     pagePins = {};
     pageReplies = {};
     pageWords.clear();
-    refusedReplies = readJson(refusedKey(id), {});
+    refusedReplies = readJson(
+      refusedKey(id),
+      z.record(
+        z.string(),
+        z.object({ entries: z.array(ThreadEntrySchema), why: z.string() })
+      ),
+      {}
+    );
     const joined = joinArtifact(
       session,
       id,
@@ -2415,12 +2433,13 @@
    * the point on it, and whether its composer is open or parked. A reload
    * brings it back at its target as it was.
    */
-  interface KeptDraft {
-    inkId?: string;
-    parked: boolean;
-    point?: { x: number; y: number };
-    target: ComposeTarget;
-  }
+  const KeptDraftSchema = z.object({
+    inkId: z.string().optional(),
+    parked: z.boolean(),
+    point: z.object({ x: z.number(), y: z.number() }).optional(),
+    target: ComposeTargetSchema,
+  });
+  type KeptDraft = z.infer<typeof KeptDraftSchema>;
   let keptDraft: KeptDraft | null = null;
   const draftKey = $derived(
     artifactId ? `cawco-comment-draft:${artifactId}` : null
@@ -2453,7 +2472,7 @@
   /** A page loaded again: the draft kept for it comes back at its target, parked or open, once per load. */
   function restoreDraft() {
     const key = draftKey;
-    const kept = key ? readJson<KeptDraft | null>(key, null) : null;
+    const kept = key ? readJson(key, KeptDraftSchema.nullable(), null) : null;
     keptDraft = kept;
     if (!kept?.target?.anchor || composing) {
       return;

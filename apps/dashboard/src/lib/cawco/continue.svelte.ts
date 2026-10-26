@@ -16,6 +16,7 @@ import type {
   PermissionMode,
 } from "@cawco/core";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { ContinueSourceShape } from "#lib/cawco/stored-shapes.js";
 import { cawco, type SendExtras } from "./client.svelte";
 import { spawning } from "./spawn/new-session.svelte";
 import { readJson, writeJson } from "./storage";
@@ -63,7 +64,7 @@ export interface SessionDraft {
 const KEY = "cawco:continuing";
 
 export const continuing = $state<{ source: ContinueSource | null }>({
-  source: readJson<ContinueSource | null>(KEY, null, "session"),
+  source: readJson(KEY, ContinueSourceShape.nullable(), null, "session"),
 });
 
 $effect.root(() => {

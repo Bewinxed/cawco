@@ -8,6 +8,7 @@
  * button and More's submenu.
  */
 import { PREVIEW_SCHEMES, type PreviewScheme } from "@cawco/core/comments";
+import { CanvasChosenShape } from "#lib/cawco/stored-shapes.js";
 import { store, stored } from "../storage";
 
 export type CanvasWidth = "own" | "390" | "768" | "1280" | "all";
@@ -44,7 +45,10 @@ function keptView(key: string): CanvasChosen {
     return { ...OWN_VIEW };
   }
   try {
-    return { ...OWN_VIEW, ...(JSON.parse(kept) as Partial<CanvasChosen>) };
+    return {
+      ...OWN_VIEW,
+      ...CanvasChosenShape.partial().catch({}).parse(JSON.parse(kept)),
+    };
   } catch {
     return { ...OWN_VIEW };
   }

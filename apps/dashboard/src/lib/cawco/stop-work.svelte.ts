@@ -20,6 +20,8 @@ import type { CawRunning, CawView, ProjectStopFrame } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
+import { z } from "zod";
+import { StopJobSchema } from "#lib/cawco/stored-shapes.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import {
@@ -240,7 +242,12 @@ class StopWork {
     if (typeof window === "undefined") {
       return;
     }
-    const kept = readJson<Record<string, StopJob>>(KEY, {}, "session");
+    const kept = readJson(
+      KEY,
+      z.record(z.string(), StopJobSchema),
+      {},
+      "session"
+    );
     for (const job of Object.values(kept)) {
       // A tile in flight as the page went has landed.
       for (const row of job.rows) {

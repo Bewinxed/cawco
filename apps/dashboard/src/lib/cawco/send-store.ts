@@ -8,6 +8,8 @@
  * once. A record goes once the hub takes its send; one the hub refused is
  * kept with its words for Try again or Edit, for as long as those stand.
  */
+
+import { KeptSendSchema } from "#lib/cawco/stored-shapes.js";
 import type { SendExtras } from "./client.svelte";
 import { database, done, result, SENDS } from "./idb";
 
@@ -38,10 +40,12 @@ export async function keepSend(send: KeptSend): Promise<void> {
   const transaction = db.transaction(SENDS, "readwrite");
   const store = transaction.objectStore(SENDS);
   // Plain data, whatever the caller held it in (a `$state` proxy does not clone).
-  const plain = JSON.parse(JSON.stringify(send)) as KeptSend;
+  const plain = KeptSendSchema.parse(JSON.parse(JSON.stringify(send)));
   const before = store.get(send.commandId);
   before.onsuccess = () => {
-    const first = before.result as KeptSend | undefined;
+    const first = KeptSendSchema.optional()
+      .catch(undefined)
+      .parse(before.result);
     store.put(first ? { ...plain, at: first.at } : plain);
   };
   return done(transaction);
@@ -57,7 +61,7 @@ export async function refuseSend(
   const store = transaction.objectStore(SENDS);
   const kept = store.get(commandId);
   kept.onsuccess = () => {
-    const send = kept.result as KeptSend | undefined;
+    const send = KeptSendSchema.optional().catch(undefined).parse(kept.result);
     if (send) {
       store.put({ ...send, refused: { at: Date.now(), reason } });
     }
@@ -76,8 +80,12 @@ export async function forgetSend(commandId: string): Promise<void> {
 /** Every kept send, oldest first. */
 export async function keptSends(): Promise<KeptSend[]> {
   const db = await database();
-  const all = await result<KeptSend[]>(
-    db.transaction(SENDS).objectStore(SENDS).getAll()
-  );
+  // A send a build before this one kept in another shape is not sent again.
+  const all = (
+    await result(db.transaction(SENDS).objectStore(SENDS).getAll())
+  ).flatMap((one: unknown) => {
+    const read = KeptSendSchema.safeParse(one);
+    return read.success ? [read.data] : [];
+  });
   return all.sort((a, b) => a.at - b.at);
 }

@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { z } from "zod";
   import { TabDraft } from "../tab-draft.svelte";
 
   /**
@@ -12,18 +13,31 @@
    * Rule): open or not, what was typed and picked, and the skill whose fetch
    * it started. The fetch itself is the hub's row; this only names it.
    */
-  const draft = new TabDraft("cawco:fetch-skill", () => ({
-    open: false,
-    at: "head" as Where,
-    typed: "",
-    skillName: "",
-    named: false,
-    projectId: "",
-    /** The skill this popover asked the hub for, until it lands. */
-    asked: null as string | null,
-    /** Why the hub refused the ask itself (no row to carry it). */
-    refused: null as string | null,
-  }));
+  const draft = new TabDraft(
+    "cawco:fetch-skill",
+    z.object({
+      open: z.boolean(),
+      at: z.string(),
+      typed: z.string(),
+      skillName: z.string(),
+      named: z.boolean(),
+      projectId: z.string(),
+      /** The skill this popover asked the hub for, until it lands. */
+      asked: z.string().nullable(),
+      /** Why the hub refused the ask itself (no row to carry it). */
+      refused: z.string().nullable(),
+    }),
+    () => ({
+      open: false,
+      at: "head",
+      typed: "",
+      skillName: "",
+      named: false,
+      projectId: "",
+      asked: null,
+      refused: null,
+    })
+  );
 
   /** The popovers mounted on the page, by where: one put away opens in the header's when its own is gone. */
   const mounted = $state<Record<Where, number>>({});

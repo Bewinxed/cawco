@@ -10,20 +10,23 @@
  * it survives a reload in this tab and is told to no other, whose reader did
  * not start the work there. Every change is written as it happens.
  */
+
+import type { z } from "zod";
 import { readJson, writeJson } from "./storage";
 
-export class TabDraft<T extends object> {
+export class TabDraft<S extends z.ZodObject> {
   /** The surface's held state; change it in place, and it is kept. */
-  value: T;
+  value: z.output<S>;
   readonly #key: string;
-  readonly #blank: () => T;
+  readonly #blank: () => z.output<S>;
 
-  constructor(key: string, blank: () => T) {
+  /** `shape` is what the surface keeps; a kept field that is not its shape any more is read as blank. */
+  constructor(key: string, shape: S, blank: () => z.output<S>) {
     this.#key = key;
     this.#blank = blank;
     this.value = $state({
       ...blank(),
-      ...readJson<Partial<T>>(key, {}, "session"),
+      ...readJson(key, shape.partial().catch({}), {}, "session"),
     });
     $effect.root(() => {
       $effect(() => {
