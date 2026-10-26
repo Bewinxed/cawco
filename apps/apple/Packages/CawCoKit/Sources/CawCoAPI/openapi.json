@@ -56902,6 +56902,10 @@
       "PermissionPresentation": {
         "type": "object",
         "properties": {
+          "askedBecause": {
+            "description": "A project's Caw's call his gate put to the person (hub lead-gate.ts):\nwhich rule sent it, in one line (\"Asked because this turn was woken by a\nroutine, and this command writes: `git commit`.\"), drawn under the\ncommand or the change. Absent on any other ask.",
+            "type": "string"
+          },
           "asker": {
             "description": "The session that asked, by the name the board gives it (\"Caw\" for a project's lead).",
             "type": "string"
