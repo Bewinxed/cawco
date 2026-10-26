@@ -104,8 +104,6 @@ export type CawEdits =
   | { kind: "declared"; globs: string[] }
   | { kind: "unreadable"; problems: string[] };
 
-const FENCE = /^---\s*$/u;
-const LINE_SPLIT = /\r?\n/u;
 const INDENTED = /^\s/u;
 const OPTION = /^([a-z-]+):\s*(.*)$/u;
 const DURATION = /^(\d{1,5})(s|m|h)$/u;
@@ -347,15 +345,24 @@ const targetsProblem = (step: DeclaredStep): string | undefined => {
   }
 };
 
-/** gate.md's block as steps and Caw edits, or every problem it has. */
-export const readGate = (content: string): GateReading => {
+const FENCE = /^---\s*$/u;
+const LINE_SPLIT = /\r?\n/u;
+
+/** The lines of a folder file's block, between its opening --- line and the next; undefined when it holds none. */
+export const blockLines = (content: string): string[] | undefined => {
   const lines = content.split(LINE_SPLIT);
   const start = lines.findIndex((line) => line.trim() !== "");
   const end =
     start >= 0 && FENCE.test(lines[start] ?? "")
       ? lines.findIndex((line, at) => at > start && FENCE.test(line))
       : -1;
-  if (end < 0) {
+  return end < 0 ? undefined : lines.slice(start + 1, end);
+};
+
+/** gate.md's block as steps and Caw edits, or every problem it has. */
+export const readGate = (content: string): GateReading => {
+  const block = blockLines(content);
+  if (!block) {
     return {
       ok: false,
       problems: [
@@ -369,7 +376,7 @@ export const readGate = (content: string): GateReading => {
     seen: new Set(),
     steps: [],
   };
-  for (const line of lines.slice(start + 1, end)) {
+  for (const line of block) {
     const text = line.trim();
     if (!text || text.startsWith("#")) {
       continue;

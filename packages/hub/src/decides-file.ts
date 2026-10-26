@@ -44,6 +44,7 @@ import {
 } from "@cawco/core/decides";
 import { Elysia, t } from "elysia";
 import type { DecidesDb } from "./db/decides";
+import { blockLines } from "./gate-file";
 import { FolderRefusal, readFolderFile, refused } from "./project-folder";
 
 /** A refusal of `settle`, in one sentence. */
@@ -69,8 +70,6 @@ export type DecidesReading =
     }
   | { ok: false; problems: string[] };
 
-const FENCE = /^---\s*$/u;
-const LINE_SPLIT = /\r?\n/u;
 const INDENTED = /^\s/u;
 const LINE = /^([^:]+):\s*(.*)$/u;
 const LEADING = /^\.\//u;
@@ -169,13 +168,8 @@ const marginLine = (read: BlockRead, text: string): void => {
 
 /** decides.md's block as routes, its advisor and its paths, or every problem it has. */
 export const readDecides = (content: string): DecidesReading => {
-  const lines = content.split(LINE_SPLIT);
-  const start = lines.findIndex((line) => line.trim() !== "");
-  const end =
-    start >= 0 && FENCE.test(lines[start] ?? "")
-      ? lines.findIndex((line, at) => at > start && FENCE.test(line))
-      : -1;
-  if (end < 0) {
+  const block = blockLines(content);
+  if (!block) {
     return {
       ok: false,
       problems: [
@@ -184,7 +178,7 @@ export const readDecides = (content: string): DecidesReading => {
     };
   }
   const read: BlockRead = { inYours: false, problems: [], routes: {} };
-  for (const line of lines.slice(start + 1, end)) {
+  for (const line of block) {
     const text = line.trim();
     if (!text || text.startsWith("#")) {
       continue;
