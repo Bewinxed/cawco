@@ -463,13 +463,13 @@ export class Chrome {
     this.#crumb.setAttribute("aria-live", "polite");
     const tools = document.createElement("div");
     tools.className = "tools";
-    const outlineButton = this.#button("Outline", () => {
+    const outlineButton = makeButton("Outline", () => {
       this.#outline.hidden = !this.#outline.hidden;
       outlineButton.setAttribute("aria-pressed", String(!this.#outline.hidden));
     });
     outlineButton.setAttribute("aria-pressed", "false");
     outlineButton.title = "Outline: every section and frame (J and K step)";
-    const reset = this.#button("Reset layout", () => options.resetLayout());
+    const reset = makeButton("Reset layout", () => options.resetLayout());
     tools.append(outlineButton, reset);
     this.#band.append(name, tools, this.#crumb);
     this.#strip = document.createElement("div");
@@ -499,15 +499,6 @@ export class Chrome {
     this.#sizes.observe(this.#outline);
     window.addEventListener("keydown", (event) => this.#key(event));
     this.#swipes();
-  }
-
-  #button(words: string, run: () => void): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "ghost";
-    button.textContent = words;
-    button.addEventListener("click", run);
-    return button;
   }
 
   /** Whether the page is a phone's: one frame at a time. */
@@ -922,14 +913,14 @@ export class Chrome {
     const back = stories[at - 1];
     const ahead = stories[at + 1];
     if (back) {
-      const button = this.#button(back, () => this.#step(-1));
+      const button = makeButton(back, () => this.#step(-1));
       button.prepend(glyph("back"));
       this.#steps.append(button);
     } else {
       this.#steps.append(document.createElement("span"));
     }
     if (ahead) {
-      const button = this.#button(ahead, () => this.#step(1));
+      const button = makeButton(ahead, () => this.#step(1));
       button.append(glyph("ahead"));
       this.#steps.append(button);
     }
@@ -986,31 +977,6 @@ export class Chrome {
     });
   }
 
-  /**
-   * DialKit starts its timeline 400px tall and keeps its height inline, the
-   * person's to change with its resize handle (a separator that steps 20px
-   * on each arrow key): on a phone it starts at `most` instead, stepped down
-   * through that same handle, so the person can still make it taller.
-   */
-  #timelineStartsAt(dock: HTMLElement, most: number): void {
-    const handle = dock.querySelector<HTMLElement>(
-      ".dialkit-timeline-resize-handle"
-    );
-    const inner = dock.querySelector<HTMLElement>(".dialkit-timeline-dock");
-    if (!(handle && inner)) {
-      return;
-    }
-    const now = Number.parseFloat(getComputedStyle(inner).maxHeight);
-    const steps = Number.isFinite(now)
-      ? Math.max(0, Math.ceil((now - most) / TIMELINE_STEP))
-      : 0;
-    for (let step = 0; step < steps; step += 1) {
-      handle.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
-      );
-    }
-  }
-
   /** The dock DialKit draws into, made once, in the page (DialKit's own CSS is scoped to its classes); its size takes its room from the canvas. */
   #dockOf(kind: "dials" | "timeline"): HTMLElement {
     const id = `cawco-dock-${kind}`;
@@ -1045,7 +1011,7 @@ export class Chrome {
         theme: pageScheme(),
       });
       if (this.#flags.phone) {
-        this.#timelineStartsAt(this.#dock, windowHeight() / 4);
+        timelineStartsAt(this.#dock, windowHeight() / 4);
       }
     }
     const clips: Record<string, unknown> = {};
@@ -1240,6 +1206,40 @@ export class Chrome {
         400
       );
     });
+  }
+}
+
+function makeButton(words: string, run: () => void): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost";
+  button.textContent = words;
+  button.addEventListener("click", run);
+  return button;
+}
+
+/**
+ * DialKit starts its timeline 400px tall and keeps its height inline, the
+ * person's to change with its resize handle (a separator that steps 20px
+ * on each arrow key): on a phone it starts at `most` instead, stepped down
+ * through that same handle, so the person can still make it taller.
+ */
+function timelineStartsAt(dock: HTMLElement, most: number): void {
+  const handle = dock.querySelector<HTMLElement>(
+    ".dialkit-timeline-resize-handle"
+  );
+  const inner = dock.querySelector<HTMLElement>(".dialkit-timeline-dock");
+  if (!(handle && inner)) {
+    return;
+  }
+  const now = Number.parseFloat(getComputedStyle(inner).maxHeight);
+  const steps = Number.isFinite(now)
+    ? Math.max(0, Math.ceil((now - most) / TIMELINE_STEP))
+    : 0;
+  for (let step = 0; step < steps; step += 1) {
+    handle.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+    );
   }
 }
 

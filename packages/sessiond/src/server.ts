@@ -134,7 +134,7 @@ export const SWEEP_GRACE_MS = 2000;
  * anyone can measure. A process started and orphaned inside one interval,
  * out of the child's process group, is not in that record: the reading at
  * the child's end finds it by its tree mark ({@link SessiondServer}
- * `#readTree`).
+ * `readTree`).
  */
 export const SURVEY_INTERVAL_MS = 30_000;
 
@@ -239,7 +239,7 @@ interface Proc {
   /**
    * Its own cgroup's directory, when the keeper made it one ({@link
    * openChildGroup}): everything in it is the child's, and a kill of the
-   * child kills it whole (`#kill`).
+   * child kills it whole (`killTree`).
    */
   group?: string;
   /** Cuts stdout into lines. Framing only. */
@@ -248,7 +248,7 @@ interface Proc {
    * Its tree mark: a value of its own in its environment
    * (`CAWCO_SESSIOND_TREE`), which everything it starts inherits and keeps
    * wherever it goes, a new session or process group and a new parent
-   * included ({@link SessiondServer} `#survey`).
+   * included (`survey`).
    */
   mark: string;
   /** The command lines of its tree's processes that carry its mark, by pid, as the last marked reading that found any read them: what its sweep names. */
@@ -339,7 +339,7 @@ export class SessiondServer {
   }
   /** The sweeps still giving an ended child's tree its grace ({@link #sweep}). */
   readonly #sweeps = new Set<ReturnType<typeof setTimeout>>();
-  /** The clock every live child's tree is read on ({@link #survey}). */
+  /** The clock every live child's tree is read on ({@link survey}). */
   #surveying: ReturnType<typeof setInterval> | undefined;
   readonly #build: BuildInfo;
   #server: Server | undefined;
@@ -414,7 +414,7 @@ export class SessiondServer {
           Promise.all(
             [...this.#procs.values()]
               .filter((proc) => proc.alive)
-              .map((proc) => this.#survey(proc, table))
+              .map((proc) => survey(proc, table))
           )
         )
         .catch((error: unknown) => {
@@ -510,7 +510,7 @@ export class SessiondServer {
       `[sessiond] ${proc.procId}: ${group.name} reached its ${limit === "tasks" ? `task limit (pids.max ${max}); pids.events max` : `memory limit (memory.max ${max}); memory.events oom_kill`} reads ${count}`
     );
     for (const conn of this.#conns) {
-      this.#send(conn, {
+      send(conn, {
         type: "proc.limit",
         procId: proc.procId,
         pid: proc.pid,
@@ -585,10 +585,10 @@ export class SessiondServer {
     // the ring. That is the whole tmux property, and it needs no code here.
     socket.on("error", () => this.#conns.delete(conn));
     socket.on("close", () => this.#conns.delete(conn));
-    this.#send(conn, this.#welcomeOf());
+    send(conn, this.#welcomeOf());
     // A connection the listener took in just as the drain began.
     if (this.#draining) {
-      this.#send(conn, { type: "draining" });
+      send(conn, { type: "draining" });
     }
   }
 
@@ -608,7 +608,7 @@ export class SessiondServer {
     try {
       message = JSON.parse(line); // protocol envelope off the socket, never a payload
     } catch {
-      this.#send(conn, ack("", "failed", "malformed: not json"));
+      send(conn, ack("", "failed", "malformed: not json"));
       return;
     }
     this.handle(conn, message);
@@ -634,7 +634,7 @@ export class SessiondServer {
       return;
     }
     if (type === "list") {
-      const answer = () => this.#send(conn, this.#welcomeOf());
+      const answer = () => send(conn, this.#welcomeOf());
       paceList(answer);
       return;
     }
@@ -680,40 +680,17 @@ export class SessiondServer {
         // the agent evolves past a months-old sessiond — it probes, reads
         // `unsupported`, and falls back. Closing the connection here would
         // turn every future agent feature into a sessiond release.
-        this.#send(
+        send(
           conn,
           ack(commandId, "failed", `unsupported: ${type || "(missing type)"}`)
         );
         return;
     }
     if (settlement instanceof Promise) {
-      this.#settleLater(conn, commandId, settlement);
+      settleLater(conn, commandId, settlement);
       return;
     }
-    this.#send(conn, settlement);
-  }
-
-  /**
-   * A verb that reads the process table first settles when the reading is in.
-   * A reading that fails settles the command as failed, with the reason: the
-   * agent learns its signal reached nobody rather than that it landed.
-   */
-  #settleLater(
-    conn: Conn,
-    commandId: string,
-    pending: Promise<SessiondAck>
-  ): void {
-    const settled = pending.catch((error: unknown) =>
-      ack(
-        commandId,
-        "failed",
-        `the process table could not be read: ${reasonOf(error)}`
-      )
-    );
-    detach(
-      settled.then((settlement) => this.#send(conn, settlement)),
-      "sessiond settlement"
-    );
+    send(conn, settlement);
   }
 
   // -------------------------------------------------------------------- verbs
@@ -809,7 +786,7 @@ export class SessiondServer {
     if (existing?.alive) {
       // The kill lands once its tree is read; the successor starts now, under
       // its own process group, so nothing of it is in what gets killed.
-      this.#kill(existing).catch((error: unknown) => {
+      killTree(existing).catch((error: unknown) => {
         console.error(
           `[sessiond] ${procId}: the replaced child's tree could not be read, so it was not killed: ${reasonOf(error)}`
         );
@@ -869,7 +846,7 @@ export class SessiondServer {
         env: childEnvironment(spec, mark),
         stdio: ["pipe", "pipe", "pipe"],
         // Its own process group, which it leads: what it starts stays findable
-        // under its pid after it has exited ({@link #survey}).
+        // under its pid after it has exited ({@link survey}).
         detached: true,
       }) as ChildProcessWithoutNullStreams;
     } catch (error) {
@@ -995,9 +972,9 @@ export class SessiondServer {
     if (!proc?.alive) {
       return ack(commandId, "failed", notAliveReason("signal", procId));
     }
-    return (
-      sig === "SIGKILL" ? this.#kill(proc) : this.#signalTree(proc, sig)
-    ).then(() => ack(commandId, "applied"));
+    return (sig === "SIGKILL" ? killTree(proc) : signalTree(proc, sig)).then(
+      () => ack(commandId, "applied")
+    );
   }
 
   #stdinEnd(
@@ -1012,7 +989,7 @@ export class SessiondServer {
     // while it is still there to be their ancestor. The end waits for the
     // reading; a reading that fails still ends stdin, since closing it is the
     // harness's own graceful way out and needs no tree.
-    return this.#readTree(proc).then(
+    return readTree(proc).then(
       () => {
         proc.child.stdin.end();
         return ack(commandId, "applied");
@@ -1033,142 +1010,17 @@ export class SessiondServer {
     return cgroup === undefined ? {} : { cgroup };
   }
 
-  // ---------------------------------------------------------------- the tree
-
-  /**
-   * Everything `proc` started that is running now, itself included while it
-   * lives: its descendants by parentage, the process group it leads, what
-   * an earlier reading found that is still the same process, every process
-   * that carries its tree mark ({@link Proc.mark}) in a marked reading, and
-   * the descendants of all those. Recorded on the proc, so the next reading
-   * still knows them after the child has exited and they have been
-   * reparented.
-   *
-   * Parentage alone misses what was reparented before the reading, and the
-   * group alone misses what left it: a shell the child ran with job control,
-   * a browser its driver launched detached. Both together still miss a
-   * process that left the group and was orphaned since the last reading: an
-   * MCP server's helper started with `setsid` whose launcher exited, under
-   * init by the time the child dies. Its environment still carries the
-   * child's mark, and every reading taken where the tree is ended or
-   * signalled is marked ({@link #readTree}). macOS withholds the
-   * environment of Apple's platform binaries (`/bin/sleep`, `/bin/bash`), so
-   * there the mark finds only the rest (node, a browser, any tool installed
-   * apart from the system).
-   *
-   * Every live child is read on a clock as well ({@link SURVEY_INTERVAL_MS}):
-   * one the kernel kills for memory is asked nothing first, and what it had
-   * started is known only from the reading before.
-   *
-   * ONLY WHAT IS STILL IN THE CHILD'S CGROUP IS ITS TREE. A process that left
-   * it was put elsewhere on purpose, by itself or by the service manager:
-   * conmon, which podman moves into a `libpod-conmon-<id>.scope` of its own
-   * after its double fork and `setsid()`, or anything a user moved into a
-   * scope of its own. It is dropped from the tree, here and in every later
-   * reading, and never signalled: CawCo signals no process it did not start.
-   * A container a session's work started is ended through its runtime as the
-   * session ends (agent session-containers.ts), never by a signal from here.
-   * The child itself is its own while it lives, wherever it is.
-   */
-  async #survey(proc: Proc, table: Listed[]): Promise<Pid[]> {
-    const root = proc.pid;
-    const byParent = new Map<number, Listed[]>();
-    for (const row of table) {
-      const siblings = byParent.get(row.ppid);
-      if (siblings) {
-        siblings.push(row);
-      } else {
-        byParent.set(row.ppid, [row]);
-      }
-    }
-    const running = new Map<number, string>();
-    const take = (row: Listed): void => {
-      if (running.has(row.pid)) {
-        return;
-      }
-      running.set(row.pid, row.started);
-      for (const child of byParent.get(row.pid) ?? []) {
-        take(child);
-      }
-    };
-    for (const row of table) {
-      // The child's own pid is the child only while it lives: afterwards the
-      // number is the system's to hand out again.
-      const own =
-        row.tree === proc.mark ||
-        (row.pid === root
-          ? proc.alive
-          : row.pgid === root || proc.tree.get(row.pid) === row.started);
-      if (own) {
-        take(row);
-      }
-    }
-    const kept = await stillIn(proc, running);
-    proc.tree = kept;
-    const named = table.flatMap((row) =>
-      row.command !== undefined && row.tree === proc.mark
-        ? [[row.pid, row.command] as const]
-        : []
-    );
-    if (named.length > 0) {
-      proc.named = new Map(named);
-    }
-    return [...kept.keys()].map(listedPid);
-  }
-
-  /** {@link #survey} on a fresh reading of the process table, marked: what carries the child's mark is its own. */
-  async #readTree(proc: Proc): Promise<Pid[]> {
-    return this.#survey(proc, await processTable(true));
-  }
-
-  /** A signal for the child reaches everything it started. */
-  async #signalTree(proc: Proc, sig: NodeJS.Signals): Promise<void> {
-    for (const pid of await this.#readTree(proc)) {
-      signalPid(pid, sig);
-    }
-  }
-
-  /**
-   * Everything the child started that is running now, and the child while it
-   * lives: its tree ({@link #survey}), and, when it has a cgroup of its own,
-   * every process in it, which is its tree whatever session or group a
-   * process put itself in and whoever its parent is now.
-   */
-  async #everything(proc: Proc): Promise<Pid[]> {
-    const tree = await this.#readTree(proc);
-    const members = proc.group ? await groupMembers(proc.group) : [];
-    return [...new Set([...tree, ...members.map(listedPid)])];
-  }
-
-  /**
-   * A KILL OF A CHILD ENDS ALL IT STARTED. With a cgroup of its own, the
-   * kernel kills the group whole ({@link killGroup}): nothing in it is
-   * missed for having left the child's process group and been reparented
-   * before any reading, as bwrap's sandbox does (`--new-session` calls
-   * setsid(), bubblewrap.c), which a boundary's srt host starts. Without
-   * one, every process of its tree is sent SIGKILL.
-   */
-  async #kill(proc: Proc): Promise<void> {
-    if (!proc.group) {
-      await this.#signalTree(proc, "SIGKILL");
-      return;
-    }
-    await killGroup(proc.group);
-    // Read too, for the record: a later reading knows what it was.
-    await this.#readTree(proc);
-  }
-
   /**
    * WHAT A CHILD STARTED DOES NOT OUTLIVE IT. A harness that exits leaves its
    * MCP servers to close themselves and their browsers to follow, and one
    * killed outright leaves them running under init with nobody to end them:
    * 136 MCP server sets and 569 browser processes were alive behind about a
    * dozen working sessions the day this was written. Whatever is left is told
-   * to end now ({@link #everything}), and killed after {@link SWEEP_GRACE_MS}
-   * ({@link #kill}).
+   * to end now ({@link treePids}), and killed after {@link SWEEP_GRACE_MS}
+   * ({@link killTree}).
    */
   async #sweep(proc: Proc): Promise<void> {
-    const left = await this.#everything(proc);
+    const left = await treePids(proc);
     if (left.length === 0) {
       return;
     }
@@ -1187,7 +1039,7 @@ export class SessiondServer {
     );
     const timer = setTimeout(() => {
       this.#sweeps.delete(timer);
-      this.#kill(proc).catch((error: unknown) => {
+      killTree(proc).catch((error: unknown) => {
         console.error(
           `[sessiond] ${proc.procId}: what it started could not be read for the kill: ${reasonOf(error)}`
         );
@@ -1212,9 +1064,9 @@ export class SessiondServer {
       // honest refusal.
       conn.cursors.set(procId, 0);
       if (afterSeq === undefined || afterSeq === 0) {
-        this.#send(conn, { type: "proc.backlog", procId, events: [] });
+        send(conn, { type: "proc.backlog", procId, events: [] });
       } else {
-        this.#send(conn, { type: "proc.reset", procId, nextSeq: 1 });
+        send(conn, { type: "proc.reset", procId, nextSeq: 1 });
       }
       return;
     }
@@ -1222,7 +1074,7 @@ export class SessiondServer {
     if (afterSeq === undefined) {
       // Follow from now: an empty backlog, so the agent sees the same
       // choreography (backlog-then-deltas) on both paths.
-      this.#send(conn, { type: "proc.backlog", procId, events: [] });
+      send(conn, { type: "proc.backlog", procId, events: [] });
       return;
     }
     if (!proc.ring.canReplay(afterSeq)) {
@@ -1239,7 +1091,7 @@ export class SessiondServer {
       // it did before. Absent when the ring has been dropped entirely, which
       // is the one case where there is honestly nothing to go back to.
       const { oldest } = proc.ring;
-      this.#send(conn, {
+      send(conn, {
         type: "proc.reset",
         procId,
         nextSeq: proc.ring.head + 1,
@@ -1247,7 +1099,7 @@ export class SessiondServer {
       });
       return;
     }
-    this.#send(conn, {
+    send(conn, {
       type: "proc.backlog",
       procId,
       events: proc.ring.since(afterSeq).map(toLine),
@@ -1287,7 +1139,7 @@ export class SessiondServer {
         continue;
       }
       conn.cursors.set(proc.procId, line.seq);
-      this.#send(conn, { type: "proc.line", event: line });
+      send(conn, { type: "proc.line", event: line });
     }
   }
 
@@ -1315,7 +1167,7 @@ export class SessiondServer {
       return;
     }
     for (const conn of this.#conns) {
-      this.#send(conn, {
+      send(conn, {
         type: "proc.exit",
         procId: proc.procId,
         pid: proc.pid,
@@ -1324,15 +1176,6 @@ export class SessiondServer {
         ...stderrOf(proc),
       });
     }
-  }
-
-  #send(conn: Conn, message: SessiondServerMessage): void {
-    if (conn.socket.destroyed) {
-      return;
-    }
-    // Paced: a ring line can be megabytes, and Bun's socket write is
-    // quadratic in what it has to queue (core/paced-write.ts).
-    conn.out.write(`${JSON.stringify(message)}\n`);
   }
 
   // --------------------------------------------------------------------- drain
@@ -1356,7 +1199,7 @@ export class SessiondServer {
     this.#drainingValue = true;
     this.#listenerClosed ??= this.#closeListener();
     for (const conn of this.#conns) {
-      this.#send(conn, { type: "draining" });
+      send(conn, { type: "draining" });
     }
     const alive = [...this.#procs.values()].filter((proc) => proc.alive);
     if (alive.length > 0) {
@@ -1366,9 +1209,7 @@ export class SessiondServer {
         );
       });
       await Promise.all(
-        (table ? alive : []).map((proc) =>
-          this.#survey(proc, table as Listed[])
-        )
+        (table ? alive : []).map((proc) => survey(proc, table as Listed[]))
       );
     }
     for (const proc of alive) {
@@ -1397,13 +1238,13 @@ export class SessiondServer {
     });
     const trees = await Promise.all(
       (table ? [...this.#procs.values()] : []).map((proc) =>
-        this.#survey(proc, table as Listed[])
+        survey(proc, table as Listed[])
       )
     );
     for (const pid of trees.flat()) {
       signalPid(pid, "SIGKILL");
     }
-    // A child's own cgroup goes whole, whatever its tree missed (#kill).
+    // A child's own cgroup goes whole, whatever its tree missed (`killTree`).
     await Promise.all(
       [...this.#procs.values()].flatMap((proc) =>
         proc.group
@@ -1456,6 +1297,163 @@ export class SessiondServer {
     this.#conns.clear();
     await this.#listenerClosed;
   }
+}
+
+/**
+ * A KILL OF A CHILD ENDS ALL IT STARTED. With a cgroup of its own, the
+ * kernel kills the group whole ({@link killGroup}): nothing in it is
+ * missed for having left the child's process group and been reparented
+ * before any reading, as bwrap's sandbox does (`--new-session` calls
+ * setsid(), bubblewrap.c), which a boundary's srt host starts. Without
+ * one, every process of its tree is sent SIGKILL.
+ */
+async function killTree(proc: Proc): Promise<void> {
+  if (!proc.group) {
+    await signalTree(proc, "SIGKILL");
+    return;
+  }
+  await killGroup(proc.group);
+  // Read too, for the record: a later reading knows what it was.
+  await readTree(proc);
+}
+
+/** A signal for the child reaches everything it started. */
+async function signalTree(proc: Proc, sig: NodeJS.Signals): Promise<void> {
+  for (const pid of await readTree(proc)) {
+    signalPid(pid, sig);
+  }
+}
+
+/**
+ * Everything the child started that is running now, and the child while it
+ * lives: its tree ({@link survey}), and, when it has a cgroup of its own,
+ * every process in it, which is its tree whatever session or group a
+ * process put itself in and whoever its parent is now.
+ */
+async function treePids(proc: Proc): Promise<Pid[]> {
+  const tree = await readTree(proc);
+  const members = proc.group ? await groupMembers(proc.group) : [];
+  return [...new Set([...tree, ...members.map(listedPid)])];
+}
+
+/**
+ * A verb that reads the process table first settles when the reading is in.
+ * A reading that fails settles the command as failed, with the reason: the
+ * agent learns its signal reached nobody rather than that it landed.
+ */
+function settleLater(
+  conn: Conn,
+  commandId: string,
+  pending: Promise<SessiondAck>
+): void {
+  const settled = pending.catch((error: unknown) =>
+    ack(
+      commandId,
+      "failed",
+      `the process table could not be read: ${reasonOf(error)}`
+    )
+  );
+  detach(
+    settled.then((settlement) => send(conn, settlement)),
+    "sessiond settlement"
+  );
+}
+
+/** {@link survey} on a fresh reading of the process table, marked: what carries the child's mark is its own. */
+async function readTree(proc: Proc): Promise<Pid[]> {
+  return survey(proc, await processTable(true));
+}
+
+function send(conn: Conn, message: SessiondServerMessage): void {
+  if (conn.socket.destroyed) {
+    return;
+  }
+  // Paced: a ring line can be megabytes, and Bun's socket write is
+  // quadratic in what it has to queue (core/paced-write.ts).
+  conn.out.write(`${JSON.stringify(message)}\n`);
+}
+
+// ---------------------------------------------------------------- the tree
+
+/**
+ * Everything `proc` started that is running now, itself included while it
+ * lives: its descendants by parentage, the process group it leads, what
+ * an earlier reading found that is still the same process, every process
+ * that carries its tree mark ({@link Proc.mark}) in a marked reading, and
+ * the descendants of all those. Recorded on the proc, so the next reading
+ * still knows them after the child has exited and they have been
+ * reparented.
+ *
+ * Parentage alone misses what was reparented before the reading, and the
+ * group alone misses what left it: a shell the child ran with job control,
+ * a browser its driver launched detached. Both together still miss a
+ * process that left the group and was orphaned since the last reading: an
+ * MCP server's helper started with `setsid` whose launcher exited, under
+ * init by the time the child dies. Its environment still carries the
+ * child's mark, and every reading taken where the tree is ended or
+ * signalled is marked ({@link readTree}). macOS withholds the
+ * environment of Apple's platform binaries (`/bin/sleep`, `/bin/bash`), so
+ * there the mark finds only the rest (node, a browser, any tool installed
+ * apart from the system).
+ *
+ * Every live child is read on a clock as well ({@link SURVEY_INTERVAL_MS}):
+ * one the kernel kills for memory is asked nothing first, and what it had
+ * started is known only from the reading before.
+ *
+ * ONLY WHAT IS STILL IN THE CHILD'S CGROUP IS ITS TREE. A process that left
+ * it was put elsewhere on purpose, by itself or by the service manager:
+ * conmon, which podman moves into a `libpod-conmon-<id>.scope` of its own
+ * after its double fork and `setsid()`, or anything a user moved into a
+ * scope of its own. It is dropped from the tree, here and in every later
+ * reading, and never signalled: CawCo signals no process it did not start.
+ * A container a session's work started is ended through its runtime as the
+ * session ends (agent session-containers.ts), never by a signal from here.
+ * The child itself is its own while it lives, wherever it is.
+ */
+async function survey(proc: Proc, table: Listed[]): Promise<Pid[]> {
+  const root = proc.pid;
+  const byParent = new Map<number, Listed[]>();
+  for (const row of table) {
+    const siblings = byParent.get(row.ppid);
+    if (siblings) {
+      siblings.push(row);
+    } else {
+      byParent.set(row.ppid, [row]);
+    }
+  }
+  const running = new Map<number, string>();
+  const take = (row: Listed): void => {
+    if (running.has(row.pid)) {
+      return;
+    }
+    running.set(row.pid, row.started);
+    for (const child of byParent.get(row.pid) ?? []) {
+      take(child);
+    }
+  };
+  for (const row of table) {
+    // The child's own pid is the child only while it lives: afterwards the
+    // number is the system's to hand out again.
+    const own =
+      row.tree === proc.mark ||
+      (row.pid === root
+        ? proc.alive
+        : row.pgid === root || proc.tree.get(row.pid) === row.started);
+    if (own) {
+      take(row);
+    }
+  }
+  const kept = await stillIn(proc, running);
+  proc.tree = kept;
+  const named = table.flatMap((row) =>
+    row.command !== undefined && row.tree === proc.mark
+      ? [[row.pid, row.command] as const]
+      : []
+  );
+  if (named.length > 0) {
+    proc.named = new Map(named);
+  }
+  return [...kept.keys()].map(listedPid);
 }
 
 const ack = (

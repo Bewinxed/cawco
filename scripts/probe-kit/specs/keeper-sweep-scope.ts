@@ -11,7 +11,7 @@
  * podman moves into `libpod-conmon-<id>.scope`; anything a user puts in a
  * scope to outlive the session) was still in that tree, and got the sweep's
  * SIGTERM and then SIGKILL. The tree is now only what is still in the
- * child's cgroup (`#survey`).
+ * child's cgroup (`survey`).
  *
  * A scratch keeper unit (keeper-unit.ts) starts a child, as a session's,
  * that starts two processes in the background and waits on its stdin:

@@ -1652,41 +1652,9 @@ class Home {
    */
   #workingWas: BoardRow[] | undefined;
   readonly working = $derived.by(() => {
-    this.#workingWas = unlessSame(this.#workingWas, this.#workingNow());
+    this.#workingWas = unlessSame(this.#workingWas, workingNow());
     return this.#workingWas;
   });
-
-  /**
-   * Working's rows, in its order. `working` hands back the array it handed
-   * back before while they are the same rows in the same order, so a row's
-   * turn moving on or a row outside it changing wakes nothing past it.
-   */
-  #workingNow(): BoardRow[] {
-    const rows = cawco.runningRows.filter(
-      (row) => cawco.activityOf(row.id) === "working"
-    );
-    // Ordered by when each joined Working this stint, newest first: a key
-    // that never moves while it works, so two agents trading turns never
-    // swap places. Stamped on arrival, forgotten on leaving.
-    const present = new Set(rows.map((row) => row.id));
-    for (const id of enteredWorking.keys()) {
-      if (!present.has(id)) {
-        enteredWorking.delete(id);
-      }
-    }
-    const at = Date.now();
-    for (const row of rows) {
-      if (!enteredWorking.has(row.id)) {
-        // Its turn's start when known (a page opened mid-turn), read once.
-        enteredWorking.set(row.id, cawco.turnSince(row.id) ?? at);
-      }
-    }
-    return rows.sort(
-      (a, b) =>
-        (enteredWorking.get(b.id) ?? at) - (enteredWorking.get(a.id) ?? at) ||
-        a.id.localeCompare(b.id)
-    );
-  }
 
   /**
    * Every session that has ended since it was last opened, delegates
@@ -1708,29 +1676,13 @@ class Home {
     );
   });
 
-  /**
-   * The rows of `all` a tab lists itself. Every delegate under a listed
-   * parent, folded into its parent's count (tree.ts `rooted`); one whose
-   * parent the tab does not list only when the Delegates switch is on: work
-   * another session started is listed on its own on request. A failed one is
-   * listed whatever the switch says, so a failure is never missed; a blocked
-   * one is never in a tab, it is a Needs-you card above them.
-   */
-  #listedIn(all: BoardRow[]): BoardRow[] {
-    if (rail.delegates) {
-      return all;
-    }
-    const tops = new Set(rooted(all).map((row) => row.id));
-    return all.filter((row) => tops.has(row.id) || isFailed(row));
-  }
-
   #workingListedWas: BoardRow[] | undefined;
   #finishedListedWas: BoardRow[] | undefined;
   /** What the Working tab lists of `working`, by the Delegates switch. */
   readonly workingListed = $derived.by(() => {
     this.#workingListedWas = unlessSame(
       this.#workingListedWas,
-      this.#listedIn(this.working)
+      listedIn(this.working)
     );
     return this.#workingListedWas;
   });
@@ -1738,7 +1690,7 @@ class Home {
   readonly finishedListed = $derived.by(() => {
     this.#finishedListedWas = unlessSame(
       this.#finishedListedWas,
-      this.#listedIn(this.finished)
+      listedIn(this.finished)
     );
     return this.#finishedListedWas;
   });
@@ -2033,6 +1985,54 @@ class Home {
     }
     return latest?.id ?? null;
   });
+}
+
+/**
+ * The rows of `all` a tab lists itself. Every delegate under a listed
+ * parent, folded into its parent's count (tree.ts `rooted`); one whose
+ * parent the tab does not list only when the Delegates switch is on: work
+ * another session started is listed on its own on request. A failed one is
+ * listed whatever the switch says, so a failure is never missed; a blocked
+ * one is never in a tab, it is a Needs-you card above them.
+ */
+function listedIn(all: BoardRow[]): BoardRow[] {
+  if (rail.delegates) {
+    return all;
+  }
+  const tops = new Set(rooted(all).map((row) => row.id));
+  return all.filter((row) => tops.has(row.id) || isFailed(row));
+}
+
+/**
+ * Working's rows, in its order. `working` hands back the array it handed
+ * back before while they are the same rows in the same order, so a row's
+ * turn moving on or a row outside it changing wakes nothing past it.
+ */
+function workingNow(): BoardRow[] {
+  const rows = cawco.runningRows.filter(
+    (row) => cawco.activityOf(row.id) === "working"
+  );
+  // Ordered by when each joined Working this stint, newest first: a key
+  // that never moves while it works, so two agents trading turns never
+  // swap places. Stamped on arrival, forgotten on leaving.
+  const present = new Set(rows.map((row) => row.id));
+  for (const id of enteredWorking.keys()) {
+    if (!present.has(id)) {
+      enteredWorking.delete(id);
+    }
+  }
+  const at = Date.now();
+  for (const row of rows) {
+    if (!enteredWorking.has(row.id)) {
+      // Its turn's start when known (a page opened mid-turn), read once.
+      enteredWorking.set(row.id, cawco.turnSince(row.id) ?? at);
+    }
+  }
+  return rows.sort(
+    (a, b) =>
+      (enteredWorking.get(b.id) ?? at) - (enteredWorking.get(a.id) ?? at) ||
+      a.id.localeCompare(b.id)
+  );
 }
 
 export const home = new Home();

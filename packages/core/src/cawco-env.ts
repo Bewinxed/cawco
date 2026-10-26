@@ -57,7 +57,7 @@ export const CAWCO_ENV = {
    * Set by sessiond in each child it starts, a value of that child's own,
    * and inherited by everything the child starts: when the child ends, every
    * process still carrying it is ended with it, wherever it went (sessiond
-   * server.ts `#readTree`). Read by sessiond alone, from other processes'
+   * server.ts `readTree`). Read by sessiond alone, from other processes'
    * environments.
    */
   sessiondTree: "CAWCO_SESSIOND_TREE",

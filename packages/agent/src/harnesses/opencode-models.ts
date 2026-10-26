@@ -123,7 +123,7 @@ class OpencodeModels {
         return;
       }
       try {
-        this.#catalog = this.#parse(text);
+        this.#catalog = parseCatalog(text);
         this.#confirmedAt = (await stat(file)).mtimeMs;
       } catch (error) {
         console.warn(
@@ -132,19 +132,6 @@ class OpencodeModels {
       }
     })();
     return this.#loaded;
-  }
-
-  #parse(text: string): Catalog {
-    const parsed = JSON.parse(text) as unknown;
-    if (
-      parsed === null ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed) ||
-      !("opencode" in parsed)
-    ) {
-      throw new Error("it names no `opencode` provider");
-    }
-    return parsed as Catalog;
   }
 
   /** One read of the source: unchanged (`304`), or the new copy written. */
@@ -184,7 +171,7 @@ class OpencodeModels {
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
-    const catalog = this.#parse(text);
+    const catalog = parseCatalog(text);
     await writeStateFile(file, text);
     this.#catalog = catalog;
     this.#etag = response.headers.get("etag") ?? undefined;
@@ -310,6 +297,19 @@ class OpencodeModels {
     }, REFRESH_MS);
     this.#timer.unref();
   }
+}
+
+function parseCatalog(text: string): Catalog {
+  const parsed = JSON.parse(text) as unknown;
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed) ||
+    !("opencode" in parsed)
+  ) {
+    throw new Error("it names no `opencode` provider");
+  }
+  return parsed as Catalog;
 }
 
 /** The agent's one catalog. */

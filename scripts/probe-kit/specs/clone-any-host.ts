@@ -1,6 +1,6 @@
 /**
  * "Clone a repository" takes any git URL and clones it with plain git (agent
- * session.ts `#clone`, core `isGitUrl`): nothing assumes GitHub.
+ * session.ts `cloneRepo`, core `isGitUrl`): nothing assumes GitHub.
  *
  *   bun scripts/probe-kit/run.ts clone-any-host
  *

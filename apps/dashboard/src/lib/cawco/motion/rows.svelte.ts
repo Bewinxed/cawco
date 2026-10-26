@@ -1693,7 +1693,7 @@ class Reflow {
       }
       edgeSizes.set(animation, { from: edge.from, to: edge.to, clip });
       moving.push(animation);
-      this.#keep(this.#edges, edge.element, animation);
+      trackAnimation(this.#edges, edge.element, animation);
     });
     plan.spans.forEach((span, i) => {
       const animation = heldToTravel(
@@ -1701,7 +1701,7 @@ class Reflow {
         Math.abs(span.to - span.from)
       );
       moving.push(animation);
-      this.#keep(this.#spans, span.element, animation);
+      trackAnimation(this.#spans, span.element, animation);
     });
     // A skeleton row leaving: what arrives with it is what it stood for.
     const revealing = departures.some(([element]) =>
@@ -1868,24 +1868,6 @@ class Reflow {
     }
   }
 
-  #keep(
-    running: Map<HTMLElement, Animation>,
-    element: HTMLElement,
-    animation: Animation
-  ) {
-    running.set(element, animation);
-    animation.finished.then(
-      () => {
-        if (running.get(element) === animation) {
-          running.delete(element);
-        }
-      },
-      () => {
-        /* superseded by the next change */
-      }
-    );
-  }
-
   /** `own`: its own transforms, read with its hold dropped (`change`). */
   #slide(element: HTMLElement, x: number, y: number, own: Transforms) {
     // The first frames hold it with a style, which their layout reads. An
@@ -1958,6 +1940,24 @@ class Reflow {
     move.animation?.cancel();
     this.#moves.delete(element);
   }
+}
+
+function trackAnimation(
+  running: Map<HTMLElement, Animation>,
+  element: HTMLElement,
+  animation: Animation
+) {
+  running.set(element, animation);
+  animation.finished.then(
+    () => {
+      if (running.get(element) === animation) {
+        running.delete(element);
+      }
+    },
+    () => {
+      /* superseded by the next change */
+    }
+  );
 }
 
 /**

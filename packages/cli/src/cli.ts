@@ -634,7 +634,7 @@ const writeBinaryUnits = async (services: boolean): Promise<void> => {
 
 /**
  * `cawco binary-pins`, run from this build by the build before it, before the
- * swap (agent binary-update.ts `#putOnPins`): this build's pinned harnesses go
+ * swap (agent binary-update.ts `putOnPins`): this build's pinned harnesses go
  * on, with the methods this build knows, each recorded as it lands. `cawco
  * binary-pins back <build>`, run from the build that runs instead of <build>:
  * what went on for <build> goes back on for this one (agent pin-record.ts).

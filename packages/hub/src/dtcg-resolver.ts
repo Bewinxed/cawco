@@ -365,7 +365,7 @@ class Loader {
   }
 
   async set(body: Json, where: string): Promise<void> {
-    this.take(
+    takeSources(
       await this.sources(body.sources, where),
       this.base,
       this.baseOwners
@@ -377,7 +377,7 @@ class Loader {
     for (const [context, list] of contextsOf(body, where)) {
       const sources = await this.sources(list, `${where} ${context}`);
       if (context === body.default) {
-        this.take(sources, this.base, this.baseOwners);
+        takeSources(sources, this.base, this.baseOwners);
         continue;
       }
       const condition = conditions?.[context];
@@ -388,7 +388,7 @@ class Loader {
       }
       const tree: Json = {};
       const own = new Map<string, Owned>();
-      this.take(sources, tree, own);
+      takeSources(sources, tree, own);
       this.contextOwners.set(context, own);
       this.contexts.push({
         condition,
@@ -397,13 +397,6 @@ class Loader {
         name: context,
         tree: tree as DesignTokens,
       });
-    }
-  }
-
-  private take(sources: Source[], tree: Json, into: Map<string, Owned>) {
-    for (const source of sources) {
-      mergeInto(tree, source.tree);
-      owners(source.tree, source.file, into);
     }
   }
 
@@ -442,6 +435,13 @@ class Loader {
       return [{ file: undefined, tree: entry }];
     }
     throw new Error(`${where}: a source is a $ref or inline tokens`);
+  }
+}
+
+function takeSources(sources: Source[], tree: Json, into: Map<string, Owned>) {
+  for (const source of sources) {
+    mergeInto(tree, source.tree);
+    owners(source.tree, source.file, into);
   }
 }
 

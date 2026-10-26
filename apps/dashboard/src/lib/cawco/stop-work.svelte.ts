@@ -506,7 +506,7 @@ class StopWork {
     if (job.off) {
       await stopProjectSessions(
         job.projectId,
-        ids.filter((id) => !this.isTurn(job, id))
+        ids.filter((id) => !isTurn(job, id))
       );
       return [];
     }
@@ -521,10 +521,6 @@ class StopWork {
     return ids.filter((id) => !still.has(id));
   }
 
-  private isTurn(job: StopJob, id: string): boolean {
-    return job.rows.some((row) => row.s.id === id && row.turn);
-  }
-
   /** The failed rows again; a refused end reads what still runs and stops it. */
   private async retry(job: StopJob): Promise<void> {
     const failedIds = job.rows
@@ -536,7 +532,7 @@ class StopWork {
     }
     let again: RunningSession[];
     try {
-      again = await this.running(job);
+      again = await runningSessions(job);
     } catch (error) {
       job.refusal = failureWords(error);
       this.keep();
@@ -556,18 +552,6 @@ class StopWork {
     this.stop(job, fresh);
   }
 
-  /** What of the project still runs, as the hub lists it. */
-  private async running(job: StopJob): Promise<RunningSession[]> {
-    const response = await fetch(`/api/projects/${job.projectId}/running`);
-    if (!response.ok) {
-      throw await hubRefusal(
-        response,
-        "so its sessions were not listed. Try again."
-      );
-    }
-    return ((await response.json()) as { sessions: RunningSession[] }).sessions;
-  }
-
   private heard(
     job: StopJob,
     id: string,
@@ -575,7 +559,7 @@ class StopWork {
     error: string | null
   ): void {
     const row = job.rows.find((each) => each.s.id === id);
-    if (!row || row.state === "stopped" || this.jobs[this.key(job)] !== job) {
+    if (!row || row.state === "stopped" || this.jobs[jobKey(job)] !== job) {
       return;
     }
     if (outcome === "deferred") {
@@ -593,7 +577,7 @@ class StopWork {
     } else {
       row.state = "stopped";
       row.error = null;
-      const flier = job.open ? this.fliers.get(this.key(job)) : undefined;
+      const flier = job.open ? this.fliers.get(jobKey(job)) : undefined;
       if (flier) {
         // Its word and glyph turn first; its tile leaves after the fade.
         this.after(job, dur("--dur-fade"), () => flier.fly(row));
@@ -603,19 +587,8 @@ class StopWork {
         this.arrive(job, row);
       }
     }
-    this.settle(job);
+    settle(job);
     this.keep();
-  }
-
-  /** Nothing is still stopping and something failed: offer Try again. */
-  private settle(job: StopJob): void {
-    if (
-      job.phase === "stopping" &&
-      !job.rows.some((row) => row.state === "stopping") &&
-      job.rows.some((row) => row.state === "failed")
-    ) {
-      job.phase = "fail";
-    }
   }
 
   /**
@@ -629,7 +602,7 @@ class StopWork {
     }
     row.arrived = true;
     const parent = job.rows.find((each) => each.s.id === row.s.parentId);
-    const flier = job.open ? this.fliers.get(this.key(job)) : undefined;
+    const flier = job.open ? this.fliers.get(jobKey(job)) : undefined;
     if (parent && flier) {
       this.after(job, dur("--dur-stagger"), () => flier.fly(parent));
     }
@@ -647,7 +620,7 @@ class StopWork {
     if (job.phase === "ending" || job.phase === "done") {
       return;
     }
-    const key = this.key(job);
+    const key = jobKey(job);
     job.phase = "ending";
     this.keep();
     const started = performance.now();
@@ -692,7 +665,7 @@ class StopWork {
       );
     }
     if (job.kind === "forget") {
-      await this.forgotten(job.projectId);
+      await forgotten(job.projectId);
     }
     this.close(job);
   }
@@ -706,14 +679,6 @@ class StopWork {
     job.open = false;
     this.keep();
     setTimeout(() => this.drop(job), dur("--dur-exit"));
-  }
-
-  /** The project is gone: the reader is taken off its page, which no longer exists, before the list drops it. */
-  private async forgotten(id: string): Promise<void> {
-    if (page.url.pathname === `/project/${id}`) {
-      await goto(route.spoke, { replace: true });
-    }
-    await readProjects();
   }
 
   /* ── After a reload ─────────────────────────────────────────────── */
@@ -733,7 +698,7 @@ class StopWork {
       this.drop(job);
       return;
     }
-    const read = await this.stillRunning(job);
+    const read = await stillRunning(job);
     if (read === "gone") {
       // The project is gone: a forget's end happened; a Caw off has no project to speak of.
       this.drop(job);
@@ -758,7 +723,7 @@ class StopWork {
         job.rows = asRows(running);
       } else {
         job.rows = job.rows.filter(
-          (row) => still.has(row.s.id) || this.isTurn(job, row.s.id)
+          (row) => still.has(row.s.id) || isTurn(job, row.s.id)
         );
       }
       job.phase = job.rows.length > 0 ? "list" : "none";
@@ -780,43 +745,15 @@ class StopWork {
     if (job.phase === "ending") {
       job.phase = "stopping";
     }
-    this.settle(job);
+    settle(job);
     this.keep();
     if (job.rows.every((row) => row.arrived)) {
       await this.finish(job);
     }
   }
 
-  /** What of the project still runs after a reload; "gone" when the hub no longer has the project. */
-  private async stillRunning(
-    job: StopJob
-  ): Promise<RunningSession[] | "gone" | { refused: string }> {
-    try {
-      const response = await fetch(`/api/projects/${job.projectId}/running`);
-      if (response.status === 404) {
-        return "gone";
-      }
-      if (!response.ok) {
-        throw await hubRefusal(
-          response,
-          "so what still runs could not be read. Reopen it to try again."
-        );
-      }
-      return ((await response.json()) as { sessions: RunningSession[] })
-        .sessions;
-    } catch (error) {
-      return { refused: failureWords(error) };
-    }
-  }
-
-  /* ── Housekeeping ───────────────────────────────────────────────── */
-
-  private key(job: StopJob): string {
-    return keyOf(job.kind, job.projectId);
-  }
-
   private after(job: StopJob, ms: number, run: () => void): void {
-    const key = this.key(job);
+    const key = jobKey(job);
     const set = this.timers.get(key) ?? new Set();
     this.timers.set(key, set);
     const timer = setTimeout(() => {
@@ -836,7 +773,7 @@ class StopWork {
   }
 
   private drop(job: StopJob): void {
-    const key = this.key(job);
+    const key = jobKey(job);
     if (this.jobs[key] !== job) {
       return;
     }
@@ -844,6 +781,66 @@ class StopWork {
     delete this.jobs[key];
     this.keep();
   }
+}
+
+/** What of the project still runs, as the hub lists it. */
+async function runningSessions(job: StopJob): Promise<RunningSession[]> {
+  const response = await fetch(`/api/projects/${job.projectId}/running`);
+  if (!response.ok) {
+    throw await hubRefusal(
+      response,
+      "so its sessions were not listed. Try again."
+    );
+  }
+  return ((await response.json()) as { sessions: RunningSession[] }).sessions;
+}
+
+function jobKey(job: StopJob): string {
+  return keyOf(job.kind, job.projectId);
+}
+
+/** What of the project still runs after a reload; "gone" when the hub no longer has the project. */
+async function stillRunning(
+  job: StopJob
+): Promise<RunningSession[] | "gone" | { refused: string }> {
+  try {
+    const response = await fetch(`/api/projects/${job.projectId}/running`);
+    if (response.status === 404) {
+      return "gone";
+    }
+    if (!response.ok) {
+      throw await hubRefusal(
+        response,
+        "so what still runs could not be read. Reopen it to try again."
+      );
+    }
+    return ((await response.json()) as { sessions: RunningSession[] }).sessions;
+  } catch (error) {
+    return { refused: failureWords(error) };
+  }
+}
+
+function isTurn(job: StopJob, id: string): boolean {
+  return job.rows.some((row) => row.s.id === id && row.turn);
+}
+
+/** Nothing is still stopping and something failed: offer Try again. */
+function settle(job: StopJob): void {
+  if (
+    job.phase === "stopping" &&
+    !job.rows.some((row) => row.state === "stopping") &&
+    job.rows.some((row) => row.state === "failed")
+  ) {
+    job.phase = "fail";
+  }
+}
+
+/** The project is gone: the reader is taken off its page, which no longer exists, before the list drops it. */
+async function forgotten(id: string): Promise<void> {
+  if (page.url.pathname === `/project/${id}`) {
+    await goto(route.spoke, { replace: true });
+  }
+  await readProjects();
 }
 
 export const stopWork = new StopWork();

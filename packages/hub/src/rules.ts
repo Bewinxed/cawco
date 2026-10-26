@@ -284,10 +284,7 @@ export class RuleEngine {
         buffer.pending = [];
       }
       for (const rule of this.#byTiming.message) {
-        const text = this.#withoutOwnWords(
-          rule,
-          this.#readable(rule, said, thinking)
-        );
+        const text = withoutOwnWords(rule, readable(rule, said, thinking));
         // The rule fires on any frame; only a final-message frame's reply
         // answers the turn.
         const fired =
@@ -357,7 +354,7 @@ export class RuleEngine {
         continue;
       }
       if (
-        ruleMatches(rule, this.#withoutOwnWords(rule, text)) &&
+        ruleMatches(rule, withoutOwnWords(rule, text)) &&
         this.#fire(rule, instanceId)
       ) {
         replied = true;
@@ -416,41 +413,6 @@ export class RuleEngine {
       });
   }
 
-  /** Which of the two texts a rule is allowed to read, joined when it reads both. */
-  #readable(rule: Rule, said: string, thinking: string): string {
-    if (rule.watch === "text") {
-      return said;
-    }
-    if (rule.watch === "thinking") {
-      return thinking;
-    }
-    return said && thinking ? `${said}\n${thinking}` : said || thinking;
-  }
-
-  /**
-   * The session quoting cawco's own words back is not the session tripping
-   * the rule.
-   *
-   * This closes a real loop: a rule's reply necessarily contains the phrase
-   * that fired it, models routinely echo an instruction while answering it, and
-   * that echo would fire the rule again — every time, all the way to the
-   * ceiling, with the session being punished for reading its mail. Only this
-   * rule's own header and reply are removed, so a session that genuinely trips
-   * the phrase in its own sentence still fires.
-   */
-  #withoutOwnWords(rule: Rule, text: string): string {
-    let cleaned = text;
-    const header = `[cawco rule — ${rule.name}]`;
-    if (cleaned.includes(header)) {
-      cleaned = cleaned.split(header).join(" ");
-    }
-    const reply = rule.reply.trim();
-    if (reply && cleaned.includes(reply)) {
-      cleaned = cleaned.split(reply).join(" ");
-    }
-    return cleaned;
-  }
-
   #buffer(instanceId: string): Buffer {
     const found = this.#buffers.get(instanceId);
     if (found) {
@@ -478,7 +440,7 @@ export class RuleEngine {
               buffer.streaming.includes(THINKING_MARK)
               ? buffer.streaming.slice(buffer.streaming.indexOf(THINKING_MARK))
               : "";
-      if (!(text && ruleMatches(rule, this.#withoutOwnWords(rule, text)))) {
+      if (!(text && ruleMatches(rule, withoutOwnWords(rule, text)))) {
         continue;
       }
       buffer.firedThisMessage.add(rule.id);
@@ -568,4 +530,39 @@ export class RuleEngine {
     });
     return true;
   }
+}
+
+/**
+ * The session quoting cawco's own words back is not the session tripping
+ * the rule.
+ *
+ * This closes a real loop: a rule's reply necessarily contains the phrase
+ * that fired it, models routinely echo an instruction while answering it, and
+ * that echo would fire the rule again — every time, all the way to the
+ * ceiling, with the session being punished for reading its mail. Only this
+ * rule's own header and reply are removed, so a session that genuinely trips
+ * the phrase in its own sentence still fires.
+ */
+function withoutOwnWords(rule: Rule, text: string): string {
+  let cleaned = text;
+  const header = `[cawco rule — ${rule.name}]`;
+  if (cleaned.includes(header)) {
+    cleaned = cleaned.split(header).join(" ");
+  }
+  const reply = rule.reply.trim();
+  if (reply && cleaned.includes(reply)) {
+    cleaned = cleaned.split(reply).join(" ");
+  }
+  return cleaned;
+}
+
+/** Which of the two texts a rule is allowed to read, joined when it reads both. */
+function readable(rule: Rule, said: string, thinking: string): string {
+  if (rule.watch === "text") {
+    return said;
+  }
+  if (rule.watch === "thinking") {
+    return thinking;
+  }
+  return said && thinking ? `${said}\n${thinking}` : said || thinking;
 }

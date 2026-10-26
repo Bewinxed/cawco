@@ -579,7 +579,7 @@ export class OpencodeServerOwner {
     const identities = this.generations;
     const live = await Promise.all(
       identities.map(async (identity) =>
-        (await this.#runs(identity)) ? identity : null
+        (await serverRuns(identity)) ? identity : null
       )
     );
     return live.filter(
@@ -596,13 +596,13 @@ export class OpencodeServerOwner {
    * 575 tries each in one agent's log, 13 Oct).
    */
   async startedAtMs(identity: ServerIdentity): Promise<number> {
-    if (!(await this.#runs(identity))) {
+    if (!(await serverRuns(identity))) {
       throw new Error(
         "OpenCode generation identity changed before birth read."
       );
     }
     const birth = await processStartMs(identity.pid);
-    if (birth === undefined || !(await this.#runs(identity))) {
+    if (birth === undefined || !(await serverRuns(identity))) {
       throw new Error("OpenCode generation process birth is unavailable.");
     }
     return birth;
@@ -639,18 +639,6 @@ export class OpencodeServerOwner {
     await this.#writes;
     await rm(this.#path, { force: true });
     this.#record = null;
-  }
-
-  /**
-   * The same process still runs, whoever holds it: its pid, with the start the
-   * OS gave it when it was recorded. Unlike {@link #matches} this outlives the
-   * keeper that started it.
-   */
-  async #runs(identity: ServerIdentity): Promise<boolean> {
-    return (
-      identity.startedAt !== "" &&
-      (await processStart(identity.pid)) === identity.startedAt
-    );
   }
 
   /**
@@ -701,28 +689,6 @@ export class OpencodeServerOwner {
     return !(await this.#matches(active));
   }
 
-  async #identify(
-    client: SessiondClient,
-    procId: string,
-    url: string,
-    password?: string
-  ): Promise<ServerIdentity> {
-    const listed = await client.list();
-    const proc = listed.procs.find((row) => row.procId === procId && row.alive);
-    const startedAt = proc ? await processStart(proc.pid) : "";
-    if (!(proc && startedAt)) {
-      throw new Error(`OpenCode generation ${procId} exited before adoption.`);
-    }
-    return {
-      procId,
-      pid: proc.pid,
-      epoch: listed.epoch,
-      startedAt,
-      url,
-      ...(password ? { password } : {}),
-    };
-  }
-
   /**
    * One generation started under the keeper: on `--port=0`, so the kernel
    * picks a free port and the server says which on stdout, with a password
@@ -758,7 +724,7 @@ export class OpencodeServerOwner {
         signal
       );
       const identity = {
-        ...(await this.#identify(client, procId, url, password)),
+        ...(await identify(client, procId, url, password)),
         launch: launchOf(launch),
       };
       signal.throwIfAborted();
@@ -768,7 +734,7 @@ export class OpencodeServerOwner {
       // retirement, with no URL ({@link neverAnnounced}): it is ended without
       // a wait on an activity no read can reach. Never reuse that procId or
       // signal the active generation.
-      const orphan = await this.#identify(client, procId, "", password).catch(
+      const orphan = await identify(client, procId, "", password).catch(
         () => null
       );
       if (orphan && this.#record) {
@@ -1143,7 +1109,7 @@ export class OpencodeServerOwner {
     if (this.active?.procId === identity.procId) {
       throw new Error("Refusing to retire the active OpenCode generation.");
     }
-    if ((await this.#matches(identity)) || (await this.#runs(identity))) {
+    if ((await this.#matches(identity)) || (await serverRuns(identity))) {
       // One that never announced serves nobody: no read reaches it, and
       // nothing it runs is anyone's to wait on.
       let why = isV1(identity) ? "an idle 1.x server" : "idle";
@@ -1191,7 +1157,7 @@ export class OpencodeServerOwner {
     const held = await this.#matches(identity);
     const client = held ? await this.#keeperOf(identity.epoch) : undefined;
     const present = () =>
-      held ? this.#matches(identity) : this.#runs(identity);
+      held ? this.#matches(identity) : serverRuns(identity);
     const send = async (sig: NodeJS.Signals): Promise<void> => {
       if (client) {
         await client.signal(identity.procId, sig);
@@ -1237,4 +1203,38 @@ export class OpencodeServerOwner {
       }
     }
   }
+}
+
+/**
+ * The same process still runs, whoever holds it: its pid, with the start the
+ * OS gave it when it was recorded. Unlike {@link #matches} this outlives the
+ * keeper that started it.
+ */
+async function serverRuns(identity: ServerIdentity): Promise<boolean> {
+  return (
+    identity.startedAt !== "" &&
+    (await processStart(identity.pid)) === identity.startedAt
+  );
+}
+
+async function identify(
+  client: SessiondClient,
+  procId: string,
+  url: string,
+  password?: string
+): Promise<ServerIdentity> {
+  const listed = await client.list();
+  const proc = listed.procs.find((row) => row.procId === procId && row.alive);
+  const startedAt = proc ? await processStart(proc.pid) : "";
+  if (!(proc && startedAt)) {
+    throw new Error(`OpenCode generation ${procId} exited before adoption.`);
+  }
+  return {
+    procId,
+    pid: proc.pid,
+    epoch: listed.epoch,
+    startedAt,
+    url,
+    ...(password ? { password } : {}),
+  };
 }

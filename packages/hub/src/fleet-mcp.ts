@@ -690,19 +690,10 @@ export class FleetMcp {
       held: row.access ?? null,
       as: row.tokens ? (row.identity ?? null) : null,
       ended: !row.tokens && row.endedAt !== null && row.endedAt !== undefined,
-      offers: accessOffers(this.#scopes(row)),
+      offers: accessOffers(scopesOf(row)),
       signedIn: Boolean(row.tokens),
       url: row.metadata.authorization_endpoint,
     };
-  }
-
-  /** The scopes a server names: its resource's, else its authorization server's. */
-  #scopes(row: OAuthRow): string[] {
-    return (
-      row.resource.scopes_supported ??
-      (row.metadata as { scopes_supported?: string[] }).scopes_supported ??
-      []
-    );
   }
 
   /**
@@ -767,7 +758,7 @@ export class FleetMcp {
       }
     }
     const state = crypto.randomUUID();
-    const offers = accessOffers(this.#scopes(row));
+    const offers = accessOffers(scopesOf(row));
     const access = asked ?? row.access ?? null;
     const scopes =
       offers.find((offer) => offer.access === access)?.scopes ??
@@ -1116,7 +1107,7 @@ export class FleetMcp {
     if (left > EXPIRY_MARGIN_MS) {
       return row;
     }
-    return await this.#waited(renewed);
+    return await renewalWithin(renewed);
   }
 
   /**
@@ -1149,19 +1140,8 @@ export class FleetMcp {
         `The server refused the sign-in's new access token (${words}). Retry the request.`
       );
     }
-    return await this.#waited(
+    return await renewalWithin(
       this.#refresh(name, `the server refused its access token (${words})`)
-    );
-  }
-
-  /** A refresh, waited on for at most {@link REFRESH_WAIT_MS}; it goes on past that. */
-  async #waited(renewal: Promise<OAuthRow>): Promise<OAuthRow> {
-    const waited = await readWithin(REFRESH_WAIT_MS, () => renewal);
-    if (waited.kind === "answered") {
-      return waited.value;
-    }
-    throw new NotNow(
-      "This server's sign-in is being renewed and the provider has not answered yet. Retry the request."
     );
   }
 
@@ -1244,4 +1224,24 @@ export class FleetMcp {
       );
     }
   }
+}
+
+/** The scopes a server names: its resource's, else its authorization server's. */
+function scopesOf(row: OAuthRow): string[] {
+  return (
+    row.resource.scopes_supported ??
+    (row.metadata as { scopes_supported?: string[] }).scopes_supported ??
+    []
+  );
+}
+
+/** A refresh, waited on for at most {@link REFRESH_WAIT_MS}; it goes on past that. */
+async function renewalWithin(renewal: Promise<OAuthRow>): Promise<OAuthRow> {
+  const waited = await readWithin(REFRESH_WAIT_MS, () => renewal);
+  if (waited.kind === "answered") {
+    return waited.value;
+  }
+  throw new NotNow(
+    "This server's sign-in is being renewed and the provider has not answered yet. Retry the request."
+  );
 }

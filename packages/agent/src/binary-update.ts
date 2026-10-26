@@ -816,7 +816,7 @@ export class BinaryUpdater {
       }
     }
     await this.#keepDecider();
-    await this.#ownWrapper();
+    await ownWrapper();
     await this.#advanceKeeper();
     await this.#tendKeepers();
   }
@@ -856,7 +856,7 @@ export class BinaryUpdater {
     console.warn(`[update] ${error}; it is tried again`);
     this.#launched = undefined;
     // Nothing was applied: what went on for the build goes back.
-    const back = version ? await this.#putBackPins(version) : undefined;
+    const back = version ? await putBackPins(version) : undefined;
     const said = back ? `${error}; ${back}` : error;
     await this.#lowerFence();
     if (version) {
@@ -1194,27 +1194,6 @@ export class BinaryUpdater {
         `[update] ${error instanceof Error ? error.message : error}`
       )
     );
-  }
-
-  /**
-   * The service wrapper is this build's own once no trial is open: the update
-   * helper has confirmed it, so the script that will recover the next update's
-   * trial is one a confirmed build wrote, never the build on trial.
-   */
-  async #ownWrapper(): Promise<void> {
-    const installation = await readInstallation();
-    if (
-      !installation ||
-      installation.installedVersion !== runtimeVersion ||
-      (await readTrial())
-    ) {
-      return;
-    }
-    const path = join(binaryRoot(), "run");
-    if ((await readFile(path, "utf8").catch(() => "")) !== BINARY_WRAPPER) {
-      await writeWrapper(binaryRoot());
-      console.info(`[update] ${path} is ${runtimeVersion}'s wrapper now`);
-    }
   }
 
   /**
@@ -1735,48 +1714,12 @@ export class BinaryUpdater {
   }
 
   /**
-   * THE HARNESSES THE BUILD PINS GO ON BEFORE IT DOES: `cawco binary-pins`,
-   * run from the staged build itself, so its own catalog says what it pins
-   * and how a copy here got here (pin-record.ts `runBinaryPins`). After the
-   * drain, under the install's fence, so nothing new starts on a harness
-   * between its install and the swap, and before the helper is launched. One
-   * that does not go on ends the attempt with its sentence: nothing is
-   * swapped, what already went on goes back, and the build is tried again on
-   * the retry schedule.
-   */
-  async #putOnPins(version: string): Promise<void> {
-    const said = await runBinaryPins(version);
-    if (said) {
-      console.info(`[update] before ${version}: ${said}`);
-    }
-  }
-
-  /**
-   * `version` will not run after all: what went on for it goes back on for
-   * this build. Never throws: it runs on the way out of a failure, which it
-   * adds its own to, as the words it answers.
-   */
-  async #putBackPins(version: string): Promise<string | undefined> {
-    try {
-      const said = await runBinaryPins(runtimeVersion, version);
-      if (said) {
-        console.info(`[update] ${version} did not go on: ${said} went back`);
-      }
-      return undefined;
-    } catch (error) {
-      const said = `what went on for ${version} did not go back: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(`[update] ${said}`);
-      return said;
-    }
-  }
-
-  /**
    * Replaces this machine's services once {@link #drain} allows. The fence
    * stays up until the helper restarts them, and comes down if the helper
    * cannot be started, or gives up before restarting anything ({@link #watch});
    * its lease ends it in any case. Under it the build's pinned harnesses go on
-   * first ({@link #putOnPins}); every way out before the helper takes over
-   * puts them back ({@link #putBackPins}).
+   * first ({@link putOnPins}); every way out before the helper takes over
+   * puts them back ({@link putBackPins}).
    */
   async #replace(
     hub: string | undefined,
@@ -1789,7 +1732,7 @@ export class BinaryUpdater {
     }
     try {
       await this.#raiseFence(hub, INSTALL_FENCE_MS);
-      await this.#putOnPins(version);
+      await putOnPins(version);
       await this.#set({
         phase: "installing",
         heldChildren: undefined,
@@ -1814,7 +1757,7 @@ export class BinaryUpdater {
       this.#outlasted.clear();
     } catch (error) {
       // Nothing was swapped: what went on for the build goes back first.
-      const back = await this.#putBackPins(version);
+      const back = await putBackPins(version);
       await this.#lowerFence();
       if (back) {
         throw new Error(
@@ -2009,5 +1952,62 @@ export class BinaryUpdater {
       `[update] the session keeper ${current.keeper.version} is handed over to ${runtimeVersion}'s`
     );
     await launchApplyHelper(["binary-apply", runtimeVersion, "--keeper-only"]);
+  }
+}
+
+/**
+ * `version` will not run after all: what went on for it goes back on for
+ * this build. Never throws: it runs on the way out of a failure, which it
+ * adds its own to, as the words it answers.
+ */
+async function putBackPins(version: string): Promise<string | undefined> {
+  try {
+    const said = await runBinaryPins(runtimeVersion, version);
+    if (said) {
+      console.info(`[update] ${version} did not go on: ${said} went back`);
+    }
+    return undefined;
+  } catch (error) {
+    const said = `what went on for ${version} did not go back: ${error instanceof Error ? error.message : String(error)}`;
+    console.error(`[update] ${said}`);
+    return said;
+  }
+}
+
+/**
+ * THE HARNESSES THE BUILD PINS GO ON BEFORE IT DOES: `cawco binary-pins`,
+ * run from the staged build itself, so its own catalog says what it pins
+ * and how a copy here got here (pin-record.ts `runBinaryPins`). After the
+ * drain, under the install's fence, so nothing new starts on a harness
+ * between its install and the swap, and before the helper is launched. One
+ * that does not go on ends the attempt with its sentence: nothing is
+ * swapped, what already went on goes back, and the build is tried again on
+ * the retry schedule.
+ */
+async function putOnPins(version: string): Promise<void> {
+  const said = await runBinaryPins(version);
+  if (said) {
+    console.info(`[update] before ${version}: ${said}`);
+  }
+}
+
+/**
+ * The service wrapper is this build's own once no trial is open: the update
+ * helper has confirmed it, so the script that will recover the next update's
+ * trial is one a confirmed build wrote, never the build on trial.
+ */
+async function ownWrapper(): Promise<void> {
+  const installation = await readInstallation();
+  if (
+    !installation ||
+    installation.installedVersion !== runtimeVersion ||
+    (await readTrial())
+  ) {
+    return;
+  }
+  const path = join(binaryRoot(), "run");
+  if ((await readFile(path, "utf8").catch(() => "")) !== BINARY_WRAPPER) {
+    await writeWrapper(binaryRoot());
+    console.info(`[update] ${path} is ${runtimeVersion}'s wrapper now`);
   }
 }

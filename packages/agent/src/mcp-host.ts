@@ -304,8 +304,8 @@ class Child {
       },
       () => undefined
     );
-    this.#read(this.#proc.stdout, (line) => this.#take(line));
-    this.#read(this.#proc.stderr, (line) => {
+    readLines(this.#proc.stdout, (line) => this.#take(line));
+    readLines(this.#proc.stderr, (line) => {
       this.#stderr.push(line);
       if (this.#stderr.length > STDERR_KEPT) {
         this.#stderr.shift();
@@ -325,30 +325,6 @@ class Child {
     console.info(
       `[mcp-host] ${name}: started pid ${pid} for ${cause}: ${launch.command} ${launch.args.join(" ")}`
     );
-  }
-
-  async #read(
-    stream: ReadableStream<Uint8Array>,
-    line: (text: string) => void
-  ): Promise<void> {
-    const decoder = new TextDecoder();
-    let buffered = "";
-    try {
-      for await (const chunk of stream) {
-        buffered += decoder.decode(chunk, { stream: true });
-        let end = buffered.indexOf("\n");
-        while (end >= 0) {
-          const text = buffered.slice(0, end).trim();
-          buffered = buffered.slice(end + 1);
-          if (text) {
-            line(text);
-          }
-          end = buffered.indexOf("\n");
-        }
-      }
-    } catch {
-      // The process ended: `exited` says so.
-    }
   }
 
   /** One message from the server: an answer to the host, a notification, or a request of its own. */
@@ -445,6 +421,30 @@ class Child {
   /** Ends the process; `exited` follows. */
   stop(): void {
     this.#proc.kill("SIGTERM");
+  }
+}
+
+async function readLines(
+  stream: ReadableStream<Uint8Array>,
+  line: (text: string) => void
+): Promise<void> {
+  const decoder = new TextDecoder();
+  let buffered = "";
+  try {
+    for await (const chunk of stream) {
+      buffered += decoder.decode(chunk, { stream: true });
+      let end = buffered.indexOf("\n");
+      while (end >= 0) {
+        const text = buffered.slice(0, end).trim();
+        buffered = buffered.slice(end + 1);
+        if (text) {
+          line(text);
+        }
+        end = buffered.indexOf("\n");
+      }
+    }
+  } catch {
+    // The process ended: `exited` says so.
   }
 }
 

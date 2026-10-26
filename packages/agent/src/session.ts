@@ -937,7 +937,7 @@ export class SessionSupervisor {
       }
       return totals;
     });
-    this.#adapter("opencode").setCustodyReadiness?.(() =>
+    adapterFor("opencode").setCustodyReadiness?.(() =>
       this.harnessCustodyReady("opencode")
     );
     onFleetMcpMoved(() => this.#reportFleet());
@@ -960,7 +960,7 @@ export class SessionSupervisor {
     rows: { id: string; sessionId: string | null; cwd: string }[],
     claimed: string[]
   ): Promise<{ id: string; present: boolean | null }[]> {
-    const adapter = this.#adapter("opencode");
+    const adapter = adapterFor("opencode");
     return await Promise.all(
       rows.map(async (row) => {
         try {
@@ -1676,8 +1676,7 @@ export class SessionSupervisor {
         processGeneration: pending.generation,
       });
     }
-    for (const address of this.#adapter("opencode").sessionAddresses?.() ??
-      []) {
+    for (const address of adapterFor("opencode").sessionAddresses?.() ?? []) {
       addresses.set(address.instanceId, {
         ...address,
         processGeneration: this.#generations.get(address.instanceId),
@@ -1825,7 +1824,7 @@ export class SessionSupervisor {
    * (awake.ts).
    */
   async turnsRunning(): Promise<string[]> {
-    const opencode = (await this.#adapter("opencode").busyInstances?.()) ?? [];
+    const opencode = (await adapterFor("opencode").busyInstances?.()) ?? [];
     return [
       ...new Set([
         ...[...this.#busy].filter(
@@ -2112,7 +2111,7 @@ export class SessionSupervisor {
     }
     if (session.harness === "opencode") {
       const busy =
-        serverBusy ?? (await this.#adapter("opencode").busyInstances?.()) ?? [];
+        serverBusy ?? (await adapterFor("opencode").busyInstances?.()) ?? [];
       if (busy.includes(instanceId)) {
         return { why: "the opencode server reports its turn running" };
       }
@@ -2231,7 +2230,7 @@ export class SessionSupervisor {
     // restarted inside them left a CLI the hub had filed asleep, which no
     // custody names again, running in its workspace's clone; the hub then
     // closed that workspace under it (obelisk, 2026-10-18).
-    const left = await this.#endHeld(instanceId).then(
+    const left = await endHeld(instanceId).then(
       () => undefined,
       (error: unknown) =>
         error instanceof Error ? error : new Error(String(error))
@@ -2320,8 +2319,7 @@ export class SessionSupervisor {
    */
   async #restless(ids: string[]): Promise<Record<string, string>> {
     const restless: Record<string, string> = {};
-    const serverBusy =
-      (await this.#adapter("opencode").busyInstances?.()) ?? [];
+    const serverBusy = (await adapterFor("opencode").busyInstances?.()) ?? [];
     for (const instanceId of ids) {
       if (this.#queues.has(instanceId)) {
         restless[instanceId] = "something sent to it is still on its way";
@@ -2413,55 +2411,6 @@ export class SessionSupervisor {
   /** The conversations a carry is moving now, by session id ({@link carrySessions}). */
   readonly #carrying = new Set<string>();
 
-  /**
-   * What the keepers hold of Claude's sessions, by instance id: `alive`, and
-   * `exited` (listed by a keeper, none of them alive). Undefined when they
-   * did not answer within {@link CARRY_KEEPERS_MS}.
-   */
-  async #carryHeld(): Promise<
-    { alive: Set<string>; exited: Set<string> } | undefined
-  > {
-    const adapter = this.#adapter("claude") as Harness &
-      Partial<SessiondAdoption>;
-    const at = Date.now();
-    const read = await readWithin(
-      CARRY_KEEPERS_MS,
-      () => adapter.custodyCandidates?.() ?? Promise.resolve({ procs: [] })
-    );
-    let listing: { procs: { alive: boolean; procId: string }[] };
-    switch (read.kind) {
-      case "answered":
-        listing = read.value;
-        break;
-      case "unanswered":
-        console.warn(
-          `[carry] ${carryLate("reading what its keepers hold", CARRY_KEEPERS_MS, read)}`
-        );
-        return undefined;
-      default: {
-        const unhandled: never = read;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
-    }
-    const alive = new Set<string>();
-    const listed = new Set<string>();
-    for (const proc of listing.procs) {
-      const identity = parseProcId(proc.procId);
-      if (identity.kind !== "claude") {
-        continue;
-      }
-      listed.add(identity.instanceId);
-      if (proc.alive) {
-        alive.add(identity.instanceId);
-      }
-    }
-    const exited = new Set([...listed].filter((id) => !alive.has(id)));
-    console.info(
-      `[carry] its keepers hold ${alive.size} live Claude process(es), ${exited.size} exited, read in ${Date.now() - at} ms`
-    );
-    return { alive, exited };
-  }
-
   /** {@link carrySessions}' steps for `requests`, each outcome into `outcomes`. */
   async #carry(
     requests: CarrySessionRequest[],
@@ -2471,7 +2420,7 @@ export class SessionSupervisor {
     if (requests.length === 0) {
       return;
     }
-    const held = await this.#carryHeld();
+    const held = await carryHeld();
     const go: CarrySessionRequest[] = [];
     const ended = new Map<string, MoveEnded>();
     for (const request of requests) {
@@ -2641,7 +2590,7 @@ export class SessionSupervisor {
     }
     // The stop did not finish: the conversation moves only once its keeper
     // reports no live process writing it.
-    const after = await this.#carryHeld();
+    const after = await carryHeld();
     if (after && !after.alive.has(instanceId)) {
       console.info(
         `[carry] ${instanceId}: its keeper reports its process gone, so its conversation is carried`
@@ -2664,8 +2613,7 @@ export class SessionSupervisor {
     if (carried.length === 0) {
       return;
     }
-    const serverBusy =
-      (await this.#adapter("opencode").busyInstances?.()) ?? [];
+    const serverBusy = (await adapterFor("opencode").busyInstances?.()) ?? [];
     const now = Date.now();
     for (const [instanceId, session] of carried) {
       const outdated = await session.outdated?.();
@@ -2869,41 +2817,6 @@ export class SessionSupervisor {
     return Promise.resolve();
   }
 
-  #adapter(kind: HarnessKind): Harness {
-    const adapter = harnessOf(kind);
-    if (!adapter) {
-      throw new Error(`no harness adapter for ${kind}`);
-    }
-    return adapter;
-  }
-
-  /**
-   * The directory a spawn runs in, made when it may be. Undefined for a probe
-   * that has nothing to find; a throw for a spawn that has nowhere to run.
-   */
-  async #workdir(payload: SpawnPayload): Promise<string | undefined> {
-    const { bootstrap, reattachOnly, workspace } = payload;
-    // Every folder a spawn names is a MachinePath: the hub settled it.
-    const workdir = bootstrap ? await this.#clone(bootstrap) : payload.cwd;
-    // A workspace's directory is its clone: one that is gone was removed
-    // after its work landed, and an empty folder made in its place would be
-    // a session resumed into nothing.
-    if (!(bootstrap || reattachOnly || workspace)) {
-      await mkdir(workdir, { recursive: true });
-    }
-    if (await isDirectory(workdir)) {
-      return workdir;
-    }
-    // A probe for a turn a lost handle may still be running finds nothing
-    // where there is no directory, and says nothing, as it does when the
-    // server holds no such turn: the hub left the row's history alone until
-    // something was found, and a probe is not a spawn to fail.
-    if (reattachOnly) {
-      return undefined;
-    }
-    throw new Error(`working directory does not exist: ${workdir}`);
-  }
-
   #recoveryUnavailable(payload: SpawnPayload, reason: string): void {
     if (payload.reattachOnly) {
       this.sink({
@@ -2999,35 +2912,6 @@ export class SessionSupervisor {
   }
 
   /**
-   * THE CREDENTIAL GATE OF A LAUNCH, for every harness. A process this agent
-   * launched is published only once it has installed the credential the hub
-   * granted as it started ({@link #granted}) and the hub has acknowledged it.
-   * Nothing has been sent to it yet, so one that cannot is stopped before its
-   * first turn, and the throw is its spawn's failure with the reason. A child
-   * this agent attached to proves the credential it already holds after it
-   * is published ({@link #settleAttached}).
-   */
-  async #admit(
-    session: HarnessSession,
-    launched: { credential: string }
-  ): Promise<void> {
-    try {
-      // Remembered for redaction as it was granted ({@link #granted}).
-      await session.control(INSTALL_SESSION_CREDENTIAL, [
-        launched.credential,
-        "initial",
-      ]);
-    } catch (problem) {
-      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
-      await session.stop().catch(() => {});
-      throw new HeldProcessRefused(
-        `The session's CawCo MCP credential could not be installed, so it was stopped before its first turn: ${errorText(problem)}`,
-        { cause: problem }
-      );
-    }
-  }
-
-  /**
    * WHAT AN ATTACHED CHILD MUST ANSWER GOES AHEAD OF WHAT IS SENT TO IT, NOT
    * AHEAD OF ITS ATTACH. The child is published the moment its `Query` is on
    * it: a live process, this session's, running, its turn under way. Its
@@ -3060,7 +2944,7 @@ export class SessionSupervisor {
       await this.#answers(
         session,
         (async () => {
-          await this.#applyStoredPermissionMode(session, mode);
+          await applyStoredPermissionMode(session, mode);
           const held = (await session.control(
             VERIFY_SESSION_CREDENTIAL,
             []
@@ -3271,7 +3155,7 @@ export class SessionSupervisor {
         "A start names the harness it runs on; this one named none."
       );
     }
-    const adapter = this.#adapter(kind);
+    const adapter = adapterFor(kind);
     if (payload.resume && !payload.resume.fork) {
       this.#resumable.set(instanceId, {
         adapter,
@@ -3283,7 +3167,7 @@ export class SessionSupervisor {
       if (payload.scratchWorktree) {
         this.#worktrees.set(instanceId, payload.scratchWorktree);
       }
-      let workdir = await this.#workdir(payload);
+      let workdir = await workdirFor(payload);
       if (workdir === undefined) {
         this.#recoveryUnavailable(
           payload,
@@ -3463,8 +3347,8 @@ export class SessionSupervisor {
       // published; a reattach is published at once, and its held child
       // answers behind that ({@link #settleAttached}).
       if (grant) {
-        await this.#applyStoredPermissionMode(session, spec.permissionMode);
-        await this.#admit(session, { credential: grant.sessionCredential });
+        await applyStoredPermissionMode(session, spec.permissionMode);
+        await admit(session, { credential: grant.sessionCredential });
       }
       // Refused its input while it was starting: it is not a session to
       // hand work to, and the refusal has said so.
@@ -4349,16 +4233,6 @@ export class SessionSupervisor {
     );
   }
 
-  /** A session's stored mode, asked of its process before anything is sent to it. */
-  async #applyStoredPermissionMode(
-    session: HarnessSession,
-    mode: SpawnPayload["permissionMode"]
-  ): Promise<void> {
-    if (mode !== undefined) {
-      await session.control(CONTROL_SET_PERMISSION_MODE, [mode]);
-    }
-  }
-
   /**
    * REATTACH (design §4.1, §7), one harness's sessions, as the register ack
    * hands them over (step 4). The agent has restarted; sessiond is still
@@ -4393,24 +4267,12 @@ export class SessionSupervisor {
         read: (keeper: string) => Promise<KeeperReading>;
       }
     | undefined {
-    const adoption = this.#adoption(kind);
+    const adoption = adoptionOf(kind);
     return adoption
       ? {
           keepers: () => adoption.custodyKeepers(),
           read: (keeper) => adoption.custodyReading(keeper),
         }
-      : undefined;
-  }
-
-  /** The harness's adoption, when it keeps its children on sessiond. */
-  #adoption(kind: HarnessKind): (Harness & SessiondAdoption) | undefined {
-    const candidate = this.#adapter(kind) as Harness &
-      Partial<SessiondAdoption>;
-    return typeof candidate.adopt === "function" &&
-      typeof candidate.custodyKeepers === "function" &&
-      typeof candidate.custodyReading === "function" &&
-      typeof candidate.turnRunning === "function"
-      ? (candidate as Harness & SessiondAdoption)
       : undefined;
   }
 
@@ -4431,7 +4293,7 @@ export class SessionSupervisor {
     spec: SpawnPayload,
     proc: Claimed["proc"]
   ): "attached" | "held" {
-    const adoption = this.#adoption(kind);
+    const adoption = adoptionOf(kind);
     if (!adoption) {
       throw new Error(`${kind} keeps no children on sessiond to take back`);
     }
@@ -4570,7 +4432,7 @@ export class SessionSupervisor {
       case "opencode-server":
         return {
           holder: "opencode-server",
-          instanceIds: this.#adapter("opencode").sessionsOn?.(procId) ?? [],
+          instanceIds: adapterFor("opencode").sessionsOn?.(procId) ?? [],
         };
       case "judge":
         return { holder: "session", instanceIds: [] };
@@ -4738,7 +4600,7 @@ export class SessionSupervisor {
 
   /**
    * A FAILED SESSION LEAVES NO PROCESS RUNNING. Its keeper's child (only the
-   * one of `pid`, when given) is ended and waited out ({@link #endHeld}),
+   * one of `pid`, when given) is ended and waited out ({@link endHeld}),
    * then the hub hears the failure ({@link #fail}). The hub files the row
    * failed and holds its workspace no longer (work-items.ts `holdOn`), and
    * nothing ends a CLI left running there: no custody names a failed session
@@ -4750,7 +4612,7 @@ export class SessionSupervisor {
     processGeneration: string | undefined,
     pid?: number
   ): void {
-    this.#endHeld(instanceId, pid)
+    endHeld(instanceId, pid)
       .catch((problem: unknown) =>
         warn(
           `${instanceId}: its process could not be ended after its failure: ${errorText(problem)}`
@@ -5209,51 +5071,6 @@ export class SessionSupervisor {
   }
 
   /**
-   * Ends the instance's children on every keeper that holds one, the current
-   * or a retiring one, and waits until each has gone; with `pid`, only the
-   * child of that pid, so a process started since under the same id is left.
-   */
-  #endHeld(instanceId: string, pid?: number): Promise<boolean> {
-    return withKeepers(async (keepers) => {
-      const children = keepers.flatMap(({ client }) =>
-        client.procs
-          .filter((proc) => {
-            const id = parseProcId(proc.procId);
-            return (
-              proc.alive &&
-              (pid === undefined || proc.pid === pid) &&
-              (id.kind === "claude" || id.kind === "pi") &&
-              id.instanceId === instanceId
-            );
-          })
-          .map((proc) => ({ client, child: proc }))
-      );
-      await Promise.all(
-        children.map(async ({ client, child }) => {
-          await endProc(client, child.procId);
-          const deadline = Date.now() + 10_000;
-          let alive = true;
-          while (alive && Date.now() < deadline) {
-            const after = await client.list();
-            alive = after.procs.some(
-              (proc) => proc.pid === child.pid && proc.alive
-            );
-            if (alive) {
-              await Bun.sleep(100);
-            }
-          }
-          if (alive) {
-            throw new Error(
-              `sessiond process ${child.pid} for ${instanceId} did not exit after its stop`
-            );
-          }
-        })
-      );
-      return children.length > 0;
-    });
-  }
-
-  /**
    * Ends everything session `instanceId` left running in a workspace
    * (boundary.ts {@link endSessionWork}): an interrupt or a stop of it, or
    * the settle of a workspace whose items have all ended
@@ -5359,7 +5176,7 @@ export class SessionSupervisor {
       if (kind === "opencode") {
         const key = sessionId ?? session?.sessionId;
         const directory = cwd ?? this.#resumable.get(instanceId)?.cwd;
-        const adapter = this.#adapter("opencode");
+        const adapter = adapterFor("opencode");
         if (!(directory && adapter.endSession)) {
           throw new Error(
             "OpenCode end requires the row's conversation and directory."
@@ -5444,7 +5261,7 @@ export class SessionSupervisor {
         this.#sessions.delete(instanceId);
       }
       if (kind !== "opencode") {
-        await this.#endHeld(instanceId);
+        await endHeld(instanceId);
         ended = { harness: kind, resourcesClosed: true };
       }
       // Its process is gone, and sessiond swept what it started on the host;
@@ -5520,58 +5337,12 @@ export class SessionSupervisor {
   }
 
   /**
-   * `repo`, a git URL on any host, cloned by plain git with the machine's own
-   * git credential, whatever host it names; anything else is refused.
-   */
-  async #clone({
-    repo,
-    baseDir,
-  }: NonNullable<SpawnPayload["bootstrap"]>): Promise<string> {
-    if (!isGitUrl(repo)) {
-      throw new Error(
-        `${repo} is not a git URL: name the repository by its clone URL (https://, ssh:// or git@host:path)`
-      );
-    }
-    // A MachinePath from the hub: absolute, no trailing slash.
-    const parent = baseDir;
-    const target = `${parent === "/" ? "" : parent}/${repoLeaf(repo)}`;
-
-    if (await isDirectory(target)) {
-      const origin = await hostGit(target, ["remote", "get-url", "origin"]);
-      if (
-        origin.exitCode !== 0 ||
-        repoIdentity(origin.text()) !== repoIdentity(repo)
-      ) {
-        throw new Error(
-          `bootstrap target exists and is not the requested repo: ${target}`
-        );
-      }
-      return target;
-    }
-
-    await Bun.$`mkdir -p ${parent}`.env(hostEnvironment()).quiet();
-    const cloned = await hostGit(parent, [
-      "clone",
-      "--single-branch",
-      "--",
-      repo.trim(),
-      target,
-    ]);
-    if (cloned.exitCode !== 0) {
-      throw new Error(
-        `could not clone ${repo}: ${tail(cloned.stderr.toString())}`
-      );
-    }
-    return target;
-  }
-
-  /**
    * A detached checkout of `baseCwd`'s repo at `~/.worktrees/<repo>-<id8>`,
    * outside the repo so its own `git status` never sees it. A directory with
    * no commit to check out (not a repo, or an empty one) runs as it is.
    */
   async #addWorktree(instanceId: string, baseCwd: string): Promise<string> {
-    const recorded = await readJson<Worktree>(this.#worktreeRecord(instanceId));
+    const recorded = await readJson<Worktree>(worktreeRecord(instanceId));
     if (recorded) {
       this.#worktrees.set(instanceId, recorded);
       this.#recordWorktree(instanceId, recorded);
@@ -5632,20 +5403,11 @@ export class SessionSupervisor {
       dir,
       ...(reused ? {} : { announce: { cwd: baseCwd, base } }),
     };
-    await mkdir(dirname(this.#worktreeRecord(instanceId)), { recursive: true });
-    await writeJson(this.#worktreeRecord(instanceId), worktree);
+    await mkdir(dirname(worktreeRecord(instanceId)), { recursive: true });
+    await writeJson(worktreeRecord(instanceId), worktree);
     this.#worktrees.set(instanceId, worktree);
     this.#recordWorktree(instanceId, worktree);
     return dir;
-  }
-
-  #worktreeRecord(instanceId: string): string {
-    return join(
-      homedir(),
-      ".cawco",
-      "scratch-worktrees",
-      `${hashText(instanceId)}.json`
-    );
   }
 
   #recordWorktree(instanceId: string, worktree: Worktree): void {
@@ -5664,7 +5426,7 @@ export class SessionSupervisor {
   async #worktreeOf(instanceId: string): Promise<Worktree | undefined> {
     return (
       this.#worktrees.get(instanceId) ??
-      (await readJson<Worktree>(this.#worktreeRecord(instanceId))) ??
+      (await readJson<Worktree>(worktreeRecord(instanceId))) ??
       undefined
     );
   }
@@ -5697,7 +5459,7 @@ export class SessionSupervisor {
     }
     if (!(await isDirectory(worktree.path))) {
       this.#worktrees.delete(instanceId);
-      await rm(this.#worktreeRecord(instanceId), { force: true });
+      await rm(worktreeRecord(instanceId), { force: true });
       return;
     }
 
@@ -5715,7 +5477,7 @@ export class SessionSupervisor {
     }
     await hostGit(worktree.root, ["worktree", "prune"]);
     this.#worktrees.delete(instanceId);
-    await rm(this.#worktreeRecord(instanceId), { force: true });
+    await rm(worktreeRecord(instanceId), { force: true });
   }
 
   /** Discarding a spin-off throws its transcript away too. */
@@ -5779,7 +5541,7 @@ export class SessionSupervisor {
     }
     try {
       if (method === CONTROL_LIST_SESSIONS) {
-        const { sessions, unanswered, failed } = await this.#listSessions(args);
+        const { sessions, unanswered, failed } = await listSessions(args);
         this.sink({
           kind: "control_result",
           instanceId,
@@ -5843,65 +5605,6 @@ export class SessionSupervisor {
         },
       });
     }
-  }
-
-  /**
-   * The stored sessions of every harness, merged and newest-first. Every
-   * harness is asked at once, and each has {@link HARNESS_LISTING_MS} to
-   * answer: one whose server is slow to answer or to fail (OpenCode waits
-   * 30s for its server's first line) is left out of this answer, as one that
-   * fails is, rather than holding every other harness's sessions past the
-   * reader's own wait (the dashboard's 15s), which lost the whole catalog.
-   * Each one left out is said beside the answer (`unanswered`, `failed`),
-   * never read as having none.
-   */
-  async #listSessions(args: unknown[]): Promise<{
-    sessions: NeutralSessionInfo[];
-    unanswered: HarnessUnanswered[];
-    failed: HarnessFailed[];
-  }> {
-    const options = (args[0] ?? {}) as { limit?: number; dir?: string };
-    const unanswered: HarnessUnanswered[] = [];
-    const failed: HarnessFailed[] = [];
-    const listed = await Promise.all(
-      harnesses().map(async (adapter) => {
-        let read: Bounded<NeutralSessionInfo[]>;
-        try {
-          read = await readWithin(HARNESS_LISTING_MS, () =>
-            adapter.listSessions(options.dir)
-          );
-        } catch (error) {
-          warn(`listSessions on ${adapter.kind} failed: ${error}`);
-          failed.push({ harness: adapter.kind, error: errorText(error) });
-          return [];
-        }
-        switch (read.kind) {
-          case "answered":
-            return read.value;
-          case "unanswered":
-            // Said beside the answer (`unanswered`), never read as having none.
-            warn(
-              `${adapter.kind} did not list its sessions within ${HARNESS_LISTING_MS / 1000} s; it is left out of this answer`
-            );
-            unanswered.push({
-              harness: adapter.kind,
-              after: HARNESS_LISTING_MS,
-            });
-            return [];
-          default: {
-            const unhandled: never = read;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
-        }
-      })
-    );
-    const all = listed.flat();
-    all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
-    return {
-      sessions: (options.limit ? all.slice(0, options.limit) : all).map(titled),
-      unanswered,
-      failed,
-    };
   }
 
   readonly #mcpLauncherStates = new Map<
@@ -6030,7 +5733,7 @@ export class SessionSupervisor {
       const placed = await placeFolder(cwd, copies, Object.keys(mcp.taken));
       placed.mcp = {
         ...mcp.states,
-        ...(await this.#placeHarnessMcp(cwd, copies.mcp, mcp.taken)),
+        ...(await placeHarnessMcp(cwd, copies.mcp, mcp.taken)),
       };
       const said = failedPlaced(placed);
       console.info(
@@ -6038,41 +5741,6 @@ export class SessionSupervisor {
       );
       this.#reportPlaced(placed);
     });
-  }
-
-  /**
-   * The MCP copies placed at `cwd` (`rows`; `launched`, as this machine
-   * launches them) into each harness's own files that keeps them
-   * (`Harness.placeFleet`): each copy's state there, the worst of the
-   * harnesses'. A harness that cannot is said, and the others go on.
-   */
-  async #placeHarnessMcp(
-    cwd: string,
-    rows: FleetMcpServer[],
-    launched: Record<string, FleetMcpServer>
-  ): Promise<Record<string, FleetItemState>> {
-    const states: Record<string, FleetItemState> = {};
-    for (const adapter of harnesses()) {
-      if (!adapter.placeFleet) {
-        continue;
-      }
-      try {
-        const said = await adapter.placeFleet(
-          cwd,
-          adapter.capabilities.mcpStatus ? Object.values(launched) : rows
-        );
-        for (const [key, state] of Object.entries(said)) {
-          states[key] = states[key]
-            ? worstFleetState([states[key], state])
-            : state;
-        }
-      } catch (error) {
-        warn(
-          `${adapter.kind} did not take the MCP servers placed at ${cwd}: ${errorText(error)}`
-        );
-      }
-    }
-    return states;
   }
 
   /**
@@ -6262,21 +5930,9 @@ export class SessionSupervisor {
         });
       }
       this.#healFleetMcp([...this.#sessions.keys()]);
-      this.#rearmMoved();
+      rearmBoundaries();
     }).catch((error: unknown) =>
       warn(`the fleet converge failed: ${errorText(error)}`)
-    );
-  }
-
-  /**
-   * What a converge wrote that a boundary reads (the fleet's hook scripts):
-   * each boundary in use that started without it is handed over to one that
-   * has it (boundary.ts `rearmMoved`). Nothing waits on it.
-   */
-  #rearmMoved(): void {
-    rearmMoved("the fleet sync wrote what a boundary reads").catch(
-      (error: unknown) =>
-        warn(`the boundaries were not looked at again: ${errorText(error)}`)
     );
   }
 
@@ -6695,49 +6351,11 @@ export class SessionSupervisor {
       harnessConfig,
       ...(memory ? { memory } : {}),
       ...(toolchain ? { toolchain } : {}),
-      have: await this.#fleetHoldings(),
+      have: await fleetHoldings(),
       at: Date.now(),
     });
     this.#lastReport = report;
     return report;
-  }
-
-  /**
-   * What this machine holds of the fleet's content on its disk now, read from
-   * every harness that keeps a copy. One set per harness, INTERSECTED — never
-   * unioned. Skills are written by more than one harness into more than one
-   * directory (claude's `~/.claude/skills`, pi's own), so a hash one of them
-   * holds is not a hash the machine holds: leaving those bytes out would
-   * strand every harness that still needs them. A harness that converges none
-   * reads no set and is not counted, which is why opencode — which reads
-   * claude's directory rather than keeping its own — does not veto every
-   * skill on the machine. A harness whose read fails holds nothing, so the
-   * hub sends everything rather than trust a copy nobody could read.
-   */
-  async #fleetHoldings(): Promise<FleetHoldings> {
-    const skillClaims: Record<string, string>[] = [];
-    const pluginClaims: Record<string, string>[] = [];
-    for (const adapter of harnesses()) {
-      if (!adapter.fleetHoldings) {
-        continue;
-      }
-      try {
-        const held = await adapter.fleetHoldings();
-        if (held.skills) {
-          skillClaims.push(held.skills);
-        }
-        if (held.plugins) {
-          pluginClaims.push(held.plugins);
-        }
-      } catch (error) {
-        warn(`reading ${adapter.kind}'s fleet holdings failed: ${error}`);
-        return { skills: {}, plugins: {} };
-      }
-    }
-    return {
-      skills: agreedHashes(skillClaims),
-      plugins: agreedHashes(pluginClaims),
-    };
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches to whichever catalog/harness/daemon method the control names, each a distinct branch
@@ -6836,7 +6454,7 @@ export class SessionSupervisor {
             `${method} names no harness: a session key is one harness's`
           );
         }
-        const adapter = this.#adapter(kind);
+        const adapter = adapterFor(kind);
         switch (method) {
           case "getSessionInfo": {
             const info = await adapter.getSessionInfo(
@@ -6926,7 +6544,7 @@ export class SessionSupervisor {
       // A machine-scoped control only one harness knows: try the named harness,
       // then every harness, until one claims it.
       if (kind) {
-        const adapter = this.#adapter(kind);
+        const adapter = adapterFor(kind);
         if (adapter.machine) {
           const answer = await adapter.machine(method, args);
           if (answer !== undefined) {
@@ -7032,4 +6650,383 @@ export class SessionSupervisor {
     }
     this.#emitPulse(instanceId, true);
   }
+}
+
+/**
+ * What the keepers hold of Claude's sessions, by instance id: `alive`, and
+ * `exited` (listed by a keeper, none of them alive). Undefined when they
+ * did not answer within {@link CARRY_KEEPERS_MS}.
+ */
+async function carryHeld(): Promise<
+  { alive: Set<string>; exited: Set<string> } | undefined
+> {
+  const adapter = adapterFor("claude") as Harness & Partial<SessiondAdoption>;
+  const at = Date.now();
+  const read = await readWithin(
+    CARRY_KEEPERS_MS,
+    () => adapter.custodyCandidates?.() ?? Promise.resolve({ procs: [] })
+  );
+  let listing: { procs: { alive: boolean; procId: string }[] };
+  switch (read.kind) {
+    case "answered":
+      listing = read.value;
+      break;
+    case "unanswered":
+      console.warn(
+        `[carry] ${carryLate("reading what its keepers hold", CARRY_KEEPERS_MS, read)}`
+      );
+      return undefined;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  const alive = new Set<string>();
+  const listed = new Set<string>();
+  for (const proc of listing.procs) {
+    const identity = parseProcId(proc.procId);
+    if (identity.kind !== "claude") {
+      continue;
+    }
+    listed.add(identity.instanceId);
+    if (proc.alive) {
+      alive.add(identity.instanceId);
+    }
+  }
+  const exited = new Set([...listed].filter((id) => !alive.has(id)));
+  console.info(
+    `[carry] its keepers hold ${alive.size} live Claude process(es), ${exited.size} exited, read in ${Date.now() - at} ms`
+  );
+  return { alive, exited };
+}
+
+/**
+ * The directory a spawn runs in, made when it may be. Undefined for a probe
+ * that has nothing to find; a throw for a spawn that has nowhere to run.
+ */
+async function workdirFor(payload: SpawnPayload): Promise<string | undefined> {
+  const { bootstrap, reattachOnly, workspace } = payload;
+  // Every folder a spawn names is a MachinePath: the hub settled it.
+  const workdir = bootstrap ? await cloneRepo(bootstrap) : payload.cwd;
+  // A workspace's directory is its clone: one that is gone was removed
+  // after its work landed, and an empty folder made in its place would be
+  // a session resumed into nothing.
+  if (!(bootstrap || reattachOnly || workspace)) {
+    await mkdir(workdir, { recursive: true });
+  }
+  if (await isDirectory(workdir)) {
+    return workdir;
+  }
+  // A probe for a turn a lost handle may still be running finds nothing
+  // where there is no directory, and says nothing, as it does when the
+  // server holds no such turn: the hub left the row's history alone until
+  // something was found, and a probe is not a spawn to fail.
+  if (reattachOnly) {
+    return undefined;
+  }
+  throw new Error(`working directory does not exist: ${workdir}`);
+}
+
+/** The harness's adoption, when it keeps its children on sessiond. */
+function adoptionOf(
+  kind: HarnessKind
+): (Harness & SessiondAdoption) | undefined {
+  const candidate = adapterFor(kind) as Harness & Partial<SessiondAdoption>;
+  return typeof candidate.adopt === "function" &&
+    typeof candidate.custodyKeepers === "function" &&
+    typeof candidate.custodyReading === "function" &&
+    typeof candidate.turnRunning === "function"
+    ? (candidate as Harness & SessiondAdoption)
+    : undefined;
+}
+
+/**
+ * The stored sessions of every harness, merged and newest-first. Every
+ * harness is asked at once, and each has {@link HARNESS_LISTING_MS} to
+ * answer: one whose server is slow to answer or to fail (OpenCode waits
+ * 30s for its server's first line) is left out of this answer, as one that
+ * fails is, rather than holding every other harness's sessions past the
+ * reader's own wait (the dashboard's 15s), which lost the whole catalog.
+ * Each one left out is said beside the answer (`unanswered`, `failed`),
+ * never read as having none.
+ */
+async function listSessions(args: unknown[]): Promise<{
+  sessions: NeutralSessionInfo[];
+  unanswered: HarnessUnanswered[];
+  failed: HarnessFailed[];
+}> {
+  const options = (args[0] ?? {}) as { limit?: number; dir?: string };
+  const unanswered: HarnessUnanswered[] = [];
+  const failed: HarnessFailed[] = [];
+  const listed = await Promise.all(
+    harnesses().map(async (adapter) => {
+      let read: Bounded<NeutralSessionInfo[]>;
+      try {
+        read = await readWithin(HARNESS_LISTING_MS, () =>
+          adapter.listSessions(options.dir)
+        );
+      } catch (error) {
+        warn(`listSessions on ${adapter.kind} failed: ${error}`);
+        failed.push({ harness: adapter.kind, error: errorText(error) });
+        return [];
+      }
+      switch (read.kind) {
+        case "answered":
+          return read.value;
+        case "unanswered":
+          // Said beside the answer (`unanswered`), never read as having none.
+          warn(
+            `${adapter.kind} did not list its sessions within ${HARNESS_LISTING_MS / 1000} s; it is left out of this answer`
+          );
+          unanswered.push({
+            harness: adapter.kind,
+            after: HARNESS_LISTING_MS,
+          });
+          return [];
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    })
+  );
+  const all = listed.flat();
+  all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
+  return {
+    sessions: (options.limit ? all.slice(0, options.limit) : all).map(titled),
+    unanswered,
+    failed,
+  };
+}
+
+/**
+ * `repo`, a git URL on any host, cloned by plain git with the machine's own
+ * git credential, whatever host it names; anything else is refused.
+ */
+async function cloneRepo({
+  repo,
+  baseDir,
+}: NonNullable<SpawnPayload["bootstrap"]>): Promise<string> {
+  if (!isGitUrl(repo)) {
+    throw new Error(
+      `${repo} is not a git URL: name the repository by its clone URL (https://, ssh:// or git@host:path)`
+    );
+  }
+  // A MachinePath from the hub: absolute, no trailing slash.
+  const parent = baseDir;
+  const target = `${parent === "/" ? "" : parent}/${repoLeaf(repo)}`;
+
+  if (await isDirectory(target)) {
+    const origin = await hostGit(target, ["remote", "get-url", "origin"]);
+    if (
+      origin.exitCode !== 0 ||
+      repoIdentity(origin.text()) !== repoIdentity(repo)
+    ) {
+      throw new Error(
+        `bootstrap target exists and is not the requested repo: ${target}`
+      );
+    }
+    return target;
+  }
+
+  await Bun.$`mkdir -p ${parent}`.env(hostEnvironment()).quiet();
+  const cloned = await hostGit(parent, [
+    "clone",
+    "--single-branch",
+    "--",
+    repo.trim(),
+    target,
+  ]);
+  if (cloned.exitCode !== 0) {
+    throw new Error(
+      `could not clone ${repo}: ${tail(cloned.stderr.toString())}`
+    );
+  }
+  return target;
+}
+
+function adapterFor(kind: HarnessKind): Harness {
+  const adapter = harnessOf(kind);
+  if (!adapter) {
+    throw new Error(`no harness adapter for ${kind}`);
+  }
+  return adapter;
+}
+
+/**
+ * What this machine holds of the fleet's content on its disk now, read from
+ * every harness that keeps a copy. One set per harness, INTERSECTED — never
+ * unioned. Skills are written by more than one harness into more than one
+ * directory (claude's `~/.claude/skills`, pi's own), so a hash one of them
+ * holds is not a hash the machine holds: leaving those bytes out would
+ * strand every harness that still needs them. A harness that converges none
+ * reads no set and is not counted, which is why opencode — which reads
+ * claude's directory rather than keeping its own — does not veto every
+ * skill on the machine. A harness whose read fails holds nothing, so the
+ * hub sends everything rather than trust a copy nobody could read.
+ */
+async function fleetHoldings(): Promise<FleetHoldings> {
+  const skillClaims: Record<string, string>[] = [];
+  const pluginClaims: Record<string, string>[] = [];
+  for (const adapter of harnesses()) {
+    if (!adapter.fleetHoldings) {
+      continue;
+    }
+    try {
+      const held = await adapter.fleetHoldings();
+      if (held.skills) {
+        skillClaims.push(held.skills);
+      }
+      if (held.plugins) {
+        pluginClaims.push(held.plugins);
+      }
+    } catch (error) {
+      warn(`reading ${adapter.kind}'s fleet holdings failed: ${error}`);
+      return { skills: {}, plugins: {} };
+    }
+  }
+  return {
+    skills: agreedHashes(skillClaims),
+    plugins: agreedHashes(pluginClaims),
+  };
+}
+
+/**
+ * The MCP copies placed at `cwd` (`rows`; `launched`, as this machine
+ * launches them) into each harness's own files that keeps them
+ * (`Harness.placeFleet`): each copy's state there, the worst of the
+ * harnesses'. A harness that cannot is said, and the others go on.
+ */
+async function placeHarnessMcp(
+  cwd: string,
+  rows: FleetMcpServer[],
+  launched: Record<string, FleetMcpServer>
+): Promise<Record<string, FleetItemState>> {
+  const states: Record<string, FleetItemState> = {};
+  for (const adapter of harnesses()) {
+    if (!adapter.placeFleet) {
+      continue;
+    }
+    try {
+      const said = await adapter.placeFleet(
+        cwd,
+        adapter.capabilities.mcpStatus ? Object.values(launched) : rows
+      );
+      for (const [key, state] of Object.entries(said)) {
+        states[key] = states[key]
+          ? worstFleetState([states[key], state])
+          : state;
+      }
+    } catch (error) {
+      warn(
+        `${adapter.kind} did not take the MCP servers placed at ${cwd}: ${errorText(error)}`
+      );
+    }
+  }
+  return states;
+}
+
+function worktreeRecord(instanceId: string): string {
+  return join(
+    homedir(),
+    ".cawco",
+    "scratch-worktrees",
+    `${hashText(instanceId)}.json`
+  );
+}
+
+/**
+ * Ends the instance's children on every keeper that holds one, the current
+ * or a retiring one, and waits until each has gone; with `pid`, only the
+ * child of that pid, so a process started since under the same id is left.
+ */
+function endHeld(instanceId: string, pid?: number): Promise<boolean> {
+  return withKeepers(async (keepers) => {
+    const children = keepers.flatMap(({ client }) =>
+      client.procs
+        .filter((proc) => {
+          const id = parseProcId(proc.procId);
+          return (
+            proc.alive &&
+            (pid === undefined || proc.pid === pid) &&
+            (id.kind === "claude" || id.kind === "pi") &&
+            id.instanceId === instanceId
+          );
+        })
+        .map((proc) => ({ client, child: proc }))
+    );
+    await Promise.all(
+      children.map(async ({ client, child }) => {
+        await endProc(client, child.procId);
+        const deadline = Date.now() + 10_000;
+        let alive = true;
+        while (alive && Date.now() < deadline) {
+          const after = await client.list();
+          alive = after.procs.some(
+            (proc) => proc.pid === child.pid && proc.alive
+          );
+          if (alive) {
+            await Bun.sleep(100);
+          }
+        }
+        if (alive) {
+          throw new Error(
+            `sessiond process ${child.pid} for ${instanceId} did not exit after its stop`
+          );
+        }
+      })
+    );
+    return children.length > 0;
+  });
+}
+
+/** A session's stored mode, asked of its process before anything is sent to it. */
+async function applyStoredPermissionMode(
+  session: HarnessSession,
+  mode: SpawnPayload["permissionMode"]
+): Promise<void> {
+  if (mode !== undefined) {
+    await session.control(CONTROL_SET_PERMISSION_MODE, [mode]);
+  }
+}
+
+/**
+ * THE CREDENTIAL GATE OF A LAUNCH, for every harness. A process this agent
+ * launched is published only once it has installed the credential the hub
+ * granted as it started ({@link #granted}) and the hub has acknowledged it.
+ * Nothing has been sent to it yet, so one that cannot is stopped before its
+ * first turn, and the throw is its spawn's failure with the reason. A child
+ * this agent attached to proves the credential it already holds after it
+ * is published ({@link #settleAttached}).
+ */
+async function admit(
+  session: HarnessSession,
+  launched: { credential: string }
+): Promise<void> {
+  try {
+    // Remembered for redaction as it was granted ({@link #granted}).
+    await session.control(INSTALL_SESSION_CREDENTIAL, [
+      launched.credential,
+      "initial",
+    ]);
+  } catch (problem) {
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
+    await session.stop().catch(() => {});
+    throw new HeldProcessRefused(
+      `The session's CawCo MCP credential could not be installed, so it was stopped before its first turn: ${errorText(problem)}`,
+      { cause: problem }
+    );
+  }
+}
+
+/**
+ * What a converge wrote that a boundary reads (the fleet's hook scripts):
+ * each boundary in use that started without it is handed over to one that
+ * has it (boundary.ts `rearmMoved`). Nothing waits on it.
+ */
+function rearmBoundaries(): void {
+  rearmMoved("the fleet sync wrote what a boundary reads").catch(
+    (error: unknown) =>
+      warn(`the boundaries were not looked at again: ${errorText(error)}`)
+  );
 }

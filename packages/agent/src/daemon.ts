@@ -544,33 +544,7 @@ class LaunchAsks {
       this.#pending.set(requestId, { envelope, settle });
       this.#send?.(envelope);
     });
-    return this.#awaitGrant(instanceId, granted);
-  }
-
-  /**
-   * The hub's grant for a launch, however long it takes: the hub answers
-   * every grant, a refusal with its reason (987bb9cc0), so a launch it has
-   * not answered within {@link CUSTODY_BOUND_MS} keeps waiting, said once,
-   * never refused for the wait.
-   */
-  async #awaitGrant(
-    instanceId: string,
-    granted: Promise<LaunchGrant>
-  ): Promise<LaunchGrant> {
-    const first = await readWithin(CUSTODY_BOUND_MS, () => granted);
-    switch (first.kind) {
-      case "answered":
-        return first.value;
-      case "unanswered":
-        console.info(
-          `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
-        );
-        return granted;
-      default: {
-        const unhandled: never = first;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
-    }
+    return awaitGrant(instanceId, granted);
   }
 
   /** A connection registered: every ask not yet answered goes on it, and every one after. */
@@ -598,6 +572,32 @@ class LaunchAsks {
       : undefined;
     pending?.settle(envelope.payload as LaunchGrant);
     return true;
+  }
+}
+
+/**
+ * The hub's grant for a launch, however long it takes: the hub answers
+ * every grant, a refusal with its reason (987bb9cc0), so a launch it has
+ * not answered within {@link CUSTODY_BOUND_MS} keeps waiting, said once,
+ * never refused for the wait.
+ */
+async function awaitGrant(
+  instanceId: string,
+  granted: Promise<LaunchGrant>
+): Promise<LaunchGrant> {
+  const first = await readWithin(CUSTODY_BOUND_MS, () => granted);
+  switch (first.kind) {
+    case "answered":
+      return first.value;
+    case "unanswered":
+      console.info(
+        `[agent] ${instanceId}: the hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s; still waiting for the hub's credential`
+      );
+      return granted;
+    default: {
+      const unhandled: never = first;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

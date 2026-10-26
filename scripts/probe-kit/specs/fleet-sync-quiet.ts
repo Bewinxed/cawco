@@ -57,7 +57,7 @@ const FG_STATUS = /FG-STATUS-(\d+)/u;
 const TAG = "PROBE-QUIET-D:";
 /** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
 const CUT_OFF = "boundary stopped while this command ran";
-/** How long a converge and the look after it (agent session.ts `#rearmMoved`) take to land, after the agent says the sync. */
+/** How long a converge and the look after it (agent session.ts `rearmBoundaries`) take to land, after the agent says the sync. */
 const SETTLE_MS = 15_000;
 /** How long after D's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
 const HANDOVER_BOUND_MS = 30_000;

@@ -198,7 +198,7 @@ export class Outbox {
     }
     this.#kept.set(instanceId, owed);
     const [first] = list;
-    if (gone && first && !this.#hand(this.#lostFrame(first.frame))) {
+    if (gone && first && !this.#hand(lostFrame(first.frame))) {
       return false;
     }
     for (const kept of owed) {
@@ -273,19 +273,19 @@ export class Outbox {
       this.#lost.set(instanceId, lost);
     }
   }
+}
 
-  /** The {@link FRAMES_LOST} line a session is sent ahead of what was kept. */
-  #lostFrame(like: OutboxFrame): OutboxFrame {
-    const message: NeutralSystemMessage = {
-      type: "system",
-      subtype: FRAMES_LOST,
-      content: `frames this machine could not keep while its link to the hub was down (past ${OUTBOX_BYTES / 1024 / 1024} MiB) were lost`,
-    };
-    return {
-      kind: "frame",
-      instanceId: like.instanceId,
-      harness: like.harness,
-      message,
-    };
-  }
+/** The {@link FRAMES_LOST} line a session is sent ahead of what was kept. */
+function lostFrame(like: OutboxFrame): OutboxFrame {
+  const message: NeutralSystemMessage = {
+    type: "system",
+    subtype: FRAMES_LOST,
+    content: `frames this machine could not keep while its link to the hub was down (past ${OUTBOX_BYTES / 1024 / 1024} MiB) were lost`,
+  };
+  return {
+    kind: "frame",
+    instanceId: like.instanceId,
+    harness: like.harness,
+    message,
+  };
 }

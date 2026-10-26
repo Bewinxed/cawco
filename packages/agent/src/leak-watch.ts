@@ -27,7 +27,7 @@
  * double-forked one included; on macOS, for a workspace's boundary, every
  * process its Seatbelt profile names its own (boundary.ts `answering`),
  * wherever it moved. Beside those, its tree, as the keeper reads it (sessiond
- * server.ts `#survey`): its descendants, and every process an earlier reading
+ * server.ts `survey`): its descendants, and every process an earlier reading
  * found that is still the same process, so one whose parent ended is still
  * known as the child's. A process that a session's own shell double-forks on
  * a machine whose keeper has no cgroups is out of its tree from its first

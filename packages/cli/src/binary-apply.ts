@@ -1006,7 +1006,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
 
 /**
  * The harnesses that went on for `version` before the swap (binary-update.ts
- * `#putOnPins`) put back for `runs`, the build that runs instead, which
+ * `putOnPins`) put back for `runs`, the build that runs instead, which
  * refuses them: by `runs`'s own `binary-pins back` (pin-record.ts), never by
  * `version`, which may not start at all. Never throws: what calls it is on
  * its way out already. What did not go back is said in the log, and answered

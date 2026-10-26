@@ -156,7 +156,7 @@ export const USER_LAYER_DIRS = [
  */
 export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
 
-/** The fleet's skills for Claude Code, which OpenCode reads too (agent session.ts `#fleetHoldings`). */
+/** The fleet's skills for Claude Code, which OpenCode reads too (agent session.ts `fleetHoldings`). */
 export const claudeSkillsDir = (): string => userLayerPath("skills");
 
 /**

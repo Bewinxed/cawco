@@ -316,13 +316,6 @@ export class CanvasRoom {
     return sizes ? sizes.lift + sizes.stage.height + 1 : 0;
   }
 
-  /** The slot written to the canvas's box: its height and how far it stands past the pill each side. */
-  #slotTo(slot: HTMLElement, sizes: Sizes): void {
-    slot.style.height = `${sizes.stage.height}px`;
-    slot.style.left = `${1 - sizes.spread}px`;
-    slot.style.right = `${1 - sizes.spread}px`;
-  }
-
   /** The handles' values and bounds, for a screen reader: the height; the width, and both sizes in words. */
   #grabValues(sizes: Sizes): NonNullable<Stage["grabValue"]> {
     const { w } = sizes.size;
@@ -506,7 +499,7 @@ export class CanvasRoom {
       return;
     }
     this.#sizes = sizes;
-    this.#slotTo(slot, sizes);
+    slotTo(slot, sizes);
     stage.slots.composer = slot;
     const shape = this.#newShape(sizes);
     shape.open = 1;
@@ -764,7 +757,7 @@ export class CanvasRoom {
     }
     this.#sizes = sizes;
     this.#newShape(sizes).morphTo(1, this.#ext(sizes), 0);
-    this.#slotTo(slot, sizes);
+    slotTo(slot, sizes);
     this.#standAt(sizes.stage.height + 1);
   }
 
@@ -817,7 +810,7 @@ export class CanvasRoom {
       stage.el.style.clipPath = "";
       stage.pinned = to;
       stage.standAt("panel");
-      const flight = this.#fly(stage.el, from, to);
+      const flight = fly(stage.el, from, to);
       this.#runs = [room, flight];
       await Promise.all([room.finished, flight.finished]).catch(
         () => undefined
@@ -844,28 +837,6 @@ export class CanvasRoom {
       }
       this.error = `The canvas couldn't dock: ${errorOf(error)}. It stays over the field.`;
     }
-  }
-
-  /** The same layer from one box to another: a transform off its new box (FLIP). */
-  #fly(el: HTMLElement, from: Box, to: Box): Animation {
-    const run = motionOk.current
-      ? el.animate(
-          [
-            {
-              transformOrigin: "0 0",
-              transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})`,
-            },
-            { transformOrigin: "0 0", transform: "none" },
-          ],
-          { duration: dur("--dur-panel"), easing: CURVE.drawer }
-        )
-      : el.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: dur("--dur-fade"),
-          easing: CURVE.out,
-        });
-    run.id = "canvas-flight";
-    watch(dur("--dur-panel"));
-    return run;
   }
 
   /**
@@ -930,7 +901,7 @@ export class CanvasRoom {
       return;
     }
     this.#sizes = sizes;
-    this.#slotTo(slot, sizes);
+    slotTo(slot, sizes);
     stage.slots.composer = slot;
     const shape = this.#newShape(sizes);
     shape.open = 1;
@@ -947,7 +918,7 @@ export class CanvasRoom {
     stage.pinned = to;
     stage.standAt("composer");
     this.#tellStage();
-    const flight = this.#fly(stage.el, from, to);
+    const flight = fly(stage.el, from, to);
     this.#runs = [room, flight];
     const landed = await Promise.all([room.finished, flight.finished]).then(
       () => true,
@@ -1238,7 +1209,7 @@ export class CanvasRoom {
 
   /**
    * What the send carries for the canvas, once the hub holds what the page
-   * shows (`#reached`): its `.excalidraw` file and its outline as text
+   * shows (`reached`): its `.excalidraw` file and its outline as text
    * attachments, its picture as an image, drawn now. Null when nothing can
    * go: the reason stands under the chip or the pill.
    */
@@ -1255,7 +1226,7 @@ export class CanvasRoom {
       const stage =
         this.#stage?.id === canvas.id ? this.#stage : this.#hold(canvas);
       await stage.ready();
-      const { out, count } = await this.#reached(stage, canvas);
+      const { out, count } = await reached(stage, canvas);
       // The hub holds what the page shows: the page's own count says whether anything is drawn.
       if (count === 0) {
         throw new SendRefusal(
@@ -1289,59 +1260,6 @@ export class CanvasRoom {
     }
   }
 
-  /**
-   * The canvas as the hub holds it, once the hub holds what the page shows:
-   * its doc synced, its picture drawn, and the hub's export counting what
-   * the page's doc counts, waited for up to {@link LOST_REFUSES_MS}. A page
-   * that never synced, or whose link has stood lost, is refused; a count
-   * the hub hasn't caught up with after the wait is refused too. Each export
-   * is asked within what is left of the wait (a second at least), so a hub
-   * that doesn't answer is said, never waited on with the box spinning.
-   */
-  async #reached(
-    stage: Stage,
-    canvas: DraftCanvas
-  ): Promise<{ out: CanvasExport; count: number }> {
-    const deadline = performance.now() + LOST_REFUSES_MS;
-    // Lost long enough that the pen stopped drawing: nothing here reaches the hub.
-    if (stage.refused && stage.hasSynced) {
-      throw new SendRefusal(NOT_CONNECTED);
-    }
-    await stage.synced(deadline - performance.now());
-    if (!stage.hasSynced) {
-      throw new SendRefusal(NOT_CONNECTED);
-    }
-    await stage.picture();
-    for (;;) {
-      const read = await exportCanvasWithin(
-        canvas.id,
-        Math.max(EXPORT_AT_LEAST_MS, deadline - performance.now())
-      );
-      let out: CanvasExport;
-      switch (read.kind) {
-        case "answered":
-          out = read.value;
-          break;
-        case "unanswered":
-          throw new Error(
-            `the hub didn't answer for it within ${Math.ceil(read.after / 1000)} s`
-          );
-        default: {
-          const unhandled: never = read;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
-      const drawn = out.file.elements.filter((el) => !el.isDeleted).length;
-      if (stage.link === "synced" && drawn === stage.drawn) {
-        return { out, count: drawn };
-      }
-      if (performance.now() >= deadline) {
-        throw new SendRefusal(NOT_REACHED);
-      }
-      await new Promise((done) => setTimeout(done, EXPORT_AGAIN_MS));
-    }
-  }
-
   /** The send went out with the canvas: it is the session's, no longer a draft, and leaves the composer. */
   sent(id: string): void {
     const session = this.#parts.session();
@@ -1358,4 +1276,86 @@ export class CanvasRoom {
     this.#putAway();
     this.#letGoStage();
   }
+}
+
+/**
+ * The canvas as the hub holds it, once the hub holds what the page shows:
+ * its doc synced, its picture drawn, and the hub's export counting what
+ * the page's doc counts, waited for up to {@link LOST_REFUSES_MS}. A page
+ * that never synced, or whose link has stood lost, is refused; a count
+ * the hub hasn't caught up with after the wait is refused too. Each export
+ * is asked within what is left of the wait (a second at least), so a hub
+ * that doesn't answer is said, never waited on with the box spinning.
+ */
+async function reached(
+  stage: Stage,
+  canvas: DraftCanvas
+): Promise<{ out: CanvasExport; count: number }> {
+  const deadline = performance.now() + LOST_REFUSES_MS;
+  // Lost long enough that the pen stopped drawing: nothing here reaches the hub.
+  if (stage.refused && stage.hasSynced) {
+    throw new SendRefusal(NOT_CONNECTED);
+  }
+  await stage.synced(deadline - performance.now());
+  if (!stage.hasSynced) {
+    throw new SendRefusal(NOT_CONNECTED);
+  }
+  await stage.picture();
+  for (;;) {
+    const read = await exportCanvasWithin(
+      canvas.id,
+      Math.max(EXPORT_AT_LEAST_MS, deadline - performance.now())
+    );
+    let out: CanvasExport;
+    switch (read.kind) {
+      case "answered":
+        out = read.value;
+        break;
+      case "unanswered":
+        throw new Error(
+          `the hub didn't answer for it within ${Math.ceil(read.after / 1000)} s`
+        );
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const drawn = out.file.elements.filter((el) => !el.isDeleted).length;
+    if (stage.link === "synced" && drawn === stage.drawn) {
+      return { out, count: drawn };
+    }
+    if (performance.now() >= deadline) {
+      throw new SendRefusal(NOT_REACHED);
+    }
+    await new Promise((done) => setTimeout(done, EXPORT_AGAIN_MS));
+  }
+}
+
+/** The same layer from one box to another: a transform off its new box (FLIP). */
+function fly(el: HTMLElement, from: Box, to: Box): Animation {
+  const run = motionOk.current
+    ? el.animate(
+        [
+          {
+            transformOrigin: "0 0",
+            transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})`,
+          },
+          { transformOrigin: "0 0", transform: "none" },
+        ],
+        { duration: dur("--dur-panel"), easing: CURVE.drawer }
+      )
+    : el.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--dur-fade"),
+        easing: CURVE.out,
+      });
+  run.id = "canvas-flight";
+  watch(dur("--dur-panel"));
+  return run;
+}
+
+/** The slot written to the canvas's box: its height and how far it stands past the pill each side. */
+function slotTo(slot: HTMLElement, sizes: Sizes): void {
+  slot.style.height = `${sizes.stage.height}px`;
+  slot.style.left = `${1 - sizes.spread}px`;
+  slot.style.right = `${1 - sizes.spread}px`;
 }

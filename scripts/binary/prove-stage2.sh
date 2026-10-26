@@ -2376,7 +2376,7 @@ rig_hubwire() {
 }
 
 # ---------------------------------------------------------------- pins: the harness a build pins goes on before it,
-# the way the machine already has it (packages/agent/src/binary-update.ts #putOnPins, which runs the staged build's
+# the way the machine already has it (packages/agent/src/binary-update.ts putOnPins, which runs the staged build's
 # own `cawco binary-pins`). The hub's machine has OpenCode as a bun global, laid out as `bun install -g --trust
 # @opencode/cli` lays it out (~/.bun/bin/opencode2 into ~/.bun/install/global/node_modules/@opencode/cli): a stub that
 # says the version ~/opencode-version holds, one release below what this tree pins. ~/.bun/bin/bun is a stand-in: each

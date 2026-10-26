@@ -961,25 +961,6 @@ export class Run {
   private readonly rendererEnds: string[] = [];
 
   /**
-   * Fails `what` when a process carrying one of `tags` outlives its closed
-   * browser (browser-leftovers.ts): a `chrome_crashpad_handler` most of all.
-   */
-  private async noneLeft(
-    tags: readonly string[],
-    check: (assertion: string, ok: boolean, detail?: string) => void
-  ): Promise<void> {
-    if (tags.length === 0) {
-      return;
-    }
-    const left = await leftBehind(tags);
-    check(
-      `every browser closed leaves no process of its own behind (no chrome_crashpad_handler among the run's processes; ${tags.length} launch(es))`,
-      left.length === 0,
-      left.join("; ")
-    );
-  }
-
-  /**
    * The checkout's build of this tree, the first time a spec needs it, held
    * until the run closes (`builtOutput`).
    */
@@ -1367,7 +1348,7 @@ export class Run {
         await end().catch((error) => console.log(`  cleanup: ${error}`));
       }
       // The browsers the spec launched itself (launchEnv) are closed by now.
-      await this.noneLeft(takeLaunches(this.sharedLaunches), kit.check);
+      await noneLeft(takeLaunches(this.sharedLaunches), kit.check);
       console.log(
         `  ${spec.name}: ${((performance.now() - started) / 1000).toFixed(0)}s`
       );
@@ -1387,7 +1368,7 @@ export class Run {
     }
     // Each closed browser says the most its processes held (browser-cap.ts).
     lookNow();
-    await this.noneLeft(takeLaunches(), (assertion, ok, detail) => {
+    await noneLeft(takeLaunches(), (assertion, ok, detail) => {
       const line = `${ok ? "PASS" : "FAIL"} the run's browsers: ${assertion}${detail ? ` (${detail})` : ""}`;
       console.log(line);
       if (!ok) {
@@ -1402,6 +1383,25 @@ export class Run {
       this.output = null;
     }
   }
+}
+
+/**
+ * Fails `what` when a process carrying one of `tags` outlives its closed
+ * browser (browser-leftovers.ts): a `chrome_crashpad_handler` most of all.
+ */
+async function noneLeft(
+  tags: readonly string[],
+  check: (assertion: string, ok: boolean, detail?: string) => void
+): Promise<void> {
+  if (tags.length === 0) {
+    return;
+  }
+  const left = await leftBehind(tags);
+  check(
+    `every browser closed leaves no process of its own behind (no chrome_crashpad_handler among the run's processes; ${tags.length} launch(es))`,
+    left.length === 0,
+    left.join("; ")
+  );
 }
 
 export type KitFleet = Fleet & {

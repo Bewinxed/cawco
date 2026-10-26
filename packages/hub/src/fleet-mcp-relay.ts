@@ -356,263 +356,6 @@ export class FleetMcpRelay {
     }
   }
 
-  /**
-   * One upstream request through the server's gate: never answered 429.
-   * While the upstream is limiting, requests go one after another, each once
-   * the wait it named has passed, until one is answered and none is queued:
-   * a herd released at once would only be refused again.
-   */
-  #send(
-    name: string,
-    state: ServerState,
-    upstream: Upstream,
-    exchange: Exchange
-  ): Promise<Response> {
-    return this.#sendTaking(name, state, upstream, exchange, (response) =>
-      Promise.resolve(response)
-    );
-  }
-
-  /**
-   * {@link #send}, with what is wanted of the answer read by `take` as part
-   * of each attempt: inside `ms` when given, so an answer whose reply never
-   * comes within it is {@link NoAnswer}.
-   */
-  async #sendTaking<T>(
-    name: string,
-    state: ServerState,
-    upstream: Upstream,
-    exchange: Exchange,
-    take: (response: Response) => Promise<T>,
-    ms?: number
-  ): Promise<T> {
-    if (!state.limited) {
-      const taken = await this.#attempt(
-        name,
-        state,
-        upstream,
-        exchange,
-        take,
-        ms
-      );
-      if (taken) {
-        return taken.taken;
-      }
-    }
-    state.queued += 1;
-    const turn = state.queue.then(() =>
-      this.#held(name, state, upstream, exchange, take, ms)
-    );
-    state.queue = turn.then(
-      () => undefined,
-      () => undefined
-    );
-    try {
-      return await turn;
-    } finally {
-      state.queued -= 1;
-      if (state.queued === 0) {
-        state.limited = false;
-      }
-    }
-  }
-
-  /** A held request's turn: sent after the wait, again after each 429. */
-  async #held<T>(
-    name: string,
-    state: ServerState,
-    upstream: Upstream,
-    exchange: Exchange,
-    take: (response: Response) => Promise<T>,
-    ms?: number
-  ): Promise<T> {
-    for (;;) {
-      exchange.signal?.throwIfAborted();
-      const wait = state.until - Date.now();
-      if (wait > 0) {
-        // Pacing, not a read: the gate's own wait, then the asker is looked at again.
-        await Bun.sleep(wait);
-        exchange.signal?.throwIfAborted();
-      }
-      const taken = await this.#attempt(
-        name,
-        state,
-        upstream,
-        exchange,
-        take,
-        ms
-      );
-      if (taken) {
-        return taken.taken;
-      }
-    }
-  }
-
-  /**
-   * One send, its answer taken by `take` (inside `ms` when given); undefined
-   * when the upstream answered 429, the gate then holding its requests for
-   * the wait it named.
-   */
-  async #attempt<T>(
-    name: string,
-    state: ServerState,
-    upstream: Upstream,
-    exchange: Exchange,
-    take: (response: Response) => Promise<T>,
-    ms?: number
-  ): Promise<{ taken: T } | undefined> {
-    const once = async (signal?: AbortSignal): Promise<Attempted<T>> => {
-      const response = await upstream(
-        signal ? { ...exchange, signal } : exchange
-      );
-      if (response.status === 429) {
-        await response.body?.cancel();
-        return { limited: response.headers };
-      }
-      if (response.ok) {
-        state.misses = 0;
-      }
-      return { taken: await take(response) };
-    };
-    let attempted: Attempted<T>;
-    if (ms === undefined) {
-      attempted = await once();
-    } else {
-      const outcome = await readWithin(ms, once, {
-        ...(exchange.signal ? { signal: exchange.signal } : {}),
-      });
-      switch (outcome.kind) {
-        case "answered":
-          attempted = outcome.value;
-          break;
-        case "unanswered":
-          throw new NoAnswer(outcome.after);
-        default: {
-          const unhandled: never = outcome;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
-    }
-    if ("taken" in attempted) {
-      return attempted;
-    }
-    state.limited = true;
-    const named = namedWait(attempted.limited);
-    const hold =
-      named ?? Math.min(BACKOFF_FIRST_MS * 2 ** state.misses, BACKOFF_MAX_MS);
-    if (named === undefined) {
-      state.misses += 1;
-    }
-    const until = Date.now() + hold;
-    if (until > state.until) {
-      state.until = until;
-      console.info(
-        `[fleet-mcp] ${name}: the upstream answered 429; its requests wait ${(hold / 1000).toFixed(1)} s (${named === undefined ? "backoff" : "its own wait"}), then go one at a time`
-      );
-    }
-    return undefined;
-  }
-
-  /**
-   * A JSON-RPC request the hub makes for every session, and the upstream's
-   * answer to it: read off a JSON body or the event stream it opened, which
-   * may also carry list changes. Each attempt, its reply read included, has
-   * {@link LISTER_TIMEOUT_MS}; none in that time is {@link NoAnswer}.
-   */
-  async #rpc(
-    name: string,
-    state: ServerState,
-    upstream: Upstream,
-    lister: { session: string | null; protocol?: string },
-    message: Message
-  ): Promise<{ response: Response; reply?: Message }> {
-    const headers = new Headers({
-      Accept: "application/json, text/event-stream",
-      "Content-Type": "application/json",
-    });
-    if (lister.session) {
-      headers.set("Mcp-Session-Id", lister.session);
-    }
-    if (lister.protocol) {
-      headers.set("MCP-Protocol-Version", lister.protocol);
-    }
-    return await this.#sendTaking(
-      name,
-      state,
-      upstream,
-      { method: "POST", headers, body: JSON.stringify(message) },
-      async (response) => {
-        if (message.id === undefined) {
-          await response.body?.cancel();
-          return { response };
-        }
-        if (!response.ok) {
-          // Its refusal is read later (`refused`): read whole now, inside the time.
-          return { response: await whole(response) };
-        }
-        if (!(
-          response.headers.get("Content-Type")?.includes("text/event-stream") &&
-          response.body
-        )) {
-          const reply = parse(await response.text());
-          return { response, reply: Array.isArray(reply) ? undefined : reply };
-        }
-        return {
-          response,
-          reply: await this.#replyOn(name, state, response.body, message.id),
-        };
-      },
-      LISTER_TIMEOUT_MS
-    );
-  }
-
-  /** The message answering `id` on an event stream, read until it comes; the stream's notifications heard on the way. */
-  async #replyOn(
-    name: string,
-    state: ServerState,
-    body: ReadableStream<Uint8Array>,
-    id: Message["id"]
-  ): Promise<Message | undefined> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let data: string[] = [];
-    /** One event's data, ended by its blank line. */
-    const event = (line: string): Message | undefined => {
-      if (line.startsWith("data:")) {
-        data.push(line.slice(5).trimStart());
-        return;
-      }
-      if (line !== "" || data.length === 0) {
-        return;
-      }
-      const one = parse(data.join("\n"));
-      data = [];
-      return one && !Array.isArray(one) ? one : undefined;
-    };
-    try {
-      for (;;) {
-        const next = await reader.read();
-        if (next.done) {
-          return;
-        }
-        buffer += decoder.decode(next.value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const raw of lines) {
-          const one = event(raw.replace(CARRIAGE_RETURN, ""));
-          if (one?.method) {
-            this.#heard(name, state, one.method);
-          } else if (one && one.id === id) {
-            return one;
-          }
-        }
-      }
-    } finally {
-      await reader.cancel().catch(() => undefined);
-    }
-  }
-
   /** The server's one upstream session for every session's handshake and lists. */
   #lister(
     name: string,
@@ -623,7 +366,7 @@ export class FleetMcpRelay {
       return state.lister;
     }
     const opening = (async (): Promise<Lister> => {
-      const { response, reply } = await this.#rpc(
+      const { response, reply } = await upstreamRpc(
         name,
         state,
         upstream,
@@ -645,7 +388,7 @@ export class FleetMcpRelay {
         typeof result.protocolVersion === "string"
           ? result.protocolVersion
           : LATEST_PROTOCOL_VERSION;
-      const told = await this.#rpc(
+      const told = await upstreamRpc(
         name,
         state,
         upstream,
@@ -654,7 +397,7 @@ export class FleetMcpRelay {
       );
       await told.response.body?.cancel();
       const lister = { session, protocol, result };
-      this.#listen(name, state, upstream, lister);
+      listenForChanges(name, state, upstream, lister);
       return lister;
     })();
     state.lister = opening;
@@ -664,111 +407,6 @@ export class FleetMcpRelay {
       }
     });
     return opening;
-  }
-
-  /**
-   * The upstream's own stream on the lister's session, where it says its
-   * lists changed. One it does not offer (405) is simply not heard; one that
-   * ends takes the lister with it, so the next list opens both again.
-   */
-  #listen(
-    name: string,
-    state: ServerState,
-    upstream: Upstream,
-    lister: Lister
-  ): void {
-    state.listening?.abort();
-    const control = new AbortController();
-    state.listening = control;
-    const headers = new Headers({ Accept: "text/event-stream" });
-    if (lister.session) {
-      headers.set("Mcp-Session-Id", lister.session);
-    }
-    headers.set("MCP-Protocol-Version", lister.protocol);
-    let opened = false;
-    (async () => {
-      const response = await this.#send(name, state, upstream, {
-        method: "GET",
-        headers,
-        signal: control.signal,
-      });
-      if (!(
-        response.ok &&
-        response.body &&
-        response.headers.get("Content-Type")?.includes("text/event-stream")
-      )) {
-        await response.body?.cancel();
-        return;
-      }
-      opened = true;
-      await this.#tap(name, state, response.body).pipeTo(new WritableStream());
-    })()
-      .catch(() => undefined)
-      .finally(() => {
-        if (state.listening !== control) {
-          return;
-        }
-        state.listening = undefined;
-        if (opened && !control.signal.aborted) {
-          state.lister = undefined;
-          state.lists.clear();
-        }
-      });
-  }
-
-  /** An upstream event stream passed on unchanged, its list changes heard on the way. */
-  #tap(
-    name: string,
-    state: ServerState,
-    body: ReadableStream<Uint8Array>
-  ): ReadableStream<Uint8Array> {
-    const decoder = new TextDecoder();
-    let buffer = "";
-    return body.pipeThrough(
-      new TransformStream<Uint8Array, Uint8Array>({
-        transform: (chunk, controller) => {
-          buffer += decoder.decode(chunk, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) {
-            if (line.startsWith("data:") && line.includes("list_changed")) {
-              const event = parse(line.slice(5));
-              if (event && !Array.isArray(event) && event.method) {
-                this.#heard(name, state, event.method);
-              }
-            }
-          }
-          controller.enqueue(chunk);
-        },
-      })
-    );
-  }
-
-  /** The upstream said a list changed: the kept one goes, and every session hears it. */
-  #heard(name: string, state: ServerState, method: string): void {
-    const lists = CHANGED[method];
-    if (!lists) {
-      return;
-    }
-    for (const list of lists) {
-      state.lists.delete(list);
-      state.known.delete(list);
-    }
-    console.info(`[fleet-mcp] ${name}: the upstream says ${method}`);
-    this.#broadcast(state, method);
-  }
-
-  #broadcast(state: ServerState, method: string): void {
-    const event = encoder.encode(
-      `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", method })}\n\n`
-    );
-    for (const stream of state.streams) {
-      try {
-        stream.enqueue(event);
-      } catch {
-        state.streams.delete(stream);
-      }
-    }
   }
 
   /** One list for every session: fetched once however many ask, every page of it. */
@@ -793,7 +431,7 @@ export class FleetMcpRelay {
             `[fleet-mcp] ${name}: ${method} upstream: ${answer.items.length} ${key}`
           );
           if (before !== undefined && before !== now) {
-            this.#broadcast(state, changedBy(method));
+            broadcast(state, changedBy(method));
           }
         }
         return answer;
@@ -824,7 +462,7 @@ export class FleetMcpRelay {
     const items: unknown[] = [];
     let cursor: unknown;
     do {
-      const { response, reply } = await this.#rpc(
+      const { response, reply } = await upstreamRpc(
         name,
         state,
         upstream,
@@ -838,7 +476,7 @@ export class FleetMcpRelay {
       );
       if (response.status === 404 && lister.session && !again) {
         await response.body?.cancel();
-        if (await this.#isLister(state, lister)) {
+        if (await isLister(state, lister)) {
           state.lister = undefined;
         }
         return await this.#fetchList(name, state, upstream, method, true);
@@ -864,17 +502,6 @@ export class FleetMcpRelay {
     return { items };
   }
 
-  /** Whether the server's lister is still `lister`. */
-  async #isLister(state: ServerState, lister: Lister): Promise<boolean> {
-    const current = state.lister;
-    return current === undefined
-      ? false
-      : await current.then(
-          (one) => one === lister,
-          () => false
-        );
-  }
-
   /** A session's own upstream session, opened with its own `initialize` at its first request that needs one. */
   #session(
     name: string,
@@ -891,7 +518,7 @@ export class FleetMcpRelay {
       if (lister.session === null) {
         return null;
       }
-      const { response, reply } = await this.#rpc(
+      const { response, reply } = await upstreamRpc(
         name,
         state,
         upstream,
@@ -909,7 +536,7 @@ export class FleetMcpRelay {
       );
       const result = await initialized(response, reply);
       const session = response.headers.get("Mcp-Session-Id");
-      const told = await this.#rpc(
+      const told = await upstreamRpc(
         name,
         state,
         upstream,
@@ -961,7 +588,7 @@ export class FleetMcpRelay {
     if (session) {
       headers.set("Mcp-Session-Id", session);
     }
-    const response = await this.#send(name, state, upstream, {
+    const response = await sendUpstream(name, state, upstream, {
       method: request.method,
       headers,
       body,
@@ -988,54 +615,12 @@ export class FleetMcpRelay {
     const stream =
       response.body &&
       response.headers.get("Content-Type")?.includes("text/event-stream")
-        ? this.#tap(name, state, response.body)
+        ? tapListChanges(name, state, response.body)
         : response.body;
     return new Response(stream, {
       status: response.status,
       statusText: response.statusText,
       headers: outgoing,
-    });
-  }
-
-  /** A session's standalone stream: the hub's, carrying the list changes it hears. */
-  #stream(
-    state: ServerState,
-    downstream: Downstream,
-    request: Request
-  ): Response {
-    let held: ReadableStreamDefaultController<Uint8Array> | undefined;
-    const release = () => {
-      if (held && state.streams.delete(held)) {
-        downstream.streams -= 1;
-        downstream.used = Date.now();
-      }
-    };
-    const body = new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        held = controller;
-        state.streams.add(controller);
-        downstream.streams += 1;
-        controller.enqueue(encoder.encode(": cawco fleet\n\n"));
-        request.signal.addEventListener(
-          "abort",
-          () => {
-            release();
-            try {
-              controller.close();
-            } catch {
-              // Already closed by its reader.
-            }
-          },
-          { once: true }
-        );
-      },
-      cancel: release,
-    });
-    return new Response(body, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-      },
     });
   }
 
@@ -1050,7 +635,7 @@ export class FleetMcpRelay {
     try {
       lister = await this.#lister(name, state, upstream);
     } catch (error) {
-      return this.#refusal(error, single.id);
+      return refusalFor(error, single.id);
     }
     const asked = single.params?.protocolVersion;
     const protocol =
@@ -1070,30 +655,6 @@ export class FleetMcpRelay {
       { result: { ...lister.result, protocolVersion: protocol } },
       { "Mcp-Session-Id": id }
     );
-  }
-
-  /** A closed session's upstream session closes too; nothing waits on it. */
-  #close(
-    name: string,
-    state: ServerState,
-    upstream: Upstream,
-    downstream: Downstream
-  ): void {
-    const open = downstream.upstream;
-    if (!open) {
-      return;
-    }
-    (async () => {
-      const session = await open;
-      if (!session) {
-        return;
-      }
-      const response = await this.#send(name, state, upstream, {
-        method: "DELETE",
-        headers: new Headers({ "Mcp-Session-Id": session }),
-      });
-      await response.body?.cancel();
-    })().catch(() => undefined);
   }
 
   /**
@@ -1154,30 +715,13 @@ export class FleetMcpRelay {
       }
       listed = await this.#list(name, state, upstream, method);
     } catch (error) {
-      return this.#refusal(error, id);
+      return refusalFor(error, id);
     }
     return "error" in listed
       ? rpcAnswer(id, { error: listed.error })
       : rpcAnswer(id, {
           result: { [LIST_METHODS[method] as string]: listed.items },
         });
-  }
-
-  /** The upstream's own refusal of a request made for every session, or its silence, answered to this one. */
-  #refusal(error: unknown, id: Message["id"]): Response {
-    if (error instanceof NoAnswer) {
-      return new Response(error.message, { status: 504 });
-    }
-    if (error instanceof Refused) {
-      return new Response(error.text, {
-        status: error.status,
-        headers: error.contentType ? { "Content-Type": error.contentType } : {},
-      });
-    }
-    if (error instanceof RpcError) {
-      return rpcAnswer(id, { error: error.error });
-    }
-    throw error;
   }
 
   /**
@@ -1230,14 +774,14 @@ export class FleetMcpRelay {
     const downstream = this.#downstream(name, state, id);
 
     if (request.method === "GET") {
-      return this.#stream(state, downstream, request);
+      return standaloneStream(state, downstream, request);
     }
     if (request.method === "DELETE") {
       state.sessions.delete(id);
       if (id) {
         this.#kept.delete(id);
       }
-      this.#close(name, state, upstream, downstream);
+      closeUpstream(name, state, upstream, downstream);
       return new Response(null, { status: 200 });
     }
     const local = single
@@ -1256,7 +800,465 @@ export class FleetMcpRelay {
         body
       );
     } catch (error) {
-      return this.#refusal(error, single?.id ?? null);
+      return refusalFor(error, single?.id ?? null);
     }
   }
+}
+
+/**
+ * The upstream's own stream on the lister's session, where it says its
+ * lists changed. One it does not offer (405) is simply not heard; one that
+ * ends takes the lister with it, so the next list opens both again.
+ */
+function listenForChanges(
+  name: string,
+  state: ServerState,
+  upstream: Upstream,
+  lister: Lister
+): void {
+  state.listening?.abort();
+  const control = new AbortController();
+  state.listening = control;
+  const headers = new Headers({ Accept: "text/event-stream" });
+  if (lister.session) {
+    headers.set("Mcp-Session-Id", lister.session);
+  }
+  headers.set("MCP-Protocol-Version", lister.protocol);
+  let opened = false;
+  (async () => {
+    const response = await sendUpstream(name, state, upstream, {
+      method: "GET",
+      headers,
+      signal: control.signal,
+    });
+    if (!(
+      response.ok &&
+      response.body &&
+      response.headers.get("Content-Type")?.includes("text/event-stream")
+    )) {
+      await response.body?.cancel();
+      return;
+    }
+    opened = true;
+    await tapListChanges(name, state, response.body).pipeTo(
+      new WritableStream()
+    );
+  })()
+    .catch(() => undefined)
+    .finally(() => {
+      if (state.listening !== control) {
+        return;
+      }
+      state.listening = undefined;
+      if (opened && !control.signal.aborted) {
+        state.lister = undefined;
+        state.lists.clear();
+      }
+    });
+}
+
+/** A closed session's upstream session closes too; nothing waits on it. */
+function closeUpstream(
+  name: string,
+  state: ServerState,
+  upstream: Upstream,
+  downstream: Downstream
+): void {
+  const open = downstream.upstream;
+  if (!open) {
+    return;
+  }
+  (async () => {
+    const session = await open;
+    if (!session) {
+      return;
+    }
+    const response = await sendUpstream(name, state, upstream, {
+      method: "DELETE",
+      headers: new Headers({ "Mcp-Session-Id": session }),
+    });
+    await response.body?.cancel();
+  })().catch(() => undefined);
+}
+
+/**
+ * One upstream request through the server's gate: never answered 429.
+ * While the upstream is limiting, requests go one after another, each once
+ * the wait it named has passed, until one is answered and none is queued:
+ * a herd released at once would only be refused again.
+ */
+function sendUpstream(
+  name: string,
+  state: ServerState,
+  upstream: Upstream,
+  exchange: Exchange
+): Promise<Response> {
+  return sendTaking(name, state, upstream, exchange, (response) =>
+    Promise.resolve(response)
+  );
+}
+
+/**
+ * A JSON-RPC request the hub makes for every session, and the upstream's
+ * answer to it: read off a JSON body or the event stream it opened, which
+ * may also carry list changes. Each attempt, its reply read included, has
+ * {@link LISTER_TIMEOUT_MS}; none in that time is {@link NoAnswer}.
+ */
+async function upstreamRpc(
+  name: string,
+  state: ServerState,
+  upstream: Upstream,
+  lister: { session: string | null; protocol?: string },
+  message: Message
+): Promise<{ response: Response; reply?: Message }> {
+  const headers = new Headers({
+    Accept: "application/json, text/event-stream",
+    "Content-Type": "application/json",
+  });
+  if (lister.session) {
+    headers.set("Mcp-Session-Id", lister.session);
+  }
+  if (lister.protocol) {
+    headers.set("MCP-Protocol-Version", lister.protocol);
+  }
+  return await sendTaking(
+    name,
+    state,
+    upstream,
+    { method: "POST", headers, body: JSON.stringify(message) },
+    async (response) => {
+      if (message.id === undefined) {
+        await response.body?.cancel();
+        return { response };
+      }
+      if (!response.ok) {
+        // Its refusal is read later (`refused`): read whole now, inside the time.
+        return { response: await whole(response) };
+      }
+      if (!(
+        response.headers.get("Content-Type")?.includes("text/event-stream") &&
+        response.body
+      )) {
+        const reply = parse(await response.text());
+        return { response, reply: Array.isArray(reply) ? undefined : reply };
+      }
+      return {
+        response,
+        reply: await replyOn(name, state, response.body, message.id),
+      };
+    },
+    LISTER_TIMEOUT_MS
+  );
+}
+
+/**
+ * {@link sendUpstream}, with what is wanted of the answer read by `take` as part
+ * of each attempt: inside `ms` when given, so an answer whose reply never
+ * comes within it is {@link NoAnswer}.
+ */
+async function sendTaking<T>(
+  name: string,
+  state: ServerState,
+  upstream: Upstream,
+  exchange: Exchange,
+  take: (response: Response) => Promise<T>,
+  ms?: number
+): Promise<T> {
+  if (!state.limited) {
+    const taken = await attemptUpstream(
+      name,
+      state,
+      upstream,
+      exchange,
+      take,
+      ms
+    );
+    if (taken) {
+      return taken.taken;
+    }
+  }
+  state.queued += 1;
+  const turn = state.queue.then(() =>
+    heldTurn(name, state, upstream, exchange, take, ms)
+  );
+  state.queue = turn.then(
+    () => undefined,
+    () => undefined
+  );
+  try {
+    return await turn;
+  } finally {
+    state.queued -= 1;
+    if (state.queued === 0) {
+      state.limited = false;
+    }
+  }
+}
+
+/** The message answering `id` on an event stream, read until it comes; the stream's notifications heard on the way. */
+async function replyOn(
+  name: string,
+  state: ServerState,
+  body: ReadableStream<Uint8Array>,
+  id: Message["id"]
+): Promise<Message | undefined> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let data: string[] = [];
+  /** One event's data, ended by its blank line. */
+  const event = (line: string): Message | undefined => {
+    if (line.startsWith("data:")) {
+      data.push(line.slice(5).trimStart());
+      return;
+    }
+    if (line !== "" || data.length === 0) {
+      return;
+    }
+    const one = parse(data.join("\n"));
+    data = [];
+    return one && !Array.isArray(one) ? one : undefined;
+  };
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) {
+        return;
+      }
+      buffer += decoder.decode(next.value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const raw of lines) {
+        const one = event(raw.replace(CARRIAGE_RETURN, ""));
+        if (one?.method) {
+          listChanged(name, state, one.method);
+        } else if (one && one.id === id) {
+          return one;
+        }
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+/** An upstream event stream passed on unchanged, its list changes heard on the way. */
+function tapListChanges(
+  name: string,
+  state: ServerState,
+  body: ReadableStream<Uint8Array>
+): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform: (chunk, controller) => {
+        buffer += decoder.decode(chunk, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.startsWith("data:") && line.includes("list_changed")) {
+            const event = parse(line.slice(5));
+            if (event && !Array.isArray(event) && event.method) {
+              listChanged(name, state, event.method);
+            }
+          }
+        }
+        controller.enqueue(chunk);
+      },
+    })
+  );
+}
+
+/** A held request's turn: sent after the wait, again after each 429. */
+async function heldTurn<T>(
+  name: string,
+  state: ServerState,
+  upstream: Upstream,
+  exchange: Exchange,
+  take: (response: Response) => Promise<T>,
+  ms?: number
+): Promise<T> {
+  for (;;) {
+    exchange.signal?.throwIfAborted();
+    const wait = state.until - Date.now();
+    if (wait > 0) {
+      // Pacing, not a read: the gate's own wait, then the asker is looked at again.
+      await Bun.sleep(wait);
+      exchange.signal?.throwIfAborted();
+    }
+    const taken = await attemptUpstream(
+      name,
+      state,
+      upstream,
+      exchange,
+      take,
+      ms
+    );
+    if (taken) {
+      return taken.taken;
+    }
+  }
+}
+
+/** The upstream said a list changed: the kept one goes, and every session hears it. */
+function listChanged(name: string, state: ServerState, method: string): void {
+  const lists = CHANGED[method];
+  if (!lists) {
+    return;
+  }
+  for (const list of lists) {
+    state.lists.delete(list);
+    state.known.delete(list);
+  }
+  console.info(`[fleet-mcp] ${name}: the upstream says ${method}`);
+  broadcast(state, method);
+}
+
+/** The upstream's own refusal of a request made for every session, or its silence, answered to this one. */
+function refusalFor(error: unknown, id: Message["id"]): Response {
+  if (error instanceof NoAnswer) {
+    return new Response(error.message, { status: 504 });
+  }
+  if (error instanceof Refused) {
+    return new Response(error.text, {
+      status: error.status,
+      headers: error.contentType ? { "Content-Type": error.contentType } : {},
+    });
+  }
+  if (error instanceof RpcError) {
+    return rpcAnswer(id, { error: error.error });
+  }
+  throw error;
+}
+
+/** A session's standalone stream: the hub's, carrying the list changes it hears. */
+function standaloneStream(
+  state: ServerState,
+  downstream: Downstream,
+  request: Request
+): Response {
+  let held: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const release = () => {
+    if (held && state.streams.delete(held)) {
+      downstream.streams -= 1;
+      downstream.used = Date.now();
+    }
+  };
+  const body = new ReadableStream<Uint8Array>({
+    start: (controller) => {
+      held = controller;
+      state.streams.add(controller);
+      downstream.streams += 1;
+      controller.enqueue(encoder.encode(": cawco fleet\n\n"));
+      request.signal.addEventListener(
+        "abort",
+        () => {
+          release();
+          try {
+            controller.close();
+          } catch {
+            // Already closed by its reader.
+          }
+        },
+        { once: true }
+      );
+    },
+    cancel: release,
+  });
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
+  });
+}
+
+/** Whether the server's lister is still `lister`. */
+async function isLister(state: ServerState, lister: Lister): Promise<boolean> {
+  const current = state.lister;
+  return current === undefined
+    ? false
+    : await current.then(
+        (one) => one === lister,
+        () => false
+      );
+}
+
+function broadcast(state: ServerState, method: string): void {
+  const event = encoder.encode(
+    `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", method })}\n\n`
+  );
+  for (const stream of state.streams) {
+    try {
+      stream.enqueue(event);
+    } catch {
+      state.streams.delete(stream);
+    }
+  }
+}
+
+/**
+ * One send, its answer taken by `take` (inside `ms` when given); undefined
+ * when the upstream answered 429, the gate then holding its requests for
+ * the wait it named.
+ */
+async function attemptUpstream<T>(
+  name: string,
+  state: ServerState,
+  upstream: Upstream,
+  exchange: Exchange,
+  take: (response: Response) => Promise<T>,
+  ms?: number
+): Promise<{ taken: T } | undefined> {
+  const once = async (signal?: AbortSignal): Promise<Attempted<T>> => {
+    const response = await upstream(
+      signal ? { ...exchange, signal } : exchange
+    );
+    if (response.status === 429) {
+      await response.body?.cancel();
+      return { limited: response.headers };
+    }
+    if (response.ok) {
+      state.misses = 0;
+    }
+    return { taken: await take(response) };
+  };
+  let attempted: Attempted<T>;
+  if (ms === undefined) {
+    attempted = await once();
+  } else {
+    const outcome = await readWithin(ms, once, {
+      ...(exchange.signal ? { signal: exchange.signal } : {}),
+    });
+    switch (outcome.kind) {
+      case "answered":
+        attempted = outcome.value;
+        break;
+      case "unanswered":
+        throw new NoAnswer(outcome.after);
+      default: {
+        const unhandled: never = outcome;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
+  if ("taken" in attempted) {
+    return attempted;
+  }
+  state.limited = true;
+  const named = namedWait(attempted.limited);
+  const hold =
+    named ?? Math.min(BACKOFF_FIRST_MS * 2 ** state.misses, BACKOFF_MAX_MS);
+  if (named === undefined) {
+    state.misses += 1;
+  }
+  const until = Date.now() + hold;
+  if (until > state.until) {
+    state.until = until;
+    console.info(
+      `[fleet-mcp] ${name}: the upstream answered 429; its requests wait ${(hold / 1000).toFixed(1)} s (${named === undefined ? "backoff" : "its own wait"}), then go one at a time`
+    );
+  }
+  return undefined;
 }

@@ -391,7 +391,7 @@ const STRAY_SWEEP_MS = 5 * 60_000;
  * modification reverts across servers only with one shared snapshot dir).
  * The account's credential as 1.x kept it there (`auth.json`, written by the
  * agent for 1.x's own sign-in code) is removed: 2.0 takes it through its API
- * ({@link OpencodeHarness.#putCredential}), and a database 2.0 makes new
+ * ({@link putCredential}), and a database 2.0 makes new
  * never reads that file. A 1.x account server kept no database here; it
  * used the machine's.
  */
@@ -2031,16 +2031,6 @@ export class OpencodeHarness implements Harness {
     return [this.#machine, ...this.#accounts.values(), ...this.#views.values()];
   }
 
-  /** A slot's server in words, for the log. */
-  #slotName(slot: ServerSlot): string {
-    if (slot.view !== undefined) {
-      return `workspace ${slot.view.slice(0, 8)}'s view's`;
-    }
-    return slot.account === undefined
-      ? "the machine's"
-      : `account ${slot.account}'s`;
-  }
-
   /** The slot whose server a generation is (or was). */
   #slotOfGeneration(identity: ServerIdentity): ServerSlot | undefined {
     return this.#slots().find((slot) =>
@@ -2220,16 +2210,16 @@ export class OpencodeHarness implements Harness {
         if (!slot?.client) {
           continue;
         }
-        this.#putCredential(account, slot.client).catch((error: unknown) =>
+        putCredential(account, slot.client).catch((error: unknown) =>
           console.warn(
-            `[opencode] ${this.#slotName(slot)} server: account ${account}'s credential did not reach it: ${errorText(error)}`
+            `[opencode] ${slotName(slot)} server: account ${account}'s credential did not reach it: ${errorText(error)}`
           )
         );
       }
     });
     setOpencodeAccountsHost({
       carryOut: (account) => this.#carryOut(account),
-      ownCredentials: () => this.#ownCredentials(),
+      ownCredentials: () => ownCredentials(),
       removeOwnCredential: async (id) => {
         const client = await this.#ensure();
         answerOf(
@@ -2243,19 +2233,6 @@ export class OpencodeHarness implements Harness {
   }
 
   /**
-   * OpenCode's own sign-ins on this machine: the credential each provider
-   * uses on the machine's server, its active one per integration, read from
-   * the machine's database in place ({@link opencodeOwnCredentialRows}), so
-   * the hub's read of them at each connection starts no server. CawCo's own
-   * (`cred_cawco_…`) are on account servers only, and never listed.
-   */
-  async #ownCredentials(): Promise<OpencodeOwnCredential[]> {
-    return (await opencodeOwnCredentialRows()).filter(
-      (entry) => !entry.id.startsWith(CREDENTIAL_PREFIX)
-    );
-  }
-
-  /**
    * Before an account goes from this machine: every root session in its
    * server's database moved to the machine's server with its subagent
    * sessions ({@link #bringHome}), whatever the homes record says, then the
@@ -2266,7 +2243,7 @@ export class OpencodeHarness implements Harness {
     const client = await this.#ensureAccount(account);
     const roots = await allSessions(client, {});
     for (const root of roots) {
-      await this.#setHome([root.id], account);
+      await setHome([root.id], account);
       await this.#bringHome(root.id, "");
     }
     const slot = this.#accountSlot(account);
@@ -2297,42 +2274,10 @@ export class OpencodeHarness implements Harness {
   #configWatchTimer: ReturnType<typeof setInterval> | null = null;
   #checkingPublication = false;
   #retryConfigAt = 0;
-  /** Whether this agent keeps the server converged; see {@link #readsThisConfig}. */
+  /** Whether this agent keeps the server converged; see {@link readsThisConfig}. */
   #convergingValue = false;
   get #converging(): boolean {
     return this.#convergingValue;
-  }
-
-  /**
-   * Whether the server reads the OpenCode config this agent writes, in the
-   * server's own words: `GET /api/config` names each config dir it loaded
-   * (`{type: "directory", path}`). Asked in the quiet location, where it
-   * starts no MCP server ({@link OPENCODE_QUIET_DIR}).
-   */
-  async #readsThisConfig(
-    client: OpencodeClient,
-    signal?: AbortSignal
-  ): Promise<boolean> {
-    const quiet = at(await quietDir());
-    const sources = answerOf(
-      await askOpencode((options) => client.config.get(quiet, options), signal),
-      "which config it reads"
-    ) as unknown as { type?: string; path?: string }[];
-    const dirs = sources
-      .filter((source) => source.type === "directory")
-      .map((source) => source.path);
-    if (dirs.includes(OPENCODE_DIR)) {
-      return true;
-    }
-    console.log(
-      JSON.stringify({
-        type: "config-convergence",
-        state: "idle",
-        detail: `server reads ${dirs.join(", ") || "no config dir"}, this agent writes ${OPENCODE_DIR}; not converging it`,
-        at: Date.now(),
-      })
-    );
-    return false;
   }
 
   /** Lock held while a config change is applied: spawns queue behind it. */
@@ -2348,7 +2293,7 @@ export class OpencodeHarness implements Harness {
    * {@link configHash} of opencode.json as it is on disk now, with the
    * placed servers' revision ({@link OPENCODE_PLACED_REVISION}), the fleet's
    * servers and the held catalog's entries for
-   * the providers this machine's servers serve ({@link #catalogDigest}).
+   * the providers this machine's servers serve ({@link catalogDigest}).
    * Null when opencode.json is missing or malformed.
    */
   async #hashConfig(): Promise<string | null> {
@@ -2365,7 +2310,7 @@ export class OpencodeHarness implements Harness {
     // The fleet's servers too: a server takes them in its launch config.
     const fleet = await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP);
     // The catalog too: a server reads it only as it starts.
-    const catalog = holdsCatalog() ? await this.#catalogDigest() : "";
+    const catalog = holdsCatalog() ? await catalogDigest() : "";
     if (!(placed || (fleet && Object.keys(fleet).length > 0) || catalog)) {
       return configHashed;
     }
@@ -2407,31 +2352,6 @@ export class OpencodeHarness implements Harness {
     const hash = configHash(config as Record<string, unknown>);
     this.#configHashed = { hash, text };
     return hash;
-  }
-
-  /**
-   * The held catalog's fingerprint over the providers this machine's
-   * servers can send a request to: Zen's (`opencode`, keyless), each CawCo
-   * account's here, each the machine's own OpenCode is signed in to, and
-   * each whose key is in the environment. A change to any other provider's
-   * entry replaces no server.
-   */
-  async #catalogDigest(): Promise<string> {
-    await opencodeModels.ready();
-    const providers = new Set<string>(["opencode"]);
-    for (const account of credentialAccountIds()) {
-      const held = readHeld(account);
-      if (held) {
-        providers.add(opencodeProviderOf(held.provider));
-      }
-    }
-    for (const integration of await opencodeOwnIntegrations()) {
-      providers.add(integration);
-    }
-    for (const keyed of opencodeModels.providersKeyedIn(process.env)) {
-      providers.add(keyed);
-    }
-    return opencodeModels.digest(providers);
   }
 
   /**
@@ -2687,7 +2607,7 @@ export class OpencodeHarness implements Harness {
       }
       const gone = slot.owner.active;
       console.info(
-        `[opencode] ${this.#slotName(slot)} server ${gone?.procId}/${gone?.pid}: no keeper holds it; a server on the current keeper takes its new sessions`
+        `[opencode] ${slotName(slot)} server ${gone?.procId}/${gone?.pid}: no keeper holds it; a server on the current keeper takes its new sessions`
       );
       slot.client = null;
       slot.ready = null;
@@ -2771,7 +2691,7 @@ export class OpencodeHarness implements Harness {
       slot.ready = null;
       slot.applied = null;
       console.info(
-        `[opencode] ${this.#slotName(slot)} server: no session on it for ${SERVER_IDLE_MS / 60_000} minutes`
+        `[opencode] ${slotName(slot)} server: no session on it for ${SERVER_IDLE_MS / 60_000} minutes`
       );
       await slot.owner.retireActive();
     }
@@ -2920,7 +2840,7 @@ export class OpencodeHarness implements Harness {
           await this.#replaceAccount(slot, launch, revision);
         } catch (error) {
           console.warn(
-            `[opencode] ${this.#slotName(slot)} server was not replaced: ${errorText(error)}; tried again on the next tick`
+            `[opencode] ${slotName(slot)} server was not replaced: ${errorText(error)}; tried again on the next tick`
           );
         }
       }
@@ -2962,7 +2882,7 @@ export class OpencodeHarness implements Harness {
           signal,
           launch
         );
-        await this.#putSlotCredential(slot, candidate);
+        await putSlotCredential(slot, candidate);
       },
       (identity) => {
         const client = this.#adopt(slot, identity);
@@ -3538,7 +3458,7 @@ export class OpencodeHarness implements Harness {
         launch,
         async (identity, signal) => {
           const candidate = this.#clientForGeneration(identity);
-          if (!(await this.#readsThisConfig(candidate, signal))) {
+          if (!(await readsThisConfig(candidate, signal))) {
             throw new Error("Candidate reads another global config root.");
           }
           await this.#verifyApply(
@@ -3864,7 +3784,7 @@ export class OpencodeHarness implements Harness {
     }
     const quiet = at(await quietDir());
     const [own, [integrations, models]] = await Promise.all([
-      this.#ownCredentials(),
+      ownCredentials(),
       askOpencode((options) =>
         Promise.all([
           client.integration.list(quiet, options),
@@ -4208,7 +4128,7 @@ export class OpencodeHarness implements Harness {
           this.#verifiedProcId !== identity.procId &&
           (await isMachineAgent())
         ) {
-          this.#convergingValue = await this.#readsThisConfig(client);
+          this.#convergingValue = await readsThisConfig(client);
         }
         if (this.#converging && this.#verifiedProcId !== identity.procId) {
           const origin = `active generation ${identity.procId}/${identity.pid}`;
@@ -4320,7 +4240,7 @@ export class OpencodeHarness implements Harness {
             );
           }
         }
-        await this.#putCredential(account, adopted);
+        await putCredential(account, adopted);
       } else {
         await this.#replaceAccount(slot, launch, revision);
       }
@@ -4393,7 +4313,7 @@ export class OpencodeHarness implements Harness {
         }
       );
       console.info(
-        `[opencode] ${this.#slotName(slot)} server ${active.procId}/${active.pid} ran on the host while the view did not: ended, and one in the view takes its sessions`
+        `[opencode] ${slotName(slot)} server ${active.procId}/${active.pid} ran on the host while the view did not: ended, and one in the view takes its sessions`
       );
       return slot.ready;
     }
@@ -4432,11 +4352,11 @@ export class OpencodeHarness implements Harness {
             slot.applied = revision;
           } catch (error) {
             console.info(
-              `[opencode] ${this.#slotName(slot)} server is on another binary; the watcher replaces it at rest (${errorText(error)})`
+              `[opencode] ${slotName(slot)} server is on another binary; the watcher replaces it at rest (${errorText(error)})`
             );
           }
         }
-        await this.#putSlotCredential(slot, adopted);
+        await putSlotCredential(slot, adopted);
       } else {
         await this.#replaceAccount(slot, launch, revision);
       }
@@ -4447,7 +4367,7 @@ export class OpencodeHarness implements Harness {
         );
       }
       console.info(
-        `[opencode] ${this.#slotName(slot)} server is ${slot.owner.active?.procId}/${slot.owner.active?.pid}, ${slot.owner.active && inView(view, slot.owner.active.pid) ? "in its view" : "on the host, its view not running"}`
+        `[opencode] ${slotName(slot)} server is ${slot.owner.active?.procId}/${slot.owner.active?.pid}, ${slot.owner.active && inView(view, slot.owner.active.pid) ? "in its view" : "on the host, its view not running"}`
       );
       return client;
     })()
@@ -4459,93 +4379,6 @@ export class OpencodeHarness implements Harness {
         slot.starting = false;
       });
     return slot.ready;
-  }
-
-  /**
-   * The credential a server of its own runs on: an account's, or, on a
-   * view's server for no account, the machine's own sign-ins, copied from the
-   * machine's server as each is there (`#ownCredentials`), each under its own
-   * id, which a copy made earlier keeps.
-   */
-  async #putSlotCredential(
-    slot: ServerSlot,
-    client: OpencodeClient
-  ): Promise<void> {
-    if (slot.account !== undefined) {
-      await this.#putCredential(slot.account, client);
-      return;
-    }
-    if (slot.view === undefined) {
-      return;
-    }
-    const own = await this.#ownCredentials();
-    const put = await askOpencode(async (options) => {
-      const stored = new Set(
-        (await client.credential.list(options)).map((entry) => entry.id)
-      );
-      for (const credential of own) {
-        if (!stored.has(credential.id)) {
-          await client.credential.create(
-            {
-              id: credential.id,
-              integrationID: credential.integrationID,
-              label: `The machine's own sign-in, for workspace ${slot.view?.slice(0, 8)}`,
-              value: credential.value as CredentialCreateInput["value"],
-              activate: true,
-            },
-            options
-          );
-        }
-      }
-    });
-    answerOf(put, `the machine's sign-ins on ${this.#slotName(slot)} server`);
-  }
-
-  /**
-   * The account's credential on its server, and no other of CawCo's: put
-   * under an id named for its value (`POST /api/credential`, then
-   * `/activate`, which applies from the next request), and every earlier one
-   * removed. CawCo keeps refreshing the account (pi-ai, 15 minutes ahead of
-   * expiry) and puts each new token on the server from outside, as here: a
-   * refresh in the server emits nothing a caller could follow (settled #8),
-   * and the marker in the refresh token's place keeps OpenCode from spending
-   * a rotating one. An account that holds nothing has nothing on its server.
-   */
-  async #putCredential(account: string, client: OpencodeClient): Promise<void> {
-    const held = readHeld(account);
-    const wanted = held ? opencodeCredentialOf(held) : undefined;
-    const id = wanted
-      ? `${CREDENTIAL_PREFIX}${createHash("sha256").update(JSON.stringify(wanted)).digest("hex").slice(0, 16)}`
-      : undefined;
-    const put = await askOpencode(async (options) => {
-      const stored = await client.credential.list(options);
-      if (wanted && id) {
-        if (!stored.some((entry) => entry.id === id)) {
-          await client.credential.create(
-            {
-              id,
-              integrationID: wanted.integrationID,
-              label: `CawCo account ${account}`,
-              // Read from the account's JSON file: every value in it is JSON.
-              value: wanted.value as CredentialCreateInput["value"],
-              activate: true,
-            },
-            options
-          );
-        }
-        await client.credential.activate({ credentialID: id }, options);
-      }
-      await Promise.all(
-        stored
-          .filter(
-            (entry) => entry.id.startsWith(CREDENTIAL_PREFIX) && entry.id !== id
-          )
-          .map((entry) =>
-            client.credential.remove({ credentialID: entry.id }, options)
-          )
-      );
-    });
-    answerOf(put, `account ${account}'s credential`);
   }
 
   /** {@link #readAccountCatalog} as a start of the account's server makes it: a failure is said, and the next start reads again. */
@@ -4913,7 +4746,7 @@ export class OpencodeHarness implements Harness {
       return false;
     }
     const client = this.#clientForGeneration(identity);
-    if (await this.#runningIn(client, directory)) {
+    if (await runningIn(client, directory)) {
       return false;
     }
     if (used() || this.#operationsPending()) {
@@ -4929,23 +4762,6 @@ export class OpencodeHarness implements Harness {
       `[opencode] ${directory}: location evicted by ${caller}, nothing attached and no turn running`
     );
     return true;
-  }
-
-  /** Whether the server runs any session in `directory` now; a read not answered is the caller's error, never "no". */
-  async #runningIn(
-    client: OpencodeClient,
-    directory: string
-  ): Promise<boolean> {
-    const sessions = answerOf(
-      await askOpencode(async (options) => {
-        const running = Object.keys(await client.session.active(options));
-        return await Promise.all(
-          running.map((sessionID) => client.session.get({ sessionID }, options))
-        );
-      }),
-      `which sessions run in ${directory}`
-    );
-    return sessions.some((session) => session.location.directory === directory);
   }
 
   /** Ends every generation's subscription loop; none reconnects. */
@@ -5294,7 +5110,7 @@ export class OpencodeHarness implements Harness {
       if (!(
         [...this.#sessions.values()].some(
           (session) => session.directory === dir
-        ) || (await this.#runningIn(client, dir))
+        ) || (await runningIn(client, dir))
       )) {
         answerOf(
           await askOpencode((options) =>
@@ -5781,33 +5597,9 @@ export class OpencodeHarness implements Harness {
     return this.#open(spec, ctx);
   }
 
-  // ----------------------------------------------------- session homes
-
-  async #homes(): Promise<Record<string, string>> {
-    return (await readJson<Record<string, string>>(SESSION_HOMES)) ?? {};
-  }
-
-  /** Records that `sessionId` (and its children) is in the database of `home`'s server ({@link homeOf}). */
-  async #setHome(sessionIds: string[], home: string): Promise<void> {
-    const homes = await this.#homes();
-    for (const id of sessionIds) {
-      homes[id] = home;
-    }
-    await writeJson(SESSION_HOMES, homes);
-  }
-
   /** The server whose database holds `sessionId`, started if it is not running. */
   async #homeClient(sessionId: string): Promise<OpencodeClient> {
-    return await this.#ensureHome((await this.#homes())[sessionId] ?? "");
-  }
-
-  /** A home in words, for the log ({@link homeOf}). */
-  #homeName(home: string): string {
-    const { account, view } = homeParts(home);
-    if (view !== undefined) {
-      return `workspace ${view.slice(0, 8)}'s view's`;
-    }
-    return account === undefined ? "the machine's" : `account ${account}'s`;
+    return await this.#ensureHome((await readHomes())[sessionId] ?? "");
   }
 
   /**
@@ -5818,7 +5610,7 @@ export class OpencodeHarness implements Harness {
    * where it is: a workspace cut again reopens it.
    */
   async #dropGoneViews(): Promise<void> {
-    const named = new Set(Object.values(await this.#homes()));
+    const named = new Set(Object.values(await readHomes()));
     for (const [home, slot] of [...this.#views]) {
       const view = slot.view as string;
       if (
@@ -5836,7 +5628,7 @@ export class OpencodeHarness implements Harness {
         await slot.owner.forget();
       } catch (error) {
         console.warn(
-          `[opencode] ${this.#slotName(slot)} server: not let go of yet: ${errorText(error)}`
+          `[opencode] ${slotName(slot)} server: not let go of yet: ${errorText(error)}`
         );
         continue;
       }
@@ -5865,7 +5657,7 @@ export class OpencodeHarness implements Harness {
    * one dir; a view's keeps its own (`prepareHome`).
    */
   async #bringHome(sessionId: string, to: string): Promise<void> {
-    const home = (await this.#homes())[sessionId] ?? "";
+    const home = (await readHomes())[sessionId] ?? "";
     if (home === to) {
       return;
     }
@@ -5933,7 +5725,7 @@ export class OpencodeHarness implements Harness {
           throw error;
         }
       }
-      await this.#setHome(
+      await setHome(
         exported.map((one) => one.info.id),
         to
       );
@@ -5941,7 +5733,7 @@ export class OpencodeHarness implements Harness {
         source.session.remove({ sessionID: sessionId }, options)
       );
       console.info(
-        `[opencode] session ${sessionId} moved from ${this.#homeName(home)} server to ${this.#homeName(to)}, with ${children.length} subagent session(s)`
+        `[opencode] session ${sessionId} moved from ${homeName(home)} server to ${homeName(to)}, with ${children.length} subagent session(s)`
       );
     })().finally(() => this.#moves.delete(sessionId));
     this.#moves.set(sessionId, moving);
@@ -6039,9 +5831,9 @@ export class OpencodeHarness implements Harness {
         )
       );
       sessionId = forked.id;
-      await this.#setHome(
+      await setHome(
         [sessionId],
-        (await this.#homes())[spec.resume.sessionKey] ?? ""
+        (await readHomes())[spec.resume.sessionKey] ?? ""
       );
       await this.#bringHome(sessionId, home);
     } else if (spec.resume) {
@@ -6094,7 +5886,7 @@ export class OpencodeHarness implements Harness {
         agent,
         ...(model ? { model: JSON.stringify(model) } : {}),
       };
-      await this.#setHome([sessionId], home);
+      await setHome([sessionId], home);
     }
     if (!ctx.recordSessionAddress) {
       throw new Error(
@@ -6590,7 +6382,7 @@ export class OpencodeHarness implements Harness {
       mcp,
       ...(memory ? { memory } : {}),
     });
-    if (!(await this.#runsHere())) {
+    if (!(await runsHere())) {
       // Its files are written, for the OpenCode put on later; with none
       // that CawCo runs here there is no server to start or read, so the
       // sync stops at them rather than failing every item of the pass.
@@ -6629,22 +6421,10 @@ export class OpencodeHarness implements Harness {
     return report;
   }
 
-  /**
-   * An OpenCode CawCo runs is here (tools.ts `toolGate`). One missing, or at
-   * another version, is said where it blocks (the machine's harness block),
-   * once; the fleet's sync and reads leave its server alone, so its refusal
-   * never fails the items every other harness converged
-   * (niftybot.art, 2026-10-23: 141 of 141 "not set up", each with
-   * "OpenCode isn't installed on this machine").
-   */
-  async #runsHere(): Promise<boolean> {
-    return !(await toolGate(OPENCODE_SPEC)).refused;
-  }
-
   async fleetStatus(): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(OPENCODE_SIDECAR);
     const report: FleetSyncReport = {
-      mcp: (await this.#runsHere())
+      mcp: (await runsHere())
         ? await this.#readFleetMcp(sidecar.mcp ?? [], "latest")
         : {},
       marketplaces: {},
@@ -6727,52 +6507,6 @@ export class OpencodeHarness implements Harness {
           state: "pending",
           detail: `OpenCode had not loaded its new config ${CONFIG_SETTLE_TIMEOUT_MS / 1000} s after it was written.`,
         };
-      default: {
-        const unhandled: never = settled;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
-    }
-  }
-
-  /**
-   * The server's MCP list once none of `names` is still `pending`: 2.0
-   * connects a location's servers after it answers, so a read right after a
-   * boot names them connecting. Bounded by the startup timeout each fleet
-   * server is written with ({@link MCP_CONNECT_MS}, toOpencodeMcp) and 30 s
-   * more for a cold machine (CawCo's own margin), so OpenCode's own verdict
-   * on a server is what is read, never a cut-off of ours. The wait is one
-   * read given that time; when it ends, the last list the server gave is
-   * what it said, and none at all is said as not answered.
-   */
-  async #settledMcpList(client: OpencodeClient, names: string[]) {
-    type Listed = Awaited<ReturnType<OpencodeClient["mcp"]["list"]>>;
-    let last: Listed | undefined;
-    const settled = await readWithin(
-      MCP_CONNECT_MS + 30_000,
-      async (signal): Promise<Listed> => {
-        for (;;) {
-          signal.throwIfAborted();
-          const listed = await client.mcp.list({}, { signal });
-          last = listed;
-          const connecting = names.some((name) => {
-            const server = listed.data.find((one) => one.name === name);
-            return !server || server.status.status === "pending";
-          });
-          if (!connecting) {
-            return listed;
-          }
-          await Bun.sleep(250);
-        }
-      }
-    );
-    switch (settled.kind) {
-      case "answered":
-        return settled.value;
-      case "unanswered":
-        if (last) {
-          return last;
-        }
-        throw new Error(notAnswered("its MCP server list", settled));
       default: {
         const unhandled: never = settled;
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
@@ -7067,7 +6801,7 @@ export class OpencodeHarness implements Harness {
   /**
    * The fleet servers' states on the machine's active generation, read on
    * the location of its own directory once none is still connecting
-   * ({@link #settledMcpList}), each in OpenCode's own words. A server
+   * ({@link settledMcpList}), each in OpenCode's own words. A server
    * OpenCode holds failed is said so, with the pass that starts it again
    * ({@link #heardFleetMcp}). The location is borrowed for the read: the
    * read boots it when none runs, and it is released after, as a session's
@@ -7160,7 +6894,7 @@ export class OpencodeHarness implements Harness {
       // The server's own directory: a read there boots its location, which
       // may also hold live sessions. Its release shares the location
       // release's attachment and running checks.
-      const listed = await this.#settledMcpList(client, names);
+      const listed = await settledMcpList(client, names);
       const byName = new Map(
         listed.data.map((server) => [server.name, server.status] as const)
       );
@@ -7200,6 +6934,274 @@ export class OpencodeHarness implements Harness {
       };
     }
   }
+}
+
+/**
+ * The credential a server of its own runs on: an account's, or, on a
+ * view's server for no account, the machine's own sign-ins, copied from the
+ * machine's server as each is there (`ownCredentials`), each under its own
+ * id, which a copy made earlier keeps.
+ */
+async function putSlotCredential(
+  slot: ServerSlot,
+  client: OpencodeClient
+): Promise<void> {
+  if (slot.account !== undefined) {
+    await putCredential(slot.account, client);
+    return;
+  }
+  if (slot.view === undefined) {
+    return;
+  }
+  const own = await ownCredentials();
+  const put = await askOpencode(async (options) => {
+    const stored = new Set(
+      (await client.credential.list(options)).map((entry) => entry.id)
+    );
+    for (const credential of own) {
+      if (!stored.has(credential.id)) {
+        await client.credential.create(
+          {
+            id: credential.id,
+            integrationID: credential.integrationID,
+            label: `The machine's own sign-in, for workspace ${slot.view?.slice(0, 8)}`,
+            value: credential.value as CredentialCreateInput["value"],
+            activate: true,
+          },
+          options
+        );
+      }
+    }
+  });
+  answerOf(put, `the machine's sign-ins on ${slotName(slot)} server`);
+}
+
+/** Records that `sessionId` (and its children) is in the database of `home`'s server ({@link homeOf}). */
+async function setHome(sessionIds: string[], home: string): Promise<void> {
+  const homes = await readHomes();
+  for (const id of sessionIds) {
+    homes[id] = home;
+  }
+  await writeJson(SESSION_HOMES, homes);
+}
+
+// ----------------------------------------------------- session homes
+async function readHomes(): Promise<Record<string, string>> {
+  return (await readJson<Record<string, string>>(SESSION_HOMES)) ?? {};
+}
+
+/**
+ * An OpenCode CawCo runs is here (tools.ts `toolGate`). One missing, or at
+ * another version, is said where it blocks (the machine's harness block),
+ * once; the fleet's sync and reads leave its server alone, so its refusal
+ * never fails the items every other harness converged
+ * (niftybot.art, 2026-10-23: 141 of 141 "not set up", each with
+ * "OpenCode isn't installed on this machine").
+ */
+async function runsHere(): Promise<boolean> {
+  return !(await toolGate(OPENCODE_SPEC)).refused;
+}
+
+/**
+ * The server's MCP list once none of `names` is still `pending`: 2.0
+ * connects a location's servers after it answers, so a read right after a
+ * boot names them connecting. Bounded by the startup timeout each fleet
+ * server is written with ({@link MCP_CONNECT_MS}, toOpencodeMcp) and 30 s
+ * more for a cold machine (CawCo's own margin), so OpenCode's own verdict
+ * on a server is what is read, never a cut-off of ours. The wait is one
+ * read given that time; when it ends, the last list the server gave is
+ * what it said, and none at all is said as not answered.
+ */
+async function settledMcpList(client: OpencodeClient, names: string[]) {
+  type Listed = Awaited<ReturnType<OpencodeClient["mcp"]["list"]>>;
+  let last: Listed | undefined;
+  const settled = await readWithin(
+    MCP_CONNECT_MS + 30_000,
+    async (signal): Promise<Listed> => {
+      for (;;) {
+        signal.throwIfAborted();
+        const listed = await client.mcp.list({}, { signal });
+        last = listed;
+        const connecting = names.some((name) => {
+          const server = listed.data.find((one) => one.name === name);
+          return !server || server.status.status === "pending";
+        });
+        if (!connecting) {
+          return listed;
+        }
+        await Bun.sleep(250);
+      }
+    }
+  );
+  switch (settled.kind) {
+    case "answered":
+      return settled.value;
+    case "unanswered":
+      if (last) {
+        return last;
+      }
+      throw new Error(notAnswered("its MCP server list", settled));
+    default: {
+      const unhandled: never = settled;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+
+/** A home in words, for the log ({@link homeOf}). */
+function homeName(home: string): string {
+  const { account, view } = homeParts(home);
+  if (view !== undefined) {
+    return `workspace ${view.slice(0, 8)}'s view's`;
+  }
+  return account === undefined ? "the machine's" : `account ${account}'s`;
+}
+
+/** Whether the server runs any session in `directory` now; a read not answered is the caller's error, never "no". */
+async function runningIn(
+  client: OpencodeClient,
+  directory: string
+): Promise<boolean> {
+  const sessions = answerOf(
+    await askOpencode(async (options) => {
+      const running = Object.keys(await client.session.active(options));
+      return await Promise.all(
+        running.map((sessionID) => client.session.get({ sessionID }, options))
+      );
+    }),
+    `which sessions run in ${directory}`
+  );
+  return sessions.some((session) => session.location.directory === directory);
+}
+
+/**
+ * The account's credential on its server, and no other of CawCo's: put
+ * under an id named for its value (`POST /api/credential`, then
+ * `/activate`, which applies from the next request), and every earlier one
+ * removed. CawCo keeps refreshing the account (pi-ai, 15 minutes ahead of
+ * expiry) and puts each new token on the server from outside, as here: a
+ * refresh in the server emits nothing a caller could follow (settled #8),
+ * and the marker in the refresh token's place keeps OpenCode from spending
+ * a rotating one. An account that holds nothing has nothing on its server.
+ */
+async function putCredential(
+  account: string,
+  client: OpencodeClient
+): Promise<void> {
+  const held = readHeld(account);
+  const wanted = held ? opencodeCredentialOf(held) : undefined;
+  const id = wanted
+    ? `${CREDENTIAL_PREFIX}${createHash("sha256").update(JSON.stringify(wanted)).digest("hex").slice(0, 16)}`
+    : undefined;
+  const put = await askOpencode(async (options) => {
+    const stored = await client.credential.list(options);
+    if (wanted && id) {
+      if (!stored.some((entry) => entry.id === id)) {
+        await client.credential.create(
+          {
+            id,
+            integrationID: wanted.integrationID,
+            label: `CawCo account ${account}`,
+            // Read from the account's JSON file: every value in it is JSON.
+            value: wanted.value as CredentialCreateInput["value"],
+            activate: true,
+          },
+          options
+        );
+      }
+      await client.credential.activate({ credentialID: id }, options);
+    }
+    await Promise.all(
+      stored
+        .filter(
+          (entry) => entry.id.startsWith(CREDENTIAL_PREFIX) && entry.id !== id
+        )
+        .map((entry) =>
+          client.credential.remove({ credentialID: entry.id }, options)
+        )
+    );
+  });
+  answerOf(put, `account ${account}'s credential`);
+}
+
+/**
+ * The held catalog's fingerprint over the providers this machine's
+ * servers can send a request to: Zen's (`opencode`, keyless), each CawCo
+ * account's here, each the machine's own OpenCode is signed in to, and
+ * each whose key is in the environment. A change to any other provider's
+ * entry replaces no server.
+ */
+async function catalogDigest(): Promise<string> {
+  await opencodeModels.ready();
+  const providers = new Set<string>(["opencode"]);
+  for (const account of credentialAccountIds()) {
+    const held = readHeld(account);
+    if (held) {
+      providers.add(opencodeProviderOf(held.provider));
+    }
+  }
+  for (const integration of await opencodeOwnIntegrations()) {
+    providers.add(integration);
+  }
+  for (const keyed of opencodeModels.providersKeyedIn(process.env)) {
+    providers.add(keyed);
+  }
+  return opencodeModels.digest(providers);
+}
+
+/**
+ * Whether the server reads the OpenCode config this agent writes, in the
+ * server's own words: `GET /api/config` names each config dir it loaded
+ * (`{type: "directory", path}`). Asked in the quiet location, where it
+ * starts no MCP server ({@link OPENCODE_QUIET_DIR}).
+ */
+async function readsThisConfig(
+  client: OpencodeClient,
+  signal?: AbortSignal
+): Promise<boolean> {
+  const quiet = at(await quietDir());
+  const sources = answerOf(
+    await askOpencode((options) => client.config.get(quiet, options), signal),
+    "which config it reads"
+  ) as unknown as { type?: string; path?: string }[];
+  const dirs = sources
+    .filter((source) => source.type === "directory")
+    .map((source) => source.path);
+  if (dirs.includes(OPENCODE_DIR)) {
+    return true;
+  }
+  console.log(
+    JSON.stringify({
+      type: "config-convergence",
+      state: "idle",
+      detail: `server reads ${dirs.join(", ") || "no config dir"}, this agent writes ${OPENCODE_DIR}; not converging it`,
+      at: Date.now(),
+    })
+  );
+  return false;
+}
+
+/**
+ * OpenCode's own sign-ins on this machine: the credential each provider
+ * uses on the machine's server, its active one per integration, read from
+ * the machine's database in place ({@link opencodeOwnCredentialRows}), so
+ * the hub's read of them at each connection starts no server. CawCo's own
+ * (`cred_cawco_…`) are on account servers only, and never listed.
+ */
+async function ownCredentials(): Promise<OpencodeOwnCredential[]> {
+  return (await opencodeOwnCredentialRows()).filter(
+    (entry) => !entry.id.startsWith(CREDENTIAL_PREFIX)
+  );
+}
+
+/** A slot's server in words, for the log. */
+function slotName(slot: ServerSlot): string {
+  if (slot.view !== undefined) {
+    return `workspace ${slot.view.slice(0, 8)}'s view's`;
+  }
+  return slot.account === undefined
+    ? "the machine's"
+    : `account ${slot.account}'s`;
 }
 
 export const opencodeHarness: Harness = new OpencodeHarness();
