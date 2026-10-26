@@ -1,7 +1,10 @@
 /**
- * A delegation workspace's private copy of the folder it was made from: the
- * one way any folder becomes a workspace, a repository's root or any other
- * (`/etc/nginx`, `/root`, a home), on either OS. The delegate's writes are
+ * A folder workspace's private copy of the folder it was made from: how any
+ * folder that is no git repository becomes a workspace (`/etc/nginx`,
+ * `/root`, a home), on either OS. A git repository's workspace is a clone of
+ * its own instead (clone.ts, workspace.ts `cutClone`), which this module
+ * names as the `clone` form so every reader of a workspace's copy asks one
+ * place ({@link layerOf}). The delegate's writes are
  * its own; the folder (`F`) is never written until its change set lands
  * ({@link applyChanges}), by the agent on its machine, outside every wall.
  *
@@ -35,14 +38,9 @@
  *   `resolveReal`). The delegate does not see the person's edits made after
  *   the clone.
  *
- * A linked worktree (its `.git` a file naming the person's git dirs) gets a
- * copy like any repository's, whose `.git` is then made a repository of its
- * own that borrows the person's objects (workspace.ts `ownRepository`): no
- * git dir of the person's is written.
- *
- * A clone cut by a build before layers (`~/.worktrees/<repo>-<id8>`, a git
- * clone of its own) is a `copy` with no base: its path is CawCo's own folder,
- * its git holds its work, and it retires as a copy does ({@link layerOf}).
+ * A repository's clone (`~/.worktrees/<repo>-<id8>`, a git clone of its
+ * own, its work in its git) has no layer record: it is the `clone` form,
+ * known by its path ({@link layerOf}), and retires as a copy of its own does.
  *
  * The change set ({@link changesOf}) is the upper on Linux and the clone's
  * differences from its base on the Mac, the root `node_modules` and CawCo's
@@ -79,20 +77,19 @@ import type {
 } from "@cawco/core";
 import { claudeHome, workspacesDir } from "@cawco/core/paths";
 import { commandLine } from "@cawco/core/process-identity";
-import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import {
-  cloneDenies,
-  personUntrackedIn,
-  withPersonUntracked,
-} from "@cawco/core/workspace-policy";
+import { cloneDenies } from "@cawco/core/workspace-policy";
 import { removeTree } from "./remove-tree";
 import { SYSTEM_PATH } from "./workspace-needs";
 
-/** How a workspace holds its private copy on its machine. */
-export type LayerForm = "overlay" | "copy";
+/**
+ * How a workspace holds its private copy on its machine: a folder's view of
+ * it (`overlay`, Linux) or APFS clone (`copy`, macOS), or a repository's git
+ * clone of its own (`clone`).
+ */
+export type LayerForm = "overlay" | "copy" | "clone";
 
 /** One overlay of a Linux view: a filesystem at or under F, its upper and work dirs. */
 export interface LayerMount {
@@ -108,20 +105,13 @@ export interface LayerMount {
  * whole.
  */
 export interface Layer {
-  /** Copy: the folder's start, an APFS clone the change set is read against. Absent for a clone cut before layers. */
+  /** Copy: the folder's start, an APFS clone the change set is read against. Absent for a clone. */
   base?: string;
-  /** The folder the workspace was made from, at its real path. */
+  /** The folder the workspace was made from, at its real path; none on record for a clone. */
   folder: string;
   form: LayerForm;
-  /** A repository's root (its `.git` a directory, or a file naming one), or any other folder. */
+  /** `folder` for a layer, `repo` for a clone (core `WorkspaceKind`). */
   kind: WorkspaceKind;
-  /**
-   * A linked worktree's (or a submodule's checkout's) git dirs, when F's
-   * `.git` is a file naming them ({@link kindOf}): the copy's `.git` is a
-   * repository of its own borrowing `common`'s objects (workspace.ts
-   * `ownRepository`), which its boundary reads (core workspace-policy.ts).
-   */
-  linked?: LinkedGit;
   /** Whether the copy is whole: one that is not was cut short, and is cleared. */
   made: boolean;
   /** Copy: whether the root `node_modules` is still F's, by a link ({@link LINKED_MODULES}). */
@@ -138,16 +128,6 @@ export interface Layer {
   seen?: Record<string, number>;
   /** When the delegate's view of F began (epoch ms): the line a conflict is read from. */
   started: number;
-}
-
-/**
- * A linked worktree's git dirs, as git resolves its `.git` file
- * (gitrepository-layout(5)): its own (`gitDir`, where its HEAD and index
- * are) and the common one (`common`, its objects, refs and config).
- */
-export interface LinkedGit {
-  common: string;
-  gitDir: string;
 }
 
 /** The folder a workspace's layer keeps its own files in. */
@@ -169,12 +149,12 @@ export const writeLayer = (id: string, layer: Layer): Promise<void> =>
   writeStateFile(layerFile(id), `${JSON.stringify(layer, null, 2)}\n`);
 
 /**
- * Workspace `id`'s layer: its record, or, for a clone cut by a build before
- * layers (no record, a folder where such a build cut workspace `id`'s
- * clone: `~/.worktrees/<repo>-<id8>`, and nowhere else, so a person's own
- * folder is never taken for one), a `copy` of its own with no base and no
- * folder of origin on record. Every such clone held a repository; one whose
- * `.git` was deleted since is read as a husk (stand-ins.ts `straysIn`).
+ * Workspace `id`'s layer: a folder's record, or, for a repository's clone (no
+ * record, a folder where workspace `id`'s clone is cut:
+ * `~/.worktrees/<repo>-<id8>`, and nowhere else, so a person's own folder is
+ * never taken for one), the `clone` form, with no base and no folder of
+ * origin on record. Every clone held a repository; one whose `.git` was
+ * deleted since is read as a husk (stand-ins.ts `straysIn`).
  */
 export const layerOf = async (
   id: string,
@@ -184,7 +164,7 @@ export const layerOf = async (
   if (layer) {
     return layer;
   }
-  if (!cutBeforeLayers(id, path)) {
+  if (!clonePath(id, path)) {
     return;
   }
   const there = await lstat(path).catch(() => undefined);
@@ -193,7 +173,7 @@ export const layerOf = async (
   }
   return {
     folder: "",
-    form: "copy",
+    form: "clone",
     kind: "repo",
     made: true,
     path,
@@ -219,19 +199,19 @@ export const overlaySync = (id: string): boolean =>
   layerSync(id)?.form === "overlay";
 
 /**
- * Whether `path` is where a build before layers cut workspace `id`'s clone
- * ({@link layerOf}), `~/.worktrees/<repo>-<id8>`, or where a place's stage
- * clone is cut (stage-clone.ts `stageCloneOf`, `<repo>-stage-<id8>` there):
- * a git clone of the workspace's own, never a person's folder.
+ * Whether `path` is where workspace `id`'s clone is cut ({@link layerOf}),
+ * `~/.worktrees/<repo>-<id8>`, or where a place's stage clone is cut
+ * (stage-clone.ts `stageCloneOf`, `<repo>-stage-<id8>` there): a git clone
+ * of the workspace's own, never a person's folder.
  */
-const cutBeforeLayers = (id: string, path: string): boolean =>
+const clonePath = (id: string, path: string): boolean =>
   dirname(path) === join(homedir(), ".worktrees") &&
   basename(path).endsWith(`-${id.slice(0, 8)}`);
 
 /**
  * Whether workspace `id`'s `path` is a folder of its own (read from its
- * record, synchronously): a copy (macOS), or a clone cut before layers or a
- * stage clone ({@link cutBeforeLayers}), so whatever runs or stands there is
+ * record, synchronously): a copy (macOS), or a repository's clone or a
+ * stage clone ({@link clonePath}), so whatever runs or stands there is
  * the workspace's. Never for a Linux view, whose path is the person's folder,
  * nor for a workspace whose layer is gone or was never made and whose path
  * is no clone of its own: its path names the person's folder, where the
@@ -242,7 +222,7 @@ export const ownFolderSync = (id: string, path: string): boolean => {
   const layer = layerSync(id);
   return layer
     ? layer.form === "copy" && layer.path !== layer.folder
-    : cutBeforeLayers(id, path);
+    : clonePath(id, path);
 };
 
 /** Whether workspace `id` is a copy of a folder that is no repository (read from its record, synchronously). */
@@ -793,42 +773,35 @@ export const ownModules = (id: string): Promise<void> => {
 
 // --------------------------------------------------------------- the making
 
+/** bubblewrap's `--overlay-src` and `--overlay`, which a Linux view is mounted by, came in bubblewrap 0.11.0. */
+const OVERLAY_BWRAP: readonly [number, number] = [0, 11];
+
+const BWRAP_VERSION = /bubblewrap (\d+)\.(\d+)/;
+
 /**
- * What `folder` is: a repository's root whose `.git` is a directory of its
- * own; one whose `.git` is a file naming its git dirs (a linked worktree,
- * `git worktree add`, or a submodule's checkout), those dirs as git reads
- * them, read only; or any other folder.
+ * Refuses a Linux view of `folder` where this machine's bubblewrap is older
+ * than {@link OVERLAY_BWRAP}, in words that say so, before anything of the
+ * layer is made: Ubuntu 24.04 ships 0.9.0, whose bwrap refused the view with
+ * "Unknown option --overlay-src" (the release's stage-2 rig, 2026-10-26).
+ * A git repository's workspace is a clone, which needs no overlay.
  */
-const kindOf = async (
-  folder: string
-): Promise<{ kind: WorkspaceKind; linked?: LinkedGit }> => {
-  const git = await lstat(join(folder, ".git")).catch(() => undefined);
-  if (git?.isDirectory()) {
-    return { kind: "repo" };
-  }
-  if (!git?.isFile()) {
-    return { kind: "folder" };
-  }
-  const ran = Bun.spawnSync(
-    [
-      "git",
-      ...SAFE_GIT_FLAGS,
-      "-C",
-      folder,
-      "rev-parse",
-      "--path-format=absolute",
-      "--absolute-git-dir",
-      "--git-common-dir",
-    ],
-    { env: { ...hostEnvironment(), ...SAFE_GIT_ENV }, stderr: "pipe" }
-  );
-  const [gitDir, common] = ran.stdout.toString().trim().split("\n");
-  if (ran.exitCode !== 0 || !(gitDir && common)) {
+const refuseOldBwrap = (folder: string): void => {
+  const ran = Bun.spawnSync([systemTool("bwrap"), "--version"], {
+    env: { ...hostEnvironment(), PATH: SYSTEM_PATH },
+    stderr: "pipe",
+  });
+  const said = ran.stdout.toString().trim();
+  const found = BWRAP_VERSION.exec(said);
+  const [major, minor] = OVERLAY_BWRAP;
+  const old =
+    !found ||
+    Number(found[1]) < major ||
+    (Number(found[1]) === major && Number(found[2]) < minor);
+  if (old) {
     throw new Error(
-      `${join(folder, ".git")} is a file that git does not follow to a repository, so ${folder} cannot have a workspace: ${ran.stderr.toString().trim() || `git exited ${ran.exitCode}`}`
+      `${folder} is no git repository, so its workspace is a private view of it, which needs bubblewrap ${major}.${minor} or later; this machine has ${said || "a bubblewrap that does not say its version"}. Install a newer bubblewrap, or delegate in a git repository, whose workspace is a clone of its own.`
     );
   }
-  return { kind: "repo", linked: { common, gitDir } };
 };
 
 /**
@@ -842,9 +815,10 @@ export const makeLayer = async (
   folder: string,
   path: string
 ): Promise<Layer> => {
-  const { kind, linked: git } = await kindOf(folder);
+  const kind: WorkspaceKind = "folder";
   const started = Date.now();
   if (process.platform === "linux") {
+    refuseOldBwrap(folder);
     const dir = layerDir(id);
     const mounts = [folder, ...mountsUnder(folder).layered].map((at, n) => ({
       at,
@@ -855,7 +829,6 @@ export const makeLayer = async (
       folder,
       form: "overlay",
       kind,
-      ...(git ? { linked: git } : {}),
       made: false,
       mounts,
       path: folder,
@@ -871,7 +844,6 @@ export const makeLayer = async (
     folder,
     form: "copy",
     kind,
-    ...(git ? { linked: git } : {}),
     made: false,
     path,
     started,
@@ -907,7 +879,7 @@ export const markMade = async (id: string): Promise<void> => {
 /**
  * Removes workspace `id`'s layer: its view's processes ended and its layer
  * dir gone (Linux; F is never touched), or the clone and its base (macOS,
- * and a clone cut before layers). Throws, nothing removed, when a process of
+ * and a repository's clone). Throws, nothing removed, when a process of
  * the view will not end.
  */
 export const removeLayer = async (id: string, layer: Layer): Promise<void> => {
@@ -1144,107 +1116,6 @@ const delegateFile = (layer: Layer, rel: string): string | undefined => {
 };
 
 /**
- * Whether `rel` of a Linux view's folder is the delegate's own write: an
- * entry of the view's upper (a whiteout is a deletion, none). One only the
- * lower holds is the folder's own, the person's, the view showing it live:
- * a file the person made there since the view began reads in the view as
- * an untracked one, and is never the workspace's work. Every path of a copy
- * of its own is its own: it sees none of the folder's later files.
- */
-export const ownWrite = async (layer: Layer, rel: string): Promise<boolean> => {
-  if (layer.form === "copy") {
-    return true;
-  }
-  const upper = delegateFile(layer, rel);
-  const info = upper ? await lstat(upper).catch(() => undefined) : undefined;
-  return info !== undefined && !(info.isCharacterDevice() && info.rdev === 0);
-};
-
-/** Each view's {@link markPersonsOwn} under way: one at a time per workspace. */
-const marking = new Map<string, Promise<void>>();
-
-/**
- * A repository's Linux view's block of the person's own untracked files
- * (workspace.ts `excludeStart`) brought up to now: the view shows the
- * folder live, so a file the person made there since the view began reads
- * in it as untracked. Each untracked path git lists in the view that is not
- * the delegate's own write ({@link ownWrite}) joins the block, with those it
- * named already, so neither the delegate's finish_item, the landing's
- * check for uncommitted changes, an archive's holding nor a carry reads the
- * person's file as the workspace's work, and `git add -A` there leaves it
- * out. Run before the hub's every command in such a workspace (hub-command.ts
- * `runHubCommand`) and before an archive reads it; nothing for a copy of its
- * own, which sees none of the folder's later files.
- */
-export const markPersonsOwn = (workspace: {
-  id: string;
-  path: string;
-}): Promise<void> => {
-  const pending = marking.get(workspace.id);
-  if (pending) {
-    return pending;
-  }
-  const work = (async () => {
-    const layer = await readLayer(workspace.id).catch(() => undefined);
-    if (!(layer?.form === "overlay" && layer.kind === "repo" && layer.made)) {
-      return;
-    }
-    const pid = await ensureView(workspace.id, layer);
-    const listed = Bun.spawn(
-      viewArgv(pid, workspace.path, [
-        "git",
-        ...SAFE_GIT_FLAGS,
-        "ls-files",
-        "-z",
-        "--others",
-        "--exclude-standard",
-      ]),
-      {
-        cwd: "/",
-        env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-      }
-    );
-    const [out, err, code] = await Promise.all([
-      new Response(listed.stdout).text(),
-      new Response(listed.stderr).text(),
-      listed.exited,
-    ]);
-    if (code !== 0) {
-      throw new Error(
-        `workspace ${workspace.id}'s untracked files were not read: ${err.trim() || `git exited ${code}`}`
-      );
-    }
-    const untracked = out.split("\0").filter(Boolean);
-    const own = await Promise.all(
-      untracked.map((file) => ownWrite(layer, file))
-    );
-    const persons = untracked.filter((_, at) => !own[at]);
-    if (persons.length === 0) {
-      return;
-    }
-    const exclude = viewPath(
-      pid,
-      join(workspace.path, ".git", "info", "exclude")
-    );
-    const before = await readFile(exclude, "utf8").catch(() => "");
-    await writeStateFile(
-      exclude,
-      withPersonUntracked(before, [
-        ...new Set([...personUntrackedIn(before), ...persons]),
-      ])
-    );
-    console.info(
-      `[workspace] ${workspace.id}: ${persons.length} untracked file(s) the person made in ${layer.folder} since its view began are theirs, kept out of its status: ${persons.slice(0, 5).join(", ")}${persons.length > 5 ? ", …" : ""}`
-    );
-  })().finally(() => marking.delete(workspace.id));
-  marking.set(workspace.id, work);
-  return work;
-};
-
-/**
  * Workspace `id`'s change set: every path of F the delegate wrote or
  * deleted, read on the host from its upper dirs (Linux) or its copy against
  * the base (macOS), CawCo's own paths left out ({@link notCarried}).
@@ -1263,7 +1134,7 @@ export const changesOf = async (layer: Layer): Promise<ChangedPath[]> => {
     candidates = await copyChanges(layer.path, layer.base, skip);
   } else {
     throw new Error(
-      `${layer.path} is a clone cut before layers, with no base to read its changes against`
+      `${layer.path} is a repository's clone, which lands by git, with no base to read changes against`
     );
   }
   const differ = await Promise.all(

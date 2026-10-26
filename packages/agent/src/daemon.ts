@@ -406,7 +406,8 @@ import { onToolsMoved, probeTools } from "./tools";
 import { UsageScans } from "./usage/scans";
 import {
   archiveWorkspace,
-  clearUnmadeLayers,
+  clearUnfinished,
+  clearUnmarkedHusks,
   createWorkspace,
   discardWorkspace,
   workspaceApply,
@@ -3084,6 +3085,10 @@ const attach = (
           Partial<HeartbeatAckPayload> | undefined;
         supervisor.keepAwake(beat?.keepAwake);
         liveWorkItems(beat?.liveWorkspaces);
+        // Once the hub has said which workspaces are live: the clones cuts of
+        // an earlier build left behind are cleared (workspace.ts). Once per
+        // agent; it never throws.
+        clearUnmarkedHusks(beat?.liveWorkspaces);
         takeSessionLimits(beat?.sessionLimits);
         takeUpstream(beat?.upstream);
         followHub(beat?.tailnetHttps);
@@ -3335,10 +3340,11 @@ export const startDaemon = (rediscover = false) =>
         )
       )
     );
-    // Before any create: each layer its last process left unmade is cleared
+    // Before any create: each layer its last process left unmade, and each
+    // cut it left under way that holds only what that cut wrote, is cleared
     // (workspace.ts). Begun, not awaited: every create waits for it, nothing
     // else does.
-    clearUnmadeLayers();
+    clearUnfinished();
     // First: CLIs already running read their workspace's hook on every shell
     // call, and one an earlier build wrote runs what this build no longer has.
     // Begun, not awaited: registration and custody go on meanwhile, and each

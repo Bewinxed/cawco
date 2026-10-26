@@ -29,7 +29,7 @@
  * In a Linux view the link is made through the view (layer.ts
  * `copyPathSync`), so it is the view's own, in its upper: the person's
  * folder is never written, and the change set never carries it (layer.ts
- * `notCarried`). In a clone cut before layers it is made in the clone.
+ * `notCarried`). In a repository's clone it is made in the clone.
  *
  * Made at every boundary start, only where bun installs (a `bun.lock` or
  * `bun.lockb` at the root) and nothing is there yet: a `node_modules` the
