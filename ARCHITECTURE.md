@@ -255,8 +255,8 @@ directly or, for a provider that identifies clients by a metadata document,
 through `cawco.dev/oauth/callback`; completion updates the dashboard and
 reconnects the fleet's servers.
 
-Every harness reaches `/mcp/cawco` and the fleet proxy on loopback: the hub
-itself on the hub's machine, elsewhere its own agent's MCP gateway at
+Every harness reaches `/mcp/cawco` and the fleet proxy through its own
+agent's MCP gateway on loopback, the hub's machine included, at
 `127.0.0.1:14060` (core `CAWCO_MCP_DEFAULT_PORT`, below Linux's ephemeral
 range). A second agent on one host (a rig, a dev checkout) names another port
 with `CAWCO_MCP_PORT`; the agent logs the port it serves on. Its sessions'

@@ -1,7 +1,7 @@
 /**
  * The CawCo tool calls this hub is answering, from any machine: what a restart
- * of the hub would cut. Every harness reaches `/mcp/cawco` (directly on the
- * hub's machine, through its agent's gateway elsewhere), and a restart drops
+ * of the hub would cut. Every harness reaches `/mcp/cawco` through its
+ * machine's agent gateway, and a restart drops
  * every call held open there, up to a day long. The hub's machine reads this
  * before its update restarts the hub, and raises the fence below for the
  * moment between its last look and the restart.

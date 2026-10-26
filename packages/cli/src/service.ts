@@ -2028,7 +2028,7 @@ const restartDecision = ({
       kind: "refuse",
       reason:
         id === "agent"
-          ? `this machine's agent did not say what a restart would cut (${cut.unknown}), so it was left alone. Restart anyway with --force.`
+          ? `this machine's agent did not say what a restart would cut (${cut.unknown}), so it was left alone: work it carries itself, such as a session takeover after an update, would end. Restart anyway with --force.`
           : `could not ask the hub whether this machine's sessions are mid-turn (${cut.unknown}), and ${RESTART_COST.sessiond}. Restart anyway with --force.`,
     };
   }
