@@ -1989,30 +1989,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
 
   /**
+   * The artifacts the session can name and read ({@link readable}), each
+   * once, those it answers first: its own, its project's it answers, its
+   * delegation tree's, its project's pages and those of the projects it
+   * leads.
+   */
+  const nameable = (instance: InstanceRow): ArtifactRow[] => {
+    const seen = new Map<string, ArtifactRow>();
+    const holders = holdersInTree(instance);
+    const pagesOf = (projectId: string) =>
+      db.ofProject(projectId).filter((one) => one.kind === "page");
+    for (const row of [
+      ...answerable(instance, holders),
+      ...ofTree(instance, holders),
+      ...(instance.projectId ? pagesOf(instance.projectId) : []),
+      ...deps.ledProjects(instance).flatMap(pagesOf),
+    ]) {
+      if (!seen.has(row.id)) {
+        seen.set(row.id, row);
+      }
+    }
+    return [...seen.values()];
+  };
+
+  /**
    * The artifact `asked` names for `instance`: a whole id as given, else its
-   * handle or its name among the artifacts the session can name (its own,
-   * its project's it answers, its delegation tree's, its project's pages),
-   * refused when none or several are (handles.ts).
+   * handle or its name among the artifacts the session can name
+   * ({@link nameable}), refused when none or several are (handles.ts).
    */
   const whole = (instance: InstanceRow, asked: string): string => {
     if (WHOLE_ID.test(asked)) {
       return asked;
     }
-    const seen = new Map<string, ArtifactRow>();
-    const holders = holdersInTree(instance);
-    for (const row of [
-      ...answerable(instance, holders),
-      ...ofTree(instance, holders),
-      ...(instance.projectId
-        ? db.ofProject(instance.projectId).filter((one) => one.kind === "page")
-        : []),
-    ]) {
-      seen.set(row.id, row);
-    }
     // A name that names none or several is a refusal of the call, never
     // the hub's own fault.
     try {
-      return artifactByHandle(asked, [...seen.values()]);
+      return artifactByHandle(asked, nameable(instance));
     } catch (error) {
       // biome-ignore lint/style/useErrorCause: the cause rides ArtifactRefusal's third argument, after its status, which the rule does not read
       throw new ArtifactRefusal(
@@ -2514,13 +2526,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
   };
 
-  /** Pin `pinId` on an artifact the session answers ({@link answerable}), and that artifact; refused when none holds it. */
+  /**
+   * Pin `pinId` on an artifact the session reads, and that artifact: the
+   * one rule `comment_read`, `comment_reply` and `comment_resolve` share
+   * ({@link readable}), so a pin the session reads is one it answers.
+   * Refused when none holds it.
+   */
   const pinOf = (
     instance: InstanceRow,
     pinId: string
   ): { pin: Pin; row: ArtifactRow } => {
     const handle = pinId.length >= HANDLE_MIN && pinId.length < 36;
-    for (const row of answerable(instance)) {
+    for (const row of nameable(instance)) {
       const doc = docs.doc(row.id);
       const pin =
         readPin(doc, pinId) ??
@@ -2528,7 +2545,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? [...readPins(doc).values()].find((one) => one.id.startsWith(pinId))
           : undefined);
       if (pin) {
-        return { pin, row };
+        return { pin, row: readable(instance, row.id) };
       }
     }
     throw new ArtifactRefusal(404, artifactToolWords.noPin(pinId));

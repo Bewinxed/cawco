@@ -30,8 +30,9 @@ export const artifactToolWords = {
   /** A decision page's Canvas or Preview (`component`) naming `id`, which is neither the session's nor its delegation tree's. */
   noMediaArtifact: (component: string, id: string) =>
     `${component}("${id}"): this session's panel has no artifact ${id}.`,
+  /** A pin on no artifact the session reads: its own, its delegation tree's, its project's pages. */
   noPin: (pin: string) =>
-    `No artifact of this session holds pin ${pin}. comment_read lists its pins with their ids.`,
+    `No artifact this session reads holds pin ${pin}: not its own, its delegation tree's or its project's pages. comment_read with the artifact lists its pins with their ids.`,
   /** A delete asked up the tree of an artifact whose maker's work item is still live: `whose` names it and its maker. */
   makerDeletes: (whose: string) =>
     `${whose}, and its work item is still live: that session deletes it now (a handoff asks it to). Once its item ends (done, failed or cancelled), you, up its delegation tree, can delete it.`,

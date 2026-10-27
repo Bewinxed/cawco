@@ -1598,7 +1598,7 @@ const endedWriterChecks = async (
     );
   }
 
-  // 7b. The rule itself (artifacts/service.ts `answerable`), through the
+  // 7b. The rule itself (artifacts/service.ts `readable`), through the
   // tool: a session of no part in the project is refused the pin; once the
   // hub's record names it the project's lead, its reply lands in the thread.
   if (!pin) {
