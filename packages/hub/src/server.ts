@@ -28408,17 +28408,10 @@ export const createServer = (
     };
   };
 
-  /**
-   * Whether a session's prompt cache is still warm, as the cold check reads
-   * it: mid-turn, never measured, or not yet expired. One the hub found
-   * cold (a keep-alive that missed) is cold.
-   */
+  /** Whether a session's prompt cache is still warm, as the cold check reads it (keep-alive.ts `cacheWarmNow`). */
   const cacheWarm = (
     row: ReturnType<typeof db.getInstancesByIds>[number]
   ): boolean => {
-    if (row.cacheCold) {
-      return false;
-    }
     const state = followupState(row);
     return cacheWarmNow(row, state.midTurn, state.lastTurnAt);
   };

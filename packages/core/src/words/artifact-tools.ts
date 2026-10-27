@@ -36,9 +36,9 @@ export const artifactToolWords = {
   /** A delete asked up the tree of an artifact whose maker's work item is still live: `whose` names it and its maker. */
   makerDeletes: (whose: string) =>
     `${whose}, and its work item is still live: that session deletes it now (a handoff asks it to). Once its item ends (done, failed or cancelled), you, up its delegation tree, can delete it.`,
-  /** A delete asked by a session outside the maker's delegation tree while its holder or maker is warm: `whose` names it and its holder. */
+  /** A delete asked by a session outside the maker's delegation tree while its holder, its maker or a session up their tree is warm: `whose` names it and its holder. */
   notInTree: (whose: string) =>
-    `${whose}, and a session that made it is warm, so it is still theirs. Once its item ends, the sessions up its delegation tree can delete it; once it is cold, any session of its project can, its pins resolved first. The person can from the dashboard.`,
+    `${whose}, and a session that made it, or one up its delegation tree, is warm, so it is still theirs. Once its item ends, the sessions up its delegation tree can delete it; once that whole line is cold, any session of its project can, its pins resolved first. The person can from the dashboard.`,
   /** A delete, by a session of its project, of what a cold session left, its pins not all resolved: `whose` names it and its maker. */
   pinsOpenFirst: (whose: string, open: number) =>
     `${whose}, which is cold, and ${open === 1 ? "1 of its pins is" : `${open} of its pins are`} still open. Answer each and resolve it (comment_read with the artifact lists them, comment_resolve resolves one), then delete it.`,

@@ -2124,8 +2124,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * session of the project then reads it, answers and resolves its pins,
    * revises it, and deletes it once its pins are resolved
    * ({@link deletable}), so the person's pins never wait on a session no one
-   * can wake. A running or warm writer keeps its own. `find` reads a
-   * session's row; `judged` keeps each writer's verdict across one walk.
+   * can wake. A running or warm writer keeps its own, and a warm session up
+   * a writer's delegation tree keeps its tree's ({@link lineKeeps}). `find`
+   * reads a session's row; `judged` keeps each verdict across one walk.
    */
   const leftFor = (
     instance: InstanceRow,
@@ -2166,11 +2167,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     let left = judged.get(id);
     if (left === undefined) {
-      left = deps.cold(writer) || goneForGood(writer);
+      left =
+        (deps.cold(writer) || goneForGood(writer)) &&
+        !lineKeeps(writer, judged);
       judged.set(id, left);
     }
     return left;
   };
+
+  /**
+   * Whether a session up `writer`'s delegation tree keeps what the writer
+   * left: one warm ({@link ArtifactServiceDeps.cold} false) and not
+   * stranded, so it can still act on its tree's artifacts, as the up-tree
+   * delete lets it ({@link deletable}). Each one judged once in `judged`,
+   * under its own key.
+   */
+  const lineKeeps = (
+    writer: InstanceRow,
+    judged: Map<string, boolean>
+  ): boolean =>
+    [...above(writer)].some((id) => {
+      const key = `up:${id}`;
+      let keeps = judged.get(key);
+      if (keeps === undefined) {
+        const up = deps.instance(id);
+        keeps = !!up && !deps.stranded(up) && !deps.cold(up);
+        judged.set(key, keeps);
+      }
+      return keeps;
+    });
 
   /**
    * Every artifact of `instance`'s project its writers left there
@@ -2213,8 +2238,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * moved on, its conversation gone, nothing to give it a turn again) when
    * this session is up the writer's delegation tree, at any depth, so
    * whoever is up the tree cleans up after a session that can no longer
-   * act. Once its writers are cold or gone for good ({@link leftFor}), any
-   * session of its project deletes it, after its pins are resolved: the
+   * act. Once its writers are cold or gone for good and no one up their
+   * tree is warm ({@link leftFor}), any session of its project deletes it, after its pins are resolved: the
    * person's pins are answered before they go. Its content stays the
    * writer's while it is warm. Refused otherwise, naming who deletes it.
    */
