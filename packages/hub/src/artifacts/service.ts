@@ -167,7 +167,7 @@ import {
   type StatementChange,
 } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
-import { byHandle, HANDLE_MIN } from "../handles";
+import { byHandle, HANDLE_MIN, type Handled, namesAny } from "../handles";
 import { sessionLabel } from "../labels";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
 import { storedFilePath } from "../media";
@@ -221,21 +221,18 @@ import {
 } from "./page-changes";
 import { picturePath, thumbnailPath } from "./sync";
 
+/** How a tool names an artifact: its id or handle, else its name. */
+const ARTIFACT_KEYS: Handled<{ id: string; kind: string; name: string }> = {
+  id: (row) => row.id,
+  names: (row) => [row.name],
+  said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
+};
+
 /** The id of the one artifact among `rows` that `asked` names; thrown when it names none or several. */
 const artifactByHandle = (
   asked: string,
   rows: readonly { id: string; kind: string; name: string }[]
-): string =>
-  byHandle(
-    asked,
-    rows,
-    {
-      id: (row) => row.id,
-      names: (row) => [row.name],
-      said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
-    },
-    "artifact"
-  ).id;
+): string => byHandle(asked, rows, ARTIFACT_KEYS, "artifact").id;
 
 export class ArtifactRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
@@ -1457,6 +1454,13 @@ export interface ArtifactServiceDeps {
   clearArtifactWait: (instanceId: string, artifactId: string) => void;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => void;
+  /**
+   * Whether a session is cold now: no turn under way and its prompt cache
+   * expired, the test by which `handoff` refuses to hand it work without
+   * asking (keep-alive.ts `cacheWarmNow`). What it left in its project is
+   * then its project's to take up (`leftFor` below).
+   */
+  cold: (instance: InstanceRow) => boolean;
   db: ArtifactsDb;
   /**
    * Who decides (settling.ts): each card a session just wrote, routed by
@@ -1994,8 +1998,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The artifacts the session can name and read ({@link readable}), each
    * once, those it answers first: its own, its project's it answers, its
    * delegation tree's, its project's pages and those of the projects it
-   * leads, then what sessions gone for good left in its project
-   * ({@link leftInProject}).
+   * leads. What its project's cold writers left ({@link leftInProject})
+   * comes after these, only for what none of them names ({@link whole},
+   * {@link pinOf}).
    */
   const nameable = (instance: InstanceRow): ArtifactRow[] => {
     const seen = new Map<string, ArtifactRow>();
@@ -2007,7 +2012,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...ofTree(instance, holders),
       ...(instance.projectId ? pagesOf(instance.projectId) : []),
       ...deps.ledProjects(instance).flatMap(pagesOf),
-      ...leftInProject(instance),
     ]) {
       if (!seen.has(row.id)) {
         seen.set(row.id, row);
@@ -2019,16 +2023,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * The artifact `asked` names for `instance`: a whole id as given, else its
    * handle or its name among the artifacts the session can name
-   * ({@link nameable}), refused when none or several are (handles.ts).
+   * ({@link nameable}), else, when it names none of those, among what its
+   * project's cold writers left ({@link leftInProject}), so a name of its
+   * own never turns ambiguous by another's; refused when none or several
+   * are (handles.ts).
    */
   const whole = (instance: InstanceRow, asked: string): string => {
     if (WHOLE_ID.test(asked)) {
       return asked;
     }
+    const near = nameable(instance);
     // A name that names none or several is a refusal of the call, never
     // the hub's own fault.
     try {
-      return artifactByHandle(asked, nameable(instance));
+      return artifactByHandle(
+        asked,
+        namesAny(asked, near, ARTIFACT_KEYS)
+          ? near
+          : [...near, ...leftInProject(instance)]
+      );
     } catch (error) {
       // biome-ignore lint/style/useErrorCause: the cause rides ArtifactRefusal's third argument, after its status, which the rule does not read
       throw new ArtifactRefusal(
@@ -2093,8 +2106,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Whether session `writer` can never act again, nor anyone for it: it is
    * stranded ({@link ArtifactServiceDeps.stranded}), or its work item ended
    * and no session up its delegation tree can still act (none there is
-   * stranded or past its own item's end). What it left in its project is
-   * then that project's ({@link leftBehind}). A live writer's stays its own.
+   * stranded or past its own item's end).
    */
   const goneForGood = (writer: InstanceRow): boolean =>
     deps.stranded(writer) ||
@@ -2104,34 +2116,66 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         .some((up) => !(deps.stranded(up) || deps.itemEnded(up))));
 
   /**
-   * Whether `row`, held by `writer`, is what a session gone for good
-   * ({@link goneForGood}) left in `instance`'s project: any session of that
-   * project reads it, answers and resolves its pins, revises it, and deletes
-   * it once its pins are resolved ({@link deletable}), so the person's pins
-   * never outlive everyone who could answer them.
+   * Whether `row` is what its writers left in `instance`'s project: its
+   * holder, and its maker when another session made it, each of that
+   * project, neither the session itself, and each cold
+   * ({@link ArtifactServiceDeps.cold}, handoff's test, so none takes work
+   * without being asked) or gone for good ({@link goneForGood}). Any
+   * session of the project then reads it, answers and resolves its pins,
+   * revises it, and deletes it once its pins are resolved
+   * ({@link deletable}), so the person's pins never wait on a session no one
+   * can wake. A running or warm writer keeps its own. `find` reads a
+   * session's row; `judged` keeps each writer's verdict across one walk.
    */
   const leftFor = (
     instance: InstanceRow,
     row: ArtifactRow,
-    writer: InstanceRow
+    find: (id: string) => InstanceRow | undefined = deps.instance,
+    judged = new Map<string, boolean>()
   ): boolean =>
     !!instance.projectId &&
     row.heldFor === null &&
-    writer.id !== instance.id &&
+    row.instanceId !== null &&
     row.projectId === instance.projectId &&
-    writer.projectId === instance.projectId &&
-    goneForGood(writer);
+    [...new Set([row.instanceId, row.madeBy ?? row.instanceId])].every((id) =>
+      writerLeft(instance, id, id === row.instanceId, find, judged)
+    );
 
-  /** {@link leftFor} of `row` by the session that holds it; false for one no session holds. */
-  const leftBehind = (instance: InstanceRow, row: ArtifactRow): boolean => {
-    const writer = holder(row);
-    return !!writer && leftFor(instance, row, writer);
+  /**
+   * Whether writer `id` of an artifact has left it to `instance`'s project
+   * ({@link leftFor}): of that project, not the session itself, and cold or
+   * gone for good, judged once per walk in `judged`. A maker the hub no
+   * longer holds acts no more; a holder it doesn't hold is no one's panel.
+   */
+  const writerLeft = (
+    instance: InstanceRow,
+    id: string,
+    holds: boolean,
+    find: (id: string) => InstanceRow | undefined,
+    judged: Map<string, boolean>
+  ): boolean => {
+    if (id === instance.id) {
+      return false;
+    }
+    const writer = find(id);
+    if (!writer) {
+      return !holds;
+    }
+    if (writer.projectId !== instance.projectId) {
+      return false;
+    }
+    let left = judged.get(id);
+    if (left === undefined) {
+      left = deps.cold(writer) || goneForGood(writer);
+      judged.set(id, left);
+    }
+    return left;
   };
 
   /**
-   * Every artifact of `instance`'s project its writer left there gone for
-   * good ({@link leftFor}): one read of the project's artifacts and one of
-   * their writers' rows, each writer judged once.
+   * Every artifact of `instance`'s project its writers left there
+   * ({@link leftFor}): one read of the project's artifacts and one of their
+   * writers' rows, each writer judged once.
    */
   const leftInProject = (instance: InstanceRow): ArtifactRow[] => {
     if (!instance.projectId) {
@@ -2144,22 +2188,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
     const writers = new Map(
       deps
-        .instances([...new Set(rows.map((row) => row.instanceId as string))])
+        .instances([
+          ...new Set(
+            rows.flatMap((row) => [
+              row.instanceId as string,
+              ...(row.madeBy ? [row.madeBy] : []),
+            ])
+          ),
+        ])
         .map((writer) => [writer.id, writer])
     );
-    const gone = new Map<string, boolean>();
-    return rows.filter((row) => {
-      const writer = writers.get(row.instanceId as string);
-      if (!writer) {
-        return false;
-      }
-      let left = gone.get(writer.id);
-      if (left === undefined) {
-        left = leftFor(instance, row, writer);
-        gone.set(writer.id, left);
-      }
-      return left;
-    });
+    const judged = new Map<string, boolean>();
+    return rows.filter((row) =>
+      leftFor(instance, row, (id) => writers.get(id), judged)
+    );
   };
 
   /**
@@ -2171,10 +2213,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * moved on, its conversation gone, nothing to give it a turn again) when
    * this session is up the writer's delegation tree, at any depth, so
    * whoever is up the tree cleans up after a session that can no longer
-   * act. Once no one up that tree can act either ({@link leftFor}), any
+   * act. Once its writers are cold or gone for good ({@link leftFor}), any
    * session of its project deletes it, after its pins are resolved: the
    * person's pins are answered before they go. Its content stays the
-   * writer's while it can act. Refused otherwise, naming who deletes it.
+   * writer's while it is warm. Refused otherwise, naming who deletes it.
    */
   const deletable = (instance: InstanceRow, asked: string): ArtifactRow => {
     const id = whole(instance, asked);
@@ -2188,7 +2230,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return row;
     }
     const whose = `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is ${sessionLink(writer.id, sessionLabel(writer).name)}'s`;
-    if (leftFor(instance, row, writer)) {
+    if (leftFor(instance, row)) {
       const open = [...readPins(docs.doc(row.id)).values()].filter(
         (pin) => !pin.resolvedAt
       ).length;
@@ -2210,8 +2252,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Artifact `id` for a change: the session owns it or made it (a delegate
-   * goes on updating and reading what it handed to its parent), or a
-   * session gone for good left it in its project ({@link leftBehind}).
+   * goes on updating and reading what it handed to its parent), or its
+   * writers left it in the session's project ({@link leftFor}).
    */
   const revisable = (instance: InstanceRow, asked: string): ArtifactRow => {
     const id = whole(instance, asked);
@@ -2219,7 +2261,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (row?.madeBy === instance.id) {
       return row;
     }
-    if (row && leftBehind(instance, row)) {
+    if (row && leftFor(instance, row)) {
       return row;
     }
     return own(instance, id);
@@ -2455,7 +2497,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * An update of artifact `row` ({@link revisable}; `change`, given where it
    * goes): its maker's, while the parent's panel shows it, goes to its next
    * version ({@link holdNext}); anyone else's (its owner's, or a session of
-   * the project its gone writer left it in) to the artifact itself.
+   * the project its writers left it in) to the artifact itself.
    */
   const changedBy = async <T>(
     instance: InstanceRow,
@@ -2568,9 +2610,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Artifact `id`, when the session answers its pins ({@link answerable}),
    * or when it is a page of a project the session leads or works in
    * ({@link projectPage}), whatever became of its writer, or when another
-   * session of its delegation tree holds it ({@link inTree}), or when a
-   * session gone for good left it in the session's project
-   * ({@link leftBehind}); refused when none. A held next version is read by
+   * session of its delegation tree holds it ({@link inTree}), or when its
+   * writers left it in the session's project ({@link leftFor}); refused
+   * when none. A held next version is read by
    * whoever reads its artifact: the parent reviews what its maker changed.
    */
   const readable = (instance: InstanceRow, asked: string): ArtifactRow => {
@@ -2584,7 +2626,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       answerable(instance).find((one) => one.id === id) ??
       ledPage(instance, id) ??
       projectPage(instance, id) ??
-      (next && (inTree(instance, next) || leftBehind(instance, next))
+      (next && (inTree(instance, next) || leftFor(instance, next))
         ? next
         : undefined);
     if (!row) {
@@ -2636,18 +2678,29 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     pinId: string
   ): { pin: Pin; row: ArtifactRow } => {
     const handle = pinId.length >= HANDLE_MIN && pinId.length < 36;
-    for (const row of nameable(instance)) {
-      const doc = docs.doc(row.id);
-      const pin =
-        readPin(doc, pinId) ??
-        (handle
-          ? [...readPins(doc).values()].find((one) => one.id.startsWith(pinId))
-          : undefined);
-      if (pin) {
-        return { pin, row: readable(instance, row.id) };
+    const among = (
+      rows: ArtifactRow[]
+    ): { pin: Pin; row: ArtifactRow } | undefined => {
+      for (const row of rows) {
+        const doc = docs.doc(row.id);
+        const pin =
+          readPin(doc, pinId) ??
+          (handle
+            ? [...readPins(doc).values()].find((one) =>
+                one.id.startsWith(pinId)
+              )
+            : undefined);
+        if (pin) {
+          return { pin, row: readable(instance, row.id) };
+        }
       }
+    };
+    // What its project's cold writers left is searched only when nothing nearer holds the pin.
+    const found = among(nameable(instance)) ?? among(leftInProject(instance));
+    if (!found) {
+      throw new ArtifactRefusal(404, artifactToolWords.noPin(pinId));
     }
-    throw new ArtifactRefusal(404, artifactToolWords.noPin(pinId));
+    return found;
   };
 
   /**
@@ -6618,7 +6671,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * it, its state kept), or a JSON Patch (RFC 6902) over its `state` applied as one
      * transaction; the state after the change. A canvas's elements, deletes
      * or Mermaid; its outline after the change. Its owner's, its maker's, or
-     * a session's of the project its gone writer left it in, to call
+     * a session's of the project its writers left it in, to call
      * ({@link revisable}); what it answers is the owner's read only.
      */
     update: async (

@@ -52,6 +52,25 @@ export const promptCacheExpiresAt = (
     : null;
 };
 
+/**
+ * The cold check's one test (`handoff`'s, delegation-actions.ts
+ * `checkCold`): a session's prompt cache is warm mid-turn, unmeasured, or
+ * unexpired. A session it calls cold is one the hub hands no work to
+ * without asking, and one whose artifacts its project takes up
+ * (artifacts/service.ts `leftFor`).
+ */
+export const cacheWarmNow = (
+  row: KeepAliveRow,
+  midTurn: boolean,
+  lastTurnAt: string | null
+): boolean => {
+  if (midTurn) {
+    return true;
+  }
+  const expires = promptCacheExpiresAt(row, lastTurnAt);
+  return expires === null || expires > Date.now();
+};
+
 /** Clock and account reading are explicit: this function sends and writes nothing. */
 export const keepAliveState = (
   row: KeepAliveRow,

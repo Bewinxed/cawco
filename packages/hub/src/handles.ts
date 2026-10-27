@@ -102,6 +102,29 @@ const ambiguousHandle = <T>(
     `"${said(asked)}" names ${things.length} ${what}s: ${listed(things, keys)}. Give more of its id.`
   );
 
+/** The candidates `asked` names: by id ({@link byId}), else by a name (exact, any case); none, one or several. */
+const matches = <T>(
+  asked: string,
+  candidates: readonly T[],
+  keys: Handled<T>
+): T[] => {
+  const ided = byId(asked, candidates, keys.id);
+  if (ided.length > 0) {
+    return ided;
+  }
+  const lower = said(asked).toLowerCase();
+  return candidates.filter((thing) =>
+    (keys.names?.(thing) ?? []).some((name) => name?.toLowerCase() === lower)
+  );
+};
+
+/** Whether `asked` names any of `candidates` as {@link byHandle} reads it: one or several. */
+export const namesAny = <T>(
+  asked: string,
+  candidates: readonly T[],
+  keys: Handled<T>
+): boolean => matches(asked, candidates, keys).length > 0;
+
 /**
  * The one candidate `asked` names: by id ({@link byId}: its full id, or a
  * handle of {@link HANDLE_MIN} or more characters, bare, after a `name#`,
@@ -116,16 +139,7 @@ export function byHandle<T>(
   what: string
 ): T {
   const wanted = said(asked);
-  const lower = wanted.toLowerCase();
-  const ided = byId(asked, candidates, keys.id);
-  const found =
-    ided.length > 0
-      ? ided
-      : candidates.filter((thing) =>
-          (keys.names?.(thing) ?? []).some(
-            (name) => name?.toLowerCase() === lower
-          )
-        );
+  const found = matches(asked, candidates, keys);
   if (found.length === 1 && found[0] !== undefined) {
     return found[0];
   }

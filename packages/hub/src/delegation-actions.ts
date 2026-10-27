@@ -47,7 +47,7 @@ import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateList, DelegateListQuery } from "./delegation-tree";
 import { byId, handleId, isHandle, mentioned } from "./handles";
 import { hubHttpUrl, selfFetch } from "./hub-self";
-import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
+import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
 import { resolveSpawnType, type Unlanded } from "./work-items";
@@ -1207,8 +1207,7 @@ function warmNow(
   midTurn: boolean,
   lastTurnAt: string | null
 ): boolean {
-  const expires = promptCacheExpiresAt(row, lastTurnAt);
-  if (!(midTurn || expires === null || expires > Date.now())) {
+  if (!cacheWarmNow(row, midTurn, lastTurnAt)) {
     return false;
   }
   const prefix = `${row.id}:`;

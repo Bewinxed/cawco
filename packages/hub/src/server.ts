@@ -737,6 +737,7 @@ import { createJevTasks, phoneRequestRoutes } from "./jev-tasks";
 import { joinRoutes } from "./join";
 import { streamLargeJson } from "./json-response";
 import {
+  cacheWarmNow,
   createKeepAliveScheduler,
   isKeepAlive,
   type KeepAliveRow,
@@ -14269,6 +14270,15 @@ export const createServer = (
       plans.clearArtifactWait(instanceId, artifactId),
     stranded,
     itemEnded,
+    // Cold as handoff's check finds it: what it left, its project takes up.
+    cold: (instance) => {
+      const [row] = db.getInstancesByIds([instance.id]);
+      if (!row) {
+        return false;
+      }
+      const state = followupState(row);
+      return !cacheWarmNow(row, state.midTurn, state.lastTurnAt);
+    },
     // Caw answers the pins of his project's sessions whose writer ended, and
     // reads every page of his project (decisions.ts).
     ledProjects: (instance) =>
@@ -25635,10 +25645,8 @@ export const createServer = (
       workItems.refusal(row, { kind: "human" })?.reason ?? undefined,
     warmth: (row) => {
       const state = followupState(row);
-      // The cold check's own test: warm mid-turn, unmeasured, or unexpired.
-      const expires = promptCacheExpiresAt(row, state.lastTurnAt);
       return {
-        warm: state.midTurn || expires === null || expires > Date.now(),
+        warm: cacheWarmNow(row, state.midTurn, state.lastTurnAt),
         idle: !state.midTurn,
       };
     },
@@ -25697,8 +25705,7 @@ export const createServer = (
     jev?: { attach: boolean; noul: number } | { error: string };
     unlanded?: Unlanded | { error: string };
   }> => {
-    const expires = promptCacheExpiresAt(row, state.lastTurnAt);
-    if (state.midTurn || expires === null || expires > Date.now()) {
+    if (cacheWarmNow(row, state.midTurn, state.lastTurnAt)) {
       return {};
     }
     const unlanded = await coldWork(row.id);
@@ -25831,10 +25838,8 @@ export const createServer = (
     stalled: (instanceId) => stallOf(instanceId),
     activity: (row) => {
       const state = followupState(row);
-      // The same test the cold check makes: warm mid-turn, unmeasured, or unexpired.
-      const expires = promptCacheExpiresAt(row, state.lastTurnAt);
       return {
-        cacheWarm: state.midTurn || expires === null || expires > Date.now(),
+        cacheWarm: cacheWarmNow(row, state.midTurn, state.lastTurnAt),
         lastActivityAt: new Date(
           Math.max(
             row.updatedAt.getTime(),
@@ -28415,8 +28420,7 @@ export const createServer = (
       return false;
     }
     const state = followupState(row);
-    const expires = promptCacheExpiresAt(row, state.lastTurnAt);
-    return state.midTurn || expires === null || expires > Date.now();
+    return cacheWarmNow(row, state.midTurn, state.lastTurnAt);
   };
 
   /**

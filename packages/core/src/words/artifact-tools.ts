@@ -30,18 +30,18 @@ export const artifactToolWords = {
   /** A decision page's Canvas or Preview (`component`) naming `id`, which is neither the session's nor its delegation tree's. */
   noMediaArtifact: (component: string, id: string) =>
     `${component}("${id}"): this session's panel has no artifact ${id}.`,
-  /** A pin on no artifact the session reads: its own, its delegation tree's, its project's pages, what its project's sessions gone for good left. */
+  /** A pin on no artifact the session reads: its own, its delegation tree's, its project's pages, what its project's cold sessions left. */
   noPin: (pin: string) =>
-    `No artifact this session reads holds pin ${pin}: not its own, its delegation tree's, its project's pages or what its project's ended sessions left. comment_read with the artifact lists its pins with their ids.`,
+    `No artifact this session reads holds pin ${pin}: not its own, its delegation tree's, its project's pages or what its project's cold sessions left. comment_read with the artifact lists its pins with their ids.`,
   /** A delete asked up the tree of an artifact whose maker's work item is still live: `whose` names it and its maker. */
   makerDeletes: (whose: string) =>
     `${whose}, and its work item is still live: that session deletes it now (a handoff asks it to). Once its item ends (done, failed or cancelled), you, up its delegation tree, can delete it.`,
-  /** A delete asked by a session outside the maker's delegation tree while someone there can still act: `whose` names it and its maker. */
+  /** A delete asked by a session outside the maker's delegation tree while its holder or maker is warm: `whose` names it and its holder. */
   notInTree: (whose: string) =>
-    `${whose}. That session deletes it while its work item is live; once its item ends, the sessions up its delegation tree do; once none of them can act again, any session of its project does. The person can from the dashboard. This session is none of these.`,
-  /** A delete, by a session of its project, of what a session that can never act again left, its pins not all resolved: `whose` names it and its maker. */
+    `${whose}, and a session that made it is warm, so it is still theirs. Once its item ends, the sessions up its delegation tree can delete it; once it is cold, any session of its project can, its pins resolved first. The person can from the dashboard.`,
+  /** A delete, by a session of its project, of what a cold session left, its pins not all resolved: `whose` names it and its maker. */
   pinsOpenFirst: (whose: string, open: number) =>
-    `${whose}, which can never act again, and ${open === 1 ? "1 of its pins is" : `${open} of its pins are`} still open. Answer each and resolve it (comment_read with the artifact lists them, comment_resolve resolves one), then delete it.`,
+    `${whose}, which is cold, and ${open === 1 ? "1 of its pins is" : `${open} of its pins are`} still open. Answer each and resolve it (comment_read with the artifact lists them, comment_resolve resolves one), then delete it.`,
   /** `discard_workspace`'s answer on what its delegates left, their work items all ended. */
   leftoverEnded:
     "Their work items ended, so artifact_delete removes them from here.",
