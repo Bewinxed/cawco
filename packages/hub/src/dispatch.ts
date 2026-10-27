@@ -50,8 +50,14 @@
  *   cannot go, the lead's own start among them, is remembered on the task
  *   and shown on its card. A hook obeys `max_attempts`: at the cap its start is queued
  *   (`queued_task_starts`) and runs, oldest first and before the frontier,
- *   as a slot frees. A start you or a session ask for is not capped. Only
- *   `runs` runs here.
+ *   as a slot frees. A start you or a session ask for is not capped.
+ * - **Nothing on it.** No task sits in an `active` stage with nothing
+ *   working on it (stages.ts `nobodyProblem`): a move or filing into one
+ *   that nothing would work is refused (tasks.ts `refuseNobody`); in a
+ *   project that dispatches, it starts an attempt as a hook does, not
+ *   capped; and one whose start cannot go goes on to its todo stage as the
+ *   hub. The tracker's moves are a person's work elsewhere, held by none of
+ *   this.
  * - **Where it runs** (runs-on.ts). An attempt is cut only on a machine its
  *   task's `runs_on:` names, else its project's: a machine, or a capability
  *   such as `apple`, read from the OS each agent reports. With none online
@@ -1587,8 +1593,8 @@ export const createDispatcher = ({
   };
 
   /**
-   * A task moved into an active stage whose attempt did not start went in
-   * only to be worked (tasks.ts `refuseNobody` refuses the move otherwise):
+   * A task moved or filed into an active stage whose attempt did not start
+   * went in only to be worked (tasks.ts `refuseNobody` refuses it otherwise):
    * it goes on to the todo stage it waits in (stages.ts `waitingStageOf`),
    * as the hub, saying why, so it is never left in an active stage with
    * nothing working on it.
@@ -1647,7 +1653,7 @@ export const createDispatcher = ({
       return;
     }
     try {
-      // A move in is someone's ask: not capped.
+      // A move or filing in is someone's ask: not capped.
       await startAttempt(
         project.id,
         task.id,
@@ -1667,15 +1673,14 @@ export const createDispatcher = ({
 
   /**
    * A task entered an `active` stage, by a move or filed straight into it:
-   * one that runs a type starts it, and a move in (`from`) starts it while
-   * the project dispatches ({@link hookStart}); one with a live attempt
-   * keeps it. A move in whose start cannot go sends the task on to its todo
-   * stage ({@link nobodyOn}). A tracker's move is a person's work
-   * elsewhere: only a `runs:` starts for it.
+   * one that runs a type starts it, and any other starts it while the
+   * project dispatches ({@link hookStart}); one with a live attempt keeps
+   * it. One whose start cannot go goes on to its todo stage
+   * ({@link nobodyOn}). A tracker's is a person's work elsewhere: only a
+   * `runs:` starts for it.
    */
   const hooked = async (event: {
     actor: TaskActor;
-    from?: string;
     id: string;
     projectId: string;
     to: string;
@@ -1684,11 +1689,12 @@ export const createDispatcher = ({
     const stages = await tasks.stages(projectId);
     const stage = stages.stages.find((each) => each.name === to);
     const project = projectOf(projectId);
-    const moved = event.from !== undefined && actor.tracker === undefined;
+    // The hub's own moves never reach here but a tracker's (taskChanged).
+    const held = actor.tracker === undefined;
     const { runs } = stage?.hooks ?? {};
     if (!(
       stage?.kind === "active" &&
-      (runs || (moved && project.dispatch && project.caw))
+      (runs || (held && project.dispatch && project.caw))
     )) {
       return;
     }
@@ -1705,7 +1711,7 @@ export const createDispatcher = ({
         ? `It entered ${to}, which runs ${runs}`
         : `It entered ${to}, and ${project.name} starts attempts on its own`
     );
-    if (moved && failed) {
+    if (held && failed) {
       await nobodyOn(
         projectId,
         id,
@@ -2064,11 +2070,7 @@ export const createDispatcher = ({
       (event.actor.mover !== "hub" || event.actor.tracker !== undefined)
     ) {
       const entered = event.kind === "moved" ? event.to : event.stage;
-      hooked({
-        ...event,
-        to: entered,
-        ...(event.kind === "moved" ? { from: event.from } : {}),
-      })
+      hooked({ ...event, to: entered })
         .catch((error: unknown) =>
           console.warn(
             `[dispatch] ${event.id} entered ${entered}: ${failure(error).message}`

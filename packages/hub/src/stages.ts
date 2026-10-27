@@ -507,10 +507,10 @@ export const waitingStageOf = (
 };
 
 /**
- * Why a move into an active stage would leave the task with nothing working
- * on it there: no live attempt, the stage runs no type, and the project does
- * not dispatch; undefined when something works on it there, or `to` is not
- * an active stage.
+ * Why a move into an active stage (or a new task filed there, `from` "")
+ * would leave the task with nothing working on it there: no live attempt,
+ * the stage runs no type, and the project does not dispatch; undefined when
+ * something works on it there, or `to` is not an active stage.
  */
 export const nobodyProblem = (
   stages: Stages,
@@ -523,11 +523,16 @@ export const nobodyProblem = (
   if (target?.kind !== "active" || worked(target, workers)) {
     return;
   }
+  const why = `nothing would work on it there. No attempt at it is live, ${to} runs no type, and this project does not start attempts on its own.`;
+  if (!from) {
+    const waiting = waitingStageOf(stages, to);
+    return `${task} cannot start in ${to}: ${why}${waiting ? ` File it in ${waiting.name}, then start an attempt at it, which puts it in ${to}.` : ""}`;
+  }
   const back = sendBackOf(stages, from, workers);
   const instead = back
     ? ` Start an attempt at it, which puts it in ${to}, or send it back to ${back.stage}${back.by === "nobody" ? ", where it waits until someone starts it" : ""}.`
     : ` Start an attempt at it instead, which puts it in ${to}.`;
-  return `${task} cannot go from ${from || "no stage"} to ${to}: nothing would work on it there. No attempt at it is live, ${to} runs no type, and this project does not start attempts on its own.${instead}`;
+  return `${task} cannot go from ${from} to ${to}: ${why}${instead}`;
 };
 
 const unknownStage = (stages: Stages, name: string): string =>

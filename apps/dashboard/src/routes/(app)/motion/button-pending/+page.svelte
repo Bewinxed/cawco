@@ -150,28 +150,28 @@
     variant="default"
   />
   <Button
-    data-site="lib/cawco/tasks/TaskReview.svelte:626"
+    data-site="lib/cawco/tasks/TaskReview.svelte:629"
     label={commonWords.tryAgain}
     pendingLabel="Starting…"
     size="sm"
     variant="default"
   />
   <Button
-    data-site="lib/cawco/tasks/TaskReview.svelte:635"
+    data-site="lib/cawco/tasks/TaskReview.svelte:638"
     label={taskReviewWords.approve("Done")}
     pendingLabel={taskReviewWords.approving}
     size="sm"
     variant="default"
   />
   <Button
-    data-site="lib/cawco/tasks/TaskReview.svelte:645"
+    data-site="lib/cawco/tasks/TaskReview.svelte:648"
     label={taskReviewWords.comment}
     pendingLabel={taskReviewWords.commenting}
     size="sm"
     variant="outline"
   />
   <Button
-    data-site="lib/cawco/tasks/TaskReview.svelte:656"
+    data-site="lib/cawco/tasks/TaskReview.svelte:659"
     label={taskReviewWords.sendBack("Ready")}
     pendingLabel={taskReviewWords.sendingBack}
     size="sm"

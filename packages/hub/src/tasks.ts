@@ -2525,6 +2525,7 @@ export const createTasks = (store: TaskStore) => {
     if (problem) {
       refuse(stageNamed(stages, stage) ? 403 : 400, problem);
     }
+    refuseNobody(projectId, stages, "A new task", "", stage, actor);
     return stage;
   };
 
@@ -2985,8 +2986,9 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * Refuses a move into an active stage with nothing to work on it there
-   * (stages.ts `nobodyProblem`): something must, its live attempt, the
+   * Refuses a move into an active stage, or a new task filed there (`from`
+   * ""), with nothing to work on it there (stages.ts `nobodyProblem`):
+   * something must, its live attempt, the
    * stage's `runs:`, or the project's dispatch, which starts one
    * (dispatch.ts `hooked`). A tracker's move is a person's work elsewhere;
    * the hub's own moves are its attempts'.

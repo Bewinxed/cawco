@@ -551,7 +551,7 @@
       </div>
     {/if}
     {#if !banded}
-      <p data-slot="nothing" class="m-0 type-body text-ink-muted">
+      <p data-slot="nothing" class="m-0 type-body text-ink-muted text-pretty">
         {words.nothingToReview}
       </p>
     {/if}
@@ -616,7 +616,10 @@
           rows={2}
           bind:value={note}
         />
-        <p class="m-0 type-meta text-ink-muted" id="note-{task.id}-goes">
+        <p
+          class="m-0 type-meta text-ink-muted text-pretty"
+          id="note-{task.id}-goes"
+        >
           {words.noteGoes}
         </p>
       {/if}
