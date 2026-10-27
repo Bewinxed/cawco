@@ -6927,6 +6927,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/SendBackBy`.
+    public enum SendBackBy: OpenEnum {
+        case attempt
+        case nobody
+        case start
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "attempt": self = .attempt
+            case "nobody": self = .nobody
+            case "start": self = .start
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .attempt: "attempt"
+            case .nobody: "nobody"
+            case .start: "start"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.attempt, .nobody, .start]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/SendMode`.
     public enum SendMode: OpenEnum {
         case note

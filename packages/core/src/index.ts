@@ -1991,6 +1991,7 @@ export * from "./words/spawn";
 export * from "./words/spend";
 export * from "./words/tailnet";
 export * from "./words/task-links";
+export * from "./words/task-review";
 export * from "./words/threads";
 export * from "./words/transcript";
 export * from "./words/updates";

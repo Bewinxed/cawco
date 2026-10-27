@@ -35712,6 +35712,10 @@
               "null",
               "number"
             ]
+          },
+          "sendBack": {
+            "description": "Where Send back puts it and who takes it up there; null when it does not wait on you, or no stage before its own is open to you.",
+            "$ref": "#/components/schemas/SendBack"
           }
         },
         "required": [
@@ -35951,6 +35955,23 @@
           "promoted",
           "proposed",
           "text"
+        ]
+      },
+      "SendBack": {
+        "description": "Where Send back puts a task waiting on you, and who takes it up there\n(hub stages.ts `sendBackOf`).",
+        "type": "object",
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/SendBackBy",
+            "description": "`attempt`: its live attempt carries on, your note in hand; `start`: an\nattempt starts there (the stage's `runs:`, or the project's dispatch);\n`nobody`: it waits in a todo stage, nobody on it until someone starts it."
+          },
+          "stage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "stage"
         ]
       },
       "TaskHistory": {
@@ -59799,6 +59820,14 @@
           "delivered",
           "failed",
           "silent"
+        ]
+      },
+      "SendBackBy": {
+        "type": "string",
+        "enum": [
+          "attempt",
+          "nobody",
+          "start"
         ]
       },
       "SessionPulseActivity": {

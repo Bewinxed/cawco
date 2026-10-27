@@ -21,6 +21,7 @@ import type {
   TaskHistory,
   TaskHistoryActor,
   TaskList,
+  TaskReviewRead,
   TaskSummary,
   TaskTimes,
   TaskWait,
@@ -138,6 +139,24 @@ export function reviewOf(
   };
 }
 
+/** "Landed 41cb40c18", "landed as 903dc22e9": a commit its words say landed. */
+const LANDED = /\blanded(?:\s+(?:as|in))?[\s*`]+([0-9a-f]{7,40})\b/giu;
+
+/**
+ * The commits a task's words say landed, short, in the order first said:
+ * its description, then its comments. What a review stands on when no
+ * session handed in a result (work landed from another session).
+ */
+export function landedOf(
+  task: Pick<TaskView, "comments" | "description">
+): string[] {
+  const said = [task.description, ...task.comments.map((entry) => entry.text)];
+  const shas = said.flatMap((text) =>
+    [...text.matchAll(LANDED)].map((match) => (match[1] ?? "").slice(0, 9))
+  );
+  return [...new Set(shas)];
+}
+
 /** One to-do, flat in file order; `depth` nests it. */
 export interface Todo {
   depth: number;
@@ -152,7 +171,7 @@ export interface Todo {
 }
 
 /** One task, its file read whole. */
-export interface TaskView extends TaskFlags, TaskTimes {
+export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
   acceptance: string;
   checks: string[];
   /** Its `## Comments`, oldest first: each written by the hub with who and when. */
@@ -523,29 +542,6 @@ export const approveTarget = (
     stages.stages
       .slice(at + 1)
       .find((stage) => stage.kind !== "dropped" && allowed.has(stage.name)) ??
-    null
-  );
-};
-
-/**
- * Where a task you send back goes: the nearest stage before its own, in
- * the project's order, where the work is done (kind `active`), else the
- * nearest to-do one, that the moves allow you (social: review → draft).
- * Null when none is open to you.
- */
-export const sendBackTarget = (
-  stages: StagesView,
-  from: string
-): Stage | null => {
-  const allowed = movesFrom(stages, from);
-  const at = stages.stages.findIndex((stage) => stage.name === from);
-  const before = stages.stages
-    .slice(0, Math.max(at, 0))
-    .reverse()
-    .filter((stage) => allowed.has(stage.name));
-  return (
-    before.find((stage) => stage.kind === "active") ??
-    before.find((stage) => stage.kind === "todo") ??
     null
   );
 };

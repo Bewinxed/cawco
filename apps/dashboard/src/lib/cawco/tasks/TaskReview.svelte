@@ -12,23 +12,32 @@
    *    primary artifact), drawn whole by the artifact panel's own renderer
    *    (PreviewPane, inset). Nothing presented: its words whole, with what to
    *    check as a list. The app never draws a file's format here.
-   * 3. The decision, pinned: Approve → the next stage the moves allow you,
-   *    and Send back, whose note takes the bar's place with the stage still
-   *    in view. A session that failed or was stopped: Try again in
-   *    Approve's place, a new session on the task.
+   * 3. The decision, pinned: the note field ("What should change"), always
+   *    there, then Approve → the next stage the moves allow you, Comment,
+   *    which leaves the note on the task and moves nothing, and Send back →
+   *    the stage the hub names (`sendBack`), with who takes it up there
+   *    under it. Approve and Send back take a written note with them. A
+   *    session that failed or was stopped: Try again in Approve's place, a
+   *    new session on the task.
+   *
+   * No session handed in a result (its work landed from another session,
+   * or it waits on a decision): the result band says what is under review
+   * instead, never empty: the commits its words say landed, the cards it
+   * waits on you to answer, and its description, which is the stage too.
    *
    * Two columns once the review is wide enough (the pane expanded, the
    * task's own page): the words beside the stage, unclamped.
    *
-   * `compact` (a Caw thread's card): the result band and the decision; what
-   * it attached, and what it presented, open the task beside the
-   * conversation.
+   * `compact` (a Caw thread's card, inside the task's own box): the result
+   * band and the decision; what it attached, and what it presented, open
+   * the task beside the conversation.
    */
   import {
     artifactName,
     commonWords,
     deliverableKind,
     type ResultArtifact,
+    taskReviewWords as words,
   } from "@cawco/core";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -47,21 +56,23 @@
   import { idForWords, type SentWords } from "../id";
   import { rowHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
+  import { plainMarkdown } from "../plain-markdown";
   import {
     addComment,
     approveTarget,
     folderFileHref,
     folderRawHref,
+    landedOf,
     outputUrl,
     readTask,
     retryTask,
     reviewOf,
     type StagesView,
-    sendBackTarget,
     stageLabel,
     type TaskView,
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
+  import { referenceOf } from "../references";
   import SessionMark from "../SessionMark.svelte";
   import { sessionPlace, sessionTitle } from "../session-names.svelte";
   import { sessionStatus } from "../session-status";
@@ -111,14 +122,30 @@
   });
   /** What it attached: everything else it handed in. */
   const attached = $derived(artifacts.filter((one) => one !== presented));
-  const summary = $derived(result?.summary ?? "");
+  /** No session handed in a result: the task's own words say what is under review. */
+  const unreported = $derived(!(ended || result));
+  /** The commits its words say landed. */
+  const landed = $derived(unreported ? landedOf(task) : []);
+  /** The decisions it waits on you to answer: its cards not picked yet. */
+  const asked = $derived(
+    unreported
+      ? task.waits.filter((wait) => wait.kind === "card" && !wait.settled)
+      : []
+  );
+  const described = $derived(unreported ? task.description.trim() : "");
+  const summary = $derived(result?.summary || plainMarkdown(described));
   /** Its words whole (markdown): the stage's, or the wide review's column. */
   const whole = $derived(
-    ended ? (newest?.result?.summary ?? "") : (review?.whole ?? "")
+    ended ? (newest?.result?.summary ?? "") : review?.whole || described
   );
   const check = $derived(result?.check ?? []);
-  /** Nothing presented: its words are the stage. */
-  const wordsStage = $derived(!presented && whole.length > 0);
+  /**
+   * Nothing presented: a session's words are the stage (a thread's card has
+   * none). A task's own words stay in the result band, as a summary does.
+   */
+  const wordsStage = $derived(
+    !(compact || presented || unreported) && whole.length > 0
+  );
 
   const row = $derived(
     from ? cawco.instanceIndex.byId.get(from.instanceId) : undefined
@@ -158,68 +185,85 @@
 
   const deciding = $derived(task.kind === "you");
   const approveTo = $derived(approveTarget(stages, task.stage));
-  const backTo = $derived(sendBackTarget(stages, task.stage));
-  let approving = $state(false);
-  let sending = $state(false);
-  let retrying = $state(false);
+  /** Where Send back puts it and who takes it up there: the hub's rule. */
+  const back = $derived(deciding ? task.sendBack : null);
+  const backBy = $derived.by(() => {
+    switch (back?.by) {
+      case "attempt":
+        return words.backToAttempt;
+      case "start":
+        return words.backToStart;
+      case "nobody":
+        return words.backToNobody(stageLabel(back.stage));
+      case undefined:
+        return "";
+    }
+  });
+  /** The decision's write under way, while one is. */
+  let acting = $state<"approve" | "back" | "comment" | "retry" | null>(null);
   let problem = $state<string | null>(null);
-  /** Send back's note while it is open; null when closed. */
-  let note = $state<string | null>(null);
-  let noteField = $state<HTMLTextAreaElement | null>(null);
+  /** Your note, written before any of the decision's buttons. */
+  let note = $state("");
+  const noteText = $derived(note.trim());
 
-  async function approve() {
-    if (!approveTo) {
-      return;
-    }
-    approving = true;
-    problem = null;
-    try {
-      await onmove(approveTo.name);
-    } catch (error) {
-      problem = message(error);
-    } finally {
-      approving = false;
-    }
-  }
-
-  /** A new session on the task, as the board's Retry starts one (the hub's `retry`). */
-  async function tryAgain() {
-    retrying = true;
-    problem = null;
-    try {
-      await retryTask(projectId, task.id);
-      onchanged(await readTask(projectId, task.id));
-    } catch (error) {
-      problem = message(error);
-    } finally {
-      retrying = false;
-    }
-  }
-
-  /** The note a Send back that did not go through carried, and its comment's id. */
+  /** The note a write that did not go through carried, and its comment's id. */
   let noteSent: SentWords | null = null;
 
-  /** Your note goes on the task as your comment, then the task goes back. */
-  async function sendBack() {
-    const text = note?.trim();
-    if (!(backTo && text)) {
+  /** Your note, when there is one, goes on the task as your comment; nothing moves. */
+  async function leaveNote() {
+    const text = noteText;
+    if (!text) {
       return;
     }
-    sending = true;
-    problem = null;
-    // The same note again, after a Send back that did not go through, is the same comment.
+    // The same note again, after a write that did not go through, is the same comment.
     noteSent = idForWords(noteSent, text);
+    onchanged(await addComment(projectId, task.id, text, noteSent.id));
+    noteSent = null;
+    note = "";
+  }
+
+  /** One of the decision's writes; its refusal is said above the buttons. */
+  async function act(
+    which: NonNullable<typeof acting>,
+    work: () => Promise<unknown>
+  ) {
+    acting = which;
+    problem = null;
     try {
-      onchanged(await addComment(projectId, task.id, text, noteSent.id));
-      await onmove(backTo.name);
-      noteSent = null;
-      note = null;
+      await work();
     } catch (error) {
       problem = message(error);
     } finally {
-      sending = false;
+      acting = null;
     }
   }
+
+  const comment = () => act("comment", leaveNote);
+
+  /** The note first, when written, then the task goes on. */
+  const approve = () =>
+    act("approve", async () => {
+      if (approveTo) {
+        await leaveNote();
+        await onmove(approveTo.name);
+      }
+    });
+
+  /** The note first, when written, then the task goes where the hub says. */
+  const sendBack = () =>
+    act("back", async () => {
+      if (back) {
+        await leaveNote();
+        await onmove(back.stage);
+      }
+    });
+
+  /** A new session on the task, as the board's Retry starts one (the hub's `retry`). */
+  const tryAgain = () =>
+    act("retry", async () => {
+      await retryTask(projectId, task.id);
+      onchanged(await readTask(projectId, task.id));
+    });
 
   // --- what it attached ------------------------------------------------------------
 
@@ -282,6 +326,16 @@
   const listed = $derived(
     compact && presented ? [presented, ...attached] : attached
   );
+  /** The words line: its summary, unless the stage carries its words. */
+  const wordsLine = $derived(summary.length > 0 && !wordsStage);
+  /** The result band has something to say. */
+  const banded = $derived(
+    !!from ||
+      wordsLine ||
+      listed.length > 0 ||
+      landed.length > 0 ||
+      asked.length > 0
+  );
 </script>
 
 {#snippet attachment(one: ResultArtifact)}
@@ -339,7 +393,7 @@
 
 <section
   aria-label="Review {task.id}"
-  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:not-data-compact:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col data-compact:border data-compact:border-status-attn-glyph/40 data-compact:rounded-md data-compact:bg-surface-raised data-compact:overflow-hidden @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
+  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:not-data-compact:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
   data-compact={compact || undefined}
   data-words-staged={wordsStage || undefined}
   style:--review-areas={'"result" "stage" "decide"'}
@@ -348,11 +402,12 @@
   style:--review-rows-wide="minmax(0, 1fr) auto"
   style:--review-cols="var(--c-review-words) minmax(0, 1fr)"
 >
-  <!-- Band 1: the session, its words, what it attached -->
+  <!-- Band 1: the session, its words, what it attached; with no result,
+       what landed, what it waits on you to answer, its description. -->
   <div
     data-slot="result"
     style:--area="result"
-    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 @task-frame/task-frame:not-data-compact:min-h-0 @task-frame/task-frame:not-data-compact:overflow-y-auto @task-frame/task-frame:not-data-compact:overscroll-contain @task-frame/task-frame:not-data-compact:border-e @task-frame/task-frame:not-data-compact:border-e-border-hairline"
+    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) group-data-compact:px-space-3 @task-frame/task-frame:not-data-compact:min-h-0 @task-frame/task-frame:not-data-compact:overflow-y-auto @task-frame/task-frame:not-data-compact:overscroll-contain @task-frame/task-frame:not-data-compact:border-e @task-frame/task-frame:not-data-compact:border-e-border-hairline"
     data-band="result"
     data-compact={compact || undefined}
   >
@@ -404,7 +459,34 @@
         </p>
       {/if}
     {/if}
-    {#if summary && !wordsStage}
+    {#if landed.length > 0}
+      <p
+        data-slot="landed"
+        class="flex flex-wrap items-baseline gap-x-space-2 gap-y-0 m-0 type-body text-ink-strong"
+      >
+        <span class="type-label">{words.landed}</span>
+        {#each landed as sha (sha)}
+          <span class="font-(family-name:--font-mono) liga-none">{sha}</span>
+        {/each}
+      </p>
+    {/if}
+    {#if asked.length > 0}
+      <div
+        data-slot="asked"
+        class="flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-body text-ink-strong"
+      >
+        <span class="type-label">{words.waitsOnAnswer}</span>
+        {#each asked as wait (wait.target)}
+          {@const drawn = referenceOf(wait.href)}
+          {#if drawn.draw === "element"}
+            <drawn.element id={drawn.id} kind={drawn.kind} label={wait.label} />
+          {:else}
+            <span class="min-w-0 wrap-anywhere">{wait.label}</span>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+    {#if wordsLine}
       <div
         data-slot="words"
         class="group/words flex flex-col @task-frame/task-frame:not-data-compact:hidden"
@@ -460,6 +542,11 @@
         {/each}
       </div>
     {/if}
+    {#if !banded}
+      <p data-slot="nothing" class="m-0 type-body text-ink-muted">
+        {words.nothingToReview}
+      </p>
+    {/if}
   </div>
 
   <!-- Band 2: the stage, the only part that scrolls -->
@@ -493,100 +580,88 @@
     </div>
   {/if}
 
-  <!-- Band 3: the decision, pinned -->
-  {#if ended || (deciding && (approveTo || backTo))}
-    <div
-      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) group-data-compact:px-space-4 group-data-compact:border-t group-data-compact:border-t-border-hairline row-(--area) col-(--area) @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
+  <!-- Band 3: the decision, pinned: the note, always there, then the
+       buttons; under them, who takes it up once it is sent back. -->
+  {#if ended || deciding}
+    <form
+      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) group-data-compact:px-space-3 group-data-compact:border-t group-data-compact:border-t-border-hairline row-(--area) col-(--area) @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
       data-band="decide"
+      onsubmit={(event) => {
+        event.preventDefault();
+        comment();
+      }}
       style:--area="decide"
       style:--decide-end="max(var(--space-3), env(safe-area-inset-bottom))"
     >
-      <RowFault reason={problem} />
-      {#if note === null}
-        <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
-          {#if ended}
-            <Button
-              label={commonWords.tryAgain}
-              onclick={tryAgain}
-              pending={retrying}
-              pendingLabel="Starting…"
-              size="sm"
-            />
-          {:else if deciding && approveTo}
-            <Button
-              label="Approve → {stageLabel(approveTo.name)}"
-              onclick={approve}
-              pending={approving}
-              pendingLabel="Approving…"
-              size="sm"
-            />
-          {/if}
-          {#if deciding && backTo}
-            <Button
-              disabled={approving || retrying}
-              label="Send back"
-              onclick={() => {
-                note = "";
-                requestAnimationFrame(() => noteField?.focus());
-              }}
-              size="sm"
-              variant="outline"
-            />
-          {/if}
-        </div>
-      {:else if backTo}
-        <form
-          class="flex flex-col gap-space-2"
-          onsubmit={(event) => {
-            event.preventDefault();
-            sendBack();
+      {#if deciding}
+        <Textarea
+          aria-describedby="note-{task.id}-goes"
+          aria-label={words.note}
+          autocomplete="off"
+          onkeydown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              comment();
+            }
           }}
-        >
-          <Textarea
-            aria-describedby="send-back-{task.id}-goes"
-            aria-label="What should change"
-            autocomplete="off"
-            onkeydown={(event) => {
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                note = null;
-              } else if (
-                event.key === "Enter" &&
-                (event.metaKey || event.ctrlKey)
-              ) {
-                event.preventDefault();
-                sendBack();
-              }
-            }}
-            placeholder="What should change"
-            rows={2}
-            bind:ref={noteField}
-            bind:value={note}
-          />
-          <p class="m-0 type-meta text-ink-muted" id="send-back-{task.id}-goes">
-            Goes on the task as your comment.
-          </p>
-          <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
-            <Button
-              disabled={!note.trim()}
-              label="Send back → {stageLabel(backTo.name)}"
-              pending={sending}
-              pendingLabel="Sending back…"
-              size="sm"
-              type="submit"
-            />
-            <Button
-              disabled={sending}
-              label="Cancel"
-              onclick={() => {
-                note = null;
-              }}
-              size="sm"
-              variant="ghost"
-            />
-          </div>
-        </form>
+          placeholder={words.note}
+          rows={2}
+          bind:value={note}
+        />
+        <p class="m-0 type-meta text-ink-muted" id="note-{task.id}-goes">
+          {words.noteGoes}
+        </p>
       {/if}
-    </div>
+      <RowFault reason={problem} />
+      <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
+        {#if ended}
+          <Button
+            disabled={acting !== null && acting !== "retry"}
+            label={commonWords.tryAgain}
+            onclick={tryAgain}
+            pending={acting === "retry"}
+            pendingLabel="Starting…"
+            size="sm"
+          />
+        {:else if deciding && approveTo}
+          <Button
+            disabled={acting !== null && acting !== "approve"}
+            label={words.approve(stageLabel(approveTo.name))}
+            onclick={approve}
+            pending={acting === "approve"}
+            pendingLabel={words.approving}
+            size="sm"
+          />
+        {/if}
+        {#if deciding}
+          <Button
+            disabled={!noteText || (acting !== null && acting !== "comment")}
+            label={words.comment}
+            pending={acting === "comment"}
+            pendingLabel={words.commenting}
+            size="sm"
+            type="submit"
+            variant="outline"
+          />
+        {/if}
+        {#if back}
+          <Button
+            aria-describedby="back-{task.id}-by"
+            disabled={acting !== null && acting !== "back"}
+            label={words.sendBack(stageLabel(back.stage))}
+            onclick={sendBack}
+            pending={acting === "back"}
+            pendingLabel={words.sendingBack}
+            size="sm"
+            variant="outline"
+          />
+        {/if}
+      </div>
+      {#if back}
+        <p class="m-0 type-meta text-ink-muted" id="back-{task.id}-by">
+          {backBy}
+        </p>
+      {/if}
+    </form>
   {/if}
 </section>

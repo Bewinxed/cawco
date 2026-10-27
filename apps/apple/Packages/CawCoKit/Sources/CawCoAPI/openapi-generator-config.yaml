@@ -167,6 +167,7 @@ typeOverrides:
     RuleMatchKind: OpenEnums.RuleMatchKind
     RuleTiming: OpenEnums.RuleTiming
     RuleWatch: OpenEnums.RuleWatch
+    SendBackBy: OpenEnums.SendBackBy
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
     SessionOrigin: OpenEnums.SessionOrigin

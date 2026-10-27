@@ -40,7 +40,14 @@
     date = null,
     movable = true,
     titleFirst = false,
+    inset = false,
   }: {
+    /**
+     * It heads a box that holds more of the task (a thread's card with its
+     * review under it): the box draws the surface, so the card has no tile
+     * of its own.
+     */
+    inset?: boolean;
     /**
      * Its title over its id: where the card stands outside its column (a
      * thread), the title says what it is and the id is its handle.
@@ -92,8 +99,9 @@
 
 <a
   data-task-card
-  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
+  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out data-inset:rounded-none data-inset:shadow-none data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
   data-flip-enter={flying ? "own" : undefined}
+  data-inset={inset || undefined}
   data-share={key}
   data-task={task.id}
   {href}

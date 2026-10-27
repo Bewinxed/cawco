@@ -138,6 +138,7 @@ import {
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
+import { sendBackOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
 import {
   BUDGET,
@@ -1586,58 +1587,133 @@ export const createDispatcher = ({
   };
 
   /**
-   * A task entered an `active` stage that runs a type, by a move or filed
-   * straight into it: start it, reporting to the mover or the lead, or, while
-   * the project runs `max_attempts` already, queue the start for a slot.
+   * A task sent back out of review into an active stage with nothing to
+   * start it there went in only to be worked (tasks.ts `moveTo` refuses the
+   * move otherwise): it goes on to the nearest todo stage before its review
+   * (stages.ts `sendBackOf`), as the hub, saying why, so it is never left
+   * in an active stage with nothing working on it.
    */
-  const hooked = async (event: {
-    actor: TaskActor;
-    id: string;
-    projectId: string;
-    to: string;
-  }): Promise<void> => {
-    const { projectId, id, to, actor } = event;
+  const nobodyOn = async (
+    projectId: string,
+    id: string,
+    from: string,
+    why: string
+  ): Promise<void> => {
     const stages = await tasks.stages(projectId);
-    const stage = stages.stages.find((each) => each.name === to);
-    if (!(stage?.kind === "active" && stage.hooks.runs)) {
+    const back = sendBackOf(stages, from, { live: false, dispatches: false });
+    if (!back) {
+      console.warn(
+        `[dispatch] ${id} came back from ${from} and ${why}; no todo stage before ${from} is open, so it stays.`
+      );
       return;
     }
-    const project = projectOf(projectId);
-    const parent = await hookParent(
-      project,
-      await tasks.get(projectId, id),
-      actor.instanceId,
-      `It entered ${to}, which runs ${stage.hooks.runs}`
+    await tasks.move(
+      projectId,
+      id,
+      back.stage,
+      hubActor(`nothing works on it: ${why}`)
     );
+  };
+
+  /**
+   * A hook's start, once it is asked for: reporting to the mover or the
+   * lead; a `runs:` start, while the project runs `max_attempts` already,
+   * queued for a slot. Answers why it did not start; nothing when it
+   * started or was queued.
+   */
+  const hookStart = async (
+    project: ProjectRow,
+    task: TaskView,
+    stage: Stage,
+    actor: TaskActor,
+    how: string
+  ): Promise<string | undefined> => {
+    const { runs } = stage.hooks;
+    const parent = await hookParent(project, task, actor.instanceId, how);
     if (!parent) {
-      return;
+      return "no session can take its report";
     }
-    const live = liveIn(projectId);
-    if (live >= project.maxAttempts) {
+    const live = liveIn(project.id);
+    if (runs && live >= project.maxAttempts) {
       db.queueTaskStart({
-        projectId,
-        taskId: id,
-        stage: to,
+        projectId: project.id,
+        taskId: task.id,
+        stage: stage.name,
         parentInstanceId: parent.id === actor.instanceId ? parent.id : null,
         origin: HOOK_ORIGIN[actor.mover] ?? null,
       });
       console.log(
-        `[dispatch] ${project.name}: ${id} entered ${to}, which runs ${stage.hooks.runs}; ${counted(live, "attempt is", "attempts are")} live, the cap is ${project.maxAttempts}, so its start waits for a slot.`
+        `[dispatch] ${project.name}: ${task.id} entered ${stage.name}, which runs ${runs}; ${counted(live, "attempt is", "attempts are")} live, the cap is ${project.maxAttempts}, so its start waits for a slot.`
       );
       return;
     }
     try {
+      // A send back's start is a person's ask: not capped.
       await startAttempt(
-        projectId,
-        id,
+        project.id,
+        task.id,
         parent,
         stage,
         false,
         HOOK_ORIGIN[actor.mover]
       );
     } catch (error) {
+      const why = failure(error).message;
       console.warn(
-        `[dispatch] ${id} entered ${to}, which runs ${stage.hooks.runs}, and did not start: ${failure(error).message}`
+        `[dispatch] ${task.id}: ${how}, and it did not start: ${why}`
+      );
+      return why;
+    }
+  };
+
+  /**
+   * A task entered an `active` stage, by a move or filed straight into it:
+   * one that runs a type starts it, and one you sent back out of review
+   * (`from`, a stage of kind `you`) starts it while the project dispatches
+   * ({@link hookStart}). Sent back to its live attempt, the attempt carries
+   * on. A start after a send back that cannot go sends the task on to a
+   * todo stage ({@link nobodyOn}).
+   */
+  const hooked = async (event: {
+    actor: TaskActor;
+    from?: string;
+    id: string;
+    projectId: string;
+    to: string;
+  }): Promise<void> => {
+    const { projectId, id, to, actor, from } = event;
+    const stages = await tasks.stages(projectId);
+    const stage = stages.stages.find((each) => each.name === to);
+    const project = projectOf(projectId);
+    const back =
+      from !== undefined &&
+      stages.stages.find((each) => each.name === from)?.kind === "you";
+    const { runs } = stage?.hooks ?? {};
+    if (!(
+      stage?.kind === "active" &&
+      (runs || (back && project.dispatch && project.caw))
+    )) {
+      return;
+    }
+    const task = await tasks.get(projectId, id);
+    if (back && task.liveAttempt) {
+      return;
+    }
+    const failed = await hookStart(
+      project,
+      task,
+      stage,
+      actor,
+      runs
+        ? `It entered ${to}, which runs ${runs}`
+        : `It came back to ${to}, and ${project.name} starts attempts on its own`
+    );
+    if (back && failed && from) {
+      await nobodyOn(
+        projectId,
+        id,
+        from,
+        `its attempt in ${to} did not start (${failed})`
       );
     }
   };
@@ -1991,7 +2067,11 @@ export const createDispatcher = ({
       (event.actor.mover !== "hub" || event.actor.tracker !== undefined)
     ) {
       const entered = event.kind === "moved" ? event.to : event.stage;
-      hooked({ ...event, to: entered })
+      hooked({
+        ...event,
+        to: entered,
+        ...(event.kind === "moved" ? { from: event.from } : {}),
+      })
         .catch((error: unknown) =>
           console.warn(
             `[dispatch] ${event.id} entered ${entered}: ${failure(error).message}`

@@ -89,6 +89,7 @@ import type {
   TaskFlags,
   TaskHistory,
   TaskList,
+  TaskReviewRead,
   TaskSummary,
   TaskTimes,
   TaskWait,
@@ -131,12 +132,14 @@ import {
   firstStage,
   isCodeTemplate,
   moveProblem,
+  nobodyProblem,
   passesReview,
   readStages,
   ruledStages,
   STAGE_NAME,
   type Stages,
   type StagesReading,
+  sendBackOf,
   stageNamed,
   startProblem,
   templateStages,
@@ -392,6 +395,10 @@ export interface TaskStore {
   }) => void;
   readonly project: (id: string) =>
     | {
+        /** Its Caw is on: the lead who takes the reports of attempts nobody asked for. */
+        caw: boolean;
+        /** It starts attempts on its own (dispatch.ts), while its Caw is on. */
+        dispatch: boolean;
         id: string;
         /** Review before done: only you move a task to a done stage (stages.ts `ruledStages`). */
         review: boolean;
@@ -444,7 +451,7 @@ export interface StagesTemplateView {
 }
 
 /** One task, its file read whole, and what its attempts and edges say. */
-export interface TaskView extends TaskFlags, TaskTimes {
+export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
   acceptance: string;
   /** The accounts its attempts may run on; empty: every account. */
   accounts: string[];
@@ -1057,7 +1064,7 @@ const viewOf = (
   title: string,
   hash: string,
   stages: Stages | undefined,
-  flags: TaskFlags & Pick<TaskView, "foundInNamed">,
+  flags: TaskFlags & Pick<TaskView, "foundInNamed" | "sendBack">,
   times: TaskTimes,
   result: TaskResult | null,
   issue: TaskIssueLink | null
@@ -1724,6 +1731,18 @@ export const createTasks = (store: TaskStore) => {
 
   /** The highest task number each project has handed out, once read from its history. */
   const issued = new Map<string, number>();
+
+  /** Whether the project starts attempts on its own: its dispatch and its Caw are on (dispatch.ts). */
+  const dispatches = (projectId: string): boolean => {
+    const project = store.project(projectId);
+    return !!(project?.dispatch && project.caw);
+  };
+
+  /** Whether an attempt at the task is starting or running. */
+  const liveAt = (projectId: string, id: string): boolean =>
+    store
+      .attempts(projectId)
+      .some((item) => item.taskId === id && isLive(item.state));
 
   const known = (projectId: string): Tracker => {
     const project = store.project(projectId);
@@ -2702,6 +2721,17 @@ export const createTasks = (store: TaskStore) => {
     const foundAt = parsed.fields.foundIn
       ? settleIn(context, parsed.fields.foundIn)
       : null;
+    const flags = flagsOf(
+      projectId,
+      {
+        id: taskId(number),
+        waitsOn: parsed.fields.waitsOn,
+        partOf: parsed.fields.partOf,
+        stage,
+        hash,
+      },
+      context
+    );
     return viewOf(
       path,
       number,
@@ -2710,18 +2740,15 @@ export const createTasks = (store: TaskStore) => {
       hash,
       stages,
       {
-        ...flagsOf(
-          projectId,
-          {
-            id: taskId(number),
-            waitsOn: parsed.fields.waitsOn,
-            partOf: parsed.fields.partOf,
-            stage,
-            hash,
-          },
-          context
-        ),
+        ...flags,
         foundInNamed: foundAt && { label: foundAt.label, href: foundAt.href },
+        sendBack:
+          (stages &&
+            sendBackOf(stages, stage, {
+              live: flags.liveAttempt,
+              dispatches: dispatches(projectId),
+            })) ??
+          null,
       },
       times.get(path) as TaskTimes,
       resultOf(
@@ -2958,6 +2985,33 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
+   * Refuses a move out of review into work with nothing to work on it
+   * there: something must, its live attempt, the stage's `runs:`, or the
+   * project's dispatch, which starts one (dispatch.ts `hooked`). A
+   * tracker's move is a person's work elsewhere; the hub's own moves are its
+   * attempts'.
+   */
+  const refuseNobody = (
+    projectId: string,
+    stages: Stages,
+    id: string,
+    from: string,
+    to: string,
+    actor: TaskActor
+  ): void => {
+    if (actor.mover === "hub" || actor.tracker !== undefined) {
+      return;
+    }
+    const nobody = nobodyProblem(stages, id, from, to, {
+      live: liveAt(projectId, id),
+      dispatches: dispatches(projectId),
+    });
+    if (nobody) {
+      refuse(409, nobody);
+    }
+  };
+
+  /**
    * Puts a task in stage `to`, checked against the moves for the actor's
    * mover (the hub's own moves only need the stage to be one it may enter;
    * an approved action's, its done action). Answers the move, or nothing
@@ -2993,6 +3047,7 @@ export const createTasks = (store: TaskStore) => {
         ? hubProblem(stages, to)
         : moveProblem(stages, id, from, to, actor.mover)
     );
+    refuseNobody(projectId, stages, id, from, to, actor);
     // The lead reviews, never the doer: a task whose only changes are
     // Caw's own closes or passes review on your move, or once you approved
     // them (lead-gate.ts `reviewProblem`).

@@ -1,10 +1,10 @@
 <script lang="ts">
   /**
-   * What a task needs from you, under its card in a Caw thread: the task's
-   * file read, then its review compact (TaskReview: the session and its
-   * words, what it presented and attached, which opens the task beside the
-   * conversation, and the decision) when it waits on your review, and the other reasons it
-   * waits on you (TaskNeeds). It is read again whenever the list says the
+   * What a task needs from you, in a Caw thread, inside its card's box under
+   * the card: the task's file read, then its review compact (TaskReview: what
+   * is under review, what it presented and attached, which opens the task
+   * beside the conversation, and the decision) when it waits on your
+   * review, and the other reasons it waits on you (TaskNeeds). It is read again whenever the list says the
    * task changed, or one of its attempts handed in a result, so a decision
    * made here, on the board or by Caw shows everywhere.
    */
@@ -72,7 +72,7 @@
 </script>
 
 {#if task}
-  <div data-slot="task-needs-for-needs-for" class="flex flex-col gap-space-3">
+  <div data-slot="task-needs-for-needs-for" class="flex flex-col">
     {#if task.kind === "you"}
       <TaskReview
         compact
@@ -88,6 +88,8 @@
         {task}
       />
     {/if}
-    <TaskNeeds onchanged={took} {onopen} {projectId} {task} {tasks} />
+    <div class="px-space-3 pb-space-3 empty:hidden">
+      <TaskNeeds onchanged={took} {onopen} {projectId} {task} {tasks} />
+    </div>
   </div>
 {/if}

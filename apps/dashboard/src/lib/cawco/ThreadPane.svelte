@@ -744,15 +744,19 @@
                `minmax(0, 1fr)` and its children may shrink, so nothing it
                holds reaches into the next card's track. -->
           {@const needsYou = stages !== null && waitsOnYou(projectId, task)}
+          <!-- A task that waits on you is one box: its card, and under it,
+               inside the same box, what it needs of you (its review, an
+               ask, an action), so a review never reads as the group's. -->
           <li
             data-slot="filed-task"
-            class="*:mb-space-2 *:min-w-0 grid grid-cols-1 row-span-2 grid-rows-subgrid min-w-0 data-needs-you:col-span-full data-needs-you:max-w-c-measure motion-safe:data-arrive:animate-filed-rise motion-reduce:data-arrive:animate-filed-fade"
+            class="*:min-w-0 grid grid-cols-1 row-span-2 grid-rows-subgrid min-w-0 not-data-needs-you:*:mb-space-2 data-needs-you:col-span-full data-needs-you:max-w-c-measure data-needs-you:mb-space-2 data-needs-you:gap-0 data-needs-you:overflow-hidden data-needs-you:rounded-sm data-needs-you:border data-needs-you:border-status-attn-glyph/40 data-needs-you:bg-surface-raised data-needs-you:shadow-tile motion-safe:data-arrive:animate-filed-rise motion-reduce:data-arrive:animate-filed-fade"
             data-arrive={live || undefined}
             data-needs-you={needsYou || undefined}
             style:--arrive-delay={live ? `${(at + 1) * step}ms` : undefined}
           >
             <TaskCard
               href={taskHref(task.id)}
+              inset={needsYou}
               onopen={openTaskOf}
               {task}
               titleFirst

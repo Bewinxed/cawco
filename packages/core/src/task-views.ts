@@ -81,6 +81,26 @@ export interface StagesView {
   views: StageView[];
 }
 
+/**
+ * Where Send back puts a task waiting on you, and who takes it up there
+ * (hub stages.ts `sendBackOf`).
+ */
+export interface SendBack {
+  /**
+   * `attempt`: its live attempt carries on, your note in hand; `start`: an
+   * attempt starts there (the stage's `runs:`, or the project's dispatch);
+   * `nobody`: it waits in a todo stage, nobody on it until someone starts it.
+   */
+  by: "attempt" | "start" | "nobody";
+  stage: string;
+}
+
+/** What a task's whole read carries for its review (hub tasks.ts `TaskView`, the dashboard's). */
+export interface TaskReviewRead {
+  /** Where Send back puts it and who takes it up there; null when it does not wait on you, or no stage before its own is open to you. */
+  sendBack: SendBack | null;
+}
+
 /** One attempt at a task: a work item whose task it is, as a task read shows it. */
 export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */

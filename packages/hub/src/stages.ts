@@ -53,7 +53,12 @@ import {
   type StageKind,
   type StagesTemplate,
 } from "@cawco/core";
-import type { Stage, StageMove, StageView } from "@cawco/core/task-views";
+import type {
+  SendBack,
+  Stage,
+  StageMove,
+  StageView,
+} from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 
 export interface Stages {
@@ -437,6 +442,79 @@ export const movesFrom = (stages: Stages, from: string, who: Mover): string[] =>
         covers(stages, from, to.name, who)
     )
     .map((to) => to.name);
+
+/** What can work on a task once it is in an active stage, besides the stage's own `runs:`. */
+export interface Workers {
+  /** The project starts attempts on its own (its dispatch and its Caw are on). */
+  dispatches: boolean;
+  /** An attempt at the task is starting or running. */
+  live: boolean;
+}
+
+/** Whether anything works on a task in `stage`: its live attempt, the stage's `runs:`, or the project's dispatch. */
+const worked = (stage: Stage, workers: Workers): boolean =>
+  workers.live || !!stage.hooks.runs || workers.dispatches;
+
+/**
+ * Where you send back a task waiting on you (in a stage of kind `you`), and
+ * who takes it up there: the nearest stage before its own of kind active
+ * the moves allow you, when something works on it there (its live attempt
+ * carries on; else the stage's `runs:` or the project's dispatch starts
+ * one); else the nearest todo stage before it the moves allow you, where
+ * nobody is on it yet. Never an active stage with nothing working there.
+ * Undefined when the task does not wait on you, or no such stage is open.
+ */
+export const sendBackOf = (
+  stages: Stages,
+  from: string,
+  workers: Workers
+): SendBack | undefined => {
+  const source = stageNamed(stages, from);
+  if (source?.kind !== "you") {
+    return;
+  }
+  const open = new Set(movesFrom(stages, from, "you"));
+  const before = stages.stages
+    .slice(0, stages.stages.indexOf(source))
+    .reverse()
+    .filter((stage) => open.has(stage.name));
+  const active = before.find(
+    (stage) => stage.kind === "active" && worked(stage, workers)
+  );
+  if (active) {
+    return { stage: active.name, by: workers.live ? "attempt" : "start" };
+  }
+  const todo = before.find((stage) => stage.kind === "todo");
+  return todo && { stage: todo.name, by: "nobody" };
+};
+
+/**
+ * Why a move out of a stage of kind `you` into an active one would leave
+ * the task with nothing working on it: no live attempt, the stage runs no
+ * type, and the project does not dispatch; undefined when something works
+ * on it there, or the move is not one out of review into work.
+ */
+export const nobodyProblem = (
+  stages: Stages,
+  task: string,
+  from: string,
+  to: string,
+  workers: Workers
+): string | undefined => {
+  const target = stageNamed(stages, to);
+  if (
+    stageNamed(stages, from)?.kind !== "you" ||
+    target?.kind !== "active" ||
+    worked(target, workers)
+  ) {
+    return;
+  }
+  const back = sendBackOf(stages, from, workers);
+  const instead = back
+    ? ` Move it to ${back.stage} instead${back.by === "nobody" ? ", where it waits until someone starts it" : ""}, or start an attempt at it.`
+    : " Start an attempt at it instead.";
+  return `${task} cannot go from ${from} to ${to}: nothing would work on it there. No attempt at it is live, ${to} runs no type, and this project does not start attempts on its own.${instead}`;
+};
 
 const unknownStage = (stages: Stages, name: string): string =>
   `${name} is not a stage of this project; its stages are ${listed(
