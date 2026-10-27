@@ -20,10 +20,11 @@
    *    session that failed or was stopped: Try again in Approve's place, a
    *    new session on the task.
    *
-   * No session handed in a result (its work landed from another session,
-   * or it waits on a decision): the result band says what is under review
-   * instead, never empty: the commits its words say landed, the cards it
-   * waits on you to answer, and its description, which is the stage too.
+   * The result band is never empty. No session handed in a result (its
+   * work landed from another session, or it waits on a decision), it says
+   * what is under review instead: the commits its words say landed and its
+   * description. In review, it names the cards it waits on you to answer
+   * (beside it, TaskNeeds leaves them out: `decisionsNamed`).
    *
    * Two columns once the review is wide enough (the pane expanded, the
    * task's own page): the words beside the stage, unclamped.
@@ -60,6 +61,7 @@
   import {
     addComment,
     approveTarget,
+    decisionWait,
     folderFileHref,
     folderRawHref,
     landedOf,
@@ -126,11 +128,9 @@
   const unreported = $derived(!(ended || result));
   /** The commits its words say landed. */
   const landed = $derived(unreported ? landedOf(task) : []);
-  /** The decisions it waits on you to answer: its cards not picked yet. */
+  /** The decisions it waits on you to answer, while it is in review. */
   const asked = $derived(
-    unreported
-      ? task.waits.filter((wait) => wait.kind === "card" && !wait.settled)
-      : []
+    task.kind === "you" ? task.waits.filter(decisionWait) : []
   );
   const described = $derived(unreported ? task.description.trim() : "");
   const summary = $derived(result?.summary || plainMarkdown(described));
@@ -475,14 +475,22 @@
         data-slot="asked"
         class="flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-body text-ink-strong"
       >
-        <span class="type-label">{words.waitsOnAnswer}</span>
+        <span class="flex-none type-label">{words.waitsOnAnswer}</span>
+        <!-- A long question wraps or ends inside its chip, never past the
+             card's edge at 320 wide. -->
         {#each asked as wait (wait.target)}
           {@const drawn = referenceOf(wait.href)}
-          {#if drawn.draw === "element"}
-            <drawn.element id={drawn.id} kind={drawn.kind} label={wait.label} />
-          {:else}
-            <span class="min-w-0 wrap-anywhere">{wait.label}</span>
-          {/if}
+          <span class="min-w-0 max-w-full wrap-anywhere">
+            {#if drawn.draw === "element"}
+              <drawn.element
+                id={drawn.id}
+                kind={drawn.kind}
+                label={wait.label}
+              />
+            {:else}
+              {wait.label}
+            {/if}
+          </span>
         {/each}
       </div>
     {/if}
@@ -658,7 +666,10 @@
         {/if}
       </div>
       {#if back}
-        <p class="m-0 type-meta text-ink-muted" id="back-{task.id}-by">
+        <p
+          class="m-0 type-meta text-ink-muted text-pretty"
+          id="back-{task.id}-by"
+        >
           {backBy}
         </p>
       {/if}

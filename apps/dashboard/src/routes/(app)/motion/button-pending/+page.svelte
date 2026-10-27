@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords, taskReviewWords } from "@cawco/core";
   /**
    * BUTTON BENCH: the kit Button's label and its pending wording
    * (pending-content), read by the `button-pending` spec. A label-only
@@ -150,25 +150,32 @@
     variant="default"
   />
   <Button
-    data-site="lib/cawco/tasks/TaskReview.svelte:437"
+    data-site="lib/cawco/tasks/TaskReview.svelte:626"
     label={commonWords.tryAgain}
     pendingLabel="Starting…"
     size="sm"
     variant="default"
   />
   <Button
-    data-site="lib/cawco/tasks/TaskReview.svelte:445"
-    label="Approve → Review"
-    pendingLabel="Approving…"
+    data-site="lib/cawco/tasks/TaskReview.svelte:635"
+    label={taskReviewWords.approve("Done")}
+    pendingLabel={taskReviewWords.approving}
     size="sm"
     variant="default"
   />
   <Button
-    data-site="lib/cawco/tasks/TaskReview.svelte:499"
-    label="Send back → In progress"
-    pendingLabel="Sending back…"
+    data-site="lib/cawco/tasks/TaskReview.svelte:645"
+    label={taskReviewWords.comment}
+    pendingLabel={taskReviewWords.commenting}
     size="sm"
-    variant="default"
+    variant="outline"
+  />
+  <Button
+    data-site="lib/cawco/tasks/TaskReview.svelte:656"
+    label={taskReviewWords.sendBack("Ready")}
+    pendingLabel={taskReviewWords.sendingBack}
+    size="sm"
+    variant="outline"
   />
   <Button
     data-site="lib/cawco/tasks/TextSection.svelte:93"

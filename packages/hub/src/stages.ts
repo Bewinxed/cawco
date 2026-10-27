@@ -489,10 +489,28 @@ export const sendBackOf = (
 };
 
 /**
- * Why a move out of a stage of kind `you` into an active one would leave
- * the task with nothing working on it: no live attempt, the stage runs no
- * type, and the project does not dispatch; undefined when something works
- * on it there, or the move is not one out of review into work.
+ * Where a task nothing works on waits: the nearest todo stage before
+ * `stage`, else the project's first todo stage; undefined when it has none.
+ */
+export const waitingStageOf = (
+  stages: Stages,
+  stage: string
+): Stage | undefined => {
+  const at = stages.stages.findIndex((each) => each.name === stage);
+  return (
+    stages.stages
+      .slice(0, Math.max(at, 0))
+      .reverse()
+      .find((each) => each.kind === "todo") ??
+    stages.stages.find((each) => each.kind === "todo")
+  );
+};
+
+/**
+ * Why a move into an active stage would leave the task with nothing working
+ * on it there: no live attempt, the stage runs no type, and the project does
+ * not dispatch; undefined when something works on it there, or `to` is not
+ * an active stage.
  */
 export const nobodyProblem = (
   stages: Stages,
@@ -502,18 +520,14 @@ export const nobodyProblem = (
   workers: Workers
 ): string | undefined => {
   const target = stageNamed(stages, to);
-  if (
-    stageNamed(stages, from)?.kind !== "you" ||
-    target?.kind !== "active" ||
-    worked(target, workers)
-  ) {
+  if (target?.kind !== "active" || worked(target, workers)) {
     return;
   }
   const back = sendBackOf(stages, from, workers);
   const instead = back
-    ? ` Move it to ${back.stage} instead${back.by === "nobody" ? ", where it waits until someone starts it" : ""}, or start an attempt at it.`
-    : " Start an attempt at it instead.";
-  return `${task} cannot go from ${from} to ${to}: nothing would work on it there. No attempt at it is live, ${to} runs no type, and this project does not start attempts on its own.${instead}`;
+    ? ` Start an attempt at it, which puts it in ${to}, or send it back to ${back.stage}${back.by === "nobody" ? ", where it waits until someone starts it" : ""}.`
+    : ` Start an attempt at it instead, which puts it in ${to}.`;
+  return `${task} cannot go from ${from || "no stage"} to ${to}: nothing would work on it there. No attempt at it is live, ${to} runs no type, and this project does not start attempts on its own.${instead}`;
 };
 
 const unknownStage = (stages: Stages, name: string): string =>

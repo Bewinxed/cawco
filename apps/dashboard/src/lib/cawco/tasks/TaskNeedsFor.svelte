@@ -89,7 +89,14 @@
       />
     {/if}
     <div class="px-space-3 pb-space-3 empty:hidden">
-      <TaskNeeds onchanged={took} {onopen} {projectId} {task} {tasks} />
+      <TaskNeeds
+        decisionsNamed={task.kind === "you"}
+        onchanged={took}
+        {onopen}
+        {projectId}
+        {task}
+        {tasks}
+      />
     </div>
   </div>
 {/if}

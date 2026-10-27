@@ -138,7 +138,7 @@ import {
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
-import { sendBackOf } from "./stages";
+import { waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
 import {
   BUDGET,
@@ -1587,30 +1587,29 @@ export const createDispatcher = ({
   };
 
   /**
-   * A task sent back out of review into an active stage with nothing to
-   * start it there went in only to be worked (tasks.ts `moveTo` refuses the
-   * move otherwise): it goes on to the nearest todo stage before its review
-   * (stages.ts `sendBackOf`), as the hub, saying why, so it is never left
-   * in an active stage with nothing working on it.
+   * A task moved into an active stage whose attempt did not start went in
+   * only to be worked (tasks.ts `refuseNobody` refuses the move otherwise):
+   * it goes on to the todo stage it waits in (stages.ts `waitingStageOf`),
+   * as the hub, saying why, so it is never left in an active stage with
+   * nothing working on it.
    */
   const nobodyOn = async (
     projectId: string,
     id: string,
-    from: string,
+    to: string,
     why: string
   ): Promise<void> => {
-    const stages = await tasks.stages(projectId);
-    const back = sendBackOf(stages, from, { live: false, dispatches: false });
-    if (!back) {
+    const waiting = waitingStageOf(await tasks.stages(projectId), to);
+    if (!waiting) {
       console.warn(
-        `[dispatch] ${id} came back from ${from} and ${why}; no todo stage before ${from} is open, so it stays.`
+        `[dispatch] ${id} entered ${to} and ${why}; the project has no todo stage, so it stays.`
       );
       return;
     }
     await tasks.move(
       projectId,
       id,
-      back.stage,
+      waiting.name,
       hubActor(`nothing works on it: ${why}`)
     );
   };
@@ -1648,7 +1647,7 @@ export const createDispatcher = ({
       return;
     }
     try {
-      // A send back's start is a person's ask: not capped.
+      // A move in is someone's ask: not capped.
       await startAttempt(
         project.id,
         task.id,
@@ -1668,11 +1667,11 @@ export const createDispatcher = ({
 
   /**
    * A task entered an `active` stage, by a move or filed straight into it:
-   * one that runs a type starts it, and one you sent back out of review
-   * (`from`, a stage of kind `you`) starts it while the project dispatches
-   * ({@link hookStart}). Sent back to its live attempt, the attempt carries
-   * on. A start after a send back that cannot go sends the task on to a
-   * todo stage ({@link nobodyOn}).
+   * one that runs a type starts it, and a move in (`from`) starts it while
+   * the project dispatches ({@link hookStart}); one with a live attempt
+   * keeps it. A move in whose start cannot go sends the task on to its todo
+   * stage ({@link nobodyOn}). A tracker's move is a person's work
+   * elsewhere: only a `runs:` starts for it.
    */
   const hooked = async (event: {
     actor: TaskActor;
@@ -1681,22 +1680,20 @@ export const createDispatcher = ({
     projectId: string;
     to: string;
   }): Promise<void> => {
-    const { projectId, id, to, actor, from } = event;
+    const { projectId, id, to, actor } = event;
     const stages = await tasks.stages(projectId);
     const stage = stages.stages.find((each) => each.name === to);
     const project = projectOf(projectId);
-    const back =
-      from !== undefined &&
-      stages.stages.find((each) => each.name === from)?.kind === "you";
+    const moved = event.from !== undefined && actor.tracker === undefined;
     const { runs } = stage?.hooks ?? {};
     if (!(
       stage?.kind === "active" &&
-      (runs || (back && project.dispatch && project.caw))
+      (runs || (moved && project.dispatch && project.caw))
     )) {
       return;
     }
     const task = await tasks.get(projectId, id);
-    if (back && task.liveAttempt) {
+    if (task.liveAttempt) {
       return;
     }
     const failed = await hookStart(
@@ -1706,13 +1703,13 @@ export const createDispatcher = ({
       actor,
       runs
         ? `It entered ${to}, which runs ${runs}`
-        : `It came back to ${to}, and ${project.name} starts attempts on its own`
+        : `It entered ${to}, and ${project.name} starts attempts on its own`
     );
-    if (back && failed && from) {
+    if (moved && failed) {
       await nobodyOn(
         projectId,
         id,
-        from,
+        to,
         `its attempt in ${to} did not start (${failed})`
       );
     }

@@ -38,6 +38,7 @@
   import { failureWords as message } from "../hub-read";
   import { rowHref } from "../links";
   import {
+    decisionWait,
     moveTask,
     readTask,
     retryTask,
@@ -56,7 +57,10 @@
     onopen,
     ended = true,
     reopenTo = null,
+    decisionsNamed = false,
   }: {
+    /** Its review above names the decisions it waits on you to answer (a thread's task box): they are left out of its waits here. */
+    decisionsNamed?: boolean;
     projectId: string;
     /** The stage a task built on a moved card reopens in, when you may move it there; null: no Reopen here. */
     reopenTo?: string | null;
@@ -84,7 +88,11 @@
       !task.liveAttempt
   );
   const lastAttempt = $derived(task.attempts[0]);
-  const blockers = $derived(task.waits.filter((wait) => !wait.settled));
+  const blockers = $derived(
+    task.waits.filter(
+      (wait) => !(wait.settled || (decisionsNamed && decisionWait(wait)))
+    )
+  );
   const builtOn = $derived(task.builtOn);
 
   // --- a done task built on a card that moved ------------------------------------

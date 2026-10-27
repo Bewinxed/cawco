@@ -139,6 +139,13 @@ export function reviewOf(
   };
 }
 
+/**
+ * A wait that asks you to decide: a card not picked yet. A task's review
+ * names these; beside it, its other needs leave them out.
+ */
+export const decisionWait = (wait: TaskWait): boolean =>
+  wait.kind === "card" && !wait.settled;
+
 /** "Landed 41cb40c18", "landed as 903dc22e9": a commit its words say landed. */
 const LANDED = /\blanded(?:\s+(?:as|in))?[\s*`]+([0-9a-f]{7,40})\b/giu;
 

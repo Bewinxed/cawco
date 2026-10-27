@@ -2985,11 +2985,11 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * Refuses a move out of review into work with nothing to work on it
-   * there: something must, its live attempt, the stage's `runs:`, or the
-   * project's dispatch, which starts one (dispatch.ts `hooked`). A
-   * tracker's move is a person's work elsewhere; the hub's own moves are its
-   * attempts'.
+   * Refuses a move into an active stage with nothing to work on it there
+   * (stages.ts `nobodyProblem`): something must, its live attempt, the
+   * stage's `runs:`, or the project's dispatch, which starts one
+   * (dispatch.ts `hooked`). A tracker's move is a person's work elsewhere;
+   * the hub's own moves are its attempts'.
    */
   const refuseNobody = (
     projectId: string,
