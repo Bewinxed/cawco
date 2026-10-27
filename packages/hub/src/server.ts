@@ -430,6 +430,7 @@ import {
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
 import { COMMENT_LIMITS, SEND_CONTROLS } from "@cawco/core/comments";
+import { compressAnswer } from "@cawco/core/compress-answer";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
@@ -29332,6 +29333,14 @@ export const createServer = (
 
   return Object.assign(
     new Elysia()
+      // Every answer the hub sends, its text compressed for the client that
+      // asked (core compress-answer.ts): the phone and the machines reach
+      // the hub here, and the dashboard's server asks it for none. A
+      // socket's upgrade answers nothing to compress.
+      .wrap((fetch) => async (request: Request, ...rest: unknown[]) => {
+        const answer: Response | undefined = await fetch(request, ...rest);
+        return answer ? compressAnswer(request, answer) : answer;
+      })
       // No page of another origin calls the hub with the browser's cookies:
       // a previewed app on its own port of this host least of all.
       .request(({ request }) => {

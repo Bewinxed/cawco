@@ -67,6 +67,7 @@
     "./captures": "./src/captures.ts",
     "./browser": "./src/browser.ts",
     "./browser-gate": "./src/browser-gate.ts",
+    "./compress-answer": "./src/compress-answer.ts",
     "./stream-relay": "./src/stream-relay.ts",
     "./pass-domain": "./src/pass-domain.ts",
     "./public-address": "./src/public-address.ts",

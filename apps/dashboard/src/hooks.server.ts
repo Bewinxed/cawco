@@ -1,4 +1,5 @@
 import { crossSiteRefusal } from "@cawco/core/browser-gate";
+import { compressAnswer } from "@cawco/core/compress-answer";
 import { gateWords } from "@cawco/core/words/gate";
 import type { Handle } from "@sveltejs/kit/hooks";
 import { ownOrigin } from "#lib/cawco/own-origin.js";
@@ -29,6 +30,11 @@ import { RESTING_TAB_ICON } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
  *   not in a fallback; laid out in Nunito's fallback, every tab stood at
  *   another width than the one its shape was measured at
  *   (fluid-tabs/fold-memory.ts).
+ * - **Compression** (core compress-answer.ts): every answer this server
+ *   renders or relays (pages, their data, remote functions, `/api`) goes
+ *   compressed to a browser that accepts it, once, here; the client's built
+ *   files are already, as adapter-node precompresses them. A server load's
+ *   own `fetch` reads its answer as it is.
  */
 export const handle: Handle = async ({ event, resolve }) => {
   const refused = crossSiteRefusal(
@@ -60,5 +66,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   // the browser whether the page is going by loading a data image
   // (lib/cawco/leaving.ts, `loadsRefused`), and a refused ask holds the read.
   response.headers.set("content-security-policy", "frame-ancestors 'self'");
-  return response;
+  return event.isSubRequest
+    ? response
+    : await compressAnswer(event.request, response);
 };

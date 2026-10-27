@@ -131,6 +131,10 @@ async function proxyToHub(
         // file the reader attached (`POST /api/files`, raw bytes).
         "Content-Type":
           request.headers.get("content-type") || "application/json",
+        // The hub's bytes as they are: fetch would undo the hub's encoding
+        // here, and this server compresses the answer for the browser once
+        // (hooks.server.ts), so a compressed hop on loopback is work twice.
+        "Accept-Encoding": "identity",
         // Forward relevant headers
         ...(authorization && { Authorization: authorization }),
         ...(cookie && { Cookie: cookie }),
