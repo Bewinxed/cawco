@@ -24,7 +24,6 @@ if (bridge) {
   listenForPicks(window, {
     choose: bridge.choose,
     interacting: () => true,
-    keepsPicks: () => true,
     picked: (choice) => now[choice]?.options ?? [],
     refused: () => undefined,
   });
