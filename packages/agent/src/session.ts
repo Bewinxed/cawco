@@ -150,6 +150,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import { detach } from "@cawco/core/detach";
+import { ARTIFACT_PICTURE } from "@cawco/core/frames";
 import { measureMemoryRoom } from "@cawco/core/machine-room";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -164,6 +165,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { turnWords } from "@cawco/core/words/turns";
 import { Effect } from "effect";
 import { recordAgentState } from "./agent-state";
+import { drawArtifact } from "./artifact-picture";
 import { withFiles } from "./attachments";
 import {
   type Boundary,
@@ -1209,6 +1211,11 @@ export class SessionSupervisor {
         : openCanvasScreen(options as Parameters<typeof openCanvasScreen>[0]),
     [CANVAS_SCREEN_CLOSE]: (options) =>
       closeCanvasScreen(options as Parameters<typeof closeCanvasScreen>[0]),
+    // A preview or a page drawn as the panel draws it, for artifact_read's png (artifact-picture.ts).
+    [ARTIFACT_PICTURE]: (options) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : drawArtifact(options as Parameters<typeof drawArtifact>[0]),
     [AGENT_BUSY]: () => this.busyNow(),
   };
 

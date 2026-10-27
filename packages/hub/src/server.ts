@@ -136,6 +136,7 @@ import {
   AGENT_BUSY,
   ARTIFACT_GONE,
   ARTIFACT_ORIGIN,
+  ARTIFACT_PICTURE,
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
   type ArtifactNeed,
@@ -316,6 +317,7 @@ import {
   OVER_STATUSES,
   PAIRING_REQUIRED,
   type PendingAccountSignin,
+  PICTURE_LIMITS,
   PLACEMENT_STRATEGIES,
   PLAN_ORIGIN,
   type PlacementPreview,
@@ -14374,6 +14376,7 @@ export const createServer = (
       }
     },
     browse: (instance, row) => browseAt(instance, row),
+    picture: (instance, row, width) => pictureOf(instance, row, width),
     // A Linux workspace dials out through srt, which refuses the owner's own
     // network and its machine's own addresses (core boundary-reach.ts),
     // but for this hub's own preview origins, which its relay dials from the
@@ -14868,20 +14871,15 @@ export const createServer = (
   };
 
   /**
-   * Where session `instance`'s own browser opens artifact `row`
-   * (`artifact_browse`), and the origins it needs: a page or a canvas at
-   * its own address on the origin that serves it, a component or a
-   * preview on an embed origin of its own (as a decision page's Preview
-   * shows it), and a decision page's embeds besides: a one-time entry on
-   * that origin (host mode's name, else its own port on the host the hub's
-   * links name), which sets the session's own pass on those origins alone
-   * (preview-access.ts).
+   * Session `instance`'s way into artifact `row` for a browser of its own:
+   * the origin that serves it ({@link browsedOrigin}), its path there, and a
+   * one-time ticket that sets the session's own pass on that origin and a
+   * decision page's embeds alone (preview-access.ts). A decision page's
+   * Preview of a dev server or a sheet stands on an embed origin of its own
+   * (embedAt); its Canvas and Preview of a page stand on the page's own.
    */
-  const browseAt = (instance: InstanceRow, row: ArtifactRow): Browsed => {
+  const enteredAt = (instance: InstanceRow, row: ArtifactRow) => {
     const { key, address, path } = browsedOrigin(row);
-    // A decision page's Preview of a dev server or a sheet stands on an
-    // embed origin of its own (embedAt); its Canvas and Preview of a page
-    // stand on the page's own.
     const embeds = Object.entries(
       artifacts.programServed(row.id)?.media ?? {}
     ).flatMap(([id, held]) =>
@@ -14889,6 +14887,22 @@ export const createServer = (
         ? [embedKey(id)]
         : []
     );
+    return {
+      address,
+      path,
+      entry: mintSessionTicket(instance.id, [key, ...embeds]),
+    };
+  };
+
+  /**
+   * Where session `instance`'s own browser opens artifact `row`
+   * (`artifact_browse`) ({@link enteredAt}): a page or a canvas at its own
+   * address on the origin that serves it, a component or a preview on an
+   * embed origin of its own, entered once on that origin (host mode's name,
+   * else its own port on the host the hub's links name).
+   */
+  const browseAt = (instance: InstanceRow, row: ArtifactRow): Browsed => {
+    const { address, path, entry } = enteredAt(instance, row);
     const origin =
       address.origin ??
       previewRoute(address, new URL(dashboardUrl(registry)))?.origin;
@@ -14898,11 +14912,71 @@ export const createServer = (
         `${row.name}'s preview origin has no address this hub can name.`
       );
     }
-    const entry = mintSessionTicket(instance.id, [key, ...embeds]);
     return {
       url: previewEnterUrl(origin, entry.ticket, path),
       expiresAt: new Date(entry.expiresAt).toISOString(),
     };
+  };
+
+  /**
+   * Preview or page `row` drawn as the person's panel draws it, for session
+   * `instance`'s `artifact_read` with `png`: the hub machine's daemon opens
+   * it in its Chromium (agent artifact-picture.ts) where `artifact_browse`
+   * would, on its own preview origin, here on loopback, so the proxy's
+   * overlay and the real origin are in it; a sleeping server is woken by
+   * the page's load. Its picture, base64 PNG; refused in words when no
+   * daemon runs on the hub's machine or it didn't draw in time.
+   */
+  const pictureOf = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    width: number
+  ): Promise<string> => {
+    const machineId = await ownMachineId;
+    if (!registry.agent(machineId)) {
+      throw new ArtifactRefusal(
+        503,
+        `${row.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
+      );
+    }
+    const { address, path, entry } = enteredAt(instance, row);
+    const asked = await callAgent(
+      machineId,
+      ARTIFACT_PICTURE,
+      [
+        {
+          url: previewEnterUrl(
+            previewListeners.loopback(address.port),
+            entry.ticket,
+            path
+          ),
+          width,
+          artifact: { id: row.id, kind: row.kind, name: row.name },
+          sync: `/__cawco/artifact/${row.id}`,
+        },
+      ],
+      PICTURE_LIMITS.askMs
+    );
+    switch (asked.kind) {
+      case "unanswered":
+        throw new ArtifactRefusal(
+          503,
+          `${row.name} wasn't drawn: the hub's machine didn't draw it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${Math.round(asked.after / 1000)} s`}.`
+        );
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
+    }
+    const png = (asked.value.result as { png?: unknown } | undefined)?.png;
+    if (!asked.value.ok || typeof png !== "string") {
+      throw new ArtifactRefusal(
+        503,
+        asked.value.error ??
+          `${row.name} wasn't drawn: the hub's machine answered no picture.`
+      );
+    }
+    return png;
   };
 
   /**

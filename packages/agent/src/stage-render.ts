@@ -25,7 +25,8 @@ import {
   STAGE_RENDER_MS,
 } from "@cawco/core/stage";
 import type { Socket, TCPSocketListener } from "bun";
-import { browserExecutable, chromiumSandboxed } from "./capabilities";
+import { chromiumSandboxed } from "./capabilities";
+import { launchChromium } from "./chromium";
 import { findFrame, framePicture, poseFrame } from "./frame-picture";
 
 /** How long a render may take, page load to the last section's report. */
@@ -34,9 +35,6 @@ const RENDER_WAIT_MS = STAGE_RENDER_MS;
 const SETTLE_MS = 600;
 /** The window a render opens in: the desk's. A frame its canvas can't hold whole at its own size grows it (frame-picture.ts `poseFrame`). */
 const VIEWPORT = { width: 1440, height: 900 };
-
-/** Why a render can't run on this machine, in the words a tool answers. */
-class RenderRefusal extends Error {}
 
 /** One frame a render is asked for: its story and state, for its picture. */
 interface RenderState {
@@ -184,20 +182,14 @@ export async function renderCanvas(
   /** Chromium's own sandbox: the daemon's rule ({@link chromiumSandboxed}) unless the caller knows its own. */
   sandbox = chromiumSandboxed()
 ): Promise<Rendered> {
-  const executable = browserExecutable();
-  if (!executable) {
-    throw new RenderRefusal(
-      "This machine has no Chromium browser for the stage to draw with: install Google Chrome or Chromium (the machine's capability report names the command), then call again."
-    );
-  }
   const listener = reached === "host" ? null : await listenerFor(reached);
   const origin = `http://127.0.0.1:${listener ? listener.port : port}`;
-  const { chromium } = await import("playwright-core");
-  const browser = await chromium.launch({
-    executablePath: executable,
-    chromiumSandbox: sandbox,
-    headless: true,
-    args: ["--disable-gpu"],
+  const browser = await launchChromium(
+    "This machine has no Chromium browser for the stage to draw with: install Google Chrome or Chromium (the machine's capability report names the command), then call again.",
+    sandbox
+  ).catch((error: unknown) => {
+    listener?.stop(true);
+    throw error;
   });
   try {
     const page = await browser.newPage({

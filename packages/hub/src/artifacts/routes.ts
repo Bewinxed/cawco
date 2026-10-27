@@ -16,6 +16,7 @@ import {
 } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
+import { PICTURE_LIMITS } from "@cawco/core/frames";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
@@ -194,7 +195,7 @@ const SHAPES: Record<string, string> = {
   create: CREATE_SHAPE,
   update:
     'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
-  read: 'artifact_read takes id?, since?, png?, detail ("summary" | "story"), story, state { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? }, render. Example: { id, state: { story: "Waiting", interaction: "hover" } }.',
+  read: 'artifact_read takes id?, since?, png?, width?, detail ("summary" | "story"), story, state { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? }, render. Example: { id, state: { story: "Waiting", interaction: "hover" } }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
 
@@ -283,6 +284,9 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       let shape = SHAPES.read;
       if (path.endsWith("/design-map")) {
         shape = SHAPES.map;
+      } else if (request.method === "GET") {
+        // A read's query (its png's width, its frame): artifact_read's shape.
+        shape = SHAPES.read;
       } else if (path.endsWith("/artifacts")) {
         shape = SHAPES.create;
       } else if (!(path.endsWith("/sheet") || path.endsWith("/view"))) {
@@ -437,6 +441,14 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         query: t.Object({
           since: t.Optional(t.Numeric({ minimum: 0 })),
           png: t.Optional(t.BooleanString()),
+          // A preview's or a page's picture: its width in CSS px.
+          width: t.Optional(
+            t.Numeric({
+              minimum: PICTURE_LIMITS.minWidth,
+              maximum: PICTURE_LIMITS.maxWidth,
+              multipleOf: 1,
+            })
+          ),
           detail: t.Optional(
             t.Union([t.Literal("summary"), t.Literal("story")])
           ),
@@ -460,6 +472,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
               ...(query.state ? { state: stateOf(query.state) } : {}),
               ...(query.render ? { render: true } : {}),
               ...(query.verify ? { verify: true } : {}),
+              ...(query.width === undefined ? {} : { width: query.width }),
             }
           );
         } catch (error) {

@@ -6,10 +6,9 @@
  * agent's writes (hub artifacts/canvas.ts) where no person's screen shows
  * the canvas, a delegate's canvas handed to its parent and not opened yet.
  *
- * No dashboard frames it, so a stand-in for one ({@link HOST}) speaks to it
- * from inside the page, as the app's host script does (ComposerCanvas.swift
- * `host`), and says the hello the dashboard's would (stage.svelte.ts
- * `hello`). The hub holds it on through each write (an open naming a token
+ * No dashboard frames it, so a stand-in for one (chromium.ts
+ * `HOST_STAND_IN`) speaks to it from inside the page and says the hello the
+ * dashboard's would (stage.svelte.ts `hello`). The hub holds it on through each write (an open naming a token
  * already open) and closes it once the canvas's picture has followed its
  * last write; one the hub goes quiet on goes after twice
  * `CANVAS_LIMITS.screenHoldMs`.
@@ -17,39 +16,7 @@
 
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import type { Browser } from "playwright-core";
-import { browserExecutable, chromiumSandboxed } from "./capabilities";
-
-/**
- * The dashboard's stand-in, inside the page, before its own scripts run:
- * `window.parent` is it, so the overlay hears it as its host (host-origin.ts
- * `heardFromHost`: from `window.parent`, on the page's own origin), what the
- * page posts to it goes nowhere, and `__cawcoDeliver` hands the page a
- * message from it.
- */
-const HOST = `(() => {
-  const listeners = new Set();
-  const host = { postMessage() {} };
-  const add = window.addEventListener;
-  window.addEventListener = function (type, listener, options) {
-    if (type === "message" && listener) listeners.add(listener);
-    return add.call(this, type, listener, options);
-  };
-  const remove = window.removeEventListener;
-  window.removeEventListener = function (type, listener, options) {
-    if (type === "message") listeners.delete(listener);
-    return remove.call(this, type, listener, options);
-  };
-  window.parent = host;
-  window.__cawcoDeliver = (data) => {
-    const event = { data, origin: location.origin, source: host };
-    for (const listener of listeners) {
-      try {
-        if (typeof listener === "function") listener.call(window, event);
-        else listener.handleEvent(event);
-      } catch (error) { console.error(error); }
-    }
-  };
-})();`;
+import { greet, HOST_STAND_IN, launchChromium } from "./chromium";
 
 /** What the hub names the canvas by: its id and name, and where its doc is synced on the page's origin. */
 interface CanvasNamed {
@@ -102,38 +69,23 @@ export async function openCanvasScreen(options: {
       "A canvas screen names the canvas: its id, name and sync path."
     );
   }
-  const executable = browserExecutable();
-  if (!executable) {
-    throw new Error(
-      "The hub's machine has no Chromium browser to draw the canvas with: install Google Chrome or Chromium there (the machine's capability report names the command), then call again."
-    );
-  }
-  const { chromium } = await import("playwright-core");
-  const browser = await chromium.launch({
-    executablePath: executable,
-    chromiumSandbox: chromiumSandboxed(),
-    headless: true,
-    args: ["--disable-gpu"],
-  });
+  const browser = await launchChromium(
+    "The hub's machine has no Chromium browser to draw the canvas with: install Google Chrome or Chromium there (the machine's capability report names the command), then call again."
+  );
   try {
     const page = await browser.newPage({
       viewport: { width: 1440, height: 900 },
     });
-    await page.addInitScript(HOST);
+    await page.addInitScript(HOST_STAND_IN);
     await page.goto(url, { timeout: CANVAS_LIMITS.screenLoadMs });
     // The dashboard's hello (stage.svelte.ts `hello`), its canvas docked: no inset.
-    await page.evaluate(
-      (hello) =>
-        (
-          globalThis as unknown as { __cawcoDeliver: (data: unknown) => void }
-        ).__cawcoDeliver(hello),
+    await greet(
+      page,
       {
-        type: "cawco:hello",
         artifact: { id: canvas.id, kind: "canvas", name: canvas.name },
         sync: canvas.sync,
-        theme: "light",
-        inset: { top: 0, side: 0 },
-      }
+      },
+      { top: 0, side: 0 }
     );
   } catch (error) {
     await browser.close().catch(() => undefined);

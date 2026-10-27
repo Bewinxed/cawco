@@ -20,6 +20,7 @@ import {
   PREVIEW_LOCKED_MESSAGE,
   projectPagePlace,
 } from "@cawco/core";
+import { PICTURE_VIEW } from "@cawco/core/frames";
 import { theme } from "#lib/theme.svelte.js";
 import { keepThumbnail } from "../artifact-api";
 import { pageSource } from "../preview/page-source";
@@ -31,8 +32,8 @@ import { readArtifacts } from "./files.svelte";
 const SETTLE_MS = 1000;
 /** The most one page is given, from its frame's load to its picture. Our call. */
 const PAGE_MS = 15_000;
-/** The frame's size: the pane's at a desk, so the picture is the page as it is read there. */
-const FRAME = { width: 640, height: 800 };
+/** The frame's size: the pane's at a desk, so the picture is the page as it is read there (artifact_read's too). */
+const FRAME = PICTURE_VIEW;
 
 /** Pages tried in this tab, drawn or not: never tried again. */
 const tried = new Set<string>();

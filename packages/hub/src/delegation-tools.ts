@@ -940,17 +940,16 @@ export function handoffTools(deps: HandoffDeps) {
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and the newest artifact when none is named
-      async ({ id, since, png, detail, story, state, render, verify }) => {
-        const query = new URLSearchParams({
-          ...(since === undefined ? {} : { since: String(since) }),
-          ...(png ? { png: "true" } : {}),
-          ...(detail ? { detail } : {}),
-          ...(story ? { story } : {}),
-          ...(state ? { state: JSON.stringify(state) } : {}),
-          ...(render ? { render: "true" } : {}),
-          ...(verify ? { verify: "true" } : {}),
-        }).toString();
+      async ({ id, state, ...asked }) => {
+        // Each read field given into the query, a frame's `state` as JSON; a flag left off stays out.
+        const query = new URLSearchParams(
+          Object.entries({
+            ...asked,
+            ...(state ? { state: JSON.stringify(state) } : {}),
+          }).flatMap(([key, value]): [string, string][] =>
+            value === undefined || value === false ? [] : [[key, String(value)]]
+          )
+        ).toString();
         let target = id;
         if (target === undefined) {
           const [newest] = (await actions.artifactCall("GET", "")) as {

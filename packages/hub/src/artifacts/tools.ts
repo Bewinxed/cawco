@@ -15,6 +15,7 @@ import {
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { CHOICE_LIMITS } from "@cawco/core/choices";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
+import { PICTURE_LIMITS } from "@cawco/core/frames";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
@@ -272,13 +273,20 @@ export const artifactRead = {
   name: "artifact_read",
   description:
     "Read the person's picks, notes and values on an artifact (yours, your delegation tree's, your project's pages, what its cold sessions left): each choice " +
-    "picked or not yet. `since`: the seq your last read gave. No id: your newest. A canvas: its outline and what the person changed; " +
-    "`png` adds its picture. A component: its frames, moves, stories, dials and tuning; `state` adds a frame's style delta, " +
+    "picked or not yet. `since`: the seq your last read gave. No id: your newest. `png` adds its picture as the person's panel draws it: " +
+    "a preview or a page drawn now, overlay and pins included, `width` px wide (the panel's by default), its sleeping server woken first. " +
+    "A canvas: its outline and what the person changed. A component: its frames, moves, stories, dials and tuning; `state` adds a frame's style delta, " +
     '`detail: "story"` a story\'s args, `render` draws it now, `verify` asks the design verifier.',
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),
     png: z.boolean().optional(),
+    width: z
+      .number()
+      .int()
+      .min(PICTURE_LIMITS.minWidth)
+      .max(PICTURE_LIMITS.maxWidth)
+      .optional(),
     detail: z.enum(["summary", "story"]).optional(),
     story: z.string().optional(),
     state: z

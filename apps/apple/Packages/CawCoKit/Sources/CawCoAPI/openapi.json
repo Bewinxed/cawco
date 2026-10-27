@@ -6081,6 +6081,24 @@
             }
           },
           {
+            "name": "width",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 320,
+                  "maximum": 2560,
+                  "multipleOf": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
             "name": "detail",
             "in": "query",
             "required": false,
@@ -37743,7 +37761,7 @@
             ]
           },
           "png": {
-            "description": "A canvas's latest picture, base64 PNG, when asked (`png: true`); null when it has none yet.",
+            "description": "Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage.",
             "type": [
               "null",
               "string"

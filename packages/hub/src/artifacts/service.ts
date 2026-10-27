@@ -44,6 +44,7 @@ import {
   type InstanceRow,
   machineLabel,
   noteText,
+  PICTURE_VIEW,
   type PlanStep,
   type PreviewAddress,
   type PreviewSource,
@@ -580,7 +581,7 @@ export interface ArtifactRead {
   pageHash: string | null;
   /** When the canvas's latest picture was drawn; null when it has none. */
   pictureAt?: string | null;
-  /** A canvas's latest picture, base64 PNG, when asked (`png: true`); null when it has none yet. */
+  /** Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage. */
   png?: string | null;
   /** A decision page's program as the hub keeps it, on a read without `since`: re-emit a statement from it to revise one. */
   program?: string;
@@ -1114,6 +1115,8 @@ export interface ComponentReadAsk {
   story?: string;
   /** Ask the design system's verifier for a round on it; its findings come as a message. */
   verify?: boolean;
+  /** A preview's or a page's picture: its width in CSS px; the panel's (core `PICTURE_VIEW`) when none. */
+  width?: number;
 }
 
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
@@ -1612,6 +1615,19 @@ export interface ArtifactServiceDeps {
     | { html: string; program?: BuiltProgram }
     | { refused: string; status: ArtifactRefusal["status"] }
   >;
+  /**
+   * Preview or page `artifact` drawn as the person's panel draws it, for
+   * session `instance`'s `artifact_read` with `png` (server.ts, agent
+   * artifact-picture.ts): on its own preview origin in the Chromium of the
+   * hub's machine, `width` CSS px wide, a sleeping server woken first. Its
+   * picture, base64 PNG; throws an {@link ArtifactRefusal} saying why when
+   * it can't be drawn.
+   */
+  picture: (
+    instance: InstanceRow,
+    artifact: ArtifactRow,
+    width: number
+  ) => Promise<string>;
   /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
    * person something (`comment_reply`'s `asks`): its push, grouped per
@@ -6966,10 +6982,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row.kind === "canvas") {
         return heldAnswer(readCanvas(row, since, png, ownersRead));
       }
+      if (row.kind === "browser" && png) {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is the project's browser: the hub serves no page of it to draw, so it has no picture. Read it without png.`
+        );
+      }
       if (row.kind !== "component") {
+        // Drawn before the read, which then says what the picture shows.
+        const picture = png
+          ? await deps.picture(instance, row, ask.width ?? PICTURE_VIEW.width)
+          : undefined;
         return heldAnswer({
           ...read(row, since, ownersRead),
           ...(since === undefined ? programRead(row) : {}),
+          ...(picture === undefined ? {} : { png: picture }),
         });
       }
       const answer = await readSheet(row, since, ownersRead, {
