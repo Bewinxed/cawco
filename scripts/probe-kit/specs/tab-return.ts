@@ -1136,6 +1136,9 @@ function watchOffscreenRuns(): void {
   }
 }
 
+/** How long a scroll-driven run's timeline is watched for a move (`hiddenLoopsOf`). */
+const SCROLL_READ_MS = 500;
+
 /**
  * What runs in a pane off screen, put away (PaneLeaf `data-pane-hidden`)
  * or laid out unseen (`data-pane-settling`: drawing its first picture, or
@@ -1149,60 +1152,94 @@ function watchOffscreenRuns(): void {
  * reads `running`, then `finished`, never updated and never drawn (a hidden
  * fade read so with no event, its process's CPU 2–4 ticks over five runs
  * against 37–40 shown, 2026-10-25), so only the runs it served cost.
+ *
+ * A scroll-driven run (its timeline a `ScrollTimeline`, `ViewTimeline`
+ * among them) reads `running` while its scroller stands still, and costs
+ * nothing then: Chromium asks a frame for one only when its timeline moved
+ * (scroll_snapshot_timeline.cc `ShouldScheduleNextService`: "return
+ * current_time != last_current_time_;"). The transcript's head fade in four
+ * panes put away, 20 runs `running`, drew 0 main-thread frames in 10 s
+ * idle, as many as with it gone; one time-driven loop beside it drew 600
+ * (2026-10-27). So such a run is counted only when its timeline's time
+ * changes over `SCROLL_READ_MS`.
  */
 const hiddenLoopsOf = async (page: Page, since = 0) => {
   const webkit = page.context().browser()?.browserType().name() === "webkit";
-  const read = await page.evaluate((from) => {
-    const served = (
-      (window as unknown as { __offscreenRuns?: [number, string][] })
-        .__offscreenRuns ?? []
-    ).filter(([at]) => at >= from);
-    const panes = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[data-slot="pane"][data-pane-hidden], [data-slot="pane"][data-pane-settling]'
-      ),
-    ];
-    const unseen = (pane: HTMLElement) =>
-      pane.hasAttribute("data-pane-settling");
-    /** A loop said: its pane, the slot it stands in, its element and its keyframes. */
-    const named = (loop: Animation, effect: KeyframeEffect, el: Element) =>
-      `${(el.closest("[data-pane]") as HTMLElement | null)?.dataset.pane?.slice(0, 8)} ${el.parentElement?.closest("[data-slot]")?.getAttribute("data-slot") ?? ""} ${el.localName}.${[...el.classList].slice(0, 2).join(".")}${effect.pseudoElement ?? ""} ${(loop as CSSAnimation).animationName ?? "script"}`;
-    const runs = document.getAnimations().flatMap((loop) => {
-      const effect = loop.effect as KeyframeEffect | null;
-      const el = effect?.target;
-      return effect && el && panes.some((one) => one.contains(el))
-        ? [{ loop, effect, el }]
-        : [];
-    });
-    const running = runs.filter(({ loop }) => loop.playState === "running");
-    const pseudo = runs.filter(({ effect }) => effect.pseudoElement).length;
-    const laidOut = panes.filter(unseen).length;
-    const where = running
-      .slice(0, 4)
-      .map(({ loop, effect, el }) => named(loop, effect, el));
-    // Each loop by its keyframes, where it runs and its play state: which
-    // loops the census holds (a skeleton's sweep on ::after, a breath).
-    const kinds = new Map<string, number>();
-    for (const { loop, effect } of runs) {
-      const kind = `${(loop as CSSAnimation).animationName ?? "script"}${effect.pseudoElement ?? ""} ${loop.playState}`;
-      kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
-    }
-    const byKind = [...kinds].map(([kind, n]) => `${kind} ×${n}`).join(", ");
-    return {
-      running: running.length,
-      served: served.length,
-      paused: runs.length - running.length,
-      panes: panes.length,
-      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${byKind ? `; by keyframes: ${byKind}` : ""}${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}; ${served.length} events from runs served there${
-        served.length > 0
-          ? `: ${served
-              .slice(0, 4)
-              .map(([, what]) => what)
-              .join(", ")}`
-          : ""
-      }`,
-    };
-  }, since);
+  const read = await page.evaluate(
+    async ([from, wait]) => {
+      const served = (
+        (window as unknown as { __offscreenRuns?: [number, string][] })
+          .__offscreenRuns ?? []
+      ).filter(([at]) => at >= from);
+      const panes = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-slot="pane"][data-pane-hidden], [data-slot="pane"][data-pane-settling]'
+        ),
+      ];
+      const unseen = (pane: HTMLElement) =>
+        pane.hasAttribute("data-pane-settling");
+      /** A loop said: its pane, the slot it stands in, its element and its keyframes. */
+      const named = (loop: Animation, effect: KeyframeEffect, el: Element) =>
+        `${(el.closest("[data-pane]") as HTMLElement | null)?.dataset.pane?.slice(0, 8)} ${el.parentElement?.closest("[data-slot]")?.getAttribute("data-slot") ?? ""} ${el.localName}.${[...el.classList].slice(0, 2).join(".")}${effect.pseudoElement ?? ""} ${(loop as CSSAnimation).animationName ?? "script"}`;
+      const runs = document.getAnimations().flatMap((loop) => {
+        const effect = loop.effect as KeyframeEffect | null;
+        const el = effect?.target;
+        return effect && el && panes.some((one) => one.contains(el))
+          ? [{ loop, effect, el }]
+          : [];
+      });
+      // A scroll-driven run's time is its scroller's: read it again after
+      // `wait`, and only one whose timeline moved is drawn.
+      const scrolled = (loop: Animation) =>
+        typeof ScrollTimeline !== "undefined" &&
+        loop.timeline instanceof ScrollTimeline;
+      const timeOf = (loop: Animation) => String(loop.timeline?.currentTime);
+      const before = new Map(
+        runs
+          .filter(({ loop }) => scrolled(loop))
+          .map(({ loop }) => [loop, timeOf(loop)])
+      );
+      if (before.size > 0) {
+        await new Promise((done) => setTimeout(done, wait));
+      }
+      const idle = (loop: Animation) =>
+        before.has(loop) && before.get(loop) === timeOf(loop);
+      const running = runs.filter(
+        ({ loop }) => loop.playState === "running" && !idle(loop)
+      );
+      const stillScrolled = runs.filter(
+        ({ loop }) => loop.playState === "running" && idle(loop)
+      ).length;
+      const pseudo = runs.filter(({ effect }) => effect.pseudoElement).length;
+      const laidOut = panes.filter(unseen).length;
+      const where = running
+        .slice(0, 4)
+        .map(({ loop, effect, el }) => named(loop, effect, el));
+      // Each loop by its keyframes, where it runs and its play state: which
+      // loops the census holds (a skeleton's sweep on ::after, a breath).
+      const kinds = new Map<string, number>();
+      for (const { loop, effect } of runs) {
+        const kind = `${(loop as CSSAnimation).animationName ?? "script"}${effect.pseudoElement ?? ""} ${loop.playState}`;
+        kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+      }
+      const byKind = [...kinds].map(([kind, n]) => `${kind} ×${n}`).join(", ");
+      return {
+        running: running.length,
+        served: served.length,
+        paused: runs.length - running.length - stillScrolled,
+        panes: panes.length,
+        line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${stillScrolled} scroll-driven on a still scroller, ${runs.length - running.length - stillScrolled} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${byKind ? `; by keyframes: ${byKind}` : ""}${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}; ${served.length} events from runs served there${
+          served.length > 0
+            ? `: ${served
+                .slice(0, 4)
+                .map(([, what]) => what)
+                .join(", ")}`
+            : ""
+        }`,
+      };
+    },
+    [since, SCROLL_READ_MS] as const
+  );
   return {
     ...read,
     costly: webkit ? read.served : read.running + read.served,
