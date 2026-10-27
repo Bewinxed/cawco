@@ -15,25 +15,31 @@
  * automatic code splitting or manual code splitting depending on your
  * configuration, but not both"). The loaders are the families of routes:
  * - `base`: every route, by Kit's runtime entries and the root layout;
- * - a route group (`(app)`), by its layout;
+ * - every other layout (`(app)`, `(app)/config`), by itself, for the pages
+ *   under it;
  * - each page outside every route group (an artifact in its own tab, a
  *   project's custom view in the app's web view), by itself: what a group's
  *   layout shares with one goes in a chunk named for both, so a bare page
  *   never loads the shell's chunk. The owner's rule for those: "an artifact
  *   shouldn't load anything that is not needed for the preview/artifact".
- * A page's own modules, a nested layout's and every dynamic import stay with
- * the automatic splitting, so routes still load lazily and a lazy editor or
- * diagram library is fetched only when drawn. The `/dev/*` pages are no
+ * A module both a layout and one under it load is the outer one's: every
+ * page under the inner layout loads the outer one too. What two or more pages
+ * under a nested layout (`(app)/config`, below the shell) share counts as
+ * that layout's: a settings section's pages share their rows and forms, which
+ * came out as a dozen chunks of a few KB each. A page's own modules, what
+ * pages directly under a group's layout share, and every dynamic import stay
+ * with the automatic splitting, so routes still load lazily and a lazy editor
+ * or diagram library is fetched only when drawn. The `/dev/*` routes are no
  * family: they load whatever they share, the shell included.
  *
- * A module's dependencies are loaded by everyone who loads it, so each lies in
- * a chunk of at least the same loaders. A group with more loaders takes its
- * modules first (`priority`: "modules of that group will be removed from
- * other groups"), so the recursive capture of a group's dependencies
- * (`includeDependenciesRecursively`, on by default) never pulls a shared
- * module into a narrower chunk. Rolldown reads the groups before the build
- * (`outputOptions` runs before `buildEnd`), so there is one group per
- * loader count, up to one per entry, each naming its chunks once the graph is
+ * A module's dependencies are loaded by every page that loads it, so each
+ * lies in a chunk loaded by at least the same pages. The group whose chunk
+ * more pages load takes its modules first (`priority`: "modules of that group
+ * will be removed from other groups"), so the recursive capture of a group's
+ * dependencies (`includeDependenciesRecursively`, on by default) never pulls
+ * a shared module into a narrower chunk. Rolldown reads the groups before the
+ * build (`outputOptions` runs before `buildEnd`), so there is one group per
+ * page count, up to one per entry, each naming its chunks once the graph is
  * known.
  */
 import { relative } from "node:path";
@@ -70,25 +76,101 @@ const chunkName = (families: Iterable<string>): string =>
     .sort()
     .join("_");
 
-/** The family of routes a node's route file loads for, or null when it is no family's. */
-const familyOf = (route: string): string | null => {
-  const match = ROUTE_FILE.exec(route);
+/** A route file's directory under `src/routes` and its kind, or null for another file. */
+const routeOf = (
+  file: string
+): { dir: string; kind: string; segments: string[] } | null => {
+  const match = ROUTE_FILE.exec(file);
   if (!match) {
     return null;
   }
-  const [, dir = "", kind] = match;
-  const segments = dir.split("/").filter(Boolean);
-  const [first = ""] = segments;
-  if (kind === "layout" && segments.length === 0) {
-    return BASE;
+  const [, path = "", kind = ""] = match;
+  const segments = path.split("/").filter(Boolean);
+  return { dir: segments.join("/"), kind, segments };
+};
+
+/** The family of routes a node's route file loads for, or null when it is no family's. */
+const familyOf = (file: string): string | null => {
+  const route = routeOf(file);
+  if (!route) {
+    return null;
   }
-  if (kind === "layout" && segments.length === 1 && GROUP_SEGMENT.test(first)) {
-    return first;
+  const { dir, kind, segments } = route;
+  if (segments.find((segment) => !GROUP_SEGMENT.test(segment)) === "dev") {
+    return null;
   }
-  if (kind === "page" && !GROUP_SEGMENT.test(first) && first !== "dev") {
-    return `${PAGE}${segments.join("/")}`;
+  if (kind === "layout") {
+    return dir || BASE;
   }
-  return null;
+  return kind === "page" ? `${PAGE}${dir}` : null;
+};
+
+/** Whether the family `family` loads for the page in `page`: `base` for all, a layout for the pages under it. */
+const covers = (family: string, page: string): boolean =>
+  family === BASE ||
+  (family.startsWith(PAGE)
+    ? family === `${PAGE}${page}`
+    : page === family || page.startsWith(`${family}/`));
+
+/** `families` without one a layout among them covers: each page that loads it loads that layout too. */
+const outermost = (families: Set<string>): string[] =>
+  [...families].filter(
+    (family) =>
+      ![...families].some(
+        (other) =>
+          other !== family &&
+          !other.startsWith(PAGE) &&
+          covers(other, family.replace(PAGE, ""))
+      )
+  );
+
+/**
+ * Where a module goes, by the families that load it: its chunk's name and
+ * how many pages load that chunk; null for the automatic splitting.
+ */
+const placerOf = (
+  families: string[],
+  pages: Set<string>,
+  entries: number
+): ((loaders: Set<string>) => { name: string; pages: number } | null) => {
+  const layouts = families.filter(
+    (family) => family !== BASE && !family.startsWith(PAGE)
+  );
+  const nested = layouts.filter((layout) =>
+    layouts.some((other) => other !== layout && covers(other, layout))
+  );
+  /** The innermost nested layout over `page`, if any. */
+  const sectionOf = (page: string): string | undefined =>
+    nested
+      .filter((layout) => covers(layout, page))
+      .sort((a, b) => b.length - a.length)[0];
+  return (loaders) => {
+    if (loaders.has(BASE)) {
+      return { name: BASE, pages: entries + 1 };
+    }
+    const shared = loaders.size > 1;
+    const kept = outermost(
+      new Set(
+        [...loaders].map(
+          (family) =>
+            (shared &&
+              family.startsWith(PAGE) &&
+              sectionOf(family.slice(PAGE.length))) ||
+            family
+        )
+      )
+    );
+    // Only pages: their own code, the automatic splitting's.
+    if (kept.every((family) => family.startsWith(PAGE))) {
+      return null;
+    }
+    return {
+      name: chunkName(kept),
+      pages: [...pages].filter((page) =>
+        kept.some((family) => covers(family, page))
+      ).length,
+    };
+  };
 };
 
 /** The module graph as the build has it, the parts read here. */
@@ -99,9 +181,17 @@ interface Graph {
   ) => { importedIds: readonly string[]; isEntry: boolean } | null;
 }
 
-/** Each family's first modules: Kit's runtime entries for `base`, and the route files its node entries import. */
-const rootsOf = (graph: Graph, routesDir: string): Map<string, string[]> => {
+/**
+ * Each family's first modules (Kit's runtime entries for `base`, and the
+ * route files its node entries import), and every page's directory.
+ */
+const rootsOf = (
+  graph: Graph,
+  routesDir: string
+): { pages: Set<string>; roots: Map<string, string[]> } => {
   const roots = new Map<string, string[]>();
+  // A page's node may import its `+page.ts` and its `+page.svelte`.
+  const pages = new Set<string>();
   const root = (family: string, id: string) =>
     roots.set(family, [...(roots.get(family) ?? []), id]);
   for (const id of graph.getModuleIds()) {
@@ -114,15 +204,18 @@ const rootsOf = (graph: Graph, routesDir: string): Map<string, string[]> => {
       continue;
     }
     for (const imported of KIT_NODE.test(id) ? info.importedIds : []) {
-      const family = familyOf(
-        relative(routesDir, imported).split("\\").join("/")
-      );
+      const file = relative(routesDir, imported).split("\\").join("/");
+      const route = routeOf(file);
+      if (route?.kind === "page") {
+        pages.add(route.dir);
+      }
+      const family = familyOf(file);
       if (family) {
         root(family, imported);
       }
     }
   }
-  return roots;
+  return { pages, roots };
 };
 
 /** The families whose static graph holds each module: who loads it at first paint. An entry stays its own chunk and is left out. */
@@ -148,8 +241,8 @@ const loadersOf = (
 };
 
 export const firstPaintChunks = (routesDir: string): Plugin => {
-  /** Each captured module's chunk: its loaders' names, and how many they are. */
-  const chunkOf = new Map<string, { name: string; loaders: number }>();
+  /** Each captured module's chunk: its loaders' names, and how many pages load it. */
+  const chunkOf = new Map<string, { name: string; pages: number }>();
   let entries = 0;
 
   return {
@@ -167,16 +260,16 @@ export const firstPaintChunks = (routesDir: string): Plugin => {
         return null;
       }
       const own = typeof split === "object" ? split : {};
-      // `base`'s loader count is one above every other's: each route loads it.
+      // `base`'s page count is one above every other's: each route loads it.
       const groups = Array.from({ length: entries + 1 }, (_, at) => {
-        const loaders = entries + 1 - at;
+        const pages = entries + 1 - at;
         return {
           name: (id: string) => {
             const chunk = chunkOf.get(id);
-            return chunk?.loaders === loaders ? chunk.name : null;
+            return chunk?.pages === pages ? chunk.name : null;
           },
-          debugName: `first paint, ${loaders} loaders`,
-          priority: loaders,
+          debugName: `first paint, ${pages} pages`,
+          priority: pages,
         };
       });
       return {
@@ -186,19 +279,15 @@ export const firstPaintChunks = (routesDir: string): Plugin => {
     },
     buildEnd() {
       chunkOf.clear();
-      const roots = rootsOf(this, routesDir);
+      const { pages, roots } = rootsOf(this, routesDir);
       if (!roots.has(BASE)) {
         this.error("first-paint chunks: Kit's runtime entries were not found");
       }
-      for (const [id, families] of loadersOf(this, roots)) {
-        if (families.has(BASE)) {
-          chunkOf.set(id, { name: BASE, loaders: entries + 1 });
-        } else if (![...families].every((one) => one.startsWith(PAGE))) {
-          // A bare page's own code is left to the automatic splitting.
-          chunkOf.set(id, {
-            name: chunkName(families),
-            loaders: families.size,
-          });
+      const place = placerOf([...roots.keys()], pages, entries);
+      for (const [id, loaders] of loadersOf(this, roots)) {
+        const chunk = place(loaders);
+        if (chunk) {
+          chunkOf.set(id, chunk);
         }
       }
     },
