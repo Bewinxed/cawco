@@ -639,6 +639,24 @@ export const HEALTH_PATH = "/__cawco/health";
 export const STAGE_ENSURE = "stageEnsure";
 
 /**
+ * The daemon's control method that warms one stage for a decision page as
+ * it goes out ({@link StageWarm}): answered at once, the warm-up run after.
+ */
+export const STAGE_WARM = "stageWarm";
+
+/**
+ * A stage warmed for a decision page whose Previews show canvases on it:
+ * started or woken, and each canvas's Preview page asked of it, which
+ * compiles that page's whole module graph before the person opens it.
+ */
+export interface StageWarm {
+  /** What warms it, as the stage's use log names it: the page that went out. */
+  by: string;
+  /** Each canvas's states files, from the clone's root, every one on this stage. */
+  canvases: string[][];
+}
+
+/**
  * A workspace preview's server: `command`, run by the workspace's stage
  * inside its boundary in `cwd` (from the clone's root), with `PORT` set to
  * `port`, which it serves on the boundary's loopback. Supervised as a sheet's

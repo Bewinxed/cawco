@@ -17,17 +17,18 @@
  * story file up. Its rules, the spec's:
  *
  * - starts on the first {@link ensureStage} (an `artifact_create` of a
- *   sheet, an agent's read) or the first request a preview of it relays
- *   ({@link wakeSource}), answering `live` within {@link STAGE_READY_MS} or
- *   `error`;
+ *   sheet, an agent's read), the first warm-up of a decision page sent with
+ *   a Preview of one of its sheets ({@link warmStage}, created or revised),
+ *   or the first request a preview of it relays ({@link wakeSource}),
+ *   answering `live` within {@link STAGE_READY_MS} or `error`;
  * - is asked {@link HEALTH_PATH} every {@link STAGE_HEALTH_MS}; a stage that
  *   ends or stops answering is started again, {@link STAGE_RESTARTS} times
  *   with a growing wait, then stays in `error`; one that never served (its
  *   host said `fatal`, ended, or didn't answer in time) is in `error` at
  *   once, until the next use starts it;
  * - sleeps once {@link STAGE_IDLE_MS} pass with no viewer (an open socket
- *   through a preview of it) and no use (a request, an agent's read);
- *   the next use wakes it;
+ *   through a preview of it) and no use (a request, an agent's read, a
+ *   decision page's warm-up); the next use wakes it;
  * - stops when its workspace is archived ({@link stopStages}), and with the
  *   daemon.
  *
@@ -59,6 +60,7 @@ import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
   AS_PAGE,
   COMPONENTS_PATH,
+  canvasPath,
   type DesignCard,
   type DesignMap,
   type DesignQuery,
@@ -84,6 +86,7 @@ import {
   type StageState,
   type StageStatus,
   type StageToolchain,
+  type StageWarm,
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
@@ -263,7 +266,7 @@ interface Stage {
   /** Its health look's timer, while it runs. */
   health?: ReturnType<typeof setInterval>;
   readonly key: string;
-  /** The last request, viewer or agent read: its idle time counts from here. */
+  /** The last request, viewer, agent read or warm-up: its idle time counts from here. */
   lastUse: number;
   message?: string;
   /** A place's sheet stage's mirror of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
@@ -1238,6 +1241,16 @@ async function stageAtRoot(found: StagePlace, by: string): Promise<Stage> {
   return stage;
 }
 
+/** The stage story file `story` (absolute, in `tree`) runs on, its place's project installed first; started or woken by `by`, and waited on. */
+async function storyStage(
+  tree: Tree,
+  story: string,
+  by: string
+): Promise<Stage> {
+  await installedFor(tree, dirname(story));
+  return stageAtRoot(stageFor(tree, story), by);
+}
+
 /**
  * The stage a story file runs on, started or woken when it is not live, and
  * waited on: its port, root and state, the sheet as it reads (its stories,
@@ -1259,8 +1272,7 @@ export async function ensureStage(
   if (opening) {
     writtenFirst(tree, [story, ...stories]);
   }
-  await installedFor(tree, dirname(story));
-  const stage = await stageAtRoot(stageFor(tree, story), "a sheet's read");
+  const stage = await storyStage(tree, story, "a sheet's read");
   const rel = relative(stage.root, story);
   const all = stories.map((one) => relative(stage.root, one));
   const [sheet, weight, { errors, ...report }] = await Promise.all([
@@ -1325,8 +1337,7 @@ export async function writeSheet(
 ): Promise<SheetWritten> {
   const tree = await treeOf(workspace);
   const story = storyPath(tree, write.file);
-  await installedFor(tree, dirname(story));
-  const stage = await stageAtRoot(stageFor(tree, story), "a write");
+  const stage = await storyStage(tree, story, "a write");
   const rel = relative(stage.root, story);
   const written = () =>
     answerOf<SheetWritten>(stage, WRITE_PATH, READ_WAIT_MS, `write ${rel}`, {
@@ -1375,6 +1386,81 @@ export async function renderStage(
   const rendered = await renderCanvas(reached, stage.port, { ...ask, files });
   used(stage, "a render");
   return rendered;
+}
+
+/** How long a warm-up's ask for one canvas's Preview page may take, its graph's cold walk inside it. Ours: caw-panel's 839-module graph answered 1.5 s in, cold. */
+const WARM_WAIT_MS = 60_000;
+
+/** Each canvas's Preview page asked of its stage and not answered yet, by stage and address: a warm-up of it asked meanwhile joins the one walk. */
+const warming = new Map<string, Promise<void>>();
+
+/**
+ * Canvas `files` (from the stage's root) asked of its stage as a decision
+ * page's Preview asks for it (`by=embed`): serving it walks and compiles
+ * its whole static graph (stage-host host.ts `closureOf`, through Vite's
+ * own `warmupRequest`), so the Preview's first open finds every module
+ * transformed. One walk per stage and canvas at a time.
+ */
+function walkedAsEmbed(stage: Stage, files: string[]): Promise<void> {
+  const path = `${canvasPath(files, {})}&by=embed`;
+  const key = `${stage.key} ${path}`;
+  const under = warming.get(key);
+  if (under) {
+    return under;
+  }
+  const walk = askStage(stage, path, WARM_WAIT_MS, async (response) => {
+    await response.text();
+    if (!response.ok) {
+      throw new Error(`its canvas page answered ${response.status}`);
+    }
+  })
+    .then((asked) => {
+      if (asked.kind === "unanswered") {
+        throw new Error(
+          `its canvas page did not answer within ${WARM_WAIT_MS / 1000} s`
+        );
+      }
+    })
+    .finally(() => warming.delete(key));
+  warming.set(key, walk);
+  return walk;
+}
+
+/**
+ * A stage warmed for a decision page as it goes out (core `StageWarm`):
+ * started or woken as {@link ensureStage} starts it, a use by the page,
+ * then each canvas its Previews show walked as their embed's page walks
+ * it ({@link walkedAsEmbed}). Never rejects: one that fails is logged and
+ * changes nothing the person sees; the Preview's own open says the stage's
+ * state as it always has.
+ */
+export async function warmStage(
+  workspace: WorkspaceRef,
+  warm: StageWarm
+): Promise<void> {
+  try {
+    const tree = await treeOf(workspace);
+    const canvases = warm.canvases.map((files) =>
+      files.map((file) => storyPath(tree, file))
+    );
+    const first = canvases[0]?.[0];
+    if (!first) {
+      return;
+    }
+    const stage = await storyStage(tree, first, warm.by);
+    await Promise.all(
+      canvases.map((stories) =>
+        walkedAsEmbed(
+          stage,
+          stories.map((story) => relative(stage.root, story))
+        )
+      )
+    );
+  } catch (error) {
+    console.warn(
+      `[stage] ${workspace.id.slice(0, 8)}: not warmed for ${warm.by}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 /**

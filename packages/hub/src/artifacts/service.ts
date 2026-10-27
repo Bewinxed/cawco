@@ -106,10 +106,12 @@ import {
 import {
   type AfterLinks,
   type DecisionCard,
+  type ProgramRead,
   pickMade,
   pickOf,
   picksMade,
 } from "@cawco/core/decisions";
+import { detach } from "@cawco/core/detach";
 import {
   excerptOf,
   field,
@@ -144,6 +146,7 @@ import {
   type StageOpened,
   type StageState,
   type StageUnreached,
+  type StageWarm,
   type StoryOp,
 } from "@cawco/core/stage";
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
@@ -1686,7 +1689,9 @@ export interface ArtifactServiceDeps {
    * `ensureStage`), started or woken there and waited on: its port, root and
    * state, the sheet's stories, with the workspace and its machine. Throws
    * an {@link ArtifactRefusal} saying why it can't run, and, `opening` a
-   * canvas, naming a states file that isn't written.
+   * canvas, naming a states file that isn't written. A decision page's
+   * Previews of sheets start or wake theirs as the page goes out, unwaited
+   * ({@link ArtifactServiceDeps.warmStage}).
    */
   stage: (
     at: StageAt,
@@ -1740,6 +1745,14 @@ export interface ArtifactServiceDeps {
   verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
   /** The session's current step waits on the artifact; the step that does, or null (plans.ts `waitOn`). */
   waitOn: (instanceId: string, artifactId: string) => string | null;
+  /**
+   * One stage warmed for a decision page as it goes out (agent stage.ts
+   * `warmStage`): started or woken there and every canvas of `warm` compiled
+   * as its Preview's page loads it. Settles once the machine took it, before
+   * the warm-up runs; throws an {@link ArtifactRefusal} when it can't be
+   * reached.
+   */
+  warmStage: (at: StageAt, warm: StageWarm) => Promise<void>;
   /**
    * Why a browser in a workspace on machine `machineId` cannot open `url`,
    * or null when it can (server.ts, core boundary-reach.ts
@@ -2588,6 +2601,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     discard(next);
     // A server the next version moved off is let go once nothing shows it.
     keepServed(promoted, row, undefined);
+    // The program it opens on goes out to the person now: its Previews' stages warmed for it.
+    const program = programOf(promoted);
+    if (program !== undefined) {
+      warmPreviews(promoted, readKept(program));
+    }
     return promoted;
   };
 
@@ -2682,6 +2700,44 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       for (const file of program.files) {
         writeStateFileSync(join(folder, file.path), file.bytes);
       }
+      if (page) {
+        warmPreviews(page, program.read);
+      }
+    }
+  };
+
+  /**
+   * The stages decision page `page`'s Previews of sheets run on, warmed as
+   * the page goes out (agent stage.ts `warmStage`): each started or woken
+   * and every canvas shown on it compiled, so the person's first open finds
+   * it warm. One warm-up per stage (workspace and toolchain root), sent and
+   * not waited on; one that fails changes nothing the page's write answers.
+   * A Canvas shows a drawing, which no stage serves.
+   */
+  const warmPreviews = (page: ArtifactRow, program: ProgramRead): void => {
+    const shown = new Set(
+      program.artifacts
+        .filter((one) => one.component === "Preview")
+        .map((one) => one.id)
+    );
+    const byStage = new Map<string, StageWarm & { workspace: string }>();
+    for (const id of shown) {
+      const media = mediaSeen(page, id);
+      const sheet = media ? sheetOf(media) : null;
+      if (!sheet) {
+        continue;
+      }
+      const key = `${sheet.workspace}:${sheet.dir}`;
+      const warm = byStage.get(key) ?? {
+        workspace: sheet.workspace,
+        by: `decision page ${page.name}`,
+        canvases: [],
+      };
+      warm.canvases.push(sheet.files);
+      byStage.set(key, warm);
+    }
+    for (const { workspace, ...warm } of byStage.values()) {
+      detach(deps.warmStage({ workspace }, warm), "stage warm-up");
     }
   };
 

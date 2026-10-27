@@ -472,6 +472,7 @@ import {
   STAGE_RENDER_MS,
   STAGE_SERVE,
   STAGE_UNSERVE,
+  STAGE_WARM,
   STAGE_WRITE,
   type StageCloneFrame,
   type StageFrame,
@@ -1610,6 +1611,7 @@ const HUB_STAGE_CONTROLS: ReadonlySet<string> = new Set([
   STAGE_COMPONENTS,
   STAGE_ENSURE,
   STAGE_RENDER,
+  STAGE_WARM,
   STAGE_WRITE,
 ]);
 /** Why a dashboard's control naming `method` is the hub's alone, or nothing when it may go to the machine. */
@@ -14424,6 +14426,10 @@ export const createServer = (
       },
     stageWrite: async (at, write) =>
       (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
+    // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.
+    warmStage: async (at, warm) => {
+      await onStage(at, STAGE_WARM, warm);
+    },
     stageComponents: async (at, ask) =>
       (await onStage(at, STAGE_COMPONENTS, ask)).result as DesignMap,
     // A preview no panel shows, loaded once through a listener of its own

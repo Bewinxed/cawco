@@ -140,7 +140,9 @@ import {
   STAGE_RENDER,
   STAGE_SERVE,
   STAGE_UNSERVE,
+  STAGE_WARM,
   STAGE_WRITE,
+  type StageWarm,
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
@@ -321,6 +323,7 @@ import {
   setStageSink,
   stageComponents,
   stopServed,
+  warmStage,
   writeSheet,
 } from "./stage";
 import { setStageCloneSink } from "./stage-clone";
@@ -3812,6 +3815,14 @@ const startDaemon = (rediscover = false) =>
             named.files,
             named.opening === true
           );
+    });
+    // A stage warmed for a decision page as it goes out: answered at once, the warm-up run after and never failing (stage.ts `warmStage`).
+    supervisor.registerDaemonFunction(STAGE_WARM, (ref, warm) => {
+      if (fenced()) {
+        return Promise.reject(new Error(AGENT_RESTARTING));
+      }
+      warmStage(ref as WorkspaceRef, warm as StageWarm);
+      return Promise.resolve();
     });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
     supervisor.registerDaemonFunction(STAGE_WRITE, (ref, write) =>
