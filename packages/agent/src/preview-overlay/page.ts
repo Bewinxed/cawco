@@ -640,12 +640,24 @@ function change(entry: ChoiceChange): Promise<void> {
 }
 
 /**
- * Marks each option in the page as picked or not, from the stored picks. A
- * plain button option (an HTML page's toggle) says it with `aria-pressed`;
- * one with a role of its own (a decision program's radio or checkbox, whose
- * option group says `aria-checked`) keeps its role's state alone.
+ * Whether this page's fields and picks are kept: a page artifact's are (a
+ * decision page's host, an HTML page the hub serves); a dev server's app or
+ * a component bench is its own, its fields and its option markup with it
+ * (the dashboard's decision cards on a bench).
+ */
+const keepsPage = () => artifact.kind() === "page";
+
+/**
+ * Marks each option in a page that keeps picks as picked or not, from the
+ * stored picks. A plain button option (an HTML page's toggle) says it with
+ * `aria-pressed`; one with a role of its own (a decision program's radio or
+ * checkbox, whose option group says `aria-checked`) keeps its role's state
+ * alone.
  */
 function reflect() {
+  if (!keepsPage()) {
+    return;
+  }
   const picks = artifact.state();
   for (const option of document.querySelectorAll("[data-option]")) {
     const choice = choiceOf(option)?.getAttribute("data-cawco-choice");
@@ -669,14 +681,11 @@ function told() {
   }
 }
 
-/** Whether this page's fields are kept: a page's are; a dev server's app is its own. */
-const keepsFields = () => artifact.kind() === "page";
-
 /** Fields whose last write the hub's bounds refused, so a later good one clears the host's word. */
 const refusedFields = new Set<string>();
 
 trackFields((key, holds, el) => {
-  if (!keepsFields()) {
+  if (!keepsPage()) {
     return;
   }
   const problem = artifact.write({ choice: key, pageHash, ...holds });
@@ -696,7 +705,7 @@ trackFields((key, holds, el) => {
 artifact.watch({
   state: (keys, remote) => {
     reflect();
-    if (remote && keepsFields()) {
+    if (remote && keepsPage()) {
       fillFields(artifact.state(), keys);
     }
     told();
@@ -714,7 +723,7 @@ artifact.watch({
   link: (link) => tellLink(link),
   synced: () => {
     reflect();
-    if (keepsFields()) {
+    if (keepsPage()) {
       fillFields(artifact.state());
     }
     told();
@@ -898,7 +907,7 @@ function takeInset(said: unknown) {
 function filled() {
   themed();
   reflect();
-  if (keepsFields()) {
+  if (keepsPage()) {
     fillFields(artifact.state());
   }
 }
@@ -971,7 +980,7 @@ function morphTo(html: string) {
 
 async function republished() {
   const wanted = artifact.meta().pageHash;
-  if (!(keepsFields() && wanted) || wanted === pageHash) {
+  if (!(keepsPage() && wanted) || wanted === pageHash) {
     return;
   }
   // A page that draws itself (a decision page's host, from its program)
@@ -1030,6 +1039,7 @@ const toldHost = () => undefined;
 listenForPicks(window, {
   choose,
   interacting: () => modeNow === "interact",
+  keepsPicks: keepsPage,
   picked: (choice) => artifact.state()[choice]?.options ?? [],
   refused: toldHost,
 });

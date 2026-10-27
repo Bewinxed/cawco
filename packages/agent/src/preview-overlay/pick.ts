@@ -6,9 +6,14 @@
  * written with no option: cleared); a several-pick choice
  * (`data-cawco-multiple`) toggles it among its picks. A press that leaves
  * words selected in the choice (a drag over an option's line, a double or
- * triple click on its words) is the person reading them, never a pick. The
- * overlay runs it against the page's doc (page.ts); the probe kit runs this
- * same module against its stand-in bridge (probe-kit decision-embeds.ts).
+ * triple click on its words) is the person reading them, never a pick. Only
+ * a page that keeps picks hears them (`keepsPicks`): a page the hub serves,
+ * a decision page's host or an HTML page. A preview of a dev server or a
+ * component bench draws the same markup for its own ends (the dashboard's
+ * decision cards on a bench), and a press there is the app's own, never a
+ * pick written to its artifact. The overlay runs it
+ * against the page's doc (page.ts); the probe kit runs this same module
+ * against its stand-in bridge (probe-kit decision-embeds.ts).
  */
 
 /** The choice an option belongs to. */
@@ -20,6 +25,8 @@ export interface PickWiring {
   choose: (choice: string, option: string | string[] | null) => Promise<void>;
   /** Whether a press reaches the page now (the overlay's Interact mode). */
   interacting: () => boolean;
+  /** Whether this page keeps picks: a decision page or HTML page the hub serves. */
+  keepsPicks: () => boolean;
   /** The options a choice holds picked now. */
   picked: (choice: string) => readonly string[];
   /** A refused write, which the host was already told of. */
@@ -61,7 +68,11 @@ export function listenForPicks(at: Window, wiring: PickWiring): void {
   at.addEventListener(
     "click",
     (event) => {
-      if (!(wiring.interacting() && event.target instanceof Element)) {
+      if (!(
+        wiring.keepsPicks() &&
+        wiring.interacting() &&
+        event.target instanceof Element
+      )) {
         return;
       }
       const option = event.target.closest("[data-option]");
