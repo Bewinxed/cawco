@@ -4,7 +4,7 @@
  * checkout as canvas-preload builds it), each frame a decision page's
  * Preview of one story (`by=embed`, core `canvasEmbedUrl`).
  *
- * Legs (`--legs trace,frame,page`, all by default):
+ * Legs (`--legs trace,shared,frame,raf` by default):
  *
  * - `trace`: one frame's load, end to end, on a stage just started (cold),
  *   then again with the stage warm and a fresh browser cache, then a third
@@ -23,13 +23,12 @@
  *   heap after a GC (Chromium) or its web process's memory (WebKit, read
  *   with no inspector), and the animation-frame callbacks it runs in 20 s
  *   idle.
- * - `page`: a page of `--embeds` (33, caw-panel's count) frames, each on its
- *   turn as embed-turns.ts gives them, each engine: time until every frame
- *   said its shape, the browser's CPU until then, the holding page's frame
- *   cadence while they load (p95), and the browser's memory sampled over
- *   `--idle` seconds (240) after (WebKit's, and its idle CPU, read with no
- *   inspector).
- * - `shared`: the same stories drawn inline in one frame, read alike.
+ * - `shared`: `--embeds` stories (33, caw-panel's count) drawn inline in
+ *   one frame, each engine: time until it said its shape, the browser's CPU
+ *   until then, the holding page's frame cadence while it loads (p95), and
+ *   the browser's memory sampled over `--idle` seconds (240) after
+ *   (WebKit's, and its idle CPU, read with no inspector). A frame per story
+ *   is the `decision` leg's, on the decision host's own page.
  * - `decision`: a decision page of `--embeds` Previews on the decision host,
  *   at the owner's window: its first screen until every Preview in it is
  *   drawn, then scrolled to its end at a person's pace (`--scroll`, px a
@@ -58,12 +57,10 @@
  * NOTE line. The checks are what a frame owes: it draws, and it loads no
  * module its story's closure does not reach.
  *
- *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,page,shared,frame,raf,decision,memory] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>] [--scroll 1200] [--rounds 6] [--memory-runs uninspected,collected,collected-control] [--memory-page decision]
+ *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,shared,frame,raf,decision,memory] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>] [--scroll 1200] [--rounds 6] [--memory-runs uninspected,collected,collected-control] [--memory-page decision]
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import {
-  cpSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -95,7 +92,7 @@ const arg = (name: string): string | undefined => {
   const at = process.argv.indexOf(`--${name}`);
   return at === -1 ? undefined : process.argv[at + 1];
 };
-const LEGS = new Set((arg("legs") ?? "trace,page,shared,frame,raf").split(","));
+const LEGS = new Set((arg("legs") ?? "trace,shared,frame,raf").split(","));
 const ENGINES = (arg("engines") ?? "chromium,webkit").split(",") as Engine[];
 const EMBEDS = Number(arg("embeds") ?? 33);
 /** How many times the boot leg boots its frame; each phase its median. */
@@ -141,45 +138,21 @@ const DEBUG_LINE =
 
 let hostBuilt: Promise<string> | undefined;
 
-/** Where a stage starts, and how: the dashboard (SvelteKit) unless named; `bundledDev` turns on Vite's experimental bundled dev mode in its server. */
-interface StageAt {
-  bundledDev?: boolean;
-  framework?: string;
-  kit?: boolean;
-  root?: string;
-}
-
-/** The text Vite's `createServer` options start with in the built host: the bundled dev mode goes in beside it. */
-const CONFIG_LOADER = 'configLoader:"native"';
-
-/** A stage, started fresh from this checkout's host (the dashboard's unless `at` names another root), Vite's request and transform times on its stderr. */
-async function startStage(at: StageAt = {}): Promise<Stage> {
+/** The dashboard's stage, started fresh from this checkout's host, Vite's request and transform times on its stderr. */
+async function startStage(): Promise<Stage> {
   hostBuilt ??= buildStageHost();
-  const root = at.root ?? APP;
-  const host = join(root, ".cawco/stage/host.mjs");
-  mkdirSync(join(root, ".cawco/stage"), { recursive: true });
-  let text = await hostBuilt;
-  if (at.bundledDev) {
-    if (!text.includes(CONFIG_LOADER)) {
-      throw new Error(
-        `the built host has no ${CONFIG_LOADER} to put bundled dev beside`
-      );
-    }
-    text = text.replace(
-      CONFIG_LOADER,
-      `${CONFIG_LOADER},experimental:{bundledDev:!0}`
-    );
-  }
-  writeFileSync(host, text);
+  const host = join(APP, ".cawco/stage/host.mjs");
+  mkdirSync(join(APP, ".cawco/stage"), { recursive: true });
+  writeFileSync(host, await hostBuilt);
   const port = await freePort();
   const child = spawn("bun", [host], {
-    cwd: root,
+    cwd: APP,
     env: {
       ...process.env,
       CAWCO_STAGE: "1",
       CAWCO_STAGE_PORT: String(port),
-      CAWCO_STAGE_FRAMEWORK: at.framework ?? "svelte",
-      CAWCO_STAGE_KIT: (at.kit ?? !at.root) ? "1" : "0",
+      CAWCO_STAGE_FRAMEWORK: "svelte",
+      CAWCO_STAGE_KIT: "1",
       CAWCO_STAGE_TOOLCHAIN: "vite",
       DEBUG: "vite:time,vite:transform",
       DEBUG_COLORS: "0",
@@ -291,8 +264,6 @@ const PID = /^\d+$/u;
 const PSS = /^Pss:\s+(\d+) kB/mu;
 /** A keyed module's address, its key taken off: the module's own address. */
 const KEYED_PREFIX = /^\/@cawco\/m\/[^/]+/u;
-/** A line of the stage's own words that says something went wrong. */
-const STAGE_TROUBLE = /error|fatal|warn/iu;
 const PAGE_BYTES = 4096;
 
 /** Every process under `roots` (and the roots), read from /proc. */
@@ -1418,7 +1389,7 @@ function noInspectorWebKit(
   };
 }
 
-/** What the page leg's holder of frames reads in WebKit with no inspector. */
+/** What the holder of frames reads in WebKit with no inspector. */
 interface FramesRead {
   /** What each document ran over the idle's last five seconds ({@link idleCensus}). */
   census: Census[];
@@ -1432,8 +1403,8 @@ interface FramesRead {
 }
 
 /**
- * The page leg's holder of `urls` in WebKit with no inspector, each frame
- * in its turn: its web process's memory once every frame said its shape
+ * The holder of `urls` in WebKit with no inspector, every frame asked at
+ * once: its web process's memory once every frame said its shape
  * (within {@link DRAW_MS} each), then every 20 s over `idleS` seconds, the
  * CPU its processes spent in them, and what each frame ran at their end.
  */
@@ -1686,9 +1657,9 @@ async function frameLeg(
   return stage;
 }
 
-/* --- A page of frames -------------------------------------------------------- */
+/* --- A page of one frame ----------------------------------------------------- */
 
-/** The page holding the frames: each its turn, in order, as embed-turns.ts gives them on a page at its top. */
+/** The page holding frames, every one asked for at once, each told to fetch its whole graph as it tells it. */
 const HOLDER = (urls: string[]) =>
   `<!doctype html><meta charset="utf-8">\n${HOLDER_STYLE}\n${HOLDER_BODY(urls)}`;
 const HOLDER_STYLE =
@@ -1697,22 +1668,12 @@ const HOLDER_BODY = (urls: string[]) => `<main id="list"></main>
 <script>
 const urls = ${JSON.stringify(urls)};
 const list = document.getElementById("list");
-const cards = urls.map(() => { const c = document.createElement("div"); c.className = "card"; list.append(c); return c; });
-const h = window.__holder = { start: performance.now(), intervals: [], said: 0, failed: 0, settledAt: null, turns: [] };
+const h = window.__holder = { start: performance.now(), intervals: [], said: 0, settledAt: null };
 let last = null;
 // Its cadence read until every frame said its shape, and its loop ended there: a page that asks for every frame makes the browser draw each one, and the idle after is the frames' own.
 const tick = (t) => { if (h.settledAt !== null) return; if (last !== null) h.intervals.push(t - last); last = t; requestAnimationFrame(tick); };
 requestAnimationFrame(tick);
-let at = 0; let current = null; let timer = 0;
-const frames = [];
-const done = () => { clearTimeout(timer); current = null; setTimeout(next); };
-const next = () => {
-  if (current || at >= urls.length) return;
-  const f = document.createElement("iframe");
-  f.src = urls[at]; frames.push(f); cards[at].append(f); at += 1;
-  current = f; h.turns.push(performance.now());
-  timer = setTimeout(done, 20000);
-};
+const frames = urls.map((url) => { const c = document.createElement("div"); c.className = "card"; const f = document.createElement("iframe"); f.src = url; c.append(f); list.append(c); return f; });
 addEventListener("message", (e) => {
   const f = frames.find((one) => one.contentWindow === e.source);
   if (!f) return;
@@ -1720,14 +1681,11 @@ addEventListener("message", (e) => {
   if (type === "cawco:embed-size") {
     if (!f.dataset.said) { f.dataset.said = "1"; h.said += 1; }
     f.style.blockSize = e.data.height + "px";
-    if (f === current) done();
     if (h.said === urls.length && h.settledAt === null) h.settledAt = performance.now();
   }
-  if (type === "cawco:embed-fetched" && f === current) done();
   // Its graph told (core CANVAS_EMBED_GRAPH): its whole graph its own share, nothing more to wait on, as a page with this one frame fetching gives it.
   if (type === "cawco:embed-graph") { e.source.postMessage({ type: "cawco:embed-go", urls: e.data.urls }, "*"); e.source.postMessage({ type: "cawco:embed-ready", urls: [] }, "*"); }
 });
-next();
 </script>`;
 
 const p95 = (list: number[]): number => {
@@ -1789,31 +1747,23 @@ async function idleOf(
 }
 
 /**
- * A page of `--embeds` stories, each engine: `cards`, a frame per story as
- * a decision page's Previews are; `shared`, one frame drawing every one of
- * them inline (Storybook's docs page: "Rendering multiple iframes on the
- * page can have performance issues which is why we avoid it as the
- * default", storybookjs/storybook#11328).
+ * `--embeds` stories drawn inline in one frame, each engine (Storybook's
+ * docs page: "Rendering multiple iframes on the page can have performance
+ * issues which is why we avoid it as the default",
+ * storybookjs/storybook#11328). A frame per story, as a decision page's
+ * Previews are, is the `decision` leg's: the decision host's own page.
  */
-async function pageLeg(
+async function sharedLeg(
   kit: Kit,
   stages: Stage[],
-  warm: Stage | null,
-  mode: "cards" | "shared",
-  label: string = mode,
-  built?: (pick: { file: string; story: string }) => string
+  warm: Stage | null
 ): Promise<Stage> {
+  const label = "shared";
   const stage = warm ?? (await startStage());
   if (!warm) {
     stages.push(stage);
   }
-  const picks = await pagePicks(stage.base);
-  let urls = [sharedUrl(stage.base, picks)];
-  if (built) {
-    urls = picks.map(built);
-  } else if (mode === "cards") {
-    urls = picks.map((one) => embedUrl(stage.base, one.file, one.story));
-  }
+  const urls = [sharedUrl(stage.base, await pagePicks(stage.base))];
   const holder = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -1906,21 +1856,8 @@ async function pageLeg(
         idleRuns: censusWords(idle.census),
       });
       kit.check(
-        `page ${label} ${engine}: all ${urls.length} frames of ${EMBEDS} stories said their shape (${held.said}) in ${(settledMs / 1000).toFixed(1)} s`,
+        `page ${label} ${engine}: its one frame of ${EMBEDS} stories said its shape in ${(settledMs / 1000).toFixed(1)} s`,
         held.said === urls.length
-      );
-      // Nothing animates that nobody can see (motion/rest.ts): a canvas scrolled out of view holds its loops (agent canvas runtime). A page of one frame has none out of view.
-      const runs = censusWords(idle.census);
-      if (urls.length === 1) {
-        continue;
-      }
-      kit.check(
-        `page ${label} ${engine}: no frame out of view runs a loop while the page stands untouched (${runs.outOfViewLooping} of the ${runs.outOfView} out of view do; the page's CPU over ${IDLE_S} s: ${idle.cpuMs} ms)`,
-        runs.outOfView > 0 && runs.outOfViewLooping === 0,
-        runs.busy
-          .filter((one) => !one.inView && one.running.length > 0)
-          .map((one) => `${one.document}: ${one.running.join(", ")}`)
-          .join("; ") || undefined
       );
     }
   } finally {
@@ -2659,9 +2596,6 @@ async function builtLeg(
         "built-frame",
         at(tracedFile, tracedStory)
       );
-      await pageLeg(kit, stages, stage, "cards", "built-cards", (one) =>
-        at(one.file, one.story)
-      );
     }
     if (!LEGS.has("edit")) {
       return stage;
@@ -2698,121 +2632,6 @@ async function builtLeg(
     process.chdir(was);
   }
   return stage;
-}
-
-/**
- * The stage with Vite's experimental bundled dev mode on (`experimental.
- * bundledDev`, vite.dev/blog/announcing-vite8-1), on the dashboard
- * (SvelteKit) and on the plain Vite fixtures (Svelte, React, Vue): whether
- * it starts, whether a canvas draws, and in the words each said.
- */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each project's install, its two starts and what each said, in one walk
-async function bundledLeg(kit: Kit, stages: Stage[]): Promise<void> {
-  const FIXTURES = join(ROOT, "scripts/probe-kit/fixtures/component-canvas");
-  const scratch = join(process.env.TMPDIR ?? "/tmp", "canvas-cost-fixtures");
-  const tried: { at: StageAt; file: string; name: string }[] = [
-    {
-      name: "dashboard (SvelteKit)",
-      at: {},
-      file: TRACED.split("#")[0] as string,
-    },
-  ];
-  for (const [framework, file] of [
-    ["svelte", "src/Badge.stories.js"],
-    ["react", "src/Button.stories.jsx"],
-    ["vue", "src/Button.stories.js"],
-  ] as const) {
-    const dir = join(scratch, framework);
-    if (!existsSync(join(FIXTURES, framework))) {
-      continue;
-    }
-    mkdirSync(dir, { recursive: true });
-    cpSync(join(FIXTURES, framework), dir, { recursive: true });
-    rmSync(join(dir, ".cawco/stage/cache"), { recursive: true, force: true });
-    const install = Bun.spawnSync(["bun", "install"], { cwd: dir });
-    if (install.exitCode !== 0) {
-      kit.note(
-        `bundled ${framework}: bun install failed: ${install.stderr.toString().slice(0, 300)}`
-      );
-      continue;
-    }
-    tried.push({
-      name: `${framework} (plain Vite)`,
-      at: { root: dir, framework, kit: false },
-      file,
-    });
-  }
-  for (const one of tried) {
-    for (const bundledDev of [false, true]) {
-      let stage: Stage | null = null;
-      const label = `${one.name}${bundledDev ? ", bundled dev" : ", unbundled"}`;
-      try {
-        stage = await startStage({ ...one.at, bundledDev });
-        stages.push(stage);
-        const page = await kit.page("desk", {
-          scale: 1,
-          browser: "canvas-cost-bundled",
-          init: [installCounters],
-        });
-        const errors: string[] = [];
-        page.on("pageerror", (error) =>
-          errors.push(error.message.slice(0, 300))
-        );
-        page.on("console", (message) => {
-          if (message.type() === "error") {
-            errors.push(message.text().slice(0, 300));
-          }
-        });
-        let requests = 0;
-        page.on("request", () => {
-          requests += 1;
-        });
-        const refused: string[] = [];
-        page.on("response", (response) => {
-          if (response.status() >= 400) {
-            const at = new URL(response.url());
-            refused.push(
-              `${response.status()} ${at.pathname.replace(KEYED_PREFIX, "")}`
-            );
-          }
-        });
-        const t0 = Date.now();
-        const answer = await page.goto(embedUrl(stage.base, one.file), {
-          waitUntil: "commit",
-          timeout: 60_000,
-        });
-        const drew = await drawn(page)
-          .then(() => Date.now() - t0)
-          .catch(() => null);
-        keep(kit, `bundled.${label}`, {
-          status: answer?.status() ?? null,
-          drawnMs: drew,
-          requests,
-          refused: refused.slice(0, 6),
-          errors: errors.slice(0, 6),
-          stage: stage
-            .said()
-            .split("\n")
-            .filter(
-              (line) => STAGE_TROUBLE.test(line) && !line.includes("vite:time")
-            )
-            .slice(0, 6)
-            .map((line) => line.slice(0, 400)),
-        });
-        await page.close();
-      } catch (error) {
-        keep(kit, `bundled.${label}`, {
-          started: false,
-          error: (error instanceof Error ? error.message : String(error)).slice(
-            0,
-            1500
-          ),
-        });
-      } finally {
-        stage?.stop();
-      }
-    }
-  }
 }
 
 /* --- One frame's boot, phase by phase, on any engine ------------------------ */
@@ -3376,7 +3195,7 @@ async function uninspectedDecisionPage(tls: {
 
 /**
  * A decision page of `--embeds` Previews, each one story of the dashboard's
- * states files (as the page leg picks them), on the decision host the hub
+ * states files (as `pagePicks` picks them), on the decision host the hub
  * serves (decision-embeds.ts `startDecisionStage`), the embed origin on
  * HTTPS over HTTP/2 holding each answer {@link DECISION_HOLD_MS}, the stage
  * warm and the page's media knowing each Preview's shape (a first page
@@ -4491,14 +4310,8 @@ const run = async (kit: Kit) => {
       await latencyLeg(kit, stages);
     }
     let warm: Stage | null = null;
-    if (LEGS.has("page")) {
-      warm = await pageLeg(kit, stages, null, "cards");
-    }
     if (LEGS.has("shared")) {
-      warm = await pageLeg(kit, stages, warm, "shared");
-    }
-    if (LEGS.has("cards-warm")) {
-      warm = await pageLeg(kit, stages, warm, "cards", "cards-warm");
+      warm = await sharedLeg(kit, stages, warm);
     }
     if (LEGS.has("frame")) {
       warm = await frameLeg(kit, stages, warm);
@@ -4511,9 +4324,6 @@ const run = async (kit: Kit) => {
     }
     if (LEGS.has("built") || LEGS.has("edit")) {
       warm = await builtLeg(kit, stages, warm);
-    }
-    if (LEGS.has("bundled")) {
-      await bundledLeg(kit, stages);
     }
     if (LEGS.has("boot")) {
       warm = await bootLeg(kit, stages, warm);

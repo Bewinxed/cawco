@@ -38,7 +38,9 @@
  * A workspace preview's server (core `ServeSpec`, `artifact_create(kind:
  * "preview", port, serve)`) is a stage too, keyed by its port: its command
  * run through the same executor, on the same rules, `live` once its port
- * answers any HTTP request ({@link ensureServed}). It is the daemon's child,
+ * answers any HTTP request ({@link ensureServed}), started by its
+ * `artifact_create`, a request its preview relays, or the hub as a decision
+ * page with a Preview of it goes out. It is the daemon's child,
  * so it outlives the shell, the command and the session that asked for it;
  * its last artifact's removal stops it ({@link stopServed}).
  */
@@ -1430,9 +1432,10 @@ function walkedAsEmbed(stage: Stage, files: string[]): Promise<void> {
  * A stage warmed for a decision page as it goes out (core `StageWarm`):
  * started or woken as {@link ensureStage} starts it, a use by the page,
  * then each canvas its Previews show walked as their embed's page walks
- * it ({@link walkedAsEmbed}). Never rejects: one that fails is logged and
- * changes nothing the person sees; the Preview's own open says the stage's
- * state as it always has.
+ * it ({@link walkedAsEmbed}). A stage in `error` is started again, as the
+ * page's open would start it anyway: the warm-up gives it a head start.
+ * Never rejects: one that fails is logged and changes nothing the person
+ * sees; the Preview's own open says the stage's state as it always has.
  */
 export async function warmStage(
   workspace: WorkspaceRef,

@@ -1663,6 +1663,8 @@ export interface ArtifactServiceDeps {
    * A workspace preview's server (agent stage.ts `ensureServed`), started or
    * woken on the workspace's machine and waited on until its port answers:
    * its state. Throws an {@link ArtifactRefusal} saying why it didn't start.
+   * A decision page's Previews of it wake it as the page goes out, unwaited
+   * (`warmPreviews`).
    */
   serve: (
     machineId: string,
@@ -2724,37 +2726,44 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * The stages decision page `page`'s Previews of sheets run on, warmed as
-   * the page goes out (agent stage.ts `warmStage`): each started or woken
-   * and every canvas shown on it compiled, so the person's first open finds
-   * it warm. One warm-up per stage (workspace and toolchain root), sent and
-   * not waited on; one that fails changes nothing the page's write answers.
-   * A Canvas shows a drawing, which no stage serves.
+   * The stages decision page `page`'s Previews run on, warmed as the page
+   * goes out, so the person's first open finds them warm: a sheet's stage
+   * started or woken and every canvas shown on it compiled (agent stage.ts
+   * `warmStage`), one warm-up per stage (workspace and toolchain root); a
+   * served preview's server started or woken (`serveFirst`), once per
+   * server. Each is sent and not waited on, and one that fails is logged
+   * and changes nothing the page's write answers. A Canvas shows a drawing,
+   * which no stage serves.
    */
   const warmPreviews = (page: ArtifactRow, program: ProgramRead): void => {
     const shown = new Set(
       program.artifacts
         .filter((one) => one.component === "Preview")
-        .map((one) => one.id)
+        .flatMap((one) => mediaSeen(page, one.id) ?? [])
     );
-    const byStage = new Map<string, StageWarm & { workspace: string }>();
-    for (const id of shown) {
-      const media = mediaSeen(page, id);
-      const sheet = media ? sheetOf(media) : null;
-      if (!sheet) {
-        continue;
+    const sheets = new Map<string, StageWarm & { workspace: string }>();
+    const servers = new Map<string, ArtifactRow>();
+    for (const media of shown) {
+      const sheet = sheetOf(media);
+      const served = servedOf(media);
+      if (sheet) {
+        const key = `${sheet.workspace}:${sheet.dir}`;
+        const warm = sheets.get(key) ?? {
+          workspace: sheet.workspace,
+          by: `decision page ${page.name}`,
+          canvases: [],
+        };
+        warm.canvases.push(sheet.files);
+        sheets.set(key, warm);
+      } else if (served) {
+        servers.set(`${served.workspace}@${served.port}`, media);
       }
-      const key = `${sheet.workspace}:${sheet.dir}`;
-      const warm = byStage.get(key) ?? {
-        workspace: sheet.workspace,
-        by: `decision page ${page.name}`,
-        canvases: [],
-      };
-      warm.canvases.push(sheet.files);
-      byStage.set(key, warm);
     }
-    for (const { workspace, ...warm } of byStage.values()) {
+    for (const { workspace, ...warm } of sheets.values()) {
       detach(deps.warmStage({ workspace }, warm), "stage warm-up");
+    }
+    for (const media of servers.values()) {
+      detach(serveFirst(media.source, media.machineId), "stage warm-up");
     }
   };
 
