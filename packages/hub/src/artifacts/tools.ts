@@ -216,7 +216,7 @@ export const artifactCreateToParent = {
 export const artifactUpdate = {
   name: "artifact_update",
   description:
-    "Change an artifact of yours. `statements`: a decision page's statements that change, merged by name (any of your project's pages). " +
+    "Change an artifact of yours, or one a session of your project left that has ended for good. `statements`: a decision page's statements that change, merged by name (any of your project's pages). " +
     "`html` replaces a page, picks kept. `patch`: JSON Patch over its state by choice id, all or none, like " +
     '[{"op":"replace","path":"/hero/options","value":["b"]}]. A canvas: `elements` (added, or replacing that id), `delete` (ids), ' +
     "`mermaid`. A component: `args` sets a story's values; `story` adds, duplicates, removes or moves one; `edges`, `group`, `dials`. " +
@@ -271,7 +271,7 @@ export const artifactUpdate = {
 export const artifactRead = {
   name: "artifact_read",
   description:
-    "Read the person's picks, notes and values on an artifact (yours, your delegation tree's, your project's pages): each choice " +
+    "Read the person's picks, notes and values on an artifact (yours, your delegation tree's, your project's pages, what its sessions ended for good left): each choice " +
     "picked or not yet. `since`: the seq your last read gave. No id: your newest. A canvas: its outline and what the person changed; " +
     "`png` adds its picture. A component: its frames, moves, stories, dials and tuning; `state` adds a frame's style delta, " +
     '`detail: "story"` a story\'s args, `render` draws it now, `verify` asks the design verifier.',
@@ -326,7 +326,8 @@ export const artifactPromote = {
 export const artifactDelete = {
   name: "artifact_delete",
   description:
-    "Remove an artifact of yours a newer one superseded, or one a delegate below you left once its work item ended. " +
+    "Remove an artifact of yours a newer one superseded, one a delegate below you left once its work item ended, " +
+    "or one a session of your project ended for good left, once its pins are resolved. " +
     "Pins go too; a promoted copy stays.",
   input: { id },
 };

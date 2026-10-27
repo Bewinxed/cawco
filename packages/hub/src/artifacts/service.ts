@@ -1994,7 +1994,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The artifacts the session can name and read ({@link readable}), each
    * once, those it answers first: its own, its project's it answers, its
    * delegation tree's, its project's pages and those of the projects it
-   * leads.
+   * leads, then what sessions gone for good left in its project
+   * ({@link leftInProject}).
    */
   const nameable = (instance: InstanceRow): ArtifactRow[] => {
     const seen = new Map<string, ArtifactRow>();
@@ -2006,6 +2007,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...ofTree(instance, holders),
       ...(instance.projectId ? pagesOf(instance.projectId) : []),
       ...deps.ledProjects(instance).flatMap(pagesOf),
+      ...leftInProject(instance),
     ]) {
       if (!seen.has(row.id)) {
         seen.set(row.id, row);
@@ -2088,6 +2090,79 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Whether session `writer` can never act again, nor anyone for it: it is
+   * stranded ({@link ArtifactServiceDeps.stranded}), or its work item ended
+   * and no session up its delegation tree can still act (none there is
+   * stranded or past its own item's end). What it left in its project is
+   * then that project's ({@link leftBehind}). A live writer's stays its own.
+   */
+  const goneForGood = (writer: InstanceRow): boolean =>
+    deps.stranded(writer) ||
+    (deps.itemEnded(writer) &&
+      !deps
+        .instances([...above(writer)])
+        .some((up) => !(deps.stranded(up) || deps.itemEnded(up))));
+
+  /**
+   * Whether `row`, held by `writer`, is what a session gone for good
+   * ({@link goneForGood}) left in `instance`'s project: any session of that
+   * project reads it, answers and resolves its pins, revises it, and deletes
+   * it once its pins are resolved ({@link deletable}), so the person's pins
+   * never outlive everyone who could answer them.
+   */
+  const leftFor = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    writer: InstanceRow
+  ): boolean =>
+    !!instance.projectId &&
+    row.heldFor === null &&
+    writer.id !== instance.id &&
+    row.projectId === instance.projectId &&
+    writer.projectId === instance.projectId &&
+    goneForGood(writer);
+
+  /** {@link leftFor} of `row` by the session that holds it; false for one no session holds. */
+  const leftBehind = (instance: InstanceRow, row: ArtifactRow): boolean => {
+    const writer = holder(row);
+    return !!writer && leftFor(instance, row, writer);
+  };
+
+  /**
+   * Every artifact of `instance`'s project its writer left there gone for
+   * good ({@link leftFor}): one read of the project's artifacts and one of
+   * their writers' rows, each writer judged once.
+   */
+  const leftInProject = (instance: InstanceRow): ArtifactRow[] => {
+    if (!instance.projectId) {
+      return [];
+    }
+    const rows = db
+      .ofProject(instance.projectId)
+      .filter(
+        (row) => row.instanceId !== null && row.instanceId !== instance.id
+      );
+    const writers = new Map(
+      deps
+        .instances([...new Set(rows.map((row) => row.instanceId as string))])
+        .map((writer) => [writer.id, writer])
+    );
+    const gone = new Map<string, boolean>();
+    return rows.filter((row) => {
+      const writer = writers.get(row.instanceId as string);
+      if (!writer) {
+        return false;
+      }
+      let left = gone.get(writer.id);
+      if (left === undefined) {
+        left = leftFor(instance, row, writer);
+        gone.set(writer.id, left);
+      }
+      return left;
+    });
+  };
+
+  /**
    * Artifact `asked` for a delete, named as every artifact tool names one
    * (its id, handle or name, {@link whole}): the session's own
    * ({@link own}), or another session's whose work item ended
@@ -2096,8 +2171,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * moved on, its conversation gone, nothing to give it a turn again) when
    * this session is up the writer's delegation tree, at any depth, so
    * whoever is up the tree cleans up after a session that can no longer
-   * act. Its content stays the writer's while it can: no other change
-   * widens so. Refused otherwise, naming who deletes it.
+   * act. Once no one up that tree can act either ({@link leftFor}), any
+   * session of its project deletes it, after its pins are resolved: the
+   * person's pins are answered before they go. Its content stays the
+   * writer's while it can act. Refused otherwise, naming who deletes it.
    */
   const deletable = (instance: InstanceRow, asked: string): ArtifactRow => {
     const id = whole(instance, asked);
@@ -2111,6 +2188,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return row;
     }
     const whose = `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is ${sessionLink(writer.id, sessionLabel(writer).name)}'s`;
+    if (leftFor(instance, row, writer)) {
+      const open = [...readPins(docs.doc(row.id)).values()].filter(
+        (pin) => !pin.resolvedAt
+      ).length;
+      if (open === 0) {
+        return row;
+      }
+      throw new ArtifactRefusal(
+        409,
+        artifactToolWords.pinsOpenFirst(whose, open)
+      );
+    }
     throw new ArtifactRefusal(
       403,
       up
@@ -2120,13 +2209,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Artifact `id`, when the session owns it or made it: a delegate goes on
-   * updating and reading what it handed to its parent.
+   * Artifact `id` for a change: the session owns it or made it (a delegate
+   * goes on updating and reading what it handed to its parent), or a
+   * session gone for good left it in its project ({@link leftBehind}).
    */
-  const ownedOrMade = (instance: InstanceRow, asked: string): ArtifactRow => {
+  const revisable = (instance: InstanceRow, asked: string): ArtifactRow => {
     const id = whole(instance, asked);
     const row = db.get(id);
     if (row?.madeBy === instance.id) {
+      return row;
+    }
+    if (row && leftBehind(instance, row)) {
       return row;
     }
     return own(instance, id);
@@ -2359,16 +2452,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * An update by artifact `row`'s owner or maker (`change`, given where it
-   * goes): the maker's, while the parent's panel shows it, goes to its next
-   * version ({@link holdNext}); anyone else's to the artifact itself.
+   * An update of artifact `row` ({@link revisable}; `change`, given where it
+   * goes): its maker's, while the parent's panel shows it, goes to its next
+   * version ({@link holdNext}); anyone else's (its owner's, or a session of
+   * the project its gone writer left it in) to the artifact itself.
    */
   const changedBy = async <T>(
     instance: InstanceRow,
     row: ArtifactRow,
     change: (target: ArtifactRow) => Promise<T>
   ): Promise<T> => {
-    const holding = holdNext(instance, row);
+    const holding = row.madeBy === instance.id ? holdNext(instance, row) : null;
     const owner = holder(row);
     if (!(holding && owner)) {
       return await change(row);
@@ -2474,9 +2568,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Artifact `id`, when the session answers its pins ({@link answerable}),
    * or when it is a page of a project the session leads or works in
    * ({@link projectPage}), whatever became of its writer, or when another
-   * session of its delegation tree holds it ({@link inTree}); refused when
-   * none. A held next version is read by whoever
-   * reads its artifact: the parent reviews what its maker changed.
+   * session of its delegation tree holds it ({@link inTree}), or when a
+   * session gone for good left it in the session's project
+   * ({@link leftBehind}); refused when none. A held next version is read by
+   * whoever reads its artifact: the parent reviews what its maker changed.
    */
   const readable = (instance: InstanceRow, asked: string): ArtifactRow => {
     const id = whole(instance, asked);
@@ -2489,7 +2584,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       answerable(instance).find((one) => one.id === id) ??
       ledPage(instance, id) ??
       projectPage(instance, id) ??
-      (next && inTree(instance, next) ? next : undefined);
+      (next && (inTree(instance, next) || leftBehind(instance, next))
+        ? next
+        : undefined);
     if (!row) {
       throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
     }
@@ -6520,8 +6617,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * New HTML for a page (its revision moves and every open view morphs to
      * it, its state kept), or a JSON Patch (RFC 6902) over its `state` applied as one
      * transaction; the state after the change. A canvas's elements, deletes
-     * or Mermaid; its outline after the change. Its owner's or its maker's
-     * to call ({@link ownedOrMade}); what it answers is the owner's read only.
+     * or Mermaid; its outline after the change. Its owner's, its maker's, or
+     * a session's of the project its gone writer left it in, to call
+     * ({@link revisable}); what it answers is the owner's read only.
      */
     update: async (
       instanceId: string,
@@ -6529,7 +6627,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       change: Exclude<PageChange, { statements: string }> | CanvasChange
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
-      const found = ownedOrMade(instance, id);
+      const found = revisable(instance, id);
       const ownersRead = found.instanceId === instance.id;
       const forCanvas = !("html" in change || "patch" in change);
       if (forCanvas !== (found.kind === "canvas")) {
@@ -6623,12 +6721,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * create's is, then every open view draws the new program in place, its
      * picks, notes and pins kept by id. Answers what changed, not the page.
      * Its owner's, its maker's, or any session's of its project
-     * ({@link projectPage}), Caw's included: a later session links its
-     * decisions by revising one statement. Its maker's, while the parent's
-     * panel shows it, waits as its next version ({@link changedBy}); another
-     * session's of the project lands on the page itself, or joins the next
-     * version waiting for the parent, so opening that keeps it. Each merges
-     * into the program of the row it lands on.
+     * ({@link projectPage}, the clause by which {@link readable} reads it),
+     * Caw's included: a later session links its decisions by revising one
+     * statement. Named as every artifact tool names one ({@link whole}): by
+     * its id, handle or name. Its maker's, while the parent's panel shows
+     * it, waits as its next version ({@link changedBy}); another session's
+     * of the project lands on the page itself, or joins the next version
+     * waiting for the parent, so opening that keeps it. Each merges into the
+     * program of the row it lands on.
      */
     revise: async (
       instanceId: string,
@@ -6636,14 +6736,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       statements: string
     ): Promise<Revised> => {
       const instance = sessionOf(instanceId);
-      const asked = db.get(id);
+      const wholeId = whole(instance, id);
+      const asked = db.get(wholeId);
       const peer =
         asked &&
         asked.instanceId !== instance.id &&
         asked.madeBy !== instance.id
-          ? projectPage(instance, id)
+          ? projectPage(instance, wholeId)
           : undefined;
-      const found = peer ?? ownedOrMade(instance, id);
+      const found = peer ?? revisable(instance, wholeId);
       if (programOf(found) === undefined) {
         throw new ArtifactRefusal(
           409,
@@ -6802,14 +6903,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : answer;
     },
 
-    /** `artifact_update` of a sheet by its owner or its maker: one story's args, or one story op, written by its stage. */
+    /** `artifact_update` of a sheet by whoever may change it ({@link revisable}): one story's args, or one story op, written by its stage. */
     sheetUpdate: async (
       instanceId: string,
       id: string,
       change: SheetChange
     ): Promise<ComponentWritten> => {
       const instance = sessionOf(instanceId);
-      const row = ownedOrMade(instance, id);
+      const row = revisable(instance, id);
       const written = await writeSheet(
         row,
         change,
@@ -6831,7 +6932,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       input: CanvasInput
     ): Promise<{ id: string; revision: number; spec: CanvasSpec }> => {
       const instance = sessionOf(instanceId);
-      const row = ownedOrMade(instance, id);
+      const row = revisable(instance, id);
       const sheet = sheetOf(row);
       if (!(sheet && "port" in row.source)) {
         throw new ArtifactRefusal(
@@ -6872,7 +6973,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: string,
       ask: string
     ): { ask: string; id: string } => {
-      const row = ownedOrMade(sessionOf(instanceId), id);
+      const row = revisable(sessionOf(instanceId), id);
       const problem = askProblem(ask);
       if (problem) {
         throw new ArtifactRefusal(400, problem);
