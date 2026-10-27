@@ -134,6 +134,8 @@ const shownOf = (whole: Box, pill: Box, room: Room): Box => {
 
 /** What a plan is chosen from. */
 interface Placing {
+  /** It stands at its pill alone, never beside what that is about (the /dev/pin-goo bench's joined card). */
+  besidePill: boolean;
   /** Its distance from the pill's box, past the pill's focus ring. */
   clear: number;
   /** Its distance from the well's edges. */
@@ -148,7 +150,10 @@ interface Placing {
  * else beside its pill alone; else under or over the pill, whichever holds
  * more. At the well's top-right with nothing seen.
  */
-const decide = (at: Seen | null, { clear, gap, room, size }: Placing): Plan => {
+const decide = (
+  at: Seen | null,
+  { besidePill, clear, gap, room, size }: Placing
+): Plan => {
   const full = Math.max(0, room.h - 2 * gap);
   /** Its height as it will stand beside the pill: what it holds, up to the well's. */
   const tall = Math.min(size.natural || size.height, full);
@@ -165,14 +170,14 @@ const decide = (at: Seen | null, { clear, gap, room, size }: Placing): Plan => {
   };
   const under = room.h - (subject.y + subject.h + clear) - gap;
   const over = subject.y - clear - gap;
-  const nextTo = fits(subject);
+  const nextTo = besidePill ? null : fits(subject);
   if (nextTo) {
     return { along: "subject", side: nextTo, max: full };
   }
-  if (under >= tall) {
+  if (!besidePill && under >= tall) {
     return { along: "subject", side: "bottom", max: under };
   }
-  if (over >= tall) {
+  if (!besidePill && over >= tall) {
     return { along: "subject", side: "top", max: over };
   }
   const alone = fits(pill);
@@ -196,6 +201,7 @@ const heldPlan = () => {
   let held: Plan | null = null;
   return (at: Seen | null, placing: Placing): Plan => {
     const key = [
+      placing.besidePill,
       placing.room.w,
       placing.room.h,
       placing.size.width,
@@ -213,6 +219,8 @@ const heldPlan = () => {
 
 /** What a card is placed over: its pill, what that stands on, the well. */
 interface Over {
+  /** It stands at its pill alone ({@link Placing}); PinFloat never does. */
+  besidePill?: boolean;
   /** The box of what the pill stands on, in the well, px. */
   box?: Box | null;
   /** The pill's box in the well, px; null while it is not on screen. */
@@ -280,6 +288,7 @@ export class FloatPlace {
   });
 
   readonly #placing: Placing = $derived.by(() => ({
+    besidePill: this.#over().besidePill ?? false,
     clear: this.clear,
     gap: this.gap,
     room: this.#over().room,
@@ -319,6 +328,16 @@ interface Spot {
   top: number;
 }
 
+/** How far a travel in flight has it from where it stands, px: its `translate` as drawn. */
+export const drawnShift = (el: HTMLElement): [number, number] => {
+  const shift = getComputedStyle(el).translate;
+  const [dx = 0, dy = 0] =
+    shift === "none"
+      ? []
+      : shift.split(" ").map((one) => Number.parseFloat(one));
+  return [dx, dy];
+};
+
 /**
  * It travels from `before` to where it now stands, `now`, over
  * `--dur-morph` on `--ease-drawer`, starting from where it is drawn, a
@@ -331,11 +350,7 @@ export const travelTo = (
   now: Spot,
   running: Animation | null
 ): Animation => {
-  const shift = getComputedStyle(el).translate;
-  const [dx = 0, dy = 0] =
-    shift === "none"
-      ? [0, 0]
-      : shift.split(" ").map((one) => Number.parseFloat(one));
+  const [dx, dy] = drawnShift(el);
   running?.cancel();
   return el.animate(
     [

@@ -5,10 +5,12 @@
    * owner's two comments stood on (the comment-sizing preview's Away mode
    * decision page), each opening his own thread in the real PinCard. A
    * press on a pill opens its card; Close, Esc or the pill again closes it.
-   * The page scrolls under an open card. The head's dials set the goo's
-   * blur and threshold and the open and close durations on the page's root
-   * (`--goo-blur`, `--goo-threshold`, `--dur-goo`, `--dur-goo-exit`), read
-   * as each open or close starts.
+   * The page scrolls under an open card. The head's controls, in the words
+   * of what they change: Stickiness, how far apart the card and its pin
+   * still pull a bridge between them (the goo's blur, `--goo-blur`, a prop); Open
+   * and Close, in ms (`--dur-goo`, `--dur-goo-exit`), read as each open or
+   * close starts; Stay joined, the card kept joined to its pin by a neck
+   * once open, the pin wearing the card's surface.
    */
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
@@ -40,14 +42,14 @@
     2: "Where should the away notes sit?",
   };
 
-  /** The goo's dials, at their tokens' values. */
-  const DEFAULTS = { blur: 6, threshold: 18, openMs: 350, closeMs: 250 };
-  let blur = $state(DEFAULTS.blur);
-  let threshold = $state(DEFAULTS.threshold);
+  /** The controls, at their tokens' values (the goo's blur, its open and its close), joined. */
+  const DEFAULTS = { stickiness: 6, openMs: 350, closeMs: 250, joined: true };
+  let stickiness = $state(DEFAULTS.stickiness);
   let openMs = $state(DEFAULTS.openMs);
   let closeMs = $state(DEFAULTS.closeMs);
+  let joined = $state(DEFAULTS.joined);
   const reset = () => {
-    ({ blur, threshold, openMs, closeMs } = DEFAULTS);
+    ({ stickiness, openMs, closeMs, joined } = DEFAULTS);
   };
 
   let well = $state<HTMLElement>();
@@ -148,45 +150,34 @@
     style:--at-y={pin.number === 1 ? "50%" : "var(--space-4)"}
     type="button"
   >
-    {@render pillOf(pin)}
+    <!-- Joined, the card's goo draws the pin as part of itself: the page's own pill steps back. -->
+    <span class={["flex", joined && open === pin.id && "opacity-0"]}>
+      {@render pillOf(pin)}
+    </span>
   </button>
 {/snippet}
 
 <main
   class="flex h-dvh flex-col bg-surface-recess text-ink-strong"
-  style:--goo-blur={blur}
-  style:--goo-threshold={threshold}
   style:--dur-goo="{openMs}ms"
   style:--dur-goo-exit="{closeMs}ms"
 >
-  <!-- The goo's dials. -->
+  <!-- The controls. -->
   <header
     class="flex flex-none flex-wrap items-center gap-x-space-5 gap-y-space-2 border-b border-border-hairline bg-surface-raised px-space-4 py-space-2 type-meta"
     data-slot="dials"
   >
     <label class="flex items-center gap-space-2">
-      <span>Blur</span>
+      <span>Stickiness</span>
       <input
-        bind:value={blur}
+        bind:value={stickiness}
         class="accent-action-solid"
-        max="16"
-        min="0"
+        max="12"
+        min="3"
         step="0.5"
         type="range"
       />
-      <span class="num w-c-bench-readout-w">{blur}</span>
-    </label>
-    <label class="flex items-center gap-space-2">
-      <span>Threshold</span>
-      <input
-        bind:value={threshold}
-        class="accent-action-solid"
-        max="40"
-        min="2"
-        step="1"
-        type="range"
-      />
-      <span class="num w-c-bench-readout-w">{threshold}</span>
+      <span class="num w-c-bench-readout-w">{stickiness}</span>
     </label>
     <label class="flex items-center gap-space-2">
       <span>Open, ms</span>
@@ -211,6 +202,14 @@
         type="range"
       />
       <span class="num w-c-bench-readout-w">{closeMs}</span>
+    </label>
+    <label class="flex items-center gap-space-2">
+      <input
+        bind:checked={joined}
+        class="accent-action-solid"
+        type="checkbox"
+      />
+      <span>Stay joined</span>
     </label>
     <label class="flex items-center gap-space-2">
       <input
@@ -311,6 +310,8 @@
           <PinFloatGoo
             box={where?.box ?? null}
             {exit}
+            {joined}
+            {stickiness}
             label="Comment {pin.number}"
             mark={where?.mark ?? null}
             pill={copy}

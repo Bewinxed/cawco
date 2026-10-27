@@ -1,8 +1,8 @@
 <!--
   PinFloat's card (preview/PinFloat.svelte) with the owner's two asks for it,
   for the /dev/pin-goo preview only; the live PinFloat is untouched. Placing
-  it is PinFloat's own (preview/pin-place.svelte.ts: `decide`, the plan), less the
-  composer and the foot sheet, which stay PinFloat's.
+  it is PinFloat's own (`decide`, the plan), less the composer and the foot
+  sheet, which stay PinFloat's.
 
   1. It pours out of its pill (the owner: "with the same goo-out animation
      https://transitions.dev/detail.html?t=gooey-plus-menu"). The technique
@@ -15,17 +15,24 @@
      recipe's "feDropShadow after the goo passes shadows the MERGED
      silhouette"), here `border-control` as a 1px dilated ring and
      `shadow-hairline`. The shapes, all in the raised fill, are the pill
-     (under a crisp copy of it, the recipe's crisp UI layer over the goo)
-     and the card (`stages`), over `--dur-goo`: the pill swells toward the
-     card and a drop is pulled out of its side, still joined (the first
-     quarter, `--ease-out`); the card stretches out of the drop with its near
-     edge 3px from the pill, so the neck holds (to three quarters,
-     `--ease-crossfade`); the card settles where it stands, `--space-2`
-     clear, and the neck lets go (`--ease-goo`, the recipe's overshoot). The
-     thread comes up out of a blur once the shape has room. Closing runs the
-     same shapes back into the pill over `--dur-goo-exit`, the thread gone
-     in its first half; a close caught mid-open turns back from where it is
-     drawn. Without motion it cross-fades.
+     (under its crisp mark, the recipe's crisp UI layer over the goo), the
+     neck and the card. Opening is one stretch on one curve: the card goes
+     from the pill's box to its own over `--dur-goo` on `--ease-goo` (the
+     recipe's open curve), the thread revealed inside the shape as drawn by
+     a clip on the same curve, so the neck forms and, apart, lets go as its
+     near edge leaves the pill. Closing is the same stretch back over
+     `--dur-goo-exit` on `--ease-out`, from where it is drawn.
+     Joined (the owner: "a toggle that keeps the small gooey part that makes
+     the card still connected to the chip after it's done … the comment pin
+     should change shape while it's open … as if it's part of the
+     popover"), it stands at its pin, `clear` from it, and a neck from the
+     pill's centre into the card's straight edge stays once it has opened,
+     grown on the same curve from a bead at the pill: the pin wears the
+     card's surface, its figure in the action ink, and the page's own pill
+     steps back, so pin and card are one shape with one edge and one shadow.
+     The neck follows the pin as the page scrolls under the still card, and
+     grows back from a bead when the pin comes beside it again. Without
+     motion it cross-fades.
   2. It holds still while the page scrolls (the owner: "only letting it move
      when it reaches the spot where it will move from one spot to the next,
      it should animate THEN, not animate WHILE i'm scrolling"), and moves
@@ -40,7 +47,7 @@
      it where it stood.
 -->
 <script lang="ts">
-  import { type Snippet, untrack } from "svelte";
+  import { flushSync, type Snippet, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import {
     dur,
@@ -51,12 +58,11 @@
   import type { PopSide } from "#lib/cawco/motion/pop.svelte.js";
   import {
     type Box,
+    drawnShift,
     FLOAT_W,
     FloatPlace,
     fadeOut,
     type Plan,
-    threadIn,
-    threadOut,
     travelTo,
     union,
   } from "#lib/cawco/preview/pin-place.svelte.js";
@@ -71,6 +77,8 @@
     exit = { at: "fade" },
     float = $bindable(),
     pill,
+    joined = true,
+    stickiness = numberOf("--goo-blur"),
     children,
   }: {
     /** How it goes: `fade`, or `cut` where another pin's card takes its place in the same press. */
@@ -88,6 +96,10 @@
     float?: HTMLElement;
     /** The pill as the page draws it, stood crisp over the goo while the card pours out of it and back. */
     pill?: Snippet;
+    /** It stays joined to its pin by a neck once it has poured out, the pin wearing the card's surface: one shape. */
+    joined?: boolean;
+    /** How far apart the card and its pin still pull a bridge between them, px: the goo's blur (`--goo-blur`). */
+    stickiness?: number;
     children: Snippet;
   } = $props();
 
@@ -95,21 +107,28 @@
   let body = $state<HTMLElement>();
   let cardBlob = $state<SVGRectElement>();
   let pillBlob = $state<SVGRectElement>();
-  let pillCopy = $state<HTMLElement>();
+  let neckBlob = $state<SVGRectElement>();
+  let pinLayer = $state<HTMLElement>();
+  let pinShift = $state<HTMLElement>();
+  let markFace = $state<HTMLElement>();
+  let joinedFace = $state<HTMLElement>();
   let filterEl = $state<SVGFilterElement>();
   let blurEl = $state<SVGFEGaussianBlurElement>();
   let matrixEl = $state<SVGFEColorMatrixElement>();
 
   /** Poured out: the travel to a new spot only runs once it stands. */
   let opened = $state(false);
-  const placed = new FloatPlace(() => ({ mark, box, room }), {
-    body: () => body,
-    float: () => float,
-    placed: () => {
-      pour();
-      opened = true;
-    },
-  });
+  const placed = new FloatPlace(
+    () => ({ mark, box, room, besidePill: joined }),
+    {
+      body: () => body,
+      float: () => float,
+      placed: () => {
+        pour();
+        opened = true;
+      },
+    }
+  );
   const seen = $derived(placed.seen);
   const plan = $derived(placed.plan);
 
@@ -165,6 +184,8 @@
   // drawn (a travel in flight counted).
   let stood: { left: number; plan: Plan | null; top: number } | null = null;
   let travel: Animation | null = null;
+  /** The pin's own counter-travel, while the card travels. */
+  let stay: Animation[] = [];
   $effect(() => {
     const at = place;
     const now = plan;
@@ -179,7 +200,29 @@
     if (!(moved && motionOk.current)) {
       return;
     }
+    const [dx, dy] = drawnShift(el);
+    for (const one of stay) {
+      one.cancel();
+    }
     travel = travelTo(el, before, at, travel);
+    // The pin stays on the page while the card travels: its blob and faces
+    // go the other way, on the travel's own timing, so only the neck
+    // between them stretches.
+    const back = `translate(${at.left - before.left - dx}px, ${at.top - before.top - dy}px)`;
+    const timing = {
+      duration: dur("--dur-morph"),
+      easing: ease("--ease-drawer"),
+    };
+    stay = [pillBlob, pinShift].flatMap((one) =>
+      one
+        ? [
+            one.animate(
+              [{ transform: back }, { transform: "translate(0px, 0px)" }],
+              timing
+            ),
+          ]
+        : []
+    );
   });
 
   /** An `feFlood`'s colour, a token: a filter primitive's flood is no Tailwind colour. */
@@ -195,9 +238,9 @@
     return Number.isFinite(value) ? value : numberOf(name);
   };
 
-  /** The recipe's applyGooKnobs: the blur and the alpha row from the knobs, read as each run starts. */
+  /** The recipe's applyGooKnobs: the blur and the alpha row, set as each run starts and as the stickiness changes. */
   function applyGoo(): number {
-    const blur = knob("--goo-blur");
+    const blur = stickiness;
     const slope = knob("--goo-threshold");
     const intercept = Math.round((0.5 - slope * (5 / 12)) * 100) / 100;
     blurEl?.setAttribute("stdDeviation", String(blur));
@@ -208,7 +251,9 @@
     return blur;
   }
 
-  /** The pill's box in the card's own coordinates. */
+  type Shape = Box & { r: number };
+
+  /** The pill's box in the card's own coordinates, as it stands now or was last seen. */
   const pillIn = (): Box | null => {
     const at = untrack(() => place);
     const where = untrack(() => seen);
@@ -220,7 +265,7 @@
   };
 
   /** The card's shape at rest: its box less the 1px edge the filter rings it with, `radius-lg` corners. */
-  const rest = (): Box & { r: number } => ({
+  const rest = (): Shape => ({
     x: 1,
     y: 1,
     w: Math.max(0, placed.width - 2),
@@ -228,7 +273,6 @@
     r: Math.max(0, (numberOf("--radius-lg") || 12) - 1),
   });
 
-  type Shape = Box & { r: number };
   /** A blob's keyframe: its box and corners. */
   const shapeOf = (at: Shape) => ({
     x: `${at.x}px`,
@@ -238,50 +282,140 @@
     rx: `${at.r}px`,
   });
 
+  /** The pill as a blob: its box, round ends. */
+  const pillShape = (p: Box): Shape => ({ ...p, r: p.h / 2 });
+
+  /** The content's clip to a blob, in the card's box: what of the thread shows inside the shape as drawn. */
+  const clipOf = (at: Shape) => {
+    const top = Math.max(0, at.y);
+    const left = Math.max(0, at.x);
+    const right = Math.max(0, placed.width - (at.x + at.w));
+    const bottom = Math.max(0, placed.height - (at.y + at.h));
+    return `inset(${top}px ${right}px ${bottom}px ${left}px round ${at.r}px)`;
+  };
+
   /**
-   * The pour's shapes, in the card's coordinates: the recipe's blobs leaving
-   * one another under the filter. The pill swells toward the card; a drop
-   * pulled out of its side, still joined to it; the card stretched out of the
-   * drop with its near edge 3px from the pill, so the neck holds; the card
-   * where it stands, `--space-2` clear, so the neck lets go.
+   * The neck that keeps the pin and the card one shape while it stands
+   * joined: a bar from the pill's centre into the card's near edge, three
+   * fifths of the pill's height thick, which the goo rounds into a liquid
+   * bridge. Only where the pill stands beside the card's straight edge
+   * (past its corners) and within `--space-2` and a little of it; else the
+   * neck has let go.
    */
-  function stages(p: Box) {
+  function neckOf(p: Box): Shape | null {
     const card = rest();
-    const centre = { x: p.x + p.w / 2, y: p.y + p.h / 2 };
-    const nearest = {
-      x: Math.max(card.x, Math.min(centre.x, card.x + card.w)),
-      y: Math.max(card.y, Math.min(centre.y, card.y + card.h)),
-    };
-    const length = Math.hypot(nearest.x - centre.x, nearest.y - centre.y);
-    const dx = length < 1 ? 1 : (nearest.x - centre.x) / length;
-    const dy = length < 1 ? 0 : (nearest.y - centre.y) / length;
-    /** How far the pill reaches from its centre toward the card. */
-    const half = (Math.abs(dx) * p.w + Math.abs(dy) * p.h) / 2;
-    const pull = Math.max(0, length - half - 3);
-    const drop = p.h * 1.8;
-    const swell = p.h * 0.45;
-    return {
-      pill: { ...p, r: p.h / 2 },
-      swollen: {
-        x: p.x + Math.min(0, dx) * swell,
-        y: p.y + Math.min(0, dy) * swell,
-        w: p.w + Math.abs(dx) * swell,
-        h: p.h + Math.abs(dy) * swell,
-        r: p.h / 2,
-      },
-      drop: {
-        x: centre.x + dx * (half + drop * 0.35) - drop / 2,
-        y: centre.y + dy * (half + drop * 0.35) - drop / 2,
-        w: drop,
-        h: drop,
-        r: drop / 2,
-      },
-      near: { ...card, x: card.x - dx * pull, y: card.y - dy * pull },
-      card,
-    };
+    const thick = p.h * 0.6;
+    const reach = placed.clear + 6;
+    // The neck meets the card on its straight edge, past its corners: the
+    // pill's centre line, held there.
+    const cx = Math.max(
+      card.x + card.r + thick / 2,
+      Math.min(p.x + p.w / 2, card.x + card.w - card.r - thick / 2)
+    );
+    const cy = Math.max(
+      card.y + card.r + thick / 2,
+      Math.min(p.y + p.h / 2, card.y + card.h - card.r - thick / 2)
+    );
+    const alongY = p.y + p.h > card.y && p.y < card.y + card.h;
+    const alongX = p.x + p.w > card.x && p.x < card.x + card.w;
+    const bar = (x0: number, y0: number, x1: number, y1: number): Shape => ({
+      x: Math.min(x0, x1),
+      y: Math.min(y0, y1),
+      w: Math.abs(x1 - x0),
+      h: Math.abs(y1 - y0),
+      r: thick / 2,
+    });
+    const midX = p.x + p.w / 2;
+    const midY = p.y + p.h / 2;
+    if (alongY && p.x + p.w <= card.x && card.x - (p.x + p.w) <= reach) {
+      return bar(midX, cy - thick / 2, card.x + card.r, cy + thick / 2);
+    }
+    if (alongY && p.x >= card.x + card.w && p.x - (card.x + card.w) <= reach) {
+      return bar(
+        card.x + card.w - card.r,
+        cy - thick / 2,
+        midX,
+        cy + thick / 2
+      );
+    }
+    if (alongX && p.y + p.h <= card.y && card.y - (p.y + p.h) <= reach) {
+      return bar(cx - thick / 2, midY, cx + thick / 2, card.y + card.r);
+    }
+    if (alongX && p.y >= card.y + card.h && p.y - (card.y + card.h) <= reach) {
+      return bar(
+        cx - thick / 2,
+        card.y + card.h - card.r,
+        cx + thick / 2,
+        midY
+      );
+    }
+    return null;
   }
 
-  /** The filter's region: the card and, while it pours, the pill, with room for the blur and the shadow. */
+  /** The neck's first shape: a bead at the pill's centre, the bar's thickness round. */
+  const beadOf = (p: Box, neck: Shape): Shape => {
+    const size = Math.min(neck.w, neck.h);
+    return {
+      x: p.x + p.w / 2 - size / 2,
+      y: p.y + p.h / 2 - size / 2,
+      w: size,
+      h: size,
+      r: size / 2,
+    };
+  };
+
+  $effect(() => {
+    if (stickiness > 0 && blurEl && matrixEl) {
+      untrack(applyGoo);
+    }
+  });
+
+  /** Pouring: the goo layer is the animations', not the template's. */
+  let pouring = $state(false);
+  /** Where the pill stood as the pour started: the run's pill stays there. */
+  let runPill = $state<Box | null>(null);
+  /**
+   * The pin and its neck as they stand joined, following the pill as the
+   * page scrolls under a still card; null when the card stands apart (not
+   * joined, its pill out of view, or too far from it to hold a neck).
+   */
+  const joint = $derived.by(() => {
+    if (!(joined && mark)) {
+      return null;
+    }
+    const p = {
+      x: mark.x - place.left,
+      y: mark.y - place.top,
+      w: mark.w,
+      h: mark.h,
+    };
+    const neck = neckOf(p);
+    return neck ? { pin: pillShape(p), neck } : null;
+  });
+
+  /** The pill in the goo and its faces, where it stands: joined at rest, or where a pour started. */
+  const pillAt = $derived(joint?.pin ?? (pouring ? runPill : null));
+
+  // A neck that joins again at rest (after a travel, or the pin coming back
+  // beside it) grows out of the pin as a bead, over --dur-morph on
+  // --ease-out, never appearing whole.
+  let neckWas = false;
+  $effect(() => {
+    const now = joint;
+    if (pouring) {
+      neckWas = !!now;
+      return;
+    }
+    if (now && !neckWas && motionOk.current && untrack(() => opened)) {
+      neckBlob?.animate(
+        [shapeOf(beadOf(now.pin, now.neck)), shapeOf(now.neck)],
+        { duration: dur("--dur-morph"), easing: ease("--ease-out") }
+      );
+    }
+    neckWas = !!now;
+  });
+
+  /** The filter's region: the card and, where it holds one, the pill, with room for the blur and the shadow. */
   function region(withPill: Box | null, blur: number) {
     const shape = rest();
     const reach = union(withPill ? [shape, withPill] : [shape]);
@@ -291,45 +425,76 @@
     filterEl?.setAttribute("width", String(reach.w + 2 * pad));
     filterEl?.setAttribute("height", String(reach.h + 2 * pad));
   }
-
-  /** The pill in the goo, under its crisp copy, while the card pours out of it or back; gone at rest. */
-  function showPill(at: Box | null) {
-    if (!(pillBlob && pillCopy)) {
-      return;
-    }
-    if (!at) {
-      pillBlob.classList.add("hidden");
-      pillCopy.classList.add("invisible");
-      return;
-    }
-    pillBlob.setAttribute("x", String(at.x));
-    pillBlob.setAttribute("y", String(at.y));
-    pillBlob.setAttribute("width", String(at.w));
-    pillBlob.setAttribute("height", String(at.h));
-    pillBlob.setAttribute("rx", String(at.h / 2));
-    pillBlob.classList.remove("hidden");
-    pillCopy.style.translate = `${at.x}px ${at.y}px`;
-    pillCopy.classList.remove("invisible");
-  }
-
-  /** Pouring: nothing at rest keeps the pill in the goo, or a scroll would pull a neck to it. */
-  let pouring = false;
   $effect(() => {
-    // The region follows the card's size at rest.
+    // The region follows the card's size and its joined pin at rest.
+    const joinedPin = joint?.pin ?? null;
     if (placed.width + placed.height >= 0 && !pouring) {
-      region(
-        null,
-        untrack(() => knob("--goo-blur"))
-      );
+      region(joinedPin, stickiness);
     }
   });
 
-  /** The card pours out of its pill. */
+  /** The pill and its two faces stood at `p` for a run: the blob in the goo, the crisp mark and the joined face over it. */
+  function standPill(p: Box) {
+    if (!(pillBlob && pinLayer)) {
+      return;
+    }
+    pillBlob.setAttribute("x", String(p.x));
+    pillBlob.setAttribute("y", String(p.y));
+    pillBlob.setAttribute("width", String(p.w));
+    pillBlob.setAttribute("height", String(p.h));
+    pillBlob.setAttribute("rx", String(p.h / 2));
+    pillBlob.classList.remove("hidden");
+    pinLayer.style.setProperty("--pin-x", `${p.x}px`);
+    pinLayer.style.setProperty("--pin-y", `${p.y}px`);
+    pinLayer.classList.remove("invisible");
+  }
+
+  /**
+   * One run of the goo, out of the pill (`open`) or back into it: the card,
+   * the neck and the thread's clip on one curve over one duration, the
+   * pill's own mark handing over to its joined face in step.
+   */
+  function run(
+    p: Box,
+    from: Shape,
+    to: Shape,
+    neck: Shape | null,
+    timing: { duration: number; easing: string; fill?: FillMode },
+    open: boolean
+  ): Animation | undefined {
+    const bead = neck ? beadOf(p, neck) : null;
+    if (neckBlob && neck && bead) {
+      neckBlob.classList.remove("hidden");
+      neckBlob.animate(
+        open ? [shapeOf(bead), shapeOf(neck)] : [shapeOf(neck), shapeOf(bead)],
+        timing
+      );
+    }
+    const faces = open ? [1, 0] : [0, 1];
+    if (neck) {
+      markFace?.animate(
+        faces.map((opacity) => ({ opacity })),
+        timing
+      );
+      joinedFace?.animate(
+        faces.map((opacity) => ({ opacity: 1 - opacity })),
+        timing
+      );
+    }
+    body?.animate(
+      [
+        { clipPath: clipOf(from), opacity: open ? 0 : 1 },
+        { clipPath: clipOf(to), opacity: open ? 1 : 0 },
+      ],
+      timing
+    );
+    return cardBlob?.animate([shapeOf(from), shapeOf(to)], timing);
+  }
+
+  /** The card pours out of its pill: one stretch on `--ease-goo`, the recipe's open curve. */
   function pour() {
     const el = float;
-    const card = cardBlob;
-    const inner = body;
-    if (!(el && card && inner)) {
+    if (!(el && cardBlob)) {
       return;
     }
     const blur = applyGoo();
@@ -342,91 +507,62 @@
       });
       return;
     }
-    const length = knob("--dur-goo");
+    const neck = joined ? neckOf(from) : null;
+    runPill = from;
     pouring = true;
+    flushSync();
     region(from, blur);
-    showPill(from);
-    const at = stages(from);
-    const out = ease("--ease-out");
-    const run = card.animate(
-      [
-        { ...shapeOf(at.pill), offset: 0, easing: out },
-        // The stretch moves on screen, so it eases in and out.
-        { ...shapeOf(at.drop), offset: 0.25, easing: ease("--ease-crossfade") },
-        { ...shapeOf(at.near), offset: 0.75, easing: ease("--ease-goo") },
-        { ...shapeOf(at.card), offset: 1 },
-      ],
-      { duration: length }
+    const done = run(
+      from,
+      pillShape(from),
+      rest(),
+      neck,
+      { duration: knob("--dur-goo"), easing: ease("--ease-goo") },
+      true
     );
-    pillBlob?.animate(
-      [
-        { ...shapeOf(at.pill), easing: out },
-        { ...shapeOf(at.swollen), offset: 0.45, easing: ease("--ease-goo") },
-        shapeOf(at.pill),
-      ],
-      { duration: length }
-    );
-    threadIn(inner, length);
-    run.finished.then(
+    done?.finished.then(
       () => {
         pouring = false;
-        showPill(null);
-        region(null, blur);
       },
       () => undefined
     );
   }
 
-  /** The card goes back into its pill: from where it is drawn to the pill's shape, the thread gone by half way. */
+  /** The card goes back into its pill the way it came, from where it is drawn, on `--ease-out`. */
   function drain(node: HTMLElement): TransitionConfig {
     const card = cardBlob;
-    const inner = body;
     const to = pillIn();
-    if (!(card && inner && to && motionOk.current)) {
+    if (!(card && body && to && motionOk.current)) {
       return fadeOut(node);
     }
     const length = knob("--dur-goo-exit");
     const blur = applyGoo();
     // From where it is drawn: a close caught mid-pour turns back there.
     const drawn = getComputedStyle(card);
-    const from = {
-      x: drawn.x,
-      y: drawn.y,
-      width: drawn.width,
-      height: drawn.height,
-      rx: drawn.rx === "auto" ? `${rest().r}px` : drawn.rx,
+    const from: Shape = {
+      x: Number.parseFloat(drawn.x),
+      y: Number.parseFloat(drawn.y),
+      w: Number.parseFloat(drawn.width),
+      h: Number.parseFloat(drawn.height),
+      r: Number.parseFloat(drawn.rx) || rest().r,
     };
-    const shown = getComputedStyle(inner).opacity;
-    for (const run of [
-      ...card.getAnimations(),
-      ...inner.getAnimations(),
-      ...(pillBlob?.getAnimations() ?? []),
-    ]) {
-      run.cancel();
+    for (const one of [card, body, neckBlob, markFace, joinedFace]) {
+      for (const anim of one?.getAnimations() ?? []) {
+        anim.cancel();
+      }
     }
-    pouring = true;
+    const neck = joined ? neckOf(to) : null;
+    // The template stands still through an outro: the pill is stood by hand.
+    standPill(to);
     region(to, blur);
-    showPill(to);
-    const at = stages(to);
-    const out = ease("--ease-out");
-    card.animate(
-      [
-        { ...from, offset: 0, easing: out },
-        { ...shapeOf(at.near), offset: 0.3, easing: ease("--ease-crossfade") },
-        { ...shapeOf(at.drop), offset: 0.75, easing: out },
-        { ...shapeOf(at.pill), offset: 1 },
-      ],
-      { duration: length, fill: "forwards" }
+    run(
+      to,
+      from,
+      pillShape(to),
+      neck,
+      { duration: length, easing: ease("--ease-out"), fill: "forwards" },
+      false
     );
-    pillBlob?.animate(
-      [
-        { ...shapeOf(at.pill), easing: out },
-        { ...shapeOf(at.swollen), offset: 0.6, easing: out },
-        shapeOf(at.pill),
-      ],
-      { duration: length, fill: "forwards" }
-    );
-    threadOut(inner, shown, length);
     return { duration: length };
   }
 
@@ -509,7 +645,24 @@
       </filter>
     </defs>
     <g filter="url(#goo-{uid})">
-      <rect bind:this={pillBlob} class="hidden fill-surface-raised" />
+      <rect
+        bind:this={pillBlob}
+        class={["fill-surface-raised", !pillAt && "hidden"]}
+        height={pillAt?.h ?? 0}
+        rx={(pillAt?.h ?? 0) / 2}
+        width={pillAt?.w ?? 0}
+        x={pillAt?.x ?? 0}
+        y={pillAt?.y ?? 0}
+      />
+      <rect
+        bind:this={neckBlob}
+        class={["fill-surface-raised", !joint && "hidden"]}
+        height={joint?.neck.h ?? 0}
+        rx={joint?.neck.r ?? 0}
+        width={joint?.neck.w ?? 0}
+        x={joint?.neck.x ?? 0}
+        y={joint?.neck.y ?? 0}
+      />
       <rect
         bind:this={cardBlob}
         class="fill-surface-raised"
@@ -521,14 +674,36 @@
       />
     </g>
   </svg>
-  <!-- The pill, crisp over the goo while the card pours out of it and back (the recipe's UI layer). -->
+  <!-- The pin over the goo (the recipe's crisp UI layer): its own mark while
+       it pours apart, its joined face (its figure on the card's surface)
+       while it stands joined. -->
   <div
     aria-hidden="true"
-    bind:this={pillCopy}
-    class="pointer-events-none invisible absolute start-0 top-0 flex"
+    bind:this={pinLayer}
+    class={[
+      "pointer-events-none absolute start-0 top-0 translate-x-(--pin-x) translate-y-(--pin-y)",
+      !pillAt && "invisible",
+    ]}
     data-slot="pin-goo-pill"
+    style:--pin-x="{pillAt?.x ?? 0}px"
+    style:--pin-y="{pillAt?.y ?? 0}px"
   >
-    {@render pill?.()}
+    <div bind:this={pinShift} class="relative flex">
+      <div
+        bind:this={markFace}
+        class={["flex", joint && !pouring && "opacity-0"]}
+      >
+        {@render pill?.()}
+      </div>
+      <span
+        bind:this={joinedFace}
+        class={[
+          "absolute inset-0 flex items-center justify-center type-caps num leading-none text-action-solid",
+          !joint && "opacity-0",
+        ]}
+        data-slot="pin-joined-face">{pin}</span
+      >
+    </div>
   </div>
   <div
     class="flex min-h-0 min-w-0 flex-col gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain p-space-3"
