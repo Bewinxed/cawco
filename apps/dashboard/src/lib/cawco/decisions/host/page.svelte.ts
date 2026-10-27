@@ -110,8 +110,21 @@ export interface Bridge {
   set: (key: string, value: unknown) => Promise<void>;
 }
 
+/** A bridge a page that draws decisions itself handed over ({@link provideBridge}); null on a served page. */
+let provided: Bridge | null = null;
+
+/**
+ * A page that draws decisions in its own document (the dashboard's Who
+ * decides bench) keeps their picks itself. Never on the window: under
+ * CawCo's preview overlay `window.cawco` is the overlay's own, frozen and
+ * read-only (preview-overlay page.ts).
+ */
+export const provideBridge = (own: Bridge): void => {
+  provided = own;
+};
+
 export const bridge = (): Bridge | null =>
-  (window as unknown as { cawco?: Bridge }).cawco ?? null;
+  provided ?? (window as unknown as { cawco?: Bridge }).cawco ?? null;
 
 /** This page's artifact id and the overlay's served hash, from the overlay's tag. */
 export const overlayTag = (): { artifact: string | null; hash: string } => {

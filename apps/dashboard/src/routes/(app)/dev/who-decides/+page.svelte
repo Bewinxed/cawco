@@ -27,7 +27,11 @@
     type DecidedByShown,
   } from "#lib/cawco/decisions/host/decided-by.js";
   import { DECISION_LIBRARY } from "#lib/cawco/decisions/host/library.js";
-  import { type Bridge, picks } from "#lib/cawco/decisions/host/page.svelte.js";
+  import {
+    type Bridge,
+    picks,
+    provideBridge,
+  } from "#lib/cawco/decisions/host/page.svelte.js";
   import NeedsRow from "#lib/cawco/home/NeedsRow.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
@@ -142,7 +146,7 @@ markerCommits = Text("Commit: 5d66890f2 (nightly 5756). Restart: f6ee652f8. Upst
     send: () => Promise.resolve(),
     set: () => Promise.resolve(),
   };
-  (window as unknown as { cawco?: Bridge }).cawco = bridge;
+  provideBridge(bridge);
 
   /** A press on an option picks it, a press on the one picked lets it go (the overlay's pick.ts); a card decided for him becomes his. */
   const pressing = (node: HTMLElement) => {
