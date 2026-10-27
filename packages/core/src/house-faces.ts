@@ -225,7 +225,7 @@ export const isMark = (point: number): boolean =>
 export interface FacePiece extends HouseFace {
   /** Its woff2 bytes. */
   bytes: Uint8Array<ArrayBuffer>;
-  /** The cut it is: `latin`, `latin-ext` or `more`. */
+  /** The cut it is: `latin`, `latin-ext` or `more`; split for a first paint, `first` and `latin`. */
   cut: string;
   /** Its file's name, its content's hash: `face-<hash>.woff2`, kept for good. */
   name: string;
@@ -273,23 +273,107 @@ export async function cutHouseFaces(
         ...own,
         ...marks.filter((point) => allMarks || holds(range, point)),
       ];
-      const sfnt = await subsetFont(
-        file,
-        String.fromCodePoint(...points),
-        subsetOptions(keep, options.glyphNames ?? false)
+      pieces.push(
+        await cutPiece(face, cut, points, {
+          subsetFont,
+          compress,
+          options: subsetOptions(keep, options.glyphNames ?? false),
+        })
       );
-      // One at a time: woff2-encoder 2.0.0 can corrupt an output when two
-      // compressions run at once (fixed in its 3.0 beta's notes).
-      const bytes = new Uint8Array(await compress(sfnt));
-      const hash = createHash("sha256").update(bytes).digest("hex");
-      pieces.push({
-        ...face,
-        cut,
-        range: pairsOf(points),
-        bytes,
-        name: `face-${hash.slice(0, 16)}.woff2`,
-      });
     }
+  }
+  return pieces;
+}
+
+/** `face` cut to `points` as one woff2 piece named for its content. */
+async function cutPiece(
+  face: FaceFile,
+  cut: string,
+  points: number[],
+  tools: {
+    compress: (sfnt: Uint8Array) => Promise<Uint8Array>;
+    options: { targetFormat: "sfnt" };
+    subsetFont: (
+      font: Buffer,
+      text: string,
+      options: { targetFormat: "sfnt" }
+    ) => Promise<Buffer>;
+  }
+): Promise<FacePiece> {
+  const sfnt = await tools.subsetFont(
+    Buffer.from(face.bytes),
+    String.fromCodePoint(...points),
+    tools.options
+  );
+  // One at a time: woff2-encoder 2.0.0 can corrupt an output when two
+  // compressions run at once (fixed in its 3.0 beta's notes).
+  const bytes = new Uint8Array(await tools.compress(sfnt));
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  return {
+    ...face,
+    cut,
+    range: pairsOf(points),
+    bytes,
+    name: `face-${hash.slice(0, 16)}.woff2`,
+  };
+}
+
+/** What a surface's first paint draws in each face, as text: every character of it, each once or more. */
+export type FirstPaintText = Record<FaceRole, string>;
+
+/**
+ * The house pieces with each face's latin piece split in two for a surface
+ * that inlines its first paint's faces (the dashboard, vite.config.ts
+ * `houseFaces`): a `first` piece of the characters `text` names for the face
+ * (with the latin piece's marks, so a letter and its mark still shape
+ * together), and a `latin` piece of the rest, fetched by URL only when a
+ * page draws one of them. Each keeps the face's whole wght axis and layout
+ * features, so the two match every weight alike and the browser picks one
+ * by `unicode-range` alone. A face whose text holds none of its latin
+ * characters keeps its latin piece whole, fetched by URL.
+ */
+export async function firstPaintPieces(
+  text: FirstPaintText
+): Promise<FacePiece[]> {
+  const [{ create }, { default: subsetFont }, { compress }] = await Promise.all(
+    [import("fontkit"), import("subset-font"), import("woff2-encoder")]
+  );
+  const faces = readHouseFaces();
+  const pieces: FacePiece[] = [];
+  for (const piece of await houseFacePieces()) {
+    const face = faces.find((one) => one.file === piece.file);
+    if (!face || piece.cut !== "latin") {
+      pieces.push(piece);
+      continue;
+    }
+    const wanted = new Set(
+      [...text[face.role]].map((char) => char.codePointAt(0))
+    );
+    const points = piece.range.flatMap(([from, to]) =>
+      Array.from({ length: to - from + 1 }, (_, at) => from + at)
+    );
+    const marks = points.filter(isMark);
+    const first = points.filter((point) => !isMark(point) && wanted.has(point));
+    const rest = points.filter(
+      (point) => !(isMark(point) || wanted.has(point))
+    );
+    if (first.length === 0 || rest.length === 0) {
+      pieces.push(piece);
+      continue;
+    }
+    const font = create(Buffer.from(face.bytes)) as Parameters<
+      typeof featuresOf
+    >[0];
+    const tools = {
+      subsetFont,
+      compress,
+      options: subsetOptions(
+        featuresOf(font).filter((tag) => !face.leaves.includes(tag)),
+        false
+      ),
+    };
+    pieces.push(await cutPiece(face, "first", [...first, ...marks], tools));
+    pieces.push(await cutPiece(face, "latin", [...rest, ...marks], tools));
   }
   return pieces;
 }
@@ -357,16 +441,20 @@ const faceRule = (piece: FacePiece, url: string): string =>
 
 /**
  * The house faces as a surface serves them: a rule per piece, its file at
- * `<at><name>`, and each piece's file by its name.
+ * `<at><name>`, and each piece's file by its name; `pieces` when the
+ * surface cuts its own ({@link firstPaintPieces}).
  */
-export async function houseFaceSheet(at: string): Promise<{
+export async function houseFaceSheet(
+  at: string,
+  pieces?: FacePiece[]
+): Promise<{
   css: string;
   files: [name: string, bytes: Uint8Array<ArrayBuffer>][];
 }> {
-  const pieces = await houseFacePieces();
+  const sheet = pieces ?? (await houseFacePieces());
   return {
-    css: `${pieces.map((piece) => faceRule(piece, `${at}${piece.name}`)).join("\n")}\n`,
-    files: pieces.map((piece) => [piece.name, piece.bytes]),
+    css: `${sheet.map((piece) => faceRule(piece, `${at}${piece.name}`)).join("\n")}\n`,
+    files: sheet.map((piece) => [piece.name, piece.bytes]),
   };
 }
 

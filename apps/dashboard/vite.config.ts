@@ -66,8 +66,10 @@ const devHub = (): URL => {
  * The house faces (scripts/house-faces.ts), written into `src/house-faces/`
  * before Tailwind reads app.css, which imports its `faces.css`.
  *
- * The latin pieces are the faces the first paint sets its text in. The
- * build inlines them into the stylesheet, which the page waits for anyway,
+ * The `first` pieces are the faces the first paint sets its text in: each
+ * face's latin characters the dashboard's own text draws (the script says
+ * how they are read), the rest of latin a piece by URL. The build inlines
+ * them into the stylesheet, which the page waits for anyway,
  * so the first frame is laid out in them. Fetched by URL, a face that lands
  * after the first paint re-sets every line in it: with the font 600ms late,
  * the phone board re-wrapped and moved 20px (0.027 CLS), and no fallback
@@ -84,7 +86,7 @@ const houseFaces = (): Plugin => ({
   name: "cawco:house-faces",
   async config() {
     for (const piece of await writeHouseFaces()) {
-      if (piece.cut === "latin") {
+      if (piece.cut === "first") {
         firstPaint.add(join(FACES_DIR, piece.name));
       }
     }

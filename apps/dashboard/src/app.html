@@ -37,8 +37,10 @@
     %sveltekit.head%
     <!--
       The faces the first paint sets its text in, decoded before it. The build
-      inlines Figtree's, JetBrains Mono's and Nunito's latin pieces into the stylesheet
-      above (vite.config.ts), but a browser decodes a face only once text asks for
+      inlines Figtree's, JetBrains Mono's and Nunito's first-paint pieces into the
+      stylesheet above (vite.config.ts); each `load` asks for a space, which
+      each first piece holds, so it fetches none of the latin pieces by URL. A
+      browser decodes a face only once text asks for
       it, and off to one side: the first frame could still be laid out in the
       fallback and re-set a moment later. This script runs once the stylesheet
       is in and before the body is parsed, so both are ready by the first
