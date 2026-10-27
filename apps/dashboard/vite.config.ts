@@ -23,6 +23,7 @@ import {
   type ViteDevServer,
 } from "vite";
 import { z } from "zod";
+import { firstPaintChunks } from "./first-paint-chunks.ts";
 import { groupsAsCombinators } from "./group-selectors.ts";
 import { publicOrigin } from "./public-origin.js";
 import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
@@ -506,6 +507,7 @@ export default defineConfig(({ command }) => {
         csrf: { trustedOrigins: ["*"] },
       }),
       Icons({ compiler: "svelte" }),
+      firstPaintChunks(join(import.meta.dirname, "src/routes")),
     ],
     server: {
       // The dashboard's port everywhere (core `CAWCO_LOCAL_DASHBOARD_PORT`).

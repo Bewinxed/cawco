@@ -639,13 +639,28 @@ export const asReached = (request: Request): Request => {
  * (apps/dashboard public-origin.js) for its gate, its CSRF check and the
  * page origin it tells the hub: a browser on the name is `https://<name>`,
  * one on the agent's relay `http://localhost:<port>`, as each page's Origin
- * says. Answers go back as they came, compressed or not.
+ * says. Answers go back as they came, compressed or not, each chunk as it
+ * is written.
+ *
+ * It speaks HTTP/2 to a browser that offers it (ALPN), as a preview's HTTPS
+ * does (preview.ts says how): a cold page asks for its stylesheets, modules
+ * and reads at once, and over HTTP/1.1 a browser takes six connections to
+ * an origin, so each round trip served six. One HTTP/2 connection carries
+ * them all at once. "With `tls`, Bun picks the protocol per connection using
+ * ALPN. Clients that offer `h2` (browsers, `curl`, `node:http2`) get
+ * HTTP/2. Everyone else gets HTTP/1.1" (bun.com/docs/runtime/http/server).
+ * The socket stays HTTP/1.1: "`server.upgrade()` only works on HTTP/1.1
+ * requests", and Bun offers no extended CONNECT (its SETTINGS say
+ * `enableConnectProtocol: false`, read with node:http2 on Bun 1.4.4), so a
+ * browser opens its WebSocket on an HTTP/1.1 connection of its own (RFC
+ * 8441 §3).
  */
 export const dashboardRelay =
   (port: number): OpenSecure =>
   (at) =>
     Bun.serve<PreviewSocket>({
       ...at,
+      http2: true,
       websocket: previewWebSocket,
       async fetch(request, server) {
         const url = new URL(request.url);
