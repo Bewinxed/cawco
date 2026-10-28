@@ -508,7 +508,13 @@ class Panel {
   wire() {
     // A frame drawn while hidden (the Show switch under 900px) reads no
     // boxes; its scroll-linked title and edge are drawn once it has one.
-    new ResizeObserver(() => this.onScroll()).observe(this.scroller);
+    // What it holds growing or shrinking moves no scroll event, so its
+    // edges' fades are read again then too.
+    const resized = new ResizeObserver(() => this.onScroll());
+    resized.observe(this.scroller);
+    for (const part of this.scroller.children) {
+      resized.observe(part);
+    }
     let ticking = false;
     this.scroller.addEventListener(
       "wheel",
