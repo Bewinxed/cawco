@@ -1,7 +1,8 @@
 /**
  * Three decision pages in a scratch fleet's project, as sessions publish
  * them (programs over the decision library, as the decision-page skill
- * writes them; the hub serves each in its host page), for the probes that
+ * writes them; the hub serves each in its host page) and picked as the
+ * person picks, through the page's doc (`pickAsThePerson`), for the probes that
  * seed a project with them (probe-kit specs/web/safari-blurs.ts):
  *
  * - **landing** — "Landing page hero", 12 cards, 5 picked and 2 noted: the
@@ -16,9 +17,15 @@
  * Card and option ids are dashed, so no word of the page's prose is one:
  * the probe asserts no element's text holds a card id.
  */
+import { messageAuth, WebsocketProvider } from "y-websocket";
+import { Doc } from "yjs";
 import { readWithin } from "../../packages/core/src/bounded";
+import {
+  type ChoiceEntry,
+  changedEntry,
+} from "../../packages/core/src/choices";
 import { unhandled } from "../../packages/core/src/unhandled";
-import type { Fleet } from "../scratch-fleet";
+import { type Fleet, until } from "../scratch-fleet";
 
 interface SeedOption {
   id: string;
@@ -523,12 +530,107 @@ const hub = async <T>(
   }
 };
 
-/** A page published by its writer, and the picks it holds; its artifact's id. */
+/** The hub base's scheme, which its doc socket takes as `ws`/`wss`. */
+const HTTP_SCHEME = /^http/u;
+
+type SeedPicks = Record<
+  string,
+  { note?: string; options: string[]; value?: unknown }
+>;
+
+/**
+ * The person's picks, written as they write them: into the page's doc
+ * `state` over the pane's link (hub preview-routes.ts `/ws/artifact/
+ * :instance/:artifact`, the same doc socket as the overlay's own on the
+ * preview listener, artifacts/sync.ts), each entry made as the overlay's
+ * `choose` makes it (core `changedEntry`). A card's pick is the person's
+ * (Who decides): the writer's artifact_update may not write one. Resolves
+ * once a fresh client reads every pick back from the hub.
+ */
+const pickAsThePerson = async (
+  fleet: Fleet,
+  writer: string,
+  artifact: string,
+  picks: SeedPicks
+): Promise<void> => {
+  const url = `${fleet.base.replace(HTTP_SCHEME, "ws")}/ws/artifact/${writer}`;
+  const join = async () => {
+    const doc = new Doc();
+    const link = new WebsocketProvider(url, artifact, doc, {
+      disableBc: true,
+      WebSocketPolyfill: WebSocket as never,
+    });
+    const refused: string[] = [];
+    link.messageHandlers[messageAuth] = () => {
+      refused.push(artifact);
+    };
+    await until(
+      `the ${artifact} doc joined`,
+      () => link.synced,
+      Boolean,
+      30_000
+    );
+    return {
+      doc,
+      refused,
+      leave: () => {
+        link.destroy();
+        doc.destroy();
+      },
+    };
+  };
+  const person = await join();
+  const pageHash = person.doc.getMap("meta").get("pageHash");
+  if (typeof pageHash !== "string") {
+    person.leave();
+    throw new Error(`${artifact}: its doc holds no pageHash`);
+  }
+  const state = person.doc.getMap<ChoiceEntry>("state");
+  const at = new Date().toISOString();
+  person.doc.transact(() => {
+    for (const [choice, pick] of Object.entries(picks)) {
+      state.set(
+        choice,
+        changedEntry(
+          state.get(choice),
+          {
+            choice,
+            pageHash,
+            options: pick.options,
+            ...(pick.note === undefined ? {} : { note: pick.note }),
+            ...(pick.value === undefined ? {} : { value: pick.value }),
+          },
+          at
+        )
+      );
+    }
+  });
+  const fresh = await join();
+  try {
+    const kept = fresh.doc.getMap<ChoiceEntry>("state");
+    await until(
+      `${artifact}: the hub keeps the person's ${Object.keys(picks).length} pick(s)`,
+      () =>
+        person.refused.length > 0 ||
+        Object.keys(picks).every((choice) => kept.has(choice)),
+      Boolean,
+      30_000
+    );
+    if (person.refused.length > 0) {
+      throw new Error(`${artifact}: the hub refused the person's picks`);
+    }
+  } finally {
+    fresh.leave();
+    person.leave();
+  }
+};
+
+/** A page published by its writer, and the person's picks on it; its artifact's id. */
 const publish = async (
   fleet: Fleet,
   writer: string,
   page: SeedPage,
-  picks: Record<string, { note?: string; options: string[]; value?: unknown }>
+  picks: SeedPicks
 ): Promise<string> => {
   const made = await hub<{ id: string }>(
     fleet,
@@ -542,13 +644,7 @@ const publish = async (
       program: pageProgram(page),
     }
   );
-  await hub(fleet, "PATCH", `/api/instances/${writer}/artifacts/${made.id}`, {
-    patch: Object.entries(picks).map(([key, value]) => ({
-      op: "add",
-      path: `/${key}`,
-      value,
-    })),
-  });
+  await pickAsThePerson(fleet, writer, made.id, picks);
   return made.id;
 };
 
