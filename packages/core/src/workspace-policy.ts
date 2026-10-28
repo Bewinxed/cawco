@@ -9,7 +9,9 @@
  * - Reads: the whole home dir is denied, and back come the workspace's own
  *   trees (its clone, its state dir's read-only part and its scratch dir, the
  *   shared workspace cache, the
- *   objects dir its clone borrows), the toolchains on PATH and the tool
+ *   objects dir its clone borrows), the `package.json` of each folder
+ *   above the clone up to the home dir (`ancestorManifests`), the
+ *   toolchains on PATH and the tool
  *   trees their commands link into (`homeToolchains`), the user's git
  *   config, the host tool caches skills run binaries from
  *   (`hostToolCaches`: Playwright's browsers), the
@@ -1037,6 +1039,31 @@ export const projectFolderOf = async (project: string): Promise<string[]> => {
 };
 
 /**
+ * The `package.json` of every folder above `clone`, up to the home dir and
+ * the home dir's own, read only. Node's package-scope lookup reads each
+ * folder's `package.json` upwards until one is there ("PACKAGE_SCOPE",
+ * nodejs.org/api/esm.html#resolution-algorithm-specification), and a lookup
+ * from the clone's own folder given with no trailing slash starts at its
+ * parent: knip 6.43.0's `createRequire(process.cwd())` (util/require.js) and
+ * mlly 1.8.2's `pathToFileURL(process.cwd())` (`_resolve`, under local-pkg
+ * and unplugin-icons). On Linux the denied home is an empty tmpfs whose
+ * lookups answer ENOENT, and the walk goes on; Seatbelt answers EPERM, which
+ * Node raises ("Cannot read package config /Users/…/package.json: operation
+ * not permitted"): in a Mac workspace knip read no dependency's manifest and
+ * the decision host's build failed.
+ */
+const ancestorManifests = (clone: string, home: string): string[] => {
+  const manifests: string[] = [];
+  for (let dir = dirname(clone); within(dir, home); dir = dirname(dir)) {
+    manifests.push(join(dir, "package.json"));
+    if (dir === home) {
+      break;
+    }
+  }
+  return manifests;
+};
+
+/**
  * The workspace's policy on this machine as it stands now, every path a real
  * path but the account layer names ({@link accountLayers}).
  */
@@ -1066,6 +1093,8 @@ export const workspacePolicy = async (
       ...caches,
       ...(await alternatesOf(workspace.path)),
       ...(await homeToolchains(home)),
+      ...ancestorManifests(workspace.path, home),
+      ...ancestorManifests(clone, home),
       join(home, ".gitconfig"),
       userGitConfigDir(),
       ...hostToolCaches(),

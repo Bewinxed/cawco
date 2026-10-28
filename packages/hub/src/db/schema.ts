@@ -1873,9 +1873,11 @@ export const sentMessages = sqliteTable(
     index("sent_messages_harness_id").on(table.harnessId),
     index("sent_messages_state").on(table.instanceId, table.state),
     index("sent_messages_thread").on(table.threadId, table.state),
+    // Its columns by bare name, as every check's (migrations-check.ts
+    // `qualifiedChecks`).
     check(
       "sent_messages_target",
-      sql`${table.instanceId} IS NOT NULL OR ${table.threadId} IS NOT NULL`
+      sql`${sql.identifier("instance_id")} IS NOT NULL OR ${sql.identifier("thread_id")} IS NOT NULL`
     ),
   ]
 );
@@ -4237,10 +4239,12 @@ export const previewPorts = sqliteTable(
       .unique()
       .references(() => artifacts.id, { onDelete: "cascade" }),
   },
-  (table) => [
+  () => [
+    // Its columns by bare name, as every check's (migrations-check.ts
+    // `qualifiedChecks`).
     check(
       "preview_ports_one_owner",
-      sql`(${table.instanceId} is not null) + (${table.projectId} is not null) + (${table.artifactId} is not null) = 1`
+      sql`(${sql.identifier("instance_id")} is not null) + (${sql.identifier("project_id")} is not null) + (${sql.identifier("artifact_id")} is not null) = 1`
     ),
   ]
 );

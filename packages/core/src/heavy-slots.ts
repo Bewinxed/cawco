@@ -64,6 +64,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { openLockFile, tryLock, unlock } from "./flock";
 import { workspaceCacheDir } from "./paths";
+import { parentPid } from "./process-identity";
 import { parseRecord } from "./state-file";
 import { HOUR_MS } from "./time";
 
@@ -86,31 +87,38 @@ export const HEAVY_SLOT_ENV = "CAWCO_HEAVY_SLOT";
  * task's 1024 (kernel/sched/core.c `sched_prio_to_weight`; "nice levels were
  * changed to be multiplicative",
  * https://docs.kernel.org/scheduler/sched-nice-design.html), so the person's
- * own sessions and apps win the CPU from builds. Its disk reads and writes
- * go in the idle class where the OS has one: Linux's `ionice -c3` ("A
- * program running with idle I/O priority will only get disk time when no
- * other program has asked for disk I/O", ionice(1)), macOS's `taskpolicy -b`
- * (darwin background: throttled CPU and I/O).
+ * own sessions and apps win the CPU from builds. On Linux its disk reads and
+ * writes go in the idle class, `ionice -c3` ("A program running with idle
+ * I/O priority will only get disk time when no other program has asked for
+ * disk I/O", ionice(1)).
+ *
+ * Never macOS's darwin background (`taskpolicy -b`, `PRIO_DARWIN_BG`): on
+ * Apple silicon it holds a process to the efficiency cores and throttles its
+ * I/O. Measured 2026-10-28 on a 10-core Mac (8 performance, 2 efficiency) at
+ * load 30–40, Biome over the tree took 226 s in darwin background and 12 s
+ * at nice 10; under it a merge check's golar tsc, Golar's lint, Biome and
+ * three house checks each ran past the check runner's 240 s and failed.
  */
 export const HEAVY_NICE = 10;
 
 /**
  * Shell lines that put the shell running them, and everything it starts
- * after, at {@link HEAVY_NICE} and the idle I/O class (Linux `ionice`, macOS
- * `taskpolicy`): the agent puts them before a heavy command it runs
- * (hub-command.ts), so they run where the command does, inside a
- * workspace's boundary in the runner's own shell, not in the executor
- * outside it. `$$` is that shell, in its own pid namespace.
+ * after, at {@link HEAVY_NICE} and, on Linux, the idle I/O class (`ionice`):
+ * the agent puts them before a heavy command it runs (hub-command.ts), so
+ * they run where the command does, inside a workspace's boundary in the
+ * runner's own shell, not in the executor outside it. `$$` is that shell, in
+ * its own pid namespace.
  */
 export const BACKGROUND_SHELL = `renice -n ${HEAVY_NICE} -p $$ >/dev/null
-if command -v ionice >/dev/null 2>&1; then ionice -c3 -p $$; elif command -v taskpolicy >/dev/null 2>&1; then taskpolicy -b -p $$; fi
+if command -v ionice >/dev/null 2>&1; then ionice -c3 -p $$; fi
 `;
 
 /**
  * This process and every thread it has at {@link HEAVY_NICE} at least
- * (never raised back: a run started at a lower priority keeps it), and in
- * the idle I/O class where the OS has one: what a holder that takes its own
- * slot does (scripts/check.ts, the probe kit's slot.ts), so what it starts
+ * (never raised back: a run started at a lower priority keeps it), in the
+ * idle I/O class on Linux, and out of darwin background on macOS
+ * (`taskpolicy -B`), whoever put it there: what a heavy run does as it
+ * starts (scripts/check.ts, the probe kit's slot.ts), so what it starts
  * afterwards runs so too. Linux keeps a nice and an I/O priority per thread,
  * and a child takes the forking thread's.
  */
@@ -131,7 +139,7 @@ export function runInBackground(): void {
   const io =
     process.platform === "linux"
       ? ["ionice", "-c3", "-p", ...tids.map(String)]
-      : ["taskpolicy", "-b", "-p", String(process.pid)];
+      : ["taskpolicy", "-B", "-p", String(process.pid)];
   if (Bun.which(io[0] as string)) {
     Bun.spawnSync(io, { stdout: "ignore", stderr: "inherit" });
   }
@@ -246,20 +254,11 @@ function ancestors(): number[] {
   let pid = process.ppid;
   while (pid > 1 && out.length < 64) {
     out.push(pid);
-    let parent: number;
-    if (process.platform === "linux") {
-      try {
-        const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-        parent = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
-      } catch {
-        break;
-      }
-    } else {
-      parent = Number(
-        Bun.spawnSync(["ps", "-o", "ppid=", "-p", String(pid)])
-          .stdout.toString()
-          .trim()
-      );
+    // From the kernel, no spawn: a workspace's boundary refuses setuid
+    // `/bin/ps` on macOS (EPERM at posix_spawn).
+    const parent = parentPid(pid);
+    if (parent === undefined) {
+      break;
     }
     pid = parent;
   }

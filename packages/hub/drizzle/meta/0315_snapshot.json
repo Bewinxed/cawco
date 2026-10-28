@@ -7217,7 +7217,7 @@
       "checkConstraints": {
         "preview_ports_one_owner": {
           "name": "preview_ports_one_owner",
-          "value": "(\"preview_ports\".\"instance_id\" is null) <> (\"preview_ports\".\"project_id\" is null)"
+          "value": "(\"instance_id\" is null) <> (\"project_id\" is null)"
         }
       }
     },
