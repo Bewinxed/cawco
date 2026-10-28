@@ -10470,6 +10470,9 @@ export const createServer = (
     lifetime,
     name: (machineId) => machineName(machineId),
     desired: (machineId) => machineFleetItems(machineId),
+    generation: (machineId) => db.agentFleetGeneration(machineId),
+    keepGeneration: (machineId, generation, fingerprint) =>
+      db.setAgentFleetGeneration(machineId, generation, fingerprint),
     send: (machineId, requestId, delta) => {
       const agent = registry.agent(machineId);
       if (!agent) {
@@ -10480,7 +10483,7 @@ export const createServer = (
       const riding = mcpChanges.ride(machineId);
       if (riding.size > 0) {
         const sent = fleetMcpRiding.get(machineId) ?? new Map();
-        sent.set(delta.rev, riding);
+        sent.set(delta.generation, riding);
         fleetMcpRiding.set(machineId, sent);
       }
       sendFrame(agent, {
@@ -10512,27 +10515,26 @@ export const createServer = (
   });
   /**
    * The fleet MCP changes each delta to a machine carried, by machine and the
-   * delta's rev, until a converge that reached that rev reports
-   * (fleet-mcp-changes.ts): two deltas in flight each keep their own, so a
+   * delta's generation, until a converge that reached that generation
+   * reports (fleet-mcp-changes.ts): two deltas each keep their own, so a
    * report of the first never hands the sessions the second's changes ahead
    * of the files that hold them.
    */
   const fleetMcpRiding = new Map<string, Map<number, RidingChanges>>();
   /**
-   * The changes a machine's fleet report lands: the ride of the rev its
-   * converge reached, and every earlier ride let go (what they carried that
-   * still waits rides the later one). A report read unasked lands none; an
-   * agent that names no rev lands the newest, as it always did.
+   * The changes a machine's fleet report lands: the ride of the generation
+   * its converge reached, and every earlier ride let go (what they carried
+   * that still waits rides the later one). A report read unasked lands none.
    */
   const ridingReported = (
     machineId: string,
-    rev: number | null | undefined
+    generation: number | null
   ): RidingChanges | undefined => {
     const sent = fleetMcpRiding.get(machineId);
-    if (!sent || rev === null) {
+    if (!sent || generation === null) {
       return;
     }
-    const reached = rev ?? Math.max(...sent.keys());
+    const reached = generation;
     const riding = sent.get(reached);
     for (const at of [...sent.keys()]) {
       if (at <= reached) {
@@ -35555,13 +35557,14 @@ export const createServer = (
               // a reading moved with no fleet change: kept, and the fleet MCP
               // changes its last delta carried go to the sessions there.
               if (kind === "fleet_report") {
-                const { report, rev } = message.payload as FleetReportFrame;
+                const { report, generation } =
+                  message.payload as FleetReportFrame;
                 if (isFleetReport(report)) {
                   keepFleetReport(
                     message.machineId,
                     ws,
                     report,
-                    ridingReported(message.machineId, rev)
+                    ridingReported(message.machineId, generation ?? null)
                   );
                 }
                 break;

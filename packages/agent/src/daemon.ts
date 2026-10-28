@@ -1786,6 +1786,8 @@ const attach = (
       registeredAs.machineId !== identity.machineId
         ? registeredAs.machineId
         : undefined;
+    // What it holds of the fleet, read back from disk before it says so.
+    yield* Effect.promise(() => supervisor.fleetLoaded());
     const registerPayload = (
       snapshot: Awaited<ReturnType<typeof readSessions>>
     ): RegisterPayload => ({

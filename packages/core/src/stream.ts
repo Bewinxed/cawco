@@ -162,12 +162,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    before it starts (a task's `waitsOn`), and nothing is held at its
  *    landing. A page built for 31 reads a field the hub no longer sends, so
  *    it reloads first.
+ * 33: a machine's fleet sync goes by generation, not rev (core fleet.ts
+ *    `FLEET_DELTA`): its row's last delta and its converge and report
+ *    frames name the generation. A page built for 32 reads a `rev` the hub
+ *    no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 32;
+export const WIRE_PROTOCOL = 33;
 
 /**
  * What a session's stream carries: the changes each frame made to its

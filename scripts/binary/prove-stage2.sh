@@ -1504,7 +1504,7 @@ ssh_fleet_synced() {
     return 1
   }
   synced=$(as_added "$c" "$user" sh -c 'cat "$1" 2> /dev/null || true' sh "$home/.local/share/cawco/agent-state.json" | json 'd => JSON.stringify(d.fleetSync ?? null)')
-  [[ "$(json 'd => typeof d?.rev === "number"' <<< "$synced")" == true ]] || { echo "ASSERTION FAILED: $name's agent records no sync from the hub: $synced"; added_agent_journal "$c" "$user" | grep -F "[fleet]" | tail -n 20; return 1; }
+  [[ "$(json 'd => typeof d?.generation === "number"' <<< "$synced")" == true ]] || { echo "ASSERTION FAILED: $name's agent records no sync from the hub: $synced"; added_agent_journal "$c" "$user" | grep -F "[fleet]" | tail -n 20; return 1; }
   fault=$(hub_api "/api/agents/$(cat "$rigdir/ssh-id-$name")" | json 'd => d.fleetSync?.state === "acked" ? "" : JSON.stringify(d.fleetSync ?? null)')
   [[ -z $fault ]] || { echo "ASSERTION FAILED: the hub's row has $name's last delta not acknowledged: $fault"; return 1; }
   echo "$name's agent took the hub's sync: $synced"

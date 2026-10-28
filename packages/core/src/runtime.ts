@@ -25,11 +25,14 @@ export const runtimeCommit =
  * agent knows no delta. Epoch 4: CawCo has no multi-step run engine, so a
  * hub answers no run step's or run's route and a session row names no run
  * nor step; an epoch-3 agent's OpenCode plugin still offers the step tools
- * that called them. A hub sends a launch only to an agent whose range
+ * that called them. Epoch 5: a fleet delta carries the machine's
+ * `generation`, which the hub keeps and resends unchanged, and the agent
+ * answers with its `observedGeneration`, kept on disk with what it holds
+ * (core fleet.ts `FLEET_DELTA`); an epoch-4 agent knows only a rev. A hub sends a launch only to an agent whose range
  * holds its own, and a joined machine installs only a build whose range
  * overlaps its hub's.
  */
-export const protocolRange = { min: 4, max: 4 } as const;
+export const protocolRange = { min: 5, max: 5 } as const;
 export const runtimeDataDir = () =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),

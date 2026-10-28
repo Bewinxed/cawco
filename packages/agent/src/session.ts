@@ -206,8 +206,6 @@ import {
 } from "./fleet-parts";
 import {
   type FleetPlace,
-  keepProjectRows,
-  keptProjectRows,
   placedConfig,
   place as placeRowsAt,
   placesNow,
@@ -1499,6 +1497,12 @@ export class SessionSupervisor {
       // A read the hub may let go runs beside every other: one search never
       // waits on another, nor the hub's word that it let one go on it.
       key = `read:${control.requestId}`;
+    } else if (control?.method === FLEET_DELTA) {
+      // Deltas in a lane of their own, in the order they came: an answer
+      // (ACK means kept on disk) never waits behind the machine's other
+      // controls, as a just-started agent's welcome waited 14 to 51 s
+      // behind its start-up work (2026-10-25 17:39-17:43).
+      key = "fleet";
     } else if (control?.method === CONTROL_CARRY_SESSIONS) {
       // Each carry in a lane of its own: one session's carry never waits on
       // another's. A second carry of a conversation one is still carrying is
@@ -5666,62 +5670,79 @@ export class SessionSupervisor {
 
   /**
    * A delta held as it arrives (fleet-desired.ts), in the order the hub sent
-   * them: its items join what this agent holds, and its policy, when it
-   * moved (or a welcome finds no list on disk), is written before anything
-   * else (denied-tools.ts `applyFleetDenials`) and before the agent answers.
-   * The items it moved wait for the next converge ({@link #convergeSoon}).
+   * them: one of a generation the disk already keeps (sent again because its
+   * answer went unheard) is answered and not applied again; any other's
+   * items join what this agent holds, which is written to disk before the
+   * agent answers (ACK means kept, before anything is applied). Its policy,
+   * when it moved (or a welcome), begins to be written at once
+   * (denied-tools.ts `applyFleetDenials`), and every spawn waits for that
+   * write; the items it moved wait for the next converge
+   * ({@link #convergeSoon}).
    */
   async #holdDelta(delta: FleetDelta | undefined): Promise<void> {
-    if (!delta || typeof delta.rev !== "number") {
+    if (!delta || typeof delta.generation !== "number") {
       return;
     }
     await this.#desired.loaded;
+    if (this.#desired.observed(delta)) {
+      console.info(
+        `[fleet] gen ${delta.generation} sent again: this machine keeps gen ${this.#desired.generation} already, so it is answered and not applied again`
+      );
+      return;
+    }
     const applied = this.#desired.apply(delta);
     for (const id of [...applied.changed, ...applied.removed]) {
       if (id !== "policy") {
         this.#convergeIds.add(id);
       }
     }
-    // A whole one (a welcome) holds every project row there is, none among
-    // them too.
-    if (
-      delta.full ||
-      [...applied.changed, ...applied.removed].some((id) =>
-        id.startsWith("project:")
-      )
-    ) {
-      this.#keepProjectRows();
-    }
     this.#reconvergeValue ||= delta.reconverge === true;
     const denied = this.#desired.deniedTools;
     if (denied && (applied.policy || delta.welcome)) {
-      // Awaited by the delta's answer; a failure is said there.
-      await applyFleetDenials(denied);
-      this.#desired.policyWritten();
-      // The policy is in `~/.claude/settings.json`, which a boundary binds.
-      if (applied.policy) {
-        rearmBoundaries("the fleet's policy");
-      }
+      this.#writePolicy(denied, applied.policy);
     }
+    await this.#desired.keep();
   }
 
   /**
-   * The project rows held now, kept on disk (fleet-place.ts): what every
-   * clone cut from here on places ({@link placeClone}), in this run and the
-   * next. A write that fails is said.
+   * The fleet's denied tools written (denied-tools.ts `applyFleetDenials`,
+   * which every spawn waits on while it runs), and said as the `policy`
+   * item's converge; `moved`: the policy changed, and so did
+   * `~/.claude/settings.json`, which a boundary binds.
    */
-  #keepProjectRows(): void {
-    keepProjectRows(this.#desired.projectItems()).catch((error: unknown) =>
-      warn(
-        `the project rows were not kept on disk, so a workspace cut next places the ones kept before: ${errorText(error)}`
-      )
+  #writePolicy(denied: readonly string[], moved: boolean): void {
+    const generation = this.#desired.generation ?? 0;
+    const hash = this.#desired.hashOf("policy");
+    const started = Date.now();
+    applyFleetDenials(denied).then(
+      () => {
+        this.#desired.policyWritten();
+        if (moved) {
+          this.#converging(generation, [
+            { id: "policy", hash, state: "ok", ms: Date.now() - started },
+          ]);
+          rearmBoundaries("the fleet's policy");
+        }
+      },
+      (error: unknown) => {
+        warn(`the fleet's policy was not written: ${errorText(error)}`);
+        this.#converging(generation, [
+          {
+            id: "policy",
+            hash,
+            state: "failed",
+            error: errorText(error),
+            ms: Date.now() - started,
+          },
+        ]);
+      }
     );
   }
 
   /**
    * A workspace's clone at `cwd`, cut for project `projectId`, given the
-   * project's rows this agent keeps on disk (fleet-place.ts `place`), which
-   * hold through a restart: its skills and memory documents written into
+   * project's rows this agent holds (fleet-place.ts `place`), which the
+   * disk keeps through a restart (fleet-desired.ts): its skills and memory documents written into
    * the clone, its MCP servers, hooks and harness settings into the files
    * CawCo's sessions read for that folder. Before its boundary and first
    * session start (workspace.ts `createWorkspace`), after any converge
@@ -5731,7 +5752,8 @@ export class SessionSupervisor {
    */
   placeClone(cwd: string, projectId: string): Promise<void> {
     return this.#fleetTurn(async () => {
-      const rows = (await keptProjectRows())[projectId];
+      await this.#desired.loaded;
+      const rows = this.#desired.config().projects[projectId];
       if (!rows) {
         return;
       }
@@ -5744,7 +5766,7 @@ export class SessionSupervisor {
       };
       const said = failedPlaced(placed);
       console.info(
-        `[fleet] ${cwd}: project ${projectId}'s ${copies.skills.length} skill(s), ${copies.mcp.length} MCP server(s), ${copies.memory.length} memory document(s), ${copies.hooks.length} hook(s) and ${copies.harnessConfig.length} harness setting(s) placed from the rows kept on disk, as its workspace was cut${said.length > 0 ? `; not placed: ${said.join("; ")}` : ""}`
+        `[fleet] ${cwd}: project ${projectId}'s ${copies.skills.length} skill(s), ${copies.mcp.length} MCP server(s), ${copies.memory.length} memory document(s), ${copies.hooks.length} hook(s) and ${copies.harnessConfig.length} harness setting(s) placed from the rows it holds, as its workspace was cut${said.length > 0 ? `; not placed: ${said.join("; ")}` : ""}`
       );
       this.#reportPlaced(placed);
     });
@@ -5845,21 +5867,21 @@ export class SessionSupervisor {
     this.#sendReport(report, null);
   }
 
-  /** The machine's fleet report to the hub: one a converge reached (`rev`), or one read unasked (`null`). */
-  #sendReport(report: FleetSyncReport, rev: number | null): void {
+  /** The machine's fleet report to the hub: one a converge reached (its `generation`), or one read unasked (`null`). */
+  #sendReport(report: FleetSyncReport, generation: number | null): void {
     this.emit({
       verb: "frames",
       machineId: "",
       payload: {
         kind: "fleet_report",
         report,
-        rev,
+        generation,
       } satisfies FleetReportFrame,
     });
   }
 
   /** The machine's word on items as they move (core `FleetConvergeFrame`). */
-  #converging(rev: number, items: FleetItemStatus[]): void {
+  #converging(generation: number, items: FleetItemStatus[]): void {
     if (items.length === 0) {
       return;
     }
@@ -5868,7 +5890,7 @@ export class SessionSupervisor {
       machineId: "",
       payload: {
         kind: "fleet_converge",
-        rev,
+        generation,
         items,
       } satisfies FleetConvergeFrame,
     });
@@ -5903,9 +5925,9 @@ export class SessionSupervisor {
       const moves = movesOf(ids, all);
       // Said item by item: the ones held; one taken away is said gone.
       const held = ids.filter((id) => this.#desired.has(id));
-      const rev = this.#desired.rev ?? 0;
+      const generation = this.#desired.generation ?? 0;
       this.#converging(
-        rev,
+        generation,
         held.map((id) => ({
           id,
           hash: this.#desired.hashOf(id),
@@ -5935,7 +5957,7 @@ export class SessionSupervisor {
         thrown = errorText(error);
       }
       if (thrown) {
-        warn(`the fleet's rev ${rev} did not converge: ${thrown}`);
+        warn(`the fleet's gen ${generation} did not converge: ${thrown}`);
       }
       const statuses = itemStatuses(
         this.#desired,
@@ -5945,9 +5967,9 @@ export class SessionSupervisor {
         thrown
       );
       this.#desired.converged(ids, statuses, report);
-      this.#converging(rev, statuses);
+      this.#converging(generation, statuses);
       if (report) {
-        this.#sendReport(report, rev);
+        this.#sendReport(report, generation);
       }
       this.#healFleetMcp(this.#reachedBy(moves, places));
       const bound = [...moves.wide].filter((kind) => BOUND_KINDS.has(kind));
@@ -6009,9 +6031,14 @@ export class SessionSupervisor {
     );
   }
 
-  /** What this agent holds of the fleet, for its register (core `FleetHeld`). */
+  /** What this agent holds of the fleet, for its register (core `FleetHeld`): read once the disk's is ({@link fleetLoaded}). */
   fleetHeld(): FleetHeld | undefined {
     return this.#desired.held();
+  }
+
+  /** Once what the disk keeps of the fleet is read: a register waits for it, so it claims what this agent holds through a restart. */
+  fleetLoaded(): Promise<void> {
+    return this.#desired.loaded;
   }
 
   /**
@@ -6499,10 +6526,11 @@ export class SessionSupervisor {
         return installed;
       }
 
-      // A delta, held as it arrived (#holdDelta) with its policy written:
-      // answered at once (ACK; READY for a welcome), its items converged
-      // after (#convergeSoon), each said as it moves. Only the machine's
-      // agent holds the hub's link, and so only it is sent one.
+      // A delta, held as it arrived and kept on disk (#holdDelta): answered
+      // at once with the generation kept (ACK; READY for a welcome), its
+      // policy and items applied after (#writePolicy, #convergeSoon), each
+      // said as it moves. Only the machine's agent holds the hub's link, and
+      // so only it is sent one.
       if (method === FLEET_DELTA) {
         const delta = args[0] as FleetDelta;
         // What a workspace's policy reads may have moved with it (a
@@ -6513,7 +6541,7 @@ export class SessionSupervisor {
         }
         if (delta.items.length > 0 || delta.reconverge) {
           console.info(
-            `[fleet] sync from the hub: rev ${delta.rev}, ${delta.items.length} item(s)${delta.full ? " (all it holds)" : ""}${delta.welcome ? ", its welcome" : ""}${delta.reconverge ? ", converging every item" : ""}`
+            `[fleet] sync from the hub: gen ${delta.generation}, ${delta.items.length} item(s)${delta.full ? " (all it holds)" : ""}${delta.welcome ? ", its welcome" : ""}${delta.reconverge ? ", converging every item" : ""}`
           );
         }
         // Every delta taken, as the hub hears it acknowledged.
@@ -6522,14 +6550,16 @@ export class SessionSupervisor {
             full: Boolean(delta.full),
             items: delta.items.length,
             reconverge: Boolean(delta.reconverge),
-            rev: delta.rev,
+            generation: delta.generation,
             welcome: Boolean(delta.welcome),
           }),
           "fleet sync record"
         );
         this.#convergeSoon();
         this.#healthSoon();
-        return { rev: delta.rev } satisfies FleetAck;
+        return {
+          observedGeneration: this.#desired.generation ?? delta.generation,
+        } satisfies FleetAck;
       }
       if (method === FLEET_STATUS) {
         return await this.#fleetTurn(() =>

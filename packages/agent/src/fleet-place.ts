@@ -13,10 +13,10 @@
  *   agent has at that moment ({@link placedConfig}, the converge).
  *
  * An archive deletes the clone and nothing else: the next converge finds
- * the place gone and takes its records back. The rows are kept on disk
- * ({@link keepProjectRows}) as each delta that moves one lands, and a clone
- * is placed from there ({@link keptProjectRows}), so a workspace cut after
- * the agent started again, before the hub's welcome, still gets them.
+ * the place gone and takes its records back. The rows are those the agent
+ * holds, which the disk keeps through a restart (fleet-desired.ts), so a
+ * workspace cut after the agent started again, before the hub's welcome,
+ * still gets them.
  */
 import { stat } from "node:fs/promises";
 import {
@@ -30,9 +30,8 @@ import {
   type PlacedFleetConfig,
   placeKeyOf,
 } from "@cawco/core";
-import { fleetConfigOf } from "@cawco/core/fleet-items";
-import { fleetProjectRowsFile, workspaceProjectFile } from "@cawco/core/paths";
-import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { workspaceProjectFile } from "@cawco/core/paths";
+import { readRecord } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ownFolderSync } from "./layer";
@@ -142,37 +141,4 @@ export const placedConfig = (
     placedMemory: copies.flatMap((one) => one.memory),
     placedSkills: copies.flatMap((one) => one.skills),
   };
-};
-
-/** The project items this agent holds, by id, as {@link keepProjectRows} keeps them. */
-const ProjectItemsSchema = z.record(z.string(), z.unknown());
-type ProjectItems = z.infer<typeof ProjectItemsSchema>;
-
-/** The project rows the items `items` carry. */
-const projectRowsOf = (items: ProjectItems): Record<string, FleetProjectRows> =>
-  fleetConfigOf(new Map(Object.entries(items))).projects;
-
-/** Each write of the rows, one after another, so the last delta's is the one on disk. */
-let writing: Promise<void> = Promise.resolve();
-
-/** The project items this agent holds, written to disk whole for the next start. */
-export const keepProjectRows = (items: ProjectItems): Promise<void> => {
-  const next = writing.then(() =>
-    writeStateFile(fleetProjectRowsFile(), JSON.stringify(items))
-  );
-  writing = next.catch(() => undefined);
-  return next;
-};
-
-/**
- * The project rows kept on disk, once every write begun before has landed:
- * the last delta's that moved one, in this run or the one before; none
- * before the first delta that carried any.
- */
-export const keptProjectRows = async (): Promise<
-  Record<string, FleetProjectRows>
-> => {
-  await writing;
-  const items = await readRecord(fleetProjectRowsFile(), ProjectItemsSchema);
-  return items ? projectRowsOf(items) : {};
 };

@@ -210,13 +210,15 @@ export const fleetMcpSetFile = (): string =>
 export const fleetHooksDir = (): string => join(cawcoDataDir(), "fleet-hooks");
 
 /**
- * The rows of each project this machine holds (core `FleetProjectRows`), as
- * the hub's deltas left them (agent fleet-place.ts): what a workspace cut
- * after the agent started again, before the hub's welcome, places in its
- * clone.
+ * What this machine's agent holds of the fleet (agent fleet-desired.ts):
+ * the generation of the desired state it last acknowledged (its
+ * `observedGeneration`) and every item the hub's deltas carried, written
+ * whole before it answers each delta. What its register claims after a
+ * restart, so the hub sends only what moved while it was away, and the
+ * project rows a workspace cut before that welcome places in its clone.
  */
-export const fleetProjectRowsFile = (): string =>
-  join(cawcoDataDir(), "fleet-project-rows.json");
+export const fleetDesiredFile = (): string =>
+  join(cawcoDataDir(), "fleet-desired.json");
 
 /**
  * What this machine's harnesses last converged of the fleet (agent

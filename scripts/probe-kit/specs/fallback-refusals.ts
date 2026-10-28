@@ -117,6 +117,8 @@ const welcomeRefused = (
     } as HubLifetimeShape,
     name: (machineId) => machineId,
     desired: () => new Map([["policy", { deniedTools: ["WebSearch"] }]]),
+    generation: () => ({ generation: 0, fingerprint: null }),
+    keepGeneration: () => undefined,
     send: (_, requestId) => {
       sent.push(requestId);
       return true;

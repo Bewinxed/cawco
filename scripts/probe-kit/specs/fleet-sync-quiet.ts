@@ -63,7 +63,7 @@ const SETTLE_MS = 15_000;
 /** How long after D's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
 const HANDOVER_BOUND_MS = 30_000;
 /** The agent's line for each delta it takes (agent session.ts `FLEET_DELTA`). */
-const SYNC_LINE = /\[fleet\] sync from the hub: rev (\d+)/gu;
+const SYNC_LINE = /\[fleet\] sync from the hub: gen (\d+)/gu;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const tool = (name: string, input: object): Reply => ({

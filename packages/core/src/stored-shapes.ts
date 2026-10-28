@@ -851,26 +851,26 @@ export const FleetItemStatusSchema: z.ZodType<FleetItemStatusType> =
 const FleetSyncOutcomeShape = z.union([
   z.object({
     state: z.literal("sent"),
-    rev: z.number(),
+    generation: z.number(),
     sentAt: z.number(),
     why: z.string(),
   }),
   z.object({
     state: z.literal("acked"),
-    rev: z.number(),
+    generation: z.number(),
     sentAt: z.number(),
     at: z.number(),
   }),
   z.object({
     state: z.literal("nacked"),
-    rev: z.number(),
+    generation: z.number(),
     sentAt: z.number(),
     at: z.number(),
     error: z.string(),
   }),
   z.object({
     state: z.literal("unacked"),
-    rev: z.number(),
+    generation: z.number(),
     sentAt: z.number(),
     at: z.number(),
   }),

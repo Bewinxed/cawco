@@ -1392,14 +1392,22 @@ export interface FleetSyncReport {
 /**
  * `fleetDelta(delta: FleetDelta) => FleetAck`: the machine-scoped control
  * that carries a machine's fleet config, as items (core fleet-items.ts), and
- * only the items whose hash moved since the machine last acknowledged. The
- * register's answer is one (`welcome`, WELCOME): the agent writes the
- * policy (the fleet's denied tools) before it answers, and the hub marks
- * the machine online on that answer (READY), not as its socket opens. Every
- * other is a fleet change (`fleetChanged`, hub fleet-sync.ts). The agent
- * answers as soon as it holds the items (ACK, {@link FleetAck}), or refuses
- * in its own words (`ok: false`, NACK); what the items come to as its
- * harnesses converge them follows item by item ({@link FleetConvergeFrame}).
+ * only the items whose hash moved since the machine last acknowledged, under
+ * the machine's `generation`: Kubernetes' "sequence number representing a
+ * specific generation of the desired state … monotonically increasing", and
+ * the agent's `observedGeneration`, "the `generation` most recently observed
+ * by the component responsible for acting upon changes to the desired state"
+ * (github.com/kubernetes/community, sig-architecture/api-conventions.md).
+ * The register's answer is one (`welcome`, WELCOME), and the hub marks the
+ * machine online on its answer (READY), not as its socket opens. Every other
+ * is a fleet change (`fleetChanged`, hub fleet-sync.ts). The agent answers
+ * as soon as it has kept the items on disk, before it applies any (ACK,
+ * {@link FleetAck}), or refuses in its own words (`ok: false`, NACK); what
+ * the items come to as its harnesses converge them follows item by item
+ * ({@link FleetConvergeFrame}). One delta is in flight per machine; one not
+ * answered within {@link FLEET_ACK_MS} goes again, the same generation and
+ * the same payload under the same request, and an agent that observed that
+ * generation already answers without applying it again.
  */
 export const FLEET_DELTA = "fleetDelta";
 
@@ -1415,33 +1423,34 @@ export interface FleetDeltaItem {
 export interface FleetDelta {
   /** Every item the machine is to hold: any it holds that this leaves out goes. */
   full: boolean;
+  /** The machine's desired state's generation this delta brings it to. */
+  generation: number;
   items: FleetDeltaItem[];
   /** Check every workspace boundary for an access its policy no longer grants (a project folder moved away). */
   recheck?: true;
   /** Converge every item, changed or not: the person asked for a sync. */
   reconverge?: true;
-  rev: number;
   /** The register's answer (WELCOME): the policy is written before the reply (READY). */
   welcome: boolean;
 }
 
-/** A machine's answer to a delta (ACK; READY for a welcome): the rev it now holds. */
+/** A machine's answer to a delta (ACK; READY for a welcome): the generation it has kept on disk. */
 export interface FleetAck {
-  rev: number;
+  observedGeneration: number;
 }
 
 /**
  * What a machine holds of the fleet, as its register says it (`fleetHeld`):
- * the rev it last acknowledged and each item's hash. The hub's welcome
- * carries only what differs from it. None for an agent that holds nothing
- * yet (it started since), which is sent every item.
+ * the generation it last kept on disk and each item's hash, which it keeps
+ * through a restart. The hub's welcome carries only what differs from it.
+ * None for an agent that holds nothing yet, which is sent every item.
  */
 export interface FleetHeld {
   items: Record<string, string>;
-  rev: number;
+  observedGeneration: number;
 }
 
-/** How long the hub waits for a delta's ACK before the row says so; it goes again on the machine's next heartbeat. */
+/** How long the hub waits for a delta's ACK before the row says so and it goes again, the same generation under the same request. */
 export const FLEET_ACK_MS = 15_000;
 
 /** Where one item stands as the machine's harnesses converge it. */
@@ -1460,10 +1469,11 @@ export interface FleetItemStatus {
 
 /** The machine's word on items as they move, sent unasked. */
 export interface FleetConvergeFrame {
+  /** The generation of the desired state the converge reached. */
+  generation: number;
   instanceId?: undefined;
   items: FleetItemStatus[];
   kind: "fleet_converge";
-  rev: number;
 }
 
 /**
@@ -1471,13 +1481,19 @@ export interface FleetConvergeFrame {
  * machine's row (`agents.fleet_sync`) apart from its items' converge:
  * `sent` until it answers; `acked` (for a welcome, the machine is online);
  * `nacked` in the machine's own words; `unacked` once {@link FLEET_ACK_MS}
- * passed with no answer, sent again on its next heartbeat.
+ * passed with no answer, and sent again, the same generation, until one comes.
  */
 export type FleetSyncOutcome =
-  | { state: "sent"; rev: number; sentAt: number; why: string }
-  | { state: "acked"; rev: number; sentAt: number; at: number }
-  | { state: "nacked"; rev: number; sentAt: number; at: number; error: string }
-  | { state: "unacked"; rev: number; sentAt: number; at: number };
+  | { state: "sent"; generation: number; sentAt: number; why: string }
+  | { state: "acked"; generation: number; sentAt: number; at: number }
+  | {
+      state: "nacked";
+      generation: number;
+      sentAt: number;
+      at: number;
+      error: string;
+    }
+  | { state: "unacked"; generation: number; sentAt: number; at: number };
 
 /**
  * One install of a CLI a sync depends on, as the machine found it.

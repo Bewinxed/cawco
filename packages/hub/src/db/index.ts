@@ -687,6 +687,11 @@ export interface DbShape {
    * waiting on an answer. What `from` delegated and is over stays its own.
    */
   readonly adoptChildren: (from: string, to: string) => AdoptedChildren;
+  /** The machine's fleet generation and the fingerprint of what it was to hold at it (hub fleet-sync.ts); generation 0 for a machine never sent one. */
+  readonly agentFleetGeneration: (machineId: string) => {
+    fingerprint: string | null;
+    generation: number;
+  };
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
@@ -2182,6 +2187,12 @@ export interface DbShape {
   ) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
+  /** The machine's fleet generation and the fingerprint of what it is to hold at it (hub fleet-sync.ts). */
+  readonly setAgentFleetGeneration: (
+    machineId: string,
+    generation: number,
+    fingerprint: string
+  ) => void;
   /** Each fleet item as the machine converges it (hub fleet-sync.ts), by item id. */
   readonly setAgentFleetItems: (
     machineId: string,
@@ -7484,6 +7495,23 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
+    agentFleetGeneration: (machineId) => {
+      const row = db
+        .select({
+          generation: agents.fleetGeneration,
+          fingerprint: agents.fleetFingerprint,
+        })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get();
+      return row ?? { generation: 0, fingerprint: null };
+    },
+    setAgentFleetGeneration: (machineId, generation, fingerprint) => {
+      db.update(agents)
+        .set({ fleetGeneration: generation, fleetFingerprint: fingerprint })
+        .where(eq(agents.machineId, machineId))
+        .run();
+    },
     setAgentFleetSync: (machineId, outcome) => {
       db.update(agents)
         .set({ fleetSync: outcome })
@@ -7533,6 +7561,8 @@ const make = async (path: string): Promise<DbShape> => {
               fleet,
               fleetSync,
               fleetItems,
+              fleetGeneration: _generation,
+              fleetFingerprint: _fingerprint,
               build,
               home,
               machineCapabilities,

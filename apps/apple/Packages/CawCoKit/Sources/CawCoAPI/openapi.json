@@ -44536,7 +44536,7 @@
                       "sent"
                     ]
                   },
-                  "rev": {
+                  "generation": {
                     "type": "number"
                   },
                   "sentAt": {
@@ -44547,7 +44547,7 @@
                   }
                 },
                 "required": [
-                  "rev",
+                  "generation",
                   "sentAt",
                   "state",
                   "why"
@@ -44562,7 +44562,7 @@
                       "acked"
                     ]
                   },
-                  "rev": {
+                  "generation": {
                     "type": "number"
                   },
                   "sentAt": {
@@ -44574,7 +44574,7 @@
                 },
                 "required": [
                   "at",
-                  "rev",
+                  "generation",
                   "sentAt",
                   "state"
                 ]
@@ -44588,7 +44588,7 @@
                       "nacked"
                     ]
                   },
-                  "rev": {
+                  "generation": {
                     "type": "number"
                   },
                   "sentAt": {
@@ -44604,7 +44604,7 @@
                 "required": [
                   "at",
                   "error",
-                  "rev",
+                  "generation",
                   "sentAt",
                   "state"
                 ]
@@ -44618,7 +44618,7 @@
                       "unacked"
                     ]
                   },
-                  "rev": {
+                  "generation": {
                     "type": "number"
                   },
                   "sentAt": {
@@ -44630,7 +44630,7 @@
                 },
                 "required": [
                   "at",
-                  "rev",
+                  "generation",
                   "sentAt",
                   "state"
                 ]
@@ -56468,6 +56468,13 @@
         "description": "Machine-originated: the machine's fleet report (what `fleetStatus`\nanswers), sent unasked when a harness's reading of a fleet MCP server moved\nwith no fleet change: a server OpenCode held failed connected when CawCo\nstarted it again. The hub keeps it as `agents.fleet`, as it keeps a sync's.",
         "type": "object",
         "properties": {
+          "generation": {
+            "description": "The generation of the fleet's desired state the converge that wrote it\nreached: the fleet MCP changes the deltas up to it carried are the\nsessions' to take now. Null for a report read again unasked, which\nlanded no delta.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "kind": {
             "type": "string",
             "enum": [
@@ -56476,16 +56483,10 @@
           },
           "report": {
             "$ref": "#/components/schemas/FleetSyncReport"
-          },
-          "rev": {
-            "description": "The fleet delta's rev the converge that wrote it reached: the fleet MCP\nchanges that delta carried are the sessions' to take now. Null for a\nreport read again unasked, which landed no delta. Absent from an agent\nolder than it.",
-            "type": [
-              "null",
-              "number"
-            ]
           }
         },
         "required": [
+          "generation",
           "kind",
           "report"
         ]
@@ -56494,6 +56495,10 @@
         "description": "The machine's word on items as they move, sent unasked.",
         "type": "object",
         "properties": {
+          "generation": {
+            "description": "The generation of the desired state the converge reached.",
+            "type": "number"
+          },
           "items": {
             "type": "array",
             "items": {
@@ -56505,15 +56510,12 @@
             "enum": [
               "fleet_converge"
             ]
-          },
-          "rev": {
-            "type": "number"
           }
         },
         "required": [
+          "generation",
           "items",
-          "kind",
-          "rev"
+          "kind"
         ]
       },
       "FleetItemStatus": {

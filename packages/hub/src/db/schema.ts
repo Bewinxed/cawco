@@ -257,6 +257,16 @@ export const agents = sqliteTable("agents", {
     "fleet_items"
   ),
   /**
+   * The generation of the machine's desired fleet state (hub
+   * fleet-sync.ts): raised whenever what it is to hold changes, or a
+   * person's Sync, Retry or Overwrite asks it to act, and never otherwise,
+   * so a delta sent again goes under the same one. Kept through the hub's
+   * restart; 0 until the hub has sent the machine one.
+   */
+  fleetGeneration: integer("fleet_generation").notNull().default(0),
+  /** What the machine was to hold at {@link fleetGeneration}, as one hash of every item's: what tells the next build of its config apart. */
+  fleetFingerprint: text("fleet_fingerprint"),
+  /**
    * The cawco the daemon is running (NEW.md §12), as it reported at register.
    * Null until a daemon that says so has registered once.
    */
