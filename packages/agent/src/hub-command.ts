@@ -426,7 +426,7 @@ const underSlot = async (
  * ({@link underSlot}): a merge check (the run names its `gate`), or a
  * command its caller here names `heavy` (stage-clone.ts's install), in
  * these words. Its shell first puts itself, and so all it runs, at nice 10
- * and the idle I/O class (core `BACKGROUND_SHELL`): inside a boundary that
+ * and, on Linux, the idle I/O class (core `BACKGROUND_SHELL`): inside a boundary that
  * is the runner's shell in the sandbox, which the executor outside it never
  * reaches.
  */

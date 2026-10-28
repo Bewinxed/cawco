@@ -26,7 +26,7 @@ CREATE TABLE `__new_sent_messages` (
 	`envelope` text,
 	`delivery` text,
 	FOREIGN KEY (`thread_id`) REFERENCES `project_threads`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "sent_messages_target" CHECK("__new_sent_messages"."instance_id" IS NOT NULL OR "__new_sent_messages"."thread_id" IS NOT NULL)
+	CONSTRAINT "sent_messages_target" CHECK("instance_id" IS NOT NULL OR "thread_id" IS NOT NULL)
 );
 --> statement-breakpoint
 INSERT INTO `__new_sent_messages`("uuid", "instance_id", "thread_id", "accepted_at", "read_at", "harness_id", "body", "mode", "state", "reason", "refusal", "anchor", "replaces", "replaced_by", "held", "owed", "hold", "envelope", "delivery") SELECT "uuid", "instance_id", NULL, "accepted_at", NULL, "harness_id", "body", "mode", "state", "reason", "refusal", "anchor", "replaces", "replaced_by", "held", "owed", "hold", "envelope", "delivery" FROM `sent_messages`;--> statement-breakpoint

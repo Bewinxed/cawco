@@ -10,7 +10,8 @@
  * may be dropped, its rows with it. Every foreign key
  * the schema declares stands in the migrated database with the same
  * ON DELETE and ON UPDATE ({@link foreignKeyDrift}). The journal's `when`
- * increases strictly with idx ({@link outOfOrder}). Once the hub has
+ * increases strictly with idx ({@link outOfOrder}). No check constraint
+ * names a column through its table ({@link qualifiedChecks}). Once the hub has
  * started, no row names a row that is not there (`PRAGMA
  * foreign_key_check`): a hub that kept a port for a project no longer there
  * died at every start (nightly 4627).
@@ -185,6 +186,33 @@ const outOfOrder = (entries: { tag: string; when: number }[]): string[] =>
       : [];
   });
 
+/**
+ * Every check constraint in the newest snapshot that names a column through
+ * its table (`"sent_messages"."instance_id"`), as a sentence. drizzle-kit
+ * 0.31.11 remakes a table as `__new_<table>`, renames that qualifier to the
+ * new name, then renames the table back: macOS's SQLite (3.54.0) refuses the
+ * rename ("no such column: __new_sent_messages.thread_id") where Linux's
+ * takes it, so the hub's migrations failed on a Mac alone.
+ */
+const qualifiedChecks = async (tag: string): Promise<string[]> => {
+  const { tables } = (await Bun.file(
+    join(HUB, `drizzle/meta/${tag.slice(0, 4)}_snapshot.json`)
+  ).json()) as {
+    tables: Record<
+      string,
+      { checkConstraints: Record<string, { name: string; value: string }> }
+    >;
+  };
+  return Object.entries(tables).flatMap(([table, { checkConstraints }]) =>
+    Object.values(checkConstraints)
+      .filter(({ value }) => value.includes(`"${table}".`))
+      .map(
+        ({ name }) =>
+          `\`${table}\`'s check \`${name}\` names a column through its table: write it \`sql.identifier("<column>")\`, so a remake of the table renames cleanly on macOS's SQLite.`
+      )
+  );
+};
+
 try {
   const { entries } = (await Bun.file(
     join(HUB, "drizzle/meta/_journal.json")
@@ -195,6 +223,11 @@ try {
     throw new Error(
       `The migration journal's \`when\` must increase with idx:\n${disordered.join("\n")}`
     );
+  }
+  const last = sorted.at(-1);
+  const qualified = last ? await qualifiedChecks(last.tag) : [];
+  if (qualified.length) {
+    throw new Error(qualified.join("\n"));
   }
   const dbPath = join(scratch, "hub.db");
   mkdirSync(join(scratch, "home"));

@@ -7373,7 +7373,7 @@
       "checkConstraints": {
         "preview_ports_one_owner": {
           "name": "preview_ports_one_owner",
-          "value": "(\"preview_ports\".\"instance_id\" is not null) + (\"preview_ports\".\"project_id\" is not null) + (\"preview_ports\".\"artifact_id\" is not null) = 1"
+          "value": "(\"instance_id\" is not null) + (\"project_id\" is not null) + (\"artifact_id\" is not null) = 1"
         }
       }
     },
@@ -9971,7 +9971,7 @@
       "checkConstraints": {
         "sent_messages_target": {
           "name": "sent_messages_target",
-          "value": "\"sent_messages\".\"instance_id\" IS NOT NULL OR \"sent_messages\".\"thread_id\" IS NOT NULL"
+          "value": "\"instance_id\" IS NOT NULL OR \"thread_id\" IS NOT NULL"
         }
       }
     },

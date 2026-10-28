@@ -992,6 +992,26 @@ export function processGroup(pid: number): number | undefined {
   return Number.isInteger(group) ? group : undefined;
 }
 
+/**
+ * The parent of `pid`, read from the kernel at the moment of asking
+ * (`/proc/<pid>/stat`'s fourth field on Linux, `kinfo_proc`'s `e_ppid` on
+ * macOS), synchronously and with no spawn. Undefined when there is no such
+ * process.
+ */
+export function parentPid(pid: number): number | undefined {
+  if (process.platform !== "linux") {
+    return darwinKinfo(pid)?.ppid;
+  }
+  let stat: string;
+  try {
+    stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+  } catch {
+    return;
+  }
+  const parent = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+  return Number.isInteger(parent) ? parent : undefined;
+}
+
 /** A process's arguments and environment, or undefined when it is gone or not ours to read. */
 export function processArgs(
   pid: number
