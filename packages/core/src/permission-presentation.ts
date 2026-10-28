@@ -18,6 +18,10 @@ import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 import { DAY_MS } from "./time";
 import { UPSTREAM_POST_TOOL } from "./upstream-post";
+import {
+  projectSettingsWords,
+  type SettingsBudget,
+} from "./words/project-settings";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
 export interface PermissionChange {
@@ -1228,6 +1232,22 @@ export const PROJECT_LANDS = [
 ] as const satisfies readonly LandsMode[];
 export type ProjectLands = (typeof PROJECT_LANDS)[number];
 
+/** Every change `project_settings` makes, by its kind. */
+export const PROJECT_SETTING_KINDS = [
+  "grant_connection",
+  "link_repo",
+  "set_lands",
+  "set_runs_on",
+  "create_repo",
+  "rename",
+  "set_review",
+  "set_dispatch",
+  "set_max_attempts",
+  "set_review_limit",
+  "set_budget",
+  "set_caw",
+] as const;
+
 /**
  * One change `project_settings` makes, as the hub stores it on the ask and
  * the thread note: a connection carries the account it signs in as.
@@ -1246,6 +1266,15 @@ export type ProjectSettingChange =
   | { kind: "rename"; name: string }
   /** Review before done: on, only you move a task to done. */
   | { kind: "set_review"; review: boolean }
+  /** Whether the hub starts attempts at ready tasks on its own (hub dispatch.ts). */
+  | { dispatch: boolean; kind: "set_dispatch" }
+  | { kind: "set_max_attempts"; maxAttempts: number }
+  /** Dispatch pauses at this many tasks waiting for review. */
+  | { kind: "set_review_limit"; reviewLimit: number }
+  /** What one attempt may spend where its task says nothing; null: no limit. */
+  | { budget: SettingsBudget | null; kind: "set_budget" }
+  /** The project's Caw on or off, as his switch flips it (hub caw.ts `configure`). */
+  | { caw: boolean; kind: "set_caw" }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -1289,6 +1318,16 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return change.review
         ? "Review every task before done: only you close one"
         : "Stop reviewing before done: the lead and sessions close finished tasks";
+    case "set_dispatch":
+      return projectSettingsWords.dispatchOn(change.dispatch);
+    case "set_max_attempts":
+      return projectSettingsWords.maxAttempts(change.maxAttempts);
+    case "set_review_limit":
+      return projectSettingsWords.reviewLimit(change.reviewLimit);
+    case "set_budget":
+      return projectSettingsWords.budget(change.budget);
+    case "set_caw":
+      return projectSettingsWords.cawOn(change.caw);
     case "set_lands":
       break;
   }
@@ -1316,15 +1355,9 @@ const settingChanges = (input: Record<string, unknown>) =>
     (one): one is ProjectSettingChange =>
       typeof one === "object" &&
       one !== null &&
-      [
-        "grant_connection",
-        "link_repo",
-        "set_lands",
-        "set_runs_on",
-        "create_repo",
-        "rename",
-        "set_review",
-      ].includes((one as { kind?: unknown }).kind as string)
+      (PROJECT_SETTING_KINDS as readonly string[]).includes(
+        (one as { kind?: unknown }).kind as string
+      )
   );
 
 /** A project setting change Caw asked about: each change in plain words, what a publish takes, and why. */

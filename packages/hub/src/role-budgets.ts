@@ -311,11 +311,20 @@ import type { Tasks } from "./tasks";
  * `group` words three tools share, and what find's and todo_write's schemas
  * already list were cut (worker 27,743, delegate 10,102, lead 18,558
  * measured; `--tools <role>` lists them per tool).
+ * 2026-10-28: Caw reads and changes his project's whole dispatch config
+ * (tsk-127, GitHub issue #1: no lead tool read or set auto-start, the
+ * attempt cap or the budget, and none turned Caw on): project_settings
+ * reads with no changes and takes set_dispatch, set_max_attempts,
+ * set_review_limit, set_budget and set_caw, one value each; routine_update
+ * takes a routine's target, delegate type, lands and budget, its
+ * description cut to "any field it was made with". About 340 tokens for
+ * the lead, 170 for the worker (worker 25,950, lead 18,624 measured).
+ * Raised deliberately, by that, for the lead; the worker fits.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_805,
   delegate: 10_224,
-  lead: 18_580,
+  lead: 18_640,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -525,12 +534,13 @@ export const listRoleTools = (): RoleTools[] => {
       }).tools(actor),
     projectSettings: createProjectSettings({
       ask: () => Promise.reject(new Error("measuring")),
+      caw: () => undefined,
       connections: {} as never,
       db: {} as never,
+      dispatch: {} as never,
       edit: () => Promise.reject(new Error("measuring")),
       note: () => undefined,
       publish: {} as never,
-      runsOn: () => Promise.reject(new Error("measuring")),
     }),
     triageTools: (actor) =>
       createFleetWatch({

@@ -1986,6 +1986,7 @@ export * from "./words/presence";
 export * from "./words/presence-log";
 export * from "./words/preview";
 export * from "./words/project";
+export * from "./words/project-settings";
 export * from "./words/routines";
 export * from "./words/rules";
 export * from "./words/sheet";

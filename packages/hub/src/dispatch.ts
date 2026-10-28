@@ -606,6 +606,20 @@ const countProblem = (
     ? undefined
     : `${name} is a whole number from 1 to ${max}.`;
 
+/**
+ * Why a dispatch change cannot be written as asked: a count out of range, or
+ * a budget that does not read; nothing when it can. The dashboard's change
+ * and Caw's (project-settings.ts) are checked by this one rule.
+ */
+export const dispatchProblem = ({
+  budget,
+  maxAttempts,
+  reviewLimit,
+}: DispatchChange): string | undefined =>
+  countProblem("maxAttempts", maxAttempts, MAX_ATTEMPTS_LIMIT) ??
+  countProblem("reviewLimit", reviewLimit, REVIEW_LIMIT_LIMIT) ??
+  (budget ? budgetProblem(budget) : undefined);
+
 /** `1 task waits`, `3 tasks wait`. */
 const counted = (count: number, one: string, many: string): string =>
   count === 1 ? `1 ${one}` : `${count} ${many}`;
@@ -2203,18 +2217,9 @@ export const createDispatcher = ({
       change: DispatchChange
     ): Promise<DispatchView> {
       projectOf(projectId);
-      const { maxAttempts, reviewLimit } = change;
-      const outOfRange =
-        countProblem("maxAttempts", maxAttempts, MAX_ATTEMPTS_LIMIT) ??
-        countProblem("reviewLimit", reviewLimit, REVIEW_LIMIT_LIMIT);
-      if (outOfRange) {
-        refuse(400, outOfRange);
-      }
-      const unbudgeted = change.budget
-        ? budgetProblem(change.budget)
-        : undefined;
-      if (unbudgeted) {
-        refuse(400, unbudgeted);
+      const problem = dispatchProblem(change);
+      if (problem) {
+        refuse(400, problem);
       }
       // Empty clears it, as null does.
       let runsOn =

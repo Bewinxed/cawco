@@ -12153,6 +12153,14 @@
                   "prompt": {
                     "type": "string"
                   },
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "delegate",
+                      "orchestrator",
+                      "lead"
+                    ]
+                  },
                   "delegateType": {
                     "type": [
                       "string",
@@ -27440,10 +27448,17 @@
         "properties": {
           "deleted": {
             "type": "boolean"
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
-          "deleted"
+          "deleted",
+          "routes"
         ]
       },
       "getApiConnections200": {

@@ -33,26 +33,45 @@
  *   every task waits for the person before done is the person's choice
  *   either way (on routes work through them, off takes away a look they
  *   chose), so it is always asked, `ask` or not.
- * Only Caw's own project: naming another is refused. What its work's
- * landing gate runs is the project's gate.md (gate-file.ts), not a setting.
+ * - `set_dispatch`, `set_max_attempts`, `set_review_limit`, `set_budget`:
+ *   the rest of the project's dispatch settings, each checked by the rule
+ *   the dashboard's own change is (dispatch.ts `dispatchProblem`) and
+ *   written by the same `configure` (`PATCH /api/projects/:id/dispatch`).
+ * - `set_caw`: Caw on or off, through the switch the person flips (caw.ts
+ *   `configure`, `PATCH /api/projects/:id/caw`). Off lets what he started
+ *   finish: his own turn is one of them.
+ * Called with no changes, it answers the project's settings as they stand,
+ * each named by the change that sets it, and what dispatch would do now.
+ * Only Caw's own project, named by its id or its name in any case: naming
+ * another is refused. What its work's landing gate runs is the project's
+ * gate.md (gate-file.ts), not a setting.
  */
 import {
   type InstanceRow,
   PROJECT_LANDS,
+  PROJECT_SETTING_KINDS,
   type ProjectSettingChange,
+  projectSettingsWords,
   projectSettingWords,
   publishedWords,
   type ThreadNote,
 } from "@cawco/core";
 import { PROJECT_SETTINGS } from "@cawco/core/long-calls";
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape, ProjectRow } from "./db";
+import {
+  type DispatchChange,
+  type DispatchView,
+  dispatchProblem,
+} from "./dispatch";
 import { type McpTool, sentence, tool } from "./mcp-tool";
 import { type ProjectEdit, projectName } from "./project-edit";
 import type { RepoPublish } from "./repo-publish";
 import { roleOf } from "./roles";
 import { runsOnValue } from "./runs-on";
+import { budgetParameter } from "./task-tools";
 
 const GITHUB_REPO =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/u;
@@ -92,15 +111,7 @@ const reviewSet = (
 
 /** What the tool takes: changes, flat, each read by its `kind`. */
 const ASKED_CHANGE = z.object({
-  kind: z.enum([
-    "grant_connection",
-    "link_repo",
-    "set_lands",
-    "set_runs_on",
-    "create_repo",
-    "rename",
-    "set_review",
-  ]),
+  kind: z.enum(PROJECT_SETTING_KINDS),
   connection: z.string().optional(),
   github: z.string().optional().describe("owner/name"),
   lands: z.enum(PROJECT_LANDS).optional(),
@@ -108,22 +119,145 @@ const ASKED_CHANGE = z.object({
   name: z.string().optional(),
   private: z.boolean().optional(),
   review: z.boolean().optional(),
+  dispatch: z.boolean().optional(),
+  max_attempts: z.number().int().optional(),
+  review_limit: z.number().int().optional(),
+  budget: budgetParameter("Per attempt; null: no limit.").nullable().optional(),
+  caw: z.boolean().optional(),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
 const definition = z.object({
-  changes: z.array(ASKED_CHANGE).min(1).max(3),
-  reason: z.string(),
+  changes: z.array(ASKED_CHANGE).min(1).max(6).optional(),
+  reason: z.string().optional(),
   ask: z.boolean().optional(),
   project: z.string().optional(),
 });
 
 const DESCRIPTION =
-  "Change your project's settings, noted in the thread; ask: true asks the person first (create_repo and set_review always do).";
+  "Read your project's settings (no changes) or change them, noted in the thread; ask: true asks the person first (create_repo and set_review always do).";
 
 /** What a malformed call is told, after what it got wrong. */
-const INPUT_HELP =
-  "changes is a list of grant_connection, link_repo, set_lands, set_runs_on, create_repo, rename or set_review, and reason one sentence.";
+const INPUT_HELP = `changes is a list of ${PROJECT_SETTING_KINDS.join(", ")}, and reason one sentence; leave changes out to read the settings.`;
+
+/** A stored change as the tool takes it: an ask approved after a restart is checked again from it. */
+const askedOf = (change: ProjectSettingChange): AskedChange => {
+  switch (change.kind) {
+    case "grant_connection":
+      return { kind: change.kind, connection: change.connection };
+    case "link_repo":
+      return { kind: change.kind, github: change.github };
+    case "set_lands":
+      return { kind: change.kind, lands: change.lands };
+    case "set_runs_on":
+      return { kind: change.kind, runs_on: change.runsOn };
+    case "create_repo":
+      return { kind: change.kind, name: change.name, private: change.private };
+    case "rename":
+      return { kind: change.kind, name: change.name };
+    case "set_review":
+      return { kind: change.kind, review: change.review };
+    case "set_dispatch":
+      return { kind: change.kind, dispatch: change.dispatch };
+    case "set_max_attempts":
+      return { kind: change.kind, max_attempts: change.maxAttempts };
+    case "set_review_limit":
+      return { kind: change.kind, review_limit: change.reviewLimit };
+    case "set_budget":
+      return { kind: change.kind, budget: change.budget };
+    case "set_caw":
+      return { kind: change.kind, caw: change.caw };
+    default:
+      return unhandled("project setting", change);
+  }
+};
+
+/** The changes the dispatch settings write (dispatch.ts `configure`). */
+const DISPATCH_KINDS = [
+  "set_runs_on",
+  "set_dispatch",
+  "set_max_attempts",
+  "set_review_limit",
+  "set_budget",
+] as const satisfies readonly ProjectSettingChange["kind"][];
+type DispatchSetting = Extract<
+  ProjectSettingChange,
+  { kind: (typeof DISPATCH_KINDS)[number] }
+>;
+
+/** The columns a dispatch change writes, as the dashboard's own change names them. */
+const dispatchColumns = (change: DispatchSetting): DispatchChange => {
+  switch (change.kind) {
+    case "set_runs_on":
+      return { runsOn: change.runsOn };
+    case "set_dispatch":
+      return { dispatch: change.dispatch };
+    case "set_max_attempts":
+      return { maxAttempts: change.maxAttempts };
+    case "set_review_limit":
+      return { reviewLimit: change.reviewLimit };
+    case "set_budget":
+      return { budget: change.budget };
+    default:
+      return unhandled("dispatch setting", change);
+  }
+};
+
+/** A dispatch change as asked, its value named, else refused saying which field it takes. */
+const dispatchAsked = (
+  asked: AskedChange & {
+    kind: Exclude<DispatchSetting["kind"], "set_runs_on">;
+  }
+): DispatchSetting => {
+  const { needs } = projectSettingsWords;
+  switch (asked.kind) {
+    case "set_dispatch":
+      return {
+        kind: asked.kind,
+        dispatch: asked.dispatch ?? refuse(needs.dispatch),
+      };
+    case "set_max_attempts":
+      return {
+        kind: asked.kind,
+        maxAttempts: asked.max_attempts ?? refuse(needs.maxAttempts),
+      };
+    case "set_review_limit":
+      return {
+        kind: asked.kind,
+        reviewLimit: asked.review_limit ?? refuse(needs.reviewLimit),
+      };
+    case "set_budget": {
+      const budget =
+        asked.budget === undefined ? refuse(needs.budget) : asked.budget;
+      // Empty clears it, as null does (dispatch.ts `columnsOf`).
+      return {
+        kind: asked.kind,
+        budget: budget && Object.keys(budget).length > 0 ? budget : null,
+      };
+    }
+    default:
+      return unhandled("dispatch setting", asked.kind);
+  }
+};
+
+/** A dispatch change the project has already, refused in its own words. */
+const alreadyWords = (change: DispatchSetting): string => {
+  const { already } = projectSettingsWords;
+  switch (change.kind) {
+    case "set_dispatch":
+      return already.dispatch(change.dispatch);
+    case "set_max_attempts":
+      return already.maxAttempts(change.maxAttempts);
+    case "set_review_limit":
+      return already.reviewLimit(change.reviewLimit);
+    case "set_budget":
+      return already.budget;
+    case "set_runs_on":
+      return already.runsOn(change.runsOn);
+    default:
+      return unhandled("dispatch setting", change);
+  }
+};
 
 export interface ProjectSettingsDeps {
   /** Parks the change as the person's ask in Caw's thread and waits; rejects with their refusal (admin-asks.ts). */
@@ -132,11 +266,22 @@ export interface ProjectSettingsDeps {
     input: Record<string, unknown>,
     toolUseId: string | undefined
   ) => Promise<void>;
-  readonly connections: Pick<Connections, "get" | "update">;
+  /** Turns the project's Caw on or off, as his switch does (caw.ts `configure`). */
+  readonly caw: (projectId: string, on: boolean) => unknown;
+  readonly connections: Pick<Connections, "get" | "list" | "update">;
   readonly db: Pick<
     DbShape,
     "listAgents" | "project" | "projectByRemote" | "setProjectRemote"
   >;
+  /**
+   * Changes the project's dispatch settings, and reads them with what the
+   * dispatcher would do now: the dashboard's own path (dispatch.ts
+   * `configure`, `view`).
+   */
+  readonly dispatch: {
+    configure: (projectId: string, change: DispatchChange) => Promise<unknown>;
+    view: (projectId: string) => Promise<DispatchView>;
+  };
   /**
    * The project's name, Review before done, Apple build gate and default
    * landing, through the person's own edit (project-edit.ts).
@@ -146,23 +291,23 @@ export interface ProjectSettingsDeps {
   readonly note: (actor: InstanceRow, note: ThreadNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;
-  /** Where the project's attempts run, through the dispatch settings' own path. */
-  readonly runsOn: (
-    projectId: string,
-    runsOn: string | null
-  ) => Promise<unknown>;
 }
 
 export const createProjectSettings = ({
   ask,
+  caw,
   connections,
   db,
+  dispatch,
   edit,
   note,
   publish,
-  runsOn,
 }: ProjectSettingsDeps) => {
-  /** Caw's own project, and nothing else: the caller must be its lead, and `named` (id or name) must be it. */
+  /**
+   * Caw's own project, and nothing else: the caller must be its lead, and
+   * `named` must be it, by its id or its name in any case (`cawco-dev` is
+   * the project Cawco-Dev).
+   */
   const ownProject = (actor: InstanceRow, named?: string): ProjectRow => {
     const project =
       roleOf(actor) === "lead" && actor.projectId
@@ -173,14 +318,25 @@ export const createProjectSettings = ({
         "project_settings changes the project you lead, and this session leads none."
       );
     }
-    const asked = named?.trim();
-    if (asked && asked !== project.id && asked !== project.name) {
+    const asked = named?.trim().toLowerCase();
+    if (
+      asked &&
+      asked !== project.id.toLowerCase() &&
+      asked !== project.name.trim().toLowerCase()
+    ) {
       return refuse(
-        `${asked} is not your project: project_settings changes only “${project.name}”.`
+        projectSettingsWords.notYours(named?.trim() ?? "", project.name)
       );
     }
     return project;
   };
+
+  /** The connections the project is not granted yet, by name: what grant_connection takes. */
+  const grantable = (project: ProjectRow): string[] =>
+    connections
+      .list()
+      .filter((view) => !view.projects.includes(project.id))
+      .map((view) => view.name);
 
   /** A repository link, checked against the project as it stands. */
   const linkable = (project: ProjectRow, remote: string): void => {
@@ -211,10 +367,40 @@ export const createProjectSettings = ({
       const value = runsOnValue(asked, db.listAgents());
       to = "value" in value ? value.value : refuse(value.problem);
     }
-    if (project.runsOn === to) {
-      refuse(`This project's attempts run on ${to ?? "any machine"} already.`);
+    const change: DispatchSetting = { kind: "set_runs_on", runsOn: to };
+    return project.runsOn === to ? refuse(alreadyWords(change)) : change;
+  };
+
+  /**
+   * A dispatch setting but where work lands or runs, checked by the
+   * dashboard's own rule (dispatch.ts `dispatchProblem`) and refused when it
+   * is that already.
+   */
+  const dispatchSet = (
+    project: ProjectRow,
+    asked: Parameters<typeof dispatchAsked>[0]
+  ): ProjectSettingChange => {
+    const change = dispatchAsked(asked);
+    const columns = dispatchColumns(change);
+    const same = Object.entries(columns).every(
+      ([key, value]) =>
+        JSON.stringify(project[key as keyof DispatchChange] ?? null) ===
+        JSON.stringify(value ?? null)
+    );
+    const problem = same ? alreadyWords(change) : dispatchProblem(columns);
+    return problem ? refuse(problem) : change;
+  };
+
+  /** Caw on or off, refused when he is that already. */
+  const cawSet = (
+    project: ProjectRow,
+    asked: AskedChange
+  ): ProjectSettingChange => {
+    const on = asked.caw ?? refuse(projectSettingsWords.needs.caw);
+    if (on === project.caw) {
+      refuse(projectSettingsWords.already.caw(on));
     }
-    return { kind: "set_runs_on", runsOn: to };
+    return { kind: "set_caw", caw: on };
   };
 
   /** One asked change, checked against the project as it stands, as the hub stores it. */
@@ -231,7 +417,9 @@ export const createProjectSettings = ({
         try {
           view = connections.get(name);
         } catch {
-          return refuse(`There is no connection ${name}.`);
+          return refuse(
+            projectSettingsWords.noConnection(name, grantable(project))
+          );
         }
         if (view.projects.includes(project.id)) {
           refuse(`${name} is granted to this project already.`);
@@ -259,8 +447,17 @@ export const createProjectSettings = ({
         return renamed(project, asked);
       case "set_review":
         return reviewSet(project, asked);
+      case "set_dispatch":
+      case "set_max_attempts":
+      case "set_review_limit":
+      case "set_budget":
+        return dispatchSet(project, { ...asked, kind: asked.kind });
+      case "set_caw":
+        return cawSet(project, asked);
       case "set_lands":
         break;
+      default:
+        return unhandled("project setting", asked.kind);
     }
     const to = asked.lands ?? refuse("set_lands names main, branch or pr.");
     if (project.lands === to) {
@@ -320,10 +517,20 @@ export const createProjectSettings = ({
         ];
       }
       case "set_runs_on":
-        await runsOn(project.id, change.runsOn);
+      case "set_dispatch":
+      case "set_max_attempts":
+      case "set_review_limit":
+      case "set_budget":
+        await dispatch.configure(project.id, dispatchColumns(change));
+        break;
+      case "set_caw":
+        caw(project.id, change.caw);
         break;
       case "set_lands":
         await edit(project.id, { lands: change.lands });
+        break;
+      default:
+        unhandled("project setting", change);
     }
     return [projectSettingWords(change)];
   };
@@ -341,8 +548,8 @@ export const createProjectSettings = ({
     return said;
   };
 
-  const reasonOf = (raw: string): string => {
-    const reason = raw.trim() || refuse("Say why, in one sentence.");
+  const reasonOf = (raw: string | undefined): string => {
+    const reason = raw?.trim() || refuse("Say why, in one sentence.");
     if (reason.length > REASON_LIMIT) {
       refuse(`Say why in one sentence, under ${REASON_LIMIT} characters.`);
     }
@@ -391,13 +598,41 @@ export const createProjectSettings = ({
     return said;
   };
 
-  /** The call: checked, then applied at once, or asked about first; answers what was done. */
+  /** The project's settings as they stand, and what dispatch would do now. */
+  const read = async (project: ProjectRow): Promise<string> => {
+    const now = await dispatch.view(project.id);
+    return projectSettingsWords.read({
+      name: project.name,
+      caw: project.caw,
+      dispatch: now.dispatch,
+      maxAttempts: now.maxAttempts,
+      reviewLimit: now.reviewLimit,
+      budget: now.budget,
+      lands: now.lands,
+      runsOn: now.runsOn,
+      review: project.review,
+      remote: project.remote,
+      connections: connections
+        .list()
+        .filter((view) => view.projects.includes(project.id))
+        .map((view) => view.name),
+      live: now.live,
+      reviewing: now.review,
+      paused: now.paused,
+      frontier: now.frontier,
+    });
+  };
+
+  /** The call: a read with no changes; else checked, then applied at once, or asked about first; answers what was done. */
   const changeSettings = async (
     actor: InstanceRow,
     input: z.infer<typeof definition>,
     toolUseId: string | undefined
   ): Promise<string> => {
     const project = ownProject(actor, input.project);
+    if (!input.changes) {
+      return await read(project);
+    }
     const reason = reasonOf(input.reason);
     const changes = await checkAll(project, input.changes);
     // Creating a remote and pushing reach outside, and whether work waits
@@ -462,13 +697,14 @@ export const createProjectSettings = ({
     actor: InstanceRow,
     input: Record<string, unknown>
   ): Promise<string> => {
-    // The parked input carries the card's changes, as checked then.
+    // The parked input carries the card's changes, as checked then: each
+    // is checked again as the tool takes it.
     const card = (
       Array.isArray(input.changes) ? input.changes : []
     ) as ProjectSettingChange[];
     const said = await approved(
       actor,
-      z.array(ASKED_CHANGE).parse(input.changes),
+      card.map(askedOf),
       typeof input.reason === "string" ? input.reason : "",
       card
     );

@@ -632,11 +632,17 @@ const EVENT_WORDS: Record<
     glyph: "tasks",
     noun: ["pull request closed", "pull requests closed"],
   },
-  "discussion.opened": {
+  "discussion.created": {
     when: "a discussion opens",
     act: "draft an answer",
     glyph: "reply",
     noun: ["discussion opened", "discussions opened"],
+  },
+  "discussion_comment.created": {
+    when: "someone comments on a discussion",
+    act: "draft a reply",
+    glyph: "reply",
+    noun: ["discussion comment", "discussion comments"],
   },
   "comment.created": {
     when: "someone comments",

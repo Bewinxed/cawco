@@ -13,9 +13,14 @@
  *   `issue:<n>:labeled:<label>`, `comment:<id>`, `discussion:<n>:opened`,
  *   `discussion-comment:<node id>`; source `github:<owner>/<repo>`. `actor`
  *   is always the author of the pull request, issue, discussion or comment.
- *   A discussion's comment is a `comment.created` with the discussion's
- *   number: issues, pull requests and discussions share one repository's
- *   numbers, so routing a comment onto its task by number holds for each.
+ * - **Discussions are their own kinds**, named as GitHub's webhooks name
+ *   them (docs.github.com/en/webhooks/webhook-events-and-payloads: the
+ *   `discussion` event, action `created`, "A discussion was created."; the
+ *   `discussion_comment` event, action `created`, "A comment on a
+ *   discussion was created."): `discussion.created` and
+ *   `discussion_comment.created`, beside `issue.*`, `pr.*` and an issue's or
+ *   pull request's `comment.created`, so a route takes one and not the
+ *   other. A discussion's comment carries the discussion's number.
  * - **Resources, not the events feed.** GitHub's events API "is not built to
  *   serve real-time use cases. Depending on the time of day, event latency
  *   can be anywhere from 30s to 6h" (docs.github.com/en/rest/activity/events).
@@ -363,7 +368,7 @@ const discussionOpened = (
 ): InboundEvent => ({
   source: sourceOf(repo),
   key: `discussion:${one.number}:opened`,
-  kind: "discussion.opened",
+  kind: "discussion.created",
   actor: one.actor,
   labels: one.labels,
   branch: null,
@@ -374,7 +379,7 @@ const discussionOpened = (
   at: one.at,
 });
 
-/** A comment on a discussion: a `comment.created` with the discussion's number, keyed by the comment's node ID. */
+/** A comment on a discussion: a `discussion_comment.created` with the discussion's number, keyed by the comment's node ID. */
 const discussionCommentEvent = (
   repo: string,
   number: number,
@@ -388,7 +393,7 @@ const discussionCommentEvent = (
 ): InboundEvent => ({
   source: sourceOf(repo),
   key: `discussion-comment:${one.id}`,
-  kind: "comment.created",
+  kind: "discussion_comment.created",
   actor: one.actor,
   labels: [],
   branch: null,

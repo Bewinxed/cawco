@@ -26203,10 +26203,13 @@ export const createServer = (
   const settings = createProjectSettings({
     ask: (actor, input, toolUseId) =>
       adminAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
+    // His switch's own path: off, what he started finishes, his turn among them.
+    caw: (projectId, on) =>
+      caw.configure(projectId, on ? { on } : { on, initiated: "finish" }),
     connections,
     db,
+    dispatch: dispatcher,
     edit: (projectId, change) => projectEdits.edit(projectId, change),
-    runsOn: (projectId, runsOn) => dispatcher.configure(projectId, { runsOn }),
     publish: createRepoPublish({
       bare: (projectId) => bareRepoPath(GIT_ROOT, projectId),
       call: callMachine,

@@ -52,7 +52,11 @@
  *   inbox first; with nothing left to curate it ends silent, else it is a
  *   delegate run in the `curator` role, its brief the inbox as it stands
  *   after the routine's prompt. You can pause it, move its schedule or
- *   change its prompt as any routine's.
+ *   change its prompt as any routine's; its target stays `curator`.
+ * - **Changes** (`routine_update`, `PATCH /api/routines/:id`) take any field
+ *   but its project: its target, delegate type, landing and budget too,
+ *   each checked as a new routine's is. A delete takes the event routes
+ *   that fed it with it (`event_routes` cascades), and names each.
  */
 import type {
   DelegateType,
@@ -71,6 +75,7 @@ import {
   type RoutineOutcome,
   type RoutineRunState,
   type RoutineTarget,
+  routineToolWords,
 } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -91,11 +96,11 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
 import {
-  deletedWords,
   routineListWords,
   routineRunWords,
   routineWords,
 } from "./presenters/project";
+import { handle } from "./presenters/words";
 import type { Push } from "./push";
 import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import { budgetParameter } from "./task-tools";
@@ -268,6 +273,8 @@ export interface RoutinePatch {
   lands?: LandsMode;
   name?: string;
   prompt?: string;
+  /** What each run starts; the memory curator routine's stays the hub's. */
+  target?: RoutineTarget;
   timeZone?: string;
 }
 
@@ -289,7 +296,7 @@ type Fields = Pick<
 /** A routine's fields with a change over them: what the change leaves out stays. */
 const merged = (row: RoutineRow, patch: RoutinePatch): Fields => ({
   projectId: row.projectId,
-  target: row.target,
+  target: patch.target ?? row.target,
   name: patch.name?.trim() ?? row.name,
   cron: patch.cron?.trim() ?? row.cron,
   timeZone: patch.timeZone?.trim() ?? row.timeZone,
@@ -2187,6 +2194,12 @@ export const createRoutines = ({
     const row = routineOf(id);
     mayTouch(by, row);
     const next = merged(row, patch);
+    if (
+      next.target !== row.target &&
+      (row.target === "curator" || next.target === "curator")
+    ) {
+      refuse(400, routineToolWords.curatorStays);
+    }
     checked(next);
     const now = Date.now();
     const keep = patch.keep ?? row.keep;
@@ -2218,12 +2231,29 @@ export const createRoutines = ({
     return viewOf(updated ?? row);
   };
 
-  const remove = (id: string, by: RoutineActor): { deleted: boolean } => {
+  /**
+   * Deletes a routine and its runs; the event routes that sent it events go
+   * with it (`event_routes` cascades), each named in the answer, as its
+   * route line reads in event_route_list.
+   */
+  const remove = (
+    id: string,
+    by: RoutineActor
+  ): { deleted: boolean; routes: string[] } => {
     const row = routineOf(id);
     mayTouch(by, row);
+    const routes = row.projectId
+      ? db.ingress
+          .routes(row.projectId)
+          .filter((route) => route.routineId === id)
+          .map(
+            (route) =>
+              `${handle(route.id)} · ${route.source}${route.kinds.length > 0 ? ` ${route.kinds.join(", ")}` : " any kind"}`
+          )
+      : [];
     const deleted = store.delete(id);
     schedule();
-    return { deleted };
+    return { deleted, routes: deleted ? routes : [] };
   };
 
   const runNow = (id: string, by: RoutineActor): RoutineRunView => {
@@ -2419,7 +2449,7 @@ export const createRoutines = ({
       ),
       tool(
         "routine_update",
-        "Change a routine: pause or resume it (enabled), keep it past 7 days (only on the owner's word), or its schedule or prompt.",
+        "Change a routine: pause or resume it (enabled), keep it past 7 days (only on the owner's word), or any field it was made with.",
         {
           id: routineRef(),
           enabled: z.boolean().optional(),
@@ -2427,18 +2457,17 @@ export const createRoutines = ({
           cron: scheduleParameters.cron.optional(),
           time_zone: scheduleParameters.time_zone.optional(),
           prompt: z.string().optional(),
+          target: z.enum(MADE_ROUTINE_TARGETS).optional(),
+          delegate_type: z.string().nullable().optional(),
+          lands: z.enum(LANDS_MODES).optional(),
+          budget: budgetParameter("Per run; null: none.").nullable().optional(),
         },
-        ({ id, enabled, keep, cron, time_zone, prompt }) =>
+        // Left out, a field stays: the patch's own rule (`merged`).
+        ({ id, time_zone, delegate_type, ...fields }) =>
           Promise.resolve(
             update(
               routineNamed(id, me()),
-              {
-                ...(enabled === undefined ? {} : { enabled }),
-                ...(keep === undefined ? {} : { keep }),
-                ...(cron === undefined ? {} : { cron }),
-                ...(time_zone === undefined ? {} : { timeZone: time_zone }),
-                ...(prompt === undefined ? {} : { prompt }),
-              },
+              { ...fields, timeZone: time_zone, delegateType: delegate_type },
               me()
             )
           ),
@@ -2446,10 +2475,11 @@ export const createRoutines = ({
       ),
       tool(
         "routine_delete",
-        "Delete a routine and its runs.",
+        "Delete a routine, its runs and the event routes that feed it.",
         { id: routineRef() },
         ({ id }) => Promise.resolve(remove(routineNamed(id, me()), me())),
-        deletedWords("routine")
+        ({ deleted, routes }) =>
+          deleted ? routineToolWords.deleted(routes) : routineToolWords.notThere
       ),
       tool(
         "routine_run_now",
@@ -2577,6 +2607,7 @@ export const routineRoutes = (routines: Routines) =>
           cron: t.Optional(t.String()),
           timeZone: t.Optional(t.String()),
           prompt: t.Optional(t.String()),
+          target: t.Optional(TARGET),
           ...RUN_FIELDS,
           enabled: t.Optional(t.Boolean()),
           keep: t.Optional(t.Boolean()),

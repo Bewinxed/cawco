@@ -4970,7 +4970,7 @@ export const inboundEvents = sqliteTable(
     source: text("source").notNull(),
     /** Natural, never a transport's delivery id: `pr:12:merged`, `comment:991`, `<id>:<version>`. */
     deliveryKey: text("delivery_key").notNull(),
-    /** `pr.opened`, `pr.merged`, `pr.closed`, `issue.opened`, `issue.closed`, `issue.labeled`, `comment.created`, `item`. */
+    /** `pr.opened`, `pr.merged`, `pr.closed`, `issue.opened`, `issue.closed`, `issue.labeled`, `comment.created`, `discussion.created`, `discussion_comment.created`, `item`. */
     kind: text("kind").notNull(),
     projectId: projectKey(),
     /** The event as ingress.ts normalised it, JSON, at most 64 KB (cut with a marker). */

@@ -277,3 +277,20 @@ export const routinesWords = {
   tomorrow: (time: string) => `Tomorrow ${time}`,
   yesterday: (time: string) => `Yesterday ${time}`,
 };
+
+/**
+ * What the routine tools answer a session (hub routines.ts), beside the
+ * page's words: agent-facing, so none of them reach the app.
+ */
+export const routineToolWords = {
+  /** `routine_delete`: the routine gone, and each event route that fed it, which went with it. */
+  deleted: (routes: string[]): string =>
+    routes.length === 0
+      ? "Deleted the routine. No event route sent it events."
+      : `Deleted the routine and the ${routes.length === 1 ? "event route" : `${routes.length} event routes`} that sent it events:\n${routes.map((route) => `- ${route}`).join("\n")}`,
+  /** A delete of a routine that was gone already. */
+  notThere: "There was no such routine to delete.",
+  /** The memory curator routine's target is the hub's. */
+  curatorStays:
+    "The memory curator routine is the hub's: its target stays curator.",
+};

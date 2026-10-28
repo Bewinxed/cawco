@@ -1400,7 +1400,7 @@ export const createIngress = ({
       .array(z.string())
       .optional()
       .describe(
-        "pr.opened|merged|closed, issue.opened|closed|labeled, comment.created, item."
+        "pr.opened|merged|closed, issue.opened|closed|labeled, comment.created, discussion.created, discussion_comment.created, item."
       ),
     author: z.string().optional(),
     label: z.string().optional(),
