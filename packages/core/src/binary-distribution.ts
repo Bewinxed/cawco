@@ -79,6 +79,24 @@ async function fromReleaseHost<T>(
 }
 
 /**
+ * An Octokit whose every read reaches GitHub itself. GitHub's edge keeps an
+ * answer to a request signed in as no one for up to a minute
+ * (`cache-control: public, max-age=60, s-maxage=60`), and `Cache-Control:
+ * no-cache` on the request does not pass it; a query no one asked before
+ * does. 2026-10-28 13:37:03: the hub's check, read just after nightly 6120
+ * was published, was answered with the tag list from before it and named
+ * 6119, which the hub then served for its 15-minute release cache.
+ */
+function uncachedOctokit(): Octokit {
+  const octokit = new Octokit({ userAgent: "CawCo" });
+  octokit.hook.before("request", (options) => {
+    // A GET's parameters that fill no part of its path go to its query.
+    options.uncached = crypto.randomUUID();
+  });
+  return octokit;
+}
+
+/**
  * One read of the release repository through Octokit, signed in as no one
  * (it is public): its data, or undefined where GitHub answered 404. Octokit
  * throws any other refusal with its status (@octokit/request-error
@@ -96,8 +114,7 @@ function github<T>(
     what,
     async (signal): Promise<T | undefined> => {
       try {
-        return (await ask(new Octokit({ userAgent: "CawCo" }), { signal }))
-          .data;
+        return (await ask(uncachedOctokit(), { signal })).data;
       } catch (error) {
         const refused = error as { response?: unknown; status?: unknown };
         if (typeof refused.status === "number" && refused.response) {

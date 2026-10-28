@@ -151,6 +151,8 @@ export function createBinaryUpdates(options: Options) {
   // The policy beside the database, apart from the cache, which holds builds alone.
   const policyPath = hubUpdatePolicyPath();
   let held = loadPolicy(policyPath);
+  // `at`: when the look that found it began, so a look begun earlier never
+  // replaces what a later one found.
   let current: { at: number; release: LocatedRelease } | undefined;
   let checking: Promise<LocatedRelease> | undefined;
 
@@ -173,16 +175,22 @@ export function createBinaryUpdates(options: Options) {
     });
     held = { policy };
   };
+  /** One look at the release host, begun now; what it finds becomes `current` unless a later look already answered. */
+  const look = async (): Promise<LocatedRelease> => {
+    const at = Date.now();
+    const installation = await readInstallation();
+    const release = await discoverRelease(
+      policyNow().channel,
+      installation?.releaseHost
+    );
+    if (!current || current.at <= at) {
+      current = { at, release };
+    }
+    return release;
+  };
+  /** A machine's poll: joins a look already under way. */
   const discover = (): Promise<LocatedRelease> => {
-    checking ??= (async () => {
-      const installation = await readInstallation();
-      const release = await discoverRelease(
-        policyNow().channel,
-        installation?.releaseHost
-      );
-      current = { at: Date.now(), release };
-      return release;
-    })().finally(() => {
+    checking ??= look().finally(() => {
       checking = undefined;
     });
     return checking;
@@ -304,7 +312,10 @@ export function createBinaryUpdates(options: Options) {
       if ("damaged" in held) {
         return status(409, refused());
       }
-      const found = await discover();
+      // A look of its own, begun after the ask: one a poll began earlier
+      // (before a release was published, as ship's announce asks right
+      // after) would answer what the host held then.
+      const found = await look();
       // Every online machine looks now, as it does when the policy changes,
       // rather than at its next poll a minute on: a person who asked for a
       // check sees each machine's answer to what it found. One that does not
