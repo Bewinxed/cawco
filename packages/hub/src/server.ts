@@ -24605,7 +24605,7 @@ export const createServer = (
   };
   /** Set once approved actions exist (below): until then no `action` move goes. */
   let actionMoves: NonNullable<TaskStore["actionMove"]> = () => false;
-  /** The pull requests and runs a project's tasks wait on, as its GitHub poll reads them (ingress.ts); set once ingress is made. */
+  /** The Actions runs a project's tasks wait on, as its GitHub poll reads them (ingress.ts); set once ingress is made. */
   let githubWaits:
     Pick<Ingress, "githubWait" | "githubWaitRefusal"> | undefined;
   /** A session a wait names by its handle (`cockpit#5a167bde`): the one whose id its handle begins, among every session the hub holds. */
@@ -24702,11 +24702,14 @@ export const createServer = (
     waitWorld: (projectId) => ({
       card: (artifactId, card) => artifacts.waitCard(artifactId, card),
       pin: (artifactId, number) => artifacts.waitPin(artifactId, number),
+      // A pull request's state is its link row's (external-items.ts); a run's, the poll's.
       github: (target) =>
-        githubWaits?.githubWait(projectId, target) ?? {
-          state: "checking",
-          title: null,
-        },
+        target.kind === "pr"
+          ? externalItems.prWait(projectId, target)
+          : (githubWaits?.githubWait(projectId, target) ?? {
+              state: "checking",
+              title: null,
+            }),
       session: (instanceId) => {
         const [row] = db.getInstancesByIds([instanceId]);
         if (!row) {
@@ -24752,7 +24755,14 @@ export const createServer = (
   });
   // External items on tasks (external-items.ts): links and comments from
   // GitHub and Linear as data, filed through one door.
-  const externalItems = createExternalItems({ db, tasks });
+  const externalItems = createExternalItems({
+    db,
+    tasks,
+    // A link's state moved: a wait on its pull request may settle, and the board redraws it.
+    linksMoved: (projectId) => {
+      detach(tasks.waitsMoved(projectId), "task links moved");
+    },
+  });
   // A project made from a template before the hub recorded which one is
   // known by its stages.md (stages.ts `templateOf`: kinds and moves, through
   // renames), so its starter skills reach it. A tie is left to Apply template.

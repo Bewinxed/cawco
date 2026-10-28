@@ -855,28 +855,41 @@ const linksOf = (links: string[]): string[] =>
         )
   );
 
-/** A task's links as its index row carries them: the file's `issue:` its record, then `links:`. */
+/**
+ * A task's links as its index row carries them: the file's `issue:` its
+ * record, then `links:`, then each pull request it waits on (`waits_on:`),
+ * so a wait on one reads the same link row (external-items.ts `prWait`).
+ * An item named twice is one link, the first naming.
+ */
 const fileLinksOf = (
-  fields: Pick<TaskFields, "issue" | "links">
-): TaskLinkSummary[] =>
-  [
+  fields: Pick<TaskFields, "issue" | "links" | "waitsOn">
+): TaskLinkSummary[] => {
+  const named = new Set<string>();
+  return [
     ...(fields.issue ? [{ url: fields.issue, mode: "record" as const }] : []),
     ...fields.links.map((url) => ({ url, mode: "related" as const })),
+    ...fields.waitsOn
+      .filter((handle) => waitTarget(handle)?.kind === "pr")
+      .map((url) => ({ url, mode: "related" as const })),
   ].flatMap(({ url, mode }) => {
     const item = refOfUrl(url);
-    return item
-      ? [
-          {
-            source: item.source,
-            kind: item.kind,
-            ref: item.ref,
-            state: null,
-            url,
-            mode,
-          },
-        ]
-      : [];
+    const key = item?.url.toLowerCase();
+    if (!(item && key) || named.has(key)) {
+      return [];
+    }
+    named.add(key);
+    return [
+      {
+        source: item.source,
+        kind: item.kind,
+        ref: item.ref,
+        state: null,
+        url,
+        mode,
+      },
+    ];
   });
+};
 
 /** A budget a caller gave, refused in its own words when it cannot stand. */
 const budgetOf = (budget: WorkBudget): WorkBudget => {
@@ -4606,7 +4619,14 @@ export const createTasks = (store: TaskStore) => {
     ): Promise<string> {
       if (projectId) {
         const [kept] = await waitsFor(projectId, actor, [written]);
-        return kept ?? refuse(400, `“${written}” names nothing to wait on.`);
+        if (!kept) {
+          return refuse(400, `“${written}” names nothing to wait on.`);
+        }
+        // A pull request's state is a task's link row (external-items.ts `prWait`): a step has none of its own.
+        const unlinked =
+          waitTarget(kept)?.kind === "pr" &&
+          store.linked(projectId, kept).length === 0;
+        return unlinked ? refuse(400, taskLinkWords.prUnlinked(kept)) : kept;
       }
       try {
         const target = readWait(written, store.waitReader("", actor));

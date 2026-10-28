@@ -18,9 +18,10 @@
  * a card answered differently since is told apart from one answered the
  * same way again.
  *
- * PR and run state come from the project's GitHub connection and its poller
- * (ingress.ts `githubWaits`); a project with none is refused such a target
- * where it is written ({@link readWait}).
+ * A PR's state is its task link row's (external-items.ts `prWait`), which
+ * the project's GitHub poll reads and its events keep; a run's comes from
+ * that poll itself (ingress.ts `githubWait`). A project with no GitHub
+ * poller is refused either target where it is written ({@link readWait}).
  */
 import {
   githubTarget,
@@ -35,7 +36,7 @@ import {
 import type { WaitState } from "@cawco/core/task-views";
 import type { WorkItemState } from "./db/schema";
 
-/** A pull request's or an Actions run's state, as the poller last read it. */
+/** A pull request's state as its link row holds it, or an Actions run's as the poller last read it. */
 export type GitHubWaitState =
   "open" | "merged" | "closed" | "running" | "green" | "red" | "checking";
 
@@ -48,7 +49,7 @@ export interface WaitWorld {
   ) =>
     | { asked: boolean; page: string; question: string; value: string | null }
     | undefined;
-  /** A pull request's or run's state and title, as the project's poller last read it. */
+  /** A pull request's state and title as its link row holds them; a run's as the project's poller last read them. */
   readonly github: (target: Extract<WaitTarget, { kind: "pr" | "run" }>) => {
     state: GitHubWaitState;
     title: string | null;
