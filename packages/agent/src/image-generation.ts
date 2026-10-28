@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, stat } from "node:fs/promises";
 import { arch, platform, release } from "node:os";
-import { dirname, extname, resolve } from "node:path";
+import { basename, dirname, extname, resolve } from "node:path";
 import {
   configurePage,
   type GeneratedImage,
@@ -10,10 +10,11 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { credentialAccountIds } from "@cawco/core/paths";
-import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { chatgptBaseUrl, chatgptClaims } from "@cawco/core/usage/chatgpt";
 import { z } from "zod";
+import { isWorkspaceRef } from "./hub-command";
+import { type Kept, placeInWorkspace, writeKept } from "./inputs";
 import { freshen, readHeld } from "./provider-accounts";
 
 /** Native Codex's image model and edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
@@ -57,9 +58,34 @@ async function requireNewOutput(output: string): Promise<void> {
   );
 }
 
-/** Complete bytes published atomically, without replacing a concurrent writer. */
-const publishImage = (output: string, bytes: Buffer): Promise<void> =>
-  writeStateFile(output, bytes, { exclusive: true, mode: 0o600 });
+/**
+ * Where `output_path` lands, relative from the session's working dir `cwd`:
+ * for a session `bound` to a workspace, inside its clone or its $TMPDIR, by
+ * the rule every file a workspace's session asks CawCo to write answers to
+ * (inputs.ts `placeInWorkspace`), refused in words elsewhere; for a session
+ * in no workspace, which no boundary holds, wherever it names.
+ */
+function outputOf(cwd: string, named: string, bound: unknown): Kept {
+  if (isWorkspaceRef(bound)) {
+    const kept = placeInWorkspace(bound, named, cwd);
+    if (typeof kept === "string") {
+      throw new Error(`output_path ${kept}. No image was generated.`);
+    }
+    return kept;
+  }
+  const output = resolve(cwd, named);
+  if (extname(output).toLowerCase() !== ".png") {
+    throw new Error(
+      "output_path must end in .png, for example assets/illustration.png."
+    );
+  }
+  return {
+    root: dirname(output),
+    rel: basename(output),
+    shown: output,
+    what: "the folder it was asked in",
+  };
+}
 
 function validateSize(size: string): void {
   if (size === "auto") {
@@ -331,22 +357,26 @@ async function askImage(
   return Buffer.from(result.data.data[0].b64_json, "base64");
 }
 
-/** Credentials remain on the caller's machine; the hub receives only the saved path. */
+/**
+ * Credentials remain on the caller's machine; the hub receives only the
+ * saved path. `bound`: the workspace the session runs in, or null
+ * ({@link outputOf}).
+ */
 export async function generateImage(
   cwd: string,
-  input: unknown
+  input: unknown,
+  bound: unknown = null
 ): Promise<GeneratedImage> {
   const args = requestSchema.parse(input);
   validateSize(args.size);
-  const output = resolve(cwd, args.output_path);
-  if (extname(output).toLowerCase() !== ".png") {
-    throw new Error(
-      "output_path must end in .png, for example assets/illustration.png."
-    );
-  }
+  const kept = outputOf(cwd, args.output_path, bound);
+  const output = kept.shown;
   const auth = await subscriptionAuth();
   const images = await referenceImages(cwd, args.reference_images ?? []);
-  await mkdir(dirname(output), { recursive: true });
+  if (!isWorkspaceRef(bound)) {
+    // A workspace's clone and scratch dir are there; its folders under them are made one at a time as it is written.
+    await mkdir(kept.root, { recursive: true });
+  }
   await requireNewOutput(output);
   if (activeOutputs.has(output)) {
     throw new Error(
@@ -365,7 +395,8 @@ export async function generateImage(
     if (bytes.length < 24 || !bytes.subarray(0, 8).equals(PNG)) {
       throw new Error("ChatGPT returned an invalid PNG; no image was saved.");
     }
-    await publishImage(output, bytes);
+    // Placed only where nothing is: a concurrent writer's file is never replaced.
+    await writeKept(kept, bytes, { exclusive: true, mode: 0o600 });
     return {
       path: output,
       width: bytes.readUInt32BE(16),

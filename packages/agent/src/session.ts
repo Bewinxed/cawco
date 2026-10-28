@@ -1213,10 +1213,10 @@ export class SessionSupervisor {
 
   readonly #daemonFunctions: Record<string, ControlMethod> = {
     // A generation runs in this process, so a restart cuts it: none starts behind a raised fence.
-    [GENERATE_IMAGE]: (_instanceId, cwd, input) =>
+    [GENERATE_IMAGE]: (_instanceId, cwd, input, bound) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : generateImage(cwd as string, input),
+        : generateImage(cwd as string, input, bound),
     [PREVIEW_START]: (options) =>
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) =>

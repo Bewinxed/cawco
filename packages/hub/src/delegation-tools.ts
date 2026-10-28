@@ -276,7 +276,9 @@ export function handoffTools(deps: HandoffDeps) {
         output_path: z
           .string()
           .min(1)
-          .describe("A new .png path; relative to your directory."),
+          .describe(
+            "A new .png path, relative to your directory; in a workspace, in its clone or `$TMPDIR/`."
+          ),
         reference_images: z
           .array(z.string().min(1))
           .max(5)

@@ -15004,8 +15004,9 @@ export const createServer = (
   };
 
   /**
-   * Picture `png` kept at `path` in session `instance`'s workspace
-   * (`artifact_read`'s `save`), written by the workspace's machine with the
+   * Picture `png` kept at `path` in session `instance`'s workspace, the
+   * boundary its spawns carry ({@link sessionWorkspace}) (`artifact_read`'s
+   * `save`), written by the workspace's machine with the
    * writer its inputs land by (agent inputs.ts `savePicture`), which refuses
    * a path outside the clone and the scratch dir in words. The path written.
    */
@@ -15014,7 +15015,7 @@ export const createServer = (
     path: string,
     png: string
   ): Promise<string> => {
-    const workspace = workItems.workspaceOf(instance);
+    const workspace = sessionWorkspace(instance);
     if (!workspace) {
       throw new ArtifactRefusal(
         409,
@@ -30085,7 +30086,8 @@ export const createServer = (
           const answer = await callAgent(
             row.machineId,
             GENERATE_IMAGE,
-            [row.id, row.cwd, body],
+            // Its boundary, when it runs in one: the output lands in its clone or $TMPDIR alone.
+            [row.id, row.cwd, body, sessionWorkspace(row) ?? null],
             IMAGE_GENERATION_TIMEOUT_MS + 30_000
           );
           switch (answer.kind) {

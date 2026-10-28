@@ -537,12 +537,19 @@ interface Under {
  * and each file's folder's are checked before it is written, a folder is
  * made one at a time ({@link ownFolder}), and each file is written to a new
  * name and renamed over the old one (state-file.ts). THE ONE WRITER of a
- * file CawCo puts into a workspace: its inputs, and a picture
- * `artifact_read` keeps ({@link savePicture}).
+ * file CawCo puts where a session asks: its inputs, a picture
+ * `artifact_read` keeps ({@link savePicture}) and an image `generate_image`
+ * makes ({@link writeKept}).
  */
 const writeUnder = async (
   { dir, own, strays, what }: Under,
-  files: { bytes: () => Promise<Buffer>; mode: number; name: string }[]
+  files: {
+    bytes: () => Promise<Buffer>;
+    /** Placed only where nothing is (state-file.ts `exclusive`). */
+    exclusive?: true;
+    mode: number;
+    name: string;
+  }[]
 ): Promise<void> => {
   for (const file of files) {
     if (nameProblem(file.name)) {
@@ -562,8 +569,12 @@ const writeUnder = async (
     await writeStateFile(
       join(folder, basename(file.name)),
       await file.bytes(),
-      // biome-ignore lint/suspicious/noBitwiseOperators: its own bits, and its owner's read and write
-      { inPlace: true, mode: (file.mode & 0o777) | 0o600 }
+      {
+        inPlace: true,
+        // biome-ignore lint/suspicious/noBitwiseOperators: its own bits, and its owner's read and write
+        mode: (file.mode & 0o777) | 0o600,
+        ...(file.exclusive ? { exclusive: true } : {}),
+      }
     );
   }
 };
@@ -604,41 +615,84 @@ const writeInto = async (
 /** How a session names its scratch dir in a path it hands a tool, which no shell expands. */
 const TMPDIR_NAME = "$TMPDIR/";
 
+/** A .png a session named for CawCo to write: the folder it lands under, its path there, the path as the session names it, and that folder in words. */
+export interface Kept {
+  rel: string;
+  root: string;
+  shown: string;
+  what: string;
+}
+
 /**
- * Where `named` lands in workspace `ref`: its clone or its scratch dir, and
- * its path there; or why not, in words. Relative: from the clone. `$TMPDIR/…`
- * or an absolute path inside the scratch dir (by either of its names, core
- * `workspaceTmpDir`): there. An absolute path inside the clone: there.
+ * Where `named`, a .png, lands in workspace `ref`: its clone or its scratch
+ * dir, and its path there; or why not, in words. Relative: from `from` (the
+ * clone, or a session's working dir in it). `$TMPDIR/…` or an absolute path
+ * inside the scratch dir (by either of its names, core `workspaceTmpDir`):
+ * there. An absolute path inside the clone: there. THE ONE RULE for a file
+ * a workspace's session asks CawCo to write: `artifact_read`'s `save` and
+ * `generate_image`'s `output_path`.
  */
-const placeOfSave = (
+export const placeInWorkspace = (
   ref: WorkspaceRef,
-  named: string
-): { root: string; rel: string; shown: string } | string => {
+  named: string,
+  from: string = ref.path
+): Kept | string => {
   const scratch = workspaceScratchDir(ref.id);
   const tmp = workspaceTmpDir(ref.id);
   const asked = named.startsWith(TMPDIR_NAME)
     ? join(tmp, named.slice(TMPDIR_NAME.length))
-    : resolve(ref.path, named);
+    : resolve(from, named);
   const place = [
-    { root: ref.path, shown: ref.path },
-    { root: scratch, shown: tmp },
-    { root: scratch, shown: scratch },
+    { root: ref.path, shown: ref.path, what: "clone" },
+    { root: scratch, shown: tmp, what: "scratch dir" },
+    { root: scratch, shown: scratch, what: "scratch dir" },
   ].find(({ shown }) => asked.startsWith(`${shown}/`));
   if (!place) {
-    return `${named} is outside your clone and your $TMPDIR; save names a .png path in either, like $TMPDIR/outputs/<name>.png`;
+    return `${named} is outside your clone and your $TMPDIR; name a .png path in either, like $TMPDIR/outputs/<name>.png`;
   }
   const rel = relative(place.shown, asked);
   if (extname(rel).toLowerCase() !== ".png" || nameProblem(rel)) {
-    return `${named} names no .png file; save names one, like $TMPDIR/outputs/<name>.png`;
+    return `${named} names no .png file; name one, like $TMPDIR/outputs/<name>.png`;
   }
-  return { root: place.root, rel, shown: join(place.shown, rel) };
+  return {
+    root: place.root,
+    rel,
+    shown: join(place.shown, rel),
+    what: `workspace ${ref.id}'s own ${place.what}`,
+  };
 };
 
 /**
+ * `bytes` written at `kept` ({@link writeUnder}), a link or a file where a
+ * folder goes refused; `exclusive`, only where nothing is.
+ */
+export const writeKept = async (
+  kept: Kept,
+  bytes: Buffer,
+  { exclusive, mode }: { exclusive?: true; mode: number }
+): Promise<void> =>
+  writeUnder(
+    {
+      dir: kept.root,
+      own: await realpath(kept.root),
+      strays: "refuse",
+      what: kept.what,
+    },
+    [
+      {
+        name: kept.rel,
+        mode,
+        bytes: () => Promise.resolve(bytes),
+        ...(exclusive ? { exclusive } : {}),
+      },
+    ]
+  );
+
+/**
  * Core `CONTROL_WORKSPACE_SAVE`: the picture `artifact_read` drew, base64
- * `png`, kept at `named` in workspace `ref` ({@link placeOfSave}), written
- * as an input is ({@link writeUnder}), a link or a file where a folder goes
- * refused. Answers the path written, as the session names it.
+ * `png`, kept at `named` in workspace `ref` ({@link placeInWorkspace},
+ * {@link writeKept}), replacing one there. Answers the path written, as the
+ * session names it.
  */
 export const savePicture = async (
   ref: unknown,
@@ -654,24 +708,10 @@ export const savePicture = async (
       "a picture is saved as [{ id, path }, its path, its base64 PNG]"
     );
   }
-  const place = placeOfSave(ref, named);
-  if (typeof place === "string") {
-    return { refused: place };
+  const kept = placeInWorkspace(ref, named);
+  if (typeof kept === "string") {
+    return { refused: kept };
   }
-  await writeUnder(
-    {
-      dir: place.root,
-      own: await realpath(place.root),
-      strays: "refuse",
-      what: `workspace ${ref.id}'s own ${place.root === ref.path ? "clone" : "scratch dir"}`,
-    },
-    [
-      {
-        name: place.rel,
-        mode: 0o644,
-        bytes: () => Promise.resolve(Buffer.from(png, "base64")),
-      },
-    ]
-  );
-  return { path: place.shown };
+  await writeKept(kept, Buffer.from(png, "base64"), { mode: 0o644 });
+  return { path: kept.shown };
 };
