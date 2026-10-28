@@ -185,6 +185,13 @@ export function runtimeTree(prefix: string): string {
   return join(runtimeDataDir(), prefix);
 }
 
+/**
+ * The content hash the builder took of published runtime file `name`
+ * (`publishedHashes`); none in a checkout, which publishes nothing.
+ */
+export const publishedHash = (name: string): string | undefined =>
+  publishedHashes[name];
+
 export function runtimeExecutable(name: string): string {
   const root = runtimeTree(dirname(name));
   const path = join(root, name.slice(dirname(name).length + 1));

@@ -195,6 +195,7 @@ import {
 import { guardedHandler } from "../fleet-hook-guard";
 import { proxiedFleetMcpUrl, proxiedToolCount } from "../fleet-mcp-listing";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
+import type { FleetPart } from "../fleet-parts";
 import { sessionGitEnv } from "../git-credential";
 import {
   type Harness,
@@ -5217,8 +5218,11 @@ class ClaudeHarness implements Harness {
     }
   }
 
-  syncFleet(config: import("@cawco/core").PlacedFleetConfig) {
-    return syncFleetConfig(config);
+  syncFleet(
+    config: import("@cawco/core").PlacedFleetConfig,
+    parts: ReadonlySet<FleetPart>
+  ) {
+    return syncFleetConfig(config, parts);
   }
 
   fleetStatus() {

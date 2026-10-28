@@ -40,6 +40,7 @@ import type {
   WindowAsk,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
+import type { FleetPart } from "./fleet-parts";
 
 /**
  * What a turn carries to its harness beside its words: the texts it folds in
@@ -462,8 +463,15 @@ export interface Harness {
     cwd: string,
     workspace: string
   ) => Promise<{ dir: string; spec: SpawnPayload }>;
-  /** Applies the hub's fleet config to this harness's own files; reports per entry. */
-  syncFleet?: (config: PlacedFleetConfig) => Promise<FleetSyncReport>;
+  /**
+   * Applies the parts `parts` of the hub's fleet config (fleet-parts.ts) to
+   * this harness's own files, every other part left as its last converge
+   * wrote it; reports per entry of those parts.
+   */
+  syncFleet?: (
+    config: PlacedFleetConfig,
+    parts: ReadonlySet<FleetPart>
+  ) => Promise<FleetSyncReport>;
   tagSession: (
     sessionKey: string,
     tag: string | null,

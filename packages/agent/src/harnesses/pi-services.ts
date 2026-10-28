@@ -58,11 +58,12 @@ import {
   readFleetHarnessSet,
 } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
+import type { FleetPart } from "../fleet-parts";
 import type { TranscriptSpan } from "../harness";
 import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
 import { toolGate } from "../tools";
-import { readSidecar, writeJson } from "./fleet-common";
+import { type FleetSidecar, readSidecar, writeJson } from "./fleet-common";
 import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiCredential, type PiCredentialState } from "./pi-auth";
 import { piMcpEntry, piMcpList } from "./pi-mcp";
@@ -861,6 +862,38 @@ const piFleetMcp = async (
   };
 };
 
+/**
+ * A fleet sync's servers as pi takes them: each the fleet turned off said
+ * disabled, each it wrote before (`handed`) and no longer carries said
+ * removed, and the rest as pi finds them ({@link piFleetMcp}).
+ */
+const piMcpReport = async (
+  config: PlacedFleetConfig,
+  handed: readonly string[]
+): Promise<Record<string, FleetItemState>> => {
+  const enabled = config.mcp.filter((row) => row.enabled);
+  const report: Record<string, FleetItemState> = {};
+  for (const row of config.mcp) {
+    if (!row.enabled) {
+      report[row.name] = { state: "disabled" };
+    }
+  }
+  for (const name of handed) {
+    if (!enabled.some((row) => row.name === name)) {
+      report[name] = { state: "removed" };
+    }
+  }
+  return {
+    ...report,
+    ...(await piFleetMcp(
+      Object.fromEntries(enabled.map((row) => [row.name, row.config])),
+      config.placedMcp
+        .filter((row) => row.enabled && row.cwd && row.placeId)
+        .map((row) => `${row.name}@${row.placeId}`)
+    )),
+  };
+};
+
 /** Read-only SDK metadata plus the machine's pi profile; both processes use it. */
 export class PiProfile {
   readonly kind = "pi" as const;
@@ -1109,7 +1142,16 @@ export class PiProfile {
     return method === CONTROL_MODEL_CATALOG ? await modelCatalog() : undefined;
   }
 
-  async syncFleet(config: PlacedFleetConfig): Promise<FleetSyncReport> {
+  /**
+   * The parts of one fleet sync pi has (fleet-parts.ts): its servers
+   * (`mcp`), its skills dir (`skills`), its memory file (`memory`) and its
+   * word on the hooks it runs (`hooks`); the sidecar keeps every other
+   * part's record as it stands.
+   */
+  async syncFleet(
+    config: PlacedFleetConfig,
+    parts: ReadonlySet<FleetPart>
+  ): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(PI_SIDECAR);
     const report: FleetSyncReport = {
       mcp: {},
@@ -1119,49 +1161,38 @@ export class PiProfile {
       // CawCo's inline extension runs the fleet's hooks from the harness
       // set (pi-runtime.ts `FleetHooks`); what it cannot run is said
       // unsupported here.
-      hooks: hookStatesOn(
-        "pi",
-        config.hooks.filter((hook) => hook.enabled)
-      ),
+      hooks: parts.has("hooks")
+        ? hookStatesOn(
+            "pi",
+            config.hooks.filter((hook) => hook.enabled)
+          )
+        : {},
       at: Date.now(),
     };
     const enabled = config.mcp.filter((row) => row.enabled);
-    for (const row of config.mcp) {
-      if (!row.enabled) {
-        report.mcp[row.name] = { state: "disabled" };
-      }
+    if (parts.has("mcp")) {
+      report.mcp = await piMcpReport(config, sidecar.mcp ?? []);
     }
-    for (const name of sidecar.mcp ?? []) {
-      if (!enabled.some((row) => row.name === name)) {
-        report.mcp[name] = { state: "removed" };
-      }
+    const skills = parts.has("skills")
+      ? await syncSkillFiles(
+          PI_SKILLS,
+          config.skills,
+          sidecar.skills,
+          report.skills as NonNullable<FleetSyncReport["skills"]>
+        )
+      : sidecar.skills;
+    const memory = parts.has("memory")
+      ? await syncMemory(PI_MEMORY, config.memory, sidecar.memory, report)
+      : sidecar.memory;
+    if (parts.has("mcp") || parts.has("skills") || parts.has("memory")) {
+      await writeJson(PI_SIDECAR, {
+        skills,
+        mcp: parts.has("mcp")
+          ? enabled.map((row) => row.name)
+          : (sidecar.mcp ?? []),
+        ...(memory ? { memory } : {}),
+      } satisfies FleetSidecar);
     }
-    Object.assign(
-      report.mcp,
-      await piFleetMcp(
-        Object.fromEntries(enabled.map((row) => [row.name, row.config])),
-        config.placedMcp
-          .filter((row) => row.enabled && row.cwd && row.placeId)
-          .map((row) => `${row.name}@${row.placeId}`)
-      )
-    );
-    const skills = await syncSkillFiles(
-      PI_SKILLS,
-      config.skills,
-      sidecar.skills,
-      report.skills as NonNullable<FleetSyncReport["skills"]>
-    );
-    const memory = await syncMemory(
-      PI_MEMORY,
-      config.memory,
-      sidecar.memory,
-      report
-    );
-    await writeJson(PI_SIDECAR, {
-      skills,
-      mcp: config.mcp.filter((row) => row.enabled).map((row) => row.name),
-      ...(memory ? { memory } : {}),
-    });
     return report;
   }
 

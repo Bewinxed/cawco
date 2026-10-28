@@ -107,6 +107,7 @@ import {
   readFleetHarnessSet,
 } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
+import type { FleetPart } from "../fleet-parts";
 import { GATE_FORM_ENV, gateForm, LAUNCH_FLAGS } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import type {
@@ -150,7 +151,7 @@ import type { SessionQuery, StoredSession } from "../stores/opencode-reads";
 import { onToolsMoved, toolGate } from "../tools";
 import { workspaceRefs } from "../workspace-records";
 import { FULL_CAPABILITIES } from "./capabilities";
-import { readSidecar, writeJson } from "./fleet-common";
+import { type FleetSidecar, readSidecar, writeJson } from "./fleet-common";
 import { type ActivitySnapshot, OpencodeActivity } from "./opencode-activity";
 import {
   answerOf,
@@ -6235,26 +6236,27 @@ export class OpencodeHarness implements Harness {
     return placeOpencodeMcpAt(cwd, mcp);
   }
 
-  async syncFleet(config: PlacedFleetConfig): Promise<FleetSyncReport> {
+  async syncFleet(
+    config: PlacedFleetConfig,
+    parts: ReadonlySet<FleetPart>
+  ): Promise<FleetSyncReport> {
     this.#syncing += 1;
     try {
-      return await this.#syncFleet(config);
+      return await this.#syncFleet(config, parts);
     } finally {
       this.#syncing -= 1;
     }
   }
 
   /**
-   * One fleet sync, applied as far as it changed what OpenCode runs. The hub
-   * sends its whole config each time (a place added or archived, a skill, a
-   * sign-in); the fleet's servers as a server's launch takes them are
-   * compared before and after the write. Only a change there is a need: the
-   * machine's server is replaced on it now, whatever runs, and its servers
-   * read on the new one. Any other change of the config is applied as the
-   * config watcher applies one ({@link #configTick}), and a sync that changed
-   * none of the servers reads none of them again ({@link #readFleetMcp}).
+   * The parts of one fleet sync OpenCode has (fleet-parts.ts): its servers
+   * (`mcp`), its memory file (`memory`) and its word on the hooks it runs
+   * (`hooks`); a sync of no part of them writes nothing here.
    */
-  async #syncFleet(config: PlacedFleetConfig): Promise<FleetSyncReport> {
+  async #syncFleet(
+    config: PlacedFleetConfig,
+    parts: ReadonlySet<FleetPart>
+  ): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(OPENCODE_SIDECAR);
     const report: FleetSyncReport = {
       mcp: {},
@@ -6263,20 +6265,49 @@ export class OpencodeHarness implements Harness {
       skills: {},
       // CawCo's plugin runs the fleet's hooks from the harness set; what it
       // cannot run is said unsupported here.
-      hooks: hookStatesOn(
-        "opencode",
-        config.hooks.filter((hook) => hook.enabled)
-      ),
+      hooks: parts.has("hooks")
+        ? hookStatesOn(
+            "opencode",
+            config.hooks.filter((hook) => hook.enabled)
+          )
+        : {},
       at: Date.now(),
     };
+    const memory = parts.has("memory")
+      ? await syncMemory(OPENCODE_MEMORY, config.memory, sidecar.memory, report)
+      : sidecar.memory;
+    if (!parts.has("mcp")) {
+      if (parts.has("memory")) {
+        await writeJson(OPENCODE_SIDECAR, {
+          ...sidecar,
+          memory,
+        } satisfies FleetSidecar);
+      }
+      return report;
+    }
+    report.mcp = await this.#syncFleetMcp(config, sidecar, memory);
+    return report;
+  }
+
+  /**
+   * One fleet sync's servers, applied as far as it changed what OpenCode
+   * runs: the fleet's servers as a server's launch takes them are compared
+   * before and after the write. Only a change there is a need: the machine's
+   * server is replaced on it now, whatever runs, and its servers read on the
+   * new one. A project's placed copies go to the locations its live sessions
+   * run in, and replace no server; a sync that changed none of the fleet's
+   * servers reads none of them again ({@link #readFleetMcp}).
+   */
+  async #syncFleetMcp(
+    config: PlacedFleetConfig,
+    sidecar: FleetSidecar,
+    memory: string | undefined
+  ): Promise<FleetSyncReport["mcp"]> {
+    const states: FleetSyncReport["mcp"] = {};
     const serversBefore = canonicalJson(
       await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP)
     );
-    const mcp = await syncOpencodeMcp(
-      config.mcp,
-      sidecar.mcp ?? [],
-      report.mcp
-    );
+    const mcp = await syncOpencodeMcp(config.mcp, sidecar.mcp ?? [], states);
     await dropPlanAgentEntry(sidecar.planAgentDisabled === true);
     // Before the poke below: a placement that changed where a live session
     // runs replaces the server as opencode.json changing does (`#hashConfig`).
@@ -6284,22 +6315,16 @@ export class OpencodeHarness implements Harness {
       config.placedMcp,
       [...this.#sessions.values()].map((session) => session.directory)
     );
-    const memory = await syncMemory(
-      OPENCODE_MEMORY,
-      config.memory,
-      sidecar.memory,
-      report
-    );
     await writeJson(OPENCODE_SIDECAR, {
+      skills: sidecar.skills,
       mcp,
       ...(memory ? { memory } : {}),
-    });
+    } satisfies FleetSidecar);
     if (!(await runsHere())) {
       // Its files are written, for the OpenCode put on later; with none
       // that CawCo runs here there is no server to start or read, so the
       // sync stops at them rather than failing every item of the pass.
-      report.mcp = {};
-      return report;
+      return {};
     }
     const serversMoved =
       canonicalJson(
@@ -6313,13 +6338,12 @@ export class OpencodeHarness implements Harness {
     const unsettled = serversMoved ? await this.#configSettled() : undefined;
     if (unsettled) {
       const { read, said } = await apartUnread(mcp);
-      const states = {
+      const pending = {
         ...said,
         ...Object.fromEntries(read.map((name) => [name, unsettled])),
       };
-      this.#heardFleetMcp(states, "report");
-      report.mcp = { ...placed, ...states };
-      return report;
+      this.#heardFleetMcp(pending, "report");
+      return { ...states, ...placed, ...pending };
     }
     // A fleet server OpenCode holds failed where a live session runs is
     // started again now, not at the next pass. One the hub holds no sign-in
@@ -6329,8 +6353,11 @@ export class OpencodeHarness implements Harness {
     // just written holds every fleet server already, in its launch config;
     // one still connecting is left to connect.
     await this.#fleetMcpTurn(() => this.#startFailed(mcp));
-    Object.assign(report.mcp, placed, await this.#readFleetMcp(mcp, "fresh"));
-    return report;
+    return {
+      ...states,
+      ...placed,
+      ...(await this.#readFleetMcp(mcp, "fresh")),
+    };
   }
 
   async fleetStatus(): Promise<FleetSyncReport> {

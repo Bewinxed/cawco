@@ -127,7 +127,8 @@ import {
 import {
   AGENT_SOCKET_ENV,
   darwinUserDirs,
-  fleetSyncedPaths,
+  fleetHooksDir,
+  fleetMcpInstallsDir,
   forgetWorkspaceTmp,
   hostCaEnv,
   linkWorkspaceTmp,
@@ -167,6 +168,7 @@ import {
 } from "@cawco/core/process-identity";
 import {
   embeddedFile,
+  publishedHash,
   runtimeExecutable,
   runtimeVersion,
   standalone,
@@ -211,6 +213,7 @@ import { runtimeSockets } from "./browser/runtime";
 import { bunNodeShim } from "./bun-node-shim";
 import { browserExecutable } from "./capabilities";
 import { reportDamaged } from "./damaged-records";
+import { syncedHeld } from "./fleet-converged";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import {
   closeGitDoor,
@@ -3629,6 +3632,19 @@ const bwrapLauncherOf = (id: string, gen: string): string =>
 const ripgrep = (): string =>
   standalone ? runtimeExecutable("srt/rg") : rgPath;
 
+/**
+ * {@link ripgrep} as a form names it: a build's by its content, as the host
+ * script is ({@link readHostText}), since its path is under the build's own
+ * runtime folder (core runtime.ts `runtimeDataDir`, by `runtimeVersion`) and
+ * moved at every install with the same bytes behind it. Named by that path,
+ * every boundary's `settings` part moved at each install with its policy
+ * unchanged, and each was handed over for nothing (workspace 9eb7bb73,
+ * 2026-10-27 17:57 and 18:31). The boundary that runs on keeps the folder
+ * of its build, which no install takes away.
+ */
+const ripgrepForm = (): string =>
+  standalone ? `srt/rg ${publishedHash("srt/rg") ?? runtimeVersion}` : rgPath;
+
 /** The srt host script, as this build runs it: its embedded bundle, or the checkout's source. */
 const hostScript = (): string =>
   standalone
@@ -3679,7 +3695,17 @@ interface Plan {
   readonly spec: ProcSpec;
 }
 
-/** The part of a Linux form that is what the fleet sync writes ({@link syncedPresence}). */
+/**
+ * The part of a Linux form that is what the fleet sync wrote that the
+ * boundary binds, named by the hashes of the items it converged into each
+ * (fleet-converged.ts `syncedHeld`): srt binds a read path back only when
+ * it resolves ("Not restoring … nothing there resolves (absent, dangling or
+ * unreadable)", its linux-sandbox-utils.js 0.0.81), and a file's bind keeps
+ * the file it was made over, so a bound file written again, or a bound dir
+ * made since the boundary started, is a later form, and a boundary in use is
+ * handed over to it ({@link rearmMoved}). Seatbelt grants by path rule,
+ * there or not.
+ */
 const SYNCED_PART = "synced";
 
 /**
@@ -3777,42 +3803,6 @@ const formMoveWords = async (
 
 /** The generation every form is computed for ({@link Plan.form}): no boundary has it. */
 const FORM_GENERATION = "form";
-
-/**
- * Which of the paths the fleet sync writes (core `fleetSyncedPaths`, the
- * fleet's hook scripts and the user layer's `CLAUDE.md` among them) stand on
- * this machine now, for a Linux
- * boundary's form: srt binds a read path back only when it resolves ("Not
- * restoring … nothing there resolves (absent, dangling or unreadable)", its
- * linux-sandbox-utils.js 0.0.81), so a boundary started before one was made
- * has none of it. Made since, it is a later form, and the boundary is handed
- * over to it ({@link rearmMoved}). Each is named by what its bind shows: srt
- * binds the path's resolved target (its `unit.resolve`, the canonical
- * source), and `stat` follows the path to that target. A dir's bind shows
- * what the dir holds as it changes, but keeps the device and inode it was
- * made over, so a dir taken away and made again, or pointed at another
- * target, is a later form. A file's bind keeps the file it was made over,
- * whose content is all it shows, so a file is named by its content: one
- * written again whole with the same bytes (a new inode) is the same form, and
- * one with other bytes is a later one. Seatbelt grants by path rule, there or
- * not.
- */
-const syncedPresence = async (): Promise<string> =>
-  (
-    await Promise.all(
-      fleetSyncedPaths().map(async (path) => {
-        const held = await stat(path).catch(() => undefined);
-        if (!held) {
-          return `${path} none`;
-        }
-        if (held.isFile()) {
-          const bytes = await readFile(path).catch(() => undefined);
-          return `${path} ${bytes ? `file ${createHash("sha256").update(bytes).digest("hex")}` : "unreadable"}`;
-        }
-        return `${path} ${held.dev}:${held.ino}`;
-      })
-    )
-  ).join("\n");
 
 /** The form, with its parts, a boundary of workspace `ref` takes in this build on this machine now. */
 const formNow = async (
@@ -3925,20 +3915,30 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       },
     };
   }
+  // CawCo's own dirs the fleet sync writes into, which a boundary binds
+  // whole: made before any boundary starts, so none is made under one
+  // running, and the form names them by nothing ({@link SYNCED_PART}).
+  await Promise.all(
+    [fleetHooksDir(), fleetMcpInstallsDir()].map((dir) =>
+      mkdir(dir, { recursive: true })
+    )
+  );
   const srtTmp = srtTmpOf(id, gen);
   const bwrap = bwrapLauncherOf(id, gen);
   const launcher = readOnlyDeniesBwrap(hostBwrap());
-  const settings = `${JSON.stringify(
-    srtSettings(policy, {
-      bwrap,
-      rg: ripgrep(),
-      srtTmp,
-      bunNode,
-      containerSockets: runtimes,
-    }),
-    null,
-    2
-  )}\n`;
+  const settingsWith = (rg: string): string =>
+    `${JSON.stringify(
+      srtSettings(policy, {
+        bwrap,
+        rg,
+        srtTmp,
+        bunNode,
+        containerSockets: runtimes,
+      }),
+      null,
+      2
+    )}\n`;
+  const settings = settingsWith(ripgrep());
   const host = hostScript();
   hostText ??= readHostText(host);
   // What the host makes in the clone before each sandbox, so srt binds
@@ -3961,8 +3961,8 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       ...guardFiles(id, gen),
     ],
     ...formFrom([
-      ["settings", settings],
-      [SYNCED_PART, await syncedPresence()],
+      ["settings", settingsWith(ripgrepForm())],
+      [SYNCED_PART, await syncedHeld()],
       ["launcher", launcher],
       ["runner", runnerText()],
       ["exec", exec],
@@ -5776,7 +5776,7 @@ const inUseNow = async (): Promise<string[]> => {
 
 /**
  * Each boundary in use whose form's part the fleet sync writes moved since
- * it started ({@link SYNCED_PART}, {@link syncedPresence}), handed over to one
+ * it started ({@link SYNCED_PART}, fleet-converged.ts `syncedHeld`), handed over to one
  * of the form now as soon as nothing runs in it ({@link ensure}'s
  * {@link replaceOlder}), so a session's next command, hook or server start
  * runs in it: after a fleet sync made a path a boundary reads (the fleet's

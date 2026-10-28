@@ -337,6 +337,80 @@ export const BrowserRowShape = z.object({
   why: z.string().optional(),
 });
 
+const FaultCauseShape = z.enum(FAULT_CAUSES);
+
+const FleetFaultCauseShape = FaultCauseShape.exclude([
+  "auth-discovery",
+  "needs-auth",
+  "ssh-refused",
+  "unfetchable",
+]);
+
+const FleetItemStateShape = z.union([
+  z.object({
+    cause: FleetFaultCauseShape,
+    detail: z.string().optional(),
+    state: z.literal("failed"),
+  }),
+  z.object({
+    cause: z.never().optional(),
+    detail: z.string().optional(),
+    state: z.enum([
+      "applied",
+      "removed",
+      "needs-auth",
+      "disabled",
+      "unsupported",
+      "pending",
+    ]),
+  }),
+]);
+
+export const HarnessKindShape = z.enum(HARNESSES);
+
+const PlacedSectionShape = z.enum(PLACED_SECTIONS);
+
+const FleetPlacedStatesShape = z.partialRecord(
+  PlacedSectionShape,
+  z.record(z.string(), z.record(z.string(), FleetItemStateShape))
+);
+
+const CliInstallShape = z.object({
+  path: z.string(),
+  used: z.boolean().optional(),
+  version: z.string().optional(),
+});
+
+const FleetToolchainShape = z.object({
+  claude: z.array(CliInstallShape).optional(),
+});
+
+const FleetSyncReportShape = z.object({
+  at: z.number(),
+  harnessConfig: z.record(z.string(), FleetItemStateShape).optional(),
+  have: z
+    .object({
+      skills: z.record(z.string(), z.string()).optional(),
+      plugins: z.record(z.string(), z.string()).optional(),
+    })
+    .optional(),
+  hooks: z.record(z.string(), FleetItemStateShape).optional(),
+  marketplaces: z.record(z.string(), FleetItemStateShape),
+  mcp: z.record(z.string(), FleetItemStateShape),
+  mcpByHarness: z
+    .partialRecord(HarnessKindShape, z.record(z.string(), FleetItemStateShape))
+    .optional(),
+  memory: FleetItemStateShape.optional(),
+  memoryDocs: z.record(z.string(), FleetItemStateShape).optional(),
+  memoryHook: FleetItemStateShape.optional(),
+  placed: FleetPlacedStatesShape.optional(),
+  plugins: z.record(z.string(), FleetItemStateShape),
+  skills: z.record(z.string(), FleetItemStateShape).optional(),
+  toolchain: FleetToolchainShape.optional(),
+});
+export const FleetSyncReportSchema: z.ZodType<FleetSyncReportType> =
+  FleetSyncReportShape;
+
 export const HarnessConfigKindShape = z.enum(HARNESS_CONFIG_KINDS);
 
 export const HookEventShape = z.enum([
@@ -748,8 +822,6 @@ const BinaryUpdateStateShape = z.object({
 export const BinaryUpdateStateSchema: z.ZodType<BinaryUpdateStateType> =
   BinaryUpdateStateShape;
 
-export const HarnessKindShape = z.enum(HARNESSES);
-
 export const PermissionModeShape = z.enum(WIRE_PERMISSION_MODES);
 
 const SessionCustodyShape = z.union([
@@ -763,78 +835,6 @@ const SessionCustodyShape = z.union([
   }),
   z.object({ state: z.literal("unavailable"), error: z.string() }),
 ]);
-
-const FaultCauseShape = z.enum(FAULT_CAUSES);
-
-const FleetFaultCauseShape = FaultCauseShape.exclude([
-  "auth-discovery",
-  "needs-auth",
-  "ssh-refused",
-  "unfetchable",
-]);
-
-const FleetItemStateShape = z.union([
-  z.object({
-    cause: FleetFaultCauseShape,
-    detail: z.string().optional(),
-    state: z.literal("failed"),
-  }),
-  z.object({
-    cause: z.never().optional(),
-    detail: z.string().optional(),
-    state: z.enum([
-      "applied",
-      "removed",
-      "needs-auth",
-      "disabled",
-      "unsupported",
-      "pending",
-    ]),
-  }),
-]);
-
-const PlacedSectionShape = z.enum(PLACED_SECTIONS);
-
-const FleetPlacedStatesShape = z.partialRecord(
-  PlacedSectionShape,
-  z.record(z.string(), z.record(z.string(), FleetItemStateShape))
-);
-
-const CliInstallShape = z.object({
-  path: z.string(),
-  used: z.boolean().optional(),
-  version: z.string().optional(),
-});
-
-const FleetToolchainShape = z.object({
-  claude: z.array(CliInstallShape).optional(),
-});
-
-const FleetSyncReportShape = z.object({
-  at: z.number(),
-  harnessConfig: z.record(z.string(), FleetItemStateShape).optional(),
-  have: z
-    .object({
-      skills: z.record(z.string(), z.string()).optional(),
-      plugins: z.record(z.string(), z.string()).optional(),
-    })
-    .optional(),
-  hooks: z.record(z.string(), FleetItemStateShape).optional(),
-  marketplaces: z.record(z.string(), FleetItemStateShape),
-  mcp: z.record(z.string(), FleetItemStateShape),
-  mcpByHarness: z
-    .partialRecord(HarnessKindShape, z.record(z.string(), FleetItemStateShape))
-    .optional(),
-  memory: FleetItemStateShape.optional(),
-  memoryDocs: z.record(z.string(), FleetItemStateShape).optional(),
-  memoryHook: FleetItemStateShape.optional(),
-  placed: FleetPlacedStatesShape.optional(),
-  plugins: z.record(z.string(), FleetItemStateShape),
-  skills: z.record(z.string(), FleetItemStateShape).optional(),
-  toolchain: FleetToolchainShape.optional(),
-});
-export const FleetSyncReportSchema: z.ZodType<FleetSyncReportType> =
-  FleetSyncReportShape;
 
 const FleetConvergeStateShape = z.enum(["pending", "running", "ok", "failed"]);
 
@@ -2271,6 +2271,15 @@ prove<
     Same<z.output<typeof BrowserRelayShape>, BrowserRelayType>,
     Same<z.output<typeof BrowserStateShape>, BrowserStateType>,
     Same<z.output<typeof BrowserRowShape>, BrowserRowType>,
+    Same<z.output<typeof FaultCauseShape>, FaultCauseType>,
+    Same<z.output<typeof FleetFaultCauseShape>, FleetFaultCauseType>,
+    Same<z.output<typeof FleetItemStateShape>, FleetItemStateType>,
+    Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
+    Same<z.output<typeof PlacedSectionShape>, PlacedSectionType>,
+    Same<z.output<typeof FleetPlacedStatesShape>, FleetPlacedStatesType>,
+    Same<z.output<typeof CliInstallShape>, CliInstallType>,
+    Same<z.output<typeof FleetToolchainShape>, FleetToolchainType>,
+    Same<z.output<typeof FleetSyncReportShape>, FleetSyncReportType>,
     Same<z.output<typeof HarnessConfigKindShape>, HarnessConfigKindType>,
     Same<z.output<typeof HookEventShape>, HookEventType>,
     Same<z.output<typeof HookCommandHandlerShape>, HookCommandHandlerType>,
@@ -2312,17 +2321,8 @@ prove<
     Same<z.output<typeof KeptProcessShape>, KeptProcessType>,
     Same<z.output<typeof RetiringKeeperShape>, RetiringKeeperType>,
     Same<z.output<typeof BinaryUpdateStateShape>, BinaryUpdateStateType>,
-    Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
     Same<z.output<typeof PermissionModeShape>, PermissionModeType>,
     Same<z.output<typeof SessionCustodyShape>, SessionCustodyType>,
-    Same<z.output<typeof FaultCauseShape>, FaultCauseType>,
-    Same<z.output<typeof FleetFaultCauseShape>, FleetFaultCauseType>,
-    Same<z.output<typeof FleetItemStateShape>, FleetItemStateType>,
-    Same<z.output<typeof PlacedSectionShape>, PlacedSectionType>,
-    Same<z.output<typeof FleetPlacedStatesShape>, FleetPlacedStatesType>,
-    Same<z.output<typeof CliInstallShape>, CliInstallType>,
-    Same<z.output<typeof FleetToolchainShape>, FleetToolchainType>,
-    Same<z.output<typeof FleetSyncReportShape>, FleetSyncReportType>,
     Same<z.output<typeof FleetConvergeStateShape>, FleetConvergeStateType>,
     Same<z.output<typeof FleetItemStatusShape>, FleetItemStatusType>,
     Same<z.output<typeof FleetSyncOutcomeShape>, FleetSyncOutcomeType>,

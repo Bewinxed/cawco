@@ -308,7 +308,7 @@ const claudeFleet: Pick<
   Harness,
   "fleetHoldings" | "fleetStatus" | "syncFleet"
 > = {
-  syncFleet: (config) => syncFleetConfig(config),
+  syncFleet: (config, parts) => syncFleetConfig(config, parts),
   fleetStatus: () => fleetStatus(),
   fleetHoldings: () => fleetHoldings(),
 };

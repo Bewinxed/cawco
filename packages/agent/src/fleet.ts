@@ -61,6 +61,7 @@ import {
   claudeSkillsDir,
   fleetHarnessSetFile,
   fleetHooksDir,
+  fleetPlacedDir,
   placedMemoryDir,
   placedSkillsDir,
   projectClaudeDir,
@@ -89,6 +90,7 @@ import {
   hookGuardFile,
 } from "./fleet-hook-guard";
 import { apartSignedOut, readFleetMcpSet } from "./fleet-mcp-set";
+import { FLEET_PARTS, type FleetPart } from "./fleet-parts";
 import { expandHome } from "./fs";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
 import { markdownUnder } from "./placed-memory";
@@ -666,11 +668,11 @@ const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
 };
 
 /**
- * The toolchain, cached for this daemon's life and re-probed on every real
- * sync. A status read is answered from the cache because spawning a CLI per
- * status would make a passive read cost what an active one does; a sync
- * re-probes because that is the moment an operator has just changed something
- * and clicked to see whether it took.
+ * The toolchain, cached for this daemon's life and probed again on the
+ * machine's health tick ({@link probeToolchain}). A status read is answered
+ * from the cache because spawning a CLI per status would make a passive read
+ * cost what an active one does; no converge probes, so a delta that moves
+ * one item runs no CLI it does not need.
  */
 let toolchainCache: FleetToolchain | undefined;
 
@@ -3019,119 +3021,235 @@ export const placeFolder = (
     return { ...report, at: Date.now() };
   });
 
+/** What one part's converge leaves in the sidecar: its fields, a field it no longer keeps as `undefined`. */
+type SidecarFields = { [K in keyof Sidecar]?: Sidecar[K] | undefined };
+
+/** What one part's converge wrote, for the sidecar and the harness set. */
+interface PartWrote {
+  set?: Partial<FleetHarnessSet>;
+  sidecar: SidecarFields;
+}
+
+/**
+ * One part of Claude Code's converge (fleet-parts.ts): what it writes,
+ * which no other part does, and its converge, which reports each row it
+ * reached into `report` and answers its fields of the sidecar and the
+ * harness set.
+ */
+interface ConvergePart {
+  run: (
+    config: PlacedFleetConfig,
+    managed: Sidecar,
+    report: Required<
+      Pick<
+        FleetSyncReport,
+        "mcp" | "skills" | "memoryDocs" | "hooks" | "harnessConfig"
+      >
+    > &
+      FleetSyncReport
+  ) => Promise<PartWrote>;
+  writes: () => readonly string[];
+}
+
+/** Each part's converge, by the part (fleet-parts.ts `FleetPart`). */
+const PARTS: Record<FleetPart, ConvergePart> = {
+  mcp: {
+    writes: () => [CLAUDE_JSON, ...accountClaudeJsons()],
+    run: async (config, managed, report) => {
+      const cleaned = await dropWrittenMcp(
+        managed,
+        config.mcp.map((row) => row.name)
+      );
+      return {
+        sidecar: {
+          mcpServers: await reportMcp(config, managed, report.mcp),
+          // Kept until every file the fleet's servers were written into is clean.
+          ...(cleaned ? { mcp: undefined, placedMcp: undefined } : {}),
+        },
+      };
+    },
+  },
+  plugins: {
+    writes: () => [PLUGINS_DIR, VENDOR_ROOT, SETTINGS_PATH],
+    run: async (config, managed, report) => ({
+      sidecar: await syncPlugins(config, managed, report),
+    }),
+  },
+  skills: {
+    writes: () => [SKILLS_DIR],
+    run: async (config, managed, report) => ({
+      sidecar: {
+        skills: await syncSkillFiles(
+          SKILLS_DIR,
+          config.skills,
+          managed.skills,
+          report.skills
+        ),
+      },
+    }),
+  },
+  placedSkills: {
+    writes: () => [placedSkillsDir("<place>")],
+    run: async (config, managed, report) => {
+      const placedSkills = await syncPlacedSkills(
+        config.placedSkills,
+        managed.placedSkills,
+        report.skills
+      );
+      return {
+        sidecar: { placedSkills },
+        set: { placedSkills: setSkillsOf(placedSkills) },
+      };
+    },
+  },
+  memory: {
+    writes: () => [MEMORY_PATH],
+    run: async (config, managed, report) => ({
+      sidecar: {
+        memory: await syncMemory(
+          MEMORY_PATH,
+          config.memory,
+          managed.memory,
+          report
+        ),
+      },
+    }),
+  },
+  memoryDocs: {
+    writes: () => [MEMORIES_DIR],
+    // A fleet that keeps no memory links no documents either: the machine
+    // gives back the ones cawco wrote it.
+    run: async (config, managed, report) => ({
+      sidecar: {
+        memoryDocs: await syncMemoryDocs(
+          config.memory?.docs ?? [],
+          managed.memoryDocs,
+          report.memoryDocs
+        ),
+      },
+    }),
+  },
+  placedMemory: {
+    writes: () => [placedMemoryDir("<place>")],
+    run: async (config, managed, report) => ({
+      sidecar: {
+        placedMemory: await syncPlacedMemory(
+          config.placedMemory,
+          managed.placedMemory,
+          report.memoryDocs
+        ),
+      },
+    }),
+  },
+  hooks: {
+    writes: () => [HOOKS_DIR, SETTINGS_PATH, fleetHarnessSetFile()],
+    run: async (config, managed, report) => {
+      const hooks = await syncHooks(config.hooks, managed.hooks, report.hooks);
+      return { sidecar: { hooks: hooks.records }, set: hooks.set };
+    },
+  },
+  harnessConfig: {
+    writes: () => [fleetPlacedDir(), fleetHarnessSetFile()],
+    run: async (config, _managed, report) => {
+      const ready = await syncHarnessConfig(
+        config.harnessConfig,
+        report.harnessConfig
+      );
+      return {
+        sidecar: {
+          harnessConfigFailed: Object.fromEntries(
+            Object.entries(report.harnessConfig).filter(
+              ([, state]) => state.state === "failed"
+            )
+          ),
+        },
+        set: { config: ready },
+      };
+    },
+  },
+};
+
+/** The parts whose writes put a new entry in `~/.claude`, which each account's dir links to. */
+const USER_LAYER_PARTS: readonly FleetPart[] = [
+  "plugins",
+  "skills",
+  "memory",
+  "memoryDocs",
+  "hooks",
+];
+
+/**
+ * The parts `parts` of the fleet's config converged onto Claude Code's
+ * files, each by its own converge ({@link PARTS}), in the order
+ * {@link FLEET_PARTS} names them; every other part is left as the last
+ * converge of it wrote it. The sidecar and the harness set take each part's
+ * fields, every other field as it stands. Answers the report of those parts
+ * alone: a section of a part that did not run is empty, and the caller lays
+ * the parts that ran over its last report.
+ */
 const converge = async (
-  config: PlacedFleetConfig
+  config: PlacedFleetConfig,
+  parts: ReadonlySet<FleetPart>
 ): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
-  const skillStates: Record<string, FleetItemState> = {};
-  const docStates: Record<string, FleetItemState> = {};
-  const hookStates: Record<string, FleetItemState> = {};
-  const harnessStates: Record<string, FleetItemState> = {};
-  const report: FleetSyncReport = {
+  const report = {
     mcp: {},
     marketplaces: {},
     plugins: {},
-    skills: skillStates,
-    memoryDocs: docStates,
-    hooks: hookStates,
-    harnessConfig: harnessStates,
+    skills: {},
+    memoryDocs: {},
+    hooks: {},
+    harnessConfig: {},
     at: Date.now(),
-  };
-
-  const cleaned = await dropWrittenMcp(
-    managed,
-    config.mcp.map((row) => row.name)
+  } satisfies FleetSyncReport;
+  const sidecar: SidecarFields = {};
+  const set: Partial<FleetHarnessSet> = {};
+  const ran = FLEET_PARTS.filter((one) => parts.has(one));
+  for (const part of ran) {
+    const wrote = await PARTS[part].run(config, managed, report);
+    Object.assign(sidecar, wrote.sidecar);
+    Object.assign(set, wrote.set);
+  }
+  console.info(
+    `[fleet] Claude Code: ${ran.join(", ")} converged, into ${[...new Set(ran.flatMap((part) => PARTS[part].writes()))].join(", ")}`
   );
-  const mcpServers = await reportMcp(config, managed, report.mcp);
-  const installed = await syncPlugins(config, managed, report);
-  const skills = await syncSkillFiles(
-    SKILLS_DIR,
-    config.skills,
-    managed.skills,
-    skillStates
-  );
-  const placedSkills = await syncPlacedSkills(
-    config.placedSkills,
-    managed.placedSkills,
-    skillStates
-  );
-  const memory = await syncMemory(
-    MEMORY_PATH,
-    config.memory,
-    managed.memory,
-    report
-  );
-  // A fleet that keeps no memory links no documents either: the machine
-  // gives back the ones cawco wrote it.
-  const memoryDocs = await syncMemoryDocs(
-    config.memory?.docs ?? [],
-    managed.memoryDocs,
-    docStates
-  );
-  const placedMemory = await syncPlacedMemory(
-    config.placedMemory,
-    managed.placedMemory,
-    docStates
-  );
-  const hooks = await syncHooks(config.hooks, managed.hooks, hookStates);
   // What every CawCo session on this machine takes as it starts, written
-  // whole after the files it names (fleet-harness-set.ts).
-  const harnessConfig = await syncHarnessConfig(
-    config.harnessConfig,
-    harnessStates
-  );
-  await writeFleetHarnessSet({
-    ...hooks.set,
-    config: harnessConfig,
-    placedSkills: setSkillsOf(placedSkills),
-  });
+  // after the files it names (fleet-harness-set.ts): each part's entries,
+  // the rest as the set holds them.
+  if (Object.keys(set).length > 0) {
+    await writeFleetHarnessSet({ ...(await readFleetHarnessSet()), ...set });
+  }
   // The denials are the sync's own write, made as it arrived (denied-tools.ts
   // `applyFleetDenials`): kept as the sidecar holds them now, in the same
-  // turn of its writes, so a newer sync's list is never written back over.
-  await sidecarTurn(async () => {
-    const denials = await readFleetDenials();
-    await writeJson(SIDECAR, {
-      // Kept until every file the fleet's servers were written into is clean.
-      ...(cleaned
-        ? {}
-        : {
-            ...(managed.mcp ? { mcp: managed.mcp } : {}),
-            ...(managed.placedMcp ? { placedMcp: managed.placedMcp } : {}),
-          }),
-      mcpServers,
-      ...installed,
-      skills,
-      ...(denials.kind === "known"
-        ? { deniedTools: [...denials.denials.deniedTools] }
-        : {}),
-      ...(memory ? { memory } : {}),
-      memoryDocs,
-      hooks: hooks.records,
-      harnessConfigFailed: Object.fromEntries(
-        Object.entries(harnessStates).filter(
-          ([, state]) => state.state === "failed"
-        )
-      ),
-      placedMemory,
-      placedSkills,
-    } satisfies Sidecar);
-  });
+  // turn of its writes, so a newer sync's list is never written back over;
+  // so is every field of a part that did not run.
+  if (Object.keys(sidecar).length > 0) {
+    await sidecarTurn(async () => {
+      const [now, denials] = await Promise.all([
+        readSidecar(),
+        readFleetDenials(),
+      ]);
+      await writeJson(SIDECAR, {
+        ...now,
+        ...sidecar,
+        ...(denials.kind === "known"
+          ? { deniedTools: [...denials.denials.deniedTools] }
+          : {}),
+      } satisfies SidecarFields);
+    });
+  }
   // Every account's Claude Code reads its user layer from its own dir: the
   // entries `~/.claude` gained this sync are linked in there too.
-  await Promise.all(
-    accountIds().map((account) =>
-      linkUserLayer(account).catch((error: unknown) =>
-        console.warn(`[fleet] account ${account}: ${said(error)}`)
+  if (USER_LAYER_PARTS.some((part) => parts.has(part))) {
+    await Promise.all(
+      accountIds().map((account) =>
+        linkUserLayer(account).catch((error: unknown) =>
+          console.warn(`[fleet] account ${account}: ${said(error)}`)
+        )
       )
-    )
-  );
-
-  const toolchain = await machineToolchain(true);
-  return {
-    ...report,
-    ...(toolchain.claude ? { toolchain } : {}),
-    at: Date.now(),
-  };
+    );
+  }
+  return { ...report, at: Date.now() };
 };
 
 /**
@@ -3154,13 +3272,22 @@ export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> => {
 };
 
 /**
- * Applies the fleet's desired state to this machine and answers with what every
- * entry in it came to. Idempotent: a second sync with the same config writes the
- * same file and runs no CLI at all.
+ * Applies the parts `parts` of the fleet's desired state to this machine
+ * ({@link converge}) and answers with what every entry of them came to.
+ * Idempotent: a second sync with the same config writes the same file and
+ * runs no CLI at all.
  */
 export const syncFleetConfig = (
-  config: PlacedFleetConfig
-): Promise<FleetSyncReport> => inFleetQueue(() => converge(config));
+  config: PlacedFleetConfig,
+  parts: ReadonlySet<FleetPart>
+): Promise<FleetSyncReport> => inFleetQueue(() => converge(config, parts));
+
+/**
+ * Every `claude` on this machine with its version, read now: a probe, run on
+ * the machine's health tick (session.ts `#healthTick`), never by a converge.
+ */
+export const probeToolchain = (): Promise<FleetToolchain> =>
+  machineToolchain(true);
 
 /**
  * One fleet hook as a status reads it: its script where cawco wrote one,

@@ -1,7 +1,7 @@
 /**
  * A fleet sync that changes nothing a workspace's boundary reads hands
  * nothing over, and a form that moved never ends a command that runs (agent
- * boundary.ts `rearmMoved`, `syncedPresence`, `stopBoundary`). On a scratch
+ * boundary.ts `rearmMoved`, fleet-converged.ts `syncedHeld`, `stopBoundary`). On a scratch
  * fleet (real hub, agent and sessiond; Claude Code against the mock model),
  * boundaries included: run it where a workspace boundary can start.
  *
@@ -21,11 +21,12 @@
  *    binds whole. The agent converges it and logs no form move and no
  *    hand-over for D's workspace; D's boundary is the one it had, and its
  *    synced form part is the one it started with.
- * 2. The hooks dir taken away and made again by the next sync (a later inode
- *    under the boundary's bind): the agent logs D's form moved once, naming
- *    the part `synced`, and keeps the boundary while the command runs, as it
- *    records.
- * 3. A third sync, quiet again: no second form-moved line for D.
+ * 2. A fleet-wide hook (scope `user`), which the sync registers in
+ *    `~/.claude/settings.json`, a file D's boundary binds as it stood: the
+ *    agent logs D's form moved once, naming the part `synced`, and keeps the
+ *    boundary while the command runs, as it records.
+ * 3. A third sync, the project's hook again, quiet: no second form-moved
+ *    line for D.
  * 4. The command finishes with its own exit code, 7, in the boundary it
  *    started in (`FG-STATUS-7`, never the executor's cut-off line).
  * 5. Once it has ended, D resting, the boundary is handed over, as the agent
@@ -34,8 +35,8 @@
  *
  *   bun scripts/probe-kit/run.ts fleet-sync-quiet
  */
-import { existsSync, statSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
 import { readWithin } from "../../../packages/core/src/bounded";
@@ -163,16 +164,6 @@ const heldOf = async (
     pid?: number;
   };
 
-/** The fleet's hooks dir on the scratch machine (core `fleetHooksDir`). */
-const hooksDirOf = (fleet: Fleet): string =>
-  join(fleet.env.XDG_DATA_HOME as string, "cawco", "fleet-hooks");
-
-/** What a bind of the hooks dir holds: its device and inode, or none. */
-const inodeOf = (path: string): string | undefined => {
-  const held = statSync(path, { throwIfNoEntry: false });
-  return held ? `${held.dev}:${held.ino}` : undefined;
-};
-
 /** A decision, or several, in a check's words. */
 const decisionSaid = (
   decision: BoundaryDecision | readonly BoundaryDecision[] | undefined
@@ -274,9 +265,6 @@ const run = async (kit: Kit) => {
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
-  // There before D's boundary starts, as every converge makes it (agent
-  // fleet.ts `syncHooks`): a dir made only after would be a form part moved.
-  await mkdir(hooksDirOf(fleet), { recursive: true });
   const d = await fleet.api<{
     instanceId: string;
     workItemId: string;
@@ -314,19 +302,21 @@ const run = async (kit: Kit) => {
     `started: ${started}; its boundary ${JSON.stringify(ran)}`
   );
 
-  // 1: a hook placed: the sync writes its script into the hooks dir the
-  // boundary binds whole, and moves nothing the boundary's form reads.
+  // 1: a project's hook placed: the sync writes its script into the hooks
+  // dir the boundary binds whole, and moves nothing the boundary's form
+  // reads.
   const hookId = crypto.randomUUID();
-  const hook = (name: string) =>
-    hubCall(fleet, "PUT", `/api/fleet/hooks/${hookId}`, {
+  const hookAs = (row: string, scope: "project" | "user", name: string) =>
+    hubCall(fleet, "PUT", `/api/fleet/hooks/${row}`, {
       enabled: true,
       handler: { type: "command" },
-      scope: "project",
-      projectId: project.id,
+      scope,
+      ...(scope === "project" ? { projectId: project.id } : {}),
       name,
       event: "Notification",
       script: `#!${systemProgram("bash")}\nexit 0`,
     });
+  const hook = (name: string) => hookAs(hookId, "project", name);
   const quiet = await synced(fleet, () => hook("quiet probe hook"));
   const afterQuiet = await heldOf(home, id);
   kit.check(
@@ -339,13 +329,11 @@ const run = async (kit: Kit) => {
     `sync taken: ${quiet.took}; form-moved lines: ${movedLines(quiet.log, id).join(" | ") || "none"}; hand-over lines: ${handOverLines(quiet.log, id).join(" | ") || "none"}; boundary ${ran.pid}/${ran.gen} → ${afterQuiet.pid}/${afterQuiet.gen}`
   );
 
-  // 2: the hooks dir taken away under the boundary and made again by the
-  // next sync: a later inode under its bind, a form part it reads.
-  const hooksDir = hooksDirOf(fleet);
-  const dirBefore = inodeOf(hooksDir);
-  await rm(hooksDir, { recursive: true, force: true });
-  const moved = await synced(fleet, () => hook("quiet probe hook, again"));
-  const dirAfter = inodeOf(hooksDir);
+  // 2: a fleet-wide hook: the sync registers it in the user settings, a
+  // file the boundary binds as it stood, so a form part it reads moved.
+  const moved = await synced(fleet, () =>
+    hookAs(crypto.randomUUID(), "user", "fleet-wide probe hook")
+  );
   const movedSaid = movedLines(moved.log, id);
   const keptWhile = (await decisionsOf(home, id)).findLast(
     (one) =>
@@ -355,15 +343,13 @@ const run = async (kit: Kit) => {
   );
   const afterMoved = await heldOf(home, id);
   kit.check(
-    "2: the hooks dir made again under D's boundary: the agent says its form moved once, naming the synced part, and keeps the boundary while its command runs",
+    "2: a fleet-wide hook registered in the settings D's boundary binds: the agent says its form moved once, naming the synced part, and keeps the boundary while its command runs",
     moved.took &&
-      dirAfter !== undefined &&
-      dirAfter !== dirBefore &&
       movedSaid.length === 1 &&
       movedSaid[0]?.includes("synced") === true &&
       keptWhile !== undefined &&
       afterMoved.pid === ran.pid,
-    `sync taken: ${moved.took}; hooks dir ${dirBefore} → ${dirAfter}; form-moved lines: ${movedSaid.join(" | ") || "none"}; ${decisionSaid(keptWhile)}; boundary ${ran.pid} → ${afterMoved.pid}`
+    `sync taken: ${moved.took}; form-moved lines: ${movedSaid.join(" | ") || "none"}; ${decisionSaid(keptWhile)}; boundary ${ran.pid} → ${afterMoved.pid}`
   );
 
   // 3: another quiet sync while the command still runs: said once is enough.

@@ -1,15 +1,17 @@
 /**
  * What this agent holds of the fleet: every item the hub's deltas carried
  * (core fleet-items.ts), by id, with its hash and the rev it was last
- * acknowledged at. A delta is held as it arrives, before the agent answers
- * it; the config the harnesses converge is joined from the items here, and
- * only a delta that moved an item (or a person's Sync) sends one to
- * converge. Its own register says what it holds (`fleetHeld`), so a hub that
- * restarted sends only what moved since. In memory only: an agent that
- * starts again holds nothing and is sent every item, which its harnesses
- * converge by hash and leave as they are. The project rows among them are
- * also kept on disk (fleet-place.ts `keepProjectRows`), for a workspace cut
- * before that welcome.
+ * acknowledged at, beside what its harnesses last converged
+ * (fleet-converged.ts), which is kept on disk. A delta is held as it
+ * arrives, before the agent answers it; an item it carries is moved only
+ * when its hash is not the one last converged (or a person's Overwrite
+ * forces it), so only the parts it moved converge (fleet-parts.ts), and an
+ * agent that starts again converges only what moved while it was away. Its
+ * own register says what it holds (`fleetHeld`), so a hub that restarted
+ * sends only what moved since. The items themselves are in memory only: an
+ * agent that starts again is sent every item. The project rows among them
+ * are also kept on disk (fleet-place.ts `keepProjectRows`), for a workspace
+ * cut before that welcome.
  */
 import {
   type FleetDelta,
@@ -29,6 +31,11 @@ import {
   reportKeyOf,
 } from "@cawco/core/fleet-items";
 import { unhandled } from "@cawco/core/unhandled";
+import {
+  type FleetConverged,
+  keepConverged,
+  readConverged,
+} from "./fleet-converged";
 
 /** What a delta moved: the items it changed or forced, the ones it took away, and whether the policy is among them. */
 export interface DeltaApplied {
@@ -43,6 +50,16 @@ export class FleetDesired {
   /** Items a person's Overwrite forced, kept forced until a converge has written them. */
   readonly #forced = new Set<string>();
   #rev: number | undefined;
+  /** What the harnesses last converged, as the disk keeps it: the basis every delta's items are judged moved against. */
+  #converged: FleetConverged = { items: {} };
+  /** Once what the disk keeps is read: every delta waits for it. */
+  readonly loaded: Promise<void>;
+
+  constructor() {
+    this.loaded = readConverged().then((converged) => {
+      this.#converged = converged;
+    });
+  }
 
   /** What the register says this agent holds; none before its first delta. */
   held(): FleetHeld | undefined {
@@ -62,15 +79,25 @@ export class FleetDesired {
     return policy?.deniedTools;
   }
 
-  /** Holds `delta`'s items: what it moved, forced or took away. */
+  /** The report the machine last sent, as the disk keeps it; none before its first converge. */
+  get report(): FleetSyncReport | undefined {
+    return this.#converged.report;
+  }
+
+  /**
+   * Holds `delta`'s items: each whose hash is not the one last converged, or
+   * that is forced, as moved; each it takes away, and for a whole one each
+   * held or converged that it does not name, as removed.
+   */
   apply(delta: FleetDelta): DeltaApplied {
     const changed: string[] = [];
     const removed: string[] = [];
     const named = new Set<string>();
+    const converged = this.#converged.items;
     for (const item of delta.items) {
       named.add(item.id);
       if (item.value === null) {
-        if (this.#items.delete(item.id)) {
+        if (this.#items.delete(item.id) || item.id in converged) {
           removed.push(item.id);
         }
         this.#hashes.delete(item.id);
@@ -80,14 +107,17 @@ export class FleetDesired {
       if (item.force) {
         this.#forced.add(item.id);
       }
-      if (this.#hashes.get(item.id) !== item.hash || item.force) {
+      if (converged[item.id] !== item.hash || item.force) {
         changed.push(item.id);
       }
       this.#items.set(item.id, item.value);
       this.#hashes.set(item.id, item.hash);
     }
     if (delta.full) {
-      for (const id of [...this.#items.keys()]) {
+      for (const id of new Set([
+        ...this.#items.keys(),
+        ...Object.keys(converged),
+      ])) {
         if (!named.has(id)) {
           this.#items.delete(id);
           this.#hashes.delete(id);
@@ -103,6 +133,11 @@ export class FleetDesired {
   /** Every item id held now. */
   ids(): string[] {
     return [...this.#items.keys()];
+  }
+
+  /** Whether item `id` is held now. */
+  has(id: string): boolean {
+    return this.#items.has(id);
   }
 
   /** The project items held now (core `projectItemOf`), by id: what the disk keeps of them. */
@@ -129,11 +164,56 @@ export class FleetDesired {
     return fleetConfigOf(items);
   }
 
-  /** A converge wrote these items: a force on any of them is spent. */
-  converged(ids: readonly string[]): void {
+  /**
+   * A converge came to `statuses` over `ids` and to `report`: a force on any
+   * of them is spent, each that came out ok is converged at its hash, each no
+   * longer held is converged away, and the report is the one kept. Kept on
+   * disk; a write that fails is said, and the next converge writes again.
+   */
+  converged(
+    ids: readonly string[],
+    statuses: readonly FleetItemStatus[],
+    report: FleetSyncReport | undefined
+  ): void {
+    const items = { ...this.#converged.items };
     for (const id of ids) {
       this.#forced.delete(id);
+      if (!this.#items.has(id)) {
+        delete items[id];
+      }
     }
+    for (const status of statuses) {
+      if (status.state === "ok" && this.#items.has(status.id)) {
+        items[status.id] = status.hash;
+      }
+    }
+    this.#keep({ items, report: report ?? this.#converged.report });
+  }
+
+  /** The policy held now was written (denied-tools.ts `applyFleetDenials`): converged at its hash. */
+  policyWritten(): void {
+    const hash = this.#hashes.get("policy");
+    if (hash === undefined || this.#converged.items.policy === hash) {
+      return;
+    }
+    this.#keep({
+      ...this.#converged,
+      items: { ...this.#converged.items, policy: hash },
+    });
+  }
+
+  /** `report` is the machine's last one sent: a status read, or a clone's placement laid over the last. */
+  reported(report: FleetSyncReport): void {
+    this.#keep({ ...this.#converged, report });
+  }
+
+  #keep(converged: FleetConverged): void {
+    this.#converged = converged;
+    keepConverged(converged).catch((error: unknown) =>
+      console.warn(
+        `[fleet] what the machine converged was not kept on disk, so its next start converges those items again: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
   }
 }
 

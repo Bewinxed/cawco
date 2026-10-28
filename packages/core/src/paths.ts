@@ -219,6 +219,17 @@ export const fleetProjectRowsFile = (): string =>
   join(cawcoDataDir(), "fleet-project-rows.json");
 
 /**
+ * What this machine's harnesses last converged of the fleet (agent
+ * fleet-converged.ts): each item's hash as a converge wrote it, and the
+ * report that converge came to. The converge's basis (an item whose hash
+ * the file already holds is not written again, through a restart too), and
+ * what a workspace boundary's form names of what the fleet sync wrote
+ * (agent boundary.ts `SYNCED_PART`).
+ */
+export const fleetConvergedFile = (): string =>
+  join(cawcoDataDir(), "fleet-converged.json");
+
+/**
  * Where the fleet sync writes each OpenCode plugin's and pi extension's
  * module, and installs each one's npm package (agent
  * fleet-harness-config.ts): files of CawCo's own, loaded by the OpenCode
@@ -249,9 +260,10 @@ export const fleetHarnessSetFile = (): string =>
  * workspace session's harness runs inside its boundary. A Linux boundary
  * binds a file as the file it was when the boundary started, and the sync
  * writes a file whole (a new inode), so a boundary in use keeps the old one
- * until it is handed over: each of these is in its form, a file by its
- * content (agent boundary.ts `syncedPresence`), and a sync that changes one
- * hands every boundary in use over as its work ends. On 2026-10-25 running
+ * until it is handed over: each of these is in its form, named by the
+ * hashes of the fleet items converged into it (agent fleet-converged.ts
+ * `syncedHeld`), and a sync that changes one hands every boundary in use
+ * over as its work ends. On 2026-10-25 running
  * boundaries read the CLAUDE.md of their start until each restarted. Its
  * dir is no bind instead: `~/.claude` holds a session's credential and
  * transcripts too. Every workspace reads each and writes none

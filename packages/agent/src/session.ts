@@ -150,6 +150,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import { detach } from "@cawco/core/detach";
+import type { FleetItemKind } from "@cawco/core/fleet-items";
 import { ARTIFACT_PICTURE } from "@cawco/core/frames";
 import { measureMemoryRoom } from "@cawco/core/machine-room";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -194,16 +195,24 @@ import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
 import { forgetFirstSession } from "./first-session";
-import { hashText, placeFolder, readJson } from "./fleet";
+import { hashText, placeFolder, probeToolchain, readJson } from "./fleet";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
-import { readFleetMcpSet, writeFleetMcpSet } from "./fleet-mcp-set";
+import { readFleetMcpSet, within, writeFleetMcpSet } from "./fleet-mcp-set";
 import {
+  FLEET_PARTS,
+  type FleetMoves,
+  type FleetPart,
+  movesOf,
+} from "./fleet-parts";
+import {
+  type FleetPlace,
   keepProjectRows,
   keptProjectRows,
   placedConfig,
   place as placeRowsAt,
   placesNow,
 } from "./fleet-place";
+import { laidOver } from "./fleet-report";
 import { expandHome, runFs } from "./fs";
 import type {
   Harness,
@@ -551,6 +560,12 @@ const custodyProbe = async <T>(
  * (`CONTROL_TIMEOUT_MS`), so the harnesses that answered still reach it.
  */
 const HARNESS_LISTING_MS = 10_000;
+
+/**
+ * How often the machine's fleet probes run (`#healthTick`): every `claude`'s
+ * version and the fleet content on its disk, which no converge reads.
+ */
+const HEALTH_MS = 10 * 60_000;
 
 /** How often a start that waits for a turn's end looks at it ({@link SessionSupervisor.#turnEnded}). */
 const TURN_END_LOOK_MS = 250;
@@ -1116,9 +1131,10 @@ export class SessionSupervisor {
   readonly #desired = new FleetDesired();
   /** The machine's last fleet report sent, which a clone's placement adds its place to ({@link placeClone}). */
   #lastReport: FleetSyncReport | undefined;
-  /** The items deltas moved since the last converge began, and whether one took any away. */
+  /** The machine's probe tick ({@link #healthSoon}), once its agent has taken a delta. */
+  #healthTimer: ReturnType<typeof setInterval> | undefined;
+  /** The items deltas moved or took away since the last converge began. */
   readonly #convergeIds = new Set<string>();
-  #convergeRemoved = false;
   /** A person's Sync: the next converge takes every item, changed or not. */
   #reconvergeValue = false;
   get #reconverge(): boolean {
@@ -1459,10 +1475,10 @@ export class SessionSupervisor {
       }
     }
     if (control?.method === FLEET_DELTA && control.requestId) {
-      this.#fleetDenials.set(
-        control.requestId,
-        this.#holdDelta(control.args?.[0] as FleetDelta)
-      );
+      const held = this.#holdDelta(control.args?.[0] as FleetDelta);
+      // Awaited by the delta's answer, which says a failure.
+      held.catch(() => undefined);
+      this.#fleetDenials.set(control.requestId, held);
     }
     const imageRequest =
       control?.method === GENERATE_IMAGE ? control.requestId : undefined;
@@ -2926,7 +2942,7 @@ export class SessionSupervisor {
       console.info(
         `[custody] ${instanceId}: answered after its attach: ${mode === undefined ? "no stored mode" : `in its stored mode (${mode})`}, its credential proved`
       );
-      this.#healFleetMcp([instanceId]);
+      this.#healFleetMcp([{ instanceId, mcp: true, settings: true }]);
     } catch (problem) {
       if (stopped?.aborted || this.#sessions.get(instanceId) !== session) {
         return;
@@ -5564,37 +5580,76 @@ export class SessionSupervisor {
 
   /**
    * Asks each named live Claude session, one after another, to take again
-   * every fleet server the hub proxies that it holds broken: failed, or
-   * connected with none of the tools the proxy lists (claude.ts
-   * `#healFleetMcp`). After a fleet sync and at an attach, which every
-   * session meets at an agent restart, so sessions a past burst left without
-   * a server's tools heal with no new sign-in. Then each takes the fleet's
-   * hooks and Claude Code settings placed at its folder again (claude.ts
-   * `#takeFleetSettings`), so one placed while it runs reaches its next
-   * tool call, as OpenCode's and pi's read the set at each call. One at a
-   * time, so a pass over a machine's sessions is never a burst of its own.
-   * Nothing waits on it.
+   * what of the fleet it reads that moved: with `mcp`, every fleet server
+   * the hub proxies that it holds broken: failed, or connected with none of
+   * the tools the proxy lists (claude.ts `#healFleetMcp`); with `settings`,
+   * the fleet's hooks and Claude Code settings placed at its folder
+   * (claude.ts `#takeFleetSettings`), so one placed while it runs reaches its
+   * next tool call, as OpenCode's and pi's read the set at each call. At an
+   * attach, which every session meets at an agent restart, both, so sessions
+   * a past burst left without a server's tools heal with no new sign-in;
+   * after a converge, each only as what it reads moved
+   * ({@link #convergeSoon}). One at a time, so a pass over a machine's
+   * sessions is never a burst of its own. Nothing waits on it.
    */
-  #healFleetMcp(instanceIds: string[]): void {
+  #healFleetMcp(
+    asks: readonly { instanceId: string; mcp: boolean; settings: boolean }[]
+  ): void {
     this.#healing = this.#healing.then(async () => {
-      for (const instanceId of instanceIds) {
+      for (const { instanceId, mcp, settings } of asks) {
         const session = this.#sessions.get(instanceId);
         if (session?.harness !== "claude") {
           continue;
         }
-        try {
-          await session.control(CONTROL_MCP_FLEET_HEAL, []);
-        } catch (error) {
-          warn(`fleet MCP heal of ${instanceId} failed: ${errorText(error)}`);
+        if (mcp) {
+          try {
+            await session.control(CONTROL_MCP_FLEET_HEAL, []);
+          } catch (error) {
+            warn(`fleet MCP heal of ${instanceId} failed: ${errorText(error)}`);
+          }
         }
-        try {
-          await session.control(CONTROL_FLEET_SETTINGS, []);
-        } catch (error) {
-          warn(
-            `the fleet's hooks and settings did not reach ${instanceId}: ${errorText(error)}`
-          );
+        if (settings) {
+          try {
+            await session.control(CONTROL_FLEET_SETTINGS, []);
+          } catch (error) {
+            warn(
+              `the fleet's hooks and settings did not reach ${instanceId}: ${errorText(error)}`
+            );
+          }
         }
       }
+    });
+  }
+
+  /**
+   * The live sessions what converge `moves` wrote reaches, and what of it
+   * each reads: the fleet's servers every session, a project's placed
+   * copies the sessions in its `places`; the fleet's hooks and settings
+   * every session, a project's those in its places.
+   */
+  #reachedBy(
+    moves: FleetMoves,
+    places: readonly FleetPlace[]
+  ): { instanceId: string; mcp: boolean; settings: boolean }[] {
+    const movedAt = (parts: readonly FleetPart[]): string[] =>
+      places
+        .filter((one) => {
+          const moved = moves.projects.get(one.projectId);
+          return moved !== undefined && parts.some((part) => moved.has(part));
+        })
+        .map((one) => one.path);
+    const mcpAt = movedAt(["mcp"]);
+    const settingsAt = movedAt(["hooks", "harnessConfig"]);
+    const wideMcp = moves.wide.has("mcp");
+    const wideSettings =
+      moves.wide.has("hook") || moves.wide.has("harnessConfig");
+    return [...this.#sessions.keys()].flatMap((instanceId) => {
+      const cwd = this.#resumable.get(instanceId)?.cwd;
+      const inside = (paths: readonly string[]): boolean =>
+        cwd !== undefined && paths.some((path) => within(cwd, path));
+      const mcp = wideMcp || inside(mcpAt);
+      const settings = wideSettings || inside(settingsAt);
+      return mcp || settings ? [{ instanceId, mcp, settings }] : [];
     });
   }
 
@@ -5616,12 +5671,13 @@ export class SessionSupervisor {
    * else (denied-tools.ts `applyFleetDenials`) and before the agent answers.
    * The items it moved wait for the next converge ({@link #convergeSoon}).
    */
-  #holdDelta(delta: FleetDelta | undefined): Promise<void> {
+  async #holdDelta(delta: FleetDelta | undefined): Promise<void> {
     if (!delta || typeof delta.rev !== "number") {
-      return Promise.resolve();
+      return;
     }
+    await this.#desired.loaded;
     const applied = this.#desired.apply(delta);
-    for (const id of applied.changed) {
+    for (const id of [...applied.changed, ...applied.removed]) {
       if (id !== "policy") {
         this.#convergeIds.add(id);
       }
@@ -5636,16 +5692,17 @@ export class SessionSupervisor {
     ) {
       this.#keepProjectRows();
     }
-    this.#convergeRemoved ||= applied.removed.length > 0;
     this.#reconvergeValue ||= delta.reconverge === true;
     const denied = this.#desired.deniedTools;
     if (denied && (applied.policy || delta.welcome)) {
-      const write = applyFleetDenials(denied);
       // Awaited by the delta's answer; a failure is said there.
-      write.catch(() => undefined);
-      return write;
+      await applyFleetDenials(denied);
+      this.#desired.policyWritten();
+      // The policy is in `~/.claude/settings.json`, which a boundary binds.
+      if (applied.policy) {
+        rearmBoundaries("the fleet's policy");
+      }
     }
-    return Promise.resolve();
   }
 
   /**
@@ -5764,10 +5821,10 @@ export class SessionSupervisor {
    * A clone's placement (`placed`, keyed per place) sent to the hub in the
    * machine's report: the last one with each placed row's state at the
    * clone's place put in. None before the machine's first report, which
-   * its welcome's converge sends with every place.
+   * the disk keeps through a restart (fleet-converged.ts).
    */
   #reportPlaced(placed: FleetSyncReport): void {
-    const last = this.#lastReport;
+    const last = this.#lastReport ?? this.#desired.report;
     if (!last) {
       return;
     }
@@ -5784,13 +5841,19 @@ export class SessionSupervisor {
     }
     const report: FleetSyncReport = { ...last, placed: merged, at: Date.now() };
     this.#lastReport = report;
+    this.#desired.reported(report);
+    this.#sendReport(report, null);
+  }
+
+  /** The machine's fleet report to the hub: one a converge reached (`rev`), or one read unasked (`null`). */
+  #sendReport(report: FleetSyncReport, rev: number | null): void {
     this.emit({
       verb: "frames",
       machineId: "",
       payload: {
         kind: "fleet_report",
         report,
-        rev: null,
+        rev,
       } satisfies FleetReportFrame,
     });
   }
@@ -5815,29 +5878,35 @@ export class SessionSupervisor {
    * The items deltas moved, converged in one pass once the passes before it
    * are done ({@link #fleetTurn}): each said running as it begins and ok or
    * failed, in the harness's words, as it ends. A delta that comes while one
-   * is queued joins it. A delta that moved nothing but the policy converges
-   * nothing; one a person asked for (`reconverge`) converges every item.
+   * is queued joins it. Only the parts those items move are converged
+   * (fleet-parts.ts), and only what read them is told: a live session takes
+   * the fleet's servers or settings again only when they, or its own place's
+   * copies, moved ({@link #reachedBy}), and the boundaries in use are looked
+   * at only when an item they bind moved ({@link BOUND_KINDS}). A delta that
+   * moved nothing but the policy converges nothing; one a person asked for
+   * (`reconverge`) converges every part.
    */
   #convergeSoon(): void {
-    const owed =
-      this.#convergeIds.size > 0 || this.#convergeRemoved || this.#reconverge;
+    const owed = this.#convergeIds.size > 0 || this.#reconverge;
     if (this.#convergeOwed || !owed) {
       return;
     }
     this.#convergeOwedValue = true;
     this.#fleetTurn(async () => {
       this.#convergeOwedValue = false;
-      const held = new Set(this.#desired.ids());
-      const ids = (
-        this.#reconverge ? [...held] : [...this.#convergeIds]
-      ).filter((id) => held.has(id) && id !== "policy");
+      const all = this.#reconverge;
+      const ids = (all ? this.#desired.ids() : [...this.#convergeIds]).filter(
+        (id) => id !== "policy"
+      );
       this.#convergeIds.clear();
-      this.#convergeRemoved = false;
       this.#reconvergeValue = false;
+      const moves = movesOf(ids, all);
+      // Said item by item: the ones held; one taken away is said gone.
+      const held = ids.filter((id) => this.#desired.has(id));
       const rev = this.#desired.rev ?? 0;
       this.#converging(
         rev,
-        ids.map((id) => ({
+        held.map((id) => ({
           id,
           hash: this.#desired.hashOf(id),
           state: "running" as const,
@@ -5846,12 +5915,17 @@ export class SessionSupervisor {
       const started = Date.now();
       let report: FleetSyncReport | undefined;
       let thrown: string | undefined;
+      let places: FleetPlace[] = [];
       try {
         // Each project's rows at each of its places here now: its
         // checkouts, and the clones of its workspaces this agent cut.
         const holding = this.#desired.config();
-        const config = placedConfig(holding, await placesNow(holding.projects));
-        report = await this.#syncFleet(config, "syncFleet");
+        places = await placesNow(holding.projects);
+        report = await this.#syncFleet(
+          placedConfig(holding, places),
+          "syncFleet",
+          moves.parts
+        );
         if (this.#harnessFailures.size > 0) {
           thrown = [...this.#harnessFailures]
             .map(([harness, error]) => `${harness}: ${error}`)
@@ -5863,26 +5937,75 @@ export class SessionSupervisor {
       if (thrown) {
         warn(`the fleet's rev ${rev} did not converge: ${thrown}`);
       }
-      this.#desired.converged(ids);
-      this.#converging(
-        rev,
-        itemStatuses(this.#desired, ids, report, Date.now() - started, thrown)
+      const statuses = itemStatuses(
+        this.#desired,
+        held,
+        report,
+        Date.now() - started,
+        thrown
       );
+      this.#desired.converged(ids, statuses, report);
+      this.#converging(rev, statuses);
       if (report) {
-        this.emit({
-          verb: "frames",
-          machineId: "",
-          payload: {
-            kind: "fleet_report",
-            report,
-            rev,
-          } satisfies FleetReportFrame,
-        });
+        this.#sendReport(report, rev);
       }
-      this.#healFleetMcp([...this.#sessions.keys()]);
-      rearmBoundaries();
+      this.#healFleetMcp(this.#reachedBy(moves, places));
+      const bound = [...moves.wide].filter((kind) => BOUND_KINDS.has(kind));
+      if (
+        bound.length > 0 ||
+        [...moves.projects.values()].some(
+          (parts) => parts.has("hooks") || parts.has("mcp")
+        )
+      ) {
+        rearmBoundaries(bound.join(", ") || "a project's hooks or servers");
+      }
     }).catch((error: unknown) =>
       warn(`the fleet converge failed: ${errorText(error)}`)
+    );
+  }
+
+  /**
+   * The machine's probes, read on a tick of their own and never by a
+   * converge: every `claude` with its version (the report's `toolchain`)
+   * and what the disk holds of the fleet's content (`have`). The first runs
+   * as the machine's agent takes its first delta; each that reads something
+   * other than the last report says is sent laid over it.
+   */
+  #healthSoon(): void {
+    if (this.#healthTimer) {
+      return;
+    }
+    this.#healthTimer = setInterval(() => this.#healthTick(), HEALTH_MS);
+    this.#healthTimer.unref();
+    this.#healthTick();
+  }
+
+  #healthTick(): void {
+    this.#fleetTurn(async () => {
+      const [toolchain, have] = await Promise.all([
+        probeToolchain(),
+        fleetHoldings(),
+      ]);
+      const last = this.#lastReport ?? this.#desired.report;
+      const probed = toolchain.claude ? toolchain : undefined;
+      if (
+        !last ||
+        (JSON.stringify(last.toolchain) === JSON.stringify(probed) &&
+          JSON.stringify(last.have) === JSON.stringify(have))
+      ) {
+        return;
+      }
+      const report: FleetSyncReport = {
+        ...last,
+        ...(probed ? { toolchain: probed } : {}),
+        have,
+        at: Date.now(),
+      };
+      this.#lastReport = report;
+      this.#desired.reported(report);
+      this.#sendReport(report, null);
+    }).catch((error: unknown) =>
+      warn(`the machine's fleet probes were not read: ${errorText(error)}`)
     );
   }
 
@@ -5908,16 +6031,7 @@ export class SessionSupervisor {
       if (!(await isMachineAgent())) {
         return;
       }
-      const report = await this.#syncFleet(undefined, "fleetStatus");
-      this.emit({
-        verb: "frames",
-        machineId: "",
-        payload: {
-          kind: "fleet_report",
-          report,
-          rev: null,
-        } satisfies FleetReportFrame,
-      });
+      this.#sendReport(await this.#syncFleet(undefined, "fleetStatus"), null);
     }).catch((error: unknown) =>
       warn(`the fleet report was not read again: ${errorText(error)}`)
     );
@@ -6063,24 +6177,35 @@ export class SessionSupervisor {
       : local;
   }
 
-  /** Converges the fleet across every harness that has a profile, merged into one report. */
+  /**
+   * Converges the parts `parts` of the fleet across every harness that has
+   * a profile (`syncFleet`), or reads what every harness has of it
+   * (`fleetStatus`), merged into one report. A converge's is laid over the
+   * machine's last report (fleet-report.ts `laidOver`): only its parts'
+   * sections are new. Only a converge of the servers (`mcp`) launches the
+   * fleet's servers and writes the set every session takes; only one of the
+   * skills or plugins reads what the disk holds of them (`have`).
+   */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
     incoming: PlacedFleetConfig | undefined,
-    which: "syncFleet" | "fleetStatus"
+    which: "syncFleet" | "fleetStatus",
+    parts: ReadonlySet<FleetPart> = new Set(FLEET_PARTS)
   ): Promise<FleetSyncReport> {
+    const servers = incoming !== undefined && parts.has("mcp");
     // The daemon's connection names a hub reachable from this machine.
-    if (incoming) {
+    if (servers) {
       this.#mcpLauncherStates.clear();
     }
     // The fleet's shared servers, run once for the machine by its gateway
     // (mcp-host.ts): each harness dials the gateway for them.
     const hosted: { name: string; config: HostedConfig }[] = [];
-    const config = incoming && {
-      ...incoming,
-      ...(await this.#launchRows(incoming, hosted)),
-    };
-    if (config) {
+    const config =
+      incoming &&
+      (servers
+        ? { ...incoming, ...(await this.#launchRows(incoming, hosted)) }
+        : incoming);
+    if (config && servers) {
       mcpHost.configure(hosted);
       // What every CawCo session on Claude Code and pi loads from now on,
       // written before any harness converges: a session started while the
@@ -6157,7 +6282,8 @@ export class SessionSupervisor {
                   await adapter.syncFleet!(
                     (adapter.capabilities.mcpStatus
                       ? config
-                      : incoming) as PlacedFleetConfig
+                      : incoming) as PlacedFleetConfig,
+                    parts
                   )
                 : // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
                   await adapter.fleetStatus!();
@@ -6290,7 +6416,7 @@ export class SessionSupervisor {
       };
     }
     // Each project row's state said per place, as the hub keeps it.
-    const report = placedApart({
+    const fresh = placedApart({
       mcp,
       mcpByHarness,
       marketplaces,
@@ -6301,9 +6427,21 @@ export class SessionSupervisor {
       harnessConfig,
       ...(memory ? { memory } : {}),
       ...(toolchain ? { toolchain } : {}),
-      have: await fleetHoldings(),
+      ...(which === "fleetStatus" || parts.has("skills") || parts.has("plugins")
+        ? { have: await fleetHoldings() }
+        : {}),
       at: Date.now(),
     });
+    if (which === "fleetStatus") {
+      this.#lastReport = fresh;
+      this.#desired.reported(fresh);
+      return fresh;
+    }
+    const report = laidOver(
+      this.#lastReport ?? this.#desired.report,
+      fresh,
+      parts
+    );
     this.#lastReport = report;
     return report;
   }
@@ -6390,6 +6528,7 @@ export class SessionSupervisor {
           "fleet sync record"
         );
         this.#convergeSoon();
+        this.#healthSoon();
         return { rev: delta.rev } satisfies FleetAck;
       }
       if (method === FLEET_STATUS) {
@@ -6965,12 +7104,28 @@ async function admit(
 }
 
 /**
- * What a converge wrote that a boundary reads (the fleet's hook scripts):
- * each boundary in use that started without it is handed over to one that
- * has it (boundary.ts `rearmMoved`). Nothing waits on it.
+ * The kinds of fleet-wide items a Linux boundary's form names
+ * (fleet-converged.ts `syncedHeld`): one of them moved, the boundaries in
+ * use are looked at again ({@link rearmBoundaries}); no other converge
+ * looks at any.
  */
-function rearmBoundaries(): void {
-  rearmMoved("the fleet sync wrote what a boundary reads").catch(
+const BOUND_KINDS: ReadonlySet<FleetItemKind> = new Set<FleetItemKind>([
+  "memory",
+  "hook",
+  "plugin",
+  "pluginPayload",
+  "skill",
+  "mcp",
+]);
+
+/**
+ * What a converge (or the policy's write) moved, `what`, is in what a
+ * boundary binds: each boundary in use whose form's synced part moved is
+ * handed over to one that has it (boundary.ts `rearmMoved`). Nothing waits
+ * on it.
+ */
+function rearmBoundaries(what: string): void {
+  rearmMoved(`the fleet sync wrote ${what}, which a boundary reads`).catch(
     (error: unknown) =>
       warn(`the boundaries were not looked at again: ${errorText(error)}`)
   );
