@@ -151,10 +151,23 @@ export function createBinaryUpdates(options: Options) {
   // The policy beside the database, apart from the cache, which holds builds alone.
   const policyPath = hubUpdatePolicyPath();
   let held = loadPolicy(policyPath);
-  // `at`: when the look that found it began, so a look begun earlier never
-  // replaces what a later one found.
+  // `at`: when the look that found it began, for RELEASE_TTL_MS.
   let current: { at: number; release: LocatedRelease } | undefined;
   let checking: Promise<LocatedRelease> | undefined;
+  // One rule orders every look and every forget: each takes the next turn,
+  // and a look sets `current` only when its turn is later than `settled`,
+  // the turn of the last look that set it or the last forget. So a look begun
+  // before a later look answered, or before the policy changed or a refresh
+  // forgot `current`, never sets it.
+  let turns = 0;
+  let settled = 0;
+  /** `current` dropped: no look begun before now sets it, and the next poll begins its own. */
+  const forget = () => {
+    current = undefined;
+    checking = undefined;
+    turns += 1;
+    settled = turns;
+  };
 
   /** What a route that needs the policy answers while its record is damaged. */
   const refused = (): string =>
@@ -175,24 +188,33 @@ export function createBinaryUpdates(options: Options) {
     });
     held = { policy };
   };
-  /** One look at the release host, begun now; what it finds becomes `current` unless a later look already answered. */
+  /** One look at the release host, begun now; what it finds becomes `current` by the turn rule above. */
   const look = async (): Promise<LocatedRelease> => {
+    turns += 1;
+    const turn = turns;
     const at = Date.now();
     const installation = await readInstallation();
     const release = await discoverRelease(
       policyNow().channel,
       installation?.releaseHost
     );
-    if (!current || current.at <= at) {
+    if (turn > settled) {
+      settled = turn;
       current = { at, release };
     }
     return release;
   };
   /** A machine's poll: joins a look already under way. */
   const discover = (): Promise<LocatedRelease> => {
-    checking ??= look().finally(() => {
-      checking = undefined;
-    });
+    if (!checking) {
+      const begun: Promise<LocatedRelease> = look().finally(() => {
+        // A forget may have let a newer look begin meanwhile; that one stays.
+        if (checking === begun) {
+          checking = undefined;
+        }
+      });
+      checking = begun;
+    }
     return checking;
   };
   // What each channel's newest release is, one entry per channel, served for RELEASE_TTL_MS like
@@ -228,7 +250,7 @@ export function createBinaryUpdates(options: Options) {
   };
   const channels = async (refresh: boolean): Promise<BinaryUpdateChannels> => {
     if (refresh) {
-      current = undefined;
+      forget();
       channelCache.clear();
     }
     const stale = (["stable", "nightly"] as const).filter((channel) => {
@@ -267,8 +289,8 @@ export function createBinaryUpdates(options: Options) {
 
   /** A new policy, written whole, and every online machine told. */
   const adopt = async (policy: BinaryUpdatePolicy) => {
-    current = undefined;
     savePolicy(policy);
+    forget();
     await Promise.all(
       options.online().map((id) => options.configure(id, policy))
     );

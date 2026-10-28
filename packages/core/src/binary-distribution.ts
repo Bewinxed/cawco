@@ -79,6 +79,19 @@ async function fromReleaseHost<T>(
 }
 
 /**
+ * `url` read past every cache between here and its host, by the rule
+ * {@link uncachedOctokit} gives GitHub's API: a query no one asked before,
+ * and no store of its own (`cache: "no-store"`). A mirror's `release.json`
+ * sits at one URL for every release, so a CDN in front of it could answer
+ * with the one before.
+ */
+function fetchUncached(url: string, signal: AbortSignal): Promise<Response> {
+  const fresh = new URL(url);
+  fresh.searchParams.set("uncached", crypto.randomUUID());
+  return fetch(fresh, { signal, cache: "no-store" });
+}
+
+/**
  * An Octokit whose every read reaches GitHub itself. GitHub's edge keeps an
  * answer to a request signed in as no one for up to a minute
  * (`cache-control: public, max-age=60, s-maxage=60`), and `Cache-Control:
@@ -227,8 +240,8 @@ export async function discoverRelease(
     `${manifestUrl} and its signature`,
     async (signal) => {
       const [manifestResponse, signatureResponse] = await Promise.all([
-        fetch(manifestUrl, { signal }),
-        fetch(signatureUrl, { signal }),
+        fetchUncached(manifestUrl, signal),
+        fetchUncached(signatureUrl, signal),
       ]);
       if (host && manifestResponse.status === 404) {
         throw new NoReleaseError(`No published ${channel} release`);
