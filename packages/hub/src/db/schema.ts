@@ -5247,19 +5247,21 @@ export const trackerLinks = sqliteTable(
 
 /**
  * An external item a task links (core external-items.ts): one row per task
- * and URL, the file's `issue:` (mode `record`) and `links:`, each kept as
- * the source last said it. The file names the URL; this row mirrors what
- * the source holds and is read again whenever it changes, so every inbound
- * event and poll finds its task here ({@link TaskLinksDb.byItem}), never in
- * a text field.
+ * and URL, the file's `issue:` (mode `record`), `links:` and `waits_on:`
+ * pull requests, each kept as the source last said it. The file names the
+ * URL; this row mirrors what the source holds and is read again whenever it
+ * changes, so every inbound event and poll finds its task here
+ * ({@link TaskLinksDb.byItem}), never in a text field. A plan step's wait on
+ * a pull request is a row of its session's plan (`plan:<session id>`, db
+ * task-links.ts `planLinkOwner`), so it settles as a task's does.
  */
 export const taskLinks = sqliteTable(
   "task_links",
   {
     projectId: projectKey(),
-    /** The task, `tsk-12`. */
+    /** The task, `tsk-12`; for a plan step's wait, its session's plan, `plan:<session id>`. */
     taskId: text("task_id").notNull(),
-    /** As the task file writes it. */
+    /** As the task file or plan step writes it. */
     url: text("url").notNull(),
     source: text("source")
       .$type<import("@cawco/core").ExternalSource>()
@@ -5284,6 +5286,8 @@ export const taskLinks = sqliteTable(
     syncedAt: timestamp("synced_at"),
     /** Why the last read or sync of it stopped short, in the source's words. */
     problem: text("problem"),
+    /** A pull request's ETag from its last read: the next is asked with it, and a 304 costs no rate limit. */
+    etag: text("etag"),
   },
   (table) => [
     primaryKey({ columns: [table.projectId, table.taskId, table.url] }),

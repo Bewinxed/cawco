@@ -753,7 +753,7 @@ export const createIngress = ({
       repo,
     });
     await readWaits(projectId, octokit);
-    await externalItems.readLinks(projectId, octokit, repo);
+    await externalItems.readLinks(projectId, octokit);
     const source = `github:${repo.toLowerCase()}`;
     const landed = polled.events
       .filter((event) => event.source === source)

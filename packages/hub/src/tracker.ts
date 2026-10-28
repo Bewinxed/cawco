@@ -1108,6 +1108,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       ...heldOf(issue),
       syncedAt: new Date(),
       problem: null,
+      etag: null,
     };
     db.trackers.putLink(agreement, record);
   };

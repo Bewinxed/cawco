@@ -20,12 +20,14 @@
  *   the link lookup alone (db task-links.ts `byItem`), never a text field.
  *   An item no task links is the routines' to judge.
  * - **Reading a link.** A URL a task names (`links:`, `issue:`, a `waits_on`
- *   pull request) is read once from GitHub by the project's poll
- *   ({@link ExternalItems.readLinks}): an issue and a pull request through
- *   REST, a discussion through GraphQL. One that cannot be read keeps
- *   GitHub's words as its problem and is read again on the next poll. An
- *   open pull request of a repository the project does not poll is read
- *   again each poll, since no event of it reaches the hub.
+ *   pull request), or a plan step waits on, is read once from GitHub by the
+ *   project's poll ({@link ExternalItems.readLinks}): an issue and a pull
+ *   request through REST, a discussion through GraphQL. One that cannot be
+ *   read keeps GitHub's words as its problem and is read again on the next
+ *   poll. An open pull request is read again every poll with its ETag: a
+ *   draft marked ready shows within a poll (no event says so), and an
+ *   unchanged one is a 304, which "does not count against your primary rate
+ *   limit" (docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api).
  * - **A wait on a pull request** reads its link row
  *   ({@link ExternalItems.prWait}): one state per pull request, kept by the
  *   events and reads above. A link's state or title moving tells the
@@ -49,7 +51,7 @@ import type { InboundEvent } from "./ingress";
 import type { GitHubWaitState } from "./task-waits";
 import type { TaskActor, Tasks, TaskView } from "./tasks";
 import { intoFile } from "./tracker-adapter";
-import { githubActorOf, githubRefusal } from "./tracker-github";
+import { answerOf, githubActorOf, githubRefusal } from "./tracker-github";
 
 /** How far a comment's headings go into a task file (tracker-adapter.ts). */
 const COMMENT_DEPTH = 2;
@@ -58,6 +60,8 @@ const READS_PER_POLL = 20;
 const GITHUB_SOURCE = /^github:(.+)$/u;
 const COMMENT_KEY = /^(?:comment|discussion-comment):(.+)$/u;
 const HASH = /^#/u;
+/** GitHub's answer to a conditional read of something unchanged. */
+const NOT_MODIFIED = 304;
 
 /** The item each event about one names, by the event's kind. */
 const EVENT_ITEMS: Readonly<Record<string, ExternalKind>> = {
@@ -217,13 +221,53 @@ const labelNames = (labels: (string | { name?: string | null })[]): string[] =>
     .map((label) => (typeof label === "string" ? label : (label.name ?? "")))
     .filter(Boolean);
 
-/** An item read once from GitHub: an issue or a pull request through REST, a discussion through GraphQL. */
+/**
+ * A pull request read from GitHub, asked with `etag` when there is one:
+ * nothing new when GitHub answers 304 (it has not changed since), its ETag
+ * kept for the next read.
+ */
+const readPull = async (
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  number: number,
+  etag: string | null
+): Promise<ItemRead> => {
+  try {
+    const { data, headers } = await octokit.request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+      {
+        owner,
+        repo,
+        pull_number: number,
+        ...(etag ? { headers: { "if-none-match": etag } } : {}),
+      }
+    );
+    return {
+      externalId: data.node_id,
+      title: data.title,
+      ...pullState(data),
+      author: githubActorOf(data.user),
+      labels: labelNames(data.labels),
+      remoteUpdatedAt: Date.parse(data.updated_at),
+      etag: typeof headers.etag === "string" ? headers.etag : null,
+    };
+  } catch (error) {
+    if (etag && answerOf(error).status === NOT_MODIFIED) {
+      return {};
+    }
+    throw error;
+  }
+};
+
+/** An item read once from GitHub: an issue or a pull request through REST (a pull request with its ETag), a discussion through GraphQL. */
 const readItem = async (
   octokit: Octokit,
   kind: ExternalKind,
   owner: string,
   repo: string,
-  number: number
+  number: number,
+  etag: string | null
 ): Promise<ItemRead> => {
   switch (kind) {
     case "issue": {
@@ -240,20 +284,8 @@ const readItem = async (
         remoteUpdatedAt: Date.parse(data.updated_at),
       };
     }
-    case "pr": {
-      const { data } = await octokit.request(
-        "GET /repos/{owner}/{repo}/pulls/{pull_number}",
-        { owner, repo, pull_number: number }
-      );
-      return {
-        externalId: data.node_id,
-        title: data.title,
-        ...pullState(data),
-        author: githubActorOf(data.user),
-        labels: labelNames(data.labels),
-        remoteUpdatedAt: Date.parse(data.updated_at),
-      };
-    }
+    case "pr":
+      return await readPull(octokit, owner, repo, number, etag);
     case "discussion": {
       const read = await octokit.graphql<DiscussionRead>(DISCUSSION_QUERY, {
         owner,
@@ -289,25 +321,33 @@ const readItem = async (
   }
 };
 
-/** One link's item read from GitHub, or GitHub's words as its problem; undefined for a URL that names no item to read. */
-const readRow = async (
+/**
+ * An item read from GitHub for every row naming it, or GitHub's words as
+ * their problem; undefined for a URL that names no item to read. A pull
+ * request is asked with the rows' ETag only when they all hold the same
+ * one: a 304 then says nothing new to any of them.
+ */
+const readRows = async (
   octokit: Octokit,
-  row: TaskLinkRow
+  rows: TaskLinkRow[]
 ): Promise<ItemRead | undefined> => {
-  const item = refOfUrl(row.url);
+  const [first] = rows;
+  const item = first ? refOfUrl(first.url) : undefined;
   const [owner, name] = (item?.container ?? "").split("/");
-  if (!(item?.number && owner && name)) {
+  if (!(first && item?.number && owner && name)) {
     return;
   }
+  const etag = rows.every((row) => row.etag === first.etag) ? first.etag : null;
   try {
     return {
-      ...(await readItem(octokit, item.kind, owner, name, item.number)),
+      ...(await readItem(octokit, item.kind, owner, name, item.number, etag)),
       syncedAt: new Date(),
       problem: null,
     };
   } catch (error) {
     return {
-      problem: githubRefusal(error, `read ${row.ref}`, item.container).message,
+      problem: githubRefusal(error, `read ${first.ref}`, item.container)
+        .message,
     };
   }
 };
@@ -394,9 +434,10 @@ export const createExternalItems = ({
   const threadOf = (rows: TaskLinkRow[]): TaskLinkRow | undefined => rows[0];
 
   /**
-   * An item's event written into every link to it: its title, labels and
-   * state, its opener on an opening, never older over newer. Answers
-   * whether a link's state or title moved.
+   * An item's event written into every link to it (a task's, archived or
+   * not, and a plan step's wait): its title, labels and state, its opener on
+   * an opening, never older over newer. Answers whether a link's state or
+   * title moved.
    */
   const applyItemEvent = (
     projectId: string,
@@ -404,12 +445,16 @@ export const createExternalItems = ({
     kind: ExternalKind,
     repo: string
   ): boolean => {
-    const rows = db.taskLinks.byItem(projectId, {
-      source: "github",
-      kind,
-      number: event.number,
-      container: repo,
-    });
+    const rows = db.taskLinks.byItem(
+      projectId,
+      {
+        source: "github",
+        kind,
+        number: event.number,
+        container: repo,
+      },
+      "any"
+    );
     let moved = false;
     for (const row of rows.filter(
       (each) => (each.remoteUpdatedAt ?? 0) <= event.at
@@ -509,28 +554,29 @@ export const createExternalItems = ({
 
   /**
    * The project's GitHub links due a read, grouped by the item they name:
-   * the links not read yet or whose last read stopped short, and the open
-   * pull requests of a repository other than `repo`, the one polled, whose
-   * events never reach the hub. A bound project's record links are its
-   * tracker sync's to read.
+   * first the links not read yet or whose last read stopped short, then
+   * every open pull request, the longest since read first, read again each poll
+   * with its ETag (no event says a draft was marked ready). A bound
+   * project's record links are its tracker sync's to read.
    */
-  const dueItems = (projectId: string, repo: string): TaskLinkRow[][] => {
+  const dueItems = (projectId: string): TaskLinkRow[][] => {
     const bound = db.trackers.binding(projectId) !== undefined;
-    const polled = repo.toLowerCase();
     const unread = db.taskLinks
       .unread(projectId, "github")
       .filter((row) => !(bound && row.mode === "record"));
-    const elsewhere = db.taskLinks
+    const open = db.taskLinks
       .ofProject(projectId)
       .filter(
         (row) =>
           row.source === "github" &&
           row.kind === "pr" &&
-          (row.state === "open" || row.state === "draft") &&
-          refOfUrl(row.url)?.container !== polled
+          (row.state === "open" || row.state === "draft")
+      )
+      .sort(
+        (a, b) => (a.syncedAt?.getTime() ?? 0) - (b.syncedAt?.getTime() ?? 0)
       );
     const items = new Map<string, Map<string, TaskLinkRow>>();
-    for (const row of [...unread, ...elsewhere]) {
+    for (const row of [...unread, ...open]) {
       const key = refOfUrl(row.url)?.url.toLowerCase();
       if (key) {
         const rows = items.get(key) ?? new Map<string, TaskLinkRow>();
@@ -548,13 +594,11 @@ export const createExternalItems = ({
    */
   const readLinks = async (
     projectId: string,
-    octokit: Octokit,
-    repo: string
+    octokit: Octokit
   ): Promise<void> => {
     let moved = false;
-    for (const rows of dueItems(projectId, repo).slice(0, READS_PER_POLL)) {
-      const [first] = rows;
-      const read = first ? await readRow(octokit, first) : undefined;
+    for (const rows of dueItems(projectId).slice(0, READS_PER_POLL)) {
+      const read = await readRows(octokit, rows);
       if (!read) {
         continue;
       }
@@ -571,20 +615,24 @@ export const createExternalItems = ({
   /**
    * A pull request's state as a wait on it reads it (task-waits.ts
    * `settled`): its link row's, the one state the hub keeps of it;
-   * `checking` until the poll has read it. The row is the task's own: a
+   * `checking` until the poll has read it. The row is the waiter's own: a
    * task file's `waits_on` pull request is one of its links (tasks.ts
-   * `fileLinksOf`).
+   * `fileLinksOf`), a plan step's one of its plan's (db `putSessionSteps`).
    */
   const prWait = (
     projectId: string,
     target: Extract<WaitTarget, { kind: "pr" }>
   ): { state: GitHubWaitState; title: string | null } => {
-    const rows = db.taskLinks.byItem(projectId, {
-      source: "github",
-      kind: "pr",
-      number: target.number,
-      container: target.repo,
-    });
+    const rows = db.taskLinks.byItem(
+      projectId,
+      {
+        source: "github",
+        kind: "pr",
+        number: target.number,
+        container: target.repo,
+      },
+      "any"
+    );
     const row = rows.find((each) => each.state !== null) ?? rows[0];
     return {
       state: row?.state ? WAIT_STATES[row.state] : "checking",

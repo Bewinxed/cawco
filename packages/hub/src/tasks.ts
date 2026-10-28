@@ -4619,14 +4619,7 @@ export const createTasks = (store: TaskStore) => {
     ): Promise<string> {
       if (projectId) {
         const [kept] = await waitsFor(projectId, actor, [written]);
-        if (!kept) {
-          return refuse(400, `“${written}” names nothing to wait on.`);
-        }
-        // A pull request's state is a task's link row (external-items.ts `prWait`): a step has none of its own.
-        const unlinked =
-          waitTarget(kept)?.kind === "pr" &&
-          store.linked(projectId, kept).length === 0;
-        return unlinked ? refuse(400, taskLinkWords.prUnlinked(kept)) : kept;
+        return kept ?? refuse(400, `“${written}” names nothing to wait on.`);
       }
       try {
         const target = readWait(written, store.waitReader("", actor));

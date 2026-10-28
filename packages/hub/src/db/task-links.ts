@@ -9,7 +9,9 @@
  * `issue:` and `links:` URLs are the task's rows ({@link syncTaskLinks}),
  * new ones made from the URL alone and read from the source later, gone
  * ones taken out. So the file is the truth and this is what the source
- * holds of each URL.
+ * holds of each URL. A plan step's wait on a pull request is a row of its
+ * session's plan ({@link planLinkOwner}), kept with the steps the same way
+ * (db `putSessionSteps`), so it is read and settles as a task's wait does.
  */
 import {
   type ExternalComment,
@@ -17,8 +19,10 @@ import {
   type ExternalRef,
   type ExternalSource,
   type LinkMode,
+  type PlanStep,
   refOfUrl,
   type TaskLinkSummary,
+  waitTarget,
 } from "@cawco/core";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -32,6 +36,22 @@ export interface FileLink {
   record: boolean;
   url: string;
 }
+
+/** Whose rows a plan step's waits on pull requests are: its session's plan, in the task's place. */
+export const planLinkOwner = (instanceId: string): string =>
+  `plan:${instanceId}`;
+
+/** The pull requests a plan's steps wait on, as the links its rows keep. */
+export const planWaitLinks = (steps: readonly PlanStep[]): FileLink[] =>
+  [
+    ...new Set(
+      steps.flatMap((step) =>
+        step.waitsOn && waitTarget(step.waitsOn)?.kind === "pr"
+          ? [step.waitsOn]
+          : []
+      )
+    ),
+  ].map((url) => ({ url, record: false }));
 
 /** What an inbound thing names: an item by its number (GitHub), or by the source's own id (Linear). */
 export type ItemKey =
@@ -177,8 +197,9 @@ export interface TaskLinksDb {
    * THE matcher: the rows naming an item, each task's record first and then
    * by task number. Nothing reads a text field. `held`: `board` (the
    * default) only tasks the board holds, so an archived or deleted task
-   * takes nothing; `any` every row, what the tracker sync asks before it
-   * files a task for an issue.
+   * takes nothing; `any` every row, a plan's included: what the tracker
+   * sync asks before it files a task for an issue, and what an item's state
+   * is written into and a wait reads.
    */
   readonly byItem: (
     projectId: string,

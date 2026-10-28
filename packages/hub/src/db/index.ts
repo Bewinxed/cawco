@@ -268,6 +268,8 @@ import { type StartersDb, startersDb } from "./starters";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import {
   summaryOf as linkSummaryOf,
+  planLinkOwner,
+  planWaitLinks,
   syncTaskLinks,
   type TaskLinksDb,
   taskLinksDb,
@@ -8002,13 +8004,29 @@ const make = async (path: string): Promise<DbShape> => {
     },
     putSessionSteps: (instanceId, steps) => {
       const updatedAt = new Date();
-      db.insert(sessionPlans)
-        .values({ instanceId, steps, updatedAt })
-        .onConflictDoUpdate({
-          target: sessionPlans.instanceId,
-          set: { steps, updatedAt },
-        })
-        .run();
+      db.transaction((tx) => {
+        tx.insert(sessionPlans)
+          .values({ instanceId, steps, updatedAt })
+          .onConflictDoUpdate({
+            target: sessionPlans.instanceId,
+            set: { steps, updatedAt },
+          })
+          .run();
+        // Its waits on pull requests are its plan's link rows, as a task's are its file's.
+        const projectId = tx
+          .select({ projectId: instances.projectId })
+          .from(instances)
+          .where(eq(instances.id, instanceId))
+          .get()?.projectId;
+        if (projectId) {
+          syncTaskLinks(
+            tx,
+            projectId,
+            planLinkOwner(instanceId),
+            planWaitLinks(steps)
+          );
+        }
+      });
     },
     putAwaySeen: (instanceId, notes) => {
       db.update(sessionPlans)

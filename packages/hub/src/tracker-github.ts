@@ -222,7 +222,7 @@ const commentOf = (raw: RawComment): IssueComment | null => {
 };
 
 /** An error's HTTP status and headers, as Octokit's RequestError carries them. */
-const answerOf = (
+export const answerOf = (
   error: unknown
 ): { headers: Record<string, string>; said: string; status?: number } => {
   const failed = error as {

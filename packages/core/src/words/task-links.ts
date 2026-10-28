@@ -36,9 +36,6 @@ export const taskLinkWords = {
   /** Why a project cannot wait on a pull request or run. */
   noGitHub:
     "the project has no GitHub connection to read it. Connect GitHub for the project first.",
-  /** A plan step's wait on a pull request no task of the project links: a step holds no link of its own. */
-  prUnlinked: (url: string): string =>
-    `“${url}” is a pull request no task of this project links or waits on, so the hub keeps no state of it: link it on the task it belongs to (task_update links), then wait on it.`,
   /** A live attempt's word that a card it started on moved: reopened. */
   wasReopened: "was reopened",
   /** A live attempt's word that a card it started on moved: answered differently. */
