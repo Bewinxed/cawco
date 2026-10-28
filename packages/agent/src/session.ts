@@ -5940,29 +5940,7 @@ export class SessionSupervisor {
         }))
       );
       const started = Date.now();
-      let report: FleetSyncReport | undefined;
-      let thrown: string | undefined;
-      let places: FleetPlace[] = [];
-      try {
-        // Each project's rows at each of its places here now: its
-        // checkouts, and the clones of its workspaces this agent cut.
-        const holding = this.#desired.config();
-        places = await placesNow(holding.projects);
-        const placed = placedConfig(holding, places);
-        report = await this.#syncFleet(placed, "syncFleet", moves.parts);
-        // A place gone since (an archived clone, a checkout the hub no longer
-        // names) takes its file with it.
-        if (PLACE_FILE_PARTS.some((part) => moves.parts.has(part))) {
-          await keepOnlyPlaceSets(placed.places);
-        }
-        if (this.#harnessFailures.size > 0) {
-          thrown = [...this.#harnessFailures]
-            .map(([harness, error]) => `${harness}: ${error}`)
-            .join("\n");
-        }
-      } catch (error) {
-        thrown = errorText(error);
-      }
+      const { report, thrown, places } = await this.#convergeParts(moves);
       if (thrown) {
         warn(`the fleet's gen ${generation} did not converge: ${thrown}`);
       }
@@ -6005,6 +5983,40 @@ export class SessionSupervisor {
       .finally(() => {
         this.#passingValue = false;
       });
+  }
+
+  /**
+   * The parts `moves` moved converged over each project's rows at each of
+   * its places here now (its checkouts, and the clones of its workspaces
+   * this agent cut), and the file of every place gone since (an archived
+   * clone, a checkout the hub no longer names) taken away with it. Answers
+   * the report, what threw in each harness's words, and the places.
+   */
+  async #convergeParts(moves: FleetMoves): Promise<{
+    places: FleetPlace[];
+    report?: FleetSyncReport;
+    thrown?: string;
+  }> {
+    let places: FleetPlace[] = [];
+    try {
+      const holding = this.#desired.config();
+      places = await placesNow(holding.projects);
+      const placed = placedConfig(holding, places);
+      const report = await this.#syncFleet(placed, "syncFleet", moves.parts);
+      if (PLACE_FILE_PARTS.some((part) => moves.parts.has(part))) {
+        await keepOnlyPlaceSets(placed.places);
+      }
+      const failed = [...this.#harnessFailures].map(
+        ([harness, error]) => `${harness}: ${error}`
+      );
+      return {
+        places,
+        report,
+        ...(failed.length > 0 ? { thrown: failed.join("\n") } : {}),
+      };
+    } catch (error) {
+      return { places, thrown: errorText(error) };
+    }
   }
 
   /**
