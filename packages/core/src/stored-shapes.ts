@@ -70,6 +70,11 @@ import type {
   ResultArtifact as ResultArtifactType,
 } from "./deliverables";
 import type {
+  ExternalActor as ExternalActorType,
+  ExternalSource as ExternalSourceType,
+} from "./external-items";
+import { EXTERNAL_SOURCES } from "./external-items";
+import type {
   CliInstall as CliInstallType,
   FaultCause as FaultCauseType,
   FleetConvergeState as FleetConvergeStateType,
@@ -1430,6 +1435,20 @@ export const EnvelopeShape = z.object({
   verb: VerbShape,
 });
 
+const ExternalSourceShape = z.enum(EXTERNAL_SOURCES);
+
+const ExternalActorShape = z.object({
+  avatarUrl: z.string().nullable(),
+  kind: z.enum(["person", "bot", "app"]),
+  login: z.string(),
+  memberId: z.string().nullable(),
+  name: z.string().nullable(),
+  source: ExternalSourceShape,
+  url: z.string().nullable(),
+});
+export const ExternalActorSchema: z.ZodType<ExternalActorType> =
+  ExternalActorShape;
+
 const FleetRefreshShape = z.object({
   at: z.number(),
   error: z.string().optional(),
@@ -2371,6 +2390,8 @@ prove<
     Same<z.output<typeof DelegateEventPayloadShape>, DelegateEventPayloadType>,
     Same<z.output<typeof VerbShape>, VerbType>,
     Same<z.output<typeof EnvelopeShape>, EnvelopeType>,
+    Same<z.output<typeof ExternalSourceShape>, ExternalSourceType>,
+    Same<z.output<typeof ExternalActorShape>, ExternalActorType>,
     Same<z.output<typeof FleetRefreshShape>, FleetRefreshType>,
     Same<z.output<typeof StatusOptionShape>, StatusOptionType>,
     Same<z.output<typeof GithubProjectShape>, GithubProjectType>,

@@ -39,6 +39,11 @@
  * - **Data, never instructions.** An event reaches a model only inside a
  *   delimited block ({@link eventData}, {@link inboxText}) whose JSON cannot
  *   close it, after a sentence that says it is untrusted content.
+ * - **External items** (external-items.ts): every event stored is applied
+ *   to the task links it names (an issue's state, title, labels), and a
+ *   comment on a linked issue is filed on its task as data, in a project no
+ *   tracker is bound to; each poll reads the GitHub links not read yet. The
+ *   routine an event goes to still hears it and judges; it never files.
  * - **A merged pull request** an attempt opened moves its task on
  *   (dispatch.ts `pullRequestMerged`), once, since only the insert calls it.
  * - **Waits on GitHub** (task-waits.ts): each pull request and Actions run a
@@ -72,6 +77,7 @@ import type {
 } from "./db/ingress";
 import type { GitHubCursor, GitHubResource, InboundVia } from "./db/schema";
 import type { Dispatcher } from "./dispatch";
+import type { ExternalItems } from "./external-items";
 import { githubRepoOf, pollRepo, readGitHubWait } from "./github";
 import { byHandle } from "./handles";
 import type { JevAccess } from "./jev";
@@ -425,6 +431,8 @@ export interface IngressDeps {
   readonly dispatcher: Pick<Dispatcher, "pullRequestMerged">;
   /** An event landed for a project, stored once: its starters are asked again (project-starters.ts). */
   readonly eventLanded: (projectId: string) => void;
+  /** Applies a stored event to the task links it names, and reads links not read yet (external-items.ts). */
+  readonly externalItems: Pick<ExternalItems, "applyEvent" | "readLinks">;
   /** Jev's route while Jev is on (jev.ts `jevAccess`). */
   readonly jevAccess: () => JevAccess | undefined;
   readonly lifetime: HubLifetimeShape;
@@ -500,6 +508,7 @@ export const createIngress = ({
   db,
   dispatcher,
   eventLanded,
+  externalItems,
   jevAccess,
   lifetime,
   routines,
@@ -673,6 +682,16 @@ export const createIngress = ({
       ),
       "route an inbound event"
     );
+    detach(
+      externalItems
+        .applyEvent(projectId, event)
+        .catch((error: unknown) =>
+          console.warn(
+            `[ingress] ${row.source} ${row.deliveryKey} did not reach its task links: ${wordsOf(error)}`
+          )
+        ),
+      "apply an inbound event to task links"
+    );
     const { url } = event;
     if (event.kind === "pr.merged" && url) {
       detach(
@@ -726,6 +745,7 @@ export const createIngress = ({
       repo,
     });
     await readWaits(projectId, octokit);
+    await externalItems.readLinks(projectId, octokit);
     const source = `github:${repo.toLowerCase()}`;
     const landed = polled.events
       .filter((event) => event.source === source)

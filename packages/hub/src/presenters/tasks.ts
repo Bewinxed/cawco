@@ -14,6 +14,8 @@
 import {
   type AttemptResult,
   artifactLink,
+  type ExternalRef,
+  externalItemWords,
   markdownLink,
   planLink,
   type ResultArtifact,
@@ -186,6 +188,11 @@ const taskLine = (task: TaskLine, now: number, links: LinkScope): string => {
     ...(task.startProblem ? [`won't start: ${task.startProblem}`] : []),
     ...(task.type ? [`type ${task.type}`] : []),
     ...(task.labels.length > 0 ? [`labels ${task.labels.join(", ")}`] : []),
+    ...(task.links.length > 0
+      ? [
+          `links ${task.links.map((link) => `${externalItemWords.source[link.source]} ${link.ref}`).join(", ")}`,
+        ]
+      : []),
     ...Object.entries(task.fields).map(([key, value]) => `${key} ${value}`),
     ...(task.problem ? [`its file: ${task.problem}`] : []),
     `changed ${ago(task.updatedAt, now)}${task.updatedBy ? ` by ${task.updatedBy.name}` : ""}`,
@@ -278,7 +285,17 @@ const resultLines = (result: AttemptResult, now: number): string[] => [
 ];
 
 const commentLine = (comment: TaskComment, now: number): string =>
-  `- ${comment.author.name}, ${ago(comment.at, now)}: ${quote(comment.text, 600)}`;
+  comment.via
+    ? `- ${comment.via.author.login} on ${externalItemWords.source[comment.via.source]}, ${ago(comment.at, now)}: ${quote(comment.text, 600)} ${comment.via.url}`
+    : `- ${comment.author.name}, ${ago(comment.at, now)}: ${quote(comment.text, 600)}`;
+
+/** One external item a task links: `GitHub issue #12 “Title”, Open, by bewinxed: <url>`, its record marked. */
+const linkLine = (link: ExternalRef): string => {
+  const words = externalItemWords;
+  const state =
+    link.stateName || (link.state ? words.state[link.state] : words.unread);
+  return `- ${words.source[link.source]} ${words.kind[link.kind]} ${link.ref}${link.title ? ` “${link.title}”` : ""}, ${state}${link.author ? `, by ${link.author.login}` : ""}${link.mode === "record" ? ", its record" : ""}: ${link.url}${link.problem ? `. Its last read stopped short: ${link.problem}` : ""}`;
+};
 
 const historyLine = (event: TaskHistoryEvent, now: number): string =>
   `- ${ago(event.at, now)}, ${event.actor.name}: ${event.what}${event.reason ? ` (${event.reason})` : ""}`;
@@ -316,7 +333,8 @@ const fileLines = (task: TaskView, links: LinkScope): string[] =>
       `Fields: ${Object.entries(task.extra)
         .map(([key, value]) => `${key} ${valueWords(value)}`)
         .join("; ")}.`,
-    task.issue && `Issue: ${valueWords(task.issue)}.`,
+    task.links.length > 0 &&
+      lines(externalItemWords.links, task.links.map(linkLine)),
     task.description.trim() && lines("## Description", task.description.trim()),
     task.acceptance.trim() && lines("## Acceptance", task.acceptance.trim()),
     task.sections.map((section) =>

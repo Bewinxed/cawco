@@ -74,6 +74,11 @@ typeOverrides:
     ErrorSaidKind: OpenEnums.ErrorSaidKind
     Exclude: OpenEnums.Exclude
     Exclude_1: OpenEnums.Exclude_1
+    ExternalActorKind: OpenEnums.ExternalActorKind
+    ExternalCommentDirection: OpenEnums.ExternalCommentDirection
+    ExternalKind: OpenEnums.ExternalKind
+    ExternalRefState: OpenEnums.ExternalRefState
+    ExternalSource: OpenEnums.ExternalSource
     FindConversationOutcome: OpenEnums.FindConversationOutcome
     FindConversationRole: OpenEnums.FindConversationRole
     FindField: OpenEnums.FindField
@@ -119,6 +124,7 @@ typeOverrides:
     LandsMode: OpenEnums.LandsMode
     Law: OpenEnums.Law
     LfsOfferStateAnswer: OpenEnums.LfsOfferStateAnswer
+    LinkMode: OpenEnums.LinkMode
     LocalNameState: OpenEnums.LocalNameState
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia

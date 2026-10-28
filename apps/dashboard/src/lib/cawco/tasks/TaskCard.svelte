@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { projectWords } from "@cawco/core";
+  import { externalItemWords, projectWords } from "@cawco/core";
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
   import { flagsOf, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import { isRetry } from "#lib/cawco/tasks/retry.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
   /**
    * One task on the board: its id, its title, and only what it has to say
    * past that — an attempt running or failed, what it still waits on (the
@@ -13,7 +12,9 @@
    * Its footer speaks only of live state: an attempt working or trying
    * again, a wait on you, or the date it is set for. Its head says when an
    * attempt failed, or when the hub could not start one (Can't start, the
-   * hub's reason as its title; the task's pane says it whole).
+   * hub's reason as its title; the task's pane says it whole). Its foot
+   * names each external item it links by the source's mark and its ref; the
+   * task's pane lists them whole, each a link out.
    *
    * The card is a link to the task (`?task=tsk-12`), so it opens in a new
    * tab and is shared like one; a plain click opens it beside what it was
@@ -22,6 +23,8 @@
    * is also what a drag carries, and the one object a move flies (`land`):
    * a card that changes column travels there from where it was drawn.
    */
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
     IconError,
@@ -192,7 +195,7 @@
       {/if}
     </span>
   {/if}
-  {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0}
+  {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0 || task.links.length > 0}
     <span
       data-slot="foot"
       class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
@@ -232,6 +235,20 @@
           {/if}
         </span>
       {/if}
+      {#each task.links as link (link.url)}
+        <!-- A link's mark and ref: the card is a link itself, so the pane's row is the link out. -->
+        <span
+          data-slot="link"
+          class="mark-line inline-flex items-center gap-space-1"
+          title="{externalItemWords.source[link.source]} {externalItemWords
+            .kind[link.kind]} {link.ref}"
+        >
+          <ProviderLogo provider={link.source} size="meta" />
+          <span class="font-(family-name:--font-mono) liga-none text-ink-strong"
+            >{link.ref}</span
+          >
+        </span>
+      {/each}
       {#each task.labels.slice(0, 2) as label (label)}
         <!-- A tag longer than the card ends in its ellipsis inside the
              badge (DESIGN.md, The Truncate Inside Rule), never past the

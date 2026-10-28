@@ -26,6 +26,12 @@
  *   description, labels, stage, comments) are one record with its issue,
  *   which its file names (`issue:`); the sync writes what the tracker holds
  *   through the same calls as everyone, as an actor marked `tracker`.
+ * - **External items** (core external-items.ts). A task links GitHub and
+ *   Linear items by URL (`issue:`, the record; `links:`, the rest), each
+ *   mirrored as the source holds it (db task-links.ts) and drawn from there.
+ *   A comment carried from a source is an entry whose heading names the
+ *   source and URL; only the hub's sync rewrites one, when the source's
+ *   words change ({@link Tasks.editComment}).
  * - **Attempts** are work items at a task (dispatch.ts starts them). Every
  *   read carries a task's attempts and what follows from them and its edges:
  *   a live attempt, what it still waits on, a last attempt that failed or
@@ -54,6 +60,9 @@ import {
   type AttemptResult,
   CLOSED_STAGE_KINDS,
   type EndedBy,
+  type ExternalComment,
+  type ExternalRef,
+  externalItemWords,
   type InstanceRow,
   type IssueTracker,
   LANDS_MODES,
@@ -62,12 +71,13 @@ import {
   markdownLink,
   type ProjectStarter,
   type ResultArtifact,
+  refOfUrl,
   STAGES_TEMPLATES,
   STARTER_PLACES,
   type StageKind,
   type StagesTemplate,
   type StarterPlace,
-  type TaskIssueLink,
+  type TaskLinkSummary,
   type TaskMover,
   taskLink,
   taskLinkWords,
@@ -98,6 +108,8 @@ import type {
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget } from "./db/schema";
+import { cutOver } from "./external-cutover";
+import { githubRepoOf } from "./github";
 import {
   deleteFolderFile,
   type Exclusive,
@@ -358,6 +370,25 @@ export interface TaskStore {
     | "waitedOn"
   >[];
   /**
+   * The comments a task carried from outside sources, either way, as the
+   * hub keeps them (db task-links.ts `external_comments`): each with the
+   * time of its task entry.
+   */
+  readonly carried: (
+    projectId: string,
+    taskId: string
+  ) => (ExternalComment & { entryAt: number })[];
+  /**
+   * Keeps a comment carried onto a task, once (`external_comments`); one
+   * kept already whose author was not known takes theirs.
+   */
+  readonly carry: (
+    projectId: string,
+    taskId: string,
+    comment: ExternalComment,
+    entryAt: number
+  ) => void;
+  /**
    * The task a comment went on, written under `id`, the id its device chose
    * for it (db `task_comment_ids`): the same comment again adds nothing.
    */
@@ -367,16 +398,6 @@ export interface TaskStore {
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
   /**
-   * The issue a task is one record with, as its view shows it (tracker.ts):
-   * its link, or the issue its file names (`issue:`, a URL) when the project
-   * keeps no link for it; null when neither.
-   */
-  readonly issueOf?: (
-    projectId: string,
-    taskId: string,
-    named: string | null
-  ) => TaskIssueLink | null;
-  /**
    * Why a task may not close or pass review on anyone's move but yours: its
    * only changes are Caw's own, not all approved by you (lead-gate.ts
    * `reviewProblem`); nothing when it may.
@@ -385,6 +406,10 @@ export interface TaskStore {
     projectId: string,
     taskId: string
   ) => string | undefined;
+  /** The tasks that link an item (`task_read`'s `link`): a URL, or `#12` in the project's repository; a refusal in words. */
+  readonly linked: (projectId: string, link: string) => string[] | string;
+  /** A task's external items, its record first, as the hub mirrors them (db task-links.ts). */
+  readonly links: (projectId: string, taskId: string) => ExternalRef[];
   /** Every machine the hub has seen: what a `runs_on` may name (runs-on.ts). */
   readonly machines: () => MachineFacts[];
   /** A comment written under the id its device chose, once it is committed. */
@@ -400,6 +425,8 @@ export interface TaskStore {
         /** It starts attempts on its own (dispatch.ts), while its Caw is on. */
         dispatch: boolean;
         id: string;
+        /** Its checkout's normalised origin (`github.com/acme/app`); null when it has none. */
+        remote: string | null;
         /** Review before done: only you move a task to a done stage (stages.ts `ruledStages`). */
         review: boolean;
         template: StagesTemplate | null;
@@ -475,16 +502,17 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
   /** sha256 hex of the file as read. */
   hash: string;
   id: string;
-  /**
-   * The GitHub or Linear issue it is one record with (tracker.ts): its ref,
-   * its link, and why its last sync stopped short; null when it has none.
-   */
-  issue: TaskIssueLink | null;
   /** The kind of its stage; null when its stage is not one of the project's. */
   kind: StageKind | null;
   labels: string[];
   /** Where an attempt's work lands, as the file says; null: the project's default. */
   lands: LandsMode | null;
+  /**
+   * The external items it links (core external-items.ts): its record
+   * (`issue:`, the tracker sync's) first, then its `links:`, each as the
+   * source last said it.
+   */
+  links: ExternalRef[];
   /** It waits for you: its stage is of kind `you` (see {@link TaskSummary.needsYou}). */
   needsYou: boolean;
   number: number;
@@ -526,6 +554,8 @@ export interface TaskDraft {
   group?: string;
   labels?: string[];
   lands?: LandsMode;
+  /** External items it links, each by its URL: a GitHub issue, pull request or discussion, a Linear issue. */
+  links?: string[];
   outputs?: string[];
   owns?: string[];
   partOf?: string;
@@ -610,6 +640,8 @@ export interface TaskPatch {
   labels?: string[];
   /** Where an attempt's work lands; null: the project's default. */
   lands?: LandsMode | null;
+  /** The external items it links (`links:`), each by its URL; replaces the list. */
+  links?: string[];
   outputs?: string[];
   owns?: string[];
   rank?: string | null;
@@ -633,6 +665,8 @@ export interface TaskFilter {
   kind?: StageKind;
   /** A label the task carries. */
   label?: string;
+  /** An external item it links: its URL, or `#12` in the project's repository (db task-links.ts `byItem`). */
+  link?: string;
   /** true: only tasks that need you; false: only tasks that do not. */
   needsYou?: boolean;
   /** The task they are part of (`tsk-12`). */
@@ -809,6 +843,40 @@ const items = (what: string, list: string[]): string[] => {
     ...new Set(list.map((item) => oneLine(`${what} item`, item, ITEM_LIMIT))),
   ];
 };
+
+/** External items' URLs a caller gave, each one a source's item (core `refOfUrl`), refused in words when one is not. */
+const linksOf = (links: string[]): string[] =>
+  items("links", links).map((url) =>
+    refOfUrl(url)
+      ? url
+      : refuse(
+          400,
+          `“${url}” is not a GitHub issue, pull request or discussion, or a Linear issue: link one by its URL.`
+        )
+  );
+
+/** A task's links as its index row carries them: the file's `issue:` its record, then `links:`. */
+const fileLinksOf = (
+  fields: Pick<TaskFields, "issue" | "links">
+): TaskLinkSummary[] =>
+  [
+    ...(fields.issue ? [{ url: fields.issue, mode: "record" as const }] : []),
+    ...fields.links.map((url) => ({ url, mode: "related" as const })),
+  ].flatMap(({ url, mode }) => {
+    const item = refOfUrl(url);
+    return item
+      ? [
+          {
+            source: item.source,
+            kind: item.kind,
+            ref: item.ref,
+            state: null,
+            url,
+            mode,
+          },
+        ]
+      : [];
+  });
 
 /** A budget a caller gave, refused in its own words when it cannot stand. */
 const budgetOf = (budget: WorkBudget): WorkBudget => {
@@ -1049,6 +1117,7 @@ const summaryOf = (
     duplicateOf: row.duplicateOf,
     rank: row.rank,
     labels: row.labels,
+    links: row.links,
     outputs: row.outputs,
     fields: row.fields,
     todos: { done: row.todosDone, total: row.todosTotal },
@@ -1067,13 +1136,14 @@ const viewOf = (
   flags: TaskFlags & Pick<TaskView, "foundInNamed" | "sendBack">,
   times: TaskTimes,
   result: TaskResult | null,
-  issue: TaskIssueLink | null
+  links: ExternalRef[],
+  carried: ExternalComment[]
 ): TaskView => ({
   id: taskId(number),
   number,
   path,
   title,
-  issue,
+  links,
   stage: parsed.fields.stage ?? "",
   kind: kindIn(stages, parsed.fields.stage ?? ""),
   needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
@@ -1098,7 +1168,22 @@ const viewOf = (
   description: parsed.description,
   acceptance: parsed.acceptance,
   todos: parsed.todos,
-  comments: parsed.comments,
+  comments: parsed.comments.map((comment) => {
+    const kept = comment.via
+      ? carried.find((each) => each.url === comment.via?.url)
+      : undefined;
+    return kept && comment.via
+      ? {
+          ...comment,
+          via: {
+            ...comment.via,
+            author: kept.author.login ? kept.author : comment.via.author,
+            editedAt: kept.editedAt,
+            direction: kept.direction,
+          },
+        }
+      : comment;
+  }),
   sections: parsed.sections,
   extra: parsed.extra,
   problems: parsed.problems,
@@ -1232,6 +1317,10 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
   if (patch.owns !== undefined) {
     const owns = ownsOf(patch.owns);
     set("owns", () => doc.setField("owns", owns));
+  }
+  if (patch.links !== undefined) {
+    const links = linksOf(patch.links);
+    set("links", () => doc.setField("links", links));
   }
   for (const field of [
     "checks",
@@ -1789,6 +1878,7 @@ export const createTasks = (store: TaskStore) => {
       labels: parsed.fields.labels,
       outputs: parsed.fields.outputs,
       fields: doc.extraFields(),
+      links: fileLinksOf(parsed.fields),
       todosDone: todos.done,
       todosTotal: todos.total,
       problem: parsed.problems.join(" ") || null,
@@ -2757,7 +2847,8 @@ export const createTasks = (store: TaskStore) => {
           .attempts(projectId)
           .filter((item) => item.taskId === taskId(number))
       ),
-      store.issueOf?.(projectId, taskId(number), parsed.fields.issue) ?? null
+      store.links(projectId, taskId(number)),
+      store.carried(projectId, taskId(number))
     );
   };
 
@@ -3268,26 +3359,30 @@ export const createTasks = (store: TaskStore) => {
     );
   };
 
-  /** A comment's entry, its commit, and who hears of it ({@link comment}). */
+  /** A comment's entry, its commit, and who hears of it ({@link comment}); `via`, one carried from an outside source. */
   const writeComment = (
     projectId: string,
     ref: string,
     text: string,
-    actor: TaskActor
+    actor: TaskActor,
+    via?: ExternalComment
   ): Promise<TaskView> => {
     const written = commentText(text);
     return change(projectId, ref, actor, (doc) => {
       doc.addComment(
         {
-          name: actor.author.name,
+          name: via ? via.author.login : actor.author.name,
           mover: actor.mover,
           id: actor.instanceId ?? actor.actionId ?? actor.routineId ?? null,
         },
-        new Date(),
-        written
+        via ? new Date(via.at) : new Date(),
+        written,
+        via ?? null
       );
       return {
-        what: `comment “${commentGist(written)}”`,
+        what: via
+          ? `comment by ${via.author.login} on ${externalItemWords.source[via.source]} “${commentGist(written)}”`
+          : `comment “${commentGist(written)}”`,
         change: COMMENT_CHANGE,
       };
     }).then((task) =>
@@ -3310,6 +3405,13 @@ export const createTasks = (store: TaskStore) => {
   ): Promise<TaskList> => {
     const tracker = known(projectId);
     const partOf = filter.partOf ? taskRef("part_of", filter.partOf) : null;
+    const linking = filter.link?.trim()
+      ? store.linked(projectId, filter.link.trim())
+      : undefined;
+    const linked =
+      typeof linking === "string"
+        ? refuse(400, linking)
+        : linking && new Set(linking);
     const [{ rows: board, problems }, { reading }] = await Promise.all([
       sync(projectId),
       stagesOf(projectId),
@@ -3327,7 +3429,10 @@ export const createTasks = (store: TaskStore) => {
           times.get(row.path) as TaskTimes
         )
       )
-      .filter((task) => holds(task, filter, partOf));
+      .filter(
+        (task) =>
+          holds(task, filter, partOf) && (!linked || linked.has(task.id))
+      );
     const tasks = (
       filter.q?.trim() ? await saying(projectId, kept, filter.q) : kept
     ).sort(byRank);
@@ -3559,6 +3664,64 @@ export const createTasks = (store: TaskStore) => {
     );
   };
 
+  /** Every task file of the project, the board's and the archive's, each read settled: a write around the hub put back first. */
+  const settledFiles = async (
+    projectId: string
+  ): Promise<{ content: string; number: number; path: string }[]> => {
+    const paths = [
+      ...(await folderFileNames(projectId, "tasks"))
+        .filter((name) => fileTaskNumber(name) !== undefined)
+        .map((name) => `tasks/${name}`),
+      ...(await archivedNames(projectId)).map(
+        (name) => `${ARCHIVE_DIR}/${name}`
+      ),
+    ];
+    return await Promise.all(
+      paths.map(async (path) => {
+        const number = fileTaskNumber(path) as number;
+        const { content } = await readFolderFile(projectId, path);
+        const fix = await fixFor(projectId, path, content);
+        return {
+          path,
+          number,
+          content: fix
+            ? await settle(projectId, path, number, content, fix)
+            : content,
+        };
+      })
+    );
+  };
+
+  /** Task files a cutover rewrote, as one commit by the hub; the board's re-indexed. */
+  const writeCutover = async (
+    projectId: string,
+    writes: { content: string; number: number; path: string }[],
+    actor: TaskActor,
+    what: string
+  ): Promise<void> => {
+    stands(projectId);
+    await writeFolderFiles(
+      projectId,
+      writes.map(({ path, content }) => ({ path, content })),
+      {
+        author: actor.author,
+        message: commitMessage(
+          actor,
+          `tasks ${writes.map((write) => taskId(write.number)).join(", ")}`,
+          what
+        ),
+      }
+    );
+    stands(projectId);
+    store.put(
+      writes
+        .filter(({ path }) => !inArchive(path))
+        .map(({ path, number, content }) =>
+          indexRow(projectId, path, number, content, hashOf(content))
+        )
+    );
+  };
+
   /**
    * The cutover of a project's task files to one blocking edge, each file
    * once: one still carrying `after:`, `parent:` or `related:` (task-file.ts
@@ -3576,33 +3739,7 @@ export const createTasks = (store: TaskStore) => {
       seeAlso: 0,
       related: 0,
     };
-    const paths = [
-      ...(await folderFileNames(projectId, "tasks"))
-        .filter((name) => fileTaskNumber(name) !== undefined)
-        .map((name) => `tasks/${name}`),
-      ...(await archivedNames(projectId)).map(
-        (name) => `${ARCHIVE_DIR}/${name}`
-      ),
-    ];
-    const read = await Promise.all(
-      paths.map(async (path) => {
-        const { content } = await readFolderFile(projectId, path);
-        const fix = await fixFor(projectId, path, content);
-        return {
-          path,
-          number: fileTaskNumber(path) as number,
-          content: fix
-            ? await settle(
-                projectId,
-                path,
-                fileTaskNumber(path) as number,
-                content,
-                fix
-              )
-            : content,
-        };
-      })
-    );
+    const read = await settledFiles(projectId);
     const titles = new Map(
       read.map(({ path, number, content }) => [
         taskId(number),
@@ -3652,31 +3789,60 @@ export const createTasks = (store: TaskStore) => {
     const actor = hubActor(
       "task links are one blocking edge: after is waits_on, parent is part_of, related is a See also comment"
     );
-    stands(projectId);
-    await writeFolderFiles(
+    await writeCutover(
       projectId,
-      writes.map(({ path, content }) => ({ path, content })),
-      {
-        author: actor.author,
-        message: commitMessage(
-          actor,
-          `tasks ${writes.map((write) => taskId(write.number)).join(", ")}`,
-          `links: ${counts.waitsOn} after → waits_on, ${counts.partOf} parent → part_of, ${counts.seeAlso} related → See also`
-        ),
-      }
-    );
-    stands(projectId);
-    store.put(
-      writes
-        .filter(({ path }) => !inArchive(path))
-        .map(({ path, number, content }) =>
-          indexRow(projectId, path, number, content, hashOf(content))
-        )
+      writes,
+      actor,
+      `links: ${counts.waitsOn} after → waits_on, ${counts.partOf} parent → part_of, ${counts.seeAlso} related → See also`
     );
     console.info(
       `[tasks] project ${projectId}: task links migrated in ${counts.files} files: ${counts.waitsOn} after → waits_on, ${counts.partOf} parent → part_of, ${counts.related} related in ${counts.seeAlso} See also comments.`
     );
     return counts;
+  };
+
+  /**
+   * The cutover of a project's task files to external items as data, each
+   * file once (tsk-128): an extra field `github: issue#N` becomes the
+   * issue's URL in `links:` when the project's checkout is on GitHub, the
+   * field gone; a comment carried before comments were data becomes an
+   * entry headed by its author's login, the source and its URL, its words
+   * bare: the tracker sync's (`<login> on GitHub` over its kept row) and a
+   * routine's prose (`GitHub comment by <login> on issue #N (<url>):`, or
+   * words ending `— @<login> on GitHub · [view](<url>)`), each kept as a
+   * carried comment. Every file in one commit by the hub. Inside the
+   * project's turn; runs at every start beside {@link migrateLinks}, and
+   * goes once every project of the fleet has run it.
+   */
+  const migrateExternalItems = async (projectId: string): Promise<number> => {
+    const repo = githubRepoOf(store.project(projectId)?.remote ?? null);
+    const writes: { content: string; number: number; path: string }[] = [];
+    for (const { path, number, content } of await settledFiles(projectId)) {
+      const id = taskId(number);
+      const doc = new TaskDoc(path, content);
+      const recast = cutOver(doc, repo, store.carried(projectId, id));
+      for (const via of recast.carried) {
+        store.carry(projectId, id, via, via.at);
+      }
+      if (recast.changed) {
+        writes.push({ path, number, content: doc.toString() });
+      }
+    }
+    if (writes.length === 0) {
+      return 0;
+    }
+    await writeCutover(
+      projectId,
+      writes,
+      hubActor(
+        "external items are data: a github: field is a link, a carried comment is the words under its author"
+      ),
+      "external items cut over: github: fields to links, carried comments to their source and URL"
+    );
+    console.info(
+      `[tasks] project ${projectId}: external items cut over in ${writes.length} files.`
+    );
+    return writes.length;
   };
 
   /**
@@ -3867,6 +4033,7 @@ export const createTasks = (store: TaskStore) => {
           ...limitsOf(draft),
           rank: draft.rank ? oneLine("rank", draft.rank, 64) : null,
           labels: items("labels", draft.labels ?? []),
+          links: linksOf(draft.links ?? []),
         };
         const description = block("description", draft.description ?? "");
         const acceptance = block("acceptance criteria", draft.acceptance ?? "");
@@ -4134,17 +4301,20 @@ export const createTasks = (store: TaskStore) => {
      * its words: yours reach the task's live attempt (server.ts). `id`, the
      * one its device chose, makes it one comment however often it is sent:
      * one already written is answered with the task as it stands, nothing
-     * added and nobody told again.
+     * added and nobody told again. `via`: a comment written on an outside
+     * source and carried here by the hub (external-items.ts), headed by its
+     * author's login, the source and its URL.
      */
     comment(
       projectId: string,
       ref: string,
       text: string,
       actor: TaskActor,
-      id?: string
+      id?: string,
+      via?: ExternalComment
     ): Promise<TaskView> {
       if (!id) {
-        return writeComment(projectId, ref, text, actor);
+        return writeComment(projectId, ref, text, actor, via);
       }
       const first = commenting.get(id);
       if (first !== undefined) {
@@ -4454,6 +4624,34 @@ export const createTasks = (store: TaskStore) => {
       }
     },
 
+    /**
+     * Rewrites the words of the comment carried from `url`, its heading as
+     * it was: the source changed them. The hub's sync alone calls it
+     * (external-items.ts); one commit, `comment_edited` in the history.
+     * Listeners hear the task changed.
+     */
+    editComment(
+      projectId: string,
+      ref: string,
+      url: string,
+      text: string,
+      actor: TaskActor
+    ): Promise<TaskView> {
+      const written = commentText(text);
+      return change(projectId, ref, actor, (doc, id) => {
+        if (!doc.editComment(url, written)) {
+          refuse(404, `${id} holds no comment carried from ${url}.`);
+        }
+        const source = refOfUrl(url)?.source;
+        return {
+          what: `comment edited${source ? ` on ${externalItemWords.source[source]}` : ""}`,
+          change: CHANGES.commentEdited,
+        };
+      }).then((task) =>
+        told({ kind: "changed", projectId, id: task.id }, task)
+      );
+    },
+
     /** {@link migrateLinks} in the project's turn: what the hub runs for each project as it starts. */
     migrateLinks(projectId: string): Promise<LinkMigration> {
       return inTurn(projectId, async () => {
@@ -4520,6 +4718,7 @@ export const createTasks = (store: TaskStore) => {
               await dropTemplateCopy(projectId);
               await fillTypes(projectId);
               await migrateLinks(projectId);
+              await migrateExternalItems(projectId);
             });
             await sync(projectId);
           } catch (error) {
@@ -4597,6 +4796,8 @@ export const taskRoutes = (tasks: Tasks) =>
           needsYou: t.Optional(FLAG),
           /** 1: the archived tasks instead of the board's. */
           archived: t.Optional(FLAG),
+          /** An external item's URL, or #12 in the project's repository: the tasks linking it. */
+          link: t.Optional(t.String()),
         }),
       },
       async ({ params, query, request }) => {
@@ -4611,6 +4812,7 @@ export const taskRoutes = (tasks: Tasks) =>
             blocked: flagOf(query.blocked),
             needsYou: flagOf(query.needsYou),
             archived: query.archived === "1",
+            link: query.link,
             // `field.<key>=<value>`: a field a task file does not know, to equal the value.
             fields: fieldParams(new URL(request.url).searchParams),
           });
@@ -4640,6 +4842,8 @@ export const taskRoutes = (tasks: Tasks) =>
           budget: t.Optional(BUDGET),
           rank: t.Optional(t.String()),
           labels: t.Optional(t.Array(t.String())),
+          /** External items it links, each by its URL: GitHub issues, pull requests, discussions; Linear issues. */
+          links: t.Optional(t.Array(t.String())),
           description: t.Optional(t.String()),
           acceptance: t.Optional(t.String()),
           todos: t.Optional(t.Array(t.String())),
@@ -4712,6 +4916,8 @@ export const taskRoutes = (tasks: Tasks) =>
           outputs: t.Optional(t.Array(t.String())),
           context: t.Optional(t.Array(t.String())),
           labels: t.Optional(t.Array(t.String())),
+          /** The external items it links, each by its URL; replaces the list. */
+          links: t.Optional(t.Array(t.String())),
           fields: t.Optional(FIELDS),
         }),
       },

@@ -134,15 +134,3 @@ export interface TrackerTarget {
   name: string;
   url: string;
 }
-
-/** A task's linked issue, as the task's view carries it. */
-export interface TaskIssueLink {
-  /** Why the last sync of this task stopped short, in the tracker's words; null when it went through. */
-  problem: string | null;
-  provider: IssueTracker;
-  /** `#12` on GitHub, `ENG-123` on Linear. */
-  ref: string;
-  /** When this task and its issue last agreed, ms epoch; null before they first did. */
-  syncedAt: number | null;
-  url: string;
-}

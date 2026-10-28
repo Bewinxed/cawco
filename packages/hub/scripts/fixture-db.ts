@@ -156,6 +156,7 @@ function seedTasksAndThreads(db: HubDb, projects: string[]): void {
         rank: `a${t}`,
         labels: t % 4 === 0 ? ["release"] : [],
         fields: {},
+        links: [],
         todosDone: t % 3,
         todosTotal: 3,
         problem: null,

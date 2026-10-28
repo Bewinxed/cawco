@@ -23,7 +23,7 @@
  * - **Refusals** carry Linear's words: a scope it lacks is "Invalid scope:
  *   `write` required" (type `forbidden`).
  */
-import type { TrackerTarget } from "@cawco/core";
+import type { ExternalActor, TrackerTarget } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import {
   LinearError,
@@ -143,7 +143,7 @@ const ISSUES_QUERY = `query CawcoIssues($team: ID!, $since: DateTimeOrDuration!,
 
 const COMMENTS_QUERY = `query CawcoComments($team: ID!, $since: DateTimeOrDuration!, $after: String) {
   comments(first: ${PER_PAGE}, after: $after, orderBy: updatedAt, filter: { issue: { team: { id: { eq: $team } } }, createdAt: { gt: $since } }) {
-    nodes { id body createdAt issue { id } user { name } botActor { name } }
+    nodes { id body url createdAt editedAt issue { id } user { name } botActor { name } }
     pageInfo { hasNextPage endCursor }
   }
 }`;
@@ -157,7 +157,7 @@ const UPDATE_MUTATION = `mutation CawcoIssueUpdate($id: String!, $input: IssueUp
 }`;
 
 const COMMENT_MUTATION = `mutation CawcoCommentCreate($input: CommentCreateInput!) {
-  commentCreate(input: $input) { success comment { id createdAt } }
+  commentCreate(input: $input) { success comment { id createdAt url } }
 }`;
 
 interface RawIssue {
@@ -213,8 +213,24 @@ const openerOf = (raw: RawIssue): Issue["opener"] => {
   };
 };
 
+/** Someone Linear names by name: a member, else an integration. Its own fields are slice 2's (tsk-128). */
+const linearActorOf = (name: string, bot: boolean): ExternalActor => ({
+  source: "linear",
+  login: name,
+  name,
+  avatarUrl: null,
+  url: null,
+  kind: bot ? "bot" : "person",
+  memberId: null,
+});
+
 const issueOf = (raw: RawIssue): Issue => ({
+  id: raw.id,
   key: raw.id,
+  number: null,
+  author: raw.creator
+    ? linearActorOf(raw.creator.name ?? "a member", false)
+    : linearActorOf(raw.botActor?.name ?? "an integration", true),
   ref: raw.identifier,
   url: raw.url,
   title: raw.title,
@@ -477,8 +493,10 @@ export const linearAdapter = (
           body: string;
           botActor?: { name?: string | null } | null;
           createdAt: string;
+          editedAt?: string | null;
           id: string;
           issue?: { id: string } | null;
+          url: string;
           user?: { name: string } | null;
         },
         IssueComment
@@ -493,7 +511,9 @@ export const linearAdapter = (
           return {
             id: raw.id,
             issueKey: raw.issue?.id ?? "",
-            author,
+            url: raw.url,
+            author: linearActorOf(author, !raw.user),
+            editedAt: raw.editedAt ? Date.parse(raw.editedAt) : null,
             // An integration's comment (Slack, an Ask), no member behind it.
             unvouched: raw.user
               ? null
@@ -508,7 +528,7 @@ export const linearAdapter = (
     comment: async (issue, author, body) => {
       const { commentCreate } = await ask<{
         commentCreate: {
-          comment: { createdAt: string; id: string } | null;
+          comment: { createdAt: string; id: string; url: string } | null;
           success: boolean;
         };
       }>(`comment on ${issue.ref}`, COMMENT_MUTATION, {
@@ -525,6 +545,7 @@ export const linearAdapter = (
       return {
         id: commentCreate.comment.id,
         createdAt: Date.parse(commentCreate.comment.createdAt),
+        url: commentCreate.comment.url,
       };
     },
   };

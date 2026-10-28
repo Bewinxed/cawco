@@ -20,15 +20,19 @@
  *   Linear's own GitHub sync does the same: "This will only sync issues
  *   *going forward*" (linear.app/docs/github).
  * - **The link** is the task file's `issue:` (the issue's URL; files are the
- *   truth) and a row of what the two last agreed on (`tracker_links`). A
- *   side whose value moved off the agreed one changed that field. A task
- *   whose file names an issue the hub keeps no link for is linked again, the
- *   tracker the record of every field that differs.
+ *   truth), the task's record link as the issue holds it (`task_links`,
+ *   mode `record`, db task-links.ts), and a row of what the two last agreed
+ *   on (`tracker_links`). A side whose value moved off the agreed one
+ *   changed that field. A task whose file names an issue the hub keeps no
+ *   link for is linked again, the tracker the record of every field that
+ *   differs.
  * - **What syncs**, as Linear's GitHub sync does, less what CawCo keeps:
  *   "title, description, status, … labels, … comments"
  *   (linear.app/docs/github). Stages map onto states through their kinds
  *   (tracker-adapter.ts); with GitHub, a stage is open or closed. Comments
- *   go once each way, from the link on, a CawCo comment saying who wrote it.
+ *   go once each way, from the link on, a CawCo comment saying who wrote it;
+ *   one from the tracker is filed as data through external-items.ts (its
+ *   author, source and URL), and an edit there rewrites it in place.
  * - **Who opened it.** On a public repository anyone may open an issue, and
  *   a task in a `todo` stage is the dispatcher's to start. So an issue
  *   whose opener the tracker does not vouch for (GitHub: no owner, member or
@@ -68,7 +72,6 @@ import {
   type GithubProjectsView,
   type IssueTracker,
   statusOptionFor,
-  type TaskIssueLink,
   TRACKER_NAMES,
   type Tracker,
   type TrackerSyncState,
@@ -80,15 +83,19 @@ import type { Stage, TaskSummary } from "@cawco/core/task-views";
 import { Elysia, status, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { TrackerCursor, TrackerSynced } from "./db/schema";
+import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
 import type {
+  TrackerAgreementRow,
   TrackerBindingRow,
   TrackerLinkRow,
   TrackersDb,
 } from "./db/trackers";
+import type { ExternalItems } from "./external-items";
 import type { HubLifetimeShape } from "./lifetime";
 import { turnTaker } from "./project-folder";
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
 import {
+  externalStateOf,
   type Issue,
   type IssueComment,
   type IssuePatch,
@@ -120,15 +127,9 @@ const RECHECK_MS = 10 * 60_000;
 const SOON_MS = 500;
 /** A task changed this close before its last sync is looked at again: commit times are whole seconds. */
 const CLOCK_MARGIN_MS = 2000;
-/** A link's issue key while the issue could not be made yet. */
-const PENDING = "pending:";
 /** How far a description's headings go, and a comment's (tracker-adapter.ts). */
 const DESCRIPTION_DEPTH = 1;
 const COMMENT_DEPTH = 2;
-const GITHUB_ISSUE_URL =
-  /^https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/iu;
-const LINEAR_ISSUE_URL =
-  /^https:\/\/linear\.app\/[^/]+\/issue\/([A-Z0-9]+-\d+)/iu;
 
 export interface TrackersDeps {
   readonly connections: Pick<
@@ -143,8 +144,11 @@ export interface TrackersDeps {
     readonly project: (
       id: string
     ) => { id: string; remote: string | null } | undefined;
+    readonly taskLinks: Pick<TaskLinksDb, "byItem" | "comments" | "putComment">;
     readonly trackers: TrackersDb;
   };
+  /** Files a comment from the tracker on its task, once, as data (external-items.ts). */
+  readonly externalItems: Pick<ExternalItems, "fileComment">;
   readonly lifetime: HubLifetimeShape;
   readonly tasks: Pick<
     Tasks,
@@ -285,17 +289,29 @@ const fileFields = (view: TaskView): Fields => ({
   labels: labelSet(view.labels),
 });
 
-/** An issue's URL on its host: which tracker it is on, and its ref. */
-const namedIssue = (
-  url: string
-): Pick<TaskIssueLink, "provider" | "ref"> | undefined => {
-  const github = GITHUB_ISSUE_URL.exec(url)?.[1];
-  if (github) {
-    return { provider: "github", ref: `#${github}` };
-  }
-  const linear = LINEAR_ISSUE_URL.exec(url)?.[1];
-  return linear ? { provider: "linear", ref: linear } : undefined;
-};
+/** What the issue holds, as its task's record link keeps it (db task-links.ts). */
+const heldOf = (issue: Issue) => ({
+  externalId: issue.id,
+  number: issue.number,
+  ref: issue.ref,
+  title: issue.title,
+  state: externalStateOf(issue.state),
+  stateName: issue.state.name,
+  author: issue.author,
+  labels: issue.labels,
+  remoteUpdatedAt: issue.updatedAt,
+});
+
+/** How the link lookup names an issue by its tracker's key: GitHub's number in the bound repository, Linear's id. */
+const itemOf = (binding: TrackerBindingRow, key: string): ItemKey =>
+  binding.provider === "github"
+    ? {
+        source: "github",
+        kind: "issue",
+        number: Number(key),
+        container: binding.target,
+      }
+    : { source: "linear", externalId: key };
 
 const wordsOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -869,13 +885,20 @@ export const createTrackers = (deps: TrackersDeps) => {
   /** A task's comments written in CawCo since its link, posted once each to its issue. */
   const carryOut = async (round: Round): Promise<void> => {
     const { sync, link, task } = round;
-    const carried = db.trackers.carriedAt(sync.projectId, link.taskId);
+    const carried = new Set(
+      db.taskLinks
+        .comments(sync.projectId, link.taskId)
+        .filter((row) => row.direction === "out")
+        .map((row) => row.entryAt)
+    );
     const due = task.comments.filter(
       (comment) =>
+        comment.via === null &&
         comment.at >= link.linkedAt.getTime() &&
         !carried.has(comment.at) &&
         comment.author.mover !== "hub"
     );
+    const { provider } = sync.binding;
     for (const comment of due) {
       try {
         const posted = await sync.adapter.comment(
@@ -883,12 +906,25 @@ export const createTrackers = (deps: TrackersDeps) => {
           comment.author.name,
           outOfFile(comment.text, COMMENT_DEPTH)
         );
-        db.trackers.carry({
+        db.taskLinks.putComment({
           projectId: sync.projectId,
           taskId: link.taskId,
-          remoteId: posted.id,
-          origin: "cawco",
-          at: comment.at,
+          source: provider,
+          externalId: posted.id,
+          url: posted.url,
+          direction: "out",
+          author: {
+            source: provider,
+            login: comment.author.name,
+            name: null,
+            avatarUrl: null,
+            url: null,
+            kind: "app",
+            memberId: null,
+          },
+          at: posted.createdAt,
+          editedAt: null,
+          entryAt: comment.at,
         });
       } catch (error) {
         if (error instanceof TrackerRefusal && error.kind === "rate") {
@@ -946,47 +982,44 @@ export const createTrackers = (deps: TrackersDeps) => {
     await carryOut(round);
     db.trackers.updateLink(sync.projectId, link.taskId, {
       synced: round.next,
-      ref: round.issue.ref,
-      url: round.issue.url,
-      remoteUpdatedAt: round.issue.updatedAt,
+      ...heldOf(round.issue),
       syncedAt: new Date(),
       problem: round.said.length > 0 ? round.said.join(" ") : null,
     });
   };
 
-  /** One comment on a linked issue, added to its task once. */
+  /** One comment on a linked issue, added to its task once as data, or its entry rewritten when it was edited there. */
   const carryInOne = async (
     sync: Sync,
     comment: IssueComment,
     link: TrackerLinkRow
   ): Promise<void> => {
-    const text = intoFile(comment.body, COMMENT_DEPTH);
-    if (
-      !text ||
-      comment.createdAt < link.linkedAt.getTime() ||
-      db.trackers.carried(sync.projectId, comment.id)
-    ) {
+    if (comment.createdAt < link.linkedAt.getTime()) {
       return;
     }
     const { provider } = sync.binding;
     try {
-      const task = await own(sync.projectId, link.taskId, () =>
-        tasks.comment(sync.projectId, link.taskId, text, {
-          mover: "hub",
-          author: {
-            name: `${comment.author} on ${provider === "github" ? "GitHub" : "Linear"}`,
+      const filed = await own(sync.projectId, link.taskId, () =>
+        deps.externalItems.fileComment(
+          sync.projectId,
+          link.taskId,
+          link.ref,
+          {
+            source: provider,
+            externalId: comment.id,
+            url: comment.url,
+            author: comment.author,
+            at: comment.createdAt,
+            editedAt: comment.editedAt,
+            direction: "in",
           },
-          reason: `a comment on ${link.ref}`,
-          tracker: provider,
-        })
+          comment.body
+        )
       );
-      db.trackers.carry({
-        projectId: sync.projectId,
-        taskId: link.taskId,
-        remoteId: comment.id,
-        origin: "tracker",
-        at: task.comments.at(-1)?.at ?? Date.now(),
-      });
+      if (filed.kind === "none") {
+        return;
+      }
+      const { task } = filed;
       // Their words are in its file now: an agent reads them only once you say so.
       if (comment.unvouched && unattended(sync, task.stage)) {
         await own(sync.projectId, link.taskId, () =>
@@ -1028,7 +1061,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       };
     }
     for (const comment of listed.items) {
-      const link = db.trackers.linkByIssue(sync.projectId, comment.issueKey);
+      const link = linkOfIssue(sync, comment.issueKey);
       if (link) {
         await carryInOne(sync, comment, link);
       }
@@ -1039,8 +1072,16 @@ export const createTrackers = (deps: TrackersDeps) => {
     };
   };
 
-  /** The link a task gets with its issue: what they agree on, from now. */
-  const linkRow = (
+  /** The sync's link of an issue, by its tracker's key; undefined while no task, archived or not, holds it as its record. */
+  const linkOfIssue = (sync: Sync, key: string): TrackerLinkRow | undefined => {
+    const record = db.taskLinks
+      .byItem(sync.projectId, itemOf(sync.binding, key), "any")
+      .find((row) => row.mode === "record");
+    return record && db.trackers.link(sync.projectId, record.taskId);
+  };
+
+  /** Links a task to its issue: what they agree on from now, and its record link as the issue holds it. */
+  const putLink = (
     sync: Sync,
     task: TaskView,
     issue: Issue,
@@ -1049,20 +1090,27 @@ export const createTrackers = (deps: TrackersDeps) => {
     linkedAt: Date,
     /** Its opener, when the tracker does not vouch for them: its pulls wait for you. */
     unvouched: string | null = null
-  ): TrackerLinkRow => ({
-    projectId: sync.projectId,
-    taskId: task.id,
-    provider: sync.binding.provider,
-    issueKey: issue.key,
-    ref: issue.ref,
-    url: issue.url,
-    synced: { ...agreed, stage: task.stage },
-    remoteUpdatedAt: issue.updatedAt,
-    problem: null,
-    syncedAt: new Date(),
-    linkedAt,
-    unvouched,
-  });
+  ): void => {
+    const agreement: TrackerAgreementRow = {
+      projectId: sync.projectId,
+      taskId: task.id,
+      synced: { ...agreed, stage: task.stage },
+      linkedAt,
+      unvouched,
+    };
+    const record: TaskLinkRow = {
+      projectId: sync.projectId,
+      taskId: task.id,
+      url: issue.url,
+      source: sync.binding.provider,
+      kind: "issue",
+      mode: "record",
+      ...heldOf(issue),
+      syncedAt: new Date(),
+      problem: null,
+    };
+    db.trackers.putLink(agreement, record);
+  };
 
   /**
    * A task whose file names an issue the hub keeps no link for: linked
@@ -1084,9 +1132,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
     db.trackers.dropLink(sync.projectId, task.id);
     // Linked again from now: comments either side wrote before are not carried twice.
-    db.trackers.putLink(
-      linkRow(sync, task, issue, { ...fileFields(task), state: "" }, new Date())
-    );
+    putLink(sync, task, issue, { ...fileFields(task), state: "" }, new Date());
     const link = db.trackers.link(sync.projectId, task.id);
     if (link) {
       await reconcile(sync, link, issue);
@@ -1150,14 +1196,12 @@ export const createTrackers = (deps: TrackersDeps) => {
     const placed = await placeOnProject(sync, task, issue);
     db.trackers.dropLink(sync.projectId, task.id);
     // Linked from the task's making: what was said on it before its issue was made goes too.
-    db.trackers.putLink(
-      linkRow(
-        sync,
-        task,
-        issue,
-        { ...remote, state: issue.state.token, ...placed },
-        new Date(task.createdAt)
-      )
+    putLink(
+      sync,
+      task,
+      issue,
+      { ...remote, state: issue.state.token, ...placed },
+      new Date(task.createdAt)
     );
     const back = Object.fromEntries(
       FIELDS.filter((field) => !sameField(remote[field], fields[field])).map(
@@ -1188,30 +1232,17 @@ export const createTrackers = (deps: TrackersDeps) => {
     );
   };
 
-  /** A task with no issue yet: the issue its file names, linked, or one made; a refusal kept on a pending link. */
+  /** A task with no issue yet: the issue its file names, linked, or one made; a refusal is the binding's to say, and the next sync tries again. */
   const fileOrRelink = async (sync: Sync, taskId: string): Promise<void> => {
     const task = await tasks.get(sync.projectId, taskId);
     try {
-      const named = task.issue?.url;
+      const named = task.links.find((link) => link.mode === "record")?.url;
       await (named ? relink(sync, task, named) : fileIssue(sync, task));
     } catch (error) {
       if (stopsSync(error)) {
         throw error;
       }
-      db.trackers.putLink({
-        projectId: sync.projectId,
-        taskId,
-        provider: sync.binding.provider,
-        issueKey: `${PENDING}${taskId}`,
-        ref: "",
-        url: "",
-        synced: { ...fileFields(task), state: "", stage: task.stage },
-        remoteUpdatedAt: 0,
-        problem: fail(sync, taskId, problemOf(error)),
-        syncedAt: null,
-        linkedAt: new Date(),
-        unvouched: null,
-      });
+      fail(sync, taskId, problemOf(error));
     }
   };
 
@@ -1255,19 +1286,17 @@ export const createTrackers = (deps: TrackersDeps) => {
         { ...fields, stage: stage.name },
         actor
       );
-      db.trackers.putLink(
-        linkRow(
-          sync,
-          task,
-          issue,
-          {
-            ...fields,
-            state: issue.state.token,
-            ...(sync.onProject ? { status: item?.optionId ?? null } : {}),
-          },
-          new Date(issue.createdAt),
-          unvouched
-        )
+      putLink(
+        sync,
+        task,
+        issue,
+        {
+          ...fields,
+          state: issue.state.token,
+          ...(sync.onProject ? { status: item?.optionId ?? null } : {}),
+        },
+        new Date(issue.createdAt),
+        unvouched
       );
       await own(sync.projectId, task.id, () =>
         tasks.setIssue(sync.projectId, task.id, issue.url, actor)
@@ -1423,7 +1452,7 @@ export const createTrackers = (deps: TrackersDeps) => {
           link.problem !== null ||
           statusMoved ||
           task.updatedAt > (link.syncedAt?.getTime() ?? 0) - CLOCK_MARGIN_MS);
-      if (task && !link.issueKey.startsWith(PENDING) && (issue || touched)) {
+      if (task && (issue || touched)) {
         await reconcile(sync, link, issue);
       }
     }
@@ -1436,10 +1465,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   ): Promise<void> => {
     const bound = sync.binding.boundAt.getTime();
     for (const issue of moved.values()) {
-      if (
-        issue.createdAt >= bound &&
-        !db.trackers.linkByIssue(sync.projectId, issue.key)
-      ) {
+      if (issue.createdAt >= bound && !linkOfIssue(sync, issue.key)) {
         await fileTask(sync, issue);
       }
     }
@@ -1453,10 +1479,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     const bound = sync.binding.boundAt.getTime() - CLOCK_MARGIN_MS;
     for (const task of board) {
       const link = db.trackers.link(sync.projectId, task.id);
-      if (
-        task.createdAt >= bound &&
-        (!link || link.issueKey.startsWith(PENDING))
-      ) {
+      if (task.createdAt >= bound && !link) {
         await fileOrRelink(sync, task.id);
       }
     }
@@ -1793,28 +1816,6 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
   };
 
-  /** A task's issue, as its view shows it (tasks.ts `TaskStore.issueOf`). */
-  const issueOf = (
-    projectId: string,
-    taskId: string,
-    named: string | null
-  ): TaskIssueLink | null => {
-    const link = db.trackers.link(projectId, taskId);
-    if (link) {
-      return {
-        provider: link.provider,
-        ref: link.ref,
-        url: link.url,
-        problem: link.problem,
-        syncedAt: link.syncedAt?.getTime() ?? null,
-      };
-    }
-    const host = named ? namedIssue(named) : undefined;
-    return host && named
-      ? { ...host, url: named, problem: null, syncedAt: null }
-      : null;
-  };
-
   const poller = lifetime.every(POLL_MS, () => {
     for (const binding of db.trackers.bindings()) {
       detach(
@@ -1833,7 +1834,6 @@ export const createTrackers = (deps: TrackersDeps) => {
   return {
     bind,
     githubProjects: githubProjectsOf,
-    issueOf,
     targets,
     view,
     /** Syncs a project now, in its turn; answers where it stands after. */

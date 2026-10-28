@@ -27,7 +27,7 @@
  * - **Time.** Every request has 30 s to answer (readWithin), as the GitHub
  *   poller's do; none answered says so.
  */
-import type { TrackerTarget } from "@cawco/core";
+import type { ExternalActor, TrackerTarget } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import type { Octokit } from "@octokit/rest";
 import {
@@ -102,14 +102,39 @@ interface RawIssue {
   created_at: string;
   html_url: string;
   labels?: (string | { name?: string | null })[];
+  node_id?: string;
   number: number;
   pull_request?: unknown;
   state: string;
   state_reason?: string | null;
   title: string;
   updated_at: string;
-  user?: { login?: string | null } | null;
+  user?: RawUser | null;
 }
+
+/** Someone as GitHub's REST answers name them. */
+interface RawUser {
+  avatar_url?: string | null;
+  html_url?: string | null;
+  login?: string | null;
+  type?: string | null;
+}
+
+/** Someone GitHub names, as an external item carries them; null when it names no one. */
+export const githubActorOf = (
+  user: RawUser | null | undefined
+): ExternalActor | null =>
+  user?.login
+    ? {
+        source: "github",
+        login: user.login,
+        name: null,
+        avatarUrl: user.avatar_url ?? null,
+        url: user.html_url ?? null,
+        kind: user.type === "Bot" ? "bot" : "person",
+        memberId: null,
+      }
+    : null;
 
 /** Who someone is to the repository, in words, when GitHub does not vouch for them; null when it does. */
 const unvouchedOf = (name: string, standing = "NONE"): string | null =>
@@ -127,10 +152,11 @@ interface RawComment {
   author_association?: string;
   body?: string | null;
   created_at: string;
+  html_url?: string;
   id: number;
   issue_url: string;
   updated_at?: string;
-  user?: { login?: string | null } | null;
+  user?: RawUser | null;
 }
 
 const stateOf = (raw: RawIssue): IssueState => {
@@ -147,7 +173,10 @@ const stateOf = (raw: RawIssue): IssueState => {
 const issueOf = (raw: RawIssue): Issue | null =>
   raw.pull_request === undefined || raw.pull_request === null
     ? {
+        id: raw.node_id ?? "",
         key: String(raw.number),
+        number: raw.number,
+        author: githubActorOf(raw.user),
         ref: `#${raw.number}`,
         url: raw.html_url,
         title: raw.title,
@@ -167,15 +196,27 @@ const issueOf = (raw: RawIssue): Issue | null =>
 /** A comment as the sync reads it; null for one on no issue it can name. */
 const commentOf = (raw: RawComment): IssueComment | null => {
   const number = ISSUE_PATH.exec(new URL(raw.issue_url).pathname)?.[1];
-  const author = raw.user?.login ?? "someone";
-  return number
+  const author = githubActorOf(raw.user) ?? {
+    source: "github",
+    login: "someone",
+    name: null,
+    avatarUrl: null,
+    url: null,
+    kind: "person",
+    memberId: null,
+  };
+  const createdAt = Date.parse(raw.created_at);
+  const updatedAt = Date.parse(raw.updated_at ?? raw.created_at);
+  return number && raw.html_url
     ? {
         id: String(raw.id),
         issueKey: number,
+        url: raw.html_url,
         author,
-        unvouched: unvouchedOf(author, raw.author_association),
+        unvouched: unvouchedOf(author.login, raw.author_association),
         body: (raw.body ?? "").replaceAll("\r\n", "\n").trim(),
-        createdAt: Date.parse(raw.created_at),
+        createdAt,
+        editedAt: updatedAt > createdAt ? updatedAt : null,
       }
     : null;
 };
@@ -525,7 +566,11 @@ export const githubAdapter = (
             request: { signal },
           }
         );
-        return { id: String(data.id), createdAt: Date.parse(data.created_at) };
+        return {
+          id: String(data.id),
+          createdAt: Date.parse(data.created_at),
+          url: data.html_url,
+        };
       }),
   };
 };

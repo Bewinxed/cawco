@@ -6,6 +6,7 @@
  * ---
  * stage: draft
  * issue: "https://github.com/acme/app/issues/12"
+ * links: ["https://github.com/acme/app/pull/418"]
  * type: writer
  * waits_on: [138, "<artifact id>#head", "https://github.com/acme/app/pull/418"]
  * part_of: 120
@@ -69,10 +70,15 @@
  * write through the API, and the parser reads whatever a hand wrote.
  */
 import {
+  actorNamed,
+  commentIdOfUrl,
+  type ExternalComment,
   type FrontMatterLine,
   frontMatterBlock,
+  isExternalSource,
   LANDS_MODES,
   type LandsMode,
+  refOfUrl,
   TASK_MOVERS,
   type TaskTodo,
   waitHandle,
@@ -85,6 +91,7 @@ import type { WorkBudget } from "./db/schema";
 export const TASK_FIELDS = [
   "stage",
   "issue",
+  "links",
   "type",
   "waits_on",
   "part_of",
@@ -129,6 +136,12 @@ export interface TaskFields {
   labels: string[];
   /** Where an attempt's work lands (`main`, `branch`, `pr`, `none`); null: the project's default. */
   lands: LandsMode | null;
+  /**
+   * Every other external item it links (`links:`), each by its URL: a
+   * GitHub issue, pull request or discussion, a Linear issue (core
+   * external-items.ts). Written by a person, a session or the sync.
+   */
+  links: string[];
   outputs: string[];
   /** Globs of the repository's files its attempt owns: no overlapping live item runs beside it. */
   owns: string[];
@@ -164,11 +177,19 @@ export interface TaskCommentAuthor {
 
 /** One entry of a task's `## Comments`, written only by the hub (tasks.ts `comment`). */
 export interface TaskComment {
-  /** When it was written, ms epoch. */
+  /** When it was written, ms epoch: on its source, for one carried from there. */
   at: number;
   author: TaskCommentAuthor;
   /** Its markdown, as written. */
   text: string;
+  /**
+   * Set when it was written on an outside source, as its heading names it
+   * (its author's login, the source, its URL); the hub's `external_comments`
+   * row adds its author's picture and when it was edited (tasks.ts). The
+   * board draws the words under `via.author` with the source's mark and a
+   * link to `via.url`.
+   */
+  via: ExternalComment | null;
 }
 
 /** A front matter value a task file does not know: one scalar, or a list. */
@@ -380,6 +401,7 @@ const renderEdge = (ref: string): string =>
 const FIELD_KEYS = {
   stage: "stage",
   issue: "issue",
+  links: "links",
   type: "type",
   waits_on: "waitsOn",
   part_of: "partOf",
@@ -436,6 +458,7 @@ const renderBudget = (budget: WorkBudget): string | undefined => {
 const emptyFields = (): TaskFields => ({
   stage: null,
   issue: null,
+  links: [],
   type: null,
   waitsOn: [],
   partOf: null,
@@ -471,6 +494,28 @@ const readWaits = (line: FrontMatterLine, problems: string[]): string[] => {
     } else {
       problems.push(
         `waits_on: “${item}” is not a task, card, pin, pull request, Actions run or session.`
+      );
+    }
+  }
+  return [...new Set(kept)];
+};
+
+/** `links:`, each an external item's URL (core `refOfUrl`); what names none goes to `problems`. */
+const readLinks = (line: FrontMatterLine, problems: string[]): string[] => {
+  const items = listOf(line);
+  if (!items) {
+    problems.push(
+      'links: is not a list like ["https://github.com/acme/app/pull/418"].'
+    );
+    return [];
+  }
+  const kept: string[] = [];
+  for (const item of items) {
+    if (refOfUrl(item)) {
+      kept.push(item.trim());
+    } else {
+      problems.push(
+        `links: “${item}” is not a GitHub issue, pull request or discussion, or a Linear issue.`
       );
     }
   }
@@ -603,6 +648,8 @@ const readField = (
 ): boolean => {
   if (field === "waits_on") {
     fields.waitsOn = readWaits(line, problems);
+  } else if (field === "links") {
+    fields.links = readLinks(line, problems);
   } else if (field === "part_of") {
     fields.partOf = readEdge(field, line, problems);
   } else if (field === "found_in") {
@@ -683,46 +730,88 @@ const isTodos = (heading: string): boolean =>
 const isComments = (heading: string): boolean =>
   sectionName(heading) === "comments";
 
-/** A comment entry's heading: `### <name> · <mover>[ · <id>] · <ISO time>`. */
+/**
+ * A comment entry's heading: `### <name> · <mover>[ · <id>] · <ISO time>`;
+ * for one carried from an outside source, `### <login> · <source> · <its
+ * URL> · <ISO time>` (`### bewinxed · github · https://github.com/acme/app/
+ * issues/1#issuecomment-6401439683 · 2026-10-25T09:12:00.000Z`).
+ */
 const COMMENT_HEADING = /^###\s+(.+)$/u;
 const COMMENT_SEPARATOR = " · ";
 const MIDDLE_DOT = /·/gu;
 const COMMENT_MOVERS: ReadonlySet<string> = new Set(TASK_MOVERS);
 
-/** A comment heading's author and time; undefined when it is not one the hub wrote. */
+/** A carried comment's source and URL, from its heading's middle slots; null for any other. */
+const viaOf = (
+  name: string,
+  slot: string,
+  url: string,
+  at: number
+): ExternalComment | null => {
+  const externalId = commentIdOfUrl(url);
+  return isExternalSource(slot) && externalId
+    ? {
+        source: slot,
+        externalId,
+        url,
+        author: actorNamed(slot, name),
+        at,
+        editedAt: null,
+        direction: "in",
+      }
+    : null;
+};
+
+/** A comment heading's author, time and source; undefined when it is not one the hub wrote. */
 const commentHeading = (
   heading: string
-): Pick<TaskComment, "at" | "author"> | undefined => {
+): Omit<TaskComment, "text"> | undefined => {
   const parts = heading.split(COMMENT_SEPARATOR).map((part) => part.trim());
   const at = Date.parse(parts.at(-1) ?? "");
   if (parts.length < 3 || Number.isNaN(at)) {
     return;
   }
+  const name = parts[0] ?? "";
   const mover = parts[1] ?? "";
+  const id = parts.length > 3 ? (parts[2] ?? null) : null;
+  const via = parts.length === 4 ? viaOf(name, mover, id ?? "", at) : null;
   return {
     at,
     author: {
-      name: parts[0] ?? "",
+      name,
       mover: COMMENT_MOVERS.has(mover) ? mover : null,
-      id: parts.length > 3 ? (parts[2] ?? null) : null,
+      id: via ? null : id,
     },
+    via,
   };
 };
 
+/** One comment entry and where it stands in the body: its heading's line, and one past its last. */
+interface CommentEntry {
+  comment: TaskComment;
+  end: number;
+  heading: number;
+}
+
 /** The entries of a `## Comments` section, oldest first, skipping anything inside a code fence. */
-const commentsOf = (
+const commentEntries = (
   lines: string[],
   section: BodySection | undefined
-): TaskComment[] => {
-  const comments: TaskComment[] = [];
+): CommentEntry[] => {
+  const entries: CommentEntry[] = [];
   if (!section) {
-    return comments;
+    return entries;
   }
   let open:
-    { head: Pick<TaskComment, "at" | "author">; lines: string[] } | undefined;
-  const close = () => {
+    | { head: Omit<TaskComment, "text">; heading: number; lines: string[] }
+    | undefined;
+  const close = (end: number) => {
     if (open) {
-      comments.push({ ...open.head, text: textOf(open.lines) });
+      entries.push({
+        comment: { ...open.head, text: textOf(open.lines) },
+        heading: open.heading,
+        end,
+      });
     }
   };
   let fenced = false;
@@ -734,14 +823,14 @@ const commentsOf = (
     const heading = fenced ? undefined : COMMENT_HEADING.exec(raw)?.[1];
     const head = heading === undefined ? undefined : commentHeading(heading);
     if (head) {
-      close();
-      open = { head, lines: [] };
+      close(at);
+      open = { head, heading: at, lines: [] };
     } else {
       open?.lines.push(raw);
     }
   }
-  close();
-  return comments;
+  close(section.end);
+  return entries;
 };
 
 /** The body's `## ` sections, skipping anything inside a code fence. */
@@ -874,6 +963,19 @@ export const criteriaOf = (acceptance: string): string[] => {
   return all.slice(0, CRITERIA_MAX);
 };
 
+/** A comment entry's heading line (`addComment`): the hub's actor's, or a carried comment's source and URL. */
+const commentHeadingLine = (
+  author: TaskCommentAuthor,
+  at: Date,
+  via: ExternalComment | null
+): string => {
+  const name = author.name.replace(MIDDLE_DOT, "-").replace(SPACES, " ");
+  const slots = via
+    ? [via.source, via.url]
+    : [author.mover ?? "someone", ...(author.id ? [author.id] : [])];
+  return `### ${[name.trim() || "someone", ...slots, at.toISOString()].join(COMMENT_SEPARATOR)}`;
+};
+
 // --- the document --------------------------------------------------------------
 
 /**
@@ -962,10 +1064,7 @@ export class TaskDoc {
       todos: this.todoLines().map(
         ({ indent: _indent, line: _line, ...todo }) => todo
       ),
-      comments: commentsOf(
-        this.body,
-        sections.find((section) => isComments(section.heading))
-      ),
+      comments: this.commentEntries().map((entry) => entry.comment),
       sections: sections
         .filter(
           (section) =>
@@ -1235,18 +1334,18 @@ export class TaskDoc {
   /**
    * Adds one entry to the `## Comments` section, making the section at the
    * end when there is none: a `### <name> · <mover>[ · <id>] · <time>`
-   * heading and the text under it. Only the hub writes one (tasks.ts
-   * `comment`); entries are never changed or taken out.
+   * heading, or for one carried from an outside source (`via`) a
+   * `### <login> · <source> · <URL> · <time>` one, and the text under it.
+   * Only the hub writes one (tasks.ts `comment`); entries are never taken
+   * out, and only the hub's sync changes one ({@link editComment}).
    */
-  addComment(author: TaskCommentAuthor, at: Date, text: string): void {
-    const name = author.name.replace(MIDDLE_DOT, "-").replace(SPACES, " ");
-    const heading = `### ${[
-      name.trim() || "someone",
-      author.mover ?? "someone",
-      ...(author.id ? [author.id] : []),
-      at.toISOString(),
-    ].join(COMMENT_SEPARATOR)}`;
-    const entry = [heading, "", text.trim(), ""];
+  addComment(
+    author: TaskCommentAuthor,
+    at: Date,
+    text: string,
+    via: ExternalComment | null = null
+  ): void {
+    const entry = [commentHeadingLine(author, at, via), "", text.trim(), ""];
     const section = sectionsOf(this.body).find((each) =>
       isComments(each.heading)
     );
@@ -1260,6 +1359,76 @@ export class TaskDoc {
       end -= 1;
     }
     this.body.splice(end, 0, "", ...entry.slice(0, -1));
+  }
+
+  /** The `## Comments` section's entries, each with where it stands in the body. */
+  private commentEntries(): CommentEntry[] {
+    return commentEntries(
+      this.body,
+      sectionsOf(this.body).find((section) => isComments(section.heading))
+    );
+  }
+
+  /**
+   * Rewrites the words of the entry carried from `url` (its heading names
+   * it), its heading as it was: the source changed them (tasks.ts
+   * `editComment`, the hub's sync alone). Answers false when no entry names
+   * that URL.
+   */
+  editComment(url: string, text: string): boolean {
+    const entry = this.entryWhere((comment) => comment.via?.url === url);
+    if (entry) {
+      this.body.splice(
+        entry.heading + 1,
+        entry.end - entry.heading - 1,
+        "",
+        text.trim()
+      );
+    }
+    return entry !== undefined;
+  }
+
+  /** The first entry `matches` takes: its heading's line, and one past its last line of words. */
+  private entryWhere(
+    matches: (comment: TaskComment) => boolean
+  ): { end: number; heading: number } | undefined {
+    const entry = this.commentEntries().find((each) => matches(each.comment));
+    if (!entry) {
+      return;
+    }
+    let { end } = entry;
+    while (end > entry.heading + 1 && this.body[end - 1]?.trim() === "") {
+      end -= 1;
+    }
+    return { heading: entry.heading, end };
+  }
+
+  /**
+   * Rewrites the entry headed at time `at` as one carried from `via`: its
+   * heading names the author's login, the source and its URL, its words
+   * become `text`. The cutover of comments written before they were data
+   * (tasks.ts `migrateExternalItems`). Answers false when no entry has that
+   * time.
+   */
+  recastComment(at: number, via: ExternalComment, text: string): boolean {
+    const entry = this.entryWhere(
+      (comment) => comment.at === at && comment.via === null
+    );
+    if (!entry) {
+      return false;
+    }
+    this.body.splice(
+      entry.heading,
+      entry.end - entry.heading,
+      commentHeadingLine(
+        { name: via.author.login, mover: null, id: null },
+        new Date(at),
+        via
+      ),
+      "",
+      text.trim()
+    );
+    return true;
   }
 
   /** The `## Comments` section's lines, its heading first and its trailing blank lines left off; undefined when there is none. */

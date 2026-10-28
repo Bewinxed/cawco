@@ -46,6 +46,8 @@ export * from "./deliverables";
 // A checkout's JavaScript dependencies from its root lockfile: a workspace's
 // cut and the repository's scripts, never the landing gate.
 export * from "./deps";
+// An external item on a task: a GitHub or Linear link and a comment carried from it.
+export * from "./external-items";
 // Finding things across the fleet: what /api/find answers (find.ts).
 export * from "./find";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
@@ -1966,6 +1968,7 @@ export * from "./words/contact";
 export * from "./words/containers";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
+export * from "./words/external-items";
 export * from "./words/files";
 export * from "./words/find-secrets";
 export * from "./words/gate";

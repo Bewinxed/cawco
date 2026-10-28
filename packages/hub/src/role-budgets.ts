@@ -320,11 +320,17 @@ import type { Tasks } from "./tasks";
  * description cut to "any field it was made with". About 340 tokens for
  * the lead, 170 for the worker (worker 25,950, lead 18,624 measured).
  * Raised deliberately, by that, for the lead; the worker fits.
+ * 2026-10-28: a task's external items are data (tsk-128): task_create and
+ * task_update take `links` (GitHub and Linear URLs), and task_read finds
+ * the tasks linking an item by `link` in place of a `github` field the
+ * routine matched as text. About 45 tokens for the lead and the worker
+ * (lead 18,684 measured). Raised deliberately, by that, for the lead; the
+ * worker fits.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_805,
   delegate: 10_224,
-  lead: 18_640,
+  lead: 18_690,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -491,6 +497,7 @@ export const listRoleTools = (): RoleTools[] => {
         db: {} as never,
         dispatcher: {} as never,
         eventLanded: () => undefined,
+        externalItems: {} as never,
         jevAccess: () => undefined,
         lifetime,
         routines: {} as never,

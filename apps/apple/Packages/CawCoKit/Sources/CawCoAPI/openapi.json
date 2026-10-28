@@ -2893,6 +2893,14 @@
                 "0"
               ]
             }
+          },
+          {
+            "name": "link",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "operationId": "getApiProjectsByIdTasks",
@@ -3107,6 +3115,12 @@
                     "type": "string"
                   },
                   "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "links": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -3517,6 +3531,12 @@
                     }
                   },
                   "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "links": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -34853,6 +34873,13 @@
               "type": "string"
             }
           },
+          "links": {
+            "description": "The external items it links (`issue:` first, then `links:`), as the card draws them: each source's mark and ref.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskLinkSummary"
+            }
+          },
           "needsYou": {
             "description": "It waits for you: its stage is of kind `you`, where only you move it on.\nAn attempt that failed or was stopped is its starter's business, not\nyours. Derived on read, never stored.",
             "type": "boolean"
@@ -35062,6 +35089,7 @@
           "labels",
           "lastAttemptFailed",
           "lastAttemptStopped",
+          "links",
           "liveAttempt",
           "needsYou",
           "number",
@@ -35083,6 +35111,64 @@
           "updatedAt",
           "waits",
           "waitsOn"
+        ]
+      },
+      "TaskLinkSummary": {
+        "description": "A link as a task's line on the board carries it: the card draws its mark and ref.",
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/LinkMode"
+          },
+          "ref": {
+            "description": "`#12`, `ENG-123`.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ExternalKind"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ExternalSource"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExternalRefState",
+            "description": "Its state as the source last said it; null until the item was read."
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "mode",
+          "ref",
+          "source",
+          "url"
+        ]
+      },
+      "LinkMode": {
+        "description": "`record`: the task's fields are one record with it (the file's `issue:`,\nthe tracker sync's). The rest are GitHub's and Linear's own link words;\na URL a person or session writes into `links:` is `related`.",
+        "type": "string",
+        "enum": [
+          "closes",
+          "record",
+          "refs",
+          "related"
+        ]
+      },
+      "ExternalKind": {
+        "type": "string",
+        "enum": [
+          "discussion",
+          "issue",
+          "pr"
+        ]
+      },
+      "ExternalSource": {
+        "type": "string",
+        "enum": [
+          "github",
+          "linear"
         ]
       },
       "TaskAttempt": {
@@ -35390,7 +35476,6 @@
         ]
       },
       "WaitKind": {
-        "description": "What a task waits on (hub task-file.ts `waits_on:`) and what a plan step\nwaits on (`PlanStep.waitsOn`): one grammar, its kind read from the\nhandle's shape, never from a type field. The hub's task-waits.ts reads\nwhat an agent writes into it and settles each target.\n\n| Kind    | An agent writes                                   | A file keeps                    |\n| ------- | ------------------------------------------------- | ------------------------------- |\n| task    | `tsk-12` (`#12`, `12`)                            | `12`                            |\n| card    | `<page>#<card>`, the page by name, handle or id   | `<artifact id>#<card>`          |\n| pin     | `<page>/<number>`                                 | `<artifact id>/<number>`        |\n| pr      | `https://github.com/<owner>/<repo>/pull/<n>`      | the same                        |\n| run     | `https://github.com/<owner>/<repo>/actions/runs/<n>` | the same                     |\n| session | `<dir>#<id8>`, the handle CawCo's tools name it by | `<dir>#<session id>`           |\n\nA kept card's artifact and a kept session are whole ids, so `<uuid>#<card>`\nand `<dir>#<uuid>` never read as each other.",
         "type": "string",
         "enum": [
           "card",
@@ -35523,10 +35608,6 @@
           "id": {
             "type": "string"
           },
-          "issue": {
-            "description": "The GitHub or Linear issue it is one record with (tracker.ts): its ref,\nits link, and why its last sync stopped short; null when it has none.",
-            "$ref": "#/components/schemas/TaskIssueLink"
-          },
           "kind": {
             "$ref": "#/components/schemas/StageKind",
             "description": "The kind of its stage; null when its stage is not one of the project's."
@@ -35540,6 +35621,13 @@
           "lands": {
             "$ref": "#/components/schemas/LandsMode",
             "description": "Where an attempt's work lands, as the file says; null: the project's default."
+          },
+          "links": {
+            "description": "The external items it links (core external-items.ts): its record\n(`issue:`, the tracker sync's) first, then its `links:`, each as the\nsource last said it.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExternalRef"
+            }
           },
           "needsYou": {
             "description": "It waits for you: its stage is of kind `you` (see {@link TaskSummary.needsYou}).",
@@ -35785,6 +35873,7 @@
           "labels",
           "lastAttemptFailed",
           "lastAttemptStopped",
+          "links",
           "liveAttempt",
           "needsYou",
           "number",
@@ -35831,7 +35920,7 @@
         "type": "object",
         "properties": {
           "at": {
-            "description": "When it was written, ms epoch.",
+            "description": "When it was written, ms epoch: on its source, for one carried from there.",
             "type": "number"
           },
           "author": {
@@ -35840,6 +35929,10 @@
           "text": {
             "description": "Its markdown, as written.",
             "type": "string"
+          },
+          "via": {
+            "description": "Set when it was written on an outside source, as its heading names it\n(its author's login, the source, its URL); the hub's `external_comments`\nrow adds its author's picture and when it was edited (tasks.ts). The\nboard draws the words under `via.author` with the source's mark and a\nlink to `via.url`.",
+            "$ref": "#/components/schemas/ExternalComment"
           }
         },
         "required": [
@@ -35877,26 +35970,168 @@
           "name"
         ]
       },
-      "TaskIssueLink": {
-        "description": "A task's linked issue, as the task's view carries it.",
+      "ExternalComment": {
+        "description": "A comment written on an outside source and carried onto a task.",
         "type": "object",
         "properties": {
-          "problem": {
-            "description": "Why the last sync of this task stopped short, in the tracker's words; null when it went through.",
+          "at": {
+            "description": "When it was written on the source, ms epoch.",
+            "type": "number"
+          },
+          "author": {
+            "$ref": "#/components/schemas/ExternalActor"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/ExternalCommentDirection",
+            "description": "`in`: written on the source, added to the task; `out`: written on the task, posted to the source."
+          },
+          "editedAt": {
+            "description": "The source's last edit of it, ms epoch; null when never edited.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "externalId": {
+            "description": "The source's own id for it: GitHub's comment number, Linear's uuid.",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ExternalSource"
+          },
+          "url": {
+            "description": "Where it reads on the source: the item's URL with the comment's anchor.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "author",
+          "direction",
+          "editedAt",
+          "externalId",
+          "source",
+          "url"
+        ]
+      },
+      "ExternalActor": {
+        "description": "Who wrote or opened something on a source.",
+        "type": "object",
+        "properties": {
+          "avatarUrl": {
+            "description": "Their picture on the source; null when it gave none.",
             "type": [
               "null",
               "string"
             ]
           },
-          "provider": {
-            "$ref": "#/components/schemas/IssueTracker"
+          "kind": {
+            "$ref": "#/components/schemas/ExternalActorKind"
+          },
+          "login": {
+            "description": "`bewinxed` on GitHub; a Linear user's name. A comment's heading names them by it.",
+            "type": "string"
+          },
+          "memberId": {
+            "description": "The fleet member they are, once a login → member map exists (tsk-138); null until then.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "description": "Their display name, when the source gives one apart from the login.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/ExternalSource"
+          },
+          "url": {
+            "description": "Their page on the source; null when it gave none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "avatarUrl",
+          "kind",
+          "login",
+          "memberId",
+          "name",
+          "source",
+          "url"
+        ]
+      },
+      "ExternalRef": {
+        "description": "One external item a task links, as the board draws it.",
+        "type": "object",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/ExternalActor"
+          },
+          "id": {
+            "description": "The source's own id: GitHub's node id, Linear's uuid; empty until the item was read.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ExternalKind"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mode": {
+            "$ref": "#/components/schemas/LinkMode"
+          },
+          "number": {
+            "description": "GitHub's #12; null on Linear.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "problem": {
+            "description": "Why the last read of it stopped short, in the source's words; null when it went through.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "ref": {
-            "description": "`#12` on GitHub, `ENG-123` on Linear.",
+            "description": "`#12`, `ENG-123`.",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ExternalSource"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExternalRefState",
+            "description": "Its state as the source last said it; null until the item was read."
+          },
+          "stateName": {
+            "description": "The source's own word: \"Open\", \"Closed\", \"In Progress\"; empty until read.",
             "type": "string"
           },
           "syncedAt": {
-            "description": "When this task and its issue last agreed, ms epoch; null before they first did.",
+            "description": "When the hub last read it from the source, ms epoch; null before it first did.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "title": {
+            "description": "Empty until the item was read.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "When the source last changed it, ms epoch; null before it was read.",
             "type": [
               "null",
               "number"
@@ -35907,19 +36142,19 @@
           }
         },
         "required": [
+          "id",
+          "kind",
+          "labels",
+          "mode",
+          "number",
           "problem",
-          "provider",
           "ref",
+          "source",
+          "stateName",
           "syncedAt",
+          "title",
+          "updatedAt",
           "url"
-        ]
-      },
-      "IssueTracker": {
-        "description": "A tracker that is an outside service.",
-        "type": "string",
-        "enum": [
-          "github",
-          "linear"
         ]
       },
       "TaskResult": {
@@ -36110,11 +36345,12 @@
         ]
       },
       "TaskHistoryKind": {
-        "description": "`created`: its file added. `moved`: a stage move. `changed`: fields,\nto-dos or edges, through the hub. `commented`: a comment added through the\nhub. `edited`: its file changed by a commit the hub's task code did not\nmake (a hand edit, folder_write); the hub putting back what one wrote\naround it is `changed`, in words that say so. `archived`: its file moved\ninto tasks/archive/, or added there (a merged project's archived task);\n`unarchived`: back out of it. `renamed`, `deleted`:\nits file.",
+        "description": "`created`: its file added. `moved`: a stage move. `changed`: fields,\nto-dos or edges, through the hub. `commented`: a comment added through the\nhub. `comment_edited`: a comment carried from an outside source, its words\nchanged there and rewritten in place by the hub (tasks.ts `editComment`).\n`edited`: its file changed by a commit the hub's task code did not\nmake (a hand edit, folder_write); the hub putting back what one wrote\naround it is `changed`, in words that say so. `archived`: its file moved\ninto tasks/archive/, or added there (a merged project's archived task);\n`unarchived`: back out of it. `renamed`, `deleted`:\nits file.",
         "type": "string",
         "enum": [
           "archived",
           "changed",
+          "comment_edited",
           "commented",
           "created",
           "deleted",
@@ -42022,6 +42258,14 @@
         "required": [
           "id",
           "name"
+        ]
+      },
+      "IssueTracker": {
+        "description": "A tracker that is an outside service.",
+        "type": "string",
+        "enum": [
+          "github",
+          "linear"
         ]
       },
       "TrackerSyncState": {
@@ -59555,6 +59799,31 @@
           "compile",
           "missing",
           "page"
+        ]
+      },
+      "ExternalActorKind": {
+        "type": "string",
+        "enum": [
+          "app",
+          "bot",
+          "person"
+        ]
+      },
+      "ExternalCommentDirection": {
+        "type": "string",
+        "enum": [
+          "in",
+          "out"
+        ]
+      },
+      "ExternalRefState": {
+        "type": "string",
+        "enum": [
+          "canceled",
+          "closed",
+          "draft",
+          "merged",
+          "open"
         ]
       },
       "FindConversationOutcome": {

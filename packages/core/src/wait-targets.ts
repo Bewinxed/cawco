@@ -16,6 +16,7 @@
  * A kept card's artifact and a kept session are whole ids, so `<uuid>#<card>`
  * and `<dir>#<uuid>` never read as each other.
  */
+import { refOfUrl } from "./external-items";
 
 export type WaitKind = "task" | "card" | "pin" | "pr" | "run" | "session";
 
@@ -32,8 +33,6 @@ const TASK = /^(?:tsk-|#)?(\d{1,9})$/iu;
 const CARD = new RegExp(`^(${UUID})#([^#\\s]+)$`, "iu");
 const SESSION = new RegExp(`^([^#\\s]*)#(${UUID})$`, "iu");
 const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "iu");
-const PR =
-  /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d{1,9})(?:[/?#].*)?$/iu;
 const RUN =
   /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/actions\/runs\/(\d{1,15})(?:[/?#].*)?$/iu;
 
@@ -42,15 +41,13 @@ export const githubTarget = (
   url: string
 ): Extract<WaitTarget, { kind: "pr" | "run" }> | undefined => {
   const written = url.trim();
-  const pr = PR.exec(written);
-  if (pr) {
-    const repo = (pr[1] as string).toLowerCase();
-    const number = Number(pr[2]);
+  const item = refOfUrl(written);
+  if (item?.source === "github" && item.kind === "pr" && item.number !== null) {
     return {
       kind: "pr",
-      repo,
-      number,
-      url: `https://github.com/${repo}/pull/${number}`,
+      repo: item.container,
+      number: item.number,
+      url: `https://github.com/${item.container}/pull/${item.number}`,
     };
   }
   const run = RUN.exec(written);

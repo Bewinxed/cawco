@@ -200,6 +200,8 @@ const lines = (what?: string) =>
   what === undefined
     ? z.array(z.string()).optional()
     : z.array(z.string()).optional().describe(what);
+/** The external items a task links, by URL: task_create's and task_update's one shape. */
+const linksParameter = () => lines();
 /** The project's own fields a task file carries beyond its known ones: task_create's and task_update's one shape. */
 const fieldsParameter = () =>
   z
@@ -388,6 +390,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         label: z.string().optional(),
         type: z.string().optional(),
         part_of: z.string().optional().describe("The whole: lists its parts."),
+        link: z.string().optional().describe("A URL or #12."),
         fields: z.record(z.string(), z.string()).optional(),
         blocked: z.boolean().optional(),
         needsYou: z.boolean().optional(),
@@ -453,6 +456,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         owns: ownsParameter().optional(),
         budget: budgetParameter().optional(),
         labels: lines(),
+        links: linksParameter(),
         fields: fieldsParameter(),
       },
       async ({ waits_on, part_of, runs_on, ...draft }, format) => {
@@ -516,6 +520,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         owns: ownsParameter().optional(),
         budget: budgetParameter().nullable().optional(),
         labels: lines(),
+        links: linksParameter(),
         fields: fieldsParameter(),
       },
       async ({ id, stage, reason, runs_on, ...rest }, format) => {

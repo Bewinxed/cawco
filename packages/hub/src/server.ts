@@ -670,6 +670,7 @@ import type {
   TrashKind,
 } from "./db/schema";
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
+import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
 import { sendWords } from "./db/words";
 import { decidesRoutes } from "./decides-file";
@@ -705,6 +706,7 @@ import {
 import { createDesignSystem, designSection } from "./design-system";
 import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
+import { createExternalItems } from "./external-items";
 import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_QUERY } from "./find";
 import { forScreens } from "./find-secrets";
@@ -725,6 +727,7 @@ import { accountForecasts, carrySequence, historyPoints } from "./forecast";
 import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
+import { githubRepoOf } from "./github";
 import { createHandedInputs } from "./handed-inputs";
 import { byId as handledIds, handleId, isHandle } from "./handles";
 import { hidden } from "./hidden";
@@ -24628,8 +24631,6 @@ export const createServer = (
   /** Set once the design system exists (below, design-system.ts `approvalRefusal`). */
   let designApproval: NonNullable<TaskStore["approvalRefusal"]> = () =>
     Promise.resolve(undefined);
-  /** Set once the tracker sync exists (below, tracker.ts `issueOf`). */
-  let trackerIssue: NonNullable<TaskStore["issueOf"]> = () => null;
   const tasks = createTasks({
     actionMove: (projectId, taskId, to, actionId) =>
       actionMoves(projectId, taskId, to, actionId),
@@ -24641,8 +24642,36 @@ export const createServer = (
     waiters: db.taskWaiters,
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
-    issueOf: (projectId, taskId, named) =>
-      trackerIssue(projectId, taskId, named),
+    links: (projectId, taskId) =>
+      db.taskLinks.ofTask(projectId, taskId).map(linkRefOf),
+    carried: (projectId, taskId) =>
+      db.taskLinks.comments(projectId, taskId).map((row) => ({
+        ...linkViaOf(row),
+        entryAt: row.entryAt,
+      })),
+    carry: (projectId, taskId, comment, entryAt) => {
+      const kept = db.taskLinks.comment(
+        projectId,
+        comment.source,
+        comment.externalId
+      );
+      if (!kept) {
+        db.taskLinks.putComment({ projectId, taskId, ...comment, entryAt });
+      } else if (!kept.author.login) {
+        db.taskLinks.updateComment(
+          projectId,
+          comment.source,
+          comment.externalId,
+          { author: comment.author }
+        );
+      }
+    },
+    linked: (projectId, link) =>
+      externalItems.linked(
+        projectId,
+        link,
+        githubRepoOf(db.project(projectId)?.remote ?? null)
+      ),
     starters: (projectId, place) => projectStarters.read(projectId, place),
     // The template's starter skills go to the project's places, and the old one's leave.
     setTemplate: (id, template) => {
@@ -24721,6 +24750,9 @@ export const createServer = (
       });
     },
   });
+  // External items on tasks (external-items.ts): links and comments from
+  // GitHub and Linear as data, filed through one door.
+  const externalItems = createExternalItems({ db, tasks });
   // A project made from a template before the hub recorded which one is
   // known by its stages.md (stages.ts `templateOf`: kinds and moves, through
   // renames), so its starter skills reach it. A tie is left to Apply template.
@@ -26233,8 +26265,13 @@ export const createServer = (
   });
   // Tracker sync (tracker.ts): a project's tasks one record with their
   // GitHub or Linear issues, through each service's own SDK.
-  const trackers = createTrackers({ connections, db, lifetime, tasks });
-  trackerIssue = trackers.issueOf;
+  const trackers = createTrackers({
+    connections,
+    db,
+    externalItems,
+    lifetime,
+    tasks,
+  });
   // Ingress (ingress.ts): events from GitHub and polled connections, each
   // stored once and routed to a routine or the lead's next wake.
   const ingress = createIngress({
@@ -26244,6 +26281,7 @@ export const createServer = (
     // An event from outside changes what the project's routines could take
     // (project-starters.ts).
     eventLanded: (projectId) => projectStarters.eventLanded(projectId),
+    externalItems,
     jevAccess: () => jevAccess(db),
     lifetime,
     routines,

@@ -1,33 +1,42 @@
+import type { IssueTracker } from "@cawco/core";
 import { and, count, eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import {
-  projects,
-  trackerBindings,
-  trackerComments,
-  trackerLinks,
-} from "./schema";
+import { projects, taskLinks, trackerBindings, trackerLinks } from "./schema";
+import type { TaskLinkRow } from "./task-links";
 
 export type TrackerBindingRow = typeof trackerBindings.$inferSelect;
-export type TrackerLinkRow = typeof trackerLinks.$inferSelect;
+/** What a task and its issue last agreed on (`tracker_links`). */
+export type TrackerAgreementRow = typeof trackerLinks.$inferSelect;
 
-/** The rows tracker.ts keeps: a project's binding, its tasks' links, and the comments carried. */
+/** A task the sync links to its issue: what they agreed on, and the issue as its record link holds it. */
+export interface TrackerLinkRow
+  extends
+    TrackerAgreementRow,
+    Pick<TaskLinkRow, "problem" | "ref" | "syncedAt" | "url"> {
+  /** The issue's key to its tracker: GitHub's number, Linear's id. */
+  issueKey: string;
+  provider: IssueTracker;
+}
+
+/** What a sync changes of a link: what they agreed on, and what its issue holds. */
+export type TrackerLinkPatch = Partial<
+  Pick<TrackerAgreementRow, "synced"> &
+    Omit<TaskLinkRow, "mode" | "projectId" | "taskId" | "url">
+>;
+
+/** The rows tracker.ts keeps: a project's binding, and what its tasks and their issues agreed on. */
 export interface TrackersDb {
   /**
    * Binds a project, its `projects.tracker` with it, in one transaction:
-   * a binding to another target lets go of the links and carried comments
-   * the old one had, so no task names an issue the project no longer reads.
+   * a binding to another target lets go of what the old one's links agreed
+   * on; each task's record link follows its file (`issue:`).
    */
   readonly bind: (row: TrackerBindingRow) => void;
   /** A project's binding, or none while its tasks live in CawCo's files alone. */
   readonly binding: (projectId: string) => TrackerBindingRow | undefined;
   /** Every project's binding: what the poller walks. */
   readonly bindings: () => TrackerBindingRow[];
-  /** Whether a comment was carried already, by the issue's comment id. */
-  readonly carried: (projectId: string, remoteId: string) => boolean;
-  /** The task comments (their heading times, ms) a task carried either way. */
-  readonly carriedAt: (projectId: string, taskId: string) => Set<number>;
-  readonly carry: (row: typeof trackerComments.$inferSelect) => void;
-  /** Lets a task's link go (its issue is gone, or the task is). */
+  /** Lets go of what a task and its issue agreed on (it is linked again). */
   readonly dropLink: (projectId: string, taskId: string) => void;
   /** Lets go of the Status every link agreed on: the binding's GitHub Project changed. */
   readonly forgetStatus: (projectId: string) => void;
@@ -35,25 +44,38 @@ export interface TrackersDb {
     projectId: string,
     taskId: string
   ) => TrackerLinkRow | undefined;
-  readonly linkByIssue: (
-    projectId: string,
-    issueKey: string
-  ) => TrackerLinkRow | undefined;
   readonly linkedCount: (projectId: string) => number;
   readonly links: (projectId: string) => TrackerLinkRow[];
-  readonly putLink: (row: TrackerLinkRow) => void;
-  /** Back to CawCo's files alone: the binding, its links and carried comments go. */
+  /** Links a task to its issue: what they agree on, and its record link as the issue holds it, in one transaction. */
+  readonly putLink: (agreed: TrackerAgreementRow, record: TaskLinkRow) => void;
+  /** Back to CawCo's files alone: the binding and what its links agreed on go. */
   readonly unbind: (projectId: string) => void;
   readonly updateBinding: (
     projectId: string,
     patch: Partial<Omit<TrackerBindingRow, "projectId">>
   ) => void;
+  /** Changes what a task and its issue agreed on, and what its record link holds. */
   readonly updateLink: (
     projectId: string,
     taskId: string,
-    patch: Partial<Omit<TrackerLinkRow, "projectId" | "taskId">>
+    patch: TrackerLinkPatch
   ) => void;
 }
+
+/** The agreement and its record link, as one row. */
+const joined = (
+  agreed: TrackerAgreementRow,
+  record: TaskLinkRow
+): TrackerLinkRow => ({
+  ...agreed,
+  provider: record.source,
+  issueKey:
+    record.source === "github" ? String(record.number) : record.externalId,
+  ref: record.ref,
+  url: record.url,
+  problem: record.problem,
+  syncedAt: record.syncedAt,
+});
 
 export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
   const forget = (
@@ -61,10 +83,28 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
     projectId: string
   ): void => {
     tx.delete(trackerLinks).where(eq(trackerLinks.projectId, projectId)).run();
-    tx.delete(trackerComments)
-      .where(eq(trackerComments.projectId, projectId))
-      .run();
   };
+  /** The agreements of a project (or one task) with their record links. */
+  const linked = (projectId: string, taskId?: string): TrackerLinkRow[] =>
+    db
+      .select({ agreed: trackerLinks, record: taskLinks })
+      .from(trackerLinks)
+      .innerJoin(
+        taskLinks,
+        and(
+          eq(taskLinks.projectId, trackerLinks.projectId),
+          eq(taskLinks.taskId, trackerLinks.taskId),
+          eq(taskLinks.mode, "record")
+        )
+      )
+      .where(
+        and(
+          eq(trackerLinks.projectId, projectId),
+          taskId === undefined ? undefined : eq(trackerLinks.taskId, taskId)
+        )
+      )
+      .all()
+      .map((row) => joined(row.agreed, row.record));
   return {
     binding: (projectId) =>
       db
@@ -96,76 +136,32 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
           .run();
       });
     },
-    carried: (projectId, remoteId) =>
-      db
-        .select({ at: trackerComments.at })
-        .from(trackerComments)
-        .where(
-          and(
-            eq(trackerComments.projectId, projectId),
-            eq(trackerComments.remoteId, remoteId)
-          )
-        )
-        .get() !== undefined,
-    carriedAt: (projectId, taskId) =>
-      new Set(
-        db
-          .select({ at: trackerComments.at })
-          .from(trackerComments)
-          .where(
-            and(
-              eq(trackerComments.projectId, projectId),
-              eq(trackerComments.taskId, taskId)
-            )
-          )
-          .all()
-          .map((row) => row.at)
-      ),
-    carry: (row) => {
-      db.insert(trackerComments).values(row).onConflictDoNothing().run();
-    },
-    link: (projectId, taskId) =>
-      db
-        .select()
-        .from(trackerLinks)
-        .where(
-          and(
-            eq(trackerLinks.projectId, projectId),
-            eq(trackerLinks.taskId, taskId)
-          )
-        )
-        .get(),
-    linkByIssue: (projectId, issueKey) =>
-      db
-        .select()
-        .from(trackerLinks)
-        .where(
-          and(
-            eq(trackerLinks.projectId, projectId),
-            eq(trackerLinks.issueKey, issueKey)
-          )
-        )
-        .get(),
-    links: (projectId) =>
-      db
-        .select()
-        .from(trackerLinks)
-        .where(eq(trackerLinks.projectId, projectId))
-        .all(),
+    link: (projectId, taskId) => linked(projectId, taskId)[0],
+    links: (projectId) => linked(projectId),
     linkedCount: (projectId) =>
       db
         .select({ n: count() })
         .from(trackerLinks)
         .where(eq(trackerLinks.projectId, projectId))
         .get()?.n ?? 0,
-    putLink: (row) => {
-      db.insert(trackerLinks)
-        .values(row)
-        .onConflictDoUpdate({
-          target: [trackerLinks.projectId, trackerLinks.taskId],
-          set: row,
-        })
-        .run();
+    putLink: (agreed, record) => {
+      db.transaction((tx) => {
+        tx.insert(trackerLinks)
+          .values(agreed)
+          .onConflictDoUpdate({
+            target: [trackerLinks.projectId, trackerLinks.taskId],
+            set: agreed,
+          })
+          .run();
+        const { projectId, taskId, url, ...set } = record;
+        tx.insert(taskLinks)
+          .values(record)
+          .onConflictDoUpdate({
+            target: [taskLinks.projectId, taskLinks.taskId, taskLinks.url],
+            set,
+          })
+          .run();
+      });
     },
     dropLink: (projectId, taskId) => {
       db.delete(trackerLinks)
@@ -217,15 +213,32 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
         .run();
     },
     updateLink: (projectId, taskId, patch) => {
-      db.update(trackerLinks)
-        .set(patch)
-        .where(
-          and(
-            eq(trackerLinks.projectId, projectId),
-            eq(trackerLinks.taskId, taskId)
-          )
-        )
-        .run();
+      const { synced, ...held } = patch;
+      db.transaction((tx) => {
+        if (synced) {
+          tx.update(trackerLinks)
+            .set({ synced })
+            .where(
+              and(
+                eq(trackerLinks.projectId, projectId),
+                eq(trackerLinks.taskId, taskId)
+              )
+            )
+            .run();
+        }
+        if (Object.keys(held).length > 0) {
+          tx.update(taskLinks)
+            .set(held)
+            .where(
+              and(
+                eq(taskLinks.projectId, projectId),
+                eq(taskLinks.taskId, taskId),
+                eq(taskLinks.mode, "record")
+              )
+            )
+            .run();
+        }
+      });
     },
   };
 };

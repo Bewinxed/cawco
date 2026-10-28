@@ -55,6 +55,7 @@ import type {
   SpawnPayload,
   StagesTemplate,
   StoppedCommands,
+  TaskLinkSummary,
   ToolPolicy,
   ToolStatus,
   UsageBucket,
@@ -265,6 +266,12 @@ import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
+import {
+  summaryOf as linkSummaryOf,
+  syncTaskLinks,
+  type TaskLinksDb,
+  taskLinksDb,
+} from "./task-links";
 import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
@@ -418,6 +425,13 @@ export type TaskIndexRow = typeof projectTasks.$inferSelect & {
   labels: string[];
   /** Its file's own scalar fields (`priority`, `due`), as written. */
   fields: Record<string, string>;
+  /**
+   * The external items its file links (`issue:`, mode `record`, then
+   * `links:`), as `task_links` holds them: written, each URL becomes the
+   * task's row (task-links.ts `syncTaskLinks`); read, each row as the source
+   * last said it.
+   */
+  links: TaskLinkSummary[];
 };
 /** A device the iOS app registered for pushes, by its Cawrier pairing. */
 /** A device the hub can push to: its sealed pairing secret and key opened. */
@@ -2395,6 +2409,8 @@ export interface DbShape {
   ) => { projectId: string; taskId: string } | undefined;
   /** Every row of a project's task index, in id order. */
   readonly taskIndex: (projectId: string) => TaskIndexRow[];
+  /** The external items tasks link, and the comments carried from them (task-links.ts). */
+  readonly taskLinks: TaskLinksDb;
   /** The indexed tasks that wait on `target` (`waits_on:`, a task as `tsk-12`), by number: an indexed lookup. */
   readonly taskWaiters: (
     projectId: string,
@@ -2439,7 +2455,7 @@ export interface DbShape {
    * project's list, and an archived thread comes back.
    */
   readonly touchThread: (id: string, at: Date) => ThreadRow | undefined;
-  /** Trackers: a project's binding to GitHub Issues or Linear, and its tasks' links (tracker.ts). */
+  /** Trackers: a project's binding to GitHub Issues or Linear, and what its tasks and their issues agreed on (tracker.ts). */
   readonly trackers: TrackersDb;
   /** Deleted config items, kept whole for their Undo (trash.ts). */
   readonly trash: TrashDb;
@@ -3078,6 +3094,7 @@ export const hashHookMaterial = (hook: {
 const make = async (path: string): Promise<DbShape> => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
+  const taskLinksOf = taskLinksDb(db);
   // A stored JSON value that fails its schema names its row: the database
   // says which row holds that column's text (core stored-json.ts).
   nameStoredRowsFrom((table, keys, column, raw) => {
@@ -8804,6 +8821,10 @@ const make = async (path: string): Promise<DbShape> => {
         string,
         Pick<TaskIndexRow, "waitsOn" | "labels" | "fields">
       >();
+      const linksOf = Map.groupBy(
+        taskLinksOf.ofProject(projectId),
+        (row) => row.taskId
+      );
       const lists = (file: string) => {
         const known = ofTask.get(file);
         if (known) {
@@ -8847,7 +8868,11 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(projectTasks.projectId, projectId))
         .orderBy(asc(projectTasks.number), asc(projectTasks.path))
         .all()
-        .map((row) => ({ ...row, ...lists(row.path) }));
+        .map((row) => ({
+          ...row,
+          ...lists(row.path),
+          links: (linksOf.get(row.id) ?? []).map(linkSummaryOf),
+        }));
     },
     taskWaiters: (projectId, taskId) =>
       db
@@ -8886,10 +8911,19 @@ const make = async (path: string): Promise<DbShape> => {
             .all()
             .map((project) => project.id)
         );
-        for (const { waitsOn, labels, fields, ...row } of rows.filter((r) =>
-          live.has(r.projectId)
+        for (const { waitsOn, labels, fields, links, ...row } of rows.filter(
+          (r) => live.has(r.projectId)
         )) {
           const { projectId, path: file } = row;
+          syncTaskLinks(
+            tx,
+            projectId,
+            row.id,
+            links.map((link) => ({
+              url: link.url,
+              record: link.mode === "record",
+            }))
+          );
           tx.insert(projectTasks)
             .values(row)
             .onConflictDoUpdate({
@@ -10315,6 +10349,7 @@ const make = async (path: string): Promise<DbShape> => {
     sshMachines: sshMachinesDb(db),
     memoryFacts: memoryFactsDb(db),
     trackers: trackersDb(db),
+    taskLinks: taskLinksOf,
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db),
     find: findDb(db),

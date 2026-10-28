@@ -24,17 +24,15 @@
    * where the task is; the rest are listed, disabled, so the stages read in
    * order. The hub checks the move again either way.
    *
-   * A task one record with a GitHub or Linear issue (the hub's tracker.ts)
-   * names it under the title, its mark and its ref a link to it; when its
-   * last sync stopped short, the tracker's words under it, with Sync now.
+   * The external items it links stand under the title (TaskExternalLinks), its
+   * record first; the record's fault offers Sync now.
    */
-  import { commonWords, TRACKER_NAMES } from "@cawco/core";
+  import { commonWords } from "@cawco/core";
   import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
   import { detach } from "@cawco/core/detach";
   import { type Snippet, untrack } from "svelte";
   import { readDecision } from "#lib/cawco/decisions/decisions-api.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -84,6 +82,7 @@
   import { openBeside } from "./beside.svelte";
   import { resultStamp } from "./review-stamp";
   import TaskActivity from "./TaskActivity.svelte";
+  import TaskExternalLinks from "./TaskExternalLinks.svelte";
   import TaskFields from "./TaskFields.svelte";
   import TaskLabels from "./TaskLabels.svelte";
   import TaskNeeds from "./TaskNeeds.svelte";
@@ -532,47 +531,14 @@
         </h2>
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
-      {#if shown?.issue}
-        {@const issue = shown.issue}
-        <div
-          data-slot="issue"
-          class="flex min-w-0 flex-col gap-space-1"
-          data-failed={issue.problem ? "" : undefined}
-          data-provider={issue.provider}
-        >
-          <p
-            class="mark-line m-0 flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
-          >
-            <span class="mark-cell"
-              ><ProviderLogo provider={issue.provider} size="meta" /></span
-            >
-            {#if issue.url}
-              <span data-slot="issue-words" class="min-w-0 wrap-anywhere"
-                ><a
-                  class="text-link-ink"
-                  href={issue.url}
-                  rel="noreferrer"
-                  target="_blank">{issue.ref}</a
-                >
-                on {TRACKER_NAMES[issue.provider]}</span
-              >
-            {:else}
-              <span data-slot="issue-words" class="min-w-0 wrap-anywhere"
-                >Not on {TRACKER_NAMES[issue.provider]} yet</span
-              >
-            {/if}
-          </p>
-          <RowFault
-            again={async () => {
-              await syncTracker(projectId);
-              await read(taskId);
-            }}
-            againLabel="Sync now"
-            againPending="Syncing…"
-            data-issue-fault
-            reason={issue.problem}
-          />
-        </div>
+      {#if shown && shown.links.length > 0}
+        <TaskExternalLinks
+          links={shown.links}
+          onsync={async () => {
+            await syncTracker(projectId);
+            await read(taskId);
+          }}
+        />
       {/if}
       {#if decided}
         <p data-slot="decided" class="m-0 type-meta text-ink-muted">

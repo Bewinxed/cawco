@@ -11,6 +11,8 @@
  */
 import type {
   AttemptStart,
+  ExternalComment,
+  ExternalRef,
   LandsMode,
   Stage,
   StageKind,
@@ -37,7 +39,6 @@ import type {
 import type {
   GithubProjectsView,
   IssueTracker,
-  TaskIssueLink,
   TrackerTarget,
   TrackerView,
 } from "@cawco/core/trackers";
@@ -194,12 +195,12 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
   /** sha256 hex of the file as read. */
   hash: string;
   id: string;
-  /** The GitHub or Linear issue it is one record with (the hub's tracker.ts); null when none. */
-  issue: TaskIssueLink | null;
   kind: StageKind | null;
   labels: string[];
   /** Where an attempt's work lands, as the file says; null: the project's default. */
   lands: LandsMode | null;
+  /** The external items it links (core external-items.ts): its record (the tracker sync's issue) first, then the rest. */
+  links: ExternalRef[];
   needsYou: boolean;
   number: number;
   outputs: string[];
@@ -224,6 +225,8 @@ export interface TaskComment {
   author: TaskHistoryActor;
   /** Its markdown, as written. */
   text: string;
+  /** Set when it was written on an outside source: drawn as the words under its author, with the source's mark and a link out. */
+  via: ExternalComment | null;
 }
 
 export interface TaskPatch {

@@ -166,12 +166,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    `FLEET_DELTA`): its row's last delta and its converge and report
  *    frames name the generation. A page built for 32 reads a `rev` the hub
  *    no longer sends, so it reloads first.
+ * 34: a task's external items are data (core external-items.ts): its view
+ *    names them in `links` (record first) and no longer sends `issue`, and
+ *    a comment carried from GitHub or Linear names its source in `via`. A
+ *    page built for 33 reads an `issue` the hub no longer sends, so it
+ *    reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 33;
+export const WIRE_PROTOCOL = 34;
 
 /**
  * What a session's stream carries: the changes each frame made to its

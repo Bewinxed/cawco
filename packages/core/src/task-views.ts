@@ -5,6 +5,7 @@
  * (project-tasks.ts): one set of shapes for both ends.
  */
 import type { AttemptResult } from "./deliverables";
+import type { TaskLinkSummary } from "./external-items";
 import type { LandsMode } from "./injected";
 import type { ProjectStarter } from "./starters";
 import type { TASK_FILE_STATES, TaskHistoryKind } from "./task-history";
@@ -266,6 +267,8 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   /** The kind of its stage; null when its stage is not one of the project's. */
   kind: StageKind | null;
   labels: string[];
+  /** The external items it links (`issue:` first, then `links:`), as the card draws them: each source's mark and ref. */
+  links: TaskLinkSummary[];
   /**
    * It waits for you: its stage is of kind `you`, where only you move it on.
    * An attempt that failed or was stopped is its starter's business, not

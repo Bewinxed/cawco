@@ -52,12 +52,14 @@ export const TRAILERS = {
 } as const;
 
 /**
- * Each `CawCo-Change`: a comment added; a task the hub filed (`create`), one
+ * Each `CawCo-Change`: a comment added; a carried comment's words rewritten
+ * as its source changed them (`comment-edited`); a task the hub filed (`create`), one
  * written straight into the folder that it adopted at its start (`adopt`),
  * and tasks or files merged in from another project (`merge`).
  */
 export const CHANGES = {
   comment: "comment",
+  commentEdited: "comment-edited",
   create: "create",
   adopt: "adopt",
   merge: "merge",
@@ -127,6 +129,9 @@ const kindOf = (
   }
   if (commit.trailers[TRAILERS.change] === COMMENT_CHANGE) {
     return "commented";
+  }
+  if (commit.trailers[TRAILERS.change] === CHANGES.commentEdited) {
+    return "comment_edited";
   }
   return mover ? "changed" : "edited";
 };

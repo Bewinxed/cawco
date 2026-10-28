@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { detach } from "@cawco/core/detach";
   /**
    * A task's activity: what was said about it (its `## Comments`) and what
    * happened to it (its file's history, task-history.ts), in one stream,
@@ -11,7 +10,13 @@
    * (jev-tasks.ts `commented`): a live attempt reads it at once; an ended
    * one's session continues with it, or a fresh attempt starts, unless the
    * task is done or dropped or was never attempted. The hint says which.
+   *
+   * A comment carried from GitHub or Linear (its `via`) is its words alone,
+   * under its author's login with the source's mark and a link out to it
+   * there; "edited" when its words were changed there since.
    */
+  import { type ExternalComment, externalItemWords } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import Choice from "#lib/cawco/config/Choice.svelte";
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
@@ -22,6 +27,7 @@
     type TaskComment,
     type TaskHistoryEvent,
   } from "#lib/cawco/project-tasks.js";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -98,7 +104,15 @@
    * millisecond, and its author.
    */
   type Line =
-    | { kind: "comment"; key: string; at: number; who: string; text: string }
+    | {
+        kind: "comment";
+        key: string;
+        at: number;
+        who: string;
+        text: string;
+        /** Written on an outside source: its mark, link out and edit. */
+        via: ExternalComment | null;
+      }
     | { kind: "change"; key: string; at: number; who: string; text: string };
   type Piece =
     { kind: "one"; line: Line } | { kind: "fold"; key: string; lines: Line[] };
@@ -141,6 +155,7 @@
         return `edited the file by hand${why}`;
       case "changed":
       case "commented":
+      case "comment_edited":
         break;
     }
     return `${done(event.what)}${why}`;
@@ -183,8 +198,9 @@
         kind: "comment",
         key: twins ? `${key}-${twins}` : key,
         at: comment.at,
-        who: who(comment.author.name),
+        who: comment.via ? comment.via.author.login : who(comment.author.name),
         text: comment.text,
+        via: comment.via,
       };
     });
   });
@@ -245,9 +261,30 @@
       data-slot="comment"
       class="flex flex-col gap-space-1 rounded-md bg-surface-recess px-space-3 py-space-2"
     >
-      <span class="flex items-baseline gap-space-2 type-meta"
+      <span
+        class="mark-line flex flex-wrap items-baseline gap-x-space-2 type-meta"
         >{@render asker(each.who)}
-        {@render when(each.at)}</span
+        {#if each.via}
+          {@const source = externalItemWords.source[each.via.source]}
+          <a
+            data-box
+            data-slot="via"
+            class="mark-line inline-flex items-center gap-space-1 self-center text-ink-muted no-underline hover:text-ink-strong focus-inset"
+            href={each.via.url}
+            rel="noreferrer"
+            target="_blank"
+            title={externalItemWords.openOn(source)}
+            ><ProviderLogo provider={each.via.source} size="meta" /><span
+              >{source}</span
+            ></a
+          >
+        {/if}
+        {@render when(each.at)}
+        {#if each.via?.editedAt}
+          <span data-slot="edited" class="text-ink-subtle"
+            >{externalItemWords.edited}</span
+          >
+        {/if}</span
       >
       <div
         data-slot="comment-text"

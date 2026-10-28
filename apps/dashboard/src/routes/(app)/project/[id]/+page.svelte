@@ -788,6 +788,14 @@
         )
       ),
       labels: task.labels,
+      links: task.links.map(({ source, kind, ref, state, url, mode }) => ({
+        source,
+        kind,
+        ref,
+        state,
+        url,
+        mode,
+      })),
       outputs: task.outputs,
       rank: task.rank,
       type: task.type,

@@ -212,6 +212,7 @@
     "./words/work": "./src/words/work.ts",
     "./deliverables": "./src/deliverables.ts",
     "./trackers": "./src/trackers.ts",
+    "./external-items": "./src/external-items.ts",
     "./project-gate": "./src/project-gate.ts",
     "./install": "./src/install.ts",
     "./join": "./src/join.ts",

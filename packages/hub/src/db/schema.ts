@@ -70,6 +70,7 @@ import {
   DelegateEventPayloadSchema,
   EndedBySchema,
   EnvelopeShape,
+  ExternalActorSchema,
   FleetItemStatusSchema,
   FleetMcpConfigSchema,
   FleetRefreshSchema,
@@ -5220,9 +5221,10 @@ export interface TrackerSynced {
 }
 
 /**
- * A task linked to its issue (tracker.ts). The task file names the issue
- * (`issue:`, its URL); this row keeps the issue's own key and what the two
- * last agreed on.
+ * A task linked to its issue by the tracker sync (tracker.ts): what the
+ * two last agreed on, and who opened the issue. The issue itself is the
+ * task's record link (`task_links`, mode `record`), which the file names
+ * (`issue:`, its URL).
  */
 export const trackerLinks = sqliteTable(
   "tracker_links",
@@ -5230,20 +5232,7 @@ export const trackerLinks = sqliteTable(
     projectId: projectKey(),
     /** The task, `tsk-12`. */
     taskId: text("task_id").notNull(),
-    provider: text("provider")
-      .$type<import("@cawco/core").IssueTracker>()
-      .notNull(),
-    /** GitHub: the issue's number; Linear: the issue's id. */
-    issueKey: text("issue_key").notNull(),
-    /** `#12`, `ENG-123`. */
-    ref: text("ref").notNull(),
-    url: text("url").notNull(),
     synced: storedJson(TrackerSyncedSchema)("synced").notNull(),
-    /** The issue's `updated_at` when they last agreed, ms. */
-    remoteUpdatedAt: integer("remote_updated_at").notNull(),
-    /** Why the last sync of this task stopped short, in the tracker's words. */
-    problem: text("problem"),
-    syncedAt: timestamp("synced_at"),
     /** Comments written after it, on either side, are carried to the other. */
     linkedAt: timestamp("linked_at").notNull(),
     /**
@@ -5253,35 +5242,101 @@ export const trackerLinks = sqliteTable(
      */
     unvouched: text("unvouched"),
   },
+  (table) => [primaryKey({ columns: [table.projectId, table.taskId] })]
+);
+
+/**
+ * An external item a task links (core external-items.ts): one row per task
+ * and URL, the file's `issue:` (mode `record`) and `links:`, each kept as
+ * the source last said it. The file names the URL; this row mirrors what
+ * the source holds and is read again whenever it changes, so every inbound
+ * event and poll finds its task here ({@link TaskLinksDb.byItem}), never in
+ * a text field.
+ */
+export const taskLinks = sqliteTable(
+  "task_links",
+  {
+    projectId: projectKey(),
+    /** The task, `tsk-12`. */
+    taskId: text("task_id").notNull(),
+    /** As the task file writes it. */
+    url: text("url").notNull(),
+    source: text("source")
+      .$type<import("@cawco/core").ExternalSource>()
+      .notNull(),
+    kind: text("kind").$type<import("@cawco/core").ExternalKind>().notNull(),
+    /** GitHub's node id, Linear's uuid; empty until the item was read. */
+    externalId: text("external_id").notNull().default(""),
+    /** GitHub's #12; null on Linear. */
+    number: integer("number"),
+    /** `#12`, `ENG-123`. */
+    ref: text("ref").notNull(),
+    title: text("title").notNull().default(""),
+    /** Null until the item was read. */
+    state: text("state").$type<import("@cawco/core").ExternalState>(),
+    stateName: text("state_name").notNull().default(""),
+    author: storedJson(ExternalActorSchema)("author"),
+    labels: storedJson(z.array(z.string()))("labels").notNull().default([]),
+    mode: text("mode").$type<import("@cawco/core").LinkMode>().notNull(),
+    /** When the source last changed it, ms; null before it was read. */
+    remoteUpdatedAt: integer("remote_updated_at"),
+    /** When the hub last read it; null before it first did. */
+    syncedAt: timestamp("synced_at"),
+    /** Why the last read or sync of it stopped short, in the source's words. */
+    problem: text("problem"),
+  },
   (table) => [
-    primaryKey({ columns: [table.projectId, table.taskId] }),
-    uniqueIndex("tracker_links_issue").on(
+    primaryKey({ columns: [table.projectId, table.taskId, table.url] }),
+    index("task_links_item").on(
       table.projectId,
-      table.provider,
-      table.issueKey
+      table.source,
+      table.kind,
+      table.number
     ),
+    index("task_links_external").on(
+      table.projectId,
+      table.source,
+      table.externalId
+    ),
+    uniqueIndex("task_links_record")
+      .on(table.projectId, table.url)
+      .where(sql`${table.mode} = 'record'`),
   ]
 );
 
 /**
- * A comment carried between a task and its issue (tracker.ts), so it is
- * carried once: the issue's comment id, and which entry of the task's
- * `## Comments` it is (its heading's time).
+ * A comment carried between a task and an outside source, both ways
+ * (core external-items.ts `ExternalComment`): keyed by the source's own id,
+ * so one comment is never filed twice, and an edit on the source rewrites
+ * its entry in place. `in` was written on the source and added to the task
+ * (its entry's heading names the source and this URL); `out` was written on
+ * the task and posted to the source.
  */
-export const trackerComments = sqliteTable(
-  "tracker_comments",
+export const externalComments = sqliteTable(
+  "external_comments",
   {
     projectId: projectKey(),
+    source: text("source")
+      .$type<import("@cawco/core").ExternalSource>()
+      .notNull(),
+    /** GitHub's comment number, Linear's uuid. */
+    externalId: text("external_id").notNull(),
     taskId: text("task_id").notNull(),
-    remoteId: text("remote_id").notNull(),
-    /** `cawco`: written on the task and posted to the issue; `tracker`: written on the issue and added to the task. */
-    origin: text("origin").$type<"cawco" | "tracker">().notNull(),
-    /** The task comment's heading time, ms. */
+    url: text("url").notNull(),
+    direction: text("direction").$type<"in" | "out">().notNull(),
+    author: storedJson(ExternalActorSchema)("author").notNull(),
+    /** When it was written on the source, ms. */
     at: integer("at").notNull(),
+    /** The source's last edit, ms; null when never. */
+    editedAt: integer("edited_at"),
+    /** The task entry's heading time, ms: how an `out` row finds its entry. */
+    entryAt: integer("entry_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.projectId, table.remoteId] }),
-    index("tracker_comments_task").on(table.projectId, table.taskId),
+    primaryKey({
+      columns: [table.projectId, table.source, table.externalId],
+    }),
+    index("external_comments_task").on(table.projectId, table.taskId),
   ]
 );
 

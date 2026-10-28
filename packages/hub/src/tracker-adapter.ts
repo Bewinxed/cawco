@@ -21,7 +21,12 @@
  *   go one level deeper in a description and two in a comment, and back, so
  *   both sides keep every byte (an H6 is seven or eight #s in the file).
  */
-import type { StageKind, TrackerTarget } from "@cawco/core";
+import type {
+  ExternalActor,
+  ExternalState,
+  StageKind,
+  TrackerTarget,
+} from "@cawco/core";
 import type { Stage } from "@cawco/core/task-views";
 
 /** Linear's six categories, which GitHub's states take too. */
@@ -38,13 +43,19 @@ export interface IssueState {
 
 /** An issue as the sync reads it. */
 export interface Issue {
+  /** Who opened it, as the source names them; null when it names no one. */
+  author: ExternalActor | null;
   createdAt: number;
   /** Its body, as the tracker holds it (markdown), trimmed. */
   description: string;
+  /** The source's own id: GitHub's node id, Linear's uuid. */
+  id: string;
   /** GitHub: its number; Linear: its id. */
   key: string;
   /** Its labels' names, sorted. */
   labels: string[];
+  /** GitHub's #12; null on Linear. */
+  number: number | null;
   /**
    * Who opened it: their name, and, when the tracker does not vouch for
    * them, who they are in words (GitHub: no owner, member or collaborator
@@ -63,14 +74,18 @@ export interface Issue {
 /** A comment on one of the target's issues. */
 export interface IssueComment {
   /** Who wrote it, as the tracker names them. */
-  author: string;
+  author: ExternalActor;
   body: string;
   createdAt: number;
+  /** When its words were last changed on the tracker; null when never. */
+  editedAt: number | null;
   id: string;
   /** The issue it is on, by its key. */
   issueKey: string;
   /** Who wrote it, in words, when the tracker does not vouch for them (as {@link Issue}'s opener); null when it does. */
   unvouched: string | null;
+  /** Where it reads on the tracker: its issue's URL with its anchor. */
+  url: string;
 }
 
 /** What a new issue is made of. */
@@ -105,7 +120,7 @@ export interface TrackerAdapter {
     issue: IssueRef,
     author: string,
     body: string
-  ) => Promise<{ createdAt: number; id: string }>;
+  ) => Promise<{ createdAt: number; id: string; url: string }>;
   /** The target's issues' comments written since the cursor, oldest first. */
   comments: (cursor: ListCursor) => Promise<Listed<IssueComment>>;
   create: (draft: IssueDraft) => Promise<Issue>;
@@ -232,6 +247,14 @@ export const intoFile = (text: string, by: 1 | 2): string =>
 /** A task file's text as its tracker holds it: each heading `by` levels back up. */
 export const outOfFile = (text: string, by: 1 | 2): string =>
   headings(text.trim(), (level) => (level >= 2 + by ? level - by : level));
+
+/** An issue's state in the five words every source maps onto (core external-items.ts). */
+export const externalStateOf = (state: IssueState): ExternalState => {
+  if (state.type === "completed") {
+    return "closed";
+  }
+  return state.type === "canceled" ? "canceled" : "open";
+};
 
 /** Labels as the sync compares them: each once, sorted. */
 export const labelSet = (labels: readonly string[]): string[] =>
