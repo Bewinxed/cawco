@@ -30086,8 +30086,16 @@ export const createServer = (
           const answer = await callAgent(
             row.machineId,
             GENERATE_IMAGE,
-            // Its boundary, when it runs in one: the output lands in its clone or $TMPDIR alone.
-            [row.id, row.cwd, body, sessionWorkspace(row) ?? null],
+            // Its boundary, when it runs in one: the output lands in its clone or
+            // $TMPDIR alone, and its references are read from those and its
+            // project's folder alone.
+            [
+              row.id,
+              row.cwd,
+              body,
+              sessionWorkspace(row) ?? null,
+              row.projectId ?? null,
+            ],
             IMAGE_GENERATION_TIMEOUT_MS + 30_000
           );
           switch (answer.kind) {

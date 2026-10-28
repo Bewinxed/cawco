@@ -312,6 +312,67 @@ const admit = async (
 };
 
 /**
+ * Where a caller may name files from ({@link Reach}): `bound`, the
+ * workspace it runs in, when it runs in one; `project`, its project, when
+ * it belongs to one.
+ */
+const reachOf = async (bound: unknown, project: unknown): Promise<Reach> => {
+  if (!(project === null || typeof project === "string")) {
+    throw new Error("an inputs' project is a project id or null");
+  }
+  const opened = project ? await projectFolderOf(project) : [];
+  const roots = isWorkspaceRef(bound)
+    ? [
+        ...(await Promise.all(
+          [bound.path, workspaceScratchDir(bound.id)].map((root) =>
+            realpath(root).catch(() => root)
+          )
+        )),
+        ...opened,
+      ]
+    : undefined;
+  return {
+    opened,
+    roots,
+    ...(isWorkspaceRef(bound)
+      ? { cliTmp: resolveAsFar(workspaceClaudeTmpDir(bound.id)) }
+      : {}),
+  };
+};
+
+/**
+ * Each of `paths` (absolute) as the real path of the file it is, judged as
+ * an input is ({@link resolved}, {@link readableFile}) for a session bound
+ * to workspace `bound` (its clone, its scratch dir, its project's folder);
+ * or the first reason one may not be read, in words. THE ONE READER of a
+ * file a workspace's session hands a tool CawCo runs on its host:
+ * `generate_image`'s `reference_images`.
+ */
+export const admitFiles = async (
+  paths: string[],
+  bound: WorkspaceRef,
+  project: string | null
+): Promise<string[] | string> => {
+  const reach = await reachOf(bound, project);
+  const reals: string[] = [];
+  for (const named of paths) {
+    const one = await resolved(named, reach);
+    if (typeof one === "string") {
+      return one;
+    }
+    if (!one.info.isFile()) {
+      return `${named} is not a file`;
+    }
+    const file = await readableFile(named, one.real, one.info, basename(named));
+    if (typeof file === "string") {
+      return file;
+    }
+    reals.push(file.real);
+  }
+  return reals;
+};
+
+/**
  * Each of `paths` admitted, or the first reason one may not go ({@link
  * admit}), two that would land under one name, or more than {@link
  * INPUTS_LIMIT_BYTES} together. `bound` is the workspace the parent runs in,
@@ -332,27 +393,7 @@ const admitAll = async (
   if (paths.length > INPUTS_COUNT_LIMIT) {
     return `inputs names ${paths.length} paths; it stops at ${INPUTS_COUNT_LIMIT}`;
   }
-  if (!(project === null || typeof project === "string")) {
-    throw new Error("an inputs' project is a project id or null");
-  }
-  const opened = project ? await projectFolderOf(project) : [];
-  const roots = isWorkspaceRef(bound)
-    ? [
-        ...(await Promise.all(
-          [bound.path, workspaceScratchDir(bound.id)].map((root) =>
-            realpath(root).catch(() => root)
-          )
-        )),
-        ...opened,
-      ]
-    : undefined;
-  const reach = {
-    opened,
-    roots,
-    ...(isWorkspaceRef(bound)
-      ? { cliTmp: resolveAsFar(workspaceClaudeTmpDir(bound.id)) }
-      : {}),
-  };
+  const reach = await reachOf(bound, project);
   const tally: Tally = { admitted: [], named: new Map(), bytes: 0 };
   for (const path of paths as string[]) {
     const files = await admit(path, reach);

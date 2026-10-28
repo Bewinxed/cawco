@@ -14,7 +14,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { chatgptBaseUrl, chatgptClaims } from "@cawco/core/usage/chatgpt";
 import { z } from "zod";
 import { isWorkspaceRef } from "./hub-command";
-import { type Kept, placeInWorkspace, writeKept } from "./inputs";
+import { admitFiles, type Kept, placeInWorkspace, writeKept } from "./inputs";
 import { freshen, readHeld } from "./provider-accounts";
 
 /** Native Codex's image model and edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
@@ -260,15 +260,35 @@ async function failure(
   return `ChatGPT image generation returned HTTP ${response.status}: ${detail} ${suffix} No retry was submitted.`;
 }
 
-/** Each reference as a data URL, checked before its bytes are read. */
+/**
+ * Each reference as a data URL, checked before its bytes are read, relative
+ * from `cwd`. For a session `bound` to a workspace, only what the inputs'
+ * gate admits (inputs.ts `admitFiles`: its clone, its scratch dir, its
+ * project's folder) is read, refused in words before anything is uploaded;
+ * a session in no workspace reads what it names.
+ */
 async function referenceImages(
   cwd: string,
-  references: string[]
+  references: string[],
+  bound: unknown,
+  project: unknown
 ): Promise<{ image_url: string }[]> {
+  const named = references.map((reference) => resolve(cwd, reference));
+  const paths = isWorkspaceRef(bound)
+    ? await admitFiles(
+        named,
+        bound,
+        typeof project === "string" ? project : null
+      )
+    : named;
+  if (typeof paths === "string") {
+    throw new Error(
+      `reference_images: ${paths}. Nothing was uploaded and no image was generated.`
+    );
+  }
   const images: { image_url: string }[] = [];
   let total = 0;
-  for (const reference of references) {
-    const referencePath = resolve(cwd, reference);
+  for (const referencePath of paths) {
     const info = await stat(referencePath);
     total += info.size;
     if (
@@ -360,19 +380,26 @@ async function askImage(
 /**
  * Credentials remain on the caller's machine; the hub receives only the
  * saved path. `bound`: the workspace the session runs in, or null
- * ({@link outputOf}).
+ * ({@link outputOf}); `project`: its project's id, or null
+ * ({@link referenceImages}).
  */
 export async function generateImage(
   cwd: string,
   input: unknown,
-  bound: unknown = null
+  bound: unknown = null,
+  project: unknown = null
 ): Promise<GeneratedImage> {
   const args = requestSchema.parse(input);
   validateSize(args.size);
   const kept = outputOf(cwd, args.output_path, bound);
   const output = kept.shown;
   const auth = await subscriptionAuth();
-  const images = await referenceImages(cwd, args.reference_images ?? []);
+  const images = await referenceImages(
+    cwd,
+    args.reference_images ?? [],
+    bound,
+    project
+  );
   if (!isWorkspaceRef(bound)) {
     // A workspace's clone and scratch dir are there; its folders under them are made one at a time as it is written.
     await mkdir(kept.root, { recursive: true });
