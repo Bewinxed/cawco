@@ -185,7 +185,7 @@ interface DevServer {
   /** Vite's file watcher (chokidar): a `change` on it is what Vite's HMR runs on. */
   watcher: {
     add: (paths: string[]) => unknown;
-    emit: (event: "change", file: string) => boolean;
+    emit: (event: "add" | "change", file: string) => boolean;
     on: (
       event: "add" | "change" | "unlink",
       listener: (file: string) => void
@@ -442,6 +442,72 @@ function rebundleOnChange(dev: DevServer): void {
   for (const event of ["add", "change", "unlink"] as const) {
     dev.watcher.on(event, changed);
   }
+}
+
+/** Whether module `mod` is a script a page was handed an import of (an importer of it served) that has no code served: its transform threw. */
+const failedServe = (mod: ModuleNode): boolean =>
+  mod.transformResult === null &&
+  !mod.url.includes("?") &&
+  [...mod.importers].some((importer) => importer.transformResult !== null);
+
+/** Whether `file` is a package's own manifest outside `node_modules`: the project's, or a linked workspace package's. */
+const isManifest = (file: string): boolean =>
+  file.endsWith(`${sep}package.json`) &&
+  !file.includes(`${sep}node_modules${sep}`);
+
+/** The manifests of the project's linked workspace packages (`workspace:*`), each in its real folder. */
+function linkedManifests(): string[] {
+  const own = join(root, "package.json");
+  if (!existsSync(own)) {
+    return [];
+  }
+  const manifest: unknown = JSON.parse(readFileSync(own, "utf8"));
+  const names = DEPENDENCY_FIELDS.flatMap((field) => {
+    const deps: unknown =
+      manifest && typeof manifest === "object"
+        ? Reflect.get(manifest, field)
+        : undefined;
+    return deps && typeof deps === "object" ? Object.keys(deps) : [];
+  });
+  return [...new Set(names)]
+    .map(linkedFolder)
+    .filter((dir): dir is string => dir !== null)
+    .map((dir) => join(dir, "package.json"));
+}
+const DEPENDENCY_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
+
+/**
+ * A manifest edit reaches Vite's resolver as a file created. Vite 8
+ * resolves imports in Rolldown's native resolver (`builtin:vite-resolve`),
+ * which caches every package.json it reads and clears that cache on a
+ * watched file created or deleted, never on one changed (rolldown 1.2.12
+ * `vite_resolve_plugin.rs` `watch_change`: "WatcherChangeKind::Create |
+ * WatcherChangeKind::Delete => { self.resolvers.clear_cache(); }
+ * WatcherChangeKind::Update => {}"; the same on main). An export added to
+ * `@cawco/core` while the stage ran stayed "not exported under the
+ * conditions" until a restart, and a linked package's manifest was not
+ * even watched: Vite watches "the `root`" (vite.dev/config/server-options
+ * `server.watch`) and its JS resolver's own manifests, which the native
+ * resolver never reads through. So each linked package's manifest is
+ * watched, and a change to any manifest is handed to Vite's watcher as an
+ * `add`, its own path for a file created: every environment's plugins hear
+ * it (`watchChange` with `create`: the native resolver clears its cache,
+ * Vite's `vite:watch-package-data` drops its package data), then its HMR
+ * runs with it ({@link cawcoStage}'s `hotUpdate` loads each section whose
+ * module failed again). Nothing restarts.
+ */
+function relinkOnManifestChange(dev: DevServer): void {
+  dev.watcher.add(linkedManifests());
+  dev.watcher.on("change", (file) => {
+    if (isManifest(file)) {
+      dev.watcher.emit("add", file);
+    }
+  });
 }
 
 /** The project's dev server, once it stands: what resolves a story's imports and sends its pages HMR words. */
@@ -3093,14 +3159,53 @@ function cawcoStage() {
      * React's, Vue's), so the section's module is added to the update here;
      * Vite invalidates it and sends it once (`updateModules` skips a module
      * its propagation already reached, as through a states file).
+     *
+     * A manifest taken as created ({@link relinkOnManifestChange}) may make
+     * an import resolve that failed. Vite's own HMR, on a file created,
+     * updates each module an import of which failed to resolve
+     * (`_hasResolveFailedErrorModules`), but only one whose resolve answered
+     * nothing; the native resolver throws ("is not exported under the
+     * conditions"), and the throw names no module. And Vite propagates no
+     * update from a module whose transform threw ("stop propagation because
+     * not analyzed": its `isSelfAccepting` unset). So each module a page was
+     * handed an import of and that has no code served ({@link failedServe})
+     * is invalidated as Vite's HMR invalidates a changed module (its
+     * `lastHMRTimestamp`: its importers ask for it at `?t=`, past the
+     * browser's record of the failed fetch), and its served importers are
+     * the update: Vite's propagation reaches each failed section's module,
+     * which the page loads again.
      */
     async hotUpdate(
       this: { environment: { name: string } },
-      { file, modules }: { file: string; modules: ModuleNode[] }
+      {
+        type,
+        file,
+        modules,
+        timestamp,
+      }: {
+        type: "create" | "update" | "delete";
+        file: string;
+        modules: ModuleNode[];
+        timestamp: number;
+      }
     ) {
       const graph = server?.environments.client.moduleGraph;
       if (!graph || this.environment.name !== "client") {
         return;
+      }
+      if (isManifest(file)) {
+        if (type !== "create") {
+          return;
+        }
+        const failed = [...graph.idToModuleMap.values()].filter(failedServe);
+        // Read before the invalidation, which invalidates each importer too.
+        const importers = failed.flatMap((mod) =>
+          [...mod.importers].filter((one) => one.transformResult !== null)
+        );
+        for (const mod of failed) {
+          graph.invalidateModule(mod, new Set(), timestamp, true);
+        }
+        return importers.length > 0 ? [...modules, ...importers] : undefined;
       }
       const reached = await Promise.all(
         [...sections].map(async ([sheet, id]) => {
@@ -3129,6 +3234,7 @@ function cawcoStage() {
     configureServer(dev: DevServer) {
       server = dev;
       rebundleOnChange(dev);
+      relinkOnManifestChange(dev);
       const { hot } = dev.environments.client;
       const send = hot.send.bind(hot);
       hot.send = (payload: unknown, ...rest: unknown[]) => {
