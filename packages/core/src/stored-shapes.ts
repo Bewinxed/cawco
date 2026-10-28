@@ -1393,6 +1393,7 @@ const DelegateEventShape = z.union([
       body: z.string(),
       failed: z.boolean(),
       headline: z.string().optional(),
+      outputs: z.array(z.string()).optional(),
       resultId: z.string().optional(),
       completedAt: z.string().optional(),
     }),

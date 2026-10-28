@@ -27,6 +27,7 @@
    * send him from the hero to his seat on it.
    */
   import { CAW_NO_MACHINE, type PermissionResult } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -56,6 +57,7 @@
     type BlockedRequest,
     cawco,
     commandFault,
+    loadDelegateEvents,
     readTranscript,
     type SendExtras,
     sendFailureNotice,
@@ -189,6 +191,9 @@
       readTranscript(id).then((outcome) => {
         readProblem = outcome.ok ? null : outcome.message;
       });
+      // The asks and reports of the sessions Caw started from it, which
+      // their cards on it draw; frames keep them after this.
+      detach(loadDelegateEvents(id), "loadDelegateEvents");
     });
   });
   // Docked in his panel, the thread is no tab of the workspace's: its

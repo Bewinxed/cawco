@@ -1,6 +1,11 @@
 <script lang="ts">
-  import type { Activity, DelegateAskStatus } from "@cawco/core";
+  import {
+    type Activity,
+    type DelegateAskStatus,
+    threadTarget,
+  } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   /**
    * A fleet delegate — a session this one spawned with `delegate` or
@@ -9,10 +14,15 @@
    * The delegate is a full instance with its own row and transcript; this card
    * only composes what the store already holds: the hub's record of its asks
    * and reports, the daemon's pulse, and, once opened, its live transcript.
+   *
+   * On a Caw thread the hub draws the same card for each session he started
+   * from it (hub thread-transcript.ts), with the hand-offs he sent it since
+   * its brief as lines under the head; its report brings the files it
+   * copied into the project's folder.
    */
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconChevronRight, IconExternal } from "#lib/icons.js";
+  import { IconChevronRight, IconExternal, IconHandoff } from "#lib/icons.js";
   import { formatDuration } from "#lib/utils/time.js";
   import {
     cawco,
@@ -27,6 +37,7 @@
   import { tickingClock } from "../motion/clock.svelte.js";
   import { dur, easeOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import FolderFiles from "../project/FolderFiles.svelte";
   import {
     sessionAnswer,
     sessionPlace,
@@ -86,8 +97,13 @@
    * where the delegate answers now.
    */
   const parentId = $derived(row?.parentInstanceId ?? hubAnswer?.parent?.id);
+  /**
+   * A Caw thread draws only the sessions he started from it, which report
+   * to him: the thread is where they answer.
+   */
+  const onThread = $derived(threadTarget(message.instanceId));
   const elsewhere = $derived(
-    parentId && parentId !== message.instanceId ? parentId : null
+    parentId && parentId !== message.instanceId && !onThread ? parentId : null
   );
   const ownerName = $derived(
     elsewhere ? (sessionTitle(elsewhere) ?? hubAnswer?.parent?.title ?? "") : ""
@@ -133,6 +149,13 @@
     row?.canDelegate === true || toolInput.can_delegate === true
   );
   const brief = $derived(meta.handoffBrief ?? "");
+  /** On a Caw thread: what he handed it after its brief (hub thread-transcript.ts). */
+  const handoffs = $derived(meta.delegateHandoffs ?? []);
+  /** Whose folder its outputs are in: its own project's, else the thread's. */
+  const projectId = $derived(
+    row?.projectId ??
+      (onThread ? cawco.threadOf(message.instanceId)?.projectId : undefined)
+  );
 
   /**
    * The newest turn it reported and how many there were — off the hub's rows,
@@ -144,6 +167,8 @@
       body: string;
       /** The delegate's own short outcome, when it finished with finish_item. */
       headline: string | undefined;
+      /** The folder paths its finish copied its outputs to. */
+      outputs: string[];
       failed: boolean;
       count: number;
       at: number | undefined;
@@ -153,6 +178,7 @@
         return {
           body: last.payload.body,
           headline: last.payload.headline,
+          outputs: last.payload.outputs ?? [],
           failed: last.payload.failed,
           count: reportEvents.length,
           at: new Date(last.createdAt).getTime(),
@@ -174,6 +200,7 @@
       return {
         body: latest.content,
         headline: latest.metadata?.reportHeadline,
+        outputs: [],
         failed: latest.metadata?.reportKind === "failed",
         count: peers.length,
         at: latest.timestamp ? Date.parse(latest.timestamp) : undefined,
@@ -549,6 +576,36 @@
       </p>
     {/if}
 
+    <!-- What Caw handed it after its brief, one line each at the text column,
+         the hand-off glyph in the glyph column; a new one lands as an ask
+         does. Its words whole are its title. -->
+    {#if handoffs.length > 0}
+      <ul
+        aria-label={transcriptWords.delegateHandoffs}
+        class="list-none m-0 p-0 flex flex-col gap-space-row max-w-c-measure"
+        {@attach reflow()}
+      >
+        {#each handoffs as handoff (handoff.at)}
+          <li
+            data-slot="handoff"
+            class="rail-line items-baseline mt-space-1 text-size-meta font-normal leading-body text-ink-muted min-w-0"
+            data-flip
+            title={handoff.text}
+          >
+            <span
+              data-slot="rail-cell"
+              aria-hidden="true"
+              class="rail-cell h-lh"
+              ><IconHandoff class="size-icon-sm block" /></span
+            >
+            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              >{headline(handoff.text)}</span
+            >
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
     <!-- The lines under the head: their words at the text column, a live
          beat or an ask's dot in the glyph column under the mark. One cell: a
          phase's line and the next one's cross-fade in place. A line's glyph
@@ -577,6 +634,14 @@
             <span>{status.text}</span>
           </p>
         {/key}
+      </div>
+    {/if}
+
+    <!-- Closed, a report's outputs stand under its headline: each file its
+         finish copied into the project's folder, opening where it is. -->
+    {#if report && report.outputs.length > 0 && projectId && !open}
+      <div class="rail-hang">
+        <FolderFiles files={report.outputs} {projectId} />
       </div>
     {/if}
 

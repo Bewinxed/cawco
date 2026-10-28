@@ -1507,6 +1507,12 @@ export type DelegateEvent =
         failed: boolean;
         /** The delegate's one-or-two-sentence outcome, when it finished with `finish_item`. */
         headline?: string;
+        /**
+         * The files its finish copied into its project's folder, as paths
+         * from the folder's root (`assets/tsk-12/plan.md`); absent when it
+         * handed in none.
+         */
+        outputs?: string[];
         resultId?: string;
         completedAt?: string;
       };

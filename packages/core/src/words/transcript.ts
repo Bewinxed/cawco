@@ -35,4 +35,6 @@ export const transcriptWords = {
   notSent: "Couldn't send that message.",
   /** A stored session's menu: its words carried into a new session. */
   continueInNew: "Continue in new session…",
+  /** A delegate card on a Caw thread, as a screen reader names what Caw handed it after its brief. */
+  delegateHandoffs: "Hand-offs",
 };

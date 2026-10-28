@@ -1057,6 +1057,8 @@ interface ReportTold {
   completion?: { resultId: string; completedAt?: string };
   headline?: string;
   notice?: boolean;
+  /** The folder paths its finish copied its outputs to. */
+  outputs?: string[];
 }
 
 /** Why a machine's transcripts gave no answer to a find, as the clause after "couldn't search:". */
@@ -5934,7 +5936,7 @@ export const createServer = (
     delegate: InstanceRow,
     body: string,
     failed: boolean,
-    { completion, notice = false, headline }: ReportTold
+    { completion, notice = false, headline, outputs }: ReportTold
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
     const sent = deliverSend({
@@ -5983,6 +5985,7 @@ export const createServer = (
           body,
           failed,
           ...(headline ? { headline } : {}),
+          ...(outputs?.length ? { outputs } : {}),
           ...(notice ? { notice: true } : {}),
           ...completion,
         },
@@ -6028,6 +6031,11 @@ export const createServer = (
     }
     if (!isSessionSend(row)) {
       return;
+    }
+    // Another session's words to one Caw started from a thread: its brief
+    // or a hand-off, which its row on that thread carries.
+    if (row.body.origin?.kind === "peer") {
+      threadTranscripts.delegate(row.instanceId);
     }
     if (isKeepAlive(row.body)) {
       streams.sequence(row.instanceId, {
@@ -16146,6 +16154,8 @@ export const createServer = (
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
     });
+    // One Caw started from a thread shows on it from now.
+    threadTranscripts.delegate(payload.instanceId);
     const sent = sendSpawn(agent, machineId, {
       verb: "spawn",
       machineId,
@@ -24361,8 +24371,8 @@ export const createServer = (
     },
     unblocked: (instanceId) => releaseOwed({ instanceId }),
     leadPlace: leadPlaceRef,
-    report: (row, body, failed, notice, headline) => {
-      reportToParent(row, body, failed, { notice, headline });
+    report: (row, body, failed, notice, headline, outputs) => {
+      reportToParent(row, body, failed, { notice, headline, outputs });
       // An item that ends while its session is at rest (checks a restarted
       // hub ran again) has no turn's end left to stop it at.
       sleepFinished(row.id);
@@ -31241,6 +31251,17 @@ export const createServer = (
         ({ query, status }) => {
           if (!(query.parent || query.instance)) {
             return status(400, "name a parent or an instance");
+          }
+          // A Caw thread (`thread:<id>`): what the sessions he started from
+          // it said, the delegates its page draws.
+          const thread = query.parent ? threadTarget(query.parent) : undefined;
+          if (thread) {
+            return db
+              .threadDelegates(thread)
+              .flatMap((row) => db.listDelegateEvents({ instance: row.id }))
+              .sort(
+                (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id
+              );
           }
           return db.listDelegateEvents(query);
         }

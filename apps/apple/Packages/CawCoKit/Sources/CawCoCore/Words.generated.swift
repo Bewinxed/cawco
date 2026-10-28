@@ -873,6 +873,9 @@ public enum Words {
 
         /// A stored session's menu: its words carried into a new session.
         public static let continueInNew = "Continue in new session…"
+
+        /// A delegate card on a Caw thread, as a screen reader names what Caw handed it after its brief.
+        public static let delegateHandoffs = "Hand-offs"
     }
 
     public enum Asks {

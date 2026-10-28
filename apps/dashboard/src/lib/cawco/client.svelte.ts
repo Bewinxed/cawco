@@ -2501,9 +2501,10 @@ function rereadDelegateEvents(): void {
  * opened. Broadcast as it happens *and* readable here, for the same reason the
  * hand-offs are: an exchange that settled an hour ago is still the record, and
  * a settled ask is never pushed again. A read that fails leaves the delegate
- * cards on the transcript markers, and the next open tries again.
+ * cards on the transcript markers, and the next open tries again. A Caw
+ * thread's (`thread:<id>`) are those of the sessions he started from it.
  */
-async function loadDelegateEvents(instanceId: string): Promise<void> {
+export async function loadDelegateEvents(instanceId: string): Promise<void> {
   if (delegatesRead.has(instanceId)) {
     return;
   }

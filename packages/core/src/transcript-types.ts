@@ -97,6 +97,13 @@ export interface BlockMetadata {
    */
   continuation?: true;
   cwd?: string;
+  /**
+   * On a Caw thread's delegate row (hub thread-transcript.ts): each hand-off
+   * its starter sent it after its brief, oldest first, its words without the
+   * marker. A session's transcript draws those hand-offs as rows of their
+   * own and carries none here.
+   */
+  delegateHandoffs?: Array<{ at: string; text: string }>;
   /** The delegate a `tool.handoff` started, read once off its result. */
   delegateInstanceId?: string;
   /** The delegate's brief headline, carried beside {@link delegateInstanceId}. */

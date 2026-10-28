@@ -2390,6 +2390,12 @@ export interface DbShape {
     taskId: string
   ) => { id: string; path: string }[];
   readonly thread: (id: string) => ThreadRow | undefined;
+  /**
+   * The sessions a project's Caw started from a thread (`thread_id`, set at
+   * spawn, with a parent), oldest first: what the thread's transcript draws
+   * as its delegate rows.
+   */
+  readonly threadDelegates: (threadId: string) => PublicInstanceRow[];
   /** One thread message by its id, in any thread. */
   readonly threadMessage: (id: string) => ThreadMessageRow | undefined;
   /** A thread's messages, oldest first. */
@@ -7720,6 +7726,19 @@ const make = async (path: string): Promise<DbShape> => {
         .where(and(inArray(instances.id, ids), keptInstances()))
         .all();
     },
+    threadDelegates: (threadId) =>
+      db
+        .select(publicColumns)
+        .from(instances)
+        .where(
+          and(
+            eq(instances.threadId, threadId),
+            isNotNull(instances.parentInstanceId),
+            keptInstances()
+          )
+        )
+        .orderBy(asc(instances.createdAt), asc(instances.id))
+        .all(),
     instanceBySessionId: (sessionId) =>
       db
         .select(publicColumns)

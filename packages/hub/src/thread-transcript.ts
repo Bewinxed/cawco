@@ -12,7 +12,12 @@
  * - Caw's replies, the events noted in it and the person's answers to his
  *   questions are its `thread_messages`, at the time each was written;
  * - the tail is Caw's words as he writes them, in the turn that read the
- *   person's newest words here.
+ *   person's newest words here;
+ * - each session Caw started from the thread (`instances.thread_id`) is the
+ *   row a session's transcript draws for its `delegate` or `start_session`
+ *   call (a `tool.handoff` the dashboard draws as its Delegate card), at
+ *   its spawn, carrying each hand-off Caw sent it since its brief. Its live
+ *   state, asks and report are the hub's delegate events, as on any card.
  *
  * Built once per thread from what the database holds (core
  * `TranscriptBuilder.seed`), then kept: each record that moves, each row
@@ -22,6 +27,7 @@
  */
 import {
   CAW_EVENT_NOTE,
+  parseHandoffMarker,
   type SendRecord,
   sendRef,
   TRANSCRIPT_PAGE,
@@ -36,13 +42,23 @@ import {
 } from "@cawco/core";
 import type {
   DbShape,
+  PublicInstanceRow,
   SentMessageRow,
   ThreadMessageRow,
   ThreadRow,
 } from "./db";
 
 export interface ThreadTranscriptPorts {
-  readonly db: Pick<DbShape, "thread" | "threadMessages" | "threadSends">;
+  readonly db: Pick<
+    DbShape,
+    | "getInstancesByIds"
+    | "sendsIn"
+    | "thread"
+    | "threadDelegates"
+    | "threadMessages"
+    | "threadSends"
+    | "workItem"
+  >;
   /** The thread's stream head: the seq a page is consistent with. */
   readonly head: (viewId: string) => number;
   /** This hub's run, the numbering {@link head} counts in. */
@@ -56,6 +72,11 @@ export interface ThreadTranscriptPorts {
 }
 
 export interface ThreadTranscriptsShape {
+  /**
+   * A session Caw started from a thread was spawned, or sent something:
+   * its row on the thread, drawn again when what it says moved.
+   */
+  readonly delegate: (instanceId: string) => void;
   /** One of the thread's own rows added: Caw's reply, a note, your answer to his question. */
   readonly line: (row: ThreadMessageRow) => void;
   /** A page of the thread, the newest when `before` is absent; undefined for no such thread. */
@@ -174,6 +195,44 @@ const threadBlockOf = (
   return { ...base, ...answerBlock(row) };
 };
 
+/** The states a hand-off stands in on a delegate's row: sent, whether or not it was read yet. */
+const HANDED_STATES: SentMessageRow["state"][] = ["pending", "read", "failed"];
+
+/** A send's words as its sender wrote them, its pictures and files left out. */
+const sendText = (row: SentMessageRow): string => {
+  const { content } = row.body.message;
+  return typeof content === "string"
+    ? content
+    : content
+        .map((block) => (block.type === "text" ? block.text : ""))
+        .join("\n");
+};
+
+/**
+ * What a delegate's starter sent it, oldest first, each as its words without
+ * the hand-off marker: its brief first, then every hand-off after it.
+ */
+const fromStarter = (
+  sends: SentMessageRow[],
+  starter: string
+): { at: string; text: string }[] =>
+  sends
+    .filter(
+      (send) =>
+        send.body.origin?.kind === "peer" &&
+        send.body.origin.fromSession === starter
+    )
+    .map((send) => {
+      const text = sendText(send);
+      return {
+        at: send.acceptedAt.toISOString(),
+        text: (parseHandoffMarker(text)?.body ?? text).trim(),
+      };
+    });
+
+/** The id a session's row on a thread keeps, page to page and frame to frame. */
+const delegateRowId = (instanceId: string): string => `delegate:${instanceId}`;
+
 export const createThreadTranscripts = (
   ports: ThreadTranscriptPorts
 ): ThreadTranscriptsShape => {
@@ -199,6 +258,50 @@ export const createThreadTranscripts = (
     }
   };
 
+  /** Each delegate row as last drawn, so a send that moves nothing it says draws nothing. */
+  const drawn = new Map<string, string>();
+
+  /**
+   * A session Caw started from the thread as its transcript draws a
+   * `delegate` (a work item) or `start_session` call: its title and type,
+   * its brief, the session it is, and each hand-off sent it since.
+   */
+  const delegateBlockOf = (
+    row: PublicInstanceRow,
+    viewId: string
+  ): TranscriptBlock => {
+    const item = row.workItemId ? ports.db.workItem(row.workItemId) : undefined;
+    const said = row.parentInstanceId
+      ? fromStarter(
+          ports.db.sendsIn(row.id, HANDED_STATES),
+          row.parentInstanceId
+        )
+      : [];
+    const [opening, ...handoffs] = said;
+    const title = item?.title ?? row.title ?? "";
+    const type = item?.type ?? row.delegateType;
+    const id = delegateRowId(row.id);
+    return {
+      id,
+      instanceId: viewId,
+      timestamp: row.createdAt.toISOString(),
+      type: "tool.handoff",
+      content: title,
+      toolCallId: id,
+      metadata: {
+        toolId: id,
+        toolName: item ? "delegate" : "start_session",
+        toolInput: { title, ...(type ? { type } : {}) },
+        toolStatus: "success",
+        handoffKind: item ? "delegate" : "start",
+        handoffBrief: item?.brief ?? opening?.text ?? "",
+        delegateInstanceId: row.id,
+        delegateTitle: title,
+        ...(handoffs.length > 0 ? { delegateHandoffs: handoffs } : {}),
+      },
+    };
+  };
+
   /** The thread's builder, built from the database the first time it is asked for. */
   const builderOf = (threadId: string): TranscriptBuilder | undefined => {
     const known = built.get(threadId);
@@ -222,6 +325,11 @@ export const createThreadTranscripts = (
           at: (send.readAt ?? send.acceptedAt).getTime(),
           block: sendRef(viewId, send.uuid),
         })),
+      ...ports.db.threadDelegates(threadId).map((row) => {
+        const block = delegateBlockOf(row, viewId);
+        drawn.set(block.id, JSON.stringify(block));
+        return { at: row.createdAt.getTime(), block };
+      }),
     ];
     rows.sort(
       (a, b) =>
@@ -240,6 +348,20 @@ export const createThreadTranscripts = (
   };
 
   return {
+    delegate: (instanceId) => {
+      const [row] = ports.db.getInstancesByIds([instanceId]);
+      const builder = row?.threadId ? built.get(row.threadId) : undefined;
+      if (!(row && builder && row.parentInstanceId)) {
+        return;
+      }
+      const block = delegateBlockOf(row, builder.instanceId);
+      const json = JSON.stringify(block);
+      if (drawn.get(block.id) === json) {
+        return;
+      }
+      drawn.set(block.id, json);
+      emit(builder.instanceId, builder.applyBlock(block));
+    },
     line: (row) => {
       const builder = built.get(row.threadId);
       if (builder) {

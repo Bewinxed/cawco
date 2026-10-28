@@ -1043,14 +1043,16 @@ export interface WorkItemDeps {
   readonly recutKept?: (instanceId: string) => void;
   /**
    * Hands a report to the parent of the item's session: `body` the full
-   * report, `headline` its one-or-two-sentence outcome when there is one.
+   * report, `headline` its one-or-two-sentence outcome when there is one,
+   * `outputs` the folder paths its finish copied its outputs to.
    */
   readonly report: (
     row: InstanceRow,
     body: string,
     failed: boolean,
     notice?: boolean,
-    headline?: string
+    headline?: string,
+    outputs?: string[]
   ) => void;
   /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts); throws a refusal in its words. */
   readonly resolveHanded: (
@@ -7865,7 +7867,8 @@ export const createWorkItems = ({
     row: InstanceRow,
     ended: WorkItemRow,
     body: string,
-    headline: string
+    headline: string,
+    outputs: string[]
   ): string => {
     if (heldForGroup(ended)) {
       return `; your parent hears of it with the rest of group “${ended.group}”`;
@@ -7875,7 +7878,8 @@ export const createWorkItems = ({
       `${body}${reportLine(ended)}`,
       ended.state === "failed",
       false,
-      headline
+      headline,
+      outputs
     );
     return "";
   };
@@ -8317,26 +8321,28 @@ export const createWorkItems = ({
    * Copies the item's outputs from its workspace into its project's folder,
    * under `assets/<task or item>/` ({@link copyOutputs}): its declared
    * outputs and whatever it left in `$TMPDIR/outputs/`. The report's lines
-   * on them, and whether they arrived.
+   * on them, whether they arrived, and the paths they arrived at from the
+   * folder's root.
    */
   const collectOutputs = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
-  ): Promise<{ ok: boolean; line: string }> => {
+  ): Promise<{ ok: boolean; line: string; paths: string[] }> => {
     const { projectId } = item;
     if (!projectId) {
       return item.outputs?.length
         ? {
             ok: false,
             line: "\n\nOutputs not collected: the item belongs to no project.",
+            paths: [],
           }
-        : { ok: true, line: "" };
+        : { ok: true, line: "", paths: [] };
     }
     const folder = outputsFolder(item);
     try {
       const written = await copyOutputs(workspace, { ...item, projectId });
       if (!written) {
-        return { ok: true, line: "" };
+        return { ok: true, line: "", paths: [] };
       }
       // Absolute, as the project's workspaces on the hub's machine read them
       // (core workspace-policy.ts `projectFolder`); a delegate on any machine
@@ -8344,6 +8350,7 @@ export const createWorkItems = ({
       const root = projectRoot(projectId);
       return {
         ok: true,
+        paths: written.paths,
         line: `\n\nOutputs, copied into the project's folder ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}, readable by the project's delegates (on the hub's machine at these paths, on any machine with folder_read and the path after ${root}/):\n${written.paths.map((path) => `- ${root}/${path}`).join("\n")}`,
       };
     } catch (error) {
@@ -8351,6 +8358,7 @@ export const createWorkItems = ({
       return {
         ok: false,
         line: `\n\nOutputs not collected into ${folder}/: ${reason}`,
+        paths: [],
       };
     }
   };
@@ -8485,7 +8493,13 @@ export const createWorkItems = ({
       ...landedFields(landing),
       ...settled,
     });
-    const held = reportOrHold(row, ended, body, submission.headline);
+    const held = reportOrHold(
+      row,
+      ended,
+      body,
+      submission.headline,
+      collected.paths
+    );
     return landedText(landing, collected, gateSaid, held);
   };
 
