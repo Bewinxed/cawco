@@ -6129,6 +6129,16 @@
             }
           },
           {
+            "name": "save",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "maxLength": 1000,
+              "type": "string"
+            }
+          },
+          {
             "name": "render",
             "in": "query",
             "required": false,
@@ -37795,6 +37805,10 @@
           },
           "revision": {
             "type": "number"
+          },
+          "saved": {
+            "description": "Where its picture was kept, as the session names the path (`save`).",
+            "type": "string"
           },
           "sentAt": {
             "description": "When the person last pressed Send; null before they have (and on a canvas, which has no Send).",

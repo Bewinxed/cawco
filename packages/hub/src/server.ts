@@ -113,6 +113,7 @@ import type {
   UsageSpend,
   WindowAsk,
   WorkspaceRef,
+  WorkspaceSaved,
 } from "@cawco/core";
 import {
   ACCOUNT_HUES,
@@ -236,6 +237,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
+  CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
   type CommandQueue,
   type CommandQueueFrame,
@@ -342,6 +344,7 @@ import {
   pauseClock,
   permissionModeNamed,
   pictureName,
+  placeAtLink,
   previewEnterUrl,
   previewRoute,
   providerChoices,
@@ -1593,6 +1596,7 @@ const strategyChoice = t.Object({
 const UNROUTED_REPLY_LIMIT = 4096;
 /** Workspace controls only the hub sends: a dashboard's control naming one is refused at the relay. */
 const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
+  CONTROL_WORKSPACE_SAVE,
   CONTROL_INPUTS_ADMIT,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
@@ -14394,7 +14398,8 @@ export const createServer = (
       }
     },
     browse: (instance, row) => browseAt(instance, row),
-    picture: (instance, row, width) => pictureOf(instance, row, width),
+    picture: (instance, row, drawn) => pictureOf(instance, row, drawn),
+    keepPicture: (instance, path, png) => keepPicture(instance, path, png),
     // A Linux workspace dials out through srt, which refuses the owner's own
     // network and its machine's own addresses (core boundary-reach.ts),
     // but for this hub's own preview origins, which its relay dials from the
@@ -14942,13 +14947,14 @@ export const createServer = (
    * it in its Chromium (agent artifact-picture.ts) where `artifact_browse`
    * would, on its own preview origin, here on loopback, so the proxy's
    * overlay and the real origin are in it; a sleeping server is woken by
-   * the page's load. Its picture, base64 PNG; refused in words when no
-   * daemon runs on the hub's machine or it didn't draw in time.
+   * the page's load; at its state's `link` (a query merged into its own, or
+   * a hash) when one is named. Its picture, base64 PNG; refused in words
+   * when no daemon runs on the hub's machine or it didn't draw in time.
    */
   const pictureOf = async (
     instance: InstanceRow,
     row: ArtifactRow,
-    width: number
+    { link, width }: { link?: string; width: number }
   ): Promise<string> => {
     const machineId = await ownMachineId;
     if (!registry.agent(machineId)) {
@@ -14966,7 +14972,7 @@ export const createServer = (
           url: previewEnterUrl(
             previewListeners.loopback(address.port),
             entry.ticket,
-            path
+            link === undefined ? path : placeAtLink(path, link)
           ),
           width,
           artifact: { id: row.id, kind: row.kind, name: row.name },
@@ -14995,6 +15001,54 @@ export const createServer = (
       );
     }
     return png;
+  };
+
+  /**
+   * Picture `png` kept at `path` in session `instance`'s workspace
+   * (`artifact_read`'s `save`), written by the workspace's machine with the
+   * writer its inputs land by (agent inputs.ts `savePicture`), which refuses
+   * a path outside the clone and the scratch dir in words. The path written.
+   */
+  const keepPicture = async (
+    instance: InstanceRow,
+    path: string,
+    png: string
+  ): Promise<string> => {
+    const workspace = workItems.workspaceOf(instance);
+    if (!workspace) {
+      throw new ArtifactRefusal(
+        409,
+        "save keeps a picture in your workspace, and this session runs in none; read it without save."
+      );
+    }
+    const asked = await callAgent(
+      instance.machineId,
+      CONTROL_WORKSPACE_SAVE,
+      [workspace, path, png],
+      WORKSPACE_TIMEOUT_MS
+    );
+    switch (asked.kind) {
+      case "unanswered":
+        throw new ArtifactRefusal(
+          503,
+          `The picture wasn't saved: ${machineName(instance.machineId)} ${asked.reason === "dead" ? "isn't connected" : `didn't answer within ${Math.round(asked.after / 1000)} s`}.`
+        );
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
+    }
+    const saved = asked.value.result as WorkspaceSaved | undefined;
+    if (!(asked.value.ok && saved)) {
+      throw new ArtifactRefusal(
+        503,
+        `The picture wasn't saved: ${asked.value.error ?? "its machine answered nothing"}.`
+      );
+    }
+    if ("refused" in saved) {
+      throw new ArtifactRefusal(400, saved.refused);
+    }
+    return saved.path;
   };
 
   /**

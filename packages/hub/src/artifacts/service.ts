@@ -588,6 +588,8 @@ export interface ArtifactRead {
   /** Keys that changed since `since` and are no longer there. */
   removed?: string[];
   revision: number;
+  /** Where its picture was kept, as the session names the path (`save`). */
+  saved?: string;
   /** When the person last pressed Send; null before they have (and on a canvas, which has no Send). */
   sentAt: string | null;
   /** What the page's `cawco.send(text)` sent with the person's last send. */
@@ -1119,6 +1121,49 @@ export interface ComponentReadAsk {
   width?: number;
 }
 
+/** What `artifact_read` asks of any artifact's picture beyond the component's own. */
+export interface PictureAsk extends ComponentReadAsk {
+  /** A preview or a page drawn at its state's own link: the query or hash it adds (`?__state=pairing:asking`). */
+  link?: string;
+  /** Keep the picture at this path in the session's workspace. */
+  save?: string;
+}
+
+/**
+ * Why `row` can't be read as `ask` asks, or nothing: a state's link draws a
+ * preview or a page, a frame is a component's, and the project's browser
+ * has no page the hub can draw (`drawn`: a picture is asked).
+ */
+const pictureRefusal = (
+  row: ArtifactRow,
+  ask: PictureAsk,
+  drawn: boolean
+): ArtifactRefusal | undefined => {
+  if (
+    ask.link !== undefined &&
+    !(row.kind === "preview" || row.kind === "page")
+  ) {
+    return new ArtifactRefusal(
+      400,
+      row.kind === "component"
+        ? `${row.name} is a component canvas: its state is a frame, { story, interaction?, scheme?, width? }.`
+        : `${row.name} is a ${row.kind}: a state's link draws a preview or a page.`
+    );
+  }
+  if (ask.state && row.kind !== "component") {
+    return new ArtifactRefusal(
+      400,
+      `${row.name} is a ${row.kind}: its state is the query or hash of the state's own link, like "?__state=pairing:asking".`
+    );
+  }
+  if (row.kind === "browser" && drawn) {
+    return new ArtifactRefusal(
+      409,
+      `${row.name} is the project's browser: the hub serves no page of it to draw, so it has no picture. Read it without png.`
+    );
+  }
+};
+
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
 const sheetOf = (
   row: ArtifactRow
@@ -1563,6 +1608,17 @@ export interface ArtifactServiceDeps {
     { refused: string; status: ArtifactRefusal["status"] } | undefined
   >;
   /**
+   * Picture `png` (base64) kept at `path` in session `instance`'s workspace
+   * (`artifact_read`'s `save`), written by its machine (core
+   * `CONTROL_WORKSPACE_SAVE`). The path written; throws an
+   * {@link ArtifactRefusal} saying why when it wasn't.
+   */
+  keepPicture: (
+    instance: InstanceRow,
+    path: string,
+    png: string
+  ) => Promise<string>;
+  /**
    * The projects session `instance` leads (their Caw): an ended writer's
    * marks are routed to him, and he answers them in their pins' threads.
    * He also reads every page of his project, so a page whose session ended
@@ -1619,14 +1675,14 @@ export interface ArtifactServiceDeps {
    * Preview or page `artifact` drawn as the person's panel draws it, for
    * session `instance`'s `artifact_read` with `png` (server.ts, agent
    * artifact-picture.ts): on its own preview origin in the Chromium of the
-   * hub's machine, `width` CSS px wide, a sleeping server woken first. Its
-   * picture, base64 PNG; throws an {@link ArtifactRefusal} saying why when
-   * it can't be drawn.
+   * hub's machine, `width` CSS px wide, at its state's `link` when one is
+   * named, a sleeping server woken first. Its picture, base64 PNG; throws an
+   * {@link ArtifactRefusal} saying why when it can't be drawn.
    */
   picture: (
     instance: InstanceRow,
     artifact: ArtifactRow,
-    width: number
+    drawn: { link?: string; width: number }
   ) => Promise<string>;
   /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
@@ -5644,6 +5700,61 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * id, and the next version's as `held`; with the artifact's link
    * (`[name](cawco:artifact/<id>)`), which the agent names it by.
    */
+  /**
+   * `artifact_read` of `row` for `instance`, its picture drawn when `drawn`:
+   * a canvas's latest; a preview or a page now, at its state's link when
+   * `ask` names one; a component's frames by its stage.
+   */
+  const readOf = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    since: number | undefined,
+    drawn: boolean,
+    { link, ...ask }: PictureAsk
+  ): Promise<ArtifactRead> => {
+    const ownersRead = readsForOwner(instance, row);
+    if (row.kind === "canvas") {
+      return heldAnswer(readCanvas(row, since, drawn, ownersRead));
+    }
+    if (row.kind !== "component") {
+      // Drawn before the read, which then says what the picture shows.
+      const picture = drawn
+        ? await deps.picture(instance, row, {
+            width: ask.width ?? PICTURE_VIEW.width,
+            ...(link === undefined ? {} : { link }),
+          })
+        : undefined;
+      return heldAnswer({
+        ...read(row, since, ownersRead),
+        ...(since === undefined ? programRead(row) : {}),
+        ...(picture === undefined ? {} : { png: picture }),
+      });
+    }
+    const answer = await readSheet(row, since, ownersRead, {
+      ...ask,
+      png: drawn,
+    });
+    return ask.verify
+      ? { ...answer, verify: await askVerify(instance, row) }
+      : answer;
+  };
+
+  /** The picture read `told` answered for `row`, kept at `save` in `instance`'s workspace: the path written. */
+  const keptIn = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    save: string,
+    told: ArtifactRead
+  ): Promise<string> => {
+    if (typeof told.png !== "string") {
+      throw new ArtifactRefusal(
+        409,
+        `${row.name} has no picture yet, so nothing was saved.`
+      );
+    }
+    return deps.keepPicture(instance, save, told.png);
+  };
+
   const heldAnswer = <T extends { held?: string; id: string }>(
     answer: T
   ): T & { link?: string } => {
@@ -6974,38 +7085,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id?: string,
       since?: number,
       png = false,
-      ask: ComponentReadAsk = {}
+      ask: PictureAsk = {}
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
       const row = readTarget(instance, id);
-      const ownersRead = readsForOwner(instance, row);
-      if (row.kind === "canvas") {
-        return heldAnswer(readCanvas(row, since, png, ownersRead));
+      // A state's link draws it, and a picture kept is drawn first.
+      const drawn =
+        png ||
+        ask.png === true ||
+        ask.link !== undefined ||
+        ask.save !== undefined;
+      const refusal = pictureRefusal(row, ask, drawn);
+      if (refusal) {
+        throw refusal;
       }
-      if (row.kind === "browser" && png) {
-        throw new ArtifactRefusal(
-          409,
-          `${row.name} is the project's browser: the hub serves no page of it to draw, so it has no picture. Read it without png.`
-        );
-      }
-      if (row.kind !== "component") {
-        // Drawn before the read, which then says what the picture shows.
-        const picture = png
-          ? await deps.picture(instance, row, ask.width ?? PICTURE_VIEW.width)
-          : undefined;
-        return heldAnswer({
-          ...read(row, since, ownersRead),
-          ...(since === undefined ? programRead(row) : {}),
-          ...(picture === undefined ? {} : { png: picture }),
-        });
-      }
-      const answer = await readSheet(row, since, ownersRead, {
-        ...ask,
-        png: png || ask.png,
-      });
-      return ask.verify
-        ? { ...answer, verify: await askVerify(instance, row) }
-        : answer;
+      const told = await readOf(instance, row, since, drawn, ask);
+      return ask.save === undefined
+        ? told
+        : { ...told, saved: await keptIn(instance, row, ask.save, told) };
     },
 
     /** `artifact_update` of a sheet by whoever may change it ({@link revisable}): one story's args, or one story op, written by its stage. */

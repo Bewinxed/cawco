@@ -2725,6 +2725,18 @@ export const CONTROL_INPUTS_WRITE = "inputsWrite";
  */
 export const CONTROL_INPUTS_COPY = "inputsCopy";
 
+/**
+ * A picture `artifact_read` drew, kept where its session asked (`save`), in
+ * its workspace on its machine, by the inputs' writer (agent inputs.ts
+ * `savePicture`): a .png path relative from the clone, `$TMPDIR/…`, or
+ * absolute inside the clone or the scratch dir. Args `[WorkspaceRef, path,
+ * base64 PNG]`; answers {@link WorkspaceSaved}. Only the hub sends it.
+ */
+export const CONTROL_WORKSPACE_SAVE = "workspaceSave";
+
+/** What {@link CONTROL_WORKSPACE_SAVE} answers: the path written, as the session names it; or why not, in words. */
+export type WorkspaceSaved = { path: string } | { refused: string };
+
 /** The folder in a workspace's scratch dir (its `$TMPDIR`) a delegate's inputs land in. */
 export const INPUTS_DIR = "inputs";
 

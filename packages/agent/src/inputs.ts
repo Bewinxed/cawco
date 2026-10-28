@@ -7,7 +7,9 @@
  * parent's machine, refused there in words when one may not leave it, and
  * written into the delegate's `$TMPDIR/inputs/` before the brief that names
  * them: copied there by this machine when the workspace is on it too, read
- * here and written by the workspace's machine when it is on another.
+ * here and written by the workspace's machine when it is on another. Its
+ * writer also keeps a picture `artifact_read` drew where the session asks
+ * (core `CONTROL_WORKSPACE_SAVE`).
  */
 import { constants, type Stats } from "node:fs";
 import {
@@ -21,7 +23,15 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import {
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
@@ -29,8 +39,14 @@ import {
   type InputNamed,
   type InputsAdmitted,
   type InputsRead,
+  type WorkspaceRef,
+  type WorkspaceSaved,
 } from "@cawco/core";
-import { workspaceClaudeTmpDir, workspaceScratchDir } from "@cawco/core/paths";
+import {
+  workspaceClaudeTmpDir,
+  workspaceScratchDir,
+  workspaceTmpDir,
+} from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   inputDenial,
@@ -469,18 +485,34 @@ export const writeInputs = async (
 };
 
 /**
- * The folder `rel` (an input's folders, `.` for none) under `own`, the
- * inputs folder's real path, made one folder at a time: what stands where a
- * folder goes and is none (a file, a link) is taken away first, so no
- * folder is made through a link.
+ * What stands where a written file's folder goes and is none (a file, a
+ * link): `clear` takes it away first, in a folder only CawCo writes (the
+ * inputs); `refuse` says so and writes nothing, in a folder the session
+ * keeps its own work in (its clone, its scratch dir).
  */
-const ownFolder = async (own: string, rel: string): Promise<string> => {
+type Strays = "clear" | "refuse";
+
+/**
+ * The folder `rel` (a file's folders, `.` for none) under `own`, the
+ * written folder's real path, made one folder at a time, so no folder is
+ * made through a link ({@link Strays}).
+ */
+const ownFolder = async (
+  own: string,
+  rel: string,
+  strays: Strays
+): Promise<string> => {
   let at = own;
   for (const component of rel === "." ? [] : rel.split("/")) {
     at = join(at, component);
     const found = await lstat(at).catch(() => undefined);
     if (found?.isDirectory()) {
       continue;
+    }
+    if (found && strays === "refuse") {
+      throw new Error(
+        `${at} is ${found.isSymbolicLink() ? "a link" : "a file"}, not a folder, so nothing was written under it; name a path whose folders are folders`
+      );
     }
     if (found) {
       await rm(at, { force: true });
@@ -490,14 +522,56 @@ const ownFolder = async (own: string, rel: string): Promise<string> => {
   return at;
 };
 
+/** Where {@link writeUnder} writes: `dir` as named, `own` its real path, `what` it is in words. */
+interface Under {
+  dir: string;
+  own: string;
+  strays: Strays;
+  what: string;
+}
+
+/**
+ * Each file written under `dir`, at its name (a path when it keeps its
+ * folders), replacing one there, and readable by its owner at least. The
+ * workspace writes `dir`, so nothing there is followed: `dir`'s real path
+ * and each file's folder's are checked before it is written, a folder is
+ * made one at a time ({@link ownFolder}), and each file is written to a new
+ * name and renamed over the old one (state-file.ts). THE ONE WRITER of a
+ * file CawCo puts into a workspace: its inputs, and a picture
+ * `artifact_read` keeps ({@link savePicture}).
+ */
+const writeUnder = async (
+  { dir, own, strays, what }: Under,
+  files: { bytes: () => Promise<Buffer>; mode: number; name: string }[]
+): Promise<void> => {
+  for (const file of files) {
+    if (nameProblem(file.name)) {
+      throw new Error(`"${file.name}" is not a file name`);
+    }
+    if ((await realpath(dir)) !== own) {
+      throw new Error(
+        `${dir} is no longer ${what}, so nothing more was written there`
+      );
+    }
+    const folder = await ownFolder(own, dirname(file.name), strays);
+    if ((await realpath(folder)) !== folder) {
+      throw new Error(
+        `${folder} is no longer inside ${what}, so nothing more was written there`
+      );
+    }
+    await writeStateFile(
+      join(folder, basename(file.name)),
+      await file.bytes(),
+      // biome-ignore lint/suspicious/noBitwiseOperators: its own bits, and its owner's read and write
+      { inPlace: true, mode: (file.mode & 0o777) | 0o600 }
+    );
+  }
+};
+
 /**
  * Each input written into the workspace's scratch dir under {@link
- * INPUTS_DIR}, at its name (a path when it keeps its folders), replacing
- * one there, and readable by its owner at least. The workspace writes its
- * scratch dir, so nothing there is followed: a link at `inputs` or at any
- * folder under it is taken away, each file's folder's real path is checked
- * before it is written, and each file is written to a new name and renamed
- * over the old one (state-file.ts).
+ * INPUTS_DIR} ({@link writeUnder}); a link or a file at `inputs` is taken
+ * away first.
  */
 const writeInto = async (
   ref: unknown,
@@ -513,30 +587,91 @@ const writeInto = async (
     await rm(dir, { force: true });
   }
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  const own = join(await realpath(scratch), INPUTS_DIR);
-  for (const file of files) {
-    if (nameProblem(file.name)) {
-      throw new Error(`"${file.name}" is not a file name`);
-    }
-    if ((await realpath(dir)) !== own) {
-      throw new Error(
-        `${dir} is no longer workspace ${ref.id}'s own inputs folder, so nothing more was written there`
-      );
-    }
-    const folder = await ownFolder(own, dirname(file.name));
-    if ((await realpath(folder)) !== folder) {
-      throw new Error(
-        `${folder} is no longer inside workspace ${ref.id}'s own inputs folder, so nothing more was written there`
-      );
-    }
-    await writeStateFile(
-      join(folder, basename(file.name)),
-      await file.bytes(),
-      // biome-ignore lint/suspicious/noBitwiseOperators: its own bits, and its owner's read and write
-      { inPlace: true, mode: (file.mode & 0o777) | 0o600 }
-    );
-  }
+  await writeUnder(
+    {
+      dir,
+      own: join(await realpath(scratch), INPUTS_DIR),
+      strays: "clear",
+      what: `workspace ${ref.id}'s own inputs folder`,
+    },
+    files
+  );
   console.info(
     `[inputs] workspace ${ref.id}: ${files.length} input(s) written to ${dir}`
   );
+};
+
+/** How a session names its scratch dir in a path it hands a tool, which no shell expands. */
+const TMPDIR_NAME = "$TMPDIR/";
+
+/**
+ * Where `named` lands in workspace `ref`: its clone or its scratch dir, and
+ * its path there; or why not, in words. Relative: from the clone. `$TMPDIR/…`
+ * or an absolute path inside the scratch dir (by either of its names, core
+ * `workspaceTmpDir`): there. An absolute path inside the clone: there.
+ */
+const placeOfSave = (
+  ref: WorkspaceRef,
+  named: string
+): { root: string; rel: string; shown: string } | string => {
+  const scratch = workspaceScratchDir(ref.id);
+  const tmp = workspaceTmpDir(ref.id);
+  const asked = named.startsWith(TMPDIR_NAME)
+    ? join(tmp, named.slice(TMPDIR_NAME.length))
+    : resolve(ref.path, named);
+  const place = [
+    { root: ref.path, shown: ref.path },
+    { root: scratch, shown: tmp },
+    { root: scratch, shown: scratch },
+  ].find(({ shown }) => asked.startsWith(`${shown}/`));
+  if (!place) {
+    return `${named} is outside your clone and your $TMPDIR; save names a .png path in either, like $TMPDIR/outputs/<name>.png`;
+  }
+  const rel = relative(place.shown, asked);
+  if (extname(rel).toLowerCase() !== ".png" || nameProblem(rel)) {
+    return `${named} names no .png file; save names one, like $TMPDIR/outputs/<name>.png`;
+  }
+  return { root: place.root, rel, shown: join(place.shown, rel) };
+};
+
+/**
+ * Core `CONTROL_WORKSPACE_SAVE`: the picture `artifact_read` drew, base64
+ * `png`, kept at `named` in workspace `ref` ({@link placeOfSave}), written
+ * as an input is ({@link writeUnder}), a link or a file where a folder goes
+ * refused. Answers the path written, as the session names it.
+ */
+export const savePicture = async (
+  ref: unknown,
+  named: unknown,
+  png: unknown
+): Promise<WorkspaceSaved> => {
+  if (!(
+    isWorkspaceRef(ref) &&
+    typeof named === "string" &&
+    typeof png === "string"
+  )) {
+    throw new Error(
+      "a picture is saved as [{ id, path }, its path, its base64 PNG]"
+    );
+  }
+  const place = placeOfSave(ref, named);
+  if (typeof place === "string") {
+    return { refused: place };
+  }
+  await writeUnder(
+    {
+      dir: place.root,
+      own: await realpath(place.root),
+      strays: "refuse",
+      what: `workspace ${ref.id}'s own ${place.root === ref.path ? "clone" : "scratch dir"}`,
+    },
+    [
+      {
+        name: place.rel,
+        mode: 0o644,
+        bytes: () => Promise.resolve(Buffer.from(png, "base64")),
+      },
+    ]
+  );
+  return { path: place.shown };
 };

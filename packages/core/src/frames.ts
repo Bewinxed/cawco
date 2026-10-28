@@ -244,6 +244,26 @@ export const previewEnterUrl = (
   `${origin}${PREVIEW_ENTER_PATH}?ticket=${encodeURIComponent(ticket)}${place === undefined ? "" : `&next=${encodeURIComponent(place)}`}`;
 
 /**
+ * `place` (a path on a preview origin, with its query and hash) at a state's
+ * own `link`, `artifact_read`'s `state` for a preview or a page: the link's
+ * query merged into the place's, each key it names set, and its hash in the
+ * place's stead. A state-machine preview's link is `?__state=<value>` or
+ * `?__state=<group>:<value>,…` (its state-switcher.js writes it this way).
+ */
+export const placeAtLink = (place: string, link: string): string => {
+  const base = "http://place.invalid";
+  const at = new URL(place, base);
+  const asked = new URL(link, at);
+  for (const [key, value] of asked.searchParams) {
+    at.searchParams.set(key, value);
+  }
+  if (asked.hash) {
+    at.hash = asked.hash;
+  }
+  return `${at.pathname}${at.search}${at.hash}`;
+};
+
+/**
  * The size an artifact's picture is drawn at: the dashboard's pane at a
  * desk, so a picture is the page as it is read there. A Files thumbnail
  * (dashboard page-thumbs.ts) and `artifact_read`'s `png` of a preview or a

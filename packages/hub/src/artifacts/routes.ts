@@ -51,18 +51,24 @@ const STATE_ASK = z.object({
   story: z.string().regex(STORY_NAME),
   width: z.number().positive().optional(),
 });
-const stateOf = (text: string): StateAsk => {
+/** A preview's or a page's state: the query or hash its own link for that state adds. */
+const STATE_LINK = /^[?#]\S+$/u;
+/** A read's `state`, from its JSON: a component's frame, or a preview's or a page's state link; refused with the shape when it is neither. */
+const stateOf = (text: string): { state: StateAsk } | { link: string } => {
   let value: unknown;
   try {
     value = JSON.parse(text);
   } catch {
     value = null;
   }
+  if (typeof value === "string" && STATE_LINK.test(value)) {
+    return { link: value };
+  }
   const read = STATE_ASK.safeParse(value);
   if (!read.success) {
     throw new ArtifactRefusal(400, SHAPES.read as string);
   }
-  return read.data;
+  return { state: read.data };
 };
 
 const refused = (error: unknown) => {
@@ -195,7 +201,7 @@ const SHAPES: Record<string, string> = {
   create: CREATE_SHAPE,
   update:
     'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
-  read: 'artifact_read takes id?, since?, png?, width?, detail ("summary" | "story"), story, state { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? }, render. Example: { id, state: { story: "Waiting", interaction: "hover" } }.',
+  read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
 
@@ -453,8 +459,10 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             t.Union([t.Literal("summary"), t.Literal("story")])
           ),
           story: t.Optional(storyName),
-          // A frame: JSON { story, interaction?, scheme?, width? }.
+          // JSON: a frame { story, interaction?, scheme?, width? }, or a state link's "?query" or "#hash".
           state: t.Optional(t.String({ maxLength: 400 })),
+          // Where the picture is kept in the session's workspace.
+          save: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
           render: t.Optional(t.BooleanString()),
           verify: t.Optional(t.BooleanString()),
         }),
@@ -469,7 +477,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             {
               ...(query.detail ? { detail: query.detail } : {}),
               ...(query.story ? { story: query.story } : {}),
-              ...(query.state ? { state: stateOf(query.state) } : {}),
+              ...(query.state ? stateOf(query.state) : {}),
+              ...(query.save ? { save: query.save } : {}),
               ...(query.render ? { render: true } : {}),
               ...(query.verify ? { verify: true } : {}),
               ...(query.width === undefined ? {} : { width: query.width }),

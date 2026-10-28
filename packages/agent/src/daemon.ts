@@ -71,6 +71,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
+  CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
   type HarnessKind,
   invariant,
@@ -249,7 +250,13 @@ import { serveHubCredential } from "./hub-git";
 import { carryHub, followHub, stopCarrying } from "./hub-loopback";
 import { keepHubPreviews } from "./hub-previews";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
-import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
+import {
+  admitInputs,
+  copyInputs,
+  readInputs,
+  savePicture,
+  writeInputs,
+} from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -3902,6 +3909,8 @@ const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(CONTROL_INPUTS_COPY, copyInputs);
     supervisor.registerDaemonFunction(CONTROL_INPUTS_READ, readInputs);
     supervisor.registerDaemonFunction(CONTROL_INPUTS_WRITE, writeInputs);
+    // A picture artifact_read drew, kept in a workspace here by the same writer.
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_SAVE, savePicture);
     // A project move's steps (move.ts). Each runs as this process's child, so
     // none starts behind a raised fence; the hub runs it again after a restart.
     const unfenced =
