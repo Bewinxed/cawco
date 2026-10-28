@@ -43914,7 +43914,7 @@
         ]
       },
       "InstallState": {
-        "description": "`running` while it goes; `failed`, `stopped` and `lost` stand until the\nperson acts on them; `joined` once the fleet lists the machine online and\nits harness CLIs run.",
+        "description": "`running` while it goes; `failed`, `stopped` and `lost` stand until the\nperson acts on them; `joined` once the fleet lists the machine online, its\nfleet sync is placed and its harness CLIs run.",
         "type": "string",
         "enum": [
           "failed",
@@ -43958,7 +43958,8 @@
           "listed",
           "path",
           "run",
-          "sign-in"
+          "sign-in",
+          "sync"
         ]
       },
       "InstallStarted": {

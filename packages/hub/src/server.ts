@@ -962,6 +962,7 @@ import { createUpstreamAsks, heldPostOf } from "./upstream-asks";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
+import { WelcomeConverge } from "./welcome-converge";
 import {
   caughtUp,
   closeLine,
@@ -7536,6 +7537,11 @@ export const createServer = (
     watchPairingRequests(DB_PATH, () => hubAuth.pairingOff(true), lifetime)
   );
   /**
+   * Whether each machine's welcome has converged (welcome-converge.ts): what
+   * an add's sync step waits on.
+   */
+  const welcomeConverge = new WelcomeConverge();
+  /**
    * Every install of a machine, kept from its start to the person's act on
    * its outcome (installs.ts): any dashboard reads them, a reload finds them,
    * and a restart finds a running one again as lost.
@@ -7561,6 +7567,7 @@ export const createServer = (
       } satisfies Envelope<FramePayload>),
     outcome: (install) => push.install(install),
     settled: (id) => push.installSettled(id),
+    synced: (machineId, signal) => welcomeConverge.settled(machineId, signal),
     // Stands further down, beside the installs a tool policy sends.
     readyHarnesses: (machineId, say) => readyHarnesses(machineId, say),
     // Read when an add asks, once the hub has started: both stand further down.
@@ -10495,6 +10502,7 @@ export const createServer = (
           args: [delta],
         } satisfies ControlPayload,
       } satisfies Envelope<ControlPayload>);
+      welcomeConverge.sent(machineId, delta);
       return true;
     },
     ready: (machineId) => {
@@ -35559,6 +35567,7 @@ export const createServer = (
               if (kind === "fleet_report") {
                 const { report, generation } =
                   message.payload as FleetReportFrame;
+                welcomeConverge.reported(message.machineId, generation ?? null);
                 if (isFleetReport(report)) {
                   keepFleetReport(
                     message.machineId,
@@ -35571,9 +35580,15 @@ export const createServer = (
               }
               // Its items as they converge (fleet-sync.ts): kept on its row.
               if (kind === "fleet_converge") {
-                const { items } = message.payload as FleetConvergeFrame;
+                const { items, generation } =
+                  message.payload as FleetConvergeFrame;
                 if (Array.isArray(items)) {
                   fleetSyncs.converged(message.machineId, items);
+                  welcomeConverge.converging(
+                    message.machineId,
+                    generation,
+                    items
+                  );
                 }
                 break;
               }

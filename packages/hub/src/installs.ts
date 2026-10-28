@@ -35,6 +35,7 @@ import {
   INSTALL_GRACE_MS,
   INSTALL_JOINED,
   INSTALL_STEP_PREFIX,
+  INSTALL_SYNC_LIMIT_MS,
   type Install,
   type InstallCheck,
   type InstallDraft,
@@ -230,6 +231,12 @@ export interface InstallsDeps {
   ) => Promise<string>;
   /** An outcome the person acted on: its push comes down. */
   readonly settled: (id: string) => void;
+  /**
+   * Answers once the machine's welcome has converged: the fleet's skills,
+   * MCP servers, memory documents, hooks and harness settings placed on it
+   * (welcome-converge.ts).
+   */
+  readonly synced: (machineId: string, signal: AbortSignal) => Promise<void>;
   readonly tunnels: SshTunnels;
 }
 
@@ -534,19 +541,44 @@ export const createInstalls = (deps: InstallsDeps) => {
     changed();
   };
 
-  /** The installs whose harnesses step runs now, by id: the step's work. */
+  /** The installs whose sync and harnesses steps run now, by id: the steps' work. */
   const readying = new Map<string, Promise<void>>();
 
   /**
-   * The machine is listed online: its harness CLIs are brought to versions
-   * CawCo runs (`readyHarnesses`), and then the install is joined, whatever
-   * that met. The machine is in the fleet from the moment it is listed, so
-   * nothing about a harness fails the add: one that could not be brought up
-   * is said as the step's last line, in the machine's words, and stands on
-   * the machine as its harness block with its fix (dashboard HarnessBlock,
-   * on the outcome, the machine's row and Configure → CLI tools). Asked again
-   * while it runs, it answers the same work. Only called once the add knows
-   * its machine.
+   * The fleet's sync on the machine: its welcome converged, waited on up to
+   * {@link INSTALL_SYNC_LIMIT_MS}. Past it the add goes on, said in its
+   * output: what is still on its way lands on the machine's row by itself.
+   */
+  const sync = async (machineId: string, say: (line: string) => void) => {
+    const synced = await readWithin(INSTALL_SYNC_LIMIT_MS, (signal) =>
+      deps.synced(machineId, signal)
+    );
+    switch (synced.kind) {
+      case "answered":
+        say("the fleet's skills, MCP servers, memory and hooks are on it");
+        return;
+      case "unanswered":
+        say(
+          `the fleet's sync is still running on it after ${INSTALL_SYNC_LIMIT_MS / 1000} s: each item lands on its row in the machines list as it is placed`
+        );
+        return;
+      default:
+        unhandled("synced", synced);
+    }
+  };
+
+  /**
+   * The machine is listed online: the fleet's sync is placed on it
+   * ({@link sync}), its harness CLIs are brought to versions CawCo runs
+   * (`readyHarnesses`), and then the install is joined, whatever that met.
+   * The machine is in the fleet from the moment it is listed, so nothing
+   * about an item or a harness fails the add: an item that could not be
+   * placed stands on the machine's row with its Retry, and a harness that
+   * could not be brought up is said as the step's last line, in the
+   * machine's words, and stands on the machine as its harness block with its
+   * fix (dashboard HarnessBlock, on the outcome, the machine's row and
+   * Configure → CLI tools). Asked again while it runs, it answers the same
+   * work. Only called once the add knows its machine.
    */
   const ready = (entry: Kept, machineId: string): Promise<void> => {
     const { install } = entry;
@@ -554,24 +586,28 @@ export const createInstalls = (deps: InstallsDeps) => {
     if (running !== undefined) {
       return running;
     }
-    mark(entry, "harnesses");
+    mark(entry, "sync");
     const say = (line: string) => take(entry, `${INSTALL_STEP_PREFIX}${line}`);
-    const work = deps
-      .readyHarnesses(machineId, say)
-      .catch(
-        (error: Error) =>
-          `The machine's Claude Code, OpenCode and pi weren't checked: ${error.message}`
-      )
-      .then((said) => {
-        if (install.state !== "running") {
-          return;
-        }
-        say(said);
-        end(entry, "joined");
-      })
-      .finally(() => {
-        readying.delete(install.id);
-      });
+    const work = (async () => {
+      await sync(machineId, say);
+      if (install.state !== "running") {
+        return;
+      }
+      mark(entry, "harnesses");
+      const said = await deps
+        .readyHarnesses(machineId, say)
+        .catch(
+          (error: Error) =>
+            `The machine's Claude Code, OpenCode and pi weren't checked: ${error.message}`
+        );
+      if (install.state !== "running") {
+        return;
+      }
+      say(said);
+      end(entry, "joined");
+    })().finally(() => {
+      readying.delete(install.id);
+    });
     readying.set(install.id, work);
     return work;
   };
@@ -778,7 +814,7 @@ export const createInstalls = (deps: InstallsDeps) => {
 
   /**
    * An exit of 0 waits out the hub's grace for the machine to come online,
-   * then its harnesses step ({@link ready}), which a Stop cuts short.
+   * then its sync and harnesses steps ({@link ready}), which a Stop cuts short.
    */
   const settle = async (
     entry: Kept,
@@ -1190,7 +1226,7 @@ export const createInstalls = (deps: InstallsDeps) => {
 
   /**
    * A lost install whose machine the fleet lists online did join: it goes
-   * on from there, through its harnesses step like any other add. The lost
+   * on from there, through its sync and harnesses steps like any other add. The lost
    * outcome it was told as is taken back, and its own end is told in its
    * place. The machine its own signals named (the join wait naming its code,
    * the installer's `joined as`) proves it ran, whether the fleet knew that
@@ -1218,11 +1254,11 @@ export const createInstalls = (deps: InstallsDeps) => {
     } satisfies Partial<Install>);
     deps.settled(install.id);
     console.log(
-      `[installs] ${install.id}: lost, and ${found.hostname} is online: its harnesses step runs`
+      `[installs] ${install.id}: lost, and ${found.hostname} is online: its sync and harnesses steps run`
     );
     detach(
       ready(entry, found.machineId),
-      "lost machine install's harnesses step"
+      "lost machine install's sync and harnesses steps"
     );
   };
 
@@ -1244,7 +1280,7 @@ export const createInstalls = (deps: InstallsDeps) => {
         install.hostname = machine.hostname;
         detach(
           ready(entry, machine.machineId),
-          "machine install's harnesses step"
+          "machine install's sync and harnesses steps"
         );
       }
     }
@@ -1548,7 +1584,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       }
       mark(entry, "listed");
       deps.lifetime.after(INSTALL_GRACE_MS, () => {
-        // Online by now, it is on its harnesses step, which ends it.
+        // Online by now, it is on its sync and harnesses steps, which end it.
         if (install.state === "running" && !readying.has(install.id)) {
           end(
             entry,

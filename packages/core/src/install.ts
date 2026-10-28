@@ -20,6 +20,16 @@ export const INSTALL_CODE_ENV = "CAWCO_INSTALL_CODE";
 /** How long the agent waits for the hub to list it (cli await-joined.ts `JOIN_TIMEOUT_MS`). */
 export const INSTALL_LIST_LIMIT_MS = 90_000;
 
+/**
+ * How long an add waits on the machine's fleet sync (its welcome converged:
+ * the fleet's skills, MCP servers, memory documents, hooks and harness
+ * settings placed) before it goes on without it (hub installs.ts `ready`).
+ * The owner's bar is about five seconds (10-22); an npx MCP server's first
+ * install on a fresh machine can run longer, and its item then lands on the
+ * machine's row on its own.
+ */
+export const INSTALL_SYNC_LIMIT_MS = 60_000;
+
 /** How long the hub waits after a clean exit for the machine to come online (hub join.ts). */
 export const INSTALL_GRACE_MS = 15_000;
 
@@ -44,15 +54,22 @@ export const SSH_STEPS = [
   "install",
   "agent",
   "listed",
+  "sync",
   "harnesses",
 ] as const;
 
 /**
  * The steps of an install by a command: the three the hub can see, then the
- * machine's harness CLIs brought to versions CawCo runs (hub installs.ts
- * `ready`).
+ * fleet's sync placed on the machine and its harness CLIs brought to versions
+ * CawCo runs (hub installs.ts `ready`).
  */
-export const COMMAND_STEPS = ["run", "install", "listed", "harnesses"] as const;
+export const COMMAND_STEPS = [
+  "run",
+  "install",
+  "listed",
+  "sync",
+  "harnesses",
+] as const;
 
 export type InstallStep =
   (typeof SSH_STEPS)[number] | (typeof COMMAND_STEPS)[number];
@@ -146,8 +163,8 @@ export type InstallProblem =
 
 /**
  * `running` while it goes; `failed`, `stopped` and `lost` stand until the
- * person acts on them; `joined` once the fleet lists the machine online and
- * its harness CLIs run.
+ * person acts on them; `joined` once the fleet lists the machine online, its
+ * fleet sync is placed and its harness CLIs run.
  */
 export type InstallState = "running" | "failed" | "stopped" | "lost" | "joined";
 
@@ -297,6 +314,9 @@ export const stepLimit = (
   route: InstallRoute,
   step: InstallStep
 ): number | null => {
+  if (step === "sync") {
+    return INSTALL_SYNC_LIMIT_MS;
+  }
   if (route === "ssh") {
     return step === "listed" ? INSTALL_LIST_LIMIT_MS : null;
   }
@@ -329,6 +349,7 @@ const SSH_STEP_WORDS: Record<InstallStep, string> = {
   install: "Installing",
   agent: "Starting the agent",
   listed: "Waiting for the hub to list it",
+  sync: "Syncing skills, MCP servers, memory and hooks",
   harnesses: "Bringing Claude Code, OpenCode and pi up to date",
   run: "Waiting for the command to run on it",
 };

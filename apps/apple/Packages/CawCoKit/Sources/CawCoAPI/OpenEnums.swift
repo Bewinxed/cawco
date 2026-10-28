@@ -4236,6 +4236,7 @@ public enum OpenEnums {
         case path
         case run
         case signIn
+        case sync
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -4250,6 +4251,7 @@ public enum OpenEnums {
             case "path": self = .path
             case "run": self = .run
             case "sign-in": self = .signIn
+            case "sync": self = .sync
             default: self = .unrecognized(rawValue)
             }
         }
@@ -4265,6 +4267,7 @@ public enum OpenEnums {
             case .path: "path"
             case .run: "run"
             case .signIn: "sign-in"
+            case .sync: "sync"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -4273,7 +4276,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.agent, .fetch, .harnesses, .install, .key, .listed, .path, .run, .signIn]
+        public static let allCases: [Self] = [.agent, .fetch, .harnesses, .install, .key, .listed, .path, .run, .signIn, .sync]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
