@@ -82,6 +82,7 @@ function outputOf(cwd: string, named: string, bound: unknown): Kept {
   return {
     root: dirname(output),
     rel: basename(output),
+    said: output,
     shown: output,
     what: "the folder it was asked in",
   };

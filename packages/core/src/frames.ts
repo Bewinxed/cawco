@@ -291,10 +291,16 @@ export const PICTURE_LIMITS = {
   /**
    * The page's load, through its preview origin: a sleeping server is woken
    * by it and waited on first (agent preview.ts `staged`, within core
-   * `STAGE_READY_MS`, 60 s), then the page loads. Our call.
+   * `STAGE_READY_MS`, 60 s), then the page loads and is waited on until
+   * it is ready: one bound for both. Our call.
    */
   loadMs: 75_000,
-  /** The quiet after the hello before the picture: its pins and fonts placed, as Files waits on a page. */
+  /**
+   * How long a page stands ready before its picture: content painted and
+   * nothing of its own in flight, since its last paint, its last request
+   * and the hello that places its pins (agent artifact-picture.ts
+   * `watchReadiness`), within `loadMs`, as Files waits on a page.
+   */
   settleMs: 1000,
   /** The picture itself, once the page settled. Our call. */
   shotMs: 15_000,

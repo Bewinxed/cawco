@@ -8,7 +8,7 @@
  * hash and time, a decision page's program) is the detailed form.
  */
 
-import { artifactLink, decidedByLine } from "@cawco/core";
+import { artifactLink, artifactToolWords, decidedByLine } from "@cawco/core";
 import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
 import type { CanvasSpec, DesignMap } from "@cawco/core/stage";
 import type {
@@ -214,7 +214,7 @@ const stageWords = (
 ): string[] => [
   ...(read.stage
     ? [
-        `Its ${read.stage.runs === "serve" ? "server" : "stage"} in ${read.stage.dir}: ${read.stage.status}${read.stage.message ? `, ${read.stage.message}` : ""}.`,
+        `${artifactToolWords.stageAt(read.stage.runs, read.stage.dir, read.stage.status)}${read.stage.message ? `, ${read.stage.message}` : ""}.`,
       ]
     : []),
   ...(read.unreached
@@ -423,7 +423,8 @@ export const artifactReadWords = (read: ArtifactRead): Presented => {
     read.kind === "component" && componentLines(read),
     read.program !== undefined &&
       'Its program is in response_format: "detailed"; artifact_update\'s statements revise it.',
-    `Read at seq ${read.seq}: since: ${read.seq} reads only what changes after this.`
+    `Read at seq ${read.seq}: since: ${read.seq} reads only what changes after this.`,
+    read.saved && artifactToolWords.pictureSaved(read.saved)
   );
   const pictures = picturesOf(read);
   return pictures.length > 0 ? { text, pictures } : text;

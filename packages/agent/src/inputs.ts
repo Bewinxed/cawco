@@ -656,10 +656,12 @@ const writeInto = async (
 /** How a session names its scratch dir in a path it hands a tool, which no shell expands. */
 const TMPDIR_NAME = "$TMPDIR/";
 
-/** A .png a session named for CawCo to write: the folder it lands under, its path there, the path as the session names it, and that folder in words. */
+/** A .png a session named for CawCo to write: the folder it lands under, its path there, its absolute path, that folder in words, and its path in the session's own terms. */
 export interface Kept {
   rel: string;
   root: string;
+  /** In the session's own terms: `$TMPDIR/…` in its scratch dir, else the absolute path. */
+  said: string;
   shown: string;
   what: string;
 }
@@ -698,6 +700,8 @@ export const placeInWorkspace = (
   return {
     root: place.root,
     rel,
+    said:
+      place.root === scratch ? `${TMPDIR_NAME}${rel}` : join(place.shown, rel),
     shown: join(place.shown, rel),
     what: `workspace ${ref.id}'s own ${place.what}`,
   };
@@ -732,8 +736,8 @@ export const writeKept = async (
 /**
  * Core `CONTROL_WORKSPACE_SAVE`: the picture `artifact_read` drew, base64
  * `png`, kept at `named` in workspace `ref` ({@link placeInWorkspace},
- * {@link writeKept}), replacing one there. Answers the path written, as the
- * session names it.
+ * {@link writeKept}), replacing one there. Answers the path written in the
+ * session's own terms (`$TMPDIR/outputs/x.png`).
  */
 export const savePicture = async (
   ref: unknown,
@@ -754,5 +758,5 @@ export const savePicture = async (
     return { refused: kept };
   }
   await writeKept(kept, Buffer.from(png, "base64"), { mode: 0o644 });
-  return { path: kept.shown };
+  return { path: kept.said };
 };

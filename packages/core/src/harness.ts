@@ -2734,7 +2734,7 @@ export const CONTROL_INPUTS_COPY = "inputsCopy";
  */
 export const CONTROL_WORKSPACE_SAVE = "workspaceSave";
 
-/** What {@link CONTROL_WORKSPACE_SAVE} answers: the path written, as the session names it; or why not, in words. */
+/** What {@link CONTROL_WORKSPACE_SAVE} answers: the path written, in the session's own terms (`$TMPDIR/…` in its scratch dir); or why not, in words. */
 export type WorkspaceSaved = { path: string } | { refused: string };
 
 /** The folder in a workspace's scratch dir (its `$TMPDIR`) a delegate's inputs land in. */

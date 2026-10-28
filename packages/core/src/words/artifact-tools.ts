@@ -27,6 +27,11 @@ export const artifactToolWords = {
   othersArtifact: (what: string, session: string) =>
     `${what} is session ${session}'s: your delegation tree reads it, and only that session changes it.`,
   noArtifact: (id: string) => `This session has no artifact ${id}.`,
+  /** Where a stage or a served preview runs, `dir` from its clone's root ("." the root itself): "Its server at the repo's root: live." */
+  stageAt: (runs: "serve" | "sheet", dir: string, status: string) =>
+    `Its ${runs === "serve" ? "server" : "stage"} ${dir === "." ? "at the repo's root" : `in ${dir}`}: ${status}`,
+  /** Where `artifact_read`'s `save` kept the picture, as the session named it. */
+  pictureSaved: (path: string) => `Its picture is saved at ${path}.`,
   /** A decision page's Canvas or Preview (`component`) naming `id`, which is neither the session's nor its delegation tree's. */
   noMediaArtifact: (component: string, id: string) =>
     `${component}("${id}"): this session's panel has no artifact ${id}.`,

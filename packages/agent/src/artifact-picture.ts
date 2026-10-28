@@ -7,9 +7,17 @@
  * stand-in host greets the overlay as the pane does, so the page joins its
  * doc and draws the person's pins on it. The page's load is a navigation,
  * which wakes a sleeping server and waits for it before the page is served
- * (preview.ts `staged`); then fonts load, the page settles, and the picture
- * is taken at the asked width, the page's whole length up to
- * `PICTURE_LIMITS.maxHeight`.
+ * (preview.ts `staged`); then the page is waited on until it is ready
+ * ({@link watchReadiness}), and the picture is taken at the asked width,
+ * the page's whole length up to `PICTURE_LIMITS.maxHeight`.
+ *
+ * Ready is read off the page, never a fixed wait: a SvelteKit dev route
+ * paints nothing until Vite has served its modules and its load functions
+ * have fetched their data, which "fonts, then 1 s" shot as a blank page
+ * (2026-10-28, a 3 KB cream picture of a page `artifact_browse` drew
+ * whole). Playwright marks `networkidle` DISCOURAGED ("rely on web
+ * assertions to assess readiness instead", playwright.dev, `waitUntil`), and
+ * a page that syncs its doc never idles, so the page's own signals decide.
  */
 
 import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core";
@@ -19,6 +27,7 @@ import {
   PREVIEW_LOCKED_MESSAGE,
 } from "@cawco/core/frames";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
+import type { Page } from "playwright-core";
 import {
   greet,
   type HelloArtifact,
@@ -32,6 +41,56 @@ export interface PictureAsk extends HelloArtifact {
   url: string;
   width: number;
 }
+
+/** What {@link watchReadiness} keeps on the page. */
+interface Readiness {
+  /** When the page last painted a larger element or ended a request, in its `performance.now()`. */
+  __cawcoChangedAt?: number;
+  /** Whether the page has painted its largest contentful element at least once. */
+  __cawcoPainted?: boolean;
+  /** Its own fetches and XHRs in flight. */
+  __cawcoPending?: number;
+}
+
+/**
+ * The page's readiness, watched from before its own scripts run: its
+ * largest-contentful-paint entries (the platform's word that content
+ * painted, W3C Largest Contentful Paint), and its own fetches and XHRs in
+ * flight (a load function's data). What the overlay paints, inside
+ * `cawco-overlay`, and its requests to `/__cawco/` (its doc's sync) are
+ * the hub's, never the page's. Ready: content painted, nothing in flight,
+ * and neither for {@link PICTURE_LIMITS}'s `settleMs`.
+ */
+const watchReadiness = `(() => {
+  window.__cawcoPainted = false;
+  window.__cawcoPending = 0;
+  window.__cawcoChangedAt = performance.now();
+  const changed = () => { window.__cawcoChangedAt = performance.now(); };
+  const ours = (node) => !!node?.closest?.("cawco-overlay");
+  new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      if (!ours(entry.element)) { window.__cawcoPainted = true; changed(); }
+    }
+  }).observe({ type: "largest-contentful-paint", buffered: true });
+  const counted = (url) => !String(url instanceof Request ? url.url : url).includes("/__cawco/");
+  const begun = () => { window.__cawcoPending += 1; };
+  const ended = () => { window.__cawcoPending = Math.max(0, window.__cawcoPending - 1); changed(); };
+  const fetched = window.fetch;
+  window.fetch = function (...args) {
+    if (!counted(args[0])) return fetched.apply(this, args);
+    begun();
+    return fetched.apply(this, args).finally(ended);
+  };
+  const { open, send } = XMLHttpRequest.prototype;
+  XMLHttpRequest.prototype.open = function (...args) {
+    this.__cawcoCounted = counted(args[1]);
+    return open.apply(this, args);
+  };
+  XMLHttpRequest.prototype.send = function (...args) {
+    if (this.__cawcoCounted) { begun(); this.addEventListener("loadend", ended, { once: true }); }
+    return send.apply(this, args);
+  };
+})();`;
 
 /** What the page says to its host, as the stand-in hears it: its lock turned it away, or the proxy served its down page (core `downResponse`). */
 interface Heard {
@@ -56,6 +115,39 @@ const seconds = (ms: number) => `${Math.round(ms / 1000)} s`;
 const timedOut = (error: unknown) =>
   error instanceof Error && error.name === "TimeoutError";
 
+/**
+ * Waits up to `within` ms for `page` to be ready ({@link watchReadiness}):
+ * its fonts loaded, content painted, nothing of its own in flight, and all
+ * of it still for `settleMs`. A page that never says so (one that paints
+ * only a canvas, or keeps a request open) is drawn as it stands at the
+ * bound.
+ */
+const ready = (page: Page, within: number): Promise<void> =>
+  page
+    .waitForFunction(
+      (settle) => {
+        const doc = globalThis as unknown as Readiness & {
+          document: { fonts: { status: string } };
+        };
+        return (
+          doc.document.fonts.status === "loaded" &&
+          doc.__cawcoPainted === true &&
+          doc.__cawcoPending === 0 &&
+          performance.now() - (doc.__cawcoChangedAt ?? 0) >= settle
+        );
+      },
+      PICTURE_LIMITS.settleMs,
+      { polling: 100, timeout: within }
+    )
+    .then(
+      () => undefined,
+      (error: unknown) => {
+        if (!timedOut(error)) {
+          throw error;
+        }
+      }
+    );
+
 /** The picture of `ask.url`, base64 PNG. Throws in words a tool answers when it can't be drawn. */
 export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
   if (!(isHelloArtifact(ask) && URL.canParse(ask.url))) {
@@ -74,6 +166,8 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
     );
   }
   const { name } = ask.artifact;
+  // The load and the page's readiness share one bound.
+  const deadline = Date.now() + PICTURE_LIMITS.loadMs;
   const browser = await launchChromium(
     `${name} wasn't drawn: the hub's machine has no Chromium browser to draw it with. Install Google Chrome or Chromium there (the machine's capability report names the command), then call again.`
   );
@@ -83,6 +177,7 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
       colorScheme: "light",
     });
     await page.addInitScript(HOST_STAND_IN);
+    await page.addInitScript(watchReadiness);
     // A page turned away at its origin's lock, or a down page in its stead,
     // says so to its host; the panel draws its own words for either.
     await page.addInitScript((locked) => {
@@ -118,7 +213,12 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
       throw new Error(downWords(name, heard.down));
     }
     await greet(page, ask);
-    const tall = await page.evaluate(async (settle) => {
+    // The hello places the person's pins: the quiet counts from it too.
+    await page.evaluate(() => {
+      (globalThis as unknown as Readiness).__cawcoChangedAt = performance.now();
+    });
+    await ready(page, Math.max(0, deadline - Date.now()));
+    const tall = await page.evaluate(async () => {
       const { document } = globalThis as unknown as {
         document: {
           documentElement: { scrollHeight: number };
@@ -126,9 +226,8 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
         };
       };
       await document.fonts.ready;
-      await new Promise((done) => setTimeout(done, settle));
       return document.documentElement.scrollHeight;
-    }, PICTURE_LIMITS.settleMs);
+    });
     const height = Math.min(
       Math.max(tall, PICTURE_VIEW.height),
       PICTURE_LIMITS.maxHeight
