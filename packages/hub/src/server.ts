@@ -35565,9 +35565,12 @@ export const createServer = (
               // a reading moved with no fleet change: kept, and the fleet MCP
               // changes its last delta carried go to the sessions there.
               if (kind === "fleet_report") {
-                const { report, generation } =
+                const { report, generation, convergedGeneration } =
                   message.payload as FleetReportFrame;
-                welcomeConverge.reported(message.machineId, generation ?? null);
+                welcomeConverge.reported(
+                  message.machineId,
+                  convergedGeneration
+                );
                 if (isFleetReport(report)) {
                   keepFleetReport(
                     message.machineId,
@@ -37089,6 +37092,10 @@ export const createServer = (
               ) {
                 fleetSyncs.answered(
                   message.requestId,
+                  message.payload as ControlResult
+                );
+                welcomeConverge.answered(
+                  message.machineId,
                   message.payload as ControlResult
                 );
               }

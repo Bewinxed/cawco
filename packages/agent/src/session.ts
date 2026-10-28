@@ -1143,6 +1143,11 @@ export class SessionSupervisor {
   get #convergeOwed(): boolean {
     return this.#convergeOwedValue;
   }
+  /** A converge pass runs now: a delta that moved nothing is converged once it ends. */
+  #passingValue = false;
+  get #passing(): boolean {
+    return this.#passingValue;
+  }
   /** Each harness whose converge threw in the last pass, in its words: every item of that pass failed with it. */
   #harnessFailures = new Map<HarnessKind, string>();
   /** Each delta's write of the policy, begun as it arrived and awaited before its answer, by its request. */
@@ -5690,7 +5695,17 @@ export class SessionSupervisor {
       );
       return;
     }
+    // A welcome to an agent whose last converge was cut short (it stopped
+    // mid-way): what that converge left owed converges with what it moved.
+    const cutShort =
+      delta.welcome &&
+      this.#desired.behind &&
+      !this.#passing &&
+      !this.#convergeOwed;
     const applied = this.#desired.apply(delta);
+    for (const id of cutShort ? this.#desired.unconverged() : []) {
+      this.#convergeIds.add(id);
+    }
     for (const id of [...applied.changed, ...applied.removed]) {
       if (id !== "policy") {
         this.#convergeIds.add(id);
@@ -5867,7 +5882,7 @@ export class SessionSupervisor {
     this.#sendReport(report, null);
   }
 
-  /** The machine's fleet report to the hub: one a converge reached (its `generation`), or one read unasked (`null`). */
+  /** The machine's fleet report to the hub: one a converge reached (its `generation`), or one read unasked (`null`), with the generation converged now. */
   #sendReport(report: FleetSyncReport, generation: number | null): void {
     this.emit({
       verb: "frames",
@@ -5876,6 +5891,7 @@ export class SessionSupervisor {
         kind: "fleet_report",
         report,
         generation,
+        convergedGeneration: this.#desired.convergedGeneration,
       } satisfies FleetReportFrame,
     });
   }
@@ -5916,6 +5932,7 @@ export class SessionSupervisor {
     this.#convergeOwedValue = true;
     this.#fleetTurn(async () => {
       this.#convergeOwedValue = false;
+      this.#passingValue = true;
       const all = this.#reconverge;
       const ids = (all ? this.#desired.ids() : [...this.#convergeIds]).filter(
         (id) => id !== "policy"
@@ -5966,7 +5983,17 @@ export class SessionSupervisor {
         Date.now() - started,
         thrown
       );
-      this.#desired.converged(ids, statuses, report);
+      // Every generation since converged too, when no delta since moved
+      // anything: one that did is owed the next pass.
+      this.#passingValue = false;
+      const owedSince =
+        this.#convergeOwed || this.#convergeIds.size > 0 || this.#reconverge;
+      this.#desired.converged(
+        ids,
+        statuses,
+        report,
+        owedSince ? generation : (this.#desired.generation ?? generation)
+      );
       this.#converging(generation, statuses);
       if (report) {
         this.#sendReport(report, generation);
@@ -5981,9 +6008,13 @@ export class SessionSupervisor {
       ) {
         rearmBoundaries(bound.join(", ") || "a project's hooks or servers");
       }
-    }).catch((error: unknown) =>
-      warn(`the fleet converge failed: ${errorText(error)}`)
-    );
+    })
+      .catch((error: unknown) =>
+        warn(`the fleet converge failed: ${errorText(error)}`)
+      )
+      .finally(() => {
+        this.#passingValue = false;
+      });
   }
 
   /**
@@ -6557,8 +6588,16 @@ export class SessionSupervisor {
         );
         this.#convergeSoon();
         this.#healthSoon();
+        // A delta that moved nothing to converge, with no converge under
+        // way, is converged as it is kept.
+        if (!(this.#convergeOwed || this.#passing)) {
+          this.#desired.convergedTo(
+            this.#desired.generation ?? delta.generation
+          );
+        }
         return {
           observedGeneration: this.#desired.generation ?? delta.generation,
+          convergedGeneration: this.#desired.convergedGeneration,
         } satisfies FleetAck;
       }
       if (method === FLEET_STATUS) {

@@ -139,6 +139,41 @@ export class FleetDesired {
     return policy?.deniedTools;
   }
 
+  /** The generation whose converge has ended (fleet-converged.ts): 0 before the first. */
+  get convergedGeneration(): number {
+    return this.#converged.generation ?? 0;
+  }
+
+  /**
+   * Whether a converge this agent began may not have ended: what it keeps
+   * is a generation past the one it converged, as when it stopped mid-way.
+   */
+  get behind(): boolean {
+    return (
+      this.#generation !== undefined &&
+      this.convergedGeneration < this.#generation
+    );
+  }
+
+  /** Each item held whose hash is not the one converged, and each converged one no longer held: what a converge cut short left owed. */
+  unconverged(): string[] {
+    const converged = this.#converged.items;
+    return [
+      ...[...this.#hashes]
+        .filter(([id, hash]) => converged[id] !== hash)
+        .map(([id]) => id),
+      ...Object.keys(converged).filter((id) => !this.#items.has(id)),
+    ].filter((id) => id !== "policy");
+  }
+
+  /** The converge of every generation up to `generation` has ended: kept on disk. */
+  convergedTo(generation: number): void {
+    if (this.#converged.generation === generation) {
+      return;
+    }
+    this.#keep({ ...this.#converged, generation });
+  }
+
   /** The report the machine last sent, as the disk keeps it; none before its first converge. */
   get report(): FleetSyncReport | undefined {
     return this.#converged.report;
@@ -243,15 +278,17 @@ export class FleetDesired {
   }
 
   /**
-   * A converge came to `statuses` over `ids` and to `report`: a force on any
-   * of them is spent, each that came out ok is converged at its hash, each no
-   * longer held is converged away, and the report is the one kept. Kept on
-   * disk; a write that fails is said, and the next converge writes again.
+   * A converge came to `statuses` over `ids` and to `report`, and every
+   * generation up to `generation` has converged: a force on any of them is
+   * spent, each that came out ok is converged at its hash, each no longer
+   * held is converged away, and the report is the one kept. Kept on disk; a
+   * write that fails is said, and the next converge writes again.
    */
   converged(
     ids: readonly string[],
     statuses: readonly FleetItemStatus[],
-    report: FleetSyncReport | undefined
+    report: FleetSyncReport | undefined,
+    generation: number
   ): void {
     const items = { ...this.#converged.items };
     for (const id of ids) {
@@ -265,7 +302,11 @@ export class FleetDesired {
         items[status.id] = status.hash;
       }
     }
-    this.#keep({ items, report: report ?? this.#converged.report });
+    this.#keep({
+      generation,
+      items,
+      report: report ?? this.#converged.report,
+    });
   }
 
   /** The policy held now was written (denied-tools.ts `applyFleetDenials`): converged at its hash. */

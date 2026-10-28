@@ -19,6 +19,13 @@ import { FleetSyncReportSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 
 export interface FleetConverged {
+  /**
+   * The generation of the desired state whose converge has ended: every
+   * item a delta up to it moved was converged (ok or failed), its
+   * `convergedGeneration` beside the `observedGeneration` it kept (core
+   * `FleetAck`). None before its first converge.
+   */
+  generation?: number;
   /** Each item a converge wrote (the policy as its write landed), by id, with its hash. */
   items: Record<string, string>;
   /** The report the machine last sent; none before its first converge. */
@@ -26,6 +33,7 @@ export interface FleetConverged {
 }
 
 const FleetConvergedShape = z.object({
+  generation: z.number().optional(),
   items: z.record(z.string(), z.string()),
   report: FleetSyncReportSchema.optional(),
 });

@@ -1436,6 +1436,12 @@ export interface FleetDelta {
 
 /** A machine's answer to a delta (ACK; READY for a welcome): the generation it has kept on disk. */
 export interface FleetAck {
+  /**
+   * The generation whose converge has ended on the machine: every item a
+   * delta up to it moved was converged, ok or failed. Behind
+   * `observedGeneration` while a converge runs, or after one cut short.
+   */
+  convergedGeneration: number;
   observedGeneration: number;
 }
 

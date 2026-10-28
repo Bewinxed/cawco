@@ -1,17 +1,21 @@
 /**
  * Whether each machine's welcome has converged: its harnesses have placed
- * what the welcome carried (the fleet's skills, MCP servers, memory
- * documents, hooks and harness settings), not only kept it. The agent
- * answers a welcome (READY, fleet-sync.ts) once it has kept the items on
- * disk, then converges them (agent session.ts `#convergeSoon`): the pass
- * that reached the welcome's generation says it ended with its fleet
- * report, or, when its harnesses threw, with its last word on its items
- * (`fleet_converge`, none of them still running). The policy's own word
- * (`#writePolicy`) ends no pass. An add's sync step waits on it
- * (installs.ts `ready`), so the window says the machine is in the fleet
- * only once what the fleet holds is on it.
+ * what it holds of the fleet (skills, MCP servers, memory documents, hooks,
+ * harness settings) up to the welcome's generation, not only kept it on
+ * disk. The agent says the generation whose converge has ended
+ * (`convergedGeneration`, core `FleetAck`) on its answer to every delta and
+ * on every fleet report; a converge pass that threw ends with its last word
+ * on its items (`fleet_converge`, none of them still running) and no
+ * report. An add's sync step waits on it (installs.ts `ready`), so the
+ * window says the machine is in the fleet only once what the fleet holds is
+ * on it, a machine whose last converge was cut short included.
  */
-import type { FleetDelta, FleetItemStatus } from "@cawco/core";
+import type {
+  ControlResultFrame,
+  FleetAck,
+  FleetDelta,
+  FleetItemStatus,
+} from "@cawco/core";
 
 interface Owed {
   generation: number;
@@ -27,30 +31,28 @@ export class WelcomeConverge {
   /** Each machine whose welcome's converge has not ended, with the generation it waits to reach. */
   readonly #owed = new Map<string, Owed>();
 
-  /**
-   * A delta went to the machine. A welcome carrying more than the policy
-   * (which the agent writes as it answers) owes a converge; one carrying
-   * nothing else settles whatever waited on an earlier one.
-   */
+  /** A delta went to the machine: a welcome is owed its converge. */
   sent(machineId: string, delta: FleetDelta): void {
     if (!delta.welcome) {
       return;
     }
-    if (delta.items.some((item) => item.id !== "policy")) {
-      this.#owed.set(machineId, {
-        generation: delta.generation,
-        waiters: this.#owed.get(machineId)?.waiters ?? [],
-      });
-      return;
-    }
-    this.#settle(machineId);
+    this.#owed.set(machineId, {
+      generation: delta.generation,
+      waiters: this.#owed.get(machineId)?.waiters ?? [],
+    });
   }
 
-  /** The machine's fleet report, from the converge pass that reached `generation` (null: read unasked). */
-  reported(machineId: string, generation: number | null): void {
-    if (generation !== null) {
-      this.#reached(machineId, generation);
-    }
+  /** The machine answered a delta (ACK): the generation it has converged. */
+  answered(machineId: string, result: ControlResultFrame): void {
+    const converged = result.ok
+      ? (result.result as Partial<FleetAck> | undefined)?.convergedGeneration
+      : undefined;
+    this.#reached(machineId, converged);
+  }
+
+  /** The machine's fleet report: the generation it has converged. */
+  reported(machineId: string, convergedGeneration: number | undefined): void {
+    this.#reached(machineId, convergedGeneration);
   }
 
   /** The machine's word on items as its pass at `generation` moves them: its items, none still moving, end the pass. */
@@ -66,8 +68,8 @@ export class WelcomeConverge {
 
   /**
    * Answers once the machine's welcome has converged: at once when nothing
-   * is owed (its welcome carried only the policy, or it was never sent one).
-   * A caller that lets go (`signal`) is waited for no more.
+   * is owed (it was never sent one). A caller that lets go (`signal`) is
+   * waited for no more.
    */
   settled(machineId: string, signal: AbortSignal): Promise<void> {
     const owed = this.#owed.get(machineId);
@@ -89,17 +91,17 @@ export class WelcomeConverge {
     return promise;
   }
 
-  #reached(machineId: string, generation: number): void {
+  #reached(machineId: string, generation: number | undefined): void {
     const owed = this.#owed.get(machineId);
-    if (owed && generation >= owed.generation) {
-      this.#settle(machineId);
+    if (
+      !owed ||
+      typeof generation !== "number" ||
+      generation < owed.generation
+    ) {
+      return;
     }
-  }
-
-  #settle(machineId: string): void {
-    const waiters = this.#owed.get(machineId)?.waiters ?? [];
     this.#owed.delete(machineId);
-    for (const resolve of waiters) {
+    for (const resolve of owed.waiters) {
       resolve();
     }
   }

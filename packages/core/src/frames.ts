@@ -52,6 +52,8 @@ export interface FleetMcpFrame {
  * started it again. The hub keeps it as `agents.fleet`, as it keeps a sync's.
  */
 export interface FleetReportFrame {
+  /** The generation whose converge has ended on the machine (core `FleetAck`). */
+  convergedGeneration: number;
   /**
    * The generation of the fleet's desired state the converge that wrote it
    * reached: the fleet MCP changes the deltas up to it carried are the
