@@ -155,6 +155,8 @@ interface DevServer {
       };
       /** Vite's own transform of `url` ahead of a page's ask (its `warmupRequest`): kept in its graph, an error logged and passed by. */
       warmupRequest: (url: string) => Promise<void>;
+      /** Vite's transform of `url` as its middleware asks it for a page (`environment.transformRequest`): what a request's error is thrown from. */
+      transformRequest: (url: string, ...rest: unknown[]) => Promise<unknown>;
       moduleGraph: {
         getModuleById: (id: string) => ModuleNode | undefined;
         getModuleByUrl: (url: string) => Promise<ModuleNode | undefined>;
@@ -508,6 +510,39 @@ function relinkOnManifestChange(dev: DevServer): void {
       dev.watcher.emit("add", file);
     }
   });
+}
+
+/**
+ * Each error a page's request for a module throws names that module. Vite
+ * sends a page its error with the error's own `id` (`prepareError`: "id:
+ * err.id"), which a plugin's transform error carries; the native
+ * resolver's throw from inside Vite's import analysis carries neither an
+ * `id` nor a `loc` (`"./x" is not exported under the conditions …`,
+ * `plugin: "builtin:vite-resolve"`), so the stage kept it under no file
+ * and no sheet, and its frames read `unseen`. Vite's middleware asks
+ * `environment.transformRequest(url)` for every module a page fetches; an
+ * error thrown from it that names no module is given the id of the module
+ * at `url`, the one whose transform threw, and goes on as Vite's own:
+ * kept by `keepSent` under that module, with its sheets.
+ */
+function nameFailedModules(dev: DevServer): void {
+  const env = dev.environments.client;
+  const transform = env.transformRequest.bind(env);
+  env.transformRequest = async (url, ...rest) => {
+    try {
+      return await transform(url, ...rest);
+    } catch (error) {
+      if (error instanceof Object && !Reflect.get(error, "id")) {
+        const mod = await env.moduleGraph
+          .getModuleByUrl(url)
+          .catch(() => undefined);
+        if (mod?.id) {
+          Reflect.set(error, "id", mod.id);
+        }
+      }
+      throw error;
+    }
+  };
 }
 
 /** The project's dev server, once it stands: what resolves a story's imports and sends its pages HMR words. */
@@ -1097,20 +1132,28 @@ function sourced(error: PageError): PageError {
 }
 const FILE_URL = /^file:\/\//u;
 
-/** The state of each frame of states file `abs` no current draw holds: failed with the browser's words when a page couldn't load its section, else unseen. */
-function unloadedState(abs: string): {
+/**
+ * The state of each frame of states file `file` (from the root) no current
+ * draw holds: failed with the stage's words for the problem standing on
+ * its sheet (a module of it that doesn't compile, or a page that couldn't
+ * load its section), else unseen. A states file that isn't written has no
+ * frames to say it on.
+ */
+function unloadedState(file: string): {
   error?: PageError;
   state: "failed" | "unseen";
 } {
-  const unloaded = stageErrors.get(abs);
-  return unloaded?.kind === "page"
+  const standing = [...stageErrors.values()].find(
+    (one) => one.kind !== "missing" && one.sheets.includes(file)
+  );
+  return standing
     ? {
         state: "failed",
         error: {
-          message: unloaded.message,
-          file: unloaded.file,
-          line: unloaded.line,
-          column: unloaded.column,
+          message: standing.message,
+          file: standing.file,
+          line: standing.line,
+          column: standing.column,
         },
       }
     : { state: "unseen" };
@@ -1159,7 +1202,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
       sections.push(kept.section);
       continue;
     }
-    const failed = unloadedState(abs);
+    const failed = unloadedState(file);
     const stale = failed.error ? [] : (kept?.section.frames ?? []);
     sections.push({
       file,
@@ -3235,6 +3278,7 @@ function cawcoStage() {
       server = dev;
       rebundleOnChange(dev);
       relinkOnManifestChange(dev);
+      nameFailedModules(dev);
       const { hot } = dev.environments.client;
       const send = hot.send.bind(hot);
       hot.send = (payload: unknown, ...rest: unknown[]) => {

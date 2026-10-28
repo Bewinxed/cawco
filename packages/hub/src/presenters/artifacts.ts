@@ -10,7 +10,8 @@
 
 import { artifactLink, artifactToolWords, decidedByLine } from "@cawco/core";
 import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
-import type { CanvasSpec, DesignMap } from "@cawco/core/stage";
+import type { CanvasSpec, DesignMap, PageError } from "@cawco/core/stage";
+import type { movesSaid, renderSaid } from "../artifacts/component";
 import type {
   ArtifactRead,
   ArtifactStatus,
@@ -230,6 +231,12 @@ const picturesOf = (read: ArtifactRead): Picture[] =>
     ? [{ data: read.png, mimeType: "image/png" }]
     : [];
 
+/** A page's error in words: its message, and its place in the project's source when the page's stack named one. */
+const pageErrorWords = (error: PageError): string =>
+  error.file
+    ? `${error.message} (${error.file}${error.line === null ? "" : `:${error.line}`})`
+    : error.message;
+
 /** A component canvas's read: its frames, stories, moves and the person's dials, each a line. */
 const componentLines = (read: ArtifactRead): string[] => {
   const extra = read as ArtifactRead & {
@@ -237,28 +244,8 @@ const componentLines = (read: ArtifactRead): string[] => {
     errors?: { file: string; line: number | null; message?: string }[];
     frame?: Record<string, unknown>;
     hint?: string;
-    moves?: {
-      from: string;
-      to: string;
-      animations: unknown[];
-      error?: string;
-    }[];
-    render?: {
-      by: string;
-      cut?: string;
-      frames: {
-        box: { h: number; w: number };
-        error?: string;
-        form: string;
-        interaction: string;
-        label: string | null;
-        scheme?: string;
-        state: string;
-        story: string;
-      }[];
-      pageErrors?: string[];
-      unnamed: string[];
-    };
+    moves?: ReturnType<typeof movesSaid>;
+    render?: ReturnType<typeof renderSaid>;
     stories?: {
       argsChanged: string[];
       interactions: string[];
@@ -284,7 +271,7 @@ const componentLines = (read: ArtifactRead): string[] => {
           `Frames, as ${render.by} drew them:`,
           ...render.frames.map(
             (frame) =>
-              `- ${frame.story}${frame.label ? ` ${quote(frame.label, 60)}` : ""} · ${frame.interaction}${frame.scheme ? ` · ${frame.scheme}` : ""} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${frame.error}` : ""}`
+              `- ${frame.story}${frame.label ? ` ${quote(frame.label, 60)}` : ""} · ${frame.interaction}${frame.scheme ? ` · ${frame.scheme}` : ""} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
           ),
           ...(render.cut ? [render.cut] : []),
           ...(render.unnamed.length > 0
@@ -293,7 +280,9 @@ const componentLines = (read: ArtifactRead): string[] => {
               ]
             : []),
           ...(render.pageErrors?.length
-            ? [`The canvas page's errors: ${render.pageErrors.join("; ")}`]
+            ? [
+                `The canvas page's errors: ${render.pageErrors.map(pageErrorWords).join("; ")}`,
+              ]
             : []),
         ]
       : [
@@ -313,7 +302,7 @@ const componentLines = (read: ArtifactRead): string[] => {
           "Moves:",
           ...extra.moves.map(
             (move) =>
-              `- ${move.from} → ${move.to}: ${count(move.animations.length, "animation")}${move.error ? `; ${move.error}` : ""}`
+              `- ${move.from} → ${move.to}: ${count(move.animations.length, "animation")}${move.error ? `; ${pageErrorWords(move.error)}` : ""}`
           ),
         ]
       : []),
@@ -519,7 +508,7 @@ export const artifactCreatedWords = (created: Created): string =>
       `Frames, as ${created.render.by} drew them:`,
       ...created.render.frames.map(
         (frame) =>
-          `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${frame.error}` : ""}`
+          `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
       ),
       ...(created.render.cut ? [created.render.cut] : []),
     ],
@@ -578,7 +567,7 @@ const componentChangedWords = (changed: ComponentChanged): string => {
           "Its frames, as drawn:",
           ...changed.render.map(
             (frame) =>
-              `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${frame.error}` : ""}`
+              `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
           ),
         ]
   );
