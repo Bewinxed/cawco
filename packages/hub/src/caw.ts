@@ -152,6 +152,7 @@ import {
 } from "./setup";
 import { readStages, templateText } from "./stages";
 import type { TaskEvent, TaskView } from "./tasks";
+import { cardOn } from "./thread-transcript";
 import type { Views } from "./views";
 
 /** A thread's handle as find and a chip write it: `thread#1a2b3c4d`. */
@@ -1132,6 +1133,11 @@ export const createCaw = ({
    * of its own; answers the thread it went to. `withRow` as {@link said}.
    * A project deleted since the event began has no threads to note it in.
    */
+  /** The thread a note for `threadId` goes into: that one, else the project's newest conversation. */
+  const noteThread = (projectId: string, threadId: string | undefined) =>
+    (threadId ? db.thread(threadId) : undefined) ??
+    db.newestConversation(projectId);
+
   const noteIn = (
     projectId: string,
     threadId: string | undefined,
@@ -1139,9 +1145,7 @@ export const createCaw = ({
     withRow = true
   ): string => {
     projectOf(projectId);
-    const thread =
-      (threadId ? db.thread(threadId) : undefined) ??
-      db.newestConversation(projectId);
+    const thread = noteThread(projectId, threadId);
     const event = eventRow(note);
     if (thread) {
       const added = db.addThreadMessage({ threadId: thread.id, ...event });
@@ -1813,6 +1817,23 @@ export const createCaw = ({
   };
 
   /**
+   * An item's end as its note in the thread it would go into
+   * ({@link noteThread}), or none when its session has its live card there
+   * (thread-transcript.ts `cardOn`): the card's report says it already.
+   */
+  const endNoteIn = (
+    projectId: string,
+    item: WorkItemRow,
+    threadId: string | undefined
+  ): ThreadNote | undefined => {
+    const into = noteThread(projectId, threadId);
+    const session = row(item.instanceId);
+    return into && session && cardOn(session, into.id)
+      ? undefined
+      : endNote(projectId, item);
+  };
+
+  /**
    * An attempt at a task ended: noted in the thread that named the task
    * ({@link attemptThread}), or Caw starts for it when he `hears` it and
    * has no session. With a session, its report reaching him is the wake
@@ -1826,18 +1847,22 @@ export const createCaw = ({
   ): void => {
     const taskId = item.taskId ?? "";
     const report = reportOf(item);
-    const note = endNote(project.id, item);
-    const event: CawEvent = {
-      by,
-      text: `The attempt at ${taskLink(project.id, taskId, item.title)} ended ${item.state}.${report ? `\n\n${report}` : ""}`,
-      threadId: db.threadOfTask(project.id, taskId)?.id,
-      note,
-    };
     if (hears && !project.leadInstanceId) {
-      wakeQuietly(project.id, event);
+      const threadId = db.threadOfTask(project.id, taskId)?.id;
+      const note = endNoteIn(project.id, item, threadId);
+      wakeQuietly(project.id, {
+        by,
+        text: `The attempt at ${taskLink(project.id, taskId, item.title)} ended ${item.state}.${report ? `\n\n${report}` : ""}`,
+        threadId,
+        ...(note ? { note } : {}),
+      });
       return;
     }
-    noteIn(project.id, attemptThread(project.id, item), note);
+    const threadId = attemptThread(project.id, item);
+    const note = endNoteIn(project.id, item, threadId);
+    if (note) {
+      noteIn(project.id, threadId, note);
+    }
   };
 
   const view = (projectId: string): CawView => {
@@ -2937,7 +2962,10 @@ export const createCaw = ({
       if (item.taskId && (hears || item.origin === "kept")) {
         attemptEnded(project, item, hears, by);
       } else if (!hears && item.origin === "kept") {
-        noteIn(project.id, undefined, endNote(project.id, item));
+        const note = endNoteIn(project.id, item, undefined);
+        if (note) {
+          noteIn(project.id, undefined, note);
+        }
       }
     },
 

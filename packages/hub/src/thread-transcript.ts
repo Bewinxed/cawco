@@ -230,6 +230,16 @@ const fromStarter = (
       };
     });
 
+/**
+ * Whether a session has its live card on a thread: Caw started it from
+ * there (its `thread_id`, set at spawn, with a parent). The card says how
+ * it ended, so nothing else in that thread need (caw.ts `endNoteIn`).
+ */
+export const cardOn = (
+  row: { parentInstanceId?: string | null; threadId?: string | null },
+  threadId: string
+): boolean => row.threadId === threadId && Boolean(row.parentInstanceId);
+
 /** The id a session's row on a thread keeps, page to page and frame to frame. */
 const delegateRowId = (instanceId: string): string => `delegate:${instanceId}`;
 
@@ -351,7 +361,7 @@ export const createThreadTranscripts = (
     delegate: (instanceId) => {
       const [row] = ports.db.getInstancesByIds([instanceId]);
       const builder = row?.threadId ? built.get(row.threadId) : undefined;
-      if (!(row && builder && row.parentInstanceId)) {
+      if (!(row?.threadId && builder && cardOn(row, row.threadId))) {
         return;
       }
       const block = delegateBlockOf(row, builder.instanceId);
