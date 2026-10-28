@@ -17,8 +17,6 @@ import type {
   AuthState,
   CutCommand,
   Envelope,
-  FleetItemState,
-  FleetMcpServer,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessKind,
@@ -377,17 +375,6 @@ export interface Harness {
   listSessions: (dir?: string) => Promise<NeutralSessionInfo[]>;
   /** A machine-scoped control this harness owns; `undefined` when it is not its word. */
   machine?: (method: string, args: unknown[]) => Promise<unknown> | undefined;
-  /**
-   * A project's MCP servers placed at the one folder `cwd` as a workspace's
-   * clone is cut there (fleet-place.ts `place`), into this harness's own
-   * files, every other folder's left as it stands; answers each copy's state
-   * under `<name>@<place id>`. Absent for a harness that reads the fleet MCP
-   * set itself (fleet-mcp-set.ts).
-   */
-  placeFleet?: (
-    cwd: string,
-    mcp: FleetMcpServer[]
-  ) => Promise<Record<string, FleetItemState>>;
   /**
    * Every provider the harness's own catalog names, by id and name: the
    * providers an account can be for through it. Absent from a harness with

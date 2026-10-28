@@ -108,6 +108,7 @@ import {
 } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
+import { placeSets } from "../fleet-place-set";
 import { GATE_FORM_ENV, gateForm, LAUNCH_FLAGS } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import type {
@@ -177,7 +178,6 @@ import {
 import {
   buildPluginSource,
   OPENCODE_DIR,
-  OPENCODE_PLACED_MCP,
   OPENCODE_QUIET_DIR,
   prunePlugins,
   retireV1Plugins,
@@ -878,8 +878,6 @@ const syncOpencodeMcp = async (
   return names;
 };
 
-type PlacedMcp = Record<string, { cwd: string; name: string; entry: unknown }>;
-
 /**
  * The placed servers' revision, in a server's config hash for them
  * (OpencodeHarness `#hashConfig`): moved only when a place this machine
@@ -890,19 +888,41 @@ const OPENCODE_PLACED_REVISION = join(
   "cawco-placed-mcp.revision"
 );
 
-/** Each place's servers in `placed`, canonical, by its folder. */
-const serversByPlace = (placed: PlacedMcp): Map<string, string> => {
+/**
+ * The hash of each place's servers as OpenCode takes them, by its folder,
+ * as the last converge of the servers placed them: what the next one tells a
+ * place's change by ({@link placedRevisionMoved}). The servers themselves
+ * are in each place's file (fleet-place-set.ts), which CawCo's plugin hands
+ * a location as it boots (its `placeMcp`).
+ */
+const OPENCODE_PLACED_SEEN = join(OPENCODE_DIR, "cawco-placed-mcp.seen.json");
+
+/** Each place's enabled servers in `desired`, as OpenCode takes them, hashed, by its folder. */
+const serversByPlace = (
+  desired: readonly FleetMcpServer[]
+): Record<string, string> => {
   const byPlace = new Map<string, Record<string, unknown>>();
-  for (const { cwd, name, entry } of Object.values(placed)) {
-    byPlace.set(cwd, { ...byPlace.get(cwd), [name]: entry });
+  for (const server of desired) {
+    if (server.enabled && server.cwd) {
+      byPlace.set(server.cwd, {
+        ...byPlace.get(server.cwd),
+        [server.name]: toOpencodeMcp(server.config),
+      });
+    }
   }
-  return new Map(
-    [...byPlace].map(([cwd, servers]) => [cwd, canonicalJson(servers)])
+  return Object.fromEntries(
+    [...byPlace].map(([cwd, servers]) => [
+      cwd,
+      createHash("sha256")
+        .update(canonicalJson(servers))
+        .digest("hex")
+        .slice(0, 16),
+    ])
   );
 };
 
 /**
- * Whether a server must be replaced for `placed` where it held `before`:
+ * Whether a server must be replaced for places `now` where they were `was`:
  * only when a place whose servers changed (added, edited, removed) holds a
  * directory a live session runs in (`live`). A location takes its place's
  * servers as it boots (the plugin's `placeMcp`), and one no session is in
@@ -914,104 +934,59 @@ const serversByPlace = (placed: PlacedMcp): Map<string, string> => {
  * again, on the server that replaces this one, which it moves to at rest.
  */
 const placedRevisionMoved = (
-  before: PlacedMcp,
-  placed: PlacedMcp,
+  was: Readonly<Record<string, string>>,
+  now: Readonly<Record<string, string>>,
   live: readonly string[]
-): boolean => {
-  const was = serversByPlace(before);
-  const now = serversByPlace(placed);
-  return [...new Set([...was.keys(), ...now.keys()])].some(
+): boolean =>
+  [...new Set([...Object.keys(was), ...Object.keys(now)])].some(
     (cwd) =>
-      was.get(cwd) !== now.get(cwd) &&
+      was[cwd] !== now[cwd] &&
       live.some((dir) => dir === cwd || dir.startsWith(`${cwd}/`))
   );
-};
-
-/**
- * Each enabled placed copy of `desired` put in `placed` as OpenCode takes
- * it, one whose folder is not here said so: each one's state, under
- * `<name>@<place id>`.
- */
-const placedOpencode = (
-  desired: readonly FleetMcpServer[],
-  placed: PlacedMcp
-): Record<string, FleetItemState> => {
-  const report: Record<string, FleetItemState> = {};
-  for (const server of desired) {
-    if (!(server.enabled && server.cwd && server.placeId)) {
-      continue;
-    }
-    const key = `${server.name}@${server.placeId}`;
-    if (existsSync(server.cwd)) {
-      placed[key] = {
-        cwd: server.cwd,
-        name: server.name,
-        entry: toOpencodeMcp(server.config),
-      };
-      report[key] = { state: "applied" };
-    } else {
-      report[key] = {
-        state: "failed",
-        cause: "no-checkout",
-        detail: `${server.cwd} is not on this machine`,
-      };
-    }
-  }
-  return report;
-};
-
-/**
- * A project's MCP servers at the one folder `cwd`, as a workspace's clone is
- * cut there: {@link OPENCODE_PLACED_MCP} with that folder's copies put in and
- * every other folder's as it stands. No session runs in a clone being cut,
- * so the placed revision stays where it is.
- */
-const placeOpencodeMcpAt = async (
-  cwd: string,
-  desired: readonly FleetMcpServer[]
-): Promise<Record<string, FleetItemState>> => {
-  const before = (await readJson<PlacedMcp>(OPENCODE_PLACED_MCP)) ?? {};
-  const placed: PlacedMcp = Object.fromEntries(
-    Object.entries(before).filter(([, entry]) => entry.cwd !== cwd)
-  );
-  const report = placedOpencode(desired, placed);
-  await writeJson(OPENCODE_PLACED_MCP, placed);
-  return report;
-};
 
 /**
  * A project's MCP servers at each of its places on this machine
- * (`PlacedFleetConfig.placedMcp`), for OpenCode: {@link OPENCODE_PLACED_MCP}
- * rewritten whole, which the plugin hands each location as it boots, and
- * {@link OPENCODE_PLACED_REVISION} moved when a place a live session runs
- * in changed (`live`, its directories: {@link placedRevisionMoved}).
- * Answers each copy's state under `<name>@<place id>`, a copy no longer
- * carried as removed.
+ * (`PlacedFleetConfig.placedMcp`), for OpenCode: each place's file holds
+ * them (fleet-place-set.ts), which the plugin hands each location as it
+ * boots, and {@link OPENCODE_PLACED_REVISION} moves when a place a live
+ * session runs in changed (`live`, its directories:
+ * {@link placedRevisionMoved}). Answers each copy's state under
+ * `<name>@<place id>`.
  */
 const placeOpencodeMcp = async (
   desired: FleetMcpServer[],
   live: readonly string[]
 ): Promise<Record<string, FleetItemState>> => {
-  const before = (await readJson<PlacedMcp>(OPENCODE_PLACED_MCP)) ?? {};
-  const placed: PlacedMcp = {};
-  const report = placedOpencode(desired, placed);
-  for (const key of Object.keys(before)) {
-    report[key] ??= { state: "removed" };
-  }
-  if (placedRevisionMoved(before, placed, live)) {
+  const was =
+    (await readJson<Record<string, string>>(OPENCODE_PLACED_SEEN)) ?? {};
+  const now = serversByPlace(desired);
+  if (placedRevisionMoved(was, now, live)) {
     const revision = await readFile(OPENCODE_PLACED_REVISION, "utf8").catch(
       () => ""
     );
     await writeStateFile(
       OPENCODE_PLACED_REVISION,
       createHash("sha256")
-        .update(`${revision}\u0000${canonicalJson(placed)}`)
+        .update(`${revision}\u0000${canonicalJson(now)}`)
         .digest("hex")
         .slice(0, 16)
     );
   }
-  await writeJson(OPENCODE_PLACED_MCP, placed);
-  return report;
+  await writeJson(OPENCODE_PLACED_SEEN, now);
+  return Object.fromEntries(
+    desired
+      .filter((server) => server.enabled && server.cwd && server.placeId)
+      .map((server): [string, FleetItemState] => [
+        `${server.name}@${server.placeId}`,
+        existsSync(server.cwd as string)
+          ? { state: "applied" }
+          : {
+              state: "failed",
+              cause: "no-checkout",
+              detail: `${server.cwd} is not on this machine`,
+            },
+      ])
+  );
 };
 
 /**
@@ -6229,13 +6204,6 @@ export class OpencodeHarness implements Harness {
     }
   }
 
-  placeFleet(
-    cwd: string,
-    mcp: FleetMcpServer[]
-  ): Promise<Record<string, FleetItemState>> {
-    return placeOpencodeMcpAt(cwd, mcp);
-  }
-
   async syncFleet(
     config: PlacedFleetConfig,
     parts: ReadonlySet<FleetPart>
@@ -6369,7 +6337,11 @@ export class OpencodeHarness implements Harness {
       marketplaces: {},
       plugins: {},
       skills: {},
-      hooks: hookStatesInSet("opencode", await readFleetHarnessSet()),
+      hooks: hookStatesInSet(
+        "opencode",
+        await readFleetHarnessSet(),
+        await placeSets()
+      ),
       at: Date.now(),
     };
     if (sidecar.memory !== undefined) {

@@ -24,7 +24,7 @@ import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
-import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
+import { fleetMcpAt } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import {
@@ -203,7 +203,7 @@ export const backgroundShell = (
 const piBrowserDoor = async (
   ctx: HarnessContext
 ): Promise<BrowserDoor | undefined> => {
-  const browser = fleetMcpAt(await readFleetMcpSet(), ctx.cwd)[CHROME_DEVTOOLS];
+  const browser = (await fleetMcpAt(ctx.cwd))[CHROME_DEVTOOLS];
   if (ctx.mcpGate || !(browser && "command" in browser)) {
     return;
   }

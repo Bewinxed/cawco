@@ -140,5 +140,8 @@ export const placedConfig = (
     placedMcp: copies.flatMap((one) => one.mcp),
     placedMemory: copies.flatMap((one) => one.memory),
     placedSkills: copies.flatMap((one) => one.skills),
+    places: places
+      .filter((one) => projects[one.projectId] !== undefined)
+      .map((one) => one.path),
   };
 };

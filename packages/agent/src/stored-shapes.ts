@@ -26,6 +26,7 @@ import type {
   SetHook as SetHookType,
 } from "./fleet-harness-set";
 import type { FleetMcpSet as FleetMcpSetType } from "./fleet-mcp-set";
+import type { FleetPlaceSet as FleetPlaceSetType } from "./fleet-place-set";
 
 const MediaMeasurementShape = z.object({
   at: z.number(),
@@ -94,31 +95,22 @@ const SetHookShape = z.object({
   test: HookMatchTestShape,
 });
 
-const PlacedSetHookShape = SetHookShape.extend({ cwd: z.string() });
-
-const PlacedSetSkillShape = z.object({
-  cwd: z.string(),
-  dir: z.string(),
-  name: z.string(),
-});
-
 export const FleetHarnessSetShape = z.object({
   config: z.record(z.string(), SetHarnessConfigShape),
   hooks: z.record(z.string(), SetHookShape),
-  placedHooks: z.record(z.string(), PlacedSetHookShape),
-  placedSkills: z.record(z.string(), PlacedSetSkillShape),
-});
-
-const PlacedFleetMcpShape = z.object({
-  config: FleetMcpConfigSchema,
-  cwd: z.string(),
-  name: z.string(),
 });
 
 export const FleetMcpSetShape = z.object({
-  placed: z.record(z.string(), PlacedFleetMcpShape),
   servers: z.record(z.string(), FleetMcpConfigSchema),
   signedOut: z.array(z.string()),
+});
+
+export const FleetPlaceSetShape = z.object({
+  config: z.record(z.string(), SetHarnessConfigShape),
+  cwd: z.string(),
+  hooks: z.record(z.string(), SetHookShape),
+  mcp: z.record(z.string(), FleetMcpConfigSchema),
+  skills: z.record(z.string(), z.string()),
 });
 
 /**
@@ -149,5 +141,6 @@ prove<
     Same<z.output<typeof SetHookShape>, SetHookType>,
     Same<z.output<typeof FleetHarnessSetShape>, FleetHarnessSetType>,
     Same<z.output<typeof FleetMcpSetShape>, FleetMcpSetType>,
+    Same<z.output<typeof FleetPlaceSetShape>, FleetPlaceSetType>,
   ]
 >();

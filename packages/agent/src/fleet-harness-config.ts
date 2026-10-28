@@ -4,8 +4,8 @@
  * them: a settings row as it is, a plugin's or extension's `module` written
  * into a file of CawCo's own and its `package` installed by npm, both under
  * {@link fleetPlacedDir}, outside every checkout. What each row came to goes
- * into the harness set (fleet-harness-set.ts) that sessions load as they
- * start: Claude Code's flag settings (claude.ts), CawCo's OpenCode plugin
+ * into the harness set (fleet-harness-set.ts), a project's copy into its
+ * place's file (fleet-place-set.ts), that sessions load as they start: Claude Code's flag settings (claude.ts), CawCo's OpenCode plugin
  * (opencode-plugin.ts), pi's `additionalExtensionPaths` (pi-runtime.ts).
  * Whatever no row names any more is taken away.
  */

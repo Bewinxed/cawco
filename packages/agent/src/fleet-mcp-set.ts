@@ -1,8 +1,9 @@
 /**
- * The fleet's MCP servers as this machine launches them: the fleet's own and
- * each project's placed copies, every command already resolved
- * (mcp-launcher.ts). Written whole by each fleet sync (session.ts
- * `#syncFleet`) into a file of CawCo's own ({@link fleetMcpSetFile}), and
+ * The fleet's own MCP servers as this machine launches them, every command
+ * already resolved (mcp-launcher.ts); each project's placed copies are in
+ * their place's file (fleet-place-set.ts). Written whole by each converge of
+ * the servers (session.ts `#syncFleet`) into a file of CawCo's own
+ * ({@link fleetMcpSetFile}), and
  * read by every CawCo session as it starts and as the fleet changes: Claude
  * Code's through the SDK's `mcpServers` and `setMcpServers`, pi's through
  * `pi.registerMcpServer`. OpenCode's take the same servers through its
@@ -17,18 +18,10 @@ import {
 } from "@cawco/core";
 import { fleetMcpSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { placeSetAt } from "./fleet-place-set";
 import { FleetMcpSetShape } from "./stored-shapes";
 
-/** One project's server, placed at one of its folders on this machine. */
-interface PlacedFleetMcp {
-  config: FleetMcpConfig;
-  cwd: string;
-  name: string;
-}
-
 export interface FleetMcpSet {
-  /** Each project's placed copies, by `<name>@<place id>`. */
-  placed: Record<string, PlacedFleetMcp>;
   /** The fleet's own servers, by the name sessions see. */
   servers: Record<string, FleetMcpConfig>;
   /**
@@ -41,7 +34,7 @@ export interface FleetMcpSet {
   signedOut: string[];
 }
 
-const EMPTY: FleetMcpSet = { servers: {}, placed: {}, signedOut: [] };
+const EMPTY: FleetMcpSet = { servers: {}, signedOut: [] };
 
 /** The set the last sync wrote; none before the first, or when it cannot be read (said on the log). */
 export const readFleetMcpSet = async (): Promise<FleetMcpSet> => {
@@ -89,24 +82,12 @@ export const within = (cwd: string, folder: string): boolean =>
 
 /**
  * The servers a session in `cwd` loads: the fleet's, with the placed copies
- * of the deepest place at or above `cwd` over them, as Claude Code read a
- * folder's own map over its user scope.
+ * of the deepest place at or above `cwd` over them (fleet-place-set.ts
+ * `placeSetAt`), as Claude Code read a folder's own map over its user scope.
  */
-export const fleetMcpAt = (
-  set: FleetMcpSet,
+export const fleetMcpAt = async (
   cwd: string
-): Record<string, FleetMcpConfig> => {
-  const placed = Object.values(set.placed);
-  const [folder] = placed
-    .map((row) => row.cwd)
-    .filter((one) => within(cwd, one))
-    .sort((a, b) => b.length - a.length);
-  return {
-    ...set.servers,
-    ...Object.fromEntries(
-      placed
-        .filter((row) => row.cwd === folder)
-        .map((row) => [row.name, row.config])
-    ),
-  };
-};
+): Promise<Record<string, FleetMcpConfig>> => ({
+  ...(await readFleetMcpSet()).servers,
+  ...(await placeSetAt(cwd))?.mcp,
+});

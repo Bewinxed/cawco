@@ -191,8 +191,9 @@ export const fleetMcpInstallsDir = (): string =>
   join(cawcoDataDir(), "fleet-mcp");
 
 /**
- * The fleet's MCP servers as this machine launches them, written whole by
- * each fleet sync (agent fleet-mcp-set.ts): what every CawCo session on
+ * The fleet's own MCP servers as this machine launches them, written whole
+ * by each converge of them (agent fleet-mcp-set.ts); a project's placed
+ * copies are in each place's file ({@link fleetPlacesDir}): what every CawCo session on
  * Claude Code and pi loads beside its person's own servers, through its
  * harness's per-session API. No harness reads it of its own accord, so the
  * person's own `claude` and `pi` never load it.
@@ -208,6 +209,15 @@ export const fleetMcpSetFile = (): string =>
  * runs inside its boundary.
  */
 export const fleetHooksDir = (): string => join(cawcoDataDir(), "fleet-hooks");
+
+/**
+ * Each place's file (agent fleet-place-set.ts): what CawCo's sessions in
+ * one checkout or workspace clone take of its project's rows (its MCP
+ * servers, hooks, harness settings and skills), one file per place, named
+ * by its place key, written only for that place and removed with it.
+ */
+export const fleetPlacesDir = (): string =>
+  join(cawcoDataDir(), "fleet-places");
 
 /**
  * What this machine's agent holds of the fleet (agent fleet-desired.ts):
@@ -241,10 +251,10 @@ export const fleetPlacedDir = (): string =>
   join(cawcoDataDir(), "fleet-placed");
 
 /**
- * The harness config the fleet places, as this machine's sessions take it
- * at their launch (agent fleet-harness-set.ts): the fleet's hooks and each
- * project's placed copies, with every command resolved to its script. Written
- * whole by each fleet sync; read by CawCo's Claude Code, OpenCode and pi
+ * The fleet's own harness config, as this machine's sessions take it at
+ * their launch (agent fleet-harness-set.ts): its hooks and settings, with
+ * every command resolved to its script; a project's placed copies are in
+ * each place's file ({@link fleetPlacesDir}). Written by each fleet sync; read by CawCo's Claude Code, OpenCode and pi
  * sessions alone, never by the person's own `claude`, `opencode` or `pi`.
  */
 export const fleetHarnessSetFile = (): string =>

@@ -100,7 +100,7 @@ import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { harnessMcpUrl } from "./delegation";
-import { fleetMcpAt, readFleetMcpSet } from "./fleet-mcp-set";
+import { fleetMcpAt } from "./fleet-mcp-set";
 import { gatePath, type McpGate } from "./mcp-gate";
 import { MCP_CONNECT_MS } from "./mcp-status";
 import { toolEnv } from "./tools";
@@ -975,7 +975,7 @@ class McpHost {
         status: 404,
       });
     }
-    const config = fleetMcpAt(await readFleetMcpSet(), path)[server];
+    const config = (await fleetMcpAt(path))[server];
     if (!(config && "command" in config)) {
       return new Response(
         `${server} is not a fleet MCP server this machine runs for ${id}.`,

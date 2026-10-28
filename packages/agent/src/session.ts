@@ -197,7 +197,7 @@ import { applyFleetDenials } from "./denied-tools";
 import { forgetFirstSession } from "./first-session";
 import { hashText, placeFolder, probeToolchain, readJson } from "./fleet";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
-import { readFleetMcpSet, within, writeFleetMcpSet } from "./fleet-mcp-set";
+import { within, writeFleetMcpSet } from "./fleet-mcp-set";
 import {
   FLEET_PARTS,
   type FleetMoves,
@@ -210,6 +210,7 @@ import {
   place as placeRowsAt,
   placesNow,
 } from "./fleet-place";
+import { keepOnlyPlaceSets, keepPlaceSet } from "./fleet-place-set";
 import { laidOver } from "./fleet-report";
 import { expandHome, runFs } from "./fs";
 import type {
@@ -5775,10 +5776,7 @@ export class SessionSupervisor {
       const copies = placeRowsAt(rows, cwd);
       const mcp = await this.#placeMcp(cwd, copies.mcp);
       const placed = await placeFolder(cwd, copies, Object.keys(mcp.taken));
-      placed.mcp = {
-        ...mcp.states,
-        ...(await placeHarnessMcp(cwd, copies.mcp, mcp.taken)),
-      };
+      placed.mcp = mcp.states;
       const said = failedPlaced(placed);
       console.info(
         `[fleet] ${cwd}: project ${projectId}'s ${copies.skills.length} skill(s), ${copies.mcp.length} MCP server(s), ${copies.memory.length} memory document(s), ${copies.hooks.length} hook(s) and ${copies.harnessConfig.length} harness setting(s) placed from the rows it holds, as its workspace was cut${said.length > 0 ? `; not placed: ${said.join("; ")}` : ""}`
@@ -5789,10 +5787,10 @@ export class SessionSupervisor {
 
   /**
    * The MCP copies placed at `cwd` as this machine launches them
-   * ({@link #launchRows}), each that launches in the fleet MCP set for the
-   * sessions in that folder; every other entry of the set left as it
-   * stands. Answers the copies it took and each enabled copy's state, by
-   * `<name>@<place id>`: applied once in the set, else why it cannot launch.
+   * ({@link #launchRows}), each that launches in that place's own file
+   * (fleet-place-set.ts) for the sessions in that folder. Answers the copies
+   * it took and each enabled copy's state, by `<name>@<place id>`: applied
+   * once in the file, else why it cannot launch.
    */
   async #placeMcp(
     cwd: string,
@@ -5836,20 +5834,10 @@ export class SessionSupervisor {
         };
       }
     }
-    const set = await readFleetMcpSet();
-    await writeFleetMcpSet({
-      ...set,
-      placed: {
-        ...Object.fromEntries(
-          Object.entries(set.placed).filter(([, entry]) => entry.cwd !== cwd)
-        ),
-        ...Object.fromEntries(
-          Object.entries(taken).map(([key, row]) => [
-            key,
-            { cwd, name: row.name, config: row.config },
-          ])
-        ),
-      },
+    await keepPlaceSet(cwd, {
+      mcp: Object.fromEntries(
+        Object.values(taken).map((row) => [row.name, row.config])
+      ),
     });
     return { states, taken };
   }
@@ -5960,11 +5948,13 @@ export class SessionSupervisor {
         // checkouts, and the clones of its workspaces this agent cut.
         const holding = this.#desired.config();
         places = await placesNow(holding.projects);
-        report = await this.#syncFleet(
-          placedConfig(holding, places),
-          "syncFleet",
-          moves.parts
-        );
+        const placed = placedConfig(holding, places);
+        report = await this.#syncFleet(placed, "syncFleet", moves.parts);
+        // A place gone since (an archived clone, a checkout the hub no longer
+        // names) takes its file with it.
+        if (PLACE_FILE_PARTS.some((part) => moves.parts.has(part))) {
+          await keepOnlyPlaceSets(placed.places);
+        }
         if (this.#harnessFailures.size > 0) {
           thrown = [...this.#harnessFailures]
             .map(([harness, error]) => `${harness}: ${error}`)
@@ -6274,20 +6264,25 @@ export class SessionSupervisor {
             .filter((row) => row.enabled)
             .map((row) => [row.name, row.config])
         ),
-        placed: Object.fromEntries(
-          config.placedMcp
-            .filter((row) => row.enabled && row.cwd && row.placeId)
-            .map((row) => [
-              `${row.name}@${row.placeId}`,
-              { cwd: row.cwd as string, name: row.name, config: row.config },
-            ])
-        ),
         // The hub's own word that it holds no sign-in for a server: each
         // harness reports it needing one and starts it for no status read.
         signedOut: config.mcp
           .filter((row) => row.enabled && row.auth?.state === "needs-auth")
           .map((row) => row.name),
       });
+      // Each place's copies into its own file, a place with none taking
+      // none (fleet-place-set.ts).
+      await Promise.all(
+        config.places.map((cwd) =>
+          keepPlaceSet(cwd, {
+            mcp: Object.fromEntries(
+              config.placedMcp
+                .filter((row) => row.enabled && row.cwd === cwd)
+                .map((row) => [row.name, row.config])
+            ),
+          })
+        )
+      );
     }
     type State = import("@cawco/core").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};
@@ -7044,41 +7039,6 @@ async function fleetHoldings(): Promise<FleetHoldings> {
   };
 }
 
-/**
- * The MCP copies placed at `cwd` (`rows`; `launched`, as this machine
- * launches them) into each harness's own files that keeps them
- * (`Harness.placeFleet`): each copy's state there, the worst of the
- * harnesses'. A harness that cannot is said, and the others go on.
- */
-async function placeHarnessMcp(
-  cwd: string,
-  rows: FleetMcpServer[],
-  launched: Record<string, FleetMcpServer>
-): Promise<Record<string, FleetItemState>> {
-  const states: Record<string, FleetItemState> = {};
-  for (const adapter of harnesses()) {
-    if (!adapter.placeFleet) {
-      continue;
-    }
-    try {
-      const said = await adapter.placeFleet(
-        cwd,
-        adapter.capabilities.mcpStatus ? Object.values(launched) : rows
-      );
-      for (const [key, state] of Object.entries(said)) {
-        states[key] = states[key]
-          ? worstFleetState([states[key], state])
-          : state;
-      }
-    } catch (error) {
-      warn(
-        `${adapter.kind} did not take the MCP servers placed at ${cwd}: ${errorText(error)}`
-      );
-    }
-  }
-  return states;
-}
-
 function worktreeRecord(instanceId: string): string {
   return join(
     homedir(),
@@ -7171,6 +7131,14 @@ async function admit(
     );
   }
 }
+
+/** The parts whose converge writes each place's file (fleet-place-set.ts). */
+const PLACE_FILE_PARTS: readonly FleetPart[] = [
+  "mcp",
+  "placedSkills",
+  "hooks",
+  "harnessConfig",
+];
 
 /**
  * The kinds of fleet-wide items a Linux boundary's form names

@@ -81,6 +81,7 @@ import {
 import {
   fleetHarnessSetFile,
   fleetMcpSetFile,
+  fleetPlacesDir,
   SPILLS_DIR_NAME,
   WORKSPACE_POLICY_NAME,
   workspacesDir,
@@ -94,6 +95,7 @@ import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import { readJson } from "../fleet";
 import { GATE_PREFIX } from "../mcp-gate";
 import { hostKeyFile } from "../mcp-host";
+import { MCP_CONNECT_MS } from "../mcp-status";
 import { writeJson } from "./fleet-common";
 import { CAWCO_PLUGIN_ID, SEND_NOW_METADATA } from "./opencode-client";
 import { opencodeCredentialFile } from "./opencode-credentials";
@@ -106,14 +108,6 @@ export const OPENCODE_DIR = join(
   process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
   "opencode"
 );
-
-/**
- * The project MCP servers CawCo places for OpenCode on this machine, by
- * `<name>@<place id>`, each with its place's folder and its OpenCode entry.
- * The agent's own file, outside every folder: the plugin hands a location
- * the servers of the deepest place that holds it as it boots.
- */
-export const OPENCODE_PLACED_MCP = join(OPENCODE_DIR, "cawco-placed-mcp.json");
 
 /**
  * The location the agent's own reads of a server go to (its config sources,
@@ -147,7 +141,7 @@ export const buildPluginSource =
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 // This server's password authenticates every request to it: no shell or MCP
 // server it starts inherits it.
@@ -156,7 +150,9 @@ delete process.env.OPENCODE_SERVER_PASSWORD;
 const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const cawcoCredentials = ${JSON.stringify(opencodeCredentialFile())};
-const cawcoPlacedMcp = ${JSON.stringify(OPENCODE_PLACED_MCP)};
+// How long a server gets to start and list its tools (the agent's
+// mcp-status.ts MCP_CONNECT_MS), as the agent writes OpenCode's own entries.
+const mcpConnectMs = ${JSON.stringify(MCP_CONNECT_MS)};
 const cawcoQuiet = ${JSON.stringify(OPENCODE_QUIET_DIR)};
 const machineData = ${JSON.stringify(machineDataHome())};
 const sessionNames = ${JSON.stringify(SESSION_CAWCO_ENV)};
@@ -168,6 +164,9 @@ const cawcoHostKey = ${JSON.stringify(hostKeyFile())};
 // fleet-harness-set.ts), the events this plugin runs them on and OpenCode's
 // tools by Claude Code's names (core HOOK_EVENTS_ON, HOOK_TOOL_NAMES).
 const cawcoHarnessSet = ${JSON.stringify(fleetHarnessSetFile())};
+// Each place's file (the agent's fleet-place-set.ts): what sessions in that
+// checkout or clone take of its project's rows, named by its place key.
+const cawcoPlaces = ${JSON.stringify(fleetPlacesDir())};
 const hookEvents = ${JSON.stringify(HOOK_EVENTS_ON.opencode)};
 const hookTools = ${JSON.stringify(HOOK_TOOL_NAMES.opencode)};
 const gatePrefix = ${JSON.stringify(GATE_PREFIX)};
@@ -517,50 +516,46 @@ const asideShell = (base, session) => ({
   },
 });
 
-// The names of the fleet's servers, its own and every project's placed copy:
-// in a workspace's location each one with a command goes through the
-// workspace's MCP gate. None when the set cannot be read.
-const fleetNames = () => {
+// The file of the deepest place at or above \`directory\` (the agent's
+// fleet-place-set.ts placeSetAt), by the folder as named and as its real
+// path: none when no place holds it, or its file cannot be read.
+const placeAt = (directory) => {
+  const ups = (path) => { const all = []; for (let at = path; ; at = dirname(at)) { all.push(at); if (dirname(at) === at) return all; } };
+  for (const folder of new Set([...ups(directory), ...ups(realOf(directory))])) {
+    let text;
+    try { text = readFileSync(join(cawcoPlaces, encodeURIComponent(folder) + ".json"), "utf8"); } catch { continue; }
+    try { return JSON.parse(text); } catch { return undefined; }
+  }
+  return undefined;
+};
+// The names of the fleet's servers for \`directory\`, its own and its
+// place's copies: in a workspace's location each one with a command goes
+// through the workspace's MCP gate. None when the set cannot be read.
+const fleetNames = (directory) => {
   let set = {};
   try { set = JSON.parse(readFileSync(cawcoFleetMcp, "utf8")); } catch { return new Set(); }
-  return new Set([...Object.keys(set.servers ?? {}), ...Object.values(set.placed ?? {}).map((row) => row.name)]);
+  return new Set([...Object.keys(set.servers ?? {}), ...Object.keys(placeAt(directory)?.mcp ?? {})]);
 };
 // The host key, or none when the agent has made none yet: then no fleet
 // server with a command is reached in a workspace's location.
 const hostKey = () => { try { return readFileSync(cawcoHostKey, "utf8").trim() || undefined; } catch { return undefined; } };
 
-// The fleet's hooks (the agent's fleet-harness-set.ts): the fleet's own and
-// those of the project placed at the deepest place holding \`directory\`,
-// real paths on whole path segments, read at each call so a change reaches
-// a running session. None when the set cannot be read.
+// The fleet's hooks (the agent's fleet-harness-set.ts hooksAt): the fleet's
+// own and those of the place holding \`directory\`, read at each call so a
+// change reaches a running session. None when the set cannot be read.
 const fleetHooks = (directory) => {
   let set = {};
   try { set = JSON.parse(readFileSync(cawcoHarnessSet, "utf8")); } catch { return []; }
-  const placed = Object.values(set.placedHooks ?? {});
-  const here = realOf(directory);
-  let place;
-  for (const { cwd } of placed) {
-    const root = realOf(cwd);
-    if ((here === root || here.startsWith(root + "/")) && !(place && place.length >= root.length)) place = root;
-  }
-  return [...Object.values(set.hooks ?? {}), ...placed.filter((hook) => place && realOf(hook.cwd) === place)];
+  return [...Object.values(set.hooks ?? {}), ...Object.values(placeAt(directory)?.hooks ?? {})];
 };
 // The fleet's OpenCode plugins for \`directory\` (the agent's
-// fleet-harness-set.ts configAt): the fleet's own, then those of the
-// project placed at the deepest place holding it, each a module file the
-// agent's sync made ready (its fleet-harness-config.ts).
+// fleet-harness-set.ts configAt): the fleet's own, then those of the place
+// holding it, each a module file the agent's sync made ready (its
+// fleet-harness-config.ts).
 const fleetPlugins = (directory) => {
   let set = {};
   try { set = JSON.parse(readFileSync(cawcoHarnessSet, "utf8")); } catch { return []; }
-  const rows = Object.values(set.config ?? {}).filter((row) => row.kind === "opencodePlugins" && typeof row.entry === "string");
-  const here = realOf(directory);
-  let place;
-  for (const { cwd } of rows) {
-    if (!cwd) continue;
-    const root = realOf(cwd);
-    if ((here === root || here.startsWith(root + "/")) && !(place && place.length >= root.length)) place = root;
-  }
-  return rows.filter((row) => !row.cwd || (place && realOf(row.cwd) === place));
+  return [...Object.values(set.config ?? {}), ...Object.values(placeAt(directory)?.config ?? {})].filter((row) => row.kind === "opencodePlugins" && typeof row.entry === "string");
 };
 // Whether this harness runs a hook (core hookUnsupported): an event it
 // raises, a command, no condition.
@@ -626,21 +621,19 @@ const ownInput = (tool, input) => {
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [back[key] ?? key, value]));
 };
 
+// One placed server as OpenCode takes it (the agent's opencode.ts toOpencodeMcp).
+const opencodeMcp = (config) => {
+  const timeout = { startup: mcpConnectMs, catalog: mcpConnectMs };
+  return "url" in config
+    ? { type: "remote", url: config.url, oauth: false, timeout, ...(config.headers ? { headers: config.headers } : {}) }
+    : { type: "local", command: [config.command, ...(config.args ?? [])], timeout, ...(config.env ? { environment: config.env } : {}) };
+};
 // The project MCP servers CawCo placed at the deepest place holding
-// \`directory\`, real paths on whole path segments, set where the location's
-// config names no server by that name.
+// \`directory\` (its place's file), set where the location's config names
+// no server by that name.
 const placeMcp = (editor, directory) => {
-  let placed = {};
-  try { placed = JSON.parse(readFileSync(cawcoPlacedMcp, "utf8")); } catch { return; }
-  const here = realOf(directory);
-  let place;
-  for (const { cwd } of Object.values(placed)) {
-    const root = realOf(cwd);
-    if ((here === root || here.startsWith(root + "/")) && !(place && place.length >= root.length)) place = root;
-  }
-  if (!place) return;
-  for (const { cwd, name, entry } of Object.values(placed)) {
-    if (realOf(cwd) === place && !editor.get(name)) editor.set(name, entry);
+  for (const [name, config] of Object.entries(placeAt(directory)?.mcp ?? {})) {
+    if (!editor.get(name)) editor.set(name, opencodeMcp(config));
   }
 };
 
@@ -760,7 +753,7 @@ export default {
       // through its browser door (the agent's mcp-host.ts): the location
       // dials its gate, and starts none of them itself. A location in no
       // workspace has no door, so it launches no browser tool.
-      const gated = workspace ? fleetNames() : new Set();
+      const gated = workspace ? fleetNames(directory) : new Set();
       const key = workspace ? hostKey() : undefined;
       for (const [name, config] of [...editor.list()]) {
         if (config.type !== "local") continue;

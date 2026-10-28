@@ -188,14 +188,14 @@ import {
 import {
   configAt,
   type FleetHarnessSet,
-  placedAt,
   readFleetHarnessSet,
   type SetHook,
 } from "../fleet-harness-set";
 import { guardedHandler } from "../fleet-hook-guard";
 import { proxiedFleetMcpUrl, proxiedToolCount } from "../fleet-mcp-listing";
-import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
+import { fleetMcpAt } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
+import { type FleetPlaceSet, placeSetAt } from "../fleet-place-set";
 import { sessionGitEnv } from "../git-credential";
 import {
   type Harness,
@@ -1529,7 +1529,7 @@ type FlagHookEntry = FlagHooks[string][number];
 
 /**
  * A project's hooks as flag settings hold them, by event: each copy placed
- * at the session's folder (fleet-harness-set.ts `placedAt`), its own entry
+ * at the session's place (fleet-place-set.ts `placeSetAt`), its own entry
  * under its matcher, in the order the set holds them.
  *
  * Written so no entry reads as the boundary's when an agent adopts the CLI
@@ -1810,7 +1810,7 @@ const fleetMcpFor = async (
   ctx: HarnessContext,
   workdir: string
 ): Promise<{ denied: string[]; servers: Record<string, McpServerConfig> }> => {
-  const all = fleetMcpAt(await readFleetMcpSet(), workdir);
+  const all = await fleetMcpAt(workdir);
   if (ctx.mcpGate) {
     return { servers: throughMcpGate(all, ctx.mcpGate), denied: [] };
   }
@@ -1930,6 +1930,7 @@ const launchFleet = async (
     ? { servers: {}, denied: [] }
     : await fleetMcpFor(ctx, ctx.cwd);
   const set = session.fence ? undefined : await readFleetHarnessSet();
+  const place = session.fence ? undefined : await placeSetAt(ctx.cwd);
   return {
     fleet: Object.fromEntries(
       Object.entries(fleet.servers).filter(
@@ -1937,8 +1938,8 @@ const launchFleet = async (
       )
     ),
     denied: fleet.denied,
-    hooks: set ? placedAt(set.placedHooks, ctx.cwd) : [],
-    settings: set ? launchedSettings(set, ctx.cwd) : {},
+    hooks: Object.values(place?.hooks ?? {}),
+    settings: set ? launchedSettings(set, place) : {},
   };
 };
 
@@ -1975,18 +1976,18 @@ const launchSettings = (
 };
 
 /**
- * The fleet's Claude Code settings rows and those of the project placed at
- * `cwd` (fleet-harness-set.ts `configAt`), merged key by key in that order,
+ * The fleet's Claude Code settings rows and those of the session's `place`
+ * (fleet-harness-set.ts `configAt`), merged key by key in that order,
  * so a project's key is over the fleet's: what a session's flag settings
  * carry under CawCo's own ({@link sessionSettingsOptions}). A key the hub
  * refuses a row (core `CLAUDE_SETTINGS_REFUSED`) is left out here too.
  */
 const launchedSettings = (
   set: FleetHarnessSet,
-  cwd: string
+  place: FleetPlaceSet | undefined
 ): Record<string, unknown> =>
   Object.fromEntries(
-    configAt(set, "claudeSettings", cwd)
+    configAt(set, place, "claudeSettings")
       .flatMap((row) => Object.entries(row.settings ?? {}))
       .filter(([key]) => !CLAUDE_SETTINGS_REFUSED.includes(key))
   );
@@ -3819,12 +3820,13 @@ class ClaudeSession implements HarnessSession {
       return { applied: [] };
     }
     const set = await readFleetHarnessSet();
+    const place = await placeSetAt(this.#workdir);
     const next = sessionSettingsOptions(
       this.#ctx.boundary,
       this.#lead,
       false,
-      placedAt(set.placedHooks, this.#workdir),
-      launchedSettings(set, this.#workdir)
+      Object.values(place?.hooks ?? {}),
+      launchedSettings(set, place)
     ).settings as Record<string, unknown>;
     const before = this.#flagSettings;
     const patch: Record<string, unknown> = Object.fromEntries(

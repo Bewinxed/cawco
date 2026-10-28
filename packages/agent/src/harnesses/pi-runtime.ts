@@ -67,14 +67,10 @@ import {
 import { type Boundary, boundaryCommand } from "../boundary";
 import type { BrowserDoor } from "../browser/door";
 import { callDelegationTool, delegationTools } from "../delegation";
-import {
-  configAt,
-  hooksAt,
-  placedAt,
-  readFleetHarnessSet,
-} from "../fleet-harness-set";
+import { configAt, hooksAt, readFleetHarnessSet } from "../fleet-harness-set";
 import { type HookPlace, runFleetHooks } from "../fleet-hook-run";
-import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
+import { fleetMcpAt } from "../fleet-mcp-set";
+import { placeSetAt } from "../fleet-place-set";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import type { McpGate } from "../mcp-gate";
 import { placedMemoryIn } from "../placed-memory";
@@ -431,11 +427,7 @@ class FleetMcp {
     servers: Record<string, McpServerConfig>;
     skipped: Record<string, string>;
   }> {
-    return piMcpServers(
-      fleetMcpAt(await readFleetMcpSet(), this.#cwd),
-      door,
-      this.#gate
-    );
+    return piMcpServers(await fleetMcpAt(this.#cwd), door, this.#gate);
   }
 
   /**
@@ -576,7 +568,7 @@ class FleetHooks {
   ) {
     return runFleetHooks(
       "pi",
-      hooksAt(await readFleetHarnessSet(), this.#place.cwd),
+      hooksAt(await readFleetHarnessSet(), await placeSetAt(this.#place.cwd)),
       event,
       match,
       input,
@@ -1637,22 +1629,21 @@ export async function startPiHost(
         cwd: ctx.cwd,
         ...(ctx.boundary ? { boundary: ctx.boundary } : {}),
       });
-  const placed = await readFleetHarnessSet();
+  const set = await readFleetHarnessSet();
+  const placed = await placeSetAt(ctx.cwd);
   const resourceLoader = new DefaultResourceLoader({
     cwd: ctx.cwd,
     agentDir,
     settingsManager,
     // The project's skills placed at its folder: pi reads no `.claude/skills`
-    // (fleet-harness-set.ts `placedSkills`), and "if a directory contains
+    // (its place's file, fleet-place-set.ts), and "if a directory contains
     // SKILL.md, treat it as a skill root" (pi 1.3.0 skills.js).
-    additionalSkillPaths: placedAt(placed.placedSkills, ctx.cwd).map(
-      (skill) => skill.dir
-    ),
+    additionalSkillPaths: Object.values(placed?.skills ?? {}),
     // The fleet's pi extensions and its folder's project's, as the fleet
     // sync made them ready (fleet-harness-config.ts): a module's file, or an
     // installed package's dir, which pi loads as a pi package. A fenced
     // session keeps CawCo's inline extensions alone (`cawcosExtensionsAlone`).
-    additionalExtensionPaths: configAt(placed, "piExtensions", ctx.cwd).flatMap(
+    additionalExtensionPaths: configAt(set, placed, "piExtensions").flatMap(
       (extension) => (extension.entry ? [extension.entry] : [])
     ),
     extensionFactories: [

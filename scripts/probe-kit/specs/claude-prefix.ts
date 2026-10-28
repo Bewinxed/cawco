@@ -391,7 +391,6 @@ const run = async (kit: Kit) => {
   };
   await writeFleetMcpSet({
     servers: { probegate },
-    placed: {},
     signedOut: [],
   });
   const gateway = await startMcpGateway(() => "ws://127.0.0.1:9/ws");
@@ -711,7 +710,6 @@ const run = async (kit: Kit) => {
     };
     await writeFleetMcpSet({
       servers: { probegate: changed },
-      placed: {},
       signedOut: [],
     });
     const urlOf = (config: typeof probegate) =>

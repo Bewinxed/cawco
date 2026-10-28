@@ -113,6 +113,7 @@ import {
 import { prepareClone } from "./clone";
 import { firstSessionOf, firstSpill } from "./first-session";
 import { placedAsMade } from "./fleet";
+import { dropPlaceSet } from "./fleet-place-set";
 import { expandHome } from "./fs";
 import { configEnv, useHubCredentialHelper } from "./git-credential";
 import { hostGit } from "./host-git";
@@ -2620,7 +2621,9 @@ const readAndClose = async (
   const cached = await cacheOfWorkspace(request.id, path, access.layer.form);
   await removeLayer(request.id, access.layer);
   await closeBoundary(workspace);
-  await Promise.all(cached.map(removeTree));
+  // Its place's file goes with it (fleet-place-set.ts): nothing else of the
+  // fleet's moves for an archive.
+  await Promise.all([...cached.map(removeTree), dropPlaceSet(workspace.path)]);
   console.info(
     `[workspace] ${request.id}: archived; its ${goneFolder(access.layer, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is made again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
   );

@@ -62,6 +62,7 @@ import {
   fleetHarnessSetFile,
   fleetHooksDir,
   fleetPlacedDir,
+  fleetPlacesDir,
   placedMemoryDir,
   placedSkillsDir,
   projectClaudeDir,
@@ -91,6 +92,13 @@ import {
 } from "./fleet-hook-guard";
 import { apartSignedOut, readFleetMcpSet } from "./fleet-mcp-set";
 import { FLEET_PARTS, type FleetPart } from "./fleet-parts";
+import {
+  type FleetPlaceSet,
+  keepPlaceSet,
+  placedMcpKeys,
+  placeSets,
+  readPlaceSet,
+} from "./fleet-place-set";
 import { expandHome } from "./fs";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
 import { markdownUnder } from "./placed-memory";
@@ -284,8 +292,8 @@ interface PlacedRecord {
 interface ManagedHook {
   command: string;
   /**
-   * The folder of a project's copy. One with `placed` is in the harness set
-   * (fleet-harness-set.ts); one without was registered in that folder's
+   * The folder of a project's copy. One with `placed` is in its place's
+   * file (fleet-place-set.ts); one without was registered in that folder's
    * `.claude/settings.json` by an earlier build, and the sync takes it out
    * of there ({@link dropCheckoutHooks}).
    */
@@ -2450,7 +2458,7 @@ const scriptParseError = async (
 
 /**
  * A project's copy of a hook, placed at one of its folders here: it goes to
- * the folder's sessions through the harness set (fleet-harness-set.ts),
+ * the folder's sessions through its place's file (fleet-place-set.ts),
  * never into a file of the folder. The fleet's own are registered in
  * `~/.claude/settings.json`.
  */
@@ -2519,10 +2527,11 @@ const handlerFor = (
 const identityOf = (handler: HookHandler): string =>
   entryKey(handler as HookCommand);
 
-/** What {@link syncHooks} answers: what cawco now manages, and the hooks for the harness set. */
+/** What {@link syncHooks} answers: what cawco now manages, the fleet's hooks for the harness set, and each place's for its file, by its folder. */
 interface SyncedHooks {
+  placed: Record<string, Record<string, SetHook>>;
   records: Record<string, ManagedHook>;
-  set: Pick<FleetHarnessSet, "hooks" | "placedHooks">;
+  set: Pick<FleetHarnessSet, "hooks">;
 }
 
 /**
@@ -2682,7 +2691,7 @@ const setHookOf = (hook: FleetHook, handler: HookHandler): SetHook => ({
 
 /**
  * A project's settled copy of a hook at one of its folders: its entry in
- * the harness set, which that folder's sessions take, and the record cawco
+ * that place's file, which its sessions take, and the record cawco
  * keeps of it. Applied once its script is written, with what a workspace
  * session makes of a hook that could rewrite input (core
  * `hookWorkspaceNote`).
@@ -2691,7 +2700,7 @@ const placedHookOf = (
   hook: FleetHook,
   settled: Pick<SettledHooks, "hashes" | "scriptPaths">,
   report: Record<string, FleetItemState>
-): { entry: FleetHarnessSet["placedHooks"][string]; record: ManagedHook } => {
+): { entry: SetHook; record: ManagedHook } => {
   const script = settled.scriptPaths.get(hook.id);
   const handler = handlerFor(hook, script);
   const note = hookWorkspaceNote(hook);
@@ -2699,7 +2708,7 @@ const placedHookOf = (
     ? { state: "applied", detail: note }
     : { state: "applied" };
   return {
-    entry: { ...setHookOf(hook, handler), cwd: hook.cwd as string },
+    entry: setHookOf(hook, handler),
     record: {
       hash: settled.hashes.get(hook.id) ?? hook.hash,
       command: identityOf(handler),
@@ -2751,10 +2760,11 @@ const syncHooks = async (
     note ? { state: "applied", detail: note } : { state: "applied" };
 
   // Every settled hook as a session runs it: a project's copy goes to its
-  // folder's sessions through the harness set alone, and is applied once its
-  // script is written; the fleet's own is in the set for OpenCode and pi,
-  // and registered in the user settings below for Claude Code.
-  const set: SyncedHooks["set"] = { hooks: {}, placedHooks: {} };
+  // folder's sessions through its place's file alone, and is applied once
+  // its script is written; the fleet's own is in the set for OpenCode and
+  // pi, and registered in the user settings below for Claude Code.
+  const set: SyncedHooks["set"] = { hooks: {} };
+  const placed: SyncedHooks["placed"] = {};
   const fleetWide: FleetHook[] = [];
   for (const hook of settled) {
     if (!placedHook(hook)) {
@@ -2766,7 +2776,10 @@ const syncHooks = async (
       continue;
     }
     const { entry, record } = placedHookOf(hook, settledHooks, report);
-    set.placedHooks[hook.id] = entry;
+    placed[record.cwd as string] = {
+      ...placed[record.cwd as string],
+      [hook.id]: entry,
+    };
     written[hook.id] = record;
   }
 
@@ -2889,28 +2902,41 @@ const syncHooks = async (
   // Each script is its own file: all removed at once.
   await Promise.all(gone.map((script) => rm(script, { force: true })));
 
-  return { records: written, set };
+  return { records: written, set, placed };
 };
 
-/** The placed skills cawco manages, as the harness set names them (fleet-harness-set.ts). */
-const setSkillsOf = (
+/** The placed skills cawco manages, as each place's file names them (fleet-place-set.ts): each skill's dir by its name, by the place's folder. */
+const placeSkillsOf = (
   placed: Sidecar["placedSkills"]
-): FleetHarnessSet["placedSkills"] =>
-  Object.fromEntries(
-    Object.entries(placed).map(([key, { cwd, name }]) => [
-      key,
-      { cwd, name, dir: join(placedSkillsDir(cwd), name) },
-    ])
-  );
+): Record<string, Record<string, string>> => {
+  const byPlace: Record<string, Record<string, string>> = {};
+  for (const { cwd, name } of Object.values(placed)) {
+    byPlace[cwd] = {
+      ...byPlace[cwd],
+      [name]: join(placedSkillsDir(cwd), name),
+    };
+  }
+  return byPlace;
+};
 
-/** `entries` but the ones placed at `cwd`. */
-const elsewhere = <T extends { cwd?: string }>(
-  entries: Record<string, T>,
-  cwd: string
-): Record<string, T> =>
-  Object.fromEntries(
-    Object.entries(entries).filter(([, entry]) => entry.cwd !== cwd)
-  );
+/** The harness config rows `ready` made, the fleet's own apart from each place's, by its folder. */
+const configApart = (
+  ready: Record<string, SetHarnessConfig>
+): {
+  own: Record<string, SetHarnessConfig>;
+  placed: Record<string, Record<string, SetHarnessConfig>>;
+} => {
+  const own: Record<string, SetHarnessConfig> = {};
+  const placed: Record<string, Record<string, SetHarnessConfig>> = {};
+  for (const [key, row] of Object.entries(ready)) {
+    if (row.cwd === undefined) {
+      own[key] = row;
+    } else {
+      placed[row.cwd] = { ...placed[row.cwd], [key]: row };
+    }
+  }
+  return { own, placed };
+};
 
 /**
  * A project's rows placed at the one folder `cwd` (fleet-place.ts `place`),
@@ -2919,11 +2945,11 @@ const elsewhere = <T extends { cwd?: string }>(
  * document into `.claude/rules/cawco/` ({@link placeSkill},
  * {@link placeMemoryDoc}), each hook's script written ({@link settleHooks})
  * and each Claude Code setting, OpenCode plugin and pi extension made ready
- * (fleet-harness-config.ts `readyHarnessRows`). The harness set takes the
- * folder's entries and the sidecar its records, every other folder's and
- * the fleet's own left as they stand: nothing else on the machine moves.
- * `mcpKeys`: the folder's MCP copies the fleet MCP set took (session.ts
- * `placeClone`), recorded as handed. Answers what each copy came to, under
+ * (fleet-harness-config.ts `readyHarnessRows`). The place's own file takes
+ * what its sessions read (fleet-place-set.ts), and the sidecar the records
+ * of what was written, for a later converge to take back; no file every
+ * session reads moves. `mcpKeys`: the folder's MCP copies its file took
+ * (session.ts `placeClone`), recorded as handed. Answers what each copy came to, under
  * `<key>@<place id>`.
  */
 export const placeFolder = (
@@ -2976,7 +3002,7 @@ export const placeFolder = (
       }
     }
     const settled = await settleHooks(copies.hooks, managed.hooks, hookStates);
-    const placedHooks: FleetHarnessSet["placedHooks"] = {};
+    const placedHooks: Record<string, SetHook> = {};
     const records: Record<string, ManagedHook> = { ...settled.kept };
     for (const hook of settled.settled) {
       const { entry, record } = placedHookOf(hook, settled, hookStates);
@@ -2988,15 +3014,10 @@ export const placeFolder = (
       FleetItemState
     >;
     const ready = await readyHarnessRows(copies.harnessConfig, harnessStates);
-    const set = await readFleetHarnessSet();
-    await writeFleetHarnessSet({
-      hooks: set.hooks,
-      placedHooks: { ...elsewhere(set.placedHooks, cwd), ...placedHooks },
-      config: { ...elsewhere(set.config, cwd), ...ready.set },
-      placedSkills: {
-        ...elsewhere(set.placedSkills, cwd),
-        ...setSkillsOf(placedSkills),
-      },
+    await keepPlaceSet(cwd, {
+      hooks: placedHooks,
+      config: configApart(ready.set).placed[cwd] ?? {},
+      skills: placeSkillsOf(placedSkills)[cwd] ?? {},
     });
     // Read again in the sidecar's turn: every record this did not place
     // (the denials, the fleet's own rows, other folders') stays as it is.
@@ -3026,6 +3047,11 @@ type SidecarFields = { [K in keyof Sidecar]?: Sidecar[K] | undefined };
 
 /** What one part's converge wrote, for the sidecar and the harness set. */
 interface PartWrote {
+  /** Its field of each place's file, by the place's folder: a place it names nothing at takes it empty. */
+  placed?: {
+    field: "config" | "hooks" | "skills";
+    byPlace: Record<string, Record<string, unknown>>;
+  };
   set?: Partial<FleetHarnessSet>;
   sidecar: SidecarFields;
 }
@@ -3089,7 +3115,7 @@ const PARTS: Record<FleetPart, ConvergePart> = {
     }),
   },
   placedSkills: {
-    writes: () => [placedSkillsDir("<place>")],
+    writes: () => [placedSkillsDir("<place>"), fleetPlacesDir()],
     run: async (config, managed, report) => {
       const placedSkills = await syncPlacedSkills(
         config.placedSkills,
@@ -3098,7 +3124,7 @@ const PARTS: Record<FleetPart, ConvergePart> = {
       );
       return {
         sidecar: { placedSkills },
-        set: { placedSkills: setSkillsOf(placedSkills) },
+        placed: { field: "skills", byPlace: placeSkillsOf(placedSkills) },
       };
     },
   },
@@ -3142,14 +3168,23 @@ const PARTS: Record<FleetPart, ConvergePart> = {
     }),
   },
   hooks: {
-    writes: () => [HOOKS_DIR, SETTINGS_PATH, fleetHarnessSetFile()],
+    writes: () => [
+      HOOKS_DIR,
+      SETTINGS_PATH,
+      fleetHarnessSetFile(),
+      fleetPlacesDir(),
+    ],
     run: async (config, managed, report) => {
       const hooks = await syncHooks(config.hooks, managed.hooks, report.hooks);
-      return { sidecar: { hooks: hooks.records }, set: hooks.set };
+      return {
+        sidecar: { hooks: hooks.records },
+        set: hooks.set,
+        placed: { field: "hooks", byPlace: hooks.placed },
+      };
     },
   },
   harnessConfig: {
-    writes: () => [fleetPlacedDir(), fleetHarnessSetFile()],
+    writes: () => [fleetPlacedDir(), fleetHarnessSetFile(), fleetPlacesDir()],
     run: async (config, _managed, report) => {
       const ready = await syncHarnessConfig(
         config.harnessConfig,
@@ -3163,7 +3198,8 @@ const PARTS: Record<FleetPart, ConvergePart> = {
             )
           ),
         },
-        set: { config: ready },
+        set: { config: configApart(ready).own },
+        placed: { field: "config", byPlace: configApart(ready).placed },
       };
     },
   },
@@ -3204,11 +3240,21 @@ const converge = async (
   } satisfies FleetSyncReport;
   const sidecar: SidecarFields = {};
   const set: Partial<FleetHarnessSet> = {};
+  const placeFields = new Map<string, Partial<Omit<FleetPlaceSet, "cwd">>>();
   const ran = FLEET_PARTS.filter((one) => parts.has(one));
   for (const part of ran) {
     const wrote = await PARTS[part].run(config, managed, report);
     Object.assign(sidecar, wrote.sidecar);
     Object.assign(set, wrote.set);
+    if (wrote.placed) {
+      const { field, byPlace } = wrote.placed;
+      for (const cwd of config.places) {
+        placeFields.set(cwd, {
+          ...placeFields.get(cwd),
+          [field]: byPlace[cwd] ?? {},
+        });
+      }
+    }
   }
   console.info(
     `[fleet] Claude Code: ${ran.join(", ")} converged, into ${[...new Set(ran.flatMap((part) => PARTS[part].writes()))].join(", ")}`
@@ -3219,6 +3265,11 @@ const converge = async (
   if (Object.keys(set).length > 0) {
     await writeFleetHarnessSet({ ...(await readFleetHarnessSet()), ...set });
   }
+  // Each place's own entries into its own file, every other field of it as
+  // it stands (fleet-place-set.ts).
+  await Promise.all(
+    [...placeFields].map(([cwd, fields]) => keepPlaceSet(cwd, fields))
+  );
   // The denials are the sync's own write, made as it arrived (denied-tools.ts
   // `applyFleetDenials`): kept as the sidecar holds them now, in the same
   // turn of its writes, so a newer sync's list is never written back over;
@@ -3296,7 +3347,6 @@ export const probeToolchain = (): Promise<FleetToolchain> =>
 const hookState = async (
   id: string,
   record: ManagedHook,
-  harnessSet: () => Promise<FleetHarnessSet>,
   settings: () => Promise<Record<string, unknown> | undefined>
 ): Promise<FleetItemState> => {
   const scriptPath = scriptPathOf(record);
@@ -3315,20 +3365,20 @@ const hookState = async (
     }
   }
   // The last question for every hook: whether the entry cawco registered
-  // is still where sessions take it — a project's copy in the harness set,
-  // the fleet's own in the user settings. A script that was refused
+  // is still where sessions take it — a project's copy in its place's
+  // file, the fleet's own in the user settings. A script that was refused
   // registration is kept on disk, so a matching file is not enough.
   const applied: FleetItemState = record.note
     ? { state: "applied", detail: record.note }
     : { state: "applied" };
-  if (record.placed) {
-    const one = (await harnessSet()).placedHooks[id];
+  if (record.placed && record.cwd) {
+    const one = (await readPlaceSet(record.cwd))?.hooks[id];
     return one && identityOf(one.handler) === record.command
       ? applied
       : {
           state: "failed",
           cause: "absent",
-          detail: `not in ${fleetHarnessSetFile()}`,
+          detail: `not in ${record.cwd}'s place file`,
         };
   }
   const stored = await settings();
@@ -3365,10 +3415,11 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   };
 
   // The set every session takes (fleet-mcp-set.ts), read by Claude Code;
-  // a placed copy in it is one each session in its folder takes.
+  // a placed copy in a place's file is one each session there takes.
   const set = await readFleetMcpSet();
+  const places = await placeSets();
   report.mcp = await readFleetMcpRuntime(set.servers);
-  for (const key of Object.keys(set.placed)) {
+  for (const key of placedMcpKeys(places)) {
     report.mcp[key] = { state: "applied" };
   }
   for (const name of managed.marketplaces) {
@@ -3487,17 +3538,14 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     ...managed.harnessConfigFailed,
     ...Object.fromEntries(
       await Promise.all(
-        Object.entries((await readFleetHarnessSet()).config).map(
+        [
+          ...Object.entries((await readFleetHarnessSet()).config),
+          ...places.flatMap((place) => Object.entries(place.config)),
+        ].map(
           async ([key, row]) => [key, await harnessConfigHeld(row)] as const
         )
       )
     ),
-  };
-  // Read once, at the first project copy that asks.
-  let readSet: Promise<FleetHarnessSet> | undefined;
-  const harnessSet = (): Promise<FleetHarnessSet> => {
-    readSet ??= readFleetHarnessSet();
-    return readSet;
   };
   // Read once, at the first fleet hook that asks.
   let readSettings: Promise<Record<string, unknown> | undefined> | undefined;
@@ -3508,7 +3556,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   const hookStates = await Promise.all(
     Object.entries(managed.hooks).map(
       async ([id, record]) =>
-        [id, await hookState(id, record, harnessSet, settings)] as const
+        [id, await hookState(id, record, settings)] as const
     )
   );
   for (const [id, state] of hookStates) {

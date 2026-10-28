@@ -1045,6 +1045,8 @@ export interface PlacedFleetConfig extends Omit<
   placedMemory: FleetPlacedMemoryDoc[];
   /** Each project's skills, a copy per place. */
   placedSkills: FleetSkillPayload[];
+  /** The folder of every place the projects' rows are placed at: each one's place file is what its sessions take (agent fleet-place-set.ts). */
+  places: string[];
 }
 
 /**

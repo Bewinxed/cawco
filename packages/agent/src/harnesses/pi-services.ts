@@ -59,6 +59,7 @@ import {
 } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
+import { placedMcpKeys, placeSets } from "../fleet-place-set";
 import type { TranscriptSpan } from "../harness";
 import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
@@ -1206,16 +1207,17 @@ export class PiProfile {
 
   async fleetStatus(): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(PI_SIDECAR);
+    const places = await placeSets();
     const report: FleetSyncReport = {
       mcp: {},
       marketplaces: {},
       plugins: {},
       skills: {},
-      hooks: hookStatesInSet("pi", await readFleetHarnessSet()),
+      hooks: hookStatesInSet("pi", await readFleetHarnessSet(), places),
       at: Date.now(),
     };
     const set = await readFleetMcpSet();
-    report.mcp = await piFleetMcp(set.servers, Object.keys(set.placed));
+    report.mcp = await piFleetMcp(set.servers, placedMcpKeys(places));
     const held = await heldSkills(PI_SKILLS, Object.keys(sidecar.skills));
     const records = await skillRecords(PI_SKILLS, sidecar.skills, held);
     for (const [name, recorded] of Object.entries(records)) {
