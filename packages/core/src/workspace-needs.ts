@@ -48,7 +48,14 @@
  * `ensure`). It is read fresh each time: a few lookups, so a program
  * installed a second ago counts at once.
  */
-import { lstatSync, realpathSync, type Stats, statSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  lstatSync,
+  realpathSync,
+  type Stats,
+  statSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname } from "node:path";
 import type { MachineCapability, WorkspaceTool } from "./capabilities";
@@ -101,6 +108,7 @@ const PROGRAMS = {
     os: "linux",
     package: "bubblewrap",
   },
+  brew: { for: "finding Homebrew's JDK, which Maestro runs on" },
   caffeinate: { for: "keeping a Mac awake while work runs", os: "darwin" },
   cat: {
     trusted: true,
@@ -127,6 +135,15 @@ const PROGRAMS = {
   git: { for: "a workspace's checkout", before: "checkout", package: "git" },
   grep: { for: "the probe kit's SSH box" },
   ioreg: { for: "reading whether a Mac's screen is locked", os: "darwin" },
+  /**
+   * Apple's answer to "a value for $JAVA_HOME" (java_home(1)), under `/usr`,
+   * which macOS protects ({@link PROGRAMS} `cp`).
+   */
+  java_home: {
+    for: "finding the JDK Maestro runs on",
+    os: "darwin",
+    at: "/usr/libexec/java_home",
+  },
   journalctl: { for: "the paths a Linux workspace is denied", os: "linux" },
   kill: { for: "the probe kit's SSH box" },
   launchctl: {
@@ -318,6 +335,73 @@ export const systemProgram = (name: SystemProgram): string => {
     );
   }
   return found;
+};
+
+/** Whether `home` is a JDK: a `bin/java` this user may run. */
+const isJdk = (home: string | undefined): home is string => {
+  if (!home?.startsWith("/")) {
+    return false;
+  }
+  try {
+    accessSync(`${home}/bin/java`, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** What `argv` prints, trimmed, when it exits 0; none when it fails or is missing. */
+const printed = (argv: string[]): string | undefined => {
+  const ran = Bun.spawnSync(argv, { stdout: "pipe", stderr: "ignore" });
+  return ran.exitCode === 0 ? ran.stdout.toString().trim() : undefined;
+};
+
+/**
+ * Homebrew's openjdk under `brew --prefix openjdk`: its JDK home is
+ * `libexec/openjdk.jdk/Contents/Home` on macOS and `libexec` on Linux
+ * (homebrew-core openjdk.rb, whose caveat links that bundle into
+ * /Library/Java/JavaVirtualMachines for java_home(1) to find).
+ */
+const brewJdk = (): string | undefined => {
+  const brew = findProgram("brew");
+  const prefix = brew && printed([brew, "--prefix", "openjdk"]);
+  if (!prefix) {
+    return;
+  }
+  return process.platform === "darwin"
+    ? `${prefix}/libexec/openjdk.jdk/Contents/Home`
+    : `${prefix}/libexec`;
+};
+
+/** The resolved JDK, once looked for ({@link hostJavaHome}). */
+let javaHome: { readonly at: string | undefined } | undefined;
+
+/**
+ * The JDK this machine's Java tools run on (Maestro's launcher takes
+ * `$JAVA_HOME/bin/java`, else whatever `java` the PATH has), found the
+ * platform's way: the agent's own `JAVA_HOME`; else, on macOS, Apple's
+ * java_home(1); else Homebrew's openjdk ({@link brewJdk}). Each counts only
+ * when it holds a `bin/java` this user may run. Looked for once, as the agent
+ * starts (daemon.ts `runDaemon`), and kept; none when there is none, and then
+ * a tool that needs Java says so itself.
+ */
+export const hostJavaHome = (): string | undefined => {
+  if (!javaHome) {
+    const appleJdk = (): string | undefined => {
+      const at = findProgram("java_home");
+      return process.platform === "darwin" && at ? printed([at]) : undefined;
+    };
+    let found: string | undefined;
+    for (const candidate of [() => process.env.JAVA_HOME, appleJdk, brewJdk]) {
+      const home = candidate();
+      if (isJdk(home)) {
+        found = home;
+        break;
+      }
+    }
+    javaHome = { at: found };
+  }
+  return javaHome.at;
 };
 
 /** Where the tools are looked for: this machine as it runs, or a stand-in. */

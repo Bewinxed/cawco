@@ -86,7 +86,7 @@ import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { hostEnvironment } from "./session-env";
 import { readRecord } from "./state-file";
 import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
-import { findProgram, startedPath } from "./workspace-needs";
+import { findProgram, hostJavaHome, startedPath } from "./workspace-needs";
 
 /**
  * What CawCo writes into a clone and keeps out of its status itself, by path
@@ -1081,6 +1081,7 @@ export const workspacePolicy = async (
   const stores = denied(credentialStores());
   const mac = process.platform === "darwin";
   const caches = [...workspaceCaches(), ...(await darwinUserDirs())];
+  const javaHome = hostJavaHome();
   const allowRead = unique([
     ...real([
       workspace.path,
@@ -1099,6 +1100,9 @@ export const workspacePolicy = async (
       userGitConfigDir(),
       ...hostToolCaches(),
       ...(await darwinDeveloperBundle()),
+      // The JDK Maestro runs on (paths.ts `workspaceMaestroEnv`), wherever
+      // it is installed, under home included.
+      ...(javaHome ? [javaHome] : []),
       binaryRoot(),
       ...USER_LAYER_DIRS.map((name) => join(claudeHome(), name)),
       // What the fleet sync writes that a harness loads, read only: every

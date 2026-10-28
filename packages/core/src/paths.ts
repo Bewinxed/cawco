@@ -22,7 +22,7 @@ import {
 } from "./claude-dirs";
 import { hostEnvironment } from "./session-env";
 import { sessiondEndpoint } from "./sessiond";
-import { systemProgram } from "./workspace-needs";
+import { hostJavaHome, systemProgram } from "./workspace-needs";
 
 /**
  * Node-only paths shared across packages. Kept out of the main entry, which
@@ -1215,10 +1215,21 @@ export const workspaceMaestroHome = (id: string): string =>
  * `xargs`, so a quoted path keeps its spaces. Its state already follows
  * `XDG_STATE_HOME` (EnvUtils.kt `xdgStateHome`). A caller that sets
  * `MAESTRO_OPTS` itself appends to this one.
+ *
+ * And `JAVA_HOME`, the machine's JDK ({@link hostJavaHome}), which the
+ * workspace reads (workspace-policy.ts `workspacePolicy`): the launcher runs
+ * `$JAVA_HOME/bin/java`, else the PATH's `java`, and on macOS that is
+ * /usr/bin/java, a stub that finds only JDKs installed for java_home(1)
+ * ("Unable to locate a Java Runtime" with Homebrew's alone). None when the
+ * machine has no JDK; the launcher then says so.
  */
-export const workspaceMaestroEnv = (id: string): Record<string, string> => ({
-  MAESTRO_OPTS: `"-Duser.home=${workspaceMaestroHome(id)}" "-Djava.io.tmpdir=${workspaceTmpDir(id)}"`,
-});
+export const workspaceMaestroEnv = (id: string): Record<string, string> => {
+  const java = hostJavaHome();
+  return {
+    MAESTRO_OPTS: `"-Duser.home=${workspaceMaestroHome(id)}" "-Djava.io.tmpdir=${workspaceTmpDir(id)}"`,
+    ...(java && { JAVA_HOME: java }),
+  };
+};
 
 /** The environment every workspace command runs with, pointing each tool at {@link workspaceCacheDir}. */
 export const workspaceCacheEnv = (): Record<string, string> => {

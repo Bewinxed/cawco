@@ -167,7 +167,7 @@ import {
 } from "@cawco/core/upstream-post";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
-import { workspaceNeeds } from "@cawco/core/workspace-needs";
+import { hostJavaHome, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { setSectionMarker } from "@cawco/jsonl-parser";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
@@ -4043,6 +4043,9 @@ export const runDaemon = (rediscover = false): void => {
   // A broken law crashes the agent (core invariant.ts): sessiond keeps the
   // sessions' processes across its restart.
   lawPolicy("crash");
+  // The JDK every workspace's Maestro runs on, looked for once (core
+  // workspace-needs.ts `hostJavaHome`).
+  hostJavaHome();
   const daemon = Effect.runFork(
     // A daemon before this one that was killed or crashed left its logins
     // waiting; nothing else could ever end them. Ended before the daemon
