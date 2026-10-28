@@ -947,6 +947,17 @@ export interface WorkItemDeps {
    */
   readonly itemEnded?: (item: WorkItemRow) => void;
   /**
+   * The Claude account session `instanceId`'s next launch on `machineId`
+   * runs on, as the hub's launch grant will name it (`ItemPlacement`'s
+   * `launchesOn`); none for a session that is not Claude's, or whose launch
+   * would be refused. What a workspace cut again for it names, so its
+   * boundary starts reading that account's user layer.
+   */
+  readonly launchesOn: (
+    machineId: string,
+    instanceId: string
+  ) => string | undefined;
+  /**
    * The boundary of a project's Caw, his place's (caw.ts `leadPlaceRef`);
    * none for any other session. With a work item's workspace, what tells
    * whether a session runs inside a boundary at all.
@@ -2376,6 +2387,7 @@ export const createWorkItems = ({
   itemEnded,
   lifetime,
   pauses,
+  launchesOn,
   placeAhead,
   planSteps,
   publish,
@@ -4821,7 +4833,8 @@ export const createWorkItems = ({
    * tip: on 2026-10-17 a clone whose landing was stopped while queued came
    * back at main, without its own commit. The machine refuses a commit the
    * branch it was on no longer holds. Its boundary is started on the account
-   * its latest item's session runs on: its delegate goes on in the same
+   * its latest item's session's next launch runs on ({@link
+   * WorkItemDeps.launchesOn}): its delegate goes on in the same
    * session, on its transcript, in the same folder. Filed active again, one
    * of its project's places. Nothing git does not track comes back:
    * installed dependencies, build outputs, its scratch dir. CawCo installs
@@ -4906,7 +4919,12 @@ export const createWorkItems = ({
         workspace.repoRoot,
         workspace.id,
         projectId,
-        session?.accountId ?? null,
+        // The account its launch runs on, as the grant will name it, not
+        // the row's: a resumed session whose launch moves it (a move owed
+        // at its account's limit, the machine's own login moving in) found
+        // its new boundary without that account and handed it over within
+        // its first second (workspace 9eb7bb73, 2026-10-27 17:52:15).
+        (session && launchesOn(workspace.machineId, session.id)) ?? null,
         head,
         first,
       ]);

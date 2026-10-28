@@ -15949,22 +15949,46 @@ export const createServer = (
     if (session.harness !== "claude") {
       return placed;
     }
-    const launch = launchAccount(
-      machineId,
-      {
-        accountId: placed.accountId ?? null,
-        harness: session.harness,
-        model: session.model,
-        projectId: session.projectId,
-      },
-      session.title || "this session",
-      "ask"
+    const launchesOn = launchedOn(
+      launchAccount(
+        machineId,
+        {
+          accountId: placed.accountId ?? null,
+          harness: session.harness,
+          model: session.model,
+          projectId: session.projectId,
+        },
+        session.title || "this session",
+        "ask"
+      )
     );
-    const launchesOn =
-      "refusal" in launch
-        ? undefined
-        : (launch.homeLoginMove?.accountId ?? launch.accountId);
     return { ...placed, ...(launchesOn ? { launchesOn } : {}) };
+  };
+
+  /** The account a launch {@link launchAccount} answered runs on: the one the machine's own login moves into, else its account; none for a refusal. */
+  const launchedOn = (
+    launch: ReturnType<typeof launchAccount>
+  ): string | undefined =>
+    "refusal" in launch
+      ? undefined
+      : (launch.homeLoginMove?.accountId ?? launch.accountId);
+
+  /**
+   * The Claude account session `instanceId`'s next launch on `machineId`
+   * runs on, as {@link grantLaunch} will name it (the account a move owed to
+   * it names over its row's, {@link owedOn}), read without taking anything:
+   * what its workspace cut again names (work-items `launchesOn`).
+   */
+  const nextLaunchOn = (
+    machineId: string,
+    instanceId: string
+  ): string | undefined => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (row?.harness !== "claude") {
+      return;
+    }
+    const owed = owedOn(row);
+    return launchedOn(launchAccount(machineId, owed, sessionName(owed), "ask"));
   };
 
   /**
@@ -22135,14 +22159,16 @@ export const createServer = (
    */
   const takeOwedMove = (row: StoredRow): StoredRow => {
     const owed = owedMoves.get(row.id);
-    if (!owed) {
-      return row;
-    }
-    if (owed.to === undefined) {
+    if (owed && owed.to === undefined) {
       owedMoves.delete(row.id);
-      return row;
     }
-    return { ...row, accountId: owed.to };
+    return owedOn(row);
+  };
+
+  /** `row` on the account a move owed to it names, when one does ({@link owedMoves}). */
+  const owedOn = (row: StoredRow): StoredRow => {
+    const to = owedMoves.get(row.id)?.to;
+    return to === undefined ? row : { ...row, accountId: to };
   };
 
   /**
@@ -24402,6 +24428,7 @@ export const createServer = (
     // A session's project's catalog: its own types shadow the fleet's.
     types: (projectId?: string | null) => projectTypes.typesFor(projectId),
     placeAhead: placeItem,
+    launchesOn: nextLaunchOn,
     // A `delegate` call's session (a routine's run and a design check's
     // verifier among them); Caw's, when he made the call.
     spawn: (machineId, payload, workItemId, fallbackMode, placed) =>
