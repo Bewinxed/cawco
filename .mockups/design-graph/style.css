@@ -115,6 +115,7 @@
 @property --graph-h { syntax: "<length>"; inherits: true; initial-value: 520px; }
 @property --c-handle-arc-gap { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-handle-stroke { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-handle-stroke-held { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --c-handle-inset { syntax: "<length>"; inherits: true; initial-value: 0px; }
 /* One component under review: the wide panel from bp-desk-wide. Two or more on screen at once: the 448 panel
    with the graphs stacked, or twice it with them side by side, and no 2000 cap (all-components-design.md). */
@@ -378,14 +379,18 @@ html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2
 @property --reach-b { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @property --sweep-a { syntax: "<number>"; inherits: false; initial-value: 0; }
 @property --sweep-b { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --leg-o { syntax: "<number>"; inherits: true; initial-value: 1; }
 .arc { position: absolute; z-index: 5; inline-size: 1px; block-size: 1px; overflow: visible; pointer-events: none; color: var(--border-row-outline); transition: --reach-a var(--dur-exit) var(--ease-out), --reach-b var(--dur-exit) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-exit) var(--ease-out); }
-.arc path { fill: none; stroke-width: var(--c-handle-stroke); stroke-linecap: round; stroke-linejoin: round; transition: stroke-width var(--dur-exit) var(--ease-out); }
-.arc:is([data-state="reach"], [data-state="follow"], [data-state="settle"], [data-state="sweep"]) path { stroke-width: var(--c-handle-stroke-held); }
-.arc[data-state="reach"] path { transition: stroke-width var(--dur-control) var(--ease-out); }
-.arc[data-state="follow"] path { transition: stroke-width var(--dur-control) var(--ease-out); }
-.arc[data-state="sweep"] path { transition: stroke-width var(--dur-pop) var(--ease-out); }
-.arc .arc-body { stroke: currentColor; }
-.arc stop { stop-color: currentColor; }
+/* The run is one path, the body and both legs, so no two strokes meet and double their edges' ink. */
+.arc .arc-run { fill: none; stroke: currentColor; stroke-width: var(--c-handle-stroke); stroke-linecap: round; stroke-linejoin: round; transition: stroke-width var(--dur-exit) var(--ease-out); }
+.arc:is([data-state="reach"], [data-state="follow"], [data-state="settle"], [data-state="sweep"]) .arc-run { stroke-width: var(--c-handle-stroke-held); }
+.arc[data-state="reach"] .arc-run { transition: stroke-width var(--dur-control) var(--ease-out); }
+.arc[data-state="follow"] .arc-run { transition: stroke-width var(--dur-control) var(--ease-out); }
+.arc[data-state="sweep"] .arc-run { transition: stroke-width var(--dur-pop) var(--ease-out); }
+/* The taper is the run's mask: on its white ground, past each leg's start, black at 1 − the taper's ink (app.js
+   sets --ink per stop), times --leg-o, the legs' share (1; under Reduce Motion it fades them). Mask values,
+   not inks. */
+.arc stop { stop-color: #000; stop-opacity: calc(1 - var(--ink, 1) * var(--leg-o)); }
 .arc > g { transition: opacity var(--dur-exit) var(--ease-out); }
 #arcP { inset-inline-start: 0; inset-block-end: 0; }
 #arcD { inset-inline-end: -1px; inset-block-start: -1px; }
@@ -400,8 +405,10 @@ html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2
   /* The run appears and goes by opacity alone over --dur-control; its length jumps (after the fade, going). */
   .arc[data-state] { transition: color var(--dur-control) var(--ease-out), --reach-a 0s, --reach-b 0s, --sweep-a 0s, --sweep-b 0s; }
   .arc[data-state=""] { transition: color var(--dur-control) var(--ease-out), --reach-a 0s linear var(--dur-control), --reach-b 0s linear var(--dur-control), --sweep-a 0s linear var(--dur-control), --sweep-b 0s linear var(--dur-control); }
-  .arc .arc-leg, .arc[data-state] .arc-leg { transition: opacity var(--dur-control) var(--ease-out), stroke-width var(--dur-control) var(--ease-out); }
-  .arc[data-state=""] .arc-leg { opacity: 0; }
+  /* The legs' share lives on the drawing's group, which the panel's own reduced-motion rule leaves free. */
+  .arc[data-state] > g { transition: opacity var(--dur-exit) var(--ease-out), --leg-o var(--dur-control) var(--ease-out); }
+  .arc[data-state=""] > g { --leg-o: 0; }
+  .arc .arc-run { transition: stroke-width var(--dur-control) var(--ease-out); }
 }
 /* Stacked graphs have no foot edge: the corner moves the width alone. */
 

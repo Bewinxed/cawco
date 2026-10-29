@@ -37,11 +37,12 @@
       <!-- One section per component: its name, its own zoom and Outline, its graph and its dials. -->
       <div class="graphs" id="graphs"></div>
       <!-- Resizing (round 29, section A): 8px bands on the leading edge and the foot take a pointer; the corner
-           square is the one separator a key reaches. The arc is drawn in the corner that resizes. -->
+           square is the one separator a key reaches. The arc is drawn in the corner that resizes: one stroked
+           path, its legs' rim taper the mask's (app.js paintArc). -->
       <div class="sash sash-w" id="sashW" aria-hidden="true" data-edge="w"></div>
       <div class="sash sash-h" id="sashH" aria-hidden="true" data-edge="h"></div>
       <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize the graph panel" tabindex="0" data-edge="wh"></div>
-      <svg class="arc" id="arcP" data-corner="bl" aria-hidden="true" focusable="false"><defs><linearGradient id="arcP-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcP-b" gradientUnits="userSpaceOnUse"></linearGradient></defs><g><path class="arc-leg" data-leg="a" stroke="url(#arcP-a)"/><path class="arc-body"/><path class="arc-leg" data-leg="b" stroke="url(#arcP-b)"/></g></svg>
+      <svg class="arc" id="arcP" data-corner="bl" aria-hidden="true" focusable="false"><g><defs><linearGradient id="arcP-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcP-b" gradientUnits="userSpaceOnUse"></linearGradient><mask id="arcP-m" maskUnits="userSpaceOnUse" x="-8192" y="-8192" width="16384" height="16384"><rect x="-8192" y="-8192" width="16384" height="16384" fill="#fff"/><path class="arc-taper" data-leg="a" fill="url(#arcP-a)"/><path class="arc-taper" data-leg="b" fill="url(#arcP-b)"/></mask></defs><path class="arc-run" mask="url(#arcP-m)"/></g></svg>
       <!-- Two graphs stacked: the foot edge between them splits their heights. -->
       <div class="sash sash-s" id="sashS" role="separator" aria-orientation="horizontal" aria-label="Split the graphs' heights" tabindex="0" data-edge="s"></div>
       <span class="lit" data-arm="s" aria-hidden="true"></span>
@@ -50,7 +51,7 @@
     <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The timeline">
       <div class="sash sash-d" id="sashD" aria-hidden="true" data-edge="d"></div>
       <div class="sash sash-dc" id="sashDC" role="separator" aria-orientation="horizontal" aria-label="Resize the timeline" tabindex="0" data-edge="d"></div>
-      <svg class="arc" id="arcD" data-corner="tr" aria-hidden="true" focusable="false"><defs><linearGradient id="arcD-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcD-b" gradientUnits="userSpaceOnUse"></linearGradient></defs><g transform="scale(-1 -1)"><path class="arc-leg" data-leg="a" stroke="url(#arcD-a)"/><path class="arc-body"/><path class="arc-leg" data-leg="b" stroke="url(#arcD-b)"/></g></svg>
+      <svg class="arc" id="arcD" data-corner="tr" aria-hidden="true" focusable="false"><g><defs><linearGradient id="arcD-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcD-b" gradientUnits="userSpaceOnUse"></linearGradient><mask id="arcD-m" maskUnits="userSpaceOnUse" x="-8192" y="-8192" width="16384" height="16384"><rect x="-8192" y="-8192" width="16384" height="16384" fill="#fff"/><path class="arc-taper" data-leg="a" fill="url(#arcD-a)"/><path class="arc-taper" data-leg="b" fill="url(#arcD-b)"/></mask></defs><path class="arc-run" mask="url(#arcD-m)"/></g></svg>
       <div class="dock-body" id="dockBody"></div>
     </section>
   </div>

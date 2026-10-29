@@ -2292,7 +2292,7 @@ function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); 
 // ---- The arc (section A): one object at three lengths ----
 // Drawn in its corner's own frame: the panel's bottom-leading corner at 0,0, x in along the foot, y up the
 // leading edge as it falls negative; the dock's top-trailing corner is the same drawing turned half round
-// (body.html). The corner's circle is centred on (R, −R); the arc's centreline stands --c-handle-inset in
+// (arcFrame). The corner's circle is centred on (R, −R); the arc's centreline stands --c-handle-inset in
 // from the outer edge (radius ri = R − inset), its body --c-handle-sweep of that circle on the diagonal. Leg a
 // runs on from the body's end round the rest of the quarter and up the vertical edge (the panel's leading
 // edge, the dock's trailing one); leg b round and along the horizontal one (the panel's foot, the dock's top).
@@ -2314,37 +2314,61 @@ function legAt(g, leg, s) {
   if (s <= g.sc) { const t = t0 + (leg === "a" ? s : -s) / g.ri; return [g.R + g.ri * Math.cos(t), -g.R + g.ri * Math.sin(t)]; }
   return leg === "a" ? [g.d, -g.R - (s - g.sc)] : [g.R + (s - g.sc), -g.d];
 }
-function legPath(g, leg, len) {
-  if (len < 0.05) return "";
-  const p0 = legAt(g, leg, 0), arcLen = Math.min(len, g.sc), p1 = legAt(g, leg, arcLen);
-  let d = "M" + r3(p0[0]) + " " + r3(p0[1]) + " A" + r3(g.ri) + " " + r3(g.ri) + " 0 0 " + (leg === "a" ? 1 : 0) + " " + r3(p1[0]) + " " + r3(p1[1]);
-  if (len > g.sc) { const p2 = legAt(g, leg, len); d += " L" + r3(p2[0]) + " " + r3(p2[1]); }
+const pt = (p) => r3(p[0]) + " " + r3(p[1]);
+// The body alone: from leg b's start round the circle to leg a's.
+const bodyPath = (g) => "M" + pt(legAt(g, "b", 0)) + " A" + r3(g.ri) + " " + r3(g.ri) + " 0 0 1 " + pt(legAt(g, "a", 0));
+// The whole run as one path, so no two strokes meet: leg b's tip back to the corner's circle, round it through
+// the body, out along leg a to its tip. Under 90° of the circle in all, so one small arc.
+function runPath(g, a, b) {
+  let d = "M" + pt(legAt(g, "b", b));
+  if (b > g.sc) d += " L" + pt(legAt(g, "b", g.sc));
+  d += " A" + r3(g.ri) + " " + r3(g.ri) + " 0 0 1 " + pt(legAt(g, "a", Math.min(a, g.sc)));
+  if (a > g.sc) d += " L" + pt(legAt(g, "a", a));
   return d;
 }
 // The rim taper (DESIGN.md, Rim taper): over its last --tab-rim-taper px the stroke's ink is 1 − (1 − x)^6 of
-// whole, x the share of the taper from its tip; the stroke keeps its width to the tip.
-const TAPER_STOPS = 12;
-function taper(grad, g, leg, len) {
-  const T = Math.min(px("--tab-rim-taper") || 32, len), k = px("--tab-rim-taper-ease") || 6;
+// whole, x the share of the taper from its tip; the stroke keeps its width to the tip. Drawn in the run's
+// mask: a leg's zone is everything past its start, cut square to the circle there, filled with the gradient
+// (style.css turns each stop's --ink into the mask's black).
+const TAPER_STOPS = 12, FAR = 8192;
+function taper(sv, g, leg, len) {
+  const zone = sv.querySelector('.arc-taper[data-leg="' + leg + '"]');
+  if (len < 0.05) { zone.setAttribute("d", ""); return; }
+  const T = Math.min(px("--tab-rim-taper") || 32, len), k = px("--tab-rim-taper-ease") || 6, grad = sv.querySelector("#" + sv.id + "-" + leg);
+  const p0 = legAt(g, leg, 0), t0 = (3 * Math.PI) / 4 + (leg === "a" ? g.sweep / 2 : -g.sweep / 2);
+  const u = leg === "a" ? [-Math.sin(t0), Math.cos(t0)] : [Math.sin(t0), -Math.cos(t0)], n = [-u[1], u[0]];
+  const at = (s, m) => [p0[0] + u[0] * s + n[0] * m, p0[1] + u[1] * s + n[1] * m];
+  zone.setAttribute("d", "M" + pt(at(0, -FAR)) + " L" + pt(at(0, FAR)) + " L" + pt(at(FAR, FAR)) + " L" + pt(at(FAR, -FAR)) + "Z");
   const a = legAt(g, leg, Math.max(0, len - T)), b = legAt(g, leg, len);
   grad.setAttribute("x1", r3(a[0])); grad.setAttribute("y1", r3(a[1])); grad.setAttribute("x2", r3(b[0])); grad.setAttribute("y2", r3(b[1]));
   if (grad.children.length !== TAPER_STOPS + 1) { grad.replaceChildren(); for (let i = 0; i <= TAPER_STOPS; i++) grad.append(document.createElementNS(SVGNS, "stop")); }
-  [...grad.children].forEach((st, i) => { const f = i / TAPER_STOPS; st.setAttribute("offset", r3(f)); st.setAttribute("stop-opacity", r3(1 - f ** k)); });
+  [...grad.children].forEach((st, i) => { const f = i / TAPER_STOPS; st.setAttribute("offset", r3(f)); st.style.setProperty("--ink", r3(1 - f ** k)); });
 }
-// Paints one arc from its computed values; answers the two lengths drawn.
+// The frame: its origin on the surface's corner (the 1px box's corner that stands on it, data-corner), turned
+// half round for the dock, and moved under a device pixel so the held stroke's straight runs fill whole device
+// pixels (their centrelines on the grid's half or whole pixel as the held width asks) rather than grey ones
+// either side. The box's own place is taken as the engine paints it, snapped to the device grid.
+function arcFrame(arc, g) {
+  const c = arc.svg.dataset.corner, r = arc.svg.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  const ox = c[1] === "r" ? r.width : 0, oy = c[0] === "b" ? r.height : 0, sx = c[1] === "r" ? -1 : 1, sy = c[0] === "b" ? 1 : -1;
+  const phase = ((px("--c-handle-stroke-held") * dpr) / 2) % 1;
+  const snap = (v) => (Math.round(v * dpr - phase) + phase) / dpr - v;
+  const x = ox + snap(Math.round(r.left * dpr) / dpr + ox + sx * g.d), y = oy + snap(Math.round(r.top * dpr) / dpr + oy - sy * g.d);
+  return "translate(" + r3(x) + " " + r3(y) + ")" + (sx < 0 ? " scale(-1 -1)" : "");
+}
+// Paints one arc from its computed values; answers the two lengths drawn and the body's own path.
 function paintArc(arc) {
   const cs = getComputedStyle(arc.svg), g = arcGeo(arc), num = (n) => parseFloat(cs.getPropertyValue(n)) || 0;
   const a = clamp(num("--reach-a") + (g.fullA - num("--reach-a")) * num("--sweep-a"), 0, g.fullA), b = clamp(num("--reach-b") + (g.fullB - num("--reach-b")) * num("--sweep-b"), 0, g.fullB);
-  const key = [a, b, g.fullA, g.fullB, g.ri].map(r3).join(",");
-  if (arc.painted === key) return { a, b };
-  arc.painted = key;
-  const p0 = legAt(g, "b", 0), p1 = legAt(g, "a", 0), sv = arc.svg;
-  sv.querySelector(".arc-body").setAttribute("d", "M" + r3(p0[0]) + " " + r3(p0[1]) + " A" + r3(g.ri) + " " + r3(g.ri) + " 0 0 1 " + r3(p1[0]) + " " + r3(p1[1]));
-  for (const [leg, len] of [["a", a], ["b", b]]) {
-    sv.querySelector('.arc-leg[data-leg="' + leg + '"]').setAttribute("d", legPath(g, leg, len));
-    if (len >= 0.05) taper(sv.querySelector("#" + sv.id + "-" + leg), g, leg, len);
+  const frame = arcFrame(arc, g), key = [a, b, g.fullA, g.fullB, g.ri].map(r3).join(",") + frame;
+  if (arc.painted !== key) {
+    arc.painted = key;
+    const sv = arc.svg;
+    sv.querySelector("g").setAttribute("transform", frame);
+    sv.querySelector(".arc-run").setAttribute("d", runPath(g, a, b));
+    taper(sv, g, "a", a); taper(sv, g, "b", b);
   }
-  return { a, b };
+  return { a, b, body: bodyPath(g) };
 }
 // The painter runs while any arc's transitions run (or stand paused under a scrubbing clock) and a frame
 // past, so the last frame painted is the value they end on.
@@ -2491,8 +2515,8 @@ for (const sash of document.querySelectorAll(".sash")) {
     sash._keyTimer = setTimeout(relayoutAfterResize, ms("--dur-control"));
   };
 }
-// Any size change redraws the arcs at the new edge lengths.
-{ const ro = new ResizeObserver(() => { for (const arc of ARCS) { arc.painted = null; paintArc(arc); } }); ro.observe(panel); ro.observe($("dock")); }
+// Any size change redraws the arcs at the new edge lengths; a window resize (a zoom, another screen) re-snaps them.
+{ const repaint = () => { for (const arc of ARCS) { arc.painted = null; paintArc(arc); } }; const ro = new ResizeObserver(repaint); ro.observe(panel); ro.observe($("dock")); addEventListener("resize", repaint); }
 
 // ---- Zoom and pan: the toolbar's group drives the shown graph; each section's its own ----
 // Touch: native scroll pans; two fingers pinch the zoom (0.5 to 1.6) about their midpoint.

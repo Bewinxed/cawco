@@ -42,7 +42,7 @@ function install() {
     return { w: run(-1, 0) + run(1, 0), h: run(0, -1) + run(0, 1), by: [...new Set(by)].join("/") };
   };
   // The arc's drawn lengths (each leg's path) and its body, painted from the clock as it stands.
-  K.arc = (id) => { window.__paintArcs(); const s = document.getElementById(id), len = (p) => (p.getAttribute("d") ? p.getTotalLength() : 0); return { a: len(s.querySelector('[data-leg="a"]')), b: len(s.querySelector('[data-leg="b"]')), body: s.querySelector(".arc-body").getAttribute("d"), color: getComputedStyle(s).color, state: s.dataset.state, node: s }; };
+  K.arc = (id) => { const [p, d] = window.__paintArcs(), s = document.getElementById(id), drawn = id === "arcP" ? p : d; return { a: drawn.a, b: drawn.b, body: drawn.body, color: getComputedStyle(s).color, state: s.dataset.state, node: s }; };
   K.color = (name) => { const p = document.createElement("span"); p.style.color = "var(" + name + ")"; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; };
   // Every running or paused animation on the page whose target matches, by WAAPI (the WebKit path).
   K.anims = (sel) => document.getAnimations().filter((a) => a.effect && a.effect.target && a.effect.target.matches && a.effect.target.matches(sel));
@@ -112,7 +112,7 @@ async function deskMotion(browser, scheme) {
 
   // A. The arc: reach on hover, sweep on drag, retract on release. One element throughout.
   await page.mouse.move(700, 300); await frame(page);
-  const rest = await ev(() => { const a = __k.arc("arcP"); window.__arcNode = a.node; window.__arcBody = a.node.querySelector(".arc-body"); return { ...a, node: undefined }; });
+  const rest = await ev(() => { const a = __k.arc("arcP"); window.__arcNode = a.node; window.__arcBody = a.node.querySelector(".arc-run"); return { ...a, node: undefined }; });
   ok(V, "the arc at rest: its body alone, no legs, in the 3:1 edge ink", rest.a < 0.1 && rest.b < 0.1 && !!rest.body && rest.color === ink.rest, JSON.stringify({ a: rest.a, b: rest.b, color: rest.color }));
   const sw = await ev(() => __k.box(document.getElementById("sashW")));
   const px0 = sw.x + sw.w / 2, py0 = sw.y + sw.h / 2;
@@ -120,7 +120,7 @@ async function deskMotion(browser, scheme) {
   await page.mouse.move(px0, py0); await frame(page);
   const reachT = await ev(() => { const s = document.getElementById("arcP"); return { want: parseFloat(s.style.getPropertyValue("--reach-a")), state: s.dataset.state }; });
   const reach = [];
-  for (const f of [0, 0.5, 1]) { await C.seek(f, (a) => a.name === "--reach-a" || a.name === "color" || a.name === "stroke-width"); reach.push(await ev(() => { const a = __k.arc("arcP"); return { a: a.a, color: a.color, same: a.node === window.__arcNode && a.node.querySelector(".arc-body") === window.__arcBody, body: a.body }; })); }
+  for (const f of [0, 0.5, 1]) { await C.seek(f, (a) => a.name === "--reach-a" || a.name === "color" || a.name === "stroke-width"); reach.push(await ev(() => { const a = __k.arc("arcP"); return { a: a.a, color: a.color, same: a.node === window.__arcNode && a.node.querySelector(".arc-run") === window.__arcBody, body: a.body }; })); }
   const reachAnim = C.list().find((a) => a.name === "--reach-a");
   ok(V, "reach: one transition on the leg's reach (" + (reachAnim && reachAnim.source.duration) + "ms, --dur-control), the leg runs up the hovered edge 0 → ½ → whole, to 24px past the pointer", !!reachAnim && reachAnim.source.duration === 120 && reachT.state === "reach" && reach[0].a < 0.5 && reach[1].a > reach[0].a + 5 && near(reach[2].a, reachT.want, 1.5), JSON.stringify(reach.map((x) => r1(x.a))) + " want " + r1(reachT.want));
   ok(V, "reach: the same arc element and the same body path at 0, ½ and 1 (one object)", reach.every((x) => x.same && x.body === rest.body));
@@ -132,7 +132,7 @@ async function deskMotion(browser, scheme) {
     const rgba = (css) => { cv.clearRect(0, 0, 1, 1); cv.fillStyle = "#000"; cv.fillStyle = css; cv.fillRect(0, 0, 1, 1); return [...cv.getImageData(0, 0, 1, 1).data]; };
     const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }, L = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
     const ratio = (a, b) => { const x = L(rgba(a)), y = L(rgba(b)); return Math.round(((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)) * 100) / 100; };
-    const leg = document.querySelector('#arcP [data-leg="a"]'), shell = getComputedStyle(document.getElementById("shell"));
+    const leg = document.querySelector("#arcP .arc-run"), shell = getComputedStyle(document.getElementById("shell"));
     return { width: getComputedStyle(leg).strokeWidth, border: shell.borderLeftWidth, vsBorder: ratio(getComputedStyle(document.getElementById("arcP")).color, shell.borderLeftColor), vsRaised: ratio(getComputedStyle(document.getElementById("arcP")).color, shell.backgroundColor) };
   });
   ok(V, "fix 7: the reach is 3px against the panel's 1px edge, its ink " + glance.vsBorder + ":1 against that edge's ink and " + glance.vsRaised + ":1 on the panel", glance.width === "3px" && glance.border === "1px" && glance.vsBorder >= 4.5 && glance.vsRaised >= 7, JSON.stringify(glance));
@@ -149,7 +149,7 @@ async function deskMotion(browser, scheme) {
   await page.mouse.down(); await page.mouse.move(px0 - 10, py0 - 120, { steps: 2 }); await frame(page);
   const full = await ev(() => { const p = document.getElementById("panel"), R = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--radius-panel")); return p.offsetHeight - 2 * R; });
   const sweep = [];
-  for (const f of [0, 0.5, 1]) { await C.seek(f, (a) => /^--(sweep|reach)-a$|^color$/.test(a.name)); sweep.push(await ev(() => { const a = __k.arc("arcP"); return { a: a.a, color: a.color, same: a.node === window.__arcNode && a.node.querySelector(".arc-body") === window.__arcBody, body: a.body }; })); }
+  for (const f of [0, 0.5, 1]) { await C.seek(f, (a) => /^--(sweep|reach)-a$|^color$/.test(a.name)); sweep.push(await ev(() => { const a = __k.arc("arcP"); return { a: a.a, color: a.color, same: a.node === window.__arcNode && a.node.querySelector(".arc-run") === window.__arcBody, body: a.body }; })); }
   const sweepAnim = C.list().find((a) => a.name === "--sweep-a");
   ok(V, "drag: the run sweeps the whole edge over --dur-pop (" + (sweepAnim && sweepAnim.source.duration) + "ms) from where the reach stood, 0 → ½ → the edge's length", !!sweepAnim && sweepAnim.source.duration === 260 && near(sweep[0].a, hoverA, 2) && sweep[1].a > sweep[0].a + 20 && sweep[2].a >= full - 1, JSON.stringify(sweep.map((x) => r1(x.a))) + " edge " + r1(full));
   ok(V, "drag: its ink to coral (The Coral Is Where You Act Rule); the same arc and body throughout", sweep[2].color === ink.coral && sweep.every((x) => x.same && x.body === rest.body), sweep.map((x) => x.color).join(" → "));
@@ -670,8 +670,8 @@ async function reducedMotion(browser) {
   const ev = (fn, arg) => page.evaluate(fn, arg);
   const sw = await ev(() => __k.box(document.getElementById("sashW")));
   await page.mouse.move(sw.x + sw.w / 2, sw.y + sw.h / 2); await frame(page);
-  const arc = await ev(() => ({ a: __k.arc("arcP").a, moves: __k.anims("#arcP").map((a) => a.transitionProperty), fades: __k.anims("#arcP .arc-leg").map((a) => a.transitionProperty + ":" + a.effect.getTiming().duration) }));
-  ok(V, "the arc's reach: its length at once, shown by opacity alone over --dur-control", arc.a > 50 && !arc.moves.some((p) => /^--(reach|sweep)/.test(p)) && arc.fades.includes("opacity:120"), JSON.stringify(arc));
+  const arc = await ev(() => ({ a: __k.arc("arcP").a, moves: __k.anims("#arcP").map((a) => a.transitionProperty), fades: __k.anims("#arcP > g").map((a) => a.transitionProperty + ":" + a.effect.getTiming().duration) }));
+  ok(V, "the arc's reach: its length at once, its legs shown by their mask's share (--leg-o) alone over --dur-control", arc.a > 50 && !arc.moves.some((p) => /^--(reach|sweep)/.test(p)) && arc.fades.includes("--leg-o:120"), JSON.stringify(arc));
   await page.mouse.move(700, 300); await page.waitForTimeout(300);
   const f = await ev(() => __k.box(document.querySelector('.clip[data-key="label"] .fact-dur')));
   await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await frame(page);
