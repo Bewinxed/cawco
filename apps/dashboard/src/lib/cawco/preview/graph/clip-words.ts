@@ -6,7 +6,6 @@
  * pick "snap"): to the page's duration tokens first, freed by ⌥.
  */
 
-import { designGraphWords } from "@cawco/core";
 import {
   bounces,
   type ClipTiming,
@@ -17,8 +16,9 @@ import {
   easingTokenOf,
   type MoveTokens,
 } from "@cawco/core/design-graph";
+import { designGraphWords } from "@cawco/core/words/design-graph";
 
-const DASHES = /^--/;
+const DASHES = /^--/u;
 
 /** A token's short name, as its chip says it: `--dur-pop` is `pop`, `--ease-drawer` is `drawer`, `--ease-out` stays `ease-out`. */
 export function tokenWord(name: string): string {
@@ -73,10 +73,10 @@ export function nearest(
   return best;
 }
 
-const CAPITAL = /[A-Z]/g;
-const SEPARATORS = /[\s,]+/;
+const CAPITAL = /[A-Z]/gu;
+const SEPARATORS = /[\s,]+/u;
 /** The family a longhand belongs to, as a person names it: `padding-top` is padding, `border-top-width` border. */
-const FAMILY = /^(padding|margin|border|inset|gap|outline)(-.*)?$/;
+const FAMILY = /^(padding|margin|border|inset|gap|outline)(-.*)?$/u;
 /** How many properties a clip's row names before it says how many more. */
 const PROPERTIES_SAID = 3;
 
@@ -103,7 +103,7 @@ export function propertyWords(property: string): string {
 }
 
 /** A length rounded to the 10ms a free drag takes. */
-export const tens = (ms: number) => Math.round(ms / 10) * 10;
+const tens = (ms: number) => Math.round(ms / 10) * 10;
 
 /** The slider's end: past the clip's own length, never under 500ms. */
 export const sliderMax = (ms: number) =>

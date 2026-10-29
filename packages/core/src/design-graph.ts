@@ -19,6 +19,7 @@
  * agent is aware of tokens but can do anything needed for the preview, it
  * chooses to use the tokens or adhoc values").
  */
+import { bezier } from "./bezier";
 import type { CanvasDial, CanvasEdge, Interaction } from "./stage";
 import { humanize } from "./tool-presentation";
 
@@ -92,7 +93,7 @@ export interface Variation {
  * round 29 draws a state: its name in words on the node's first line, its
  * doc comment the note under it.
  */
-export interface GraphState {
+interface GraphState {
   /** The story's doc comment; null when it has none. */
   label: string | null;
   /** The story's name in words (`SaveFailed` as "Save failed"): the node's title, the dock's and a pin's path. */
@@ -129,7 +130,7 @@ export interface SectionGraph {
 }
 
 /** The id of the machine a section's ungrouped stories stand in. */
-export const OWN_MACHINE = "";
+const OWN_MACHINE = "";
 
 /** A name as one section reads it: `file:Story` of this file is `Story`; another file's is null. */
 function inSection(name: string, file: string): string | null {
@@ -141,7 +142,7 @@ function inSection(name: string, file: string): string | null {
 }
 
 /** The words an interaction's chip says. */
-export const INTERACTION_WORDS: Record<Exclude<Interaction, "rest">, string> = {
+const INTERACTION_WORDS: Record<Exclude<Interaction, "rest">, string> = {
   hover: "Hover",
   focus: "Focus",
   pressed: "Pressed",
@@ -332,16 +333,16 @@ export const CLIP_KINDS: readonly ClipKind[] = [
   "unfold",
 ];
 
-const SPACED = /[\s,]+/;
+const SPACED = /[\s,]+/u;
 const UNFOLDS =
-  /^(height|max-height|min-height|block-size|grid-template-rows)$/;
-const BOX_EDGES = /^(padding|margin|border)(-.*)?(-width)?$/;
+  /^(height|max-height|min-height|block-size|grid-template-rows)$/u;
+const BOX_EDGES = /^(padding|margin|border)(-.*)?(-width)?$/u;
 const SIZES =
-  /^(width|height|inline-size|block-size|min-.*|max-.*|scale|zoom)$/;
+  /^(width|height|inline-size|block-size|min-.*|max-.*|scale|zoom)$/u;
 const MOVES =
-  /^(transform|translate|rotate|top|left|right|bottom|inset.*|offset.*)$/;
+  /^(transform|translate|rotate|top|left|right|bottom|inset.*|offset.*)$/u;
 const COLOURS =
-  /(colou?r|background|fill|stroke|shadow|gradient|filter-colou?r|accent|caret)/;
+  /(colou?r|background|fill|stroke|shadow|gradient|filter-colou?r|accent|caret)/u;
 
 /**
  * A clip's kind from what it runs and what its element said: a text swap
@@ -357,7 +358,7 @@ export function kindOfClip(property: string, wordsChanged: boolean): ClipKind {
   const names = property
     .split(SPACED)
     .filter(Boolean)
-    .map((one) => one.replaceAll(/[A-Z]/g, (c) => `-${c.toLowerCase()}`));
+    .map((one) => one.replaceAll(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`));
   const has = (rule: RegExp) => names.some((one) => rule.test(one));
   if (has(UNFOLDS) && (has(BOX_EDGES) || names.length > 1)) {
     return "unfold";
@@ -494,9 +495,6 @@ export interface Spring {
   velocity: number;
 }
 
-/** A spring with no bounce, a mass of 1 and no starting velocity: the house's (DESIGN.md Springs). */
-export const STILL_SPRING: Spring = { bounce: 0, mass: 1, velocity: 0 };
-
 /** A spring's stiffness and damping, from its response (ms) and its bounce and mass: ω = 2π / (1.2 × response), k = m ω², c = 2 (1 − bounce) √(k m). */
 export function springPhysics(
   response: number,
@@ -539,7 +537,7 @@ const NAMED_EASINGS: Record<string, Bezier> = {
   "ease-out": [0, 0, 0.58, 1],
   "ease-in-out": [0.42, 0, 0.58, 1],
 };
-const BEZIER_CSS = /^cubic-bezier\(\s*([^)]+)\)$/;
+const BEZIER_CSS = /^cubic-bezier\(\s*([^)]+)\)$/u;
 
 /** A CSS easing's four bézier numbers, or null when it is no cubic-bézier (a `linear()`, `steps()`). */
 export function bezierOf(easing: string): Bezier | null {
@@ -560,11 +558,11 @@ const round = (value: number, places: number) => {
 };
 
 /** A bézier as CSS. */
-export const bezierCss = (points: Bezier): string =>
+const bezierCss = (points: Bezier): string =>
   `cubic-bezier(${points.map((one) => round(one, 4)).join(", ")})`;
 
 /** Two béziers that draw the same curve, to a thousandth. */
-export const sameBezier = (a: Bezier, b: Bezier): boolean =>
+const sameBezier = (a: Bezier, b: Bezier): boolean =>
   a.every((one, at) => Math.abs(one - (b[at] as number)) < 0.001);
 
 /** A curve as the dock reads the CSS easing a clip ran with. */
@@ -588,50 +586,6 @@ export const durationTokenOf = (
   tokens: readonly DurationToken[]
 ): DurationToken | null =>
   tokens.find((one) => Math.abs(one.ms - ms) < 0.5) ?? null;
-
-/** A bézier's value at time `x` (0 to 1), by Newton's method on its x, bisection where that stalls. */
-export function bezierAt([x1, y1, x2, y2]: Bezier): (x: number) => number {
-  const cx = 3 * x1;
-  const bx = 3 * (x2 - x1) - cx;
-  const ax = 1 - cx - bx;
-  const cy = 3 * y1;
-  const by = 3 * (y2 - y1) - cy;
-  const ay = 1 - cy - by;
-  const sampleX = (t: number) => ((ax * t + bx) * t + cx) * t;
-  const sampleY = (t: number) => ((ay * t + by) * t + cy) * t;
-  const slopeX = (t: number) => (3 * ax * t + 2 * bx) * t + cx;
-  return (x) => {
-    if (x <= 0) {
-      return 0;
-    }
-    if (x >= 1) {
-      return 1;
-    }
-    let t = x;
-    for (let step = 0; step < 8; step += 1) {
-      const error = sampleX(t) - x;
-      const slope = slopeX(t);
-      if (Math.abs(error) < 1e-6 || Math.abs(slope) < 1e-6) {
-        break;
-      }
-      t -= error / slope;
-    }
-    if (Math.abs(sampleX(t) - x) > 1e-4) {
-      let low = 0;
-      let high = 1;
-      t = x;
-      for (let step = 0; step < 40; step += 1) {
-        if (sampleX(t) < x) {
-          low = t;
-        } else {
-          high = t;
-        }
-        t = (low + high) / 2;
-      }
-    }
-    return sampleY(t);
-  };
-}
 
 /** A spring's path from 0 to 1, sampled each ms, and when it comes to rest. */
 export interface SpringPath {
@@ -717,7 +671,7 @@ const SPRING_STOPS = 60;
  * A spring as the engine runs it: a `linear()` easing of its path over its
  * settle, which is its run's duration.
  */
-export function springRun(
+function springRun(
   response: number,
   spring: Spring
 ): { duration: number; easing: string } {
@@ -754,8 +708,8 @@ export const runEnd = (timing: ClipTiming): number =>
       )
     : timing.duration);
 
-const LINEAR_STOP = /^\s*(-?[\d.]+)(?:\s+(-?[\d.]+)%)?(?:\s+(-?[\d.]+)%)?\s*$/;
-const LINEAR_CSS = /^linear\((.*)\)$/s;
+const LINEAR_STOP = /^\s*(-?[\d.]+)(?:\s+(-?[\d.]+)%)?(?:\s+(-?[\d.]+)%)?\s*$/u;
+const LINEAR_CSS = /^linear\((.*)\)$/su;
 
 /** Each stop with no place stands evenly between its placed neighbours (CSS Easing 2), the ends at 0 and 1. */
 function placeStops(stops: { x: number | null; y: number }[]): void {
@@ -830,7 +784,7 @@ export function curvePoints(
     });
   }
   if (curve.kind === "bezier") {
-    const at = bezierAt(curve.points);
+    const at = bezier(...curve.points);
     return Array.from({ length: count + 1 }, (_, k) => [
       k / count,
       at(k / count),

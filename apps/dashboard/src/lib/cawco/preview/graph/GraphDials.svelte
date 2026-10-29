@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { designGraphWords as words } from "@cawco/core";
   /**
    * The agent's dials under its graph (round 29: "what the agent put up for
    * tuning on this component"): a CSS variable on every frame or an arg
@@ -8,6 +7,7 @@
    * every frame, and the artifact keeps the values as `dials`.
    */
   import type { CanvasDial } from "@cawco/core/stage";
+  import { designGraphWords as words } from "@cawco/core/words/design-graph";
   import type { DesignGraph } from "./design-graph.svelte";
 
   let { graph }: { graph: DesignGraph } = $props();
