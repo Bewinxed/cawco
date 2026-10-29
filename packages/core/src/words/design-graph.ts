@@ -52,11 +52,14 @@ export const designGraphWords = {
   loop: "Loop",
   /** The playhead's place over the move's length, to a reader. */
   readout: (at: number, length: number) => `${at} of ${length} ms`,
-  /** A clip's kind of change (pin 27), its row's glyph named for a reader. */
+  /** What a clip changes (mockup round 29's six kinds), its row's glyph named for a reader. */
   kinds: {
-    enter: "Comes in",
-    change: "Changes",
-    exit: "Goes",
+    opacity: "Opacity",
+    position: "Position",
+    size: "Size",
+    colour: "Colour",
+    text: "Text swap",
+    unfold: "Unfold",
   } satisfies Record<ClipKind, string>,
   /** An agent's own value off the token scale, on its chip (the owner: "it chooses to use the tokens or adhoc values"). */
   adHoc: "ad hoc",
@@ -70,7 +73,6 @@ export const designGraphWords = {
     `Controls, ${element} ${property}`,
   close: "Close the clip's controls",
   closeTip: "Close (Esc)",
-  back: "Back to the timeline",
   duration: "Duration",
   /** A spring's length: its perceptual duration. */
   response: "Response",
@@ -94,10 +96,6 @@ export const designGraphWords = {
   didntRun: (why: string) => `The move didn't run: ${why}`,
   /** A move that ran and fired nothing. */
   noClips: "The move ran and animated nothing.",
-  /** Where a clip's controls open (the owner's note "popover? lol..": his pick between the two answers). */
-  clipControls: "Clip controls",
-  inTheRow: "In the row",
-  inAnInspector: "In an inspector",
   /** The agent's dials under the graph, to a reader. */
   dials: "Dials",
   /** A pin placed while a state was kept, under the person's words (the owner's pick "pins"). */

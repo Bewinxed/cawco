@@ -1,10 +1,9 @@
 <script lang="ts">
   import { designGraphWords as words } from "@cawco/core";
   /**
-   * A clip's controls (Projects spec §5.10; round 29, section C), one
-   * component wherever they open (clip-controls.ts: in the clip's row, or in
-   * an inspector beside the timeline), never a popover (the owner: "popover?
-   * lol.."). One thing at a time: the length (a slider with a detent at each
+   * A clip's controls (Projects spec §5.10; round 29, section C), in the
+   * clip's own row under its facts (the owner's pick "in the row"), never a
+   * popover (the owner: "popover? lol.."). One thing at a time: the length (a slider with a detent at each
    * of the page's duration tokens, and a figure that takes any number), the
    * curve (the page's easing tokens as glyphs, Spring, Custom, and the
    * agent's own curve as written; the chosen one drawn large, a bézier's
@@ -26,7 +25,7 @@
     springPhysics,
   } from "@cawco/core/design-graph";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { IconChevronLeft, IconClose } from "#lib/icons.js";
+  import { IconClose } from "#lib/icons.js";
   import CurveGlyph from "./CurveGlyph.svelte";
   import {
     adHoc,
@@ -35,7 +34,6 @@
     curveWord,
     ladderOf,
     nearest,
-    propertyWords,
     sliderMax,
     tokenWord,
   } from "./clip-words";
@@ -47,16 +45,10 @@
   let {
     graph,
     id,
-    placement,
-    narrow = false,
     onclose,
   }: {
     graph: DesignGraph;
     id: number;
-    /** Where they stand: in the clip's own row, or in the dock's inspector. */
-    placement: "row" | "inspector";
-    /** An inspector standing in the timeline's place (a dock too narrow for both): Close is Back. */
-    narrow?: boolean;
     onclose: () => void;
   } = $props();
 
@@ -478,38 +470,12 @@
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: Esc anywhere in the controls closes them; each control inside takes its own keys first. -->
   <section
     aria-label={words.controls(clip.element, clip.property)}
-    class="grid min-w-0 gap-space-3 data-[placement=row]:col-span-full data-[placement=row]:pb-space-2"
+    class="col-span-full grid min-w-0 gap-space-3 pb-space-2"
     data-clip-controls={id}
-    data-placement={placement}
     onkeydown={rootKey}
   >
     <header class="flex min-w-0 items-center gap-space-2">
-      {#if placement === "inspector"}
-        {#if narrow}
-          <GlassGroup>
-            <button
-              aria-label={words.back}
-              class={SYMBOL}
-              onclick={onclose}
-              title={words.back}
-              type="button"><IconChevronLeft /></button
-            >
-          </GlassGroup>
-        {/if}
-        <div class="mark-line flex min-w-0 flex-1 items-center gap-space-2">
-          <KindGlyph kind={clip.kind} />
-          <p
-            class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
-          >
-            {clip.element}
-            <code class="type-code text-ink-muted"
-              >{propertyWords(clip.property)}</code
-            >
-          </p>
-        </div>
-      {:else}
-        <span class="flex-1"></span>
-      {/if}
+      <span class="flex-1"></span>
       {#if edited}
         <button
           class={GHOST}
@@ -518,18 +484,16 @@
           type="button">{words.reset}</button
         >
       {/if}
-      {#if !(placement === "inspector" && narrow)}
-        <GlassGroup>
-          <button
-            aria-label={words.close}
-            class={SYMBOL}
-            data-close-controls
-            onclick={onclose}
-            title={words.closeTip}
-            type="button"><IconClose /></button
-          >
-        </GlassGroup>
-      {/if}
+      <GlassGroup>
+        <button
+          aria-label={words.close}
+          class={SYMBOL}
+          data-close-controls
+          onclick={onclose}
+          title={words.closeTip}
+          type="button"><IconClose /></button
+        >
+      </GlassGroup>
     </header>
 
     <!-- The length: a slider with a detent at each duration token, and a figure that takes any number. -->
