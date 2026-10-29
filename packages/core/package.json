@@ -107,6 +107,7 @@
     "./doc-maps": "./src/doc-maps.ts",
     "./stage": "./src/stage.ts",
     "./design-graph": "./src/design-graph.ts",
+    "./bezier": "./src/bezier.ts",
     "./canvas-host": "./src/canvas-host.ts",
     "./decision-host": "./src/decision-host.ts",
     "./shell-shortcuts": "./src/shell-shortcuts.ts",

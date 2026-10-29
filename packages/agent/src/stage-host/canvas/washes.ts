@@ -13,6 +13,8 @@
  * over what the preview shows; with no seam it is not marked.
  */
 
+import { ownText } from "./moves";
+
 /** A value's box, in the world's own coordinates (before its transform). */
 interface Box {
   h: number;
@@ -37,9 +39,9 @@ const ELEMENTS_READ = 600;
 const MEDIA = new Set(["img", "svg", "video", "canvas", "picture"]);
 const FIELDS = new Set(["input", "textarea", "select"]);
 /** Classes a build writes per module (Svelte's, CSS modules'): a state's tree is matched by the project's own. */
-const HASH_CLASS = /^(svelte-[\w-]+|s-[\w-]{6,}|[\w-]+_[\w-]{5,})$/;
+const HASH_CLASS = /^(svelte-[\w-]+|s-[\w-]{6,}|[\w-]+_[\w-]{5,})$/u;
 
-const CLEAR = /^(transparent|rgba\(0, 0, 0, 0\))$/;
+const CLEAR = /^(transparent|rgba\(0, 0, 0, 0\))$/u;
 
 const drawsBox = (style: CSSStyleDeclaration): boolean => {
   const fill = !CLEAR.test(style.backgroundColor);
@@ -60,13 +62,7 @@ function saidBy(el: Element): string | null {
   if (MEDIA.has(tag)) {
     return `${tag}:${el.getAttribute("src") ?? el.getAttribute("href") ?? ""}`;
   }
-  const own = [...el.childNodes]
-    .filter((one) => one.nodeType === Node.TEXT_NODE)
-    .map((one) => one.textContent ?? "")
-    .join(" ")
-    .replaceAll(/\s+/g, " ")
-    .trim();
-  return own || null;
+  return ownText(el) || null;
 }
 
 /** An element's step in its frame's tree: its tag and the project's classes. */
