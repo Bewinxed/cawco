@@ -2330,20 +2330,179 @@
         }
       }
     },
-    "c-clip-enter": {
+    "c-clip-opacity": {
       "$type": "color",
-      "$value": "{color.data-ok}",
-      "$description": "A clip that brings its element in: its glyph and its bar's hue (pin 27, \"color things differently\") (Projects spec §5.10, \"The design graph\"; mockup round 29)."
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 176]
+      },
+      "$description": "A clip that changes its element's opacity: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick \"Its own colour per kind\" on design-graph-finish; mockup round 29's hue option, at the designer's strength)."
     },
-    "c-clip-change": {
+    "c-clip-opacity-wash": {
       "$type": "color",
-      "$value": "{color.status-live-glyph}",
-      "$description": "A clip that changes its element where it stands: its glyph and its bar's hue (Projects spec §5.10, \"The design graph\"; mockup round 29)."
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.92, 0.05, 176]
+      },
+      "$description": "The bar of a clip that changes its element's opacity: its kind's hue as a wash (mockup round 29)."
     },
-    "c-clip-exit": {
+    "c-clip-opacity-held": {
       "$type": "color",
-      "$value": "{color.data-bad}",
-      "$description": "A clip that takes its element away: its glyph and its bar's hue (Projects spec §5.10, \"The design graph\"; mockup round 29)."
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.836, -0.063844, 0.004464]
+      },
+      "$description": "The bar of a opacity clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-opacity} 20%, {color.c-clip-opacity-wash})"
+        }
+      }
+    },
+    "c-clip-position": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 272]
+      },
+      "$description": "A clip that changes its element's position: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick \"Its own colour per kind\" on design-graph-finish; mockup round 29's hue option, at the designer's strength)."
+    },
+    "c-clip-position-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.92, 0.05, 272]
+      },
+      "$description": "The bar of a clip that changes its element's position: its kind's hue as a wash (mockup round 29)."
+    },
+    "c-clip-position-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.836, 0.002234, -0.063961]
+      },
+      "$description": "The bar of a position clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-position} 20%, {color.c-clip-position-wash})"
+        }
+      }
+    },
+    "c-clip-size": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 62]
+      },
+      "$description": "A clip that changes its element's size: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick \"Its own colour per kind\" on design-graph-finish; mockup round 29's hue option, at the designer's strength)."
+    },
+    "c-clip-size-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.92, 0.05, 62]
+      },
+      "$description": "The bar of a clip that changes its element's size: its kind's hue as a wash (mockup round 29)."
+    },
+    "c-clip-size-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.836, 0.030046, 0.056509]
+      },
+      "$description": "The bar of a size clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-size} 20%, {color.c-clip-size-wash})"
+        }
+      }
+    },
+    "c-clip-colour": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 335]
+      },
+      "$description": "A clip that changes its element's colour: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick \"Its own colour per kind\" on design-graph-finish; mockup round 29's hue option, at the designer's strength)."
+    },
+    "c-clip-colour-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.92, 0.05, 335]
+      },
+      "$description": "The bar of a clip that changes its element's colour: its kind's hue as a wash (mockup round 29)."
+    },
+    "c-clip-colour-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.836, 0.058004, -0.027048]
+      },
+      "$description": "The bar of a colour clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-colour} 20%, {color.c-clip-colour-wash})"
+        }
+      }
+    },
+    "c-clip-text": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 300]
+      },
+      "$description": "A clip that changes its element's a text swap: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick \"Its own colour per kind\" on design-graph-finish; mockup round 29's hue option, at the designer's strength)."
+    },
+    "c-clip-text-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.92, 0.05, 300]
+      },
+      "$description": "The bar of a clip that changes its element's a text swap: its kind's hue as a wash (mockup round 29)."
+    },
+    "c-clip-text-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.836, 0.032, -0.055426]
+      },
+      "$description": "The bar of a a text swap clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-text} 20%, {color.c-clip-text-wash})"
+        }
+      }
+    },
+    "c-clip-unfold": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 235]
+      },
+      "$description": "A clip that changes its element's unfold: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick \"Its own colour per kind\" on design-graph-finish; mockup round 29's hue option, at the designer's strength)."
+    },
+    "c-clip-unfold-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.92, 0.05, 235]
+      },
+      "$description": "The bar of a clip that changes its element's unfold: its kind's hue as a wash (mockup round 29)."
+    },
+    "c-clip-unfold-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.836, -0.036709, -0.052426]
+      },
+      "$description": "The bar of a unfold clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-unfold} 20%, {color.c-clip-unfold-wash})"
+        }
+      }
     }
   },
   "shadow": {
@@ -4397,14 +4556,6 @@
         "unit": "px"
       },
       "$description": "The narrowest a state on the design graph is drawn, in a phone's single column (mockup round 22's floor)."
-    },
-    "c-graph-region-band-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 24,
-        "unit": "px"
-      },
-      "$description": "A machine's header band on the design graph: its name in the label role across the top of its region (mockup round 27, pin 30)."
     },
     "c-graph-drawer-stop": {
       "$type": "dimension",

@@ -14,7 +14,7 @@
    * tokens and to the other clips' edges and the playhead; ⌥ frees it (the
    * owner's pick "snap"). A drop replays the move (the owner's pick
    * "replay"); a key's nudge stays still. A press opens the clip's controls
-   * where clip-controls.ts says: in its row, or in the inspector.
+   * in its row, under its facts (the owner's pick "in the row").
    */
   import {
     type ClipKind,
@@ -254,16 +254,13 @@
     }
   }
 
-  /* --- A clip's controls, where clip-controls.ts says ---------------------- */
+  /* --- A clip's controls, in its row ------------------------------------- */
 
   let dock = $state<HTMLElement>();
   let dockW = $state(0);
   /** A dock too narrow for a name column beside the lanes stacks each row (the dock's own width, not the window's). */
   const stacked = $derived(
     dockW > 0 && dockW < numberOf("--c-dock-name-w") * 2
-  );
-  const inspecting = $derived(
-    graph.controlsAt === "inspector" && graph.chosen !== null
   );
   function open(id: number): void {
     if (!editing) {
@@ -304,25 +301,49 @@
     tick().then(() => view && readFades());
   });
 
-  /** Each kind's hue on its bar (pin 27): its fill at 15% (the diff-add-bg recipe), twice that chosen, its edge, a spring's tail. */
+  /** Each kind's hue (the owner's pick "Its own colour per kind"; mockup round 29's hue option): its bar's wash, held or chosen its hue mixed in, its edge, a spring's tail, its length's figure. */
   const HUES = {
-    enter: {
-      fill: "bg-c-clip-enter/15",
-      held: "bg-c-clip-enter/30",
-      edge: "border-c-clip-enter",
-      tail: "bg-c-clip-enter/30",
+    opacity: {
+      fill: "bg-c-clip-opacity-wash",
+      held: "bg-c-clip-opacity-held",
+      edge: "border-c-clip-opacity",
+      tail: "bg-c-clip-opacity-wash",
+      figure: "text-c-clip-opacity",
     },
-    change: {
-      fill: "bg-c-clip-change/15",
-      held: "bg-c-clip-change/30",
-      edge: "border-c-clip-change",
-      tail: "bg-c-clip-change/30",
+    position: {
+      fill: "bg-c-clip-position-wash",
+      held: "bg-c-clip-position-held",
+      edge: "border-c-clip-position",
+      tail: "bg-c-clip-position-wash",
+      figure: "text-c-clip-position",
     },
-    exit: {
-      fill: "bg-c-clip-exit/15",
-      held: "bg-c-clip-exit/30",
-      edge: "border-c-clip-exit",
-      tail: "bg-c-clip-exit/30",
+    size: {
+      fill: "bg-c-clip-size-wash",
+      held: "bg-c-clip-size-held",
+      edge: "border-c-clip-size",
+      tail: "bg-c-clip-size-wash",
+      figure: "text-c-clip-size",
+    },
+    colour: {
+      fill: "bg-c-clip-colour-wash",
+      held: "bg-c-clip-colour-held",
+      edge: "border-c-clip-colour",
+      tail: "bg-c-clip-colour-wash",
+      figure: "text-c-clip-colour",
+    },
+    text: {
+      fill: "bg-c-clip-text-wash",
+      held: "bg-c-clip-text-held",
+      edge: "border-c-clip-text",
+      tail: "bg-c-clip-text-wash",
+      figure: "text-c-clip-text",
+    },
+    unfold: {
+      fill: "bg-c-clip-unfold-wash",
+      held: "bg-c-clip-unfold-held",
+      edge: "border-c-clip-unfold",
+      tail: "bg-c-clip-unfold-wash",
+      figure: "text-c-clip-unfold",
     },
   } as const;
 
@@ -354,7 +375,6 @@
     })}
     aria-label={words.move(stateName(move.from), stateName(move.to))}
     class="flex h-full min-h-0 min-w-0 flex-col"
-    data-inspecting={inspecting || undefined}
     data-move-dock
     data-stacked={stacked || undefined}
     data-view={graph.view}
@@ -423,256 +443,226 @@
     {/if}
 
     <div class="flex min-h-0 flex-1 gap-space-2">
-      {#if !(inspecting && stacked)}
-        <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute inset-x-0 top-0 z-3 h-c-edge-fade-len bg-linear-to-b from-surface-raised to-transparent opacity-0 transition-opacity duration-(--dur-control) ease-out data-on:opacity-100"
-            data-fade="top"
-            data-on={fades.top || undefined}
-          ></div>
-          <div
-            bind:this={lanes}
-            class="grid min-h-0 flex-1 auto-rows-min grid-cols-(--cols) overflow-auto overscroll-contain px-space-2 pb-space-2"
-            data-lanes
-            onscroll={readFades}
-            style:--cols={stacked
-              ? "minmax(0, 1fr)"
-              : "minmax(0, var(--c-dock-name-w)) minmax(0, 1fr)"}
-          >
-            {#if graph.changed.size > 0}
-              <!-- The timeline's own head: how many clips stand edited away from the agent's timing, and Reset beside it, only above 0 (The Earned Count Rule). -->
-              <div
-                class="col-span-full flex min-w-0 items-center gap-space-2 pb-space-1"
-                data-edits-line
-              >
-                <span
-                  class="min-w-0 truncate type-meta text-ink-muted tabular-nums"
-                  data-edits>{words.changed(graph.changed.size)}</span
-                >
-                <button
-                  class={GHOST}
-                  data-reset-all
-                  onclick={() => graph.resetAll()}
-                  title={words.resetTip}
-                  type="button">{words.reset}</button
-                >
-              </div>
-            {/if}
-            <!-- The ruler: round times, sticky over the rows; a press or a drag on it scrubs. -->
-            {#if !stacked}<span class="sticky top-0 z-2 bg-surface-raised"
-              ></span>{/if}
+      <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-x-0 top-0 z-3 h-c-edge-fade-len bg-linear-to-b from-surface-raised to-transparent opacity-0 transition-opacity duration-(--dur-control) ease-out data-on:opacity-100"
+          data-fade="top"
+          data-on={fades.top || undefined}
+        ></div>
+        <div
+          bind:this={lanes}
+          class="grid min-h-0 flex-1 auto-rows-min grid-cols-(--cols) overflow-auto overscroll-contain px-space-2 pb-space-2"
+          data-lanes
+          onscroll={readFades}
+          style:--cols={stacked
+            ? "minmax(0, 1fr)"
+            : "minmax(0, var(--c-dock-name-w)) minmax(0, 1fr)"}
+        >
+          {#if graph.changed.size > 0}
+            <!-- The timeline's own head: how many clips stand edited away from the agent's timing, and Reset beside it, only above 0 (The Earned Count Rule). -->
             <div
-              bind:this={ruler}
-              {@attach frameSize((node: HTMLElement) => {
-                laneW = node.clientWidth;
-              })}
-              class="sticky top-0 z-2 h-c-badge-h cursor-ew-resize touch-none bg-surface-raised"
-              data-ruler
-              onpointerdown={scrubDown}
-              role="presentation"
+              class="col-span-full flex min-w-0 items-center gap-space-2 pb-space-1"
+              data-edits-line
             >
-              {#each marks as mark (mark)}
-                <i
-                  class="absolute bottom-0 left-(--x) h-space-1 w-px bg-border-hairline"
-                  style:--x={`${xOf(mark)}px`}
-                ></i>
-                <span
-                  class="absolute top-0 left-(--x) -translate-x-1/2 type-meta text-ink-muted tabular-nums"
-                  style:--x={`${Math.max(numberOf("--space-3"), Math.min(laneW - numberOf("--space-3"), xOf(mark)))}px`}
-                  >{mark}</span
-                >
-              {/each}
-              <!-- The playhead's head (pin 13), the one place the time is said: a pill saying the moment the page stands in tabular figures, over the ruler's marks, its line down through the lanes; ink, never coral (DESIGN.md, The Coral Is Where You Act Rule), as a tooltip is (The Ink Stays Ink Rule). Held inside the ruler at its ends. -->
-              <output
-                aria-label={words.readout(readout, Math.round(graph.length))}
-                class="pointer-events-none absolute inset-y-0 left-(--x) z-1 grid -translate-x-1/2 place-items-center rounded-pill bg-ink-solid px-space-1 type-code text-on-ink tabular-nums"
-                data-playhead-knob
-                style:--x={`${Math.max(numberOf("--space-4"), Math.min(laneW - numberOf("--space-4"), xOf(Math.min(time, end))))}px`}
-                >{readout}</output
+              <span
+                class="min-w-0 truncate type-meta text-ink-muted tabular-nums"
+                data-edits>{words.changed(graph.changed.size)}</span
+              >
+              <button
+                class={GHOST}
+                data-reset-all
+                onclick={() => graph.resetAll()}
+                title={words.resetTip}
+                type="button">{words.reset}</button
               >
             </div>
-            {#each move.clips as clip (clip.id)}
-              {@const timing = drawn[clip.id]}
-              {@const was = graph.original[clip.id]}
-              {@const changed = graph.changed.has(clip.id)}
-              {@const chosen = graph.chosen === clip.id}
-              {#if timing && was}
-                {@const length = lengthWords(timing)}
-                <!-- One clip: its name cell and its lane, the controls under them when they open in the row. -->
-                <div
-                  class="relative col-span-full grid grid-cols-subgrid items-center gap-y-space-1 rounded-sm py-space-1 data-chosen:bg-c-chosen-wash data-chosen:ring-1 data-chosen:ring-brand-solid data-chosen:ring-inset"
-                  data-chosen={chosen || undefined}
-                  data-clip={clip.id}
-                  data-kind={clip.kind}
-                >
-                  <div class="grid min-w-0 gap-y-space-row px-space-1">
-                    <div
-                      class="mark-line flex min-w-0 items-center gap-x-space-2"
+          {/if}
+          <!-- The ruler: round times, sticky over the rows; a press or a drag on it scrubs. -->
+          {#if !stacked}<span class="sticky top-0 z-2 bg-surface-raised"
+            ></span>{/if}
+          <div
+            bind:this={ruler}
+            {@attach frameSize((node: HTMLElement) => {
+              laneW = node.clientWidth;
+            })}
+            class="sticky top-0 z-2 h-c-badge-h cursor-ew-resize touch-none bg-surface-raised"
+            data-ruler
+            onpointerdown={scrubDown}
+            role="presentation"
+          >
+            {#each marks as mark (mark)}
+              <i
+                class="absolute bottom-0 left-(--x) h-space-1 w-px bg-border-hairline"
+                style:--x={`${xOf(mark)}px`}
+              ></i>
+              <span
+                class="absolute top-0 left-(--x) -translate-x-1/2 type-meta text-ink-muted tabular-nums"
+                style:--x={`${Math.max(numberOf("--space-3"), Math.min(laneW - numberOf("--space-3"), xOf(mark)))}px`}
+                >{mark}</span
+              >
+            {/each}
+            <!-- The playhead's head (pin 13), the one place the time is said: a pill saying the moment the page stands in tabular figures, over the ruler's marks, its line down through the lanes; ink, never coral (DESIGN.md, The Coral Is Where You Act Rule), as a tooltip is (The Ink Stays Ink Rule). Held inside the ruler at its ends. -->
+            <output
+              aria-label={words.readout(readout, Math.round(graph.length))}
+              class="pointer-events-none absolute inset-y-0 left-(--x) z-1 grid -translate-x-1/2 place-items-center rounded-pill bg-ink-solid px-space-1 type-code text-on-ink tabular-nums"
+              data-playhead-knob
+              style:--x={`${Math.max(numberOf("--space-4"), Math.min(laneW - numberOf("--space-4"), xOf(Math.min(time, end))))}px`}
+              >{readout}</output
+            >
+          </div>
+          {#each move.clips as clip (clip.id)}
+            {@const timing = drawn[clip.id]}
+            {@const was = graph.original[clip.id]}
+            {@const changed = graph.changed.has(clip.id)}
+            {@const chosen = graph.chosen === clip.id}
+            {#if timing && was}
+              {@const length = lengthWords(timing)}
+              <!-- One clip: its name cell and its lane, the controls under them when they open in the row. -->
+              <div
+                class="relative col-span-full grid grid-cols-subgrid items-center gap-y-space-1 rounded-sm py-space-1 data-chosen:bg-c-chosen-wash data-chosen:ring-1 data-chosen:ring-brand-solid data-chosen:ring-inset"
+                data-chosen={chosen || undefined}
+                data-clip={clip.id}
+                data-kind={clip.kind}
+              >
+                <div class="grid min-w-0 gap-y-space-row px-space-1">
+                  <div
+                    class="mark-line flex min-w-0 items-center gap-x-space-2"
+                  >
+                    <KindGlyph kind={clip.kind} />
+                    <p
+                      class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
+                      title={`${clip.element} ${clip.property}`}
                     >
-                      <KindGlyph kind={clip.kind} />
-                      <p
-                        class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
-                        title={`${clip.element} ${clip.property}`}
+                      {clip.element}
+                      <code class="type-code text-ink-muted"
+                        >{propertyWords(clip.property)}</code
                       >
-                        {clip.element}
-                        <code class="type-code text-ink-muted"
-                          >{propertyWords(clip.property)}</code
-                        >
-                      </p>
-                    </div>
-                    <div
-                      class="flex min-w-0 items-center gap-space-2 overflow-hidden ps-(--lead)"
-                      style:--lead={`${numberOf("--icon-md") + numberOf("--space-2")}px`}
-                    >
-                      <button
-                        aria-label={length.label}
-                        class="flex flex-none items-baseline gap-space-1 rounded-xs px-space-row touch-hit hover:bg-surface-hover {RING}"
-                        data-changed={(changed &&
-                          timing.duration !== was.duration) ||
-                          undefined}
-                        data-fact="duration"
-                        onclick={() => open(clip.id)}
-                        type="button"
-                      >
-                        <span
-                          class={[
-                            "type-code tabular-nums",
-                            changed && timing.duration !== was.duration
-                              ? "text-selected-ink"
-                              : "text-ink-strong",
-                          ]}>{Math.round(timing.duration)}</span
-                        ><span class="type-meta text-ink-muted">ms</span>
-                      </button>
-                      {#if length.token}
-                        <code
-                          class="flex-none rounded-xs bg-surface-recess px-space-1 type-code text-ink-row"
-                          data-token>{tokenWord(length.token.name)}</code
-                        >
-                      {:else}
-                        <!-- Off the token scale: dashed, for the agent to name (the owner's pick "snap"). -->
-                        <span
-                          class="flex-none rounded-xs border border-dashed border-border-control-strong px-space-1 type-meta text-ink-row"
-                          data-ad-hoc="duration">{words.adHoc}</span
-                        >
-                      {/if}
-                      <button
-                        aria-label={words.curveOf(
-                          curveWord(timing, tokens.easings)
-                        )}
-                        class="mark-line flex min-w-0 items-center gap-space-1 rounded-xs px-space-row text-ink-row touch-hit hover:bg-surface-hover data-changed:text-selected-ink {RING}"
-                        data-changed={(changed &&
-                          JSON.stringify(timing.curve) !==
-                            JSON.stringify(was.curve)) ||
-                          undefined}
-                        data-fact="curve"
-                        onclick={() => open(clip.id)}
-                        type="button"
-                      >
-                        <CurveGlyph
-                          curve={timing.curve}
-                          response={timing.duration}
-                        />
-                        <span
-                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta"
-                          >{curveWord(timing, tokens.easings)}</span
-                        >
-                      </button>
-                    </div>
+                    </p>
                   </div>
-                  <!-- Its lane: the agent's timing as an outline under an edited bar, the bar in its kind's hue, a spring's settle as its tail. -->
-                  <div class="relative h-c-badge-h min-w-0" data-lane={clip.id}>
-                    {#if editing && changed}
-                      <div
-                        aria-hidden="true"
-                        class="absolute inset-y-0 left-(--x) w-(--w) rounded-xs border border-dashed border-border-control-strong"
-                        data-ghost
-                        style:--w={`${Math.max(1, xOf(was.duration))}px`}
-                        style:--x={`${xOf(was.start)}px`}
-                      ></div>
-                    {/if}
-                    {#if runEnd(timing) > timing.start + timing.duration}
-                      <div
-                        aria-hidden="true"
+                  <div
+                    class="flex min-w-0 items-center gap-space-2 overflow-hidden ps-(--lead)"
+                    style:--lead={`${numberOf("--icon-md") + numberOf("--space-2")}px`}
+                  >
+                    <button
+                      aria-label={length.label}
+                      class="flex flex-none items-baseline gap-space-1 rounded-xs px-space-row touch-hit hover:bg-surface-hover {RING}"
+                      data-changed={(changed &&
+                        timing.duration !== was.duration) ||
+                        undefined}
+                      data-fact="duration"
+                      onclick={() => open(clip.id)}
+                      type="button"
+                    >
+                      <span
                         class={[
-                          "absolute inset-y-1/3 left-(--x) w-(--w) rounded-e-pill",
-                          HUES[clip.kind].tail,
-                        ]}
-                        data-tail
-                        style:--w={`${Math.max(0, xOf(runEnd(timing) - timing.start - timing.duration))}px`}
-                        style:--x={`${xOf(timing.start + timing.duration)}px`}
-                      ></div>
+                          "type-code tabular-nums",
+                          HUES[clip.kind].figure,
+                        ]}>{Math.round(timing.duration)}</span
+                      ><span class="type-meta text-ink-muted">ms</span>
+                    </button>
+                    {#if length.token}
+                      <code
+                        class="flex-none rounded-xs bg-surface-recess px-space-1 type-code text-ink-row"
+                        data-token>{tokenWord(length.token.name)}</code
+                      >
+                    {:else}
+                      <!-- Off the token scale: the agent's own value, dashed so the row says which (the owner: "it chooses to use the tokens or adhoc values"). -->
+                      <span
+                        class="flex-none rounded-xs border border-dashed border-border-control-strong px-space-1 type-meta text-ink-row"
+                        data-ad-hoc="duration">{words.adHoc}</span
+                      >
                     {/if}
                     <button
-                      aria-label={`${clip.element} ${clip.property}`}
-                      aria-pressed={chosen}
-                      class={[
-                        "absolute inset-y-0 left-(--x) w-(--w) touch-none rounded-xs border transition-colors duration-(--dur-control) ease-out",
-                        HUES[clip.kind].edge,
-                        barFill(clip.kind, !editing && changed, chosen),
-                        editing ? "cursor-grab" : "cursor-default",
-                        RING,
-                      ]}
-                      data-bar={clip.id}
-                      data-kind={clip.kind}
-                      data-outline={(!editing && changed) || undefined}
-                      onkeydown={(event) => barKey(event, clip.id)}
-                      onpointerdown={(event) => barDown(event, clip.id)}
-                      style:--w={`${Math.max(2, xOf(timing.duration))}px`}
-                      style:--x={`${xOf(timing.start)}px`}
+                      aria-label={words.curveOf(
+                        curveWord(timing, tokens.easings)
+                      )}
+                      class="mark-line flex min-w-0 items-center gap-space-1 rounded-xs px-space-row text-ink-row touch-hit hover:bg-surface-hover data-changed:text-selected-ink {RING}"
+                      data-changed={(changed &&
+                        JSON.stringify(timing.curve) !==
+                          JSON.stringify(was.curve)) ||
+                        undefined}
+                      data-fact="curve"
+                      onclick={() => open(clip.id)}
                       type="button"
-                    ></button>
-                    <!-- The playhead: ink, through every lane at the moment the page stands. -->
+                    >
+                      <CurveGlyph
+                        curve={timing.curve}
+                        response={timing.duration}
+                      />
+                      <span
+                        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta"
+                        >{curveWord(timing, tokens.easings)}</span
+                      >
+                    </button>
+                  </div>
+                </div>
+                <!-- Its lane: the agent's timing as an outline under an edited bar, the bar in its kind's hue, a spring's settle as its tail. -->
+                <div class="relative h-c-badge-h min-w-0" data-lane={clip.id}>
+                  {#if editing && changed}
                     <div
                       aria-hidden="true"
-                      class="pointer-events-none absolute -inset-y-space-1 left-(--x) w-px bg-ink-strong"
-                      data-playhead
-                      style:--x={`${xOf(Math.min(time, end))}px`}
+                      class="absolute inset-y-0 left-(--x) w-(--w) rounded-xs border border-dashed border-border-control-strong"
+                      data-ghost
+                      style:--w={`${Math.max(1, xOf(was.duration))}px`}
+                      style:--x={`${xOf(was.start)}px`}
                     ></div>
-                  </div>
-                  {#if chosen && graph.controlsAt === "row"}
-                    <div class="col-span-full px-space-1 pt-space-2">
-                      <ClipControls
-                        {graph}
-                        id={clip.id}
-                        onclose={close}
-                        placement="row"
-                      />
-                    </div>
                   {/if}
+                  {#if runEnd(timing) > timing.start + timing.duration}
+                    <div
+                      aria-hidden="true"
+                      class={[
+                        "absolute inset-y-1/3 left-(--x) w-(--w) rounded-e-pill",
+                        HUES[clip.kind].tail,
+                      ]}
+                      data-tail
+                      style:--w={`${Math.max(0, xOf(runEnd(timing) - timing.start - timing.duration))}px`}
+                      style:--x={`${xOf(timing.start + timing.duration)}px`}
+                    ></div>
+                  {/if}
+                  <button
+                    aria-label={`${clip.element} ${clip.property}`}
+                    aria-pressed={chosen}
+                    class={[
+                      "absolute inset-y-0 left-(--x) w-(--w) touch-none rounded-xs border transition-colors duration-(--dur-control) ease-out",
+                      HUES[clip.kind].edge,
+                      barFill(clip.kind, !editing && changed, chosen),
+                      editing ? "cursor-grab" : "cursor-default",
+                      RING,
+                    ]}
+                    data-bar={clip.id}
+                    data-kind={clip.kind}
+                    data-outline={(!editing && changed) || undefined}
+                    onkeydown={(event) => barKey(event, clip.id)}
+                    onpointerdown={(event) => barDown(event, clip.id)}
+                    style:--w={`${Math.max(2, xOf(timing.duration))}px`}
+                    style:--x={`${xOf(timing.start)}px`}
+                    type="button"
+                  ></button>
+                  <!-- The playhead: ink, through every lane at the moment the page stands. -->
+                  <div
+                    aria-hidden="true"
+                    class="pointer-events-none absolute -inset-y-space-1 left-(--x) w-px bg-ink-strong"
+                    data-playhead
+                    style:--x={`${xOf(Math.min(time, end))}px`}
+                  ></div>
                 </div>
-              {/if}
-            {/each}
-          </div>
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute inset-x-0 bottom-0 z-3 h-c-edge-fade-len bg-linear-to-t from-surface-raised to-transparent opacity-0 transition-opacity duration-(--dur-control) ease-out data-on:opacity-100"
-            data-fade="foot"
-            data-on={fades.foot || undefined}
-          ></div>
+                {#if chosen}
+                  <div class="col-span-full px-space-1 pt-space-2">
+                    <ClipControls {graph} id={clip.id} onclose={close} />
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          {/each}
         </div>
-      {/if}
-      {#if inspecting && graph.chosen !== null}
-        <aside
-          class={[
-            "min-h-0 min-w-0 overflow-auto overscroll-contain px-space-3 pb-space-2",
-            stacked
-              ? "flex-1"
-              : "w-(--iw) flex-none border-s border-border-hairline",
-          ]}
-          data-inspector
-          data-stacked={stacked || undefined}
-          style:--iw={`${Math.min(numberOf("--c-dock-name-w") + numberOf("--space-8"), dockW * 0.45)}px`}
-        >
-          <ClipControls
-            {graph}
-            id={graph.chosen}
-            narrow={stacked}
-            onclose={close}
-            placement="inspector"
-          />
-        </aside>
-      {/if}
+        <div
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-x-0 bottom-0 z-3 h-c-edge-fade-len bg-linear-to-t from-surface-raised to-transparent opacity-0 transition-opacity duration-(--dur-control) ease-out data-on:opacity-100"
+          data-fade="foot"
+          data-on={fades.foot || undefined}
+        ></div>
+      </div>
     </div>
   </section>
 {/if}
