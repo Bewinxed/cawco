@@ -46,6 +46,7 @@ import { detach } from "@cawco/core/detach";
 import {
   causeOf,
   forwardRequest,
+  heldWhileServed,
   type PreviewSocket,
   previewWebSocket,
   proxyHeaders,
@@ -663,6 +664,8 @@ export const dashboardRelay =
       http2: true,
       websocket: previewWebSocket,
       async fetch(request, server) {
+        // As long as the dashboard takes: its own limits stand behind this hop.
+        heldWhileServed(server, request);
         const url = new URL(request.url);
         const headers = proxyHeaders(request.headers);
         for (const name of UNCARRIED_HEADERS) {

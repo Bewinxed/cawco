@@ -4,6 +4,7 @@ import type { TailnetServing } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import {
   causeOf,
+  heldWhileServed,
   type PreviewSocket,
   previewFailed,
   previewWebSocket,
@@ -140,6 +141,8 @@ const listen = (
     port: local,
     websocket: previewWebSocket,
     async fetch(request, server) {
+      // As long as the hub takes: its own limits stand behind this hop.
+      heldWhileServed(server, request);
       const url = new URL(request.url);
       const at = `${url.pathname}${url.search}`;
       const headers = proxyHeaders(request.headers);

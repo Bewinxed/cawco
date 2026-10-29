@@ -22,9 +22,12 @@ import {
   cachePreview,
   causeOf,
   compressed,
+  DOWN_WORDS,
   decodedHeaders,
+  downOf,
   downResponse,
   folderKey,
+  heldWhileServed,
   IMMUTABLE,
   injectOverlay,
   keyOverlay,
@@ -568,6 +571,9 @@ const ping = (): Response =>
 const pingDown = (why: string): Response =>
   Response.json({ why } satisfies PreviewPingDown, { headers: PING_HEADERS });
 
+/** A sentence's last stop: the pane's words put their own after `why` (core `previewUnreachedWords`). */
+const TRAILING_STOP = /\.$/u;
+
 /** How long the machine's listener has to answer the ping's relay. Our call: under the pane's own 10 s for the whole probe. */
 const PING_RELAY_MS = 5000;
 
@@ -623,8 +629,17 @@ async function pingSession(
     if (read.kind !== "answered") {
       return failed(`no answer within ${read.after} ms`, "timeout");
     }
-    await read.value.body?.cancel();
-    return ping();
+    if (read.value.ok) {
+      await read.value.body?.cancel();
+      return ping();
+    }
+    // The listener answered as a load would be met: the down page it names,
+    // in the machine's words, else the hop's (the pane adds the stop).
+    const said = downOf(await read.value.text());
+    const words = said
+      ? (said.why ?? DOWN_WORDS[said.down])
+      : `its machine's listener answered ${read.value.status}`;
+    return pingDown(words.replace(TRAILING_STOP, ""));
   } catch (error) {
     return failed(causeOf(error), codeOf(error));
   }
@@ -874,6 +889,9 @@ async function serveSession(
     );
     return downResponse("closed", 404);
   }
+  // It waits on the machine: a listener started, its stage's wake, the
+  // server's first answer.
+  heldWhileServed(server, request);
   // No listener serves it now (its machine restarted, or the last start
   // failed): started here, or the hop that failed says why.
   const reached = await deps.reach(instanceId);

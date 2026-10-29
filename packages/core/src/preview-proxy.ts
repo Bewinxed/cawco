@@ -853,6 +853,27 @@ export const forwardRequest = (
   });
 
 /**
+ * A request held open for as long as what serves it takes to answer, on
+ * every hop that carries one on (the agent's loopback carrying the hub, the
+ * dashboard's tailnet HTTPS, the hub's preview listener, the machine's
+ * preview listener). Bun closes a
+ * connection whose request has been silent for its `idleTimeout`, "@default
+ * 10" (bun-types serve.d.ts), and a page's first load waits on its server's
+ * wake (agent stage.ts `wakeSource`: up to core `STAGE_READY_MS`) and on the
+ * dev server's first compile, which together pass 10 s. Cut there, the
+ * browser got no answer at all ("Empty reply from server" over HTTP/1.1,
+ * "Error in the HTTP2 framing layer" over HTTP/2, measured on Bun 1.4.4),
+ * and the panel's frame showed Chromium's grey error page instead of the
+ * app or CawCo's own down page. "`0` means no timeout" (bun-types
+ * `Server.timeout`); the wait is bounded by the wake's own deadlines and
+ * what the server answers.
+ */
+export const heldWhileServed = (
+  server: { timeout: (request: Request, seconds: number) => void },
+  request: Request
+): void => server.timeout(request, 0);
+
+/**
  * The machine's listener marks an answer that came from the preview's own
  * port (its stage or server), never one of its own (`downResponse`, a
  * sleeping stage's cover): the hub's relay reads it, so a stage the hub

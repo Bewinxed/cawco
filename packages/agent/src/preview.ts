@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { PREVIEW_PING_PATH, type PreviewSource } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import {
   type BrowserKey,
   type BrowserListenArgs,
@@ -16,6 +17,7 @@ import {
   folderGone,
   folderKey,
   folderWeight,
+  heldWhileServed,
   IMMUTABLE,
   injectOverlay,
   isFolderGone,
@@ -53,6 +55,8 @@ const previews = new Map<
   { listener: Server<PreviewSocket>; source: PreviewSource; token: string }
 >();
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+/** How long the ping waits for the port's answer. Ours: under the hub's 5 s for the ping's relay (hub preview.ts `PING_RELAY_MS`). */
+const PING_ASK_MS = 3000;
 
 /**
  * The headers a proxy in front of the hub adds to name where the browser
@@ -569,6 +573,13 @@ export function listenBrowsers(args: unknown): { port: number } {
   return { port: listener.port as number };
 }
 
+/** Why a request to `source`'s port got no answer, in the down page's words. */
+const unanswered = (
+  source: { port: number; workspace?: string },
+  error: unknown
+): string =>
+  `port ${source.port}${source.workspace ? ` in workspace ${source.workspace}` : ""} didn't answer the agent's listener: ${causeOf(error)}`;
+
 /** A port source with the parts a start names, and none it leaves out. */
 const portSource = (
   port: number,
@@ -726,6 +737,51 @@ async function start(
       return downResponse("reach", 502, causeOf(error));
     }
   };
+  /**
+   * The hub's ping (hub preview.ts `pingSession`), answered as a load of
+   * the page would be met, short of waking a stage: "ok", or the down page
+   * the load would get, which the hub reads (core `downOf`). A folder, and a
+   * port a stage serves (the load wakes it), answer at once; any other port
+   * needs its workspace running and its server answering on it.
+   */
+  const pinged = async (): Promise<Response> => {
+    const ok = new Response("ok", { headers: { "cache-control": "no-store" } });
+    if (
+      !("port" in source) ||
+      (source.workspace && (source.stage || source.serve))
+    ) {
+      return ok;
+    }
+    let upstream: Awaited<ReturnType<typeof upstreamOf>>;
+    try {
+      upstream = await upstreamOf(instanceId, source);
+    } catch (error) {
+      return error instanceof WorkspaceDown
+        ? downResponse("workspace", 503)
+        : downResponse("reach", 502, causeOf(error));
+    }
+    try {
+      // Answering at all is serving: a server still compiling is no refusal.
+      await readWithin(PING_ASK_MS, async (signal) => {
+        const answer = await fetch(
+          upstream === "host"
+            ? `http://127.0.0.1:${source.port}/`
+            : `http://localhost:${source.port}/`,
+          {
+            method: "HEAD",
+            headers: { host: `localhost:${source.port}` },
+            redirect: "manual",
+            signal,
+            ...(upstream === "host" ? {} : { unix: upstream.unix }),
+          }
+        );
+        await answer.body?.cancel();
+      });
+      return ok;
+    } catch (error) {
+      return downResponse("server", 502, unanswered(source, error));
+    }
+  };
   const listener = Bun.serve<PreviewSocket>({
     hostname: "0.0.0.0",
     port: 0,
@@ -753,7 +809,7 @@ async function start(
         return notRelayed();
       }
       if (url.pathname === PREVIEW_PING_PATH) {
-        return new Response("ok", { headers: { "cache-control": "no-store" } });
+        return await pinged();
       }
       let response: Response;
       /** A folder's file at its folder's key: kept for good. */
@@ -793,6 +849,8 @@ async function start(
           }
         }
         headers.set("accept-encoding", "identity");
+        // It waits on the stage's wake and the server's first answer.
+        heldWhileServed(server, request);
         const asleep = await staged(request);
         if (asleep) {
           return asleep;
@@ -855,7 +913,7 @@ async function start(
             await closeBridge(instanceId);
             return downResponse("workspace", 503);
           }
-          const why = `port ${source.port}${source.workspace ? ` in workspace ${source.workspace}` : ""} didn't answer the agent's listener: ${causeOf(error)}`;
+          const why = unanswered(source, error);
           previewFailed("agent listener", instanceId, why);
           return downResponse("server", 502, why);
         }
