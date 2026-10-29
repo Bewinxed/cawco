@@ -187,7 +187,7 @@ export const recordToPairs = (
 const SKILL_NAME_PATTERN = /^[A-Za-z0-9._-]+$/u;
 
 /** The source forms the hub's resolver takes as they are. */
-const SKILL_SCHEME = /^(?:skills:|github:|npm:|https?:\/\/)/u;
+const SKILL_SCHEME = /^(?:skills:|github:|npm:|https?:\/\/|file:\/\/)/u;
 
 /** The scheme prefix a skill source names itself with, when it has one. */
 const SKILL_SOURCE_SCHEME_PATTERN = /^(skills|github|npm):/u;

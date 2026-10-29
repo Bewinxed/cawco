@@ -356,6 +356,7 @@ import {
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
+  READ_SKILL_FOLDER,
   RESOLVE_PERMISSION,
   type RebalanceNotice,
   type Relaunch,
@@ -916,7 +917,11 @@ import { sessionLimitRoutes } from "./session-limits";
 import { createSettling } from "./settling";
 import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
-import { resolveSkill } from "./skills";
+import {
+  bindSkillSource,
+  resolveSkill,
+  type SkillFolderReader,
+} from "./skills";
 import { sourceFacts } from "./source-facts";
 import {
   CLIENT_ADDRESS_HEADER,
@@ -3597,7 +3602,12 @@ export const createServer = (
       }
     },
     sourceFacts: (name, input) =>
-      sourceFacts(name, input, () => db.fleetConfig().marketplaces),
+      sourceFacts(
+        name,
+        input,
+        () => db.fleetConfig().marketplaces,
+        readSkillFolder
+      ),
     // The hub runs an approved ask itself, as the session that asked.
     run: async (name, input, asker) => {
       // A relay's opening asks as an admin write does (relay.ts).
@@ -10895,6 +10905,80 @@ export const createServer = (
   const readAgent = async (
     ...ask: Parameters<typeof callAgent>
   ): Promise<Bounded<ControlResult>> => asRead(await callAgent(...ask));
+
+  /**
+   * The machine a skill folder's source names by its host (skills.ts
+   * `bindSkillSource`): its machineId, its hostname, or that hostname as the
+   * fleet shows it, case aside. Throws, in a sentence, for a name no machine
+   * or several have.
+   */
+  const skillFolderMachine = (host: string): string => {
+    const needle = host.toLowerCase();
+    const matches = db
+      .namedMachines()
+      .filter(
+        (machine) =>
+          machine.machineId.toLowerCase() === needle ||
+          machine.hostname.toLowerCase() === needle ||
+          machineLabel(machine.hostname).toLowerCase() === needle
+      );
+    const [only] = matches;
+    if (!only || matches.length > 1) {
+      throw new Error(
+        only
+          ? `${matches.length} machines are called ${host}; install from the folder again from a session on the one that holds it`
+          : `no machine in this fleet is called ${host}`
+      );
+    }
+    return only.machineId;
+  };
+
+  /** A local skill source's own name for `machineId`: its fleet name, else its id when another machine shares that name. */
+  const skillFolderHost = (machineId: string): string => {
+    const machines = db.namedMachines();
+    const machine = machines.find((one) => one.machineId === machineId);
+    if (!machine) {
+      return machineId;
+    }
+    const name = machineLabel(machine.hostname);
+    return machines.some(
+      (other) =>
+        other.machineId !== machineId &&
+        machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
+    )
+      ? machineId
+      : name;
+  };
+
+  /**
+   * A skill folder's files, read off the machine `host` names through its
+   * agent (agent fleet.ts `readSkillFolder`, which keeps the read inside the
+   * folder and under core's `SKILL_FOLDER_LIMIT_BYTES`). Throws the
+   * machine's own sentence when it will not.
+   */
+  const readSkillFolder: SkillFolderReader = async (host, path) => {
+    const machineId = skillFolderMachine(host);
+    const asked = await readAgent(
+      machineId,
+      READ_SKILL_FOLDER,
+      [path],
+      READ_TIMEOUT_MS
+    );
+    switch (asked.kind) {
+      case "unanswered":
+        throw unansweredError(machineId, asked, `reading ${path}`);
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
+    }
+    if (!asked.value.ok) {
+      throw new Error(
+        asked.value.error ?? `${machineName(machineId)} could not read ${path}`
+      );
+    }
+    return asked.value.result as SkillFile[];
+  };
 
   /**
    * {@link readAgent} for a read the machine stops once the hub stops
@@ -21277,7 +21361,11 @@ export const createServer = (
     }
     skillChoices.delete(name);
     const work = (async (): Promise<SkillFetch | undefined> => {
-      const resolved = await resolveSkill(source, db.heldSkillNames(name));
+      const resolved = await resolveSkill(
+        source,
+        db.heldSkillNames(name),
+        readSkillFolder
+      );
       const stored = db.listSkills().find((skill) => skill.name === name);
       if (!stored) {
         return;
@@ -21565,8 +21653,10 @@ export const createServer = (
   };
   /**
    * Whether a row's source is read for updates: not an adopted skill's
-   * machine, which has no upstream, and not a source on a loopback host
-   * (core `isLoopbackSource`), a server stood up once to install from.
+   * machine, which has no upstream, not a skill folder on a machine
+   * (`file://`), which a reinstall or refresh reads again, and not a source
+   * on a loopback host (core `isLoopbackSource`), a server stood up once to
+   * install from.
    */
   const watched = (row: { skill: string } | { plugin: string }): boolean => {
     const source =
@@ -21576,6 +21666,7 @@ export const createServer = (
     return (
       source !== undefined &&
       !source.startsWith("machine:") &&
+      !source.startsWith("file:") &&
       !isLoopbackSource(source)
     );
   };
@@ -21646,7 +21737,8 @@ export const createServer = (
       // One source at a time, so GitHub is not hit in a burst.
       const resolved = await resolveSkill(
         row.source,
-        db.heldSkillNames(row.name)
+        db.heldSkillNames(row.name),
+        readSkillFolder
       );
       if (lifetime.closed()) {
         return;
@@ -26755,6 +26847,21 @@ export const createServer = (
     triageTools: (actor) => watch?.tools(actor) ?? [],
     askPerson: (actor, name, input, toolUseId) =>
       adminAsks.ask(actor, name, input, toolUseId),
+    // A skill installed from a folder is read off the caller's own machine.
+    bindAdminInput: (actor, name, input) =>
+      name === "admin_skills_write" &&
+      input.action === "install" &&
+      typeof input.source === "string"
+        ? {
+            ...input,
+            source: bindSkillSource(input.source, {
+              hostname: skillFolderHost(actor.machineId),
+              home: db
+                .listAgents()
+                .find((agent) => agent.machineId === actor.machineId)?.home,
+            }),
+          }
+        : input,
     sendToUser: (actor, message) => push.userMessage(actor.id, message),
     shownRefusal: (actor, tool, paths) =>
       shownRefusal(shownDeps, {

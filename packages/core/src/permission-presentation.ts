@@ -116,10 +116,15 @@ export type AdminGroup =
  * proposed (hub source-facts.ts): a skill's source, a marketplace's.
  */
 export interface SourceFacts {
-  /** The source as read: `github.com/owner/repo`, `npm package`. */
+  /** The source as read: `github.com/owner/repo`, `npm package`, `/path on machine`. */
   at: string;
   /** When it first came out: the repository's creation, the package's first publish (ISO). */
   since?: string;
+  /**
+   * A skill read from a folder on a machine before the person is asked: what
+   * its SKILL.md declares and every file the install carries, by path.
+   */
+  skill?: { description: string; files: string[]; name: string };
   /** The repository's GitHub stars. */
   stars?: number;
   /** Why there are no facts: a source that carries none, or the registry's answer. */
@@ -540,6 +545,16 @@ function sourceFields(
       value: `${COUNT.format(source.weeklyDownloads)} last week`,
     });
   }
+  if (source.skill) {
+    fields.push(
+      { key: "skill", value: source.skill.name },
+      { key: "description", value: source.skill.description },
+      {
+        key: "files",
+        value: `${plural(source.skill.files.length, "file")}: ${source.skill.files.join(", ")}`,
+      }
+    );
+  }
   return fields;
 }
 
@@ -675,6 +690,18 @@ const given = (input: Record<string, unknown>, skip: readonly string[]) =>
     )
   );
 
+/**
+ * A skill's source as the card says it: a folder on a machine
+ * (`file://<machine>/<path>`, hub skills.ts) as `<path> on <machine>`, any
+ * other as written.
+ */
+const skillSourceWords = (source: string): string => {
+  const url = source.startsWith("file://") ? URL.parse(source) : null;
+  return url?.hostname
+    ? `${decodeURIComponent(url.pathname)} on ${url.hostname}`
+    : source;
+};
+
 function skillsWrite(
   input: Record<string, unknown>,
   context: PresentationContext
@@ -685,7 +712,8 @@ function skillsWrite(
     input.projectId === undefined ? before?.projectId : input.projectId;
   switch (input.action) {
     case "install": {
-      const source = text(input.source) ?? "(no source)";
+      const asked = text(input.source);
+      const source = asked ? skillSourceWords(asked) : "(no source)";
       // The summary names the source.
       const facts = sourceFields(context.source, true);
       if (!before) {

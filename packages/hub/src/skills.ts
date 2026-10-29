@@ -7,8 +7,14 @@
 
 import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
-import type { SkillFile } from "@cawco/core";
+import { basename, dirname, isAbsolute, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import {
+  frontMatterBlock,
+  SKILL_SKIPPED_DIRS,
+  type SkillFile,
+  skillDescription,
+} from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -32,7 +38,27 @@ export type SkillSource =
       skill?: string;
     }
   | { kind: "npm"; pkg: string; version?: string }
-  | { kind: "url"; url: string };
+  | { kind: "url"; url: string }
+  | {
+      kind: "file";
+      /**
+       * The machine the folder is on, by its hostname: `file://<machine>/<path>`.
+       * Absent until the calling session's machine is bound to it
+       * ({@link bindSkillSource}).
+       */
+      machine?: string;
+      /** The skill folder, absolute (or `~/`, before it is bound). */
+      path: string;
+    };
+
+/**
+ * Reads a skill folder off a machine through its agent (agent fleet.ts
+ * `readSkillFolder`): its files, or a throw in a sentence.
+ */
+export type SkillFolderReader = (
+  machine: string,
+  path: string
+) => Promise<SkillFile[]>;
 
 /** A resolved skill: the files, and what they came to. */
 export interface ResolvedSkill {
@@ -85,7 +111,7 @@ const CONTAINERS = [
 const MAX_DEPTH = 3;
 
 /** Directories no skill lives in, and every one of them is a big download. */
-const SKIP = ["node_modules", ".git", "dist", "build", "__pycache__"];
+const SKIP = SKILL_SKIPPED_DIRS;
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -96,12 +122,115 @@ const MD_PATH_RE = /\.md$/iu;
 const ARCHIVE_PATH_RE = /\.(zip|tgz|tar\.gz)$/iu;
 const MEDIA_PATH_RE = /\.(gif|jpe?g|png|webp|svg|mp4|mov|webm|avif)$/iu;
 const README_NAME_RE = /^readme\.md$/iu;
+const FILE_URL_RE = /^file:\/\//iu;
+const FILE_SCHEME_RE = /^file:/iu;
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the four source shapes (url, npm:, github:, bare owner/repo) cawco accepts; each branch is a distinct grammar, not incidental complexity.
+/**
+ * A local source: `file://<machine>/<path>` (RFC 8089's file URI, its host the
+ * machine), `file:<path>`, or a bare absolute or `~/` path. Undefined for
+ * every other source.
+ */
+const parseFileSource = (
+  trimmed: string
+): (SkillSource & { kind: "file" }) | undefined => {
+  if (FILE_URL_RE.test(trimmed)) {
+    const url = URL.parse(trimmed);
+    if (!url) {
+      return;
+    }
+    const path = decodeURIComponent(url.pathname);
+    return url.hostname
+      ? { kind: "file", machine: url.hostname, path }
+      : { kind: "file", path };
+  }
+  const path = FILE_SCHEME_RE.test(trimmed)
+    ? trimmed.slice("file:".length)
+    : trimmed;
+  return path.startsWith("/") || path.startsWith("~/")
+    ? { kind: "file", path }
+    : undefined;
+};
+
+/** A local source as it is stored: the folder `path` on `machine`. */
+const fileSource = (machine: string, path: string): string => {
+  const url = pathToFileURL(path);
+  url.hostname = machine;
+  return url.href;
+};
+
+/**
+ * `source` with the calling session's machine bound to it, when it is a local
+ * source that names none (`file:/path`, `/path`, `~/path`): stored as
+ * `file://<machine>/<path>`, so the hub reads the folder off that machine and
+ * a reinstall from the same folder updates the same row. Every other source
+ * comes back as given. Throws, in a sentence, for a path that is not absolute
+ * once `~/` is the machine's `home`.
+ */
+export const bindSkillSource = (
+  source: string,
+  machine: { home?: string; hostname: string }
+): string => {
+  const parsed = parseFileSource(source.trim());
+  if (!parsed || parsed.machine) {
+    return source;
+  }
+  const path = parsed.path.startsWith("~/")
+    ? machine.home && join(machine.home, parsed.path.slice(2))
+    : parsed.path;
+  if (!(path && isAbsolute(path))) {
+    throw new Error(
+      `${source} is not a folder ${machine.hostname} can name: give the skill folder's absolute path`
+    );
+  }
+  return fileSource(machine.hostname, path);
+};
+
+/** What a skill folder's SKILL.md declares. */
+export interface DeclaredSkill {
+  description: string;
+  name: string;
+}
+
+/**
+ * The name and description a skill folder's SKILL.md front matter declares,
+ * which is what Claude Code lists the skill by. Throws, in a sentence naming
+ * `where`, when the folder has no SKILL.md or its front matter leaves either
+ * out.
+ */
+export const declaredSkill = (
+  files: readonly SkillFile[],
+  where: string
+): DeclaredSkill => {
+  const file = files.find((one) => one.path === "SKILL.md");
+  if (!file) {
+    throw new Error(`${where} holds no SKILL.md`);
+  }
+  const text = Buffer.from(file.contentBase64, "base64").toString("utf8");
+  if (!frontMatterBlock(text)) {
+    throw new Error(
+      `${where}/SKILL.md opens with no front matter: it needs a --- block with name and description`
+    );
+  }
+  const name = skillMdName(text);
+  const description = skillDescription(text);
+  if (!(name && description)) {
+    throw new Error(
+      `${where}/SKILL.md's front matter has no ${name ? "description" : "name"}: Claude Code lists a skill by both`
+    );
+  }
+  return { name, description };
+};
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the five source shapes (url, file:, npm:, github:, bare owner/repo) cawco accepts; each branch is a distinct grammar, not incidental complexity.
 export const parseSkillSource = (source: string): SkillSource | undefined => {
   const trimmed = source.trim();
   if (URL_SOURCE_RE.test(trimmed)) {
     return { kind: "url", url: trimmed };
+  }
+
+  const local = parseFileSource(trimmed);
+  if (local) {
+    return local;
   }
 
   if (trimmed.startsWith("npm:")) {
@@ -164,6 +293,9 @@ const describe = (source: SkillSource): string => {
   }
   if (source.kind === "url") {
     return source.url;
+  }
+  if (source.kind === "file") {
+    return source.path;
   }
   return `${source.owner}/${source.repo}`;
 };
@@ -603,7 +735,7 @@ const fetchUrl = async (
 };
 
 const fetchSkill = async (
-  source: SkillSource,
+  source: Exclude<SkillSource, { kind: "file" }>,
   work: string,
   held: readonly string[]
 ): Promise<ResolvedSkill | UnresolvedSkill> => {
@@ -620,6 +752,40 @@ const fetchSkill = async (
 };
 
 /**
+ * A local source's skill, read off its machine through its agent and checked
+ * as {@link declaredSkill} checks it. Never throws: a failure is its sentence.
+ */
+const readLocalSkill = async (
+  source: SkillSource & { kind: "file" },
+  readFolder: SkillFolderReader | undefined
+): Promise<ResolvedSkill | UnresolvedSkill> => {
+  if (!source.machine) {
+    return {
+      error: `${source.path} names no machine: write it as file://<machine>${source.path}`,
+    };
+  }
+  if (!readFolder) {
+    return { error: "this hub reads no folders off its machines" };
+  }
+  try {
+    const files = await readFolder(source.machine, source.path);
+    declaredSkill(files, source.path);
+    return {
+      name: basename(source.path),
+      hash: hashFiles(files),
+      bytes: files.reduce(
+        (total, file) =>
+          total + Buffer.byteLength(file.contentBase64, "base64"),
+        0
+      ),
+      files,
+    };
+  } catch (error) {
+    return { error: said(error) };
+  }
+};
+
+/**
  * The skill a source names, fetched and read once for the whole fleet. Every
  * failure comes back as a sentence rather than thrown: a source that cannot be
  * resolved is a row the dashboard shows, not a request that fell over.
@@ -631,11 +797,15 @@ const fetchSkill = async (
  */
 export const resolveSkill = async (
   source: string,
-  held: readonly string[] = []
+  held: readonly string[] = [],
+  readFolder?: SkillFolderReader
 ): Promise<ResolvedSkill | UnresolvedSkill> => {
   const parsed = parseSkillSource(source);
   if (!parsed) {
     return { error: `${source} is not a source cawco knows how to fetch` };
+  }
+  if (parsed.kind === "file") {
+    return await readLocalSkill(parsed, readFolder);
   }
 
   const work = await mkdtemp(join(tmpdir(), "cawco-skill-"));

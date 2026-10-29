@@ -365,6 +365,17 @@ export function createDelegationMcp(options: {
     input: Record<string, unknown>,
     toolUseId?: string
   ) => Promise<string | undefined>;
+  /**
+   * An admin call's input with what the caller's own place means bound in,
+   * before it is asked or run: a skill installed from a folder names the
+   * caller's machine (skills.ts `bindSkillSource`). Throws, in a sentence,
+   * for input that cannot be bound.
+   */
+  bindAdminInput?: (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ) => Record<string, unknown>;
   /** The once-per-key rule of the calls that start or send (call-keys.ts). */
   callKeys: Pick<CallKeys, "once">;
   /** `send_to_user`'s push to the person's paired devices (push.ts `userMessage`); its transcript row is the call itself. */
@@ -653,13 +664,14 @@ export function createDelegationMcp(options: {
     if (answered !== undefined) {
       return { content: [{ type: "text", text: answered }] };
     }
+    const bound = options.bindAdminInput?.(actor, name, input) ?? input;
     const recorded = isAdminWrite(name)
-      ? await options.askPerson(actor, name, input, toolUseId)
+      ? await options.askPerson(actor, name, bound, toolUseId)
       : undefined;
     if (recorded !== undefined) {
       return { content: [{ type: "text", text: recorded }] };
     }
-    return await entry.call(input);
+    return await entry.call(bound);
   };
 
   /** A task tool, for its caller's project, its role already checked. */

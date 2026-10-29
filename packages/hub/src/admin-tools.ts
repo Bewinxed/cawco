@@ -625,7 +625,8 @@ export function adminTools() {
           .describe(
             "Where to fetch the skill from. Required for install. Examples: " +
               "'github:owner/repo', 'npm:package-name', 'https://example.com/skill.tar.gz', " +
-              "'skills:owner/repo@skill-name'."
+              "'skills:owner/repo@skill-name', 'file:/abs/path/to/skill-folder' (a folder " +
+              "holding a SKILL.md on your own machine, no publishing needed)."
           ),
         projectId: z
           .string()
@@ -678,7 +679,7 @@ export function adminTools() {
         );
       },
       skillSettingsWords,
-      " Install fetches the source (github:owner/repo, npm:package, a URL, or skills:slug) once at the hub and distributes the files to every machine."
+      " Install fetches the source (github:owner/repo, npm:package, a URL, skills:slug, or file:<absolute path> to a skill folder on your machine) once at the hub and distributes the files to every machine. A folder's SKILL.md needs a name and description; installing from the same folder again updates it."
     ),
 
     // ── plugins ──────────────────────────────────────────────────────────

@@ -11,7 +11,11 @@ import type { FleetMarketplace, SourceFacts } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { unhandled } from "@cawco/core/unhandled";
 import { Octokit } from "@octokit/rest";
-import { parseSkillSource } from "./skills";
+import {
+  declaredSkill,
+  parseSkillSource,
+  type SkillFolderReader,
+} from "./skills";
 import { GITHUB_API } from "./upstreams";
 
 /** How long one registry read may take before the card says it did not answer. Our call. */
@@ -38,6 +42,13 @@ const skillOrigin = (source: string): Origin => {
   }
   if (parsed.kind === "repo") {
     return { kind: "github", owner: parsed.owner, repo: parsed.repo };
+  }
+  if (parsed.kind === "file") {
+    return {
+      kind: "none",
+      at: parsed.path,
+      why: "a folder on a machine carries no stars or age",
+    };
   }
   const github = GITHUB_URL.exec(parsed.url);
   return github
@@ -179,17 +190,47 @@ const factsOf = (origin: Origin): Promise<SourceFacts> => {
 };
 
 /**
+ * A skill folder on a machine, read through its agent before anyone is
+ * asked: the card shows the skill's declared name and description and every
+ * file the install would carry. A folder that cannot be read, or whose
+ * SKILL.md names no name or description, throws its sentence, so the call is
+ * refused and nobody is asked.
+ */
+const folderFacts = async (
+  machine: string,
+  path: string,
+  readFolder: SkillFolderReader
+): Promise<SourceFacts> => {
+  const files = await readFolder(machine, path);
+  const { name, description } = declaredSkill(files, path);
+  return {
+    at: `${path} on ${machine}`,
+    skill: {
+      name,
+      description,
+      files: files.map((file) => file.path).sort(),
+    },
+  };
+};
+
+/**
  * The facts for an admin write that fetches something new: a skill's
  * install, a plugin's install (its marketplace's source) or a marketplace's
- * link; undefined for every other call.
+ * link; undefined for every other call. A skill from a folder on a machine
+ * is read through `readFolder` ({@link folderFacts}).
  */
 export const sourceFacts = (
   name: string,
   input: Record<string, unknown>,
-  marketplaces: () => FleetMarketplace[]
+  marketplaces: () => FleetMarketplace[],
+  readFolder: SkillFolderReader
 ): Promise<SourceFacts> | undefined => {
   const source = typeof input.source === "string" ? input.source : undefined;
   if (name === "admin_skills_write" && input.action === "install") {
+    const local = source ? parseSkillSource(source) : undefined;
+    if (local?.kind === "file" && local.machine) {
+      return folderFacts(local.machine, local.path, readFolder);
+    }
     return source ? factsOf(skillOrigin(source)) : undefined;
   }
   if (name !== "admin_plugins_write") {

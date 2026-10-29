@@ -68,7 +68,7 @@ export const skillsWords = {
   readsAs: (source: string) => `Reads as \`${source}\``,
   /** Backticks mark what is set in the code face (Coded.svelte, `coded`). */
   sourceHint:
-    "The install command, an `owner/repo` slug, or a `skills:`, `github:`, `npm:` or `https://` source.",
+    "The install command, an `owner/repo` slug, or a `skills:`, `github:`, `npm:`, `https://` or `file://<machine>/<folder>` source.",
   sourcePlaceholder: "bunx skills add pbakaus/impeccable",
   name: "Name",
   namePlaceholder: "impeccable",

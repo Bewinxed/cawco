@@ -11,6 +11,7 @@
 
 import {
   chmod,
+  lstat,
   mkdir,
   readdir,
   realpath,
@@ -52,6 +53,10 @@ import {
   hookProblem,
   hookWorkspaceNote,
   memoryDocProblem,
+  SKILL_FOLDER_LIMIT_BYTES,
+  SKILL_FOLDER_LIMIT_FILES,
+  SKILL_SKIPPED_DIRS,
+  skillDescription,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -3656,44 +3661,6 @@ function mergeMcp(
   return found;
 }
 
-/**
- * A skill's own description, out of the SKILL.md front matter Claude Code
- * reads. Long ones are written as YAML block scalars (`description: >-` and the
- * text indented under it), which a read of the key's own line answers with the
- * marker instead of a sentence.
- */
-/** A YAML block-scalar marker (`>`, `|`, with an optional `-`/`+` chomp indicator). */
-const YAML_BLOCK_SCALAR = /^[|>][-+]?$/u;
-
-/** A line that continues a YAML block scalar: indented, or blank. */
-const YAML_CONTINUATION = /^\s/u;
-
-function skillDescription(source: string): string | undefined {
-  if (!source.startsWith("---")) {
-    return undefined;
-  }
-  const end = source.indexOf("\n---", 3);
-  const front = (end === -1 ? source : source.slice(0, end)).split("\n");
-  const at = front.findIndex((row) => row.startsWith("description:"));
-  if (at === -1) {
-    return undefined;
-  }
-
-  const value = front[at].slice("description:".length).trim();
-  if (!YAML_BLOCK_SCALAR.test(value)) {
-    return value.replace(/^["']|["']$/gu, "") || undefined;
-  }
-
-  const block: string[] = [];
-  for (const row of front.slice(at + 1)) {
-    if (row.trim() !== "" && !YAML_CONTINUATION.test(row)) {
-      break;
-    }
-    block.push(row.trim());
-  }
-  return block.join(" ").trim() || undefined;
-}
-
 /** Where an installed plugin's skills live, by the name a session calls them. */
 function pluginSkillRoots(
   installed: InstalledPlugins
@@ -3871,12 +3838,70 @@ const filesUnder = async (root: string, prefix = ""): Promise<string[]> => {
   return paths;
 };
 
+/** A skill's file as its read found it on disk. */
+interface SkillFileOnDisk {
+  path: string;
+  size: number;
+}
+
+/**
+ * The files of a skill directory, read whole: every regular file under it
+ * but CawCo's own list of what the fleet carried ({@link CARRIED}) and the
+ * directories no skill keeps files in (core `SKILL_SKIPPED_DIRS`). A symlink
+ * is never followed, so nothing outside the directory is read. A read past
+ * core's `SKILL_FOLDER_LIMIT_FILES` or `SKILL_FOLDER_LIMIT_BYTES` is refused,
+ * said in megabytes and files, before any file is read.
+ */
+const skillFilesAt = async (dir: string): Promise<SkillFile[]> => {
+  const found: SkillFileOnDisk[] = [];
+  let bytes = 0;
+  const walk = async (at: string, prefix: string): Promise<void> => {
+    for (const entry of await readdir(at, { withFileTypes: true })) {
+      const relative = `${prefix}${entry.name}`;
+      if (entry.isDirectory()) {
+        if (!SKILL_SKIPPED_DIRS.includes(entry.name)) {
+          await walk(join(at, entry.name), `${relative}/`);
+        }
+        continue;
+      }
+      if (!entry.isFile() || relative === CARRIED) {
+        continue;
+      }
+      const { size } = await stat(join(at, entry.name));
+      bytes += size;
+      found.push({ path: relative, size });
+      if (found.length > SKILL_FOLDER_LIMIT_FILES) {
+        throw new Error(
+          `${dir} holds more than ${SKILL_FOLDER_LIMIT_FILES} files; a skill folder carries at most that many`
+        );
+      }
+      if (bytes > SKILL_FOLDER_LIMIT_BYTES) {
+        throw new Error(
+          `${dir} holds more than ${SKILL_FOLDER_LIMIT_BYTES / (1024 * 1024)} MB; a skill folder carries at most that`
+        );
+      }
+    }
+  };
+  await walk(dir, "");
+  return await Promise.all(
+    found.map(async ({ path }) => {
+      const at = join(dir, path);
+      return {
+        path,
+        contentBase64: Buffer.from(await Bun.file(at).arrayBuffer()).toString(
+          "base64"
+        ),
+        // biome-ignore lint/suspicious/noBitwiseOperators: the execute bits of a stat mode are a mask, and the mask is the question
+        executable: ((await stat(at)).mode & 0o111) !== 0,
+      };
+    })
+  );
+};
+
 /**
  * The files of a skill that is already on this machine, so the hub can adopt it
  * into the fleet and hand it to every other machine. Named as
- * {@link inspectConfig} named it, plugin skills included. Every file in it,
- * a note someone added included, but CawCo's own list of what the fleet
- * carried ({@link CARRIED}).
+ * {@link inspectConfig} named it, plugin skills included.
  */
 export const readSkillFiles = async (
   name: string,
@@ -3888,21 +3913,28 @@ export const readSkillFiles = async (
   if (!skill) {
     throw new Error(`no skill ${name} on this machine`);
   }
+  return await skillFilesAt(skill.path);
+};
 
-  const files: SkillFile[] = [];
-  const paths = (await filesUnder(skill.path)).filter(
-    (each) => each !== CARRIED
-  );
-  for (const path of paths) {
-    const content = new Uint8Array(
-      await Bun.file(join(skill.path, path)).arrayBuffer()
-    );
-    files.push({
-      path,
-      contentBase64: Buffer.from(content).toString("base64"),
-      // biome-ignore lint/suspicious/noBitwiseOperators: the execute bits of a stat mode are a mask, and the mask is the question
-      executable: ((await stat(join(skill.path, path))).mode & 0o111) !== 0,
-    });
+/**
+ * The files of a skill folder anywhere on this machine, named by its
+ * absolute path (`~/` is this machine's home), for an install from it (core
+ * `READ_SKILL_FOLDER`). The folder must hold a SKILL.md of its own.
+ */
+export const readSkillFolder = async (path: string): Promise<SkillFile[]> => {
+  const expanded = expandHome(path);
+  if (!isAbsolute(expanded)) {
+    throw new Error(`${path} is not an absolute path`);
   }
-  return files;
+  const dir = await realpath(expanded).catch(() => {
+    throw new Error(`${path} does not exist on this machine`);
+  });
+  if (!(await stat(dir)).isDirectory()) {
+    throw new Error(`${path} is a file, not a skill folder`);
+  }
+  const skillMd = await lstat(join(dir, "SKILL.md")).catch(() => undefined);
+  if (!skillMd?.isFile()) {
+    throw new Error(`${path} holds no SKILL.md`);
+  }
+  return await skillFilesAt(dir);
 };

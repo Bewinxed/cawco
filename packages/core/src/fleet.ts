@@ -1661,8 +1661,74 @@ export interface MachineHookScript {
 export const FLEET_STATUS = "fleetStatus";
 export const INSPECT_CONFIG = "inspectConfig";
 export const READ_SKILL_FILES = "readSkillFiles";
+/**
+ * `readSkillFolder(path: string) => SkillFile[]` — the files of a skill
+ * folder anywhere on the machine (its SKILL.md and everything beside it),
+ * for an install from that folder (hub skills.ts, a `file://` source).
+ */
+export const READ_SKILL_FOLDER = "readSkillFolder";
 export const READ_MEMORY_FILE = "readMemoryFile";
 export const READ_HOOK_SCRIPT = "readHookScript";
+
+/**
+ * Directories no skill's files live in, and each a big read: left out of
+ * every skill read, from a repo at the hub or a folder on a machine.
+ */
+export const SKILL_SKIPPED_DIRS: readonly string[] = [
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "__pycache__",
+];
+
+/**
+ * The most a skill folder read off a machine carries ({@link READ_SKILL_FOLDER}):
+ * a skill is instructions and the scripts and pictures they name, and a
+ * folder past this is a project, not a skill. Our call.
+ */
+export const SKILL_FOLDER_LIMIT_BYTES = 16 * 1024 * 1024;
+
+/** The most files a skill folder read off a machine carries. Our call. */
+export const SKILL_FOLDER_LIMIT_FILES = 500;
+
+/** A YAML block-scalar marker (`>`, `|`, with an optional `-`/`+` chomp indicator). */
+const YAML_BLOCK_SCALAR = /^[|>][-+]?$/u;
+
+/** A line that continues a YAML block scalar: indented, or blank. */
+const YAML_CONTINUATION = /^\s/u;
+
+/**
+ * A skill's own description, out of the SKILL.md front matter Claude Code
+ * reads. Long ones are written as YAML block scalars (`description: >-` and the
+ * text indented under it), which a read of the key's own line answers with the
+ * marker instead of a sentence.
+ */
+export function skillDescription(source: string): string | undefined {
+  if (!source.startsWith("---")) {
+    return undefined;
+  }
+  const end = source.indexOf("\n---", 3);
+  const front = (end === -1 ? source : source.slice(0, end)).split("\n");
+  const at = front.findIndex((row) => row.startsWith("description:"));
+  if (at === -1) {
+    return undefined;
+  }
+
+  const value = front[at].slice("description:".length).trim();
+  if (!YAML_BLOCK_SCALAR.test(value)) {
+    return value.replace(/^["']|["']$/gu, "") || undefined;
+  }
+
+  const block: string[] = [];
+  for (const row of front.slice(at + 1)) {
+    if (row.trim() !== "" && !YAML_CONTINUATION.test(row)) {
+      break;
+    }
+    block.push(row.trim());
+  }
+  return block.join(" ").trim() || undefined;
+}
 
 /** What a machine holds, by kind: name → hash of the files on its disk. */
 export type FleetHoldings = NonNullable<FleetSyncReport["have"]>;

@@ -112,6 +112,7 @@ import {
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
+  READ_SKILL_FOLDER,
   resumeCursor,
   SESSION_DIR_READ,
   SESSION_STOPPED,
@@ -184,6 +185,7 @@ import {
   readHookScript,
   readMemoryFile,
   readSkillFiles,
+  readSkillFolder,
   syncFleetConfig,
 } from "../fleet";
 import {
@@ -5177,6 +5179,8 @@ class ClaudeHarness implements Harness {
         return readHookScript(args[0] as string);
       case READ_SKILL_FILES:
         return readSkillFiles(args[0] as string, args[1] as string | undefined);
+      case READ_SKILL_FOLDER:
+        return readSkillFolder(args[0] as string);
       case INSPECT_CONFIG:
         return inspectConfig(args[0] as string | undefined);
       // Each change to an account dir's sign-in is one a report waits out

@@ -3549,7 +3549,7 @@ public enum Words {
         }
 
         /// Backticks mark what is set in the code face (Coded.svelte, `coded`).
-        public static let sourceHint = "The install command, an `owner/repo` slug, or a `skills:`, `github:`, `npm:` or `https://` source."
+        public static let sourceHint = "The install command, an `owner/repo` slug, or a `skills:`, `github:`, `npm:`, `https://` or `file://<machine>/<folder>` source."
 
         public static let sourcePlaceholder = "bunx skills add pbakaus/impeccable"
 

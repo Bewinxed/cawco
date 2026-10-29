@@ -24,6 +24,13 @@ const SOURCE_FACTS = z.object({
   stars: z.number().optional(),
   unknown: z.string().optional(),
   weeklyDownloads: z.number().optional(),
+  skill: z
+    .object({
+      description: z.string(),
+      files: z.array(z.string()),
+      name: z.string(),
+    })
+    .optional(),
 }) satisfies z.ZodType<SourceFacts>;
 
 /** Who runs an approved call: the hub, as the asker, through admin-tools `run`. */
