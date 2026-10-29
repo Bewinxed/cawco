@@ -6,8 +6,8 @@
   item: the 30px option chip with its keycap, its place in its decision),
   then the Recommended and Current badges after it; then its line (what it
   gets), its cost (what it costs), its builds (what picking it means
-  building or changing) and its media, each in its row, each labelled
-  (core `decisionsWords`: Gets, Costs, Builds). The
+  building or changing) and its media, each in its row, each the
+  writer's own sentence with no label before it. The
   overlay stores a press on its `data-option` (pick.ts) and the group draws
   it chosen. The line and the cost are labels of the chip, so a press on
   their words picks too; the pick is named by its label alone, and its line,
@@ -133,7 +133,7 @@
       ]}
       data-option-for={id}
       for="{uid}-chip"
-      id="{uid}-line">{words.gets(String(props.line))}</label
+      id="{uid}-line">{String(props.line)}</label
     >
   {/if}
   {#if props.cost}
@@ -144,7 +144,7 @@
       ]}
       data-option-for={id}
       for="{uid}-chip"
-      id="{uid}-cost">{words.costs(String(props.cost))}</label
+      id="{uid}-cost">{String(props.cost)}</label
     >
   {/if}
   {#if props.builds}
@@ -155,7 +155,7 @@
       ]}
       data-option-for={id}
       for="{uid}-chip"
-      id="{uid}-builds">{words.builds(String(props.builds))}</label
+      id="{uid}-builds">{String(props.builds)}</label
     >
   {/if}
   {#if media.length > 0}

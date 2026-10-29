@@ -35,7 +35,6 @@ import type { ElementNode } from "@openuidev/lang-core";
 import type { ChoiceEntry, SettledBy } from "./choices";
 import { DECISION_KINDS, type DecisionKind, decidedByLine } from "./decides";
 import type { DecisionComponentName } from "./decisions-library";
-import { decisionsWords } from "./words/decisions";
 
 /** One option of a card, as the page labelled it. */
 export interface DecisionOption {
@@ -454,8 +453,8 @@ const chosenLines = (card: RecordCard, id: string): string[] => {
   const option = card.options.find((each) => each.id === id);
   return [
     `**${labelOf(card, id)}**${option?.line ? ` — ${option.line}` : ""}`,
-    ...(option?.cost ? [`- ${decisionsWords.costs(option.cost)}`] : []),
-    ...(option?.builds ? [`- ${decisionsWords.builds(option.builds)}`] : []),
+    ...(option?.cost ? [`- Costs: ${option.cost}`] : []),
+    ...(option?.builds ? [`- Builds: ${option.builds}`] : []),
   ];
 };
 

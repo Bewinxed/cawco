@@ -44,7 +44,6 @@
  */
 import {
   type ChoiceEntry,
-  decisionsWords,
   ENDED_STATUSES,
   type InstanceRow,
 } from "@cawco/core";
@@ -130,12 +129,10 @@ const shown = (raw: string): string =>
 const MOCKUP_CLASS = /(?:^|\s)mk-([a-z0-9-]+)(?:\s|$)/u;
 const RECOMMENDED = /recommended/iu;
 
-/** An option's part as the kit labels it (`Gets: …`, RECIPES.md), its words without the label the card draws for itself. */
-const unlabelled = (raw: string, label: (words: string) => string): string => {
-  const words = shown(raw);
-  const head = label("");
-  return words.startsWith(head) ? words.slice(head.length).trim() : words;
-};
+/** A label a page written to the old kit put before an option's part ("Gets:", "Costs:", "Builds:"). */
+const PART_LABEL = /^(?:Gets|Costs|Builds):\s*/u;
+/** An option's part as the writer's own sentence: a page from before the kit dropped its labels keeps them out of the card. */
+const unlabelled = (raw: string): string => shown(raw).replace(PART_LABEL, "");
 
 /** What a page says of itself: its title and its cards, in page order. */
 export interface ReadPage {
@@ -161,8 +158,8 @@ interface OpenOption {
  * A built decision page's title and cards. A card is a choice group
  * (`[data-cawco-choice]` with options): its question and why are its
  * article's, its options labelled by their `<b>`, their first plain
- * `<span>` (what it gets), their `.dp-cost` and `.dp-builds`, each without
- * the kit's label, and a `.dp-tag` saying Recommended. A choice group outside an
+ * `<span>` (what it gets), their `.dp-cost` and `.dp-builds`, each the
+ * writer's sentence, and a `.dp-tag` saying Recommended. A choice group outside an
  * article is named by its `aria-label`.
  */
 const readPage = async (html: string): Promise<ReadPage> => {
@@ -179,9 +176,9 @@ const readPage = async (html: string): Promise<ReadPage> => {
   const closeOption = () => {
     if (option && card) {
       option.option.label = shown(option.label) || option.option.id;
-      option.option.line = unlabelled(option.line, decisionsWords.gets);
-      option.option.cost = unlabelled(option.cost, decisionsWords.costs);
-      const builds = unlabelled(option.builds, decisionsWords.builds);
+      option.option.line = unlabelled(option.line);
+      option.option.cost = unlabelled(option.cost);
+      const builds = unlabelled(option.builds);
       card.options.push(builds ? { ...option.option, builds } : option.option);
     }
     option = null;

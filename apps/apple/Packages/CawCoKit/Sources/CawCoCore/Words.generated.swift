@@ -1922,19 +1922,6 @@ public enum Words {
             "Recommended: \(label). \(why)"
         }
 
-        /// A live card's option, each part labelled: what picking it gets the person, what it costs them, what it means building (the Option's line, cost and builds).
-        public static func gets(line: String) -> String {
-            "Gets: \(line)"
-        }
-
-        public static func costs(cost: String) -> String {
-            "Costs: \(cost)"
-        }
-
-        public static func builds(builds: String) -> String {
-            "Builds: \(builds)"
-        }
-
         /// The writer's mark on the option that stands today.
         public static let current = "Current"
 
