@@ -104,17 +104,6 @@ export function elementWords(el: Element | null, described: string): string {
     : said;
 }
 
-/** What a clip did to its element: brought it in (not there before the move), took it away (gone after), else changed it. */
-export const kindOf = (
-  target: Element | null,
-  before: ReadonlySet<Element>
-): ClipKind => {
-  if (!target?.isConnected) {
-    return "exit";
-  }
-  return before.has(target) ? "change" : "enter";
-};
-
 const TIME = /^(-?[\d.]+)(ms|s)$/;
 const ROOT_SELECTOR = /(^|,)\s*(:root|html)\b/;
 const VAR_ONLY = /^var\(\s*(--[\w-]+)\s*\)$/;
