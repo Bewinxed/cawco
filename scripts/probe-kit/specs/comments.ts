@@ -8328,6 +8328,37 @@ const frameHolding = (screen: Page, id: string, what: string) =>
     30_000
   ).catch(() => null) as Promise<Frame | null>;
 
+/**
+ * The thread a pin's chip opened where it stands (CommentChip): the hover
+ * panel on a desk, the sheet on a phone. Its card's pill figure, whether
+ * Open where it is stands in it, and its head's box.
+ */
+const chipThread = (screen: Page, pinId: string) =>
+  until(
+    `the thread pin ${pinId}'s chip opened`,
+    async () => {
+      const panelId = await screen
+        .locator(`[data-pin-chip="${pinId}"]`)
+        .first()
+        .getAttribute("aria-controls");
+      const panel = screen.locator(`[data-comment-chip-panel="${panelId}"]`);
+      const head = panel.locator('[data-slot="head"]').first();
+      if ((await head.count()) === 0) {
+        return null;
+      }
+      const pill = head
+        .locator('[data-slot="head-pill"] [data-figure]')
+        .first();
+      return {
+        figure: (await pill.count()) > 0 ? await pill.textContent() : null,
+        where: (await panel.locator("[data-open-where]").count()) === 1,
+        head: await head.boundingBox(),
+      };
+    },
+    (now) => now?.figure === pinId.split("/").at(-1) && !!now?.where,
+    10_000
+  ).catch(() => null);
+
 /** Colours as sRGB bytes, as `screen` paints them. */
 const srgbOf = (screen: Page, colors: string[]) =>
   screen.evaluate((list) => {
@@ -8705,13 +8736,32 @@ const pointChecks = async (
     (now) => now.dot !== null,
     15_000
   ).catch(() => null);
+  // Pressed, the chip opens its thread where it stands (CommentChip): the
+  // popover holds pin 2's card and Open where it is, and opening it marks
+  // the answer seen. Open where it is brings the page to the panel at the pin.
   await on.page.locator(`[data-pin-chip="${id}/2"]`).first().click();
+  const popover = await chipThread(on.page, `${id}/2`);
+  const after = await until(
+    "the chip's dot gone once its thread is open",
+    () => readChips(),
+    (now) => now.dot === null,
+    10_000
+  ).catch(() => readChips());
+  await on.page
+    .locator("[data-comment-chip-panel] [data-open-where]")
+    .first()
+    .click()
+    .catch(() => undefined);
   const pinned = await frameHolding(on.page, id, "the pin's page in the pane");
   const thread = on.page.locator('[data-slot="pin-card"][data-pin-card="2"]');
   const opened = await thread
     .waitFor({ timeout: 10_000 })
     .then(() => true)
     .catch(() => false);
+  const popoverGone =
+    (await on.page
+      .locator("[data-comment-chip-panel] [data-open-where]")
+      .count()) === 0;
   const seen = pinned
     ? await until(
         "pin 2 looked at",
@@ -8720,21 +8770,23 @@ const pointChecks = async (
         10_000
       ).catch(() => null)
     : null;
-  const after = await readChips();
   const pageDot = pinned
     ? await pinned
         .locator('svg[data-cawco-pins] g[data-pin="2"] [data-dot]')
         .count()
     : -1;
   on.kit.check(
-    "chip: after a reload the chip still wears the dot; pressed, the panel holds the pin's artifact with pin 2's thread open, pin 2 is looked at (`seenAt`), and the dot is gone from the chip and the page",
+    "chip: after a reload the chip still wears the dot; pressed, it opens pin 2's thread where it stands (its card and Open where it is), pin 2 is looked at (`seenAt`) and the dot is gone from the chip and the page; Open where it is puts the popover away and the panel holds the pin's artifact with pin 2's thread open",
     !!back &&
+      popover?.figure === "2" &&
+      popover.where &&
+      after.dot === null &&
       !!pinned &&
       opened &&
+      popoverGone &&
       !!seen &&
-      after.dot === null &&
       pageDot === 0,
-    `back ${JSON.stringify(back?.dot)}; artifact ${pinned ? id : "not shown"}; thread ${opened}; seenAt ${String(seen?.seenAt)}; chip dot ${after.dot}; page dots ${pageDot}`
+    `back ${JSON.stringify(back?.dot)}; popover ${JSON.stringify(popover)}; chip dot ${after.dot}; artifact ${pinned ? id : "not shown"}; thread ${opened}; popover gone ${popoverGone}; seenAt ${String(seen?.seenAt)}; page dots ${pageDot}`
   );
   await thread
     .getByRole("button", { name: "Close", exact: true })
@@ -8765,21 +8817,30 @@ const pointChecks = async (
     .locator(`[data-pin-chip="${id}/2"]`)
     .first()
     .click({ timeout: 15_000 });
+  const sheet = await chipThread(phone, `${id}/2`);
+  const view = phone.viewportSize();
+  await phone
+    .locator("[data-comment-chip-panel] [data-open-where]")
+    .first()
+    .click()
+    .catch(() => undefined);
   const onPhone = await frameHolding(phone, id, "the pin's page on the phone");
   const phoneCard = phone.locator('[data-slot="pin-card"][data-pin-card="2"]');
   const phoneOpen = await phoneCard
     .waitFor({ timeout: 10_000 })
-    .then(() => phoneCard.boundingBox())
-    .catch(() => null);
-  const view = phone.viewportSize();
+    .then(() => true)
+    .catch(() => false);
   on.kit.check(
-    "chip (phone): pressed in the transcript, the sheet opens on the pin's artifact with pin 2's thread open, inside the screen",
-    !!onPhone &&
-      !!phoneOpen &&
+    "chip (phone): pressed in the transcript, the thread's sheet opens on pin 2's card inside the screen; its Open where it is brings the pin's artifact up with pin 2's thread open",
+    sheet?.figure === "2" &&
+      sheet.where &&
+      !!sheet.head &&
       !!view &&
-      phoneOpen.y >= 0 &&
-      phoneOpen.y + phoneOpen.height <= view.height + 1,
-    `artifact ${onPhone ? id : "not shown"}; card ${JSON.stringify(phoneOpen)}; view ${JSON.stringify(view)}`
+      sheet.head.y >= 0 &&
+      sheet.head.y + sheet.head.height <= view.height + 1 &&
+      !!onPhone &&
+      phoneOpen,
+    `sheet ${JSON.stringify(sheet)}; view ${JSON.stringify(view)}; artifact ${onPhone ? id : "not shown"}; thread ${phoneOpen}`
   );
   await phone.close();
 };
