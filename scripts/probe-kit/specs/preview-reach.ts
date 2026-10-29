@@ -297,7 +297,7 @@ const decisionSession = async (
       ask: "Pick one option on each card",
       name: "pick-host",
       program: `root = Decisions("Pick the host", [where])
-where = Decision("where", "Where does the site run?", [here, there], "It runs on the machine today.")
+where = Decision("where", "Where does the site run?", [here, there], "It runs on the machine today.", [], [], false, null, "behaviour")
 here = Option("here", "Here", "As it runs now.", true, [live], "Nothing new to try.")
 there = Option("there", "Elsewhere", "Somewhere new.", false, [], "A move to make first.")
 live = Preview("${site.id}", "The site as it runs")`,

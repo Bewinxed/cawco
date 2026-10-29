@@ -81,7 +81,7 @@ const pageProgram = (
   site: string,
   other: string
 ) => `root = Decisions("Pair the code", [leave])
-leave = Decision("leave", "When you approve, how does the code leave?", [swallow, fly], "Both drawn live.")
+leave = Decision("leave", "When you approve, how does the code leave?", [swallow, fly], "Both drawn live.", [], [], false, null, "look")
 swallow = Option("swallow", "Caw swallows the code", "It goes in one gulp.", true, [desk], "Less to watch.")
 fly = Option("fly", "The code flies up to Caw", "It travels up the page.", false, [phone], "More motion to follow.")
 desk = Preview("${site}", "Desk · Caw swallows the code")

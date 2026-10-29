@@ -261,11 +261,13 @@ export const decisionLibrary = <C>(
         .describe(
           'What the note is for, a noun phrase its button finishes ("Add <note>") and its field asks for. Left out, it reads "Add a note".'
         ),
+      // Optional to the parser only, so a page kept before kinds were required
+      // still draws; the hub refuses a new or revised Decision without one.
       kind: z
         .enum(DECISION_KINDS)
         .optional()
         .describe(
-          `What sort of choice it is; the hub settles it by the project's Who decides. ${DECISION_KINDS.map((kind) => `${kind}: ${DECISION_KIND_WORDS[kind].example}`).join("; ")}. Left out, the person picks.`
+          `Required: what sort of choice it is; the hub settles it by the project's Who decides. ${DECISION_KINDS.map((kind) => `${kind}: ${DECISION_KIND_WORDS[kind].example}`).join("; ")}. A look decision gives each option a picture (Image, Preview or Canvas).`
         ),
     })
   );
@@ -310,15 +312,15 @@ export const decisionLibrary = <C>(
 
 /** One page, as the prompt shows it: two decisions and an edge. */
 const EXAMPLE = `root = Decisions("Price the hosted plan", [shape, trial])
-shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.")
+shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.", [], [], false, null, "scope")
 seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.", true, "Nothing: today's billing.")
 machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.", false, "A machine count in billing and a new price page.")
-trial = Decision("trial", "How long is the trial?", [week, month], "A month covers a whole project.", [], ["shape"])
+trial = Decision("trial", "How long is the trial?", [week, month], "A month covers a whole project.", [], ["shape"], false, null, "scope")
 week = Option("week", "A week", "People decide fast.", false, [], "Too short to finish a real project.")
 month = Option("month", "A month", "Thirty days, then pay.", true, [], "Revenue starts a month later.")`;
 
 /** One revision, as the prompt shows it: a reworded decision and a new option, merged by name. */
-const EDIT = `trial = Decision("trial", "How long is the free trial?", [week, month, quarter], "A month covers a whole project.", [], ["shape"])
+const EDIT = `trial = Decision("trial", "How long is the free trial?", [week, month, quarter], "A month covers a whole project.", [], ["shape"], false, null, "scope")
 quarter = Option("quarter", "A quarter", "Time for a team to settle in.", false, [], "A season of hosting unpaid.")`;
 
 /**
@@ -336,6 +338,7 @@ export const decisionPromptOptions = (): PromptOptions => ({
   examples: [EXAMPLE, EDIT],
   additionalRules: [
     "Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets), its cost and its builds (what picking it means building or changing, never how long it takes); exactly one is recommended, and the Decision's why says why: the card shows it after that option's label (Recommended: Per machine. A machine is what the fleet costs to run.), so the why never names the option again. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.",
+    'Every Decision names its kind, the 9th argument (pass [], [], false, null before it when the others are left out). A "look" Decision, about how something looks, gives every Option a picture in its media (Image, Preview or Canvas); the hub refuses one that doesn\'t.',
     "Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.",
     'after names what a decision depends on; one naming another page\'s decision ("page#id") links the two pages, and the Decisions tab says it on each ("After: …", "Unlocks: …"). A Section groups decisions under a heading. Leave them out when the decisions stand alone.',
     "Plain words everywhere: no URLs or markup. Canvas and Preview name an artifact by its id; Image names a file.",

@@ -29,13 +29,13 @@ const respond = (request: Seen): Reply => ({
 });
 
 const KEPT = (site: string) => `root = Decisions("Pair the code", [leave])
-leave = Decision("leave", "When you approve, how does the code leave?", [swallow, fly], "Both drawn live.")
+leave = Decision("leave", "When you approve, how does the code leave?", [swallow, fly], "Both drawn live.", [], [], false, null, "behaviour")
 swallow = Option("swallow", "Caw swallows the code", "It goes in one gulp.", true, [desk], "Less to watch.")
 fly = Option("fly", "The code flies up to Caw", "It travels up the page.", false, [], "More motion to follow.")
 desk = Preview("${site}", "Desk · Caw swallows the code")`;
 
 const ORPHAN = `root = Decisions("Name the plan", [plan])
-plan = Decision("plan", "What is the plan called?", [short, long], "One word reads faster.")
+plan = Decision("plan", "What is the plan called?", [short, long], "One word reads faster.", [], [], false, null, "behaviour")
 short = Option("short", "Short", "One word.", true, [], "Less to say.")
 long = Option("long", "Long", "A phrase.", false, [], "Harder to say.")`;
 

@@ -2871,7 +2871,7 @@ function decisionProgram(
   for (let card = 0; card < cards; card += 1) {
     const mine = picks.slice(card * PER_CARD, (card + 1) * PER_CARD);
     lines.push(
-      `c${card} = Decision("c${card}", "Which reads right, ${card + 1} of ${cards}?", [${mine.map((_, at) => `c${card}o${at}`).join(", ")}], "Each option shows a canvas.")`
+      `c${card} = Decision("c${card}", "Which reads right, ${card + 1} of ${cards}?", [${mine.map((_, at) => `c${card}o${at}`).join(", ")}], "Each option shows a canvas.", [], [], false, null, "look")`
     );
     mine.forEach((pick, at) => {
       const n = card * PER_CARD + at;
@@ -3431,7 +3431,7 @@ const memoryProgram = (picks: { id: string; story: string }[]): string => {
   return [
     `root = Decisions("Ten canvases on one page", [${cards.join(", ")}])`,
     ...cards.flatMap((card, at) => [
-      `${card} = Decision("${card}", "Which reads right, ${at + 1} of ${cards.length}?", [${card}a, ${card}b], "Each option shows a canvas.")`,
+      `${card} = Decision("${card}", "Which reads right, ${at + 1} of ${cards.length}?", [${card}a, ${card}b], "Each option shows a canvas.", [], [], false, null, "look")`,
       `${card}a = Option("${card}a", "First", "This canvas.", true, [p${at * 2}], "The other.")`,
       `${card}b = Option("${card}b", "Second", "That canvas.", false, [p${at * 2 + 1}], "The first.")`,
     ]),

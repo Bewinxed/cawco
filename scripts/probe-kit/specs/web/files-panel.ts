@@ -135,14 +135,14 @@ const DECISIONS = [
   {
     name: "what-routines-become",
     program: `root = Decisions("${FORTY_WORDS}", [shape])
-shape = Decision("shape", "A saved program that runs real delegates", [saved, adhoc], "Today a routine is a brief in the session.")
+shape = Decision("shape", "A saved program that runs real delegates", [saved, adhoc], "Today a routine is a brief in the session.", [], [], false, null, "behaviour")
 saved = Option("saved", "A saved program", "Runs again from the project, with its own name.", true, [], "One more thing to keep.")
 adhoc = Option("adhoc", "As it is", "Nothing new to learn.", false, [], "Nothing to run again.")`,
   },
   {
     name: "resize-handle-pick",
     program: `root = Decisions("Which resize handle?", [handle])
-handle = Decision("handle", "Which handle does the panel's edge wear?", [bead, light], "Today the edge has none.")
+handle = Decision("handle", "Which handle does the panel's edge wear?", [bead, light], "Today the edge has none.", [], [], false, null, "behaviour")
 bead = Option("bead", "A bead", "A dot at the edge's middle.", true, [], "It covers a line of the page.")
 light = Option("light", "A light", "The edge lights under the pointer.", false, [], "Nothing shows until the pointer comes.")`,
   },

@@ -68,7 +68,7 @@ const idFor = (name: string) => idOf(`par-${name}`);
 const program = (title: string, names: readonly string[]): string =>
   [
     `root = Decisions("${title}", [card])`,
-    `card = Decision("card", "Which of these reads right?", [${names.map((_, at) => `o${at}`).join(", ")}], "Each option shows a canvas.")`,
+    `card = Decision("card", "Which of these reads right?", [${names.map((_, at) => `o${at}`).join(", ")}], "Each option shows a canvas.", [], [], false, null, "look")`,
     ...names.map(
       (_name, at) =>
         `o${at} = Option("o${at}", "Option ${at + 1}", "This canvas.", ${at === 0}, [p${at}], "Another canvas.")`

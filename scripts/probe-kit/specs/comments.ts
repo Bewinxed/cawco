@@ -2693,7 +2693,7 @@ const EMBED_CANVAS = `<!doctype html><html lang="en"><head><meta charset="utf-8"
 const embedProgram = (
   canvas: string
 ) => `root = Decisions("Pick how the toggle reads", [look])
-look = Decision("look", "Does the toggle read right?", [keep, redo], "Drawn live, off and on.", [live])
+look = Decision("look", "Does the toggle read right?", [keep, redo], "Drawn live, off and on.", [live], [], false, null, "behaviour")
 keep = Option("keep", "Keep it", "It says its state in words.", true, [], "One more word on the button.")
 redo = Option("redo", "Redraw it", "A new look.", false, [], "Another round.")
 live = Preview("${canvas}", "The toggle, off and on")`;
@@ -8270,14 +8270,14 @@ const cutoverCheck = async (kit: Kit) => {
 const pointProgram = (
   image: string
 ) => `root = Decisions("Point at a card", [reach, tone])
-reach = Decision("reach", "Which channels carry the launch?", [mail, feed], "Both reach a reader.")
+reach = Decision("reach", "Which channels carry the launch?", [mail, feed], "Both reach a reader.", [], [], false, null, "behaviour")
 mail = Option("mail", "Newsletter", "Readers who signed up.", true, [], "A week's wait.")
 feed = Option("feed", "Blog feed", "Readers who follow us.", false, [], "Slow to spread.")
-tone = Decision("tone", "Which tone does it take?", [plain, warm], "One voice.", [shot])
+tone = Decision("tone", "Which tone does it take?", [plain, warm], "One voice.", [shot], [], false, null, "behaviour")
 shot = Image("${image}", "The launch line as it reads", "Today's line")
 plain = Option("plain", "Plain", "Says it.", true, [], "Reads cold to some.")
 warm = Option("warm", "Warm", "Says it kindly.", false, [], "Takes more words.")`;
-const POINT_REVISION = `tone = Decision("tone", "Which tone does the launch take?", [plain, warm], "One voice.", [shot])`;
+const POINT_REVISION = `tone = Decision("tone", "Which tone does the launch take?", [plain, warm], "One voice.", [shot], [], false, null, "behaviour")`;
 
 /** A flat PNG of one grey: the picture a decision card shows, drawn again in another. */
 const greyPng = (level: number) => {
@@ -11802,7 +11802,7 @@ const longNameChecks = async (on: On) => {
     ask: "Pick the long one",
     name: "long-question",
     program: `root = Decisions("A long question", [long])
-long = Decision("long", "${FORTY_WORDS}?", [yes, no], "It runs long.")
+long = Decision("long", "${FORTY_WORDS}?", [yes, no], "It runs long.", [], [], false, null, "behaviour")
 yes = Option("yes", "Yes", "It holds.", true, [], "Nothing.")
 no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
   });

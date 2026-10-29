@@ -229,7 +229,7 @@ const run = async (kit: Kit) => {
     does: "pick",
     ask: "Pick the shot",
     program: `root = Decisions("Which shot?", [shot])
-shot = Decision("shot", "Which shot leads the page?", [drawn, plain], "The mock is drawn below.")
+shot = Decision("shot", "Which shot leads the page?", [drawn, plain], "The mock is drawn below.", [], [], false, null, "behaviour")
 drawn = Option("drawn", "The drawn mock", "As the mock has it.", true, [mockup], "One more picture to keep.")
 plain = Option("plain", "No picture", "The words alone.", false, [], "Nothing to see.")
 mockup = Preview("${mock.id}", "The mock")`,

@@ -32,7 +32,7 @@ import { fleetUp, made, planOn } from "./artifact-resize-loop";
 
 /** A decision page of one card: its options' chips are `touch-hit` controls in the panel's frame. */
 const DECISION = `root = Decisions("Plan the launch", [reach])
-reach = Decision("reach", "Which channel carries the launch?", [mail, feed], "Each reaches a different reader.")
+reach = Decision("reach", "Which channel carries the launch?", [mail, feed], "Each reaches a different reader.", [], [], false, null, "behaviour")
 mail = Option("mail", "The newsletter", "Readers who signed up.", true, [], "A week's wait.")
 feed = Option("feed", "The blog feed", "Readers who follow us.", false, [], "Slow to spread.")`;
 

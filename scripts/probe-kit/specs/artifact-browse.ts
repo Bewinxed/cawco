@@ -170,7 +170,7 @@ export const Off = { args: {} };
 };
 
 const program = (sheet: string) => `root = Decisions("Light the lamp", [lamp])
-lamp = Decision("lamp", "Does the lamp switch read right?", [keep, redo], "Drawn live.")
+lamp = Decision("lamp", "Does the lamp switch read right?", [keep, redo], "Drawn live.", [], [], false, null, "behaviour")
 keep = Option("keep", "Keep this switch", "It says its state in words.", true, [live], "One more word on the button.")
 redo = Option("redo", "Redraw it", "A new look.", false, [], "Another round.")
 live = Preview("${sheet}", "The switch, live")`;

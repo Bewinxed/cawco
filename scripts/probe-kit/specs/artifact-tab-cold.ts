@@ -106,7 +106,7 @@ const folderPage = (word: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${word}</title></head><body><h1 id="word">${word}</h1></body></html>`;
 
 const PROGRAM = `root = Decisions("Pick a word", [word])
-word = Decision("word", "Which word reads right?", [keep, other], "Read both.")
+word = Decision("word", "Which word reads right?", [keep, other], "Read both.", [], [], false, null, "behaviour")
 keep = Option("keep", "Keep this word", "The word as it stands.", true, [], "One more look.")
 other = Option("other", "Another word", "A new word.", false, [], "Another round.")`;
 

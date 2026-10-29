@@ -36,7 +36,7 @@ A choice reaches the person only as a decision card on a page, so every pick is 
 
 A choice that is not yours to make is a decision card with its kind; wait on the card — the hub settles it by the project's Who decides.
 
-Give the Decision its `kind`, the 9th argument (`Decision("cache", "Where do builds cache?", [disk, s3], "Disk is free.", [], [], false, null, "approach")`):
+Every Decision names its `kind`, the 9th argument, and the hub refuses one without it: `Decision("cache", "Where do builds cache?", [disk, s3], "Disk is free.", [], [], false, null, "approach")`.
 
 | kind | The choice |
 | --- | --- |
@@ -47,7 +47,7 @@ Give the Decision its `kind`, the 9th argument (`Decision("cache", "Where do bui
 | `rules` | Rules and checks: a lint rule off, a suppression, a check skipped, a design deviation accepted |
 | `tools` | Tools and conventions: a library, a version, a format, a config value, a name in code |
 
-`artifact_create` and `artifact_update` answer each card's route: the person's (the card waits on him), an advisor's or common practice's (a delegate the hub started settles it and reports to you), or yours. On a card that is yours, call `settle({ card: "<page>#<card>", option, why, sources })`: the pick is kept as yours, with your why, and the person can pick again. A card with no kind is the person's. Wait on the card (`waitsOn: "<page>#<card>"` on a plan step or task) and build once it settles.
+`artifact_create` and `artifact_update` answer each card's route: the person's (the card waits on him), an advisor's or common practice's (a delegate the hub started settles it and reports to you), or yours. On a card that is yours, call `settle({ card: "<page>#<card>", option, why, sources })`: the pick is kept as yours, with your why, and the person can pick again. Wait on the card (`waitsOn: "<page>#<card>"` on a plan step or task) and build once it settles.
 
 ## Steps
 
@@ -74,6 +74,7 @@ Each row refuses the page until it is fixed.
 
 | Refuse | Fix |
 | --- | --- |
+| A `look` card with an option lacking a picture | Give every option an `Image`, `Preview` or `Canvas` in its media: how something looks is shown, never told |
 | A card with no question | Ask the choice in the person's words, ending in "?" |
 | An option with no cost line | Give its `cost`: what picking it takes away or makes harder |
 | Two Recommended on one card, or none | Mark exactly one, and say why in the card's `why` |

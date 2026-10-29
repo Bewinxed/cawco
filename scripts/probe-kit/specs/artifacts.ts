@@ -1434,7 +1434,7 @@ const refusedHandChecks = async ({
 
 /** A decision page's program with one question, as the decision library takes it. */
 const ONE_QUESTION = `root = Decisions("Pick a hero", [hero])
-hero = Decision("hero", "Which hero leads?", [a, b], "A reads at a glance.")
+hero = Decision("hero", "Which hero leads?", [a, b], "A reads at a glance.", [], [], false, null, "behaviour")
 a = Option("a", "Hero A", "One line, one button.", true, [], "Says less.")
 b = Option("b", "Hero B", "A picture and a quote.", false, [], "Slower to read.")`;
 

@@ -262,7 +262,7 @@ const cawReply = (request: Seen, routed: RegExpExecArray): Reply => {
 /** Step 12's decision page, its program, and the session's long work it is pinned during. */
 const BUSY_PAGE = "busy-decision";
 const BUSY_PROGRAM = `root = Decisions("Delegates in any folder", [how])
-how = Decision("how", "How should a delegate work in a folder that isn't a git repository?", [live, snap], "Both use one mechanism for every folder.")
+how = Decision("how", "How should a delegate work in a folder that isn't a git repository?", [live, snap], "Both use one mechanism for every folder.", [], [], false, null, "behaviour")
 live = Option("live", "Live folder, private writes", "A private layer over the real folder.", true, [], "Reads are slower on the Mac.")
 snap = Option("snapshot", "Frozen copy, private writes", "A frozen copy of the folder.", false, [], "Minutes to make on a full disk.")`;
 const BUSY_MARK = "PROBE-BUSY-WORK";

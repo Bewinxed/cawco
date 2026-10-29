@@ -12,6 +12,11 @@
  * - Picks are kept by id, so ids are checked: every decision's is lowercase
  *   and its own on the page, every option's its own in its decision, and an
  *   `after` on the same page names a decision the page has.
+ * - Every decision names its kind (core decides.ts), and a `look` one gives
+ *   each option a picture (Image, Preview or Canvas): a choice of how
+ *   something looks reaches the person drawn, never told. A page kept
+ *   before these rules still loads ({@link readKept}); its next revision
+ *   meets them.
  * - It cannot run code or reach the network: no Query, Mutation, `$state`
  *   or action step, and no URL or markup in its words (a Diagram's Mermaid
  *   is Pele's to escape, its links and images off).
@@ -25,6 +30,7 @@
  * the artifact's route with the overlay, whose page hash is the program's.
  */
 
+import { DECISION_KINDS } from "@cawco/core/decides";
 import { type ProgramRead, readProgram } from "@cawco/core/decisions";
 import {
   AFTER_REF,
@@ -295,8 +301,61 @@ const cardProblems = (
       `Decision "${card.id}" has no why: one sentence on why its recommended option.`
     );
   }
+  if (!card.kind) {
+    problems.push(
+      `Decision "${card.id}" has no kind: give it one as its 9th argument (${DECISION_KINDS.join(", ")}).`
+    );
+  }
   return problems;
 };
+
+/** The pieces that show the person a picture of an option: what a look decision's options each need. */
+const PICTURES: ReadonlySet<string> = new Set<DecisionComponentName>([
+  "Image",
+  "Preview",
+  "Canvas",
+]);
+
+/** Whether `value` holds a picture piece, in a Row or Column too. */
+const holdsPicture = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.some(holdsPicture);
+  }
+  return (
+    isElement(value) &&
+    (PICTURES.has(value.typeName) || holdsPicture(value.props.children))
+  );
+};
+
+/** Every Decision in the page, wherever it stands. */
+const decisionsIn = (value: unknown): ElementNode[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap(decisionsIn);
+  }
+  if (!isElement(value)) {
+    return [];
+  }
+  return value.typeName === "Decision"
+    ? [value]
+    : decisionsIn(value.props.children);
+};
+
+/** A look decision whose options don't each carry a picture: a choice of how something looks is shown, never told. */
+const lookProblems = (root: ElementNode | null): string[] =>
+  decisionsIn(root).flatMap(({ props }) => {
+    if (props.kind !== "look" || !Array.isArray(props.options)) {
+      return [];
+    }
+    const bare = props.options
+      .filter(isElement)
+      .filter((option) => !holdsPicture(option.props.media))
+      .map((option) => `"${String(option.props.id)}"`);
+    return bare.length > 0
+      ? [
+          `Decision "${String(props.id)}" is about how something looks: give each option a picture (Image, Preview or Canvas); ${bare.join(", ")} ${bare.length === 1 ? "has" : "have"} none.`,
+        ]
+      : [];
+  });
 
 /** A decision's `after`s: each an id or `page#id`, one on this page a decision it has, never itself. */
 const afterProblems = (
@@ -527,7 +586,11 @@ const checkProgram = (
   }
   const read = readProgram(result.root);
   const whole = wholeArtifacts(program, read, artifact);
-  const ids = [...idProblems(read), ...whole.problems];
+  const ids = [
+    ...idProblems(read),
+    ...lookProblems(result.root),
+    ...whole.problems,
+  ];
   if (ids.length > 0) {
     refuse(ids);
   }

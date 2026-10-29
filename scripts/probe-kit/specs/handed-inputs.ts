@@ -970,7 +970,7 @@ const refusedBefore = async (
       ask: "Pick the page",
       name: `probe-short-preview-${RUN}`,
       program: `root = Decisions("Keep the page", [keep])
-keep = Decision("keep", "Keep the served page?", [yes, no], "It is the one served.")
+keep = Decision("keep", "Keep the served page?", [yes, no], "It is the one served.", [], [], false, null, "behaviour")
 yes = Option("yes", "Keep it", "It shows the folder.", true, [live], "Nothing more.")
 no = Option("no", "Redo it", "A new page.", false, [], "Another round.")
 live = Preview("${previewId.slice(0, 8)}", "The served page")`,
