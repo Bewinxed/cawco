@@ -21,6 +21,7 @@ import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
   awaySaid,
+  CANVAS_EMBED_FAILED,
   CANVAS_EMBED_FETCHED,
   CANVAS_EMBED_SIZE,
   CANVAS_GRAPH_FETCHED,
@@ -137,6 +138,9 @@ const FAILED_LINE: Record<SectionFailure["kind"], (name: string) => string> = {
     `${name} doesn't compile, so none of its stories are drawn.`,
   page: (name) => `${name} didn't load, so none of its stories are drawn.`,
 };
+
+/** The most of a story's error an embed's failure carries (`CANVAS_EMBED_FAILED`): its Preview says it on one line. Our call. */
+const EMBED_WHY_MAX = 200;
 
 /** How long a section's failed import waits for the stage's words. Our call: Vite sends them before it answers the request. */
 const STAGE_SAYS_MS = 1000;
@@ -1447,6 +1451,7 @@ export function boot(options: BootOptions): void {
       return adapter.mountStory(body, specFor(section, name, args), (error) => {
         into.error = pageError(error, root, base);
         later();
+        sayShape();
       });
     } catch (error) {
       into.error = pageError(error, root, base);
@@ -1507,12 +1512,24 @@ export function boot(options: BootOptions): void {
    * embed-turns.ts), and a shape said at boot, 0.6 s in with no frame
    * drawn, let the next start while this one still fetched its graph; a
    * page of 33 such Previews had ten say "didn't load".
+   *
+   * An embed that can't draw what its Preview names says why instead
+   * (`CANVAS_EMBED_FAILED`, {@link embedFailure}): a shape of nothing drawn
+   * stood in its Preview as an empty box.
    */
   function sayShape(): void {
     if (
       !embed ||
       sections.some((section) => !(section.loaded || section.failure))
     ) {
+      return;
+    }
+    const why = embedFailure();
+    if (why !== null) {
+      if (saidShape !== `failed ${why}`) {
+        saidShape = `failed ${why}`;
+        window.parent.postMessage({ type: CANVAS_EMBED_FAILED, why }, "*");
+      }
       return;
     }
     const height = Math.ceil(world.offsetHeight);
@@ -1528,6 +1545,29 @@ export function boot(options: BootOptions): void {
     }
     saidShape = shape;
     window.parent.postMessage({ type: CANVAS_EMBED_SIZE, height, width }, "*");
+  }
+
+  /**
+   * Why an embed can't draw what its Preview names, in plain words; null
+   * while it draws: a story of it that threw as it mounted, or, with no
+   * story of it drawn, a states file that didn't load (its section's line).
+   */
+  function embedFailure(): string | null {
+    const frames = sections.flatMap((section) => [...section.frames.values()]);
+    const threw = frames.find((frame) => frame.error);
+    if (threw?.error) {
+      const first = threw.error.message.split("\n")[0]?.trim() ?? "";
+      const words =
+        first.length > EMBED_WHY_MAX
+          ? `${first.slice(0, EMBED_WHY_MAX - 1)}…`
+          : first;
+      return `its story ${threw.story.name} threw as it mounted${words ? `: ${words}` : "."}`;
+    }
+    const failed = sections.find((section) => section.failure);
+    if (frames.length === 0 && failed?.failure) {
+      return FAILED_LINE[failed.failure.kind](failed.name);
+    }
+    return null;
   }
 
   /** The frame's body set for its column: its scheme, width and forced state. */

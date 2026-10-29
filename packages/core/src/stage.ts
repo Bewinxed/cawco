@@ -83,6 +83,15 @@ export const sectionName = (
 export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 
 /**
+ * A canvas embed that can't draw what its Preview names, in place of its
+ * shape: `{ type, why }`, why in plain words (a story that threw as it
+ * mounted, a states file that didn't load). The Preview says it in its own
+ * place, so it never stands as an empty frame (dashboard decisions host
+ * Preview.svelte).
+ */
+export const CANVAS_EMBED_FAILED = "cawco:embed-failed";
+
+/**
  * Any page framed by another (a decision page's Preview of a page, a dev
  * server's or a folder's preview): the message its overlay posts to the
  * page holding it, `{ type, least }`, the least font size its shown words

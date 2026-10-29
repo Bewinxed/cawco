@@ -1928,6 +1928,35 @@ public enum Words {
         /// A Preview of a page-sized design: it at the front of the session's panel, at the panel's whole size.
         public static let openFull = "Open full size"
 
+        /// A Preview that can't show its design, said where it would stand (dashboard Preview.svelte): what happened, then why and the way back.
+        public static func previewFailed(why: String) -> String {
+            "This preview didn't load: \(why)"
+        }
+
+        /// The hop its proxy named as not answering (core `PreviewDown`); `…Why` with the machine's own words for it, in parentheses.
+        public static let previewServerDown = "its server stopped answering. Start it again from its session, then try again."
+
+        public static func previewServerDownWhy(why: String) -> String {
+            "its server stopped answering (\(why)). Start it again from its session, then try again."
+        }
+
+        public static let previewWorkspaceDown = "its workspace isn't running. Once a session runs there again, try again."
+
+        public static let previewMachineDown = "its machine isn't connected to the hub. Once it's back, try again."
+
+        public static let previewReachDown = "the way to its server didn't open. Try again; if it fails again, start the server again from its session."
+
+        public static func previewReachDownWhy(why: String) -> String {
+            "the way to its server didn't open (\(why)). Try again; if it fails again, start the server again from its session."
+        }
+
+        public static let previewClosed = "its session shows something else now, or has ended. Open its session to show it again."
+
+        /// A canvas told to draw that said neither its shape nor why within `seconds`.
+        public static func previewLate(seconds: Int) -> String {
+            "its stage didn't draw it within \(seconds) s. Try again; if it stays empty, open the canvas in its session to see why."
+        }
+
         /// A decided card's fold: the options turned down.
         public static func others(count: Int) -> String {
             "\(count) other \(count == 1 ? "option" : "options")"

@@ -71,6 +71,29 @@ export const decisionsWords = {
   current: "Current",
   /** A Preview of a page-sized design: it at the front of the session's panel, at the panel's whole size. */
   openFull: "Open full size",
+  /**
+   * A Preview that can't show its design, said where it would stand
+   * (dashboard Preview.svelte): what happened, then why and the way back.
+   */
+  previewFailed: (why: string) => `This preview didn't load: ${why}`,
+  /** The hop its proxy named as not answering (core `PreviewDown`); `…Why` with the machine's own words for it, in parentheses. */
+  previewServerDown:
+    "its server stopped answering. Start it again from its session, then try again.",
+  previewServerDownWhy: (why: string) =>
+    `its server stopped answering (${why}). Start it again from its session, then try again.`,
+  previewWorkspaceDown:
+    "its workspace isn't running. Once a session runs there again, try again.",
+  previewMachineDown:
+    "its machine isn't connected to the hub. Once it's back, try again.",
+  previewReachDown:
+    "the way to its server didn't open. Try again; if it fails again, start the server again from its session.",
+  previewReachDownWhy: (why: string) =>
+    `the way to its server didn't open (${why}). Try again; if it fails again, start the server again from its session.`,
+  previewClosed:
+    "its session shows something else now, or has ended. Open its session to show it again.",
+  /** A canvas told to draw that said neither its shape nor why within `seconds`. */
+  previewLate: (seconds: number) =>
+    `its stage didn't draw it within ${seconds} s. Try again; if it stays empty, open the canvas in its session to see why.`,
   /** A decided card's fold: the options turned down. */
   others: (count: number) =>
     `${count} other ${count === 1 ? "option" : "options"}`,

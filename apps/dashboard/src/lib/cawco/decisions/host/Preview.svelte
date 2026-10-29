@@ -39,11 +39,16 @@
   drew them; the kit's picture where none was ever drawn) until it stands
   drawn, never an empty box; past the
   grace Caw and the line stand over either (DESIGN.md, Skeleton, The Claim
-  Of Nothing Rule, The Real Wait Rule). One the hub no longer holds says so
-  in words where it would stand.
+  Of Nothing Rule, The Real Wait Rule). One that can't stand says why in
+  one line in its place and shape, with Try again: an origin unreached, the
+  proxy's own page in its frame (`cawco:down`: its workspace not running,
+  its server stopped, its session closed it), a canvas that says it can't
+  draw what it names (core `CANVAS_EMBED_FAILED`), or one told to draw that
+  says neither its shape nor why within `DRAW_MS`. One the hub no longer
+  holds says so in words where it would stand.
 -->
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords, PREVIEW_DOWNS, type PreviewDown } from "@cawco/core";
   import {
     askHubReach,
     PREVIEW_REACH_PATH,
@@ -53,6 +58,7 @@
     probePreview,
   } from "@cawco/core/preview-reach";
   import {
+    CANVAS_EMBED_FAILED,
     CANVAS_EMBED_FETCHED,
     CANVAS_EMBED_GO,
     CANVAS_EMBED_GRAPH,
@@ -248,13 +254,20 @@
   $effect(() => {
     const heard = (event: MessageEvent) => {
       const said = event.data as {
+        down?: unknown;
         height?: unknown;
         least?: unknown;
         type?: unknown;
         urls?: unknown;
+        why?: unknown;
         width?: unknown;
       } | null;
       if (event.source !== frame?.contentWindow) {
+        return;
+      }
+      const why = failureIn(said);
+      if (why !== null) {
+        fail(why);
         return;
       }
       // A page-sized design's least words: how far it may be scaled.
@@ -366,8 +379,59 @@
     }
     return tall === null ? "screen" : "drawn";
   });
-  /** Why the origin can't be reached, in the shared classifier's words (core `previewUnreachedWords`). */
-  let failed = $state<string | null>(null);
+  /**
+   * Why it can't stand: its origin unreached, in the shared classifier's
+   * words (core `previewUnreachedWords`), or its frame's own failure, one
+   * line (`decisionsWords.previewFailed`): the hop the proxy's page named,
+   * the canvas's own why, or a draw that never came ({@link DRAW_MS}).
+   */
+  let failed = $state<
+    | { cause: string; kind: "unreached" }
+    | { kind: "failed"; line: string }
+    | null
+  >(null);
+  /** It can't stand, for `why` (plain words, after "This preview didn't load:"): its wait ends, and its turn with it. */
+  const fail = (why: string) => {
+    failed = { kind: "failed", line: decisionsWords.previewFailed(why) };
+    turn?.done();
+  };
+  /**
+   * Why its frame's message says it can't stand, in plain words: the
+   * proxy's own page in the frame, naming the hop that didn't answer (core
+   * `downResponse`, `cawco:down`), or a canvas that can't draw what this
+   * Preview names (core `CANVAS_EMBED_FAILED`); null for any other message.
+   */
+  const failureIn = (
+    said: { down?: unknown; type?: unknown; why?: unknown } | null
+  ): string | null => {
+    const why = typeof said?.why === "string" ? said.why : null;
+    if (said?.type === "cawco:down") {
+      const hop = PREVIEW_DOWNS.find((one) => one === said.down);
+      return hop ? downWhy(hop, why) : null;
+    }
+    return said?.type === CANVAS_EMBED_FAILED ? why : null;
+  };
+  /** Why the proxy's page says nothing serves it, by the hop it named (core `PreviewDown`) and the machine's words for it. */
+  const downWhy = (hop: PreviewDown, why: string | null): string => {
+    switch (hop) {
+      case "server":
+        return why === null
+          ? decisionsWords.previewServerDown
+          : decisionsWords.previewServerDownWhy(why);
+      case "workspace":
+        return decisionsWords.previewWorkspaceDown;
+      case "machine":
+        return decisionsWords.previewMachineDown;
+      case "reach":
+        return why === null
+          ? decisionsWords.previewReachDown
+          : decisionsWords.previewReachDownWhy(why);
+      case "closed":
+        return decisionsWords.previewClosed;
+      default:
+        return hop satisfies never;
+    }
+  };
   /** The wait has outlasted `--dur-wait-grace`: its line, or the failure, may show. */
   let slow = $state(false);
   /** Each Try again asks the origin again from the start. */
@@ -439,6 +503,8 @@
   /** The rest of its graph once every module of it is in (embed-turns.ts `ready`), held until its card is {@link close}; and the frame's origin to tell it to. */
   // Raw: a structured clone takes no proxy (postMessage refuses one with a DataCloneError).
   let rest = $state.raw<{ origin: string; urls: string[] } | null>(null);
+  /** Its frame was told to draw (`CANVAS_EMBED_READY`): its whole graph is in this browser, and it has {@link DRAW_MS} to say its shape or why it can't. */
+  let told = $state(false);
   $effect(() => {
     if (close && rest) {
       frame?.contentWindow?.postMessage(
@@ -446,13 +512,34 @@
         rest.origin
       );
       rest = null;
+      told = true;
     }
+  });
+  /**
+   * How long a canvas told to draw may take to say its shape or why it
+   * can't before its Preview says it didn't load: its graph is already in
+   * this browser by then, so what is left is evaluating it and mounting its
+   * stories (caw-panel's 839 modules drew 2.3 s after they arrived, stage
+   * host.ts). Our call: past any page's evaluation, short of a wait nobody
+   * reads as loading. A frame that says neither (a page that isn't the
+   * canvas, an import that never settles) is otherwise an empty box for good.
+   */
+  const DRAW_MS = 30_000;
+  $effect(() => {
+    if (!told || shaped || failed) {
+      return;
+    }
+    const late = setTimeout(() => {
+      fail(decisionsWords.previewLate(DRAW_MS / 1000));
+    }, DRAW_MS);
+    return () => clearTimeout(late);
   });
   $effect(() => {
     const embed = held?.embed;
     track(attempt);
     ready = null;
     rest = null;
+    told = false;
     drawn = false;
     failed = null;
     slow = false;
@@ -533,7 +620,10 @@
       }
       asking = false;
       if (why) {
-        failed = previewUnreachedWords(at.host, why, previewsNeed(at));
+        failed = {
+          kind: "unreached",
+          cause: previewUnreachedWords(at.host, why, previewsNeed(at)),
+        };
         turn?.done();
       } else {
         ready = address;
@@ -557,6 +647,26 @@
   });
   /** The failure stands once the grace is over: inside it the wait shows nothing of its own. */
   const fault = $derived(slow ? failed : null);
+  /**
+   * The box's least height where a fault stands in it: the picture's own as
+   * its wait held it (its said height, else its stories' as the media knows
+   * them, `--space-3` between), so the card keeps its place and shape when
+   * the picture fails; null for a screen's 16:10, or a canvas never drawn
+   * anywhere, which hold the kit picture's.
+   */
+  const heldHeight = $derived.by(() => {
+    if (screen) {
+      return null;
+    }
+    if (tall !== null) {
+      return `${tall}px`;
+    }
+    if (!known) {
+      return null;
+    }
+    const sum = known.parts.reduce((all, part) => all + part.h, 0);
+    return `calc(${sum}px + ${known.parts.length - 1} * var(--space-3))`;
+  });
 </script>
 
 {#snippet full()}
@@ -629,7 +739,7 @@
       ></iframe>
     </div>
   {:else if held?.embed}
-    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at its picture's own shape as the page's media knows it (the kit's picture where none was ever drawn), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace Caw and the wait's line stand over the screen's place or the canvas's skeleton (The Real Wait Rule), until it stands at its shape; then the row stands over the frame, empty. An origin that can't be reached says why in its place past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at its picture's own shape as the page's media knows it (the kit's picture where none was ever drawn), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace Caw and the wait's line stand over the screen's place or the canvas's skeleton (The Real Wait Rule), until it stands at its shape; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div
       bind:this={box}
       class={["relative", picture === undefined ? "w-full" : "flex-none"]}
@@ -638,21 +748,37 @@
         : `${picture * scale}px`}
     >
       {#if fault}
+        <!-- In the picture's own place and shape (`heldHeight`, else the kit picture's 16:10), never a box that says nothing: what happened in one line, then Try again. -->
         <div
-          class="flex w-full flex-col items-center justify-center gap-space-2 py-space-4 text-center"
+          class={[
+            "flex w-full flex-col items-center justify-center gap-space-2 p-space-4 text-center",
+            heldHeight === null
+              ? "aspect-16/10 max-h-c-media-max-h"
+              : "min-h-(--held-h)",
+          ]}
           data-slot="embed-fault"
           role="alert"
+          style:--held-h={heldHeight}
         >
-          <p class="type-label text-ink-strong wrap-anywhere">
-            The {held.kind}
-            {held.name} can't be reached.
-          </p>
-          <p
-            class="type-meta text-status-fail-ink wrap-anywhere"
-            data-slot="embed-cause"
-          >
-            {fault}
-          </p>
+          {#if fault.kind === "unreached"}
+            <p class="type-label text-ink-strong wrap-anywhere">
+              The {held.kind}
+              {held.name} can't be reached.
+            </p>
+            <p
+              class="type-meta text-status-fail-ink wrap-anywhere"
+              data-slot="embed-cause"
+            >
+              {fault.cause}
+            </p>
+          {:else}
+            <p
+              class="type-label text-ink-strong wrap-anywhere"
+              data-slot="embed-cause"
+            >
+              {fault.line}
+            </p>
+          {/if}
           <Button
             icon={IconRefresh}
             label={commonWords.tryAgain}
