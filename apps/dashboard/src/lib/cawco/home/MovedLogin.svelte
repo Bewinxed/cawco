@@ -64,7 +64,7 @@
         class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-row rounded-xs type-meta text-link-ink no-underline whitespace-nowrap transition-[opacity] duration-(--dur-control) ease-out hover:text-link-hover active:opacity-72"
         href="/config/accounts/{one.account.id}"
         onclick={onchoose}
-        style:--hang="calc(-12px * 8.25 / 24)"
+        style:--hang="calc(-1 * var(--icon-sm) * 8.25 / 24)"
         ><span>Sign in on {plural(one.missing, "machine")}</span>
         <IconChevronRight aria-hidden="true" class="size-icon-sm" /></a
       >

@@ -82,8 +82,9 @@
     mask-image: linear-gradient(
       to bottom,
       transparent,
-      #000 var(--fade-start),
-      #000 calc(100% - var(--fade-inset-end, 0px) - var(--fade-end)),
+      var(--mask-opaque) var(--fade-start),
+      var(--mask-opaque)
+        calc(100% - var(--fade-inset-end, 0px) - var(--fade-end)),
       transparent calc(100% - var(--fade-inset-end, 0px))
     );
     animation-timeline: scroll(self block);
@@ -96,7 +97,7 @@
   :where(.kit-edge-fade, .kit-edge-fade-block) {
     --fade-len: var(--c-edge-fade-len);
   }
-  @media (width < 640px) {
+  @media (width < --theme(--breakpoint-phone)) {
     :where(.kit-edge-fade, .kit-edge-fade-block) {
       --fade-len: var(--c-edge-fade-len-phone);
     }
@@ -108,8 +109,9 @@
     mask-image: linear-gradient(
       to right,
       transparent,
-      #000 min(var(--fade-start), var(--fade-cap-start, 100vw)),
-      #000 calc(100% - min(var(--fade-end), var(--fade-cap-end, 100vw))),
+      var(--mask-opaque) min(var(--fade-start), var(--fade-cap-start, 100vw)),
+      var(--mask-opaque)
+        calc(100% - min(var(--fade-end), var(--fade-cap-end, 100vw))),
       transparent
     );
   }

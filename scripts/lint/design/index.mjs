@@ -7,6 +7,7 @@ import { defineRule } from "golar/unstable";
 import { clipWithMove } from "./clip-move.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
+import { rawClassValues } from "./raw-values.mjs";
 import { dimensionBindings, rawDurationReads } from "./restricted.mjs";
 import {
   arbitraryValues,
@@ -287,6 +288,7 @@ const FIND = {
   "house/no-raw-duration-read": rawDurationReads,
   "house/no-dimension-binding": dimensionBindings,
   "house/no-clip-with-move": clipWithMove,
+  "house/no-raw-class-values": rawClassValues,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

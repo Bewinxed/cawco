@@ -5079,17 +5079,26 @@
     },
     "c-change-ring-width": {
       "$type": "dimension",
-      "$value": { "value": 2, "unit": "px" },
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
       "$description": "The changed ring's line (DESIGN.md, Changed since you looked): as heavy as the focus ring, never heavier."
     },
     "c-change-ring-offset": {
       "$type": "dimension",
-      "$value": { "value": 3, "unit": "px" },
+      "$value": {
+        "value": 3,
+        "unit": "px"
+      },
       "$description": "How far outside the changed element's box its ring stands, so the line never touches its words or its own border."
     },
     "c-change-ping-spread": {
       "$type": "dimension",
-      "$value": { "value": 10, "unit": "px" },
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
       "$description": "How far the changed ring's ping spreads outward, past the ring, as it fades over --dur-loop."
     },
     "focus-ring-width": {
@@ -6063,6 +6072,51 @@
       },
       "$description": "The narrowest a decision card's option column stands before the options stand one under another."
     },
+    "c-decision-meter-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "The thickness of a decision page's count bar (c-decision-meter-w)."
+    },
+    "c-decision-title-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "The narrowest a decision card's title stands before its state chip wraps under it."
+    },
+    "c-decision-keycap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 17,
+        "unit": "px"
+      },
+      "$description": "A decision option's keycap digit: its height, and its width at the least."
+    },
+    "c-decision-code": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14.4,
+        "unit": "px"
+      },
+      "$description": "Code inside a decision page's words: a step under the words around it, at any size they stand at.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "0.9em"
+        }
+      }
+    },
+    "c-dial-handle-ring": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1.5,
+        "unit": "px"
+      },
+      "$description": "The ring of DialKit's easing-curve handle on a decision page, drawn as an inset ring so it holds 1.5px on every screen (DESIGN.md, The Whole Pixel Border Rule)."
+    },
     "c-media-max-h": {
       "$type": "dimension",
       "$value": {
@@ -6837,6 +6891,51 @@
         "unit": "px"
       },
       "$description": "The send plane's optical centring, up and right: the glyph's mass sits low-left in its box."
+    },
+    "hit-nudge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0.5,
+        "unit": "px"
+      },
+      "$description": "The half pixel a touch area stands lower than its box (design.css touch-hit): Blink and WebKit take a press half a pixel above where a box is laid out."
+    },
+    "figure-bearing": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1.12,
+        "unit": "px"
+      },
+      "$description": "A figure's side bearing in the body face, the room between its ink and its box: a control hangs past its row's edge by it, so its ink meets that edge (Caw's panel head, a needs card's Send).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "0.07em"
+        }
+      }
+    },
+    "c-rail-label-rise": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "How far the rail's travelling label rises as it settles in on its new name (motion/Rail, rail-label-in)."
+    },
+    "c-hang-shadow-room": {
+      "$type": "dimension",
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      },
+      "$description": "How far past its sides and its foot a hanging card's clip leaves its shadow drawn (ui/hang-card); its top edge is cut flush."
+    },
+    "c-tip-arrow-nudge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1.5,
+        "unit": "px"
+      },
+      "$description": "A tooltip arrow's nudge on a tip beside its trigger (ui/tooltip), onto the tip's edge."
     },
     "c-ask-value-max-h": {
       "$type": "dimension",

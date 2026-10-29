@@ -1152,6 +1152,16 @@
     --c-decision-meter-w: 120px;
     /* The narrowest a decision card's option column stands before the options stand one under another. */
     --c-decision-option-min: 190px;
+    /* The thickness of a decision page's count bar (c-decision-meter-w). */
+    --c-decision-meter-h: 4px;
+    /* The narrowest a decision card's title stands before its state chip wraps under it. */
+    --c-decision-title-min: 240px;
+    /* A decision option's keycap digit: its height, and its width at the least. */
+    --c-decision-keycap: 17px;
+    /* Code inside a decision page's words: a step under the words around it, at any size they stand at. */
+    --c-decision-code: 0.9em;
+    /* The ring of DialKit's easing-curve handle on a decision page, drawn as an inset ring so it holds 1.5px on every screen (DESIGN.md, The Whole Pixel Border Rule). */
+    --c-dial-handle-ring: 1.5px;
     /* The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor). */
     --c-media-max-h: 80vb;
     /* The least a scaled design's words stand at: a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) wider than its card scales down no further than stands the least words the design itself sets (its overlay tells them) at this size. Past it the design scrolls sideways in its well at that scale. */
@@ -1334,6 +1344,16 @@
     --c-composer-menu-max-h: 320px;
     /* The send plane's optical centring, up and right: the glyph's mass sits low-left in its box. */
     --optical-nudge: 0.5px;
+    /* The half pixel a touch area stands lower than its box (design.css touch-hit): Blink and WebKit take a press half a pixel above where a box is laid out. */
+    --hit-nudge: 0.5px;
+    /* A figure's side bearing in the body face, the room between its ink and its box: a control hangs past its row's edge by it, so its ink meets that edge (Caw's panel head, a needs card's Send). */
+    --figure-bearing: 0.07em;
+    /* How far the rail's travelling label rises as it settles in on its new name (motion/Rail, rail-label-in). */
+    --c-rail-label-rise: 8px;
+    /* How far past its sides and its foot a hanging card's clip leaves its shadow drawn (ui/hang-card); its top edge is cut flush. */
+    --c-hang-shadow-room: 120px;
+    /* A tooltip arrow's nudge on a tip beside its trigger (ui/tooltip), onto the tip's edge. */
+    --c-tip-arrow-nudge: 1.5px;
     /* A permission card's field value before it scrolls. */
     --c-ask-value-max-h: 200px;
     /* The project offer's line basis, so its buttons wrap under it on a narrow card. */

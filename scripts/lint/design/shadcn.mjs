@@ -18,8 +18,9 @@
 // - require-static-classes: on a design-system component, a class value the
 //   rules cannot read (a call, a `let`, an import, a glued `bg-${x}`).
 // - no-inline-styles: a `style` attribute or `style:` directive setting a
-//   property, but the allowed properties; a custom property passes unless it
-//   carries a raw colour.
+//   property, but the allowed properties; a custom property or an allowed
+//   property passes unless it carries a colour or a length literal
+//   (raw-values.mjs).
 //
 // Where shadcn named a class group (`m`, `basis`, `w`, …), the allow list
 // here names the CSS properties that group writes, and a class is judged by
@@ -27,6 +28,7 @@
 // be one of them.
 import { calleeName, keyOf, sitesOf, unwrap } from "./classes.mjs";
 import { bindingAt, eachNode } from "./model.mjs";
+import { hasRawColor, rawLiteral } from "./raw-values.mjs";
 import {
   classSelectors,
   declarationsOf,
@@ -249,36 +251,6 @@ export function staticClasses(model) {
 
 /* -------------------------------------------------------- no-inline-styles */
 
-const COLOR_FUNCTION =
-  /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|hwb|oklch|oklab|lab|lch|color|color-mix|light-dark)\(/iu;
-const NAMED_COLORS = new Set(
-  "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen".split(
-    " "
-  )
-);
-
-const LEAVES = /[\s,()/]+/u;
-
-/** Whether a CSS value names a colour outright (not through a variable). */
-function hasRawColor(value) {
-  const text = value
-    .replace(/\/\*[\s\S]*?\*\//gu, " ")
-    .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu, " ")
-    .replace(/url\([^)]*\)/giu, " ")
-    // A colour function whose channels are one variable reads the theme.
-    .replace(
-      /\b(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch)\(\s*var\([^()]*\)\s*(?:\/\s*(?:[\d.]+%?|var\([^()]*\)))?\s*\)/giu,
-      " "
-    )
-    .replace(/var\([^)]*\)/giu, " ");
-  if (COLOR_FUNCTION.test(text)) {
-    return true;
-  }
-  return text
-    .split(LEAVES)
-    .some((leaf) => NAMED_COLORS.has(leaf.toLowerCase()));
-}
-
 /** `backgroundColor` as `background-color`; a custom property as it is. */
 const cssName = (name) =>
   name.startsWith("--")
@@ -405,52 +377,52 @@ export function inlineStyles(model, { allow = [] } = {}) {
     return null;
   };
 
-  /** Whether a value carries a raw colour, as far as it can be read. */
-  const carriesRawColor = (node, seen = new Set()) => {
+  /**
+   * The colour or length literal a value carries (rawLiteral's words), as
+   * far as it can be read, or null.
+   */
+  const carriedLiteral = (node, seen = new Set()) => {
     const n = unwrap(node);
     if (!n) {
-      return false;
+      return null;
     }
     switch (n.type) {
       case "Literal":
-        return typeof n.value === "string" && hasRawColor(n.value);
+        return typeof n.value === "string" ? rawLiteral(n.value) : null;
       case "TemplateLiteral":
-        return hasRawColor(n.quasis.map((q) => q.value.cooked ?? "").join(" "));
+        return rawLiteral(n.quasis.map((q) => q.value.cooked ?? "").join(" "));
       case "ConditionalExpression":
         return (
-          carriesRawColor(n.consequent, seen) ||
-          carriesRawColor(n.alternate, seen)
+          carriedLiteral(n.consequent, seen) ??
+          carriedLiteral(n.alternate, seen)
         );
       case "LogicalExpression":
-        return carriesRawColor(n.left, seen) || carriesRawColor(n.right, seen);
+        return carriedLiteral(n.left, seen) ?? carriedLiteral(n.right, seen);
       case "Identifier": {
         const b = bindingAt(model, n.name, n.start);
         if (!b || seen.has(b) || b.kind !== "const" || !b.init) {
-          return false;
+          return null;
         }
-        return carriesRawColor(b.init, new Set([...seen, b]));
+        return carriedLiteral(b.init, new Set([...seen, b]));
       }
       default:
-        return false;
+        return null;
     }
   };
 
   const judge = (property, at, value, text) => {
-    if (exempt(property)) {
-      return;
-    }
-    if (!property.startsWith("--")) {
+    if (!(exempt(property) || property.startsWith("--"))) {
       report(
         at,
         `Inline style sets ${property}. Style through classes; use CSS custom properties for dynamic values.`
       );
       return;
     }
-    const raw = text === undefined ? carriesRawColor(value) : hasRawColor(text);
-    if (raw) {
+    const said = text === undefined ? carriedLiteral(value) : rawLiteral(text);
+    if (said) {
       report(
         at,
-        `Custom property ${property} hardcodes a color. Define it as a theme token instead of injecting a raw value.`
+        `${property} writes ${said}. A colour or a size is a theme token: write var(--…), and add the token to design/tokens/cawco.tokens.json first.`
       );
     }
   };

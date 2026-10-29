@@ -1,0 +1,54 @@
+language css
+
+// A colour or a size on the dashboard and the decision-page kit is a token
+// (DESIGN.md: "Do not introduce one-off colours … spacing, radii … outside
+// it; add a token to the JSON first"), never a literal, in every stylesheet
+// and every Svelte `<style>`. Only the token build's own output writes them
+// (apps/dashboard/src/lib/tokens/, the kit's tokens.css, from
+// design/tokens/cawco.tokens.json). The markup half, a class's arbitrary
+// value and an inline style, is Golar's (scripts/lint/design/raw-values.mjs),
+// held to the same allowed lengths:
+//
+// - `0`; a hairline and its double (`1px`, `2px`, either sign);
+// - one of the font's own units (`1em`, `1ex`, `1ch`, `1cap`, `1ic`), or a
+//   count of lines (`2lh`);
+// - a share of the viewport or the container (`100dvh`, `50cqi`), which is
+//   no fixed size, as a percentage is none.
+//
+// A colour is a hex, a colour function on literal channels (a relative
+// `oklch(from var(--x) …)` reads its token) or a named colour. A media or
+// container query reads a breakpoint through Tailwind's `--theme()`
+// (`@media (width < --theme(--breakpoint-desk))`). A literal that is no
+// colour or size of the design (a sentinel past any box) says why in a
+// `biome-ignore lint/plugin/no-raw-css-values: <reason>` comment.
+or {
+  CssRegularDimension() as $hit where {
+    $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },
+    $filename <: not includes "apps/dashboard/src/lib/tokens/",
+    $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
+    $hit <: r"(?i)^-?(?:\d+\.?\d*|\.\d+)(?:px|em|rem|ch|ex|cap|ic|lh|rlh|vw|vh|vi|vb|vmin|vmax|svw|svh|svi|svb|lvw|lvh|lvi|lvb|dvw|dvh|dvi|dvb|cqw|cqh|cqi|cqb|cqmin|cqmax|cm|mm|q|in|pt|pc)$",
+    $hit <: not r"(?i)^(?:-?0+(?:\.0+)?[a-z]+|-?[12]px|1(?:em|ex|ch|cap|ic)|\d+r?lh|-?(?:\d+\.?\d*|\.\d+)(?:vw|vh|vi|vb|vmin|vmax|[sld]v[whib]|cq[whib]|cqmin|cqmax))$",
+    register_diagnostic(span=$hit, message="A size is a token: write var(--…), and add it to design/tokens/cawco.tokens.json first (then bun run tokens). A breakpoint is --theme(--breakpoint-…).")
+  },
+  CssColor() as $hit where {
+    $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },
+    $filename <: not includes "apps/dashboard/src/lib/tokens/",
+    $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
+    register_diagnostic(span=$hit, message="A colour is a token: write var(--…), and add it to design/tokens/cawco.tokens.json first (then bun run tokens).")
+  },
+  CssFunction() as $hit where {
+    $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },
+    $filename <: not includes "apps/dashboard/src/lib/tokens/",
+    $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
+    $hit <: r"(?is)^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(.*",
+    $hit <: not r"(?is)^\w+\(\s*from\s.*",
+    register_diagnostic(span=$hit, message="A colour is a token: write var(--…), and add it to design/tokens/cawco.tokens.json first (then bun run tokens).")
+  },
+  CssIdentifier() as $hit where {
+    $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },
+    $filename <: not includes "apps/dashboard/src/lib/tokens/",
+    $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
+    $hit <: r"(?i)^(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen)$",
+    register_diagnostic(span=$hit, message="A colour is a token: write var(--…), and add it to design/tokens/cawco.tokens.json first (then bun run tokens).")
+  }
+}

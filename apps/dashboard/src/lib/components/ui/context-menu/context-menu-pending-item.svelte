@@ -40,7 +40,10 @@
 
 <Item
   aria-busy={select.pending || undefined}
-  class={cn("[--btn-gap:10px] [--btn-icon:16px]", className)}
+  class={cn(
+    "[--btn-gap:--spacing(2.5)] [--btn-icon:var(--icon-md)]",
+    className
+  )}
   {disabled}
   onSelect={select.select}
   {variant}

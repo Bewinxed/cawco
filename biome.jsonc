@@ -17,6 +17,9 @@
     "./scripts/lint/stored-json.grit",
     // An exhaustive switch ends with unhandled() (packages/core/src/unhandled.ts).
     "./scripts/lint/no-hand-unhandled.grit",
+    // A colour or a size in a stylesheet or a `<style>` is a token
+    // (DESIGN.md); the markup half is Golar's (scripts/lint/design/raw-values.mjs).
+    "./scripts/lint/no-raw-css-values.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

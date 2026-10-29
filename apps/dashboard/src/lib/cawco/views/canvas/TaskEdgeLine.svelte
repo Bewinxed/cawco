@@ -60,7 +60,7 @@
     markerEnd={`url(#${edge.marker})`}
     path={route[0]}
     style={edge.landed
-      ? "stroke: var(--border-control); stroke-width: 1.5px"
-      : "stroke: var(--ink-muted); stroke-width: 1.5px"}
+      ? "stroke: var(--border-control); stroke-width: var(--c-graph-edge)"
+      : "stroke: var(--ink-muted); stroke-width: var(--c-graph-edge)"}
   />
 {/if}

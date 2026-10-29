@@ -89,11 +89,13 @@
 @property --nest-cut-r {
   syntax: "<length>";
   inherits: false;
+  /* biome-ignore lint/plugin/no-raw-css-values: no cut, a sentinel past any box rather than a size; an @property's initial value takes no var(). */
   initial-value: -9999px;
 }
 @property --nest-cut-b {
   syntax: "<length>";
   inherits: false;
+  /* biome-ignore lint/plugin/no-raw-css-values: no cut, a sentinel past any box rather than a size; an @property's initial value takes no var(). */
   initial-value: -9999px;
 }
 /* A swap between two things in one slot (`.icon-swap`, a tree mark's count
@@ -197,7 +199,7 @@
        mark: the same in every tree, whatever inset its rows keep. */
     --tree-step: calc(var(--space-1) + var(--space-2) + var(--space-3));
 
-    @media (width < 900px) {
+    @media (width < --theme(--breakpoint-desk)) {
       --seam-inset: var(--space-2);
     }
 
@@ -413,8 +415,8 @@
      Solar's icons and the local glyphs are drawn at width="1.2em", which
      would size them off the text beside them; this replaces it. */
   svg[width="1.2em"] {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-md);
+    height: var(--icon-md);
   }
 
   /* Numbers that sit in columns line up. Anywhere else a changing figure
@@ -1260,7 +1262,7 @@
      column): the text column, relative. */
   --x-hang: calc(var(--x-text) - var(--x-glyph));
 
-  @media (width < 900px) {
+  @media (width < --theme(--breakpoint-desk)) {
     --x-rail: var(--tx-x-rail-narrow);
   }
   [data-slot="thread-pane-state"] & {
@@ -1412,7 +1414,7 @@
 @utility pane-tab-pads {
   --px-end: calc(var(--px) - var(--border-width));
 
-  @media (width < 900px) {
+  @media (width < --theme(--breakpoint-desk)) {
     --px-start: calc(var(--overlap) + var(--c-tab-lead));
     --px-end: calc(var(--overlap) + var(--radius-lg) - var(--border-width));
   }
@@ -1486,7 +1488,7 @@
 @utility turn-pad {
   --pad: var(--space-3);
 
-  @media (width < 900px) {
+  @media (width < --theme(--breakpoint-desk)) {
     --pad: var(--space-2);
   }
 }
@@ -1582,6 +1584,7 @@
    width at most. The theme's breakpoints (theme.css) would cap it at
    theirs; these keep the widths it has. No element of the dashboard's own
    writes `container`. */
+/* biome-ignore-start lint/plugin/no-raw-css-values: Tailwind's own default breakpoints and widths, kept for Crepe's vendor markup; the theme declares none of them (see above). */
 @utility container {
   @media (width >= 40rem) {
     max-width: 40rem;
@@ -1599,6 +1602,7 @@
     max-width: 96rem;
   }
 }
+/* biome-ignore-end lint/plugin/no-raw-css-values: Tailwind's default container widths end here. */
 
 /* A measured figure among Figtree words (a time, a share left, a count, an
    hour tick): JetBrains Mono at its line's size, ligatures off, tabular,
@@ -1638,7 +1642,7 @@
 @keyframes ns-in-r {
   from {
     opacity: 0;
-    transform: translateX(18px);
+    transform: translateX(var(--space-5));
   }
   to {
     opacity: 1;
@@ -1648,7 +1652,7 @@
 @keyframes ns-in-l {
   from {
     opacity: 0;
-    transform: translateX(-18px);
+    transform: translateX(calc(-1 * var(--space-5)));
   }
   to {
     opacity: 1;
@@ -1658,20 +1662,20 @@
 @keyframes ns-out-l {
   to {
     opacity: 0;
-    transform: translateX(-18px);
+    transform: translateX(calc(-1 * var(--space-5)));
   }
 }
 @keyframes ns-out-r {
   to {
     opacity: 0;
-    transform: translateX(18px);
+    transform: translateX(var(--space-5));
   }
 }
 /* The rail's travelling label (motion/Rail) settling in as it re-labels. */
 @keyframes rail-label-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(var(--c-rail-label-rise));
   }
 }
 @keyframes kit-fade-in {
@@ -1791,7 +1795,7 @@
     :where(&)::after {
       content: "";
       position: absolute;
-      translate: 0.5px 0.5px;
+      translate: var(--hit-nudge) var(--hit-nudge);
       @supports (-moz-orient: inline) {
         translate: none;
       }
@@ -2087,7 +2091,7 @@
   --nest-reach: 0px;
   /* The rail to a child row's left edge: what is left of one --tree-step
      after the half mark the rail stands under and the row's own inset. */
-  --nest-half: calc(var(--mark-size, 18px) / 2);
+  --nest-half: calc(var(--mark-size, var(--space-5)) / 2);
   --nest-in: calc(var(--tree-step) - var(--nest-half) - var(--nest-reach));
   --nest-glyph-y: var(--space-4);
   --nest-gap: var(--tree-gap);
@@ -2151,12 +2155,14 @@
   [data-branch-draw]& > li::after,
   [data-branch-draw] & > li::before,
   [data-branch-draw] & > li::after {
+    /* biome-ignore lint/plugin/no-raw-css-values: no cut on these sides, a sentinel past any box rather than a size, as --nest-cut-r and --nest-cut-b rest at. */
     clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
   }
   [data-branch-hold]& > li::before,
   [data-branch-hold]& > li::after,
   [data-branch-hold] & > li::before,
   [data-branch-hold] & > li::after {
+    /* biome-ignore lint/plugin/no-raw-css-values: no cut at the foot while the line holds, the same sentinel as --nest-cut-b's rest. */
     --nest-cut-b: 9999px;
   }
 }

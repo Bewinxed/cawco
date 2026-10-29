@@ -32,3 +32,7 @@
 <svg aria-hidden="true" viewBox="0 0 1 1"
   ><path fill="#ec4899" stroke="currentColor" d="M0 0" /></svg
 >
+<div
+  class="[--gap:var(--space-2)] [--gap-x:12px] [--tab:light-dark(var(--surface-recess),var(--surface-hover))] text-[oklch(50%_0.1_30)] h-[calc(var(--icon-md)+2px)] max-h-[55dvh]"
+></div>
+<div style:--hang="calc(-1 * var(--icon-sm))" style:--far="-12px"></div>

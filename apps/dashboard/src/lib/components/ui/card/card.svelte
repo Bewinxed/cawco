@@ -19,7 +19,7 @@
      corner of its own, and its parts on the outer card's own inset. -->
 <div
   class={cn(
-    "group/card flex flex-col gap-(--card-spacing) in-data-[slot=card]:rounded-none rounded-lg bg-surface-raised in-data-[slot=card]:bg-transparent in-data-[slot=card]:py-0 py-(--card-spacing) text-body text-ink-strong in-data-[slot=card]:shadow-none shadow-tile [--card-spacing:18px] in-data-[slot=card]:*:px-0 data-[size=sm]:[--card-spacing:12px]",
+    "group/card flex flex-col gap-(--card-spacing) in-data-[slot=card]:rounded-none rounded-lg bg-surface-raised in-data-[slot=card]:bg-transparent in-data-[slot=card]:py-0 py-(--card-spacing) text-body text-ink-strong in-data-[slot=card]:shadow-none shadow-tile [--card-spacing:var(--space-5)] in-data-[slot=card]:*:px-0 data-[size=sm]:[--card-spacing:--spacing(3)]",
     className
   )}
   data-size={size}

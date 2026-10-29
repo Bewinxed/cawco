@@ -972,6 +972,17 @@ public enum Size {
     public static let cDecisionMeterW: Double = 120
     /// The narrowest a decision card's option column stands before the options stand one under another.
     public static let cDecisionOptionMin: Double = 190
+    /// The thickness of a decision page's count bar (c-decision-meter-w).
+    public static let cDecisionMeterH: Double = 4
+    /// The narrowest a decision card's title stands before its state chip wraps under it.
+    public static let cDecisionTitleMin: Double = 240
+    /// A decision option's keycap digit: its height, and its width at the least.
+    public static let cDecisionKeycap: Double = 17
+    /// Code inside a decision page's words: a step under the words around it, at any size they stand at.
+    /// In em: multiply by the font size for points.
+    public static let cDecisionCode: Double = 0.9
+    /// The ring of DialKit's easing-curve handle on a decision page, drawn as an inset ring so it holds 1.5px on every screen (DESIGN.md, The Whole Pixel Border Rule).
+    public static let cDialHandleRing: Double = 1.5
     /// The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor).
     public static let cMediaMaxH: Double = 675.2
     /// The least a scaled design's words stand at: a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) wider than its card scales down no further than stands the least words the design itself sets (its overlay tells them) at this size. Past it the design scrolls sideways in its well at that scale.
@@ -1153,6 +1164,17 @@ public enum Size {
     public static let cComposerMenuMaxH: Double = 320
     /// The send plane's optical centring, up and right: the glyph's mass sits low-left in its box.
     public static let opticalNudge: Double = 0.5
+    /// The half pixel a touch area stands lower than its box (design.css touch-hit): Blink and WebKit take a press half a pixel above where a box is laid out.
+    public static let hitNudge: Double = 0.5
+    /// A figure's side bearing in the body face, the room between its ink and its box: a control hangs past its row's edge by it, so its ink meets that edge (Caw's panel head, a needs card's Send).
+    /// In em: multiply by the font size for points.
+    public static let figureBearing: Double = 0.07
+    /// How far the rail's travelling label rises as it settles in on its new name (motion/Rail, rail-label-in).
+    public static let cRailLabelRise: Double = 8
+    /// How far past its sides and its foot a hanging card's clip leaves its shadow drawn (ui/hang-card); its top edge is cut flush.
+    public static let cHangShadowRoom: Double = 120
+    /// A tooltip arrow's nudge on a tip beside its trigger (ui/tooltip), onto the tip's edge.
+    public static let cTipArrowNudge: Double = 1.5
     /// A permission card's field value before it scrolls.
     public static let cAskValueMaxH: Double = 200
     /// The project offer's line basis, so its buttons wrap under it on a narrow card.

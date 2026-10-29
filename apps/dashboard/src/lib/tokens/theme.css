@@ -483,6 +483,11 @@
   --spacing-c-decision-page-max: var(--c-decision-page-max);
   --spacing-c-decision-meter-w: var(--c-decision-meter-w);
   --spacing-c-decision-option-min: var(--c-decision-option-min);
+  --spacing-c-decision-meter-h: var(--c-decision-meter-h);
+  --spacing-c-decision-title-min: var(--c-decision-title-min);
+  --spacing-c-decision-keycap: var(--c-decision-keycap);
+  --spacing-c-decision-code: var(--c-decision-code);
+  --spacing-c-dial-handle-ring: var(--c-dial-handle-ring);
   --spacing-c-media-max-h: var(--c-media-max-h);
   --spacing-c-media-words-floor: var(--c-media-words-floor);
   --spacing-c-artifact-card-min: var(--c-artifact-card-min);
@@ -569,6 +574,9 @@
   --spacing-c-elapsed-w: var(--c-elapsed-w);
   --spacing-c-composer-more-w: var(--c-composer-more-w);
   --spacing-c-composer-menu-max-h: var(--c-composer-menu-max-h);
+  --spacing-c-rail-label-rise: var(--c-rail-label-rise);
+  --spacing-c-hang-shadow-room: var(--c-hang-shadow-room);
+  --spacing-c-tip-arrow-nudge: var(--c-tip-arrow-nudge);
   --spacing-c-ask-value-max-h: var(--c-ask-value-max-h);
   --spacing-c-offer-line: var(--c-offer-line);
   --spacing-c-suggest-shimmer-w: var(--c-suggest-shimmer-w);

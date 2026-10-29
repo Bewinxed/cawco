@@ -232,7 +232,7 @@
       <div
         data-slot="head"
         class="mark-line flex items-center gap-space-2 px-space-3 pt-space-2 pb-space-1"
-        style:--clear-hang="calc(-1 * (1px + 2 * var(--spacing) + 0.07em))"
+        style:--clear-hang={"calc(-1 * (1px + 2 * var(--spacing) + var(--figure-bearing)))"}
       >
         <span
           data-slot="glyph"

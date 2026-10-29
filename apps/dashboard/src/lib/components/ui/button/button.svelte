@@ -10,7 +10,7 @@
   import { pressVariants } from "./press.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-border-button-outline bg-linear-to-b bg-surface-raised from-transparent to-transparent bg-clip-padding font-medium text-body text-ink-strong leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-border-button-outline bg-linear-to-b bg-surface-raised from-transparent to-transparent bg-clip-padding font-medium text-body text-ink-strong leading-none tracking-title [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* The press, by size (./press.ts, The Press Rule): a compact button
          scales; one stretched full width, as a list row or a card's body,
@@ -47,19 +47,19 @@
       },
       size: {
         default:
-          "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
+          "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:var(--c-btn-gap)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:var(--space-1)] [--btn-icon:var(--icon-sm)] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
         /* In a head control's compact form (side/head.ts, `data-form`), its
            words not drawn, it stands as its glyph: the icon size's square,
            the glyph centred inside its edge, and a count it still says kept
            that inset from the glyph and the edge. */
         sm: "h-c-btn-h-sm in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 text-label [--btn-gap:var(--space-2)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:var(--c-btn-gap)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (DESIGN.md, Composer:
            "34px Attach … and Send/Stop … each at the concentric 4px
            radius"): the default's recipe at the composer field's height. */
         composer:
-          "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:var(--c-btn-gap)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm": "size-c-btn-h-sm",

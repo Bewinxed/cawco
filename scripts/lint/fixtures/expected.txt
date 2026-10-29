@@ -24,3 +24,14 @@ scripts/lint/fixtures/design/planted.svelte:33:10 design/no-raw-svg-colors
 scripts/lint/fixtures/design/planted.ts:12:30 house/no-clip-with-move
 scripts/lint/fixtures/design/planted.ts:15:3 house/no-clip-with-move
 scripts/lint/fixtures/design/planted.ts:17:3 house/no-clip-with-move
+scripts/lint/fixtures/design/planted.svelte:19:13 house/no-raw-class-values
+scripts/lint/fixtures/design/planted.ts:7:36 house/no-raw-class-values
+scripts/lint/fixtures/design/planted.svelte:36:10 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:36:33 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:36:33 house/no-raw-class-values
+scripts/lint/fixtures/design/planted.svelte:36:48 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:36:111 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:36:111 house/no-raw-class-values
+scripts/lint/fixtures/design/planted.svelte:36:136 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:36:165 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:38:47 design/no-inline-styles

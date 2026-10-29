@@ -865,7 +865,7 @@
      the bar's two ends. The bar does not pad for the notch, so the
      inset is added here. Sonner's own narrow rules stop at 600px; these hold
      to 640px, where the layout puts the toaster top-centre. */
-  @media (max-width: 640px) {
+  @media (width <= --theme(--breakpoint-phone)) {
     [data-sonner-toaster][data-y-position="top"][data-x-position="center"] {
       top: calc(env(safe-area-inset-top) + var(--c-top-bar-h) + var(--space-2));
       right: var(--c-bar-phone-edge);
@@ -905,7 +905,8 @@
   :root[data-bar~="hosting"] {
     --edge-top-under: var(--surface-shelf);
   }
-  @media (width < 900px), (pointer: coarse) and (orientation: portrait) {
+  @media (width < --theme(--breakpoint-desk)),
+    (pointer: coarse) and (orientation: portrait) {
     :root[data-bar~="hosting"] {
       --edge-top-under: var(--surface-raised);
     }
@@ -992,7 +993,7 @@
      (Shell's `@container/shell`, BarGlass `@max-desk/shell`), not the
      window's, so a phone frame on a desk page draws the phone's group. A
      container query takes no var(): 900px is --container-desk. */
-  @container shell (width < 900px) {
+  @container shell (width < --theme(--container-desk)) {
     [data-slot="tools"] [data-machines] {
       display: none;
     }

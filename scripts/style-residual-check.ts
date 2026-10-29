@@ -12,10 +12,9 @@
  *
  * A comment covers every declaration after it until the next residual
  * comment (anything may follow the kind: `/* residual: foreign-dom — vaul's
- * overlay *\/`). A declaration holds only `var(--…)`, `calc()` of them, `0`,
- * `1px`, `2px`, percentages, unitless numbers and keywords: no colour literal
- * (`#…`, `rgb()`/`oklch()`… with numbers, a named colour) and no other length
- * literal. An empty `<style>` is deleted.
+ * overlay *\/`). A colour or a length literal in a declaration is Biome's
+ * to refuse (scripts/lint/no-raw-css-values.grit, over every `<style>` and
+ * stylesheet). An empty `<style>` is deleted.
  *
  * Each `<style>` is read by Svelte's own compiler (`parse`, modern AST), the
  * parse the component itself goes through, comments with their offsets.
@@ -66,25 +65,6 @@ type Kind = (typeof KINDS)[number];
 const LANE_CAP = 5;
 
 const RESIDUAL = /^\s*residual:\s*([a-z-]+)/u;
-const LENGTH =
-  /(?<![\w.#-])(-?(?:\d+\.?\d*|\.\d+))(px|em|rem|ch|ex|cap|ic|lh|rlh|vw|vh|vi|vb|vmin|vmax|svw|svh|svi|svb|lvw|lvh|dvw|dvh|dvi|dvb|cqw|cqh|cqi|cqb|cqmin|cqmax|cm|mm|q|in|pt|pc)(?![\w-])/giu;
-const HEX = /#[0-9a-f]{3,8}(?![\w-])/iu;
-const COLOR_FN = /(?<![\w-])(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/giu;
-const DIGIT = /\d/u;
-const WORD = /[a-z][a-z-]*/giu;
-const STRING = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu;
-const URL = /url\([^)]*\)/giu;
-/** A custom property's name, `--x` in `var(--x)` or a declaration's own: never a colour word. */
-const CUSTOM_NAME = /--[\w-]+/gu;
-/** The lengths a residual may hold as they are: a hairline and its double. */
-const ALLOWED_LENGTHS = new Set([0, 1, 2]);
-/** CSS's named colours (css-color-4 §6.1), `transparent` and `currentcolor` aside: keywords, not literals. */
-const NAMED = new Set(
-  "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen".split(
-    " "
-  )
-);
-
 interface Css {
   block?: { children: Css[] };
   end: number;
@@ -104,70 +84,6 @@ interface Report {
   /** Each unmapped declaration as `file:line  property: value`. */
   unmapped: string[];
   violations: string[];
-}
-
-const VAR_CALL = /var\([^)]*\)/gu;
-
-/** A call's own arguments, from `open` (just past its `(`) to its closing parenthesis. */
-function argumentsFrom(text: string, open: number): string {
-  let depth = 0;
-  let end = open;
-  for (; end < text.length; end += 1) {
-    const ch = text[end];
-    if (ch === "(") {
-      depth += 1;
-    } else if (ch === ")") {
-      if (depth === 0) {
-        break;
-      }
-      depth -= 1;
-    }
-  }
-  return text.slice(open, end);
-}
-
-/** The colour literals in a value: a hex, a colour function with numbers in it, a named colour. */
-function colourLiterals(bare: string): string[] {
-  const found: string[] = [];
-  const hex = bare.match(HEX);
-  if (hex) {
-    found.push(`colour literal ${hex[0]}`);
-  }
-  for (const call of bare.matchAll(COLOR_FN)) {
-    const args = argumentsFrom(bare, (call.index ?? 0) + call[0].length);
-    if (DIGIT.test(args.replace(VAR_CALL, ""))) {
-      found.push(`colour literal ${call[1]}(${args.trim()})`);
-    }
-  }
-  for (const word of bare.match(WORD) ?? []) {
-    if (NAMED.has(word.toLowerCase())) {
-      found.push(`colour literal ${word}`);
-    }
-  }
-  return found;
-}
-
-/** The length literals in a value other than 0, 1px and 2px. */
-function lengthLiterals(bare: string): string[] {
-  const found: string[] = [];
-  for (const length of bare.matchAll(LENGTH)) {
-    const amount = Math.abs(Number(length[1]));
-    const hairline =
-      length[2]?.toLowerCase() === "px" && ALLOWED_LENGTHS.has(amount);
-    if (!(amount === 0 || hairline)) {
-      found.push(`length literal ${length[0]}`);
-    }
-  }
-  return found;
-}
-
-/** What in a declaration's value is a literal it may not hold. */
-function literals(value: string): string[] {
-  const bare = value
-    .replace(STRING, '""')
-    .replace(URL, "url()")
-    .replace(CUSTOM_NAME, "--");
-  return [...colourLiterals(bare), ...lengthLiterals(bare)];
 }
 
 function lineOf(source: string, offset: number): number {
@@ -243,7 +159,7 @@ function check(path: string): Report {
     return found;
   };
   let declarations = 0;
-  /** A declaration under its kind: counted, and held to token references. */
+  /** A declaration under its kind, counted. */
   const declaration = (node: Css) => {
     declarations += 1;
     const kind = kindAt(node.start);
@@ -256,11 +172,6 @@ function check(path: string): Report {
     if (kind === "unmapped") {
       report.unmapped.push(
         `${at(node.start)}  ${node.property}: ${(node.value ?? "").replace(/\s+/gu, " ").trim()}`
-      );
-    }
-    for (const literal of literals(node.value ?? "")) {
-      report.violations.push(
-        `${at(node.start)}  ${node.property}: ${node.value}  holds a ${literal} (only var(--…), calc() of them, 0, 1px, 2px, percentages and keywords)`
       );
     }
   };

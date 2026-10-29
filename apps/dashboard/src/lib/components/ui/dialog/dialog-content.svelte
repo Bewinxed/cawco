@@ -20,13 +20,13 @@
   export const dialogTrayVariants = tv({
     slots: {
       tray: "fixed phone:top-1/2 phone:left-1/2 z-(--layer-float) flex phone:max-h-c-dialog-max-h w-full phone:max-w-112 phone:-translate-x-1/2 phone:-translate-y-1/2 flex-col phone:rounded-modal phone:bg-surface-recess phone:p-1.5 phone:shadow-overlay outline-none phone:motion-safe:data-closed:animate-dialog-out phone:motion-safe:data-open:animate-dialog-in max-phone:inset-x-0 max-phone:bottom-0 max-phone:max-h-c-sheet-max-h max-phone:w-full max-phone:rounded-t-lg max-phone:border-border-hairline max-phone:border-t max-phone:bg-surface-raised max-phone:shadow-drawer max-phone:motion-reduce:data-closed:animate-sheet-fade-out max-phone:motion-reduce:data-open:animate-sheet-fade-in max-phone:motion-safe:data-closed:animate-sheet-out max-phone:motion-safe:data-open:animate-sheet-in",
-      body: "phone:rounded-lg bg-surface-raised phone:p-space-5 max-phone:px-4 max-phone:pb-[calc(1rem+var(--safe-bottom))]",
+      body: "phone:rounded-lg bg-surface-raised phone:p-space-5 max-phone:px-4 max-phone:pb-[calc(--spacing(4)+var(--safe-bottom))]",
       /** The sheet's grabber, the drawer's own (ui/drawer), under the phone line only. */
       grabber: "phone:hidden",
       /** Close: the 30px ghost 12px from the tray body's corner; on the
           sheet, at the trailing edge of the title's line under the grabber. */
       close:
-        "absolute top-3 right-3 max-phone:top-[calc(1.75rem+var(--c-grabber-h)+(var(--text-title)*var(--leading-ui)-var(--c-btn-h-sm))/2)] max-phone:right-4",
+        "absolute top-3 right-3 max-phone:top-[calc(--spacing(7)+var(--c-grabber-h)+(var(--text-title)*var(--leading-ui)-var(--c-btn-h-sm))/2)] max-phone:right-4",
     },
   });
 
@@ -61,7 +61,7 @@
   const dialogBodyVariants = tv({
     slots: {
       frame:
-        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--space-5)-var(--hit-foot))] text-body text-ink-strong coarse:[--hit-foot:calc((var(--c-touch-floor)-var(--c-btn-h-xs))/2+0.5px)] max-phone:coarse:pb-[calc(1rem+var(--safe-bottom)-var(--hit-foot))]",
+        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--space-5)-var(--hit-foot))] text-body text-ink-strong coarse:[--hit-foot:calc((var(--c-touch-floor)-var(--c-btn-h-xs))/2+var(--hit-nudge))] max-phone:coarse:pb-[calc(--spacing(4)+var(--safe-bottom)-var(--hit-foot))]",
       grid: "grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain coarse:pb-(--hit-foot)",
     },
     variants: {

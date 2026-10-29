@@ -964,11 +964,11 @@
              ink on the trailing edge: it hangs past by what stands between
              its box and that ink (the kit's 1px transparent border, its
              padding, `space-2` a side so it never hangs past the row's own
-             `space-3`, and the figure's side bearing, 0.07em). -->
+             `space-3`, and the figure's side bearing, --figure-bearing). -->
           <span
             data-slot="send"
             class="relative col-3 row-3 flex items-center self-center justify-self-end"
-            style:--send-hang="calc(-1 * (1px + var(--space-2) + 0.07em))"
+            style:--send-hang={"calc(-1 * (1px + var(--space-2) + var(--figure-bearing)))"}
           >
             <Button
               data-needs-card-send

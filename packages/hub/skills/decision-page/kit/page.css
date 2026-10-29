@@ -1,6 +1,6 @@
 /* A decision page's shell and card recipes, on CawCo's tokens (tokens.css,
-   generated from design/tokens/cawco.tokens.json). No literal colours: every
-   value here is a token or a size the recipes share. Coral means "you, act
+   generated from design/tokens/cawco.tokens.json). No literal colour or size:
+   every one here is a token (scripts/lint/no-raw-css-values.grit). Coral means "you, act
    here"; status colours mean status. */
 :root {
   color-scheme: light dark;
@@ -30,7 +30,7 @@ p {
 }
 code {
   font-family: var(--font-mono);
-  font-size: 0.9em;
+  font-size: var(--c-decision-code);
 }
 a {
   color: var(--link-ink);
@@ -87,7 +87,7 @@ a {
 }
 .dp-hero p {
   color: var(--ink-muted);
-  max-width: 62ch;
+  max-width: var(--c-measure-short);
   margin-top: var(--space-1);
 }
 .dp-meter {
@@ -104,8 +104,8 @@ a {
   font-size: var(--text-title);
 }
 .dp-bar {
-  width: 120px;
-  height: 4px;
+  width: var(--c-decision-meter-w);
+  height: var(--c-decision-meter-h);
   border-radius: var(--radius-xs);
   background: var(--surface-recess);
   overflow: hidden;
@@ -123,6 +123,7 @@ a {
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
 }
+/* biome-ignore lint/plugin/no-raw-css-values: a plain stylesheet no Tailwind build reads, and a media query reads no custom property: the theme's --breakpoint-phone (640px). */
 @media (max-width: 640px) {
   .dp-hero {
     grid-template-columns: auto minmax(0, 1fr);
@@ -157,7 +158,7 @@ a {
 }
 .dp-card h2 {
   font-size: var(--text-title);
-  flex: 1 1 240px;
+  flex: 1 1 var(--c-decision-title-min);
 }
 .dp-state {
   font-size: var(--text-meta);
@@ -227,7 +228,7 @@ a {
 }
 .dp-why {
   color: var(--ink-muted);
-  max-width: 72ch;
+  max-width: var(--c-measure);
 }
 /* A card's media: two side by side on a wide page; one, or three and more,
    in one column at the card's full width (`solo`), so several ways compared
@@ -241,6 +242,7 @@ a {
 .dp-show.solo {
   grid-template-columns: minmax(0, 1fr);
 }
+/* biome-ignore lint/plugin/no-raw-css-values: a plain stylesheet no Tailwind build reads, and a media query reads no custom property: the theme's --breakpoint-desk (900px). */
 @media (max-width: 900px) {
   .dp-show {
     grid-template-columns: minmax(0, 1fr);
@@ -273,7 +275,10 @@ a {
    own height. */
 .dp-opts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, var(--c-decision-option-min)), 1fr)
+  );
   gap: var(--space-2);
 }
 /* The chip is DESIGN.md's option chip (app.css .kit-chip): at least 30px,
@@ -290,7 +295,7 @@ a {
   color: var(--ink-strong);
   border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
-  min-block-size: 30px;
+  min-block-size: var(--tx-option);
   padding: var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;
@@ -331,9 +336,9 @@ a {
   display: inline-grid;
   place-items: center;
   flex: none;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
+  min-width: var(--c-decision-keycap);
+  height: var(--c-decision-keycap);
+  padding: 0 var(--space-1);
   border-radius: var(--radius-xs);
   background: var(--surface-recess);
   color: var(--ink-strong);
@@ -425,7 +430,7 @@ a {
 /* The 44 Touch Rule: under a finger the note stands 44px tall. */
 @media (pointer: coarse) {
   .dp-note textarea {
-    font-size: 16px;
+    font-size: var(--text-field-floor);
     min-block-size: var(--c-btn-h-lg);
   }
 }
@@ -474,6 +479,7 @@ a {
 }
 /* On a phone the frame runs to the card's edges, so the drawing gets the
    card's inset back; its caption keeps the inset. */
+/* biome-ignore lint/plugin/no-raw-css-values: a plain stylesheet no Tailwind build reads, and a media query reads no custom property: the theme's --breakpoint-phone (640px). */
 @media (width <= 640px) {
   .dp-real {
     flex: none;
@@ -512,9 +518,9 @@ a {
    shape. */
 :root .dialkit-easing-handle::after {
   border: 0;
-  box-shadow: inset 0 0 0 1.5px var(--dial-text-secondary);
+  box-shadow: inset 0 0 0 var(--c-dial-handle-ring) var(--dial-text-secondary);
 }
 :root
   .dialkit-easing-handle:is(:hover, :focus-visible, [data-dragging])::after {
-  box-shadow: inset 0 0 0 1.5px var(--dial-text-primary);
+  box-shadow: inset 0 0 0 var(--c-dial-handle-ring) var(--dial-text-primary);
 }
