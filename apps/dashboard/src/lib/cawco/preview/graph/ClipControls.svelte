@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { designGraphWords as words } from "@cawco/core";
   /**
    * A clip's controls (Projects spec §5.10; round 29, section C), in the
    * clip's own row under its facts (the owner's pick "in the row"), never a
@@ -24,6 +23,7 @@
     springPath,
     springPhysics,
   } from "@cawco/core/design-graph";
+  import { designGraphWords as words } from "@cawco/core/words/design-graph";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { IconClose } from "#lib/icons.js";
   import CurveGlyph from "./CurveGlyph.svelte";
@@ -39,7 +39,6 @@
   } from "./clip-words";
   import type { DesignGraph } from "./design-graph.svelte";
   import GlassGroup from "./GlassGroup.svelte";
-  import KindGlyph from "./KindGlyph.svelte";
   import { GHOST, RING, SYMBOL } from "./symbol";
 
   let {
@@ -70,7 +69,7 @@
   );
 
   /** A custom curve's four figures, split on spaces or commas. */
-  const FIGURES = /[\s,]+/;
+  const FIGURES = /[\s,]+/u;
 
   const change = (next: (one: ClipTiming) => ClipTiming, replay: boolean) =>
     graph.editClip(id, next, { replay });

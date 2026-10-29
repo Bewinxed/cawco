@@ -9,7 +9,7 @@
  */
 
 /** The page's sheet: frames, sections, the stage and its washes, on classes no project writes. */
-export const PAGE_CSS = `
+const PAGE_CSS = `
 /* On the stage, the room the design graph's panel and dock leave the canvas (the pane's ask): none until a pane asks. */
 html.cawco-canvas-page { color-scheme: light dark; --cawco-stage-end: 0px; --cawco-stage-bottom: 0px; }
 html.cawco-canvas-page[data-theme="light"] { color-scheme: light; }
@@ -127,10 +127,10 @@ html.cawco-embed .cawco-stand-in-body { max-inline-size: 100%; }
 `;
 
 /** A token's value as CSS writes it: a time (`280ms`, `0.28s`) or a length in px. */
-const TIME = /^(-?[\d.]+)(ms|s)$/;
-const PX = /^(-?[\d.]+)px$/;
-const COMMENT = /\/\*[\s\S]*?\*\//g;
-const DECLARATION = /(--[\w-]+)\s*:\s*([^;]+);/g;
+const TIME = /^(-?[\d.]+)(ms|s)$/u;
+const PX = /^(-?[\d.]+)px$/u;
+const COMMENT = /\/\*[\s\S]*?\*\//gu;
+const DECLARATION = /(--[\w-]+)\s*:\s*([^;]+);/gu;
 
 /**
  * Sets the page's sheet: the house faces, CawCo's tokens scoped to the
