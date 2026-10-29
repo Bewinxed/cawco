@@ -259,7 +259,6 @@
   --color-code-string: var(--code-string);
   --color-code-number: var(--code-number);
   --color-code-comment: var(--code-comment);
-  --color-rail-body: var(--rail-body);
   --color-material-panel: var(--material-panel);
   --color-scrim: var(--scrim);
   --color-image-outline: var(--image-outline);
@@ -1066,6 +1065,10 @@
 
 @utility bg-rail {
   background-image: var(--rail);
+}
+
+@utility bg-rail-body {
+  background-image: var(--rail-body);
 }
 
 @utility bg-head-tint-ramp {

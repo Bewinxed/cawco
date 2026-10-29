@@ -2085,7 +2085,7 @@
       }
     },
     "rail-body": {
-      "$type": "color",
+      "$type": "gradient",
       "$value": "{color.rail}"
     },
     "head-tint-ramp": {

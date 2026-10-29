@@ -565,6 +565,7 @@ const gated: Gated[] = [
     "packages/agent/src/canvas-host/",
     "packages/hub/skills/decision-page/kit/",
   ]),
+  bun("scripts/token-alias-check.ts", ["design/tokens/"]),
   bun("scripts/token-contrast-check.ts", [
     ...DASH,
     "packages/hub/src/design-tokens.ts",

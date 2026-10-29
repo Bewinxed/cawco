@@ -302,9 +302,13 @@ function shadowLayers(raw: string, tokens: Tokens, where: string): string[] {
   });
 }
 
-/** A top-to-bottom `linear-gradient()` as its `Gradient` stops. */
+/** A top-to-bottom `linear-gradient()` as its `Gradient` stops, references to another gradient followed. */
 function gradient(raw: string, tokens: Tokens, where: string): string {
-  const fn = call(raw.trim());
+  let value = raw.trim();
+  for (let ref = REF.exec(value); ref; ref = REF.exec(value)) {
+    value = tokens.css(ref[1], where);
+  }
+  const fn = call(value);
   if (fn?.name !== "linear-gradient") {
     throw new Error(`${where}: unsupported gradient "${raw}"`);
   }

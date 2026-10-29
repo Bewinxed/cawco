@@ -237,7 +237,6 @@ export type TokenColor =
   | "color.code-string"
   | "color.code-number"
   | "color.code-comment"
-  | "color.rail-body"
   | "color.material-panel"
   | "color.scrim"
   | "color.image-outline"
