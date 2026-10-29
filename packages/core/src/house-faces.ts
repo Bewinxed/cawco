@@ -42,6 +42,8 @@ export type FaceRole = "sans" | "mono" | "wordmark";
 
 /** A house face: its family as a page's CSS names it, its file and its weight axis. */
 interface HouseFace {
+  /** Its file's own `wght` axis as `font-weight` takes it, `300 900`; the faces script holds it to the file's. */
+  axis: string;
   family: string;
   /** Its file in {@link FONTS_DIR}. */
   file: string;
@@ -51,7 +53,12 @@ interface HouseFace {
    */
   leaves: readonly string[];
   role: FaceRole;
-  /** Its `wght` axis as `font-weight` takes it, `300 900`; the faces script holds it to the file's own axis. */
+  /**
+   * The `wght` range its pieces keep and its `@font-face` rules declare:
+   * {@link axis}, or a narrower range HarfBuzz instances the axis to
+   * (subset-font's `variationAxes`), so the pieces carry no variation data
+   * for weights no page sets.
+   */
   weight: string;
 }
 
@@ -69,6 +76,7 @@ const HOUSE_FACES: readonly HouseFace[] = [
     role: "sans",
     family: "Figtree Variable",
     file: "Figtree.ttf",
+    axis: "300 900",
     weight: "300 900",
     leaves: PICKER_ONLY,
   },
@@ -76,7 +84,13 @@ const HOUSE_FACES: readonly HouseFace[] = [
     role: "mono",
     family: "JetBrains Mono Variable",
     file: "JetBrainsMono.ttf",
-    weight: "100 800",
+    axis: "100 800",
+    // Every weight a house surface sets code in: 400 and 500 from the
+    // weight tokens ("Nothing in product UI goes above 500"), and 700 where
+    // a `strong` holds code (Tailwind's preflight sets it `bolder`, 400 to
+    // 700, as a 500 heading's is). No stylesheet sets anything under 400
+    // or over 700.
+    weight: "400 700",
     // Its character variants, stylistic sets, case forms and scientific
     // inferiors too: only `font-feature-settings` reaches them (no
     // `font-variant-*` value does), which no house stylesheet writes, and
@@ -94,6 +108,7 @@ const HOUSE_FACES: readonly HouseFace[] = [
     role: "wordmark",
     family: "Nunito Variable",
     file: "Nunito.ttf",
+    axis: "200 1000",
     weight: "200 1000",
     leaves: PICKER_ONLY,
   },
@@ -277,7 +292,7 @@ export async function cutHouseFaces(
         await cutPiece(face, cut, points, {
           subsetFont,
           compress,
-          options: subsetOptions(keep, options.glyphNames ?? false),
+          options: subsetOptions(face, keep, options.glyphNames ?? false),
         })
       );
     }
@@ -368,6 +383,7 @@ export async function firstPaintPieces(
       subsetFont,
       compress,
       options: subsetOptions(
+        face,
         featuresOf(font).filter((tag) => !face.leaves.includes(tag)),
         false
       ),
@@ -391,20 +407,31 @@ export const featuresOf = (font: {
 ];
 
 /**
- * HarfBuzz's subset options: the whole wght axis, the layout features
- * `keep` (subset-font's default keeps every one), and each glyph's name
- * when `glyphNames`. `keepFeatures` and `glyphNames` are subset-font's
- * options its types leave out.
+ * HarfBuzz's subset options for `face`: its wght axis instanced to the
+ * range it serves when that is narrower than its file's, the layout
+ * features `keep` (subset-font's default keeps every one), and each glyph's
+ * name when `glyphNames`. `keepFeatures`, `glyphNames` and
+ * `variationAxes` are subset-font's options its types leave out.
  */
 export const subsetOptions = (
+  face: Pick<HouseFace, "axis" | "weight">,
   keep: readonly string[],
   glyphNames: boolean
 ): { targetFormat: "sfnt" } => {
+  const [min = 0, max = 0] = face.weight.split(" ").map(Number);
   const options: {
     targetFormat: "sfnt";
     glyphNames: boolean;
     keepFeatures: string[];
-  } = { targetFormat: "sfnt", glyphNames, keepFeatures: [...keep] };
+    variationAxes?: { wght: { min: number; max: number } };
+  } = {
+    targetFormat: "sfnt",
+    glyphNames,
+    keepFeatures: [...keep],
+    ...(face.weight === face.axis
+      ? {}
+      : { variationAxes: { wght: { min, max } } }),
+  };
   return options;
 };
 

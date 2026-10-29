@@ -7,8 +7,8 @@
  * `unicode-range` is not what it holds, a piece without the face's `wght`
  * axis, or a glyph text can reach in the whole file (HarfBuzz's closure of
  * every code point it holds, through every layout feature the face keeps:
- * all of Figtree's) that no piece holds; and when a face's declared weight
- * range is not its file's.
+ * all of Figtree's) that no piece holds; when a face's declared axis is not
+ * its file's; and when a piece's axis is not the weight range it serves.
  *
  *   bun scripts/house-faces.ts          write it
  *   bun scripts/house-faces.ts --check  fail when it is stale
@@ -68,9 +68,9 @@ const from: Record<string, string> = {};
 const sizes: string[] = [];
 for (const face of readHouseFaces()) {
   const whole = fontOf(face.bytes);
-  if (axisOf(whole) !== face.weight) {
+  if (axisOf(whole) !== face.axis) {
     fail(
-      `${face.file}'s wght axis is ${axisOf(whole)}, not the ${face.weight} house-faces.ts gives it.`
+      `${face.file}'s wght axis is ${axisOf(whole)}, not the ${face.axis} house-faces.ts gives it.`
     );
   }
   const drawn = new Map<number, string>();
@@ -119,7 +119,7 @@ for (const face of readHouseFaces()) {
         await subsetFont(
           Buffer.from(face.bytes),
           String.fromCodePoint(...heldBy(whole)),
-          subsetOptions(keep, true)
+          subsetOptions(face, keep, true)
         )
       )
     );

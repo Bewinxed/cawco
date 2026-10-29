@@ -14,8 +14,12 @@
  * in French). The text is read here, from the product's words
  * (`packages/core/src/words`) and every source file of the dashboard, never
  * listed by hand, so a new word's character is in the next build's piece:
- * - the sans and mono faces: printable ASCII and every character those files
- *   hold (code and paths are set in mono, words in sans);
+ * - the sans face: printable ASCII and every character those files hold;
+ * - the mono face: printable ASCII and the ellipsis, no more. What the first
+ *   screen sets in mono is data (session handles, paths, times, counts),
+ *   never the product's words, and that is what it drew on the fleet board:
+ *   ASCII and a truncation's `…`. A rarer character in it comes from the
+ *   latin piece by URL;
  * - the wordmark face: the text of each element the dashboard sets in it
  *   (`font-wordmark`), and a space, which `document.fonts.load` asks for
  *   (app.html).
@@ -83,7 +87,7 @@ const firstPaintText = (): FirstPaintText => {
       inner.replace(ENTITY, (entity) => ENTITIES[entity] ?? entity)
     )
   );
-  return { sans: every, mono: every, wordmark: ` ${wordmark.join("")}` };
+  return { sans: every, mono: `${ASCII}…`, wordmark: ` ${wordmark.join("")}` };
 };
 
 /** Writes the faces' sheet and pieces into {@link FACES_DIR}, removing what it no longer holds; answers the pieces. */
