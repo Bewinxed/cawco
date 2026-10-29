@@ -149,8 +149,12 @@
       ? `${id}-tokens-${prop.name}`
       : undefined;
   const fieldId = (prop: PropMeta) => `${id}-prop-${prop.name}`;
-  /** The sheet's edge: the right on a desk, the foot on a phone. */
-  const axis = $derived(layout === "panel" ? "X" : "Y");
+  /**
+   * The sheet's edge: the right on a desk, the foot on a phone. Read from
+   * the prop as the sheet comes and goes, never a derived of its own, which
+   * its outro would find frozen (scripts/outro-reads-check.ts).
+   */
+  const axis = () => (layout === "panel" ? "X" : "Y");
   /** The props as the person reaches for them: variants first, then switches, then fields, read-only ones last; the file's order within each. */
   const ordered = (props: PropMeta[]) =>
     props
@@ -182,8 +186,8 @@
   class="absolute inset-y-0 end-0 z-2 flex flex-col w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-(--keyboard-lift,0px) data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-over-keyboard-60 data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
   data-inspector={layout}
   style:--foot-pb="calc(var(--space-2) + env(safe-area-inset-bottom, 0px))"
-  in:sheetSlide={{ axis, leaving: false }}
-  out:sheetSlide={{ axis, leaving: true }}
+  in:sheetSlide={{ axis: axis(), leaving: false }}
+  out:sheetSlide={{ axis: axis(), leaving: true }}
 >
   <header
     data-slot="head"

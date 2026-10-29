@@ -542,6 +542,7 @@ const gated: Gated[] = [
     "packages/core/src/",
   ]),
   bun("apps/dashboard/scripts/mark-line-check.ts", DASH),
+  bun("apps/dashboard/scripts/outro-reads-check.ts", DASH),
   bun("apps/dashboard/scripts/specificity-trap.ts", DASH),
   bun("apps/dashboard/scripts/lib-import-check.ts", DASH),
   bun("apps/dashboard/scripts/svelte-unused-css.ts", DASH),

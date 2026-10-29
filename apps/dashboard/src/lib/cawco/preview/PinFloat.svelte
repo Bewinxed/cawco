@@ -211,6 +211,29 @@
     travel = travelTo(el, before, at, travel);
   });
 
+  /**
+   * What its exit reads, as last drawn: whether it is the card, where it
+   * stood, what it stood beside and the pill's face. An outro's function
+   * runs once the block holding the card has let it go, so every derived
+   * here or in that block is frozen by then and reading one is Svelte's
+   * `derived_inert` (svelte.dev/e/derived_inert); the composer closing by
+   * Esc changed its `mark` in that very flush. Written while it stands.
+   */
+  let drawn: {
+    card: boolean;
+    face: PinFace;
+    place: typeof place;
+    seen: typeof seen;
+  } = {
+    card: untrack(() => card),
+    face: untrack(() => face),
+    place: null,
+    seen: null,
+  };
+  $effect(() => {
+    drawn = { card, face, place, seen };
+  });
+
   /** A colour token as the page computes it now (its scheme's). */
   const colourOf = (token: `--${string}`): string => {
     const probe = document.createElement("i");
@@ -222,10 +245,8 @@
     return value;
   };
 
-  /** The pill's shape in the card's own coordinates, as the surface starts and ends. */
-  const pillShape = () => {
-    const at = untrack(() => place);
-    const where = untrack(() => seen);
+  /** The pill's shape in the card's own coordinates, as the surface starts and ends: the card standing `at`, the pill `where`, its face `of`. */
+  const pillShape = (at: typeof place, where: typeof seen, of: PinFace) => {
     if (!(at && where)) {
       return null;
     }
@@ -236,8 +257,8 @@
       width: `${pill.w}px`,
       height: `${pill.h}px`,
       borderRadius: `${pill.h / 2}px`,
-      backgroundColor: colourOf(face.fill),
-      borderColor: colourOf(face.edge),
+      backgroundColor: colourOf(of.fill),
+      borderColor: colourOf(of.edge),
     };
   };
 
@@ -269,7 +290,7 @@
       });
       return;
     }
-    const from = pillShape();
+    const from = untrack(() => pillShape(place, seen, face));
     if (!from) {
       // Not on the page: no pill to grow from; it fades in where it stands.
       float?.animate([{ opacity: 0 }, { opacity: 1 }], {
@@ -306,7 +327,8 @@
    * Out: the card back into its pill, the composer by the kit's `popOut`,
    * the foot sheet by its opacity; where another card takes its place, gone
    * from the screen in this very frame (an outro of no length still holds
-   * its element for frames before the block lets it go).
+   * its element for frames before the block lets it go). It reads what was
+   * last drawn (`drawn`), never a derived.
    */
   function leave(node: HTMLElement): TransitionConfig {
     if (exit.at === "cut") {
@@ -320,8 +342,8 @@
         css: (t: number) => `opacity: ${t}`,
       };
     }
-    if (!card) {
-      return popOut(node, { side: place?.side ?? "bottom" });
+    if (!drawn.card) {
+      return popOut(node, { side: drawn.place?.side ?? "bottom" });
     }
     return shrink(node);
   }
@@ -330,7 +352,7 @@
   function shrink(node: HTMLElement): TransitionConfig {
     const shape = surface;
     const inner = body;
-    const to = pillShape();
+    const to = pillShape(drawn.place, drawn.seen, drawn.face);
     const length = dur("--dur-exit");
     if (!(shape && inner && to && motionOk.current)) {
       return fadeOut(node);

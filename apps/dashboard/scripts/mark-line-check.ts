@@ -52,13 +52,9 @@
  *
  *   bun apps/dashboard/scripts/mark-line-check.ts [file…]   (no files: every .svelte under src/)
  */
-import { readFileSync } from "node:fs";
-import { join, relative } from "node:path";
 import { parse } from "svelte/compiler";
-import { repoFiles } from "../../../scripts/lib/repo-files";
+import { runSvelteCheck } from "./svelte-sources";
 
-const ROOT = join(import.meta.dir, "..");
-const SVELTE_FILE = /\.svelte$/u;
 const ALLOW = /^\s*mark-line:\s*\S/u;
 const SPLIT = /[^\w-]+/u;
 const CLASS_PREFIX = /^class=/u;
@@ -590,28 +586,12 @@ export function check(file: string, source: string): Hit[] {
 }
 
 if (import.meta.main) {
-  const named = process.argv.slice(2);
-  const files =
-    named.length > 0
-      ? named.map((one) => join(process.cwd(), one))
-      : repoFiles(["src"], ROOT)
-          .filter((file) => SVELTE_FILE.test(file))
-          .map((file) => join(ROOT, file));
-  const hits = files
-    .filter((file) => file.endsWith(".svelte"))
-    .flatMap((file) =>
-      check(relative(process.cwd(), file), readFileSync(file, "utf8"))
-    );
-  if (hits.length > 0) {
-    for (const one of hits) {
-      console.error(`${one.file}:${one.line}  ${one.tag}  ${one.what}`);
-    }
-    console.error(
-      `mark-line:check: ${hits.length} row(s) set words beside a mark that the mark line cannot centre. Give the row the recipe (class="mark-line", or a kit primitive that draws it), put its words in elements, and mark a box on the line with data-box; where the mark is not beside the words, say so with <!-- mark-line: why --> directly above the row (apps/dashboard/scripts/mark-line-check.ts, DESIGN.md The Mark Line Rule).`
-    );
-    process.exit(1);
-  }
-  console.log(
-    `mark-line:check: ${files.length} file(s), every mark line's words are elements on the recipe`
-  );
+  runSvelteCheck({
+    find: check,
+    said: (one) => `${one.tag}  ${one.what}`,
+    failed: (count) =>
+      `mark-line:check: ${count} row(s) set words beside a mark that the mark line cannot centre. Give the row the recipe (class="mark-line", or a kit primitive that draws it), put its words in elements, and mark a box on the line with data-box; where the mark is not beside the words, say so with <!-- mark-line: why --> directly above the row (apps/dashboard/scripts/mark-line-check.ts, DESIGN.md The Mark Line Rule).`,
+    passed: (files) =>
+      `mark-line:check: ${files} file(s), every mark line's words are elements on the recipe`,
+  });
 }

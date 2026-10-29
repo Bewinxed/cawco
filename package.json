@@ -32,6 +32,7 @@
     "lint:fix": "ultracite fix && bun scripts/fmt.ts",
     "machine-paths:check": "bun scripts/machine-paths-check.ts",
     "mark-line:check": "bun apps/dashboard/scripts/mark-line-check.ts",
+    "outro-reads:check": "bun apps/dashboard/scripts/outro-reads-check.ts",
     "prepare": "bun scripts/git-hooks/install.ts",
     "protocol:sweep": "bun scripts/protocol-sweep.ts",
     "signal:check": "bun scripts/signal-check.ts",

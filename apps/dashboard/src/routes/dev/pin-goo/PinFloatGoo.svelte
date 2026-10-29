@@ -442,6 +442,19 @@
     }
   });
 
+  /**
+   * The pill and the thread's closed clip as last drawn: what a close reads.
+   * Its outro runs once the card's block has let it go, every derived here
+   * frozen by then (scripts/outro-reads-check.ts).
+   */
+  let drawn = {
+    pin: untrack(() => pinHere),
+    clip: untrack(() => hiddenClip),
+  };
+  $effect(() => {
+    drawn = { pin: pinHere, clip: hiddenClip };
+  });
+
   /** The run in flight: while it lasts (`data-run`), the card's blob moves on a transition; between runs its box only follows the pin and the card's size. */
   let runEnd = 0;
   /**
@@ -466,7 +479,7 @@
     el.getBoundingClientRect();
     el.dataset.open = String(open);
     if (wrap) {
-      wrap.style.clipPath = open ? cardClip() : hiddenClip;
+      wrap.style.clipPath = open ? cardClip() : drawn.clip;
     }
     if (!open) {
       el.dataset.face = "own";
@@ -520,7 +533,7 @@
 
   /** The card goes back into its pin, and stays drawn until the pin's dip is done. */
   function drain(node: HTMLElement): TransitionConfig {
-    if (!(pinHere && motionOk.current)) {
+    if (!(drawn.pin && motionOk.current)) {
       setOpen(false);
       return fadeOut(node);
     }
