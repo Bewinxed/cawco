@@ -108,8 +108,6 @@ import type {
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget } from "./db/schema";
-import { cutOver } from "./external-cutover";
-import { githubRepoOf } from "./github";
 import {
   deleteFolderFile,
   type Exclusive,
@@ -378,16 +376,6 @@ export interface TaskStore {
     projectId: string,
     taskId: string
   ) => (ExternalComment & { entryAt: number })[];
-  /**
-   * Keeps a comment carried onto a task, once (`external_comments`); one
-   * kept already whose author was not known takes theirs.
-   */
-  readonly carry: (
-    projectId: string,
-    taskId: string,
-    comment: ExternalComment,
-    entryAt: number
-  ) => void;
   /**
    * The task a comment went on, written under `id`, the id its device chose
    * for it (db `task_comment_ids`): the same comment again adds nothing.
@@ -3815,50 +3803,6 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * The cutover of a project's task files to external items as data, each
-   * file once (tsk-128): an extra field `github: issue#N` becomes the
-   * issue's URL in `links:` when the project's checkout is on GitHub, the
-   * field gone; a comment carried before comments were data becomes an
-   * entry headed by its author's login, the source and its URL, its words
-   * bare: the tracker sync's (`<login> on GitHub` over its kept row) and a
-   * routine's prose (`GitHub comment by <login> on issue #N (<url>):`, or
-   * words ending `— @<login> on GitHub · [view](<url>)`), each kept as a
-   * carried comment. Every file in one commit by the hub. Inside the
-   * project's turn; runs at every start beside {@link migrateLinks}, and
-   * goes once every project of the fleet has run it.
-   */
-  const migrateExternalItems = async (projectId: string): Promise<number> => {
-    const repo = githubRepoOf(store.project(projectId)?.remote ?? null);
-    const writes: { content: string; number: number; path: string }[] = [];
-    for (const { path, number, content } of await settledFiles(projectId)) {
-      const id = taskId(number);
-      const doc = new TaskDoc(path, content);
-      const recast = cutOver(doc, repo, store.carried(projectId, id));
-      for (const via of recast.carried) {
-        store.carry(projectId, id, via, via.at);
-      }
-      if (recast.changed) {
-        writes.push({ path, number, content: doc.toString() });
-      }
-    }
-    if (writes.length === 0) {
-      return 0;
-    }
-    await writeCutover(
-      projectId,
-      writes,
-      hubActor(
-        "external items are data: a github: field is a link, a carried comment is the words under its author"
-      ),
-      "external items cut over: github: fields to links, carried comments to their source and URL"
-    );
-    console.info(
-      `[tasks] project ${projectId}: external items cut over in ${writes.length} files.`
-    );
-    return writes.length;
-  };
-
-  /**
    * Each live attempt's moved witnesses already told, by work item: the
    * target and the value told, one message per change, none for the same
    * answer. An attempt leaves it once it is no longer live.
@@ -4731,7 +4675,6 @@ export const createTasks = (store: TaskStore) => {
               await dropTemplateCopy(projectId);
               await fillTypes(projectId);
               await migrateLinks(projectId);
-              await migrateExternalItems(projectId);
             });
             await sync(projectId);
           } catch (error) {

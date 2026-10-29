@@ -8,8 +8,8 @@
 -- to `external_comments`. A link whose issue was never made (`pending:`)
 -- has no record to move: the next sync files its issue again, as it did.
 -- A GitHub record row's node id and every row's state are read on the next
--- sync; a carried comment's author is filled in by the hub's file pass
--- (tasks.ts `migrateExternalItems`), which reads it off the entry's heading.
+-- sync; a carried comment's author was filled in once by a since-deleted
+-- hub file pass that read it off the entry's heading.
 CREATE TABLE `external_comments` (
 	`project_id` text NOT NULL,
 	`source` text NOT NULL,

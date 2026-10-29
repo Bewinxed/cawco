@@ -24649,23 +24649,6 @@ export const createServer = (
         ...linkViaOf(row),
         entryAt: row.entryAt,
       })),
-    carry: (projectId, taskId, comment, entryAt) => {
-      const kept = db.taskLinks.comment(
-        projectId,
-        comment.source,
-        comment.externalId
-      );
-      if (!kept) {
-        db.taskLinks.putComment({ projectId, taskId, ...comment, entryAt });
-      } else if (!kept.author.login) {
-        db.taskLinks.updateComment(
-          projectId,
-          comment.source,
-          comment.externalId,
-          { author: comment.author }
-        );
-      }
-    },
     linked: (projectId, link) =>
       externalItems.linked(
         projectId,

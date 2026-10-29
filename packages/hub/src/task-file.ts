@@ -1403,34 +1403,6 @@ export class TaskDoc {
     return { heading: entry.heading, end };
   }
 
-  /**
-   * Rewrites the entry headed at time `at` as one carried from `via`: its
-   * heading names the author's login, the source and its URL, its words
-   * become `text`. The cutover of comments written before they were data
-   * (tasks.ts `migrateExternalItems`). Answers false when no entry has that
-   * time.
-   */
-  recastComment(at: number, via: ExternalComment, text: string): boolean {
-    const entry = this.entryWhere(
-      (comment) => comment.at === at && comment.via === null
-    );
-    if (!entry) {
-      return false;
-    }
-    this.body.splice(
-      entry.heading,
-      entry.end - entry.heading,
-      commentHeadingLine(
-        { name: via.author.login, mover: null, id: null },
-        new Date(at),
-        via
-      ),
-      "",
-      text.trim()
-    );
-    return true;
-  }
-
   /** The `## Comments` section's lines, its heading first and its trailing blank lines left off; undefined when there is none. */
   commentsSection(): string[] | undefined {
     const section = sectionsOf(this.body).find((each) =>
