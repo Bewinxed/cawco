@@ -82,7 +82,7 @@ Each row refuses the page until it is fixed.
 | Size or id captions ("99% of 272×101", "tsk-142") | Caption what the person judges, or nothing |
 | Frames outside a card | Each frame is an option's media or its card's media |
 | More than one card for a choice already made | One card per choice; a made one leaves the root once built |
-| A page that shows a state catalogue | States are the canvas's; the page asks one question per card |
+| One frame stacking desk and phone, or a behaviour choice told only in words | A behaviour or flow choice is a state machine: the component canvas with edges, one frame per state, each edge labelled by what the person does, phone and desk in separate rows, embedded as the option's picture through `Preview` (or `Canvas` for a drawing) |
 
 ## When to write HTML instead
 

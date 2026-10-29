@@ -17,7 +17,7 @@ export const REFUSALS = [
   "Size or id captions",
   "Frames outside a card",
   "More than one card for a choice already made",
-  "A page that shows a state catalogue",
+  "One frame stacking desk and phone",
 ] as const;
 
 const SKILL = join(import.meta.dir, "../skills/decision-page/SKILL.md");

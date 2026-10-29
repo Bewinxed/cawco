@@ -33,7 +33,7 @@ The person's panel is where they act, never where they look. An artifact is open
 | --- | --- |
 | No one line a stranger could act on | Write the ask first; no ask, no artifact |
 | A pick on a component canvas or a preview | A decision page whose options embed the story |
-| Every state, width and scheme stacked down one page | One frame per state on a component canvas; one card per question on a decision page |
+| Every state, width and scheme stacked down one page, or desk and phone in one frame | One frame per state on a component canvas, phone and desk in separate rows; a behaviour or flow choice is a state machine (that canvas with edges labelled by what the person does), embedded in a decision page's option through `Preview` or `Canvas` |
 | Captures of a desk page shown in the panel | The real component on the canvas, or the preview at its path |
 | Today beside each proposal, a legend, a size caption | Nothing on it that is not a question or a thing to judge |
 | A preview to prove a change | Build, lint, type-check and the probe, in your words |
