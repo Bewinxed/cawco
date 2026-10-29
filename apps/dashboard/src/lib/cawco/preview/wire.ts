@@ -8,6 +8,7 @@
 
 import {
   type Bezier,
+  CLIP_KINDS,
   type ClipKind,
   type DialsModel,
   type GraphModel,
@@ -463,7 +464,7 @@ export function previewGraph(value: unknown): GraphModel | null {
   };
 }
 
-const CLIP_KINDS = new Set<ClipKind>(["enter", "change", "exit"]);
+const CLIP_KIND_SET = new Set<ClipKind>(CLIP_KINDS);
 /** The longest words a clip's element, property or easing is said in. Ours. */
 const CLIP_BOUNDS = { words: 200, easing: 4000, ms: 600_000 } as const;
 
@@ -486,7 +487,7 @@ const clipOf = (value: unknown, id: number): MoveClip | null => {
     element === null ||
     property === null ||
     easing === null ||
-    !CLIP_KINDS.has(raw.kind as ClipKind)
+    !CLIP_KIND_SET.has(raw.kind as ClipKind)
   ) {
     return null;
   }

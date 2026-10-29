@@ -352,12 +352,42 @@ public enum Palette {
     public static let cGraphLabelBg = Palette.named("c-graph-label-bg")
     /// A chosen clip row's ground in the dock: the house wash at 40% by day, so a choice reads as chosen and not as a failure's red; the wash itself at night (Projects spec §5.10, "The design graph"; mockup round 29).
     public static let cChosenWash = Palette.named("c-chosen-wash")
-    /// A clip that brings its element in: its glyph and its bar's hue (pin 27, "color things differently") (Projects spec §5.10, "The design graph"; mockup round 29).
-    public static let cClipEnter = Palette.named("c-clip-enter")
-    /// A clip that changes its element where it stands: its glyph and its bar's hue (Projects spec §5.10, "The design graph"; mockup round 29).
-    public static let cClipChange = Palette.named("c-clip-change")
-    /// A clip that takes its element away: its glyph and its bar's hue (Projects spec §5.10, "The design graph"; mockup round 29).
-    public static let cClipExit = Palette.named("c-clip-exit")
+    /// A clip that changes its element's opacity: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength).
+    public static let cClipOpacity = Palette.named("c-clip-opacity")
+    /// The bar of a clip that changes its element's opacity: its kind's hue as a wash (mockup round 29).
+    public static let cClipOpacityWash = Palette.named("c-clip-opacity-wash")
+    /// The bar of a opacity clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).
+    public static let cClipOpacityHeld = Palette.named("c-clip-opacity-held")
+    /// A clip that changes its element's position: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength).
+    public static let cClipPosition = Palette.named("c-clip-position")
+    /// The bar of a clip that changes its element's position: its kind's hue as a wash (mockup round 29).
+    public static let cClipPositionWash = Palette.named("c-clip-position-wash")
+    /// The bar of a position clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).
+    public static let cClipPositionHeld = Palette.named("c-clip-position-held")
+    /// A clip that changes its element's size: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength).
+    public static let cClipSize = Palette.named("c-clip-size")
+    /// The bar of a clip that changes its element's size: its kind's hue as a wash (mockup round 29).
+    public static let cClipSizeWash = Palette.named("c-clip-size-wash")
+    /// The bar of a size clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).
+    public static let cClipSizeHeld = Palette.named("c-clip-size-held")
+    /// A clip that changes its element's colour: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength).
+    public static let cClipColour = Palette.named("c-clip-colour")
+    /// The bar of a clip that changes its element's colour: its kind's hue as a wash (mockup round 29).
+    public static let cClipColourWash = Palette.named("c-clip-colour-wash")
+    /// The bar of a colour clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).
+    public static let cClipColourHeld = Palette.named("c-clip-colour-held")
+    /// A clip that changes its element's a text swap: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength).
+    public static let cClipText = Palette.named("c-clip-text")
+    /// The bar of a clip that changes its element's a text swap: its kind's hue as a wash (mockup round 29).
+    public static let cClipTextWash = Palette.named("c-clip-text-wash")
+    /// The bar of a a text swap clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).
+    public static let cClipTextHeld = Palette.named("c-clip-text-held")
+    /// A clip that changes its element's unfold: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength).
+    public static let cClipUnfold = Palette.named("c-clip-unfold")
+    /// The bar of a clip that changes its element's unfold: its kind's hue as a wash (mockup round 29).
+    public static let cClipUnfoldWash = Palette.named("c-clip-unfold-wash")
+    /// The bar of a unfold clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix).
+    public static let cClipUnfoldHeld = Palette.named("c-clip-unfold-held")
 }
 
 public enum Shadow {
@@ -607,8 +637,6 @@ public enum Size {
     public static let cGraphNodeW: Double = 168
     /// The narrowest a state on the design graph is drawn, in a phone's single column (mockup round 22's floor).
     public static let cGraphNodeMinW: Double = 120
-    /// A machine's header band on the design graph: its name in the label role across the top of its region (mockup round 27, pin 30).
-    public static let cGraphRegionBandH: Double = 24
     /// The design graph's drawer at its first stop on a phone or a narrow pane: the graph in view, the component above it (mockup round 22).
     public static let cGraphDrawerStop: Double = 379.8
     /// The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines.
