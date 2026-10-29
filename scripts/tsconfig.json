@@ -9,7 +9,7 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"]
   },
   "include": ["**/*.ts", "**/*.mts"],
-  "exclude": ["probe-kit", "lint/fixtures/biome"],
+  "exclude": ["probe-kit"],
   "references": [
     { "path": "../packages/agent" },
     { "path": "../packages/agent/src/canvas-host" },

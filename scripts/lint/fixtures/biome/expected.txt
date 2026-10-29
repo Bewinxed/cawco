@@ -1,9 +1,9 @@
 # Every finding each Biome plugin must report in its fixtures (scripts/lint/biome-plugins.ts
 # holds a run to this list): `<plugin>/<path>:<line>:<column>`, then the plugin.
-no-raw-deadline/planted.ts:4:23 no-raw-deadline
-no-raw-deadline/planted.ts:6:3 no-raw-deadline
-no-raw-deadline/planted.ts:8:22 no-raw-deadline
-no-raw-deadline/planted.ts:9:24 no-raw-deadline
+no-raw-deadline/planted.ts:8:23 no-raw-deadline
+no-raw-deadline/planted.ts:10:3 no-raw-deadline
+no-raw-deadline/planted.ts:12:22 no-raw-deadline
+no-raw-deadline/planted.ts:13:24 no-raw-deadline
 no-time-constants/planted.ts:3:8 no-time-constants
 no-time-constants/planted.ts:3:24 no-time-constants
 no-time-constants/planted.ts:4:20 no-time-constants
@@ -24,4 +24,4 @@ no-raw-css-values/apps/dashboard/src/planted.css:7:17 no-raw-css-values
 no-raw-css-values/apps/dashboard/src/planted.css:9:17 no-raw-css-values
 no-raw-css-values/apps/dashboard/src/planted.css:11:13 no-raw-css-values
 no-raw-css-values/packages/hub/skills/decision-page/kit/page.css:3:11 no-raw-css-values
-kit-namespace-only/planted.ts:3:24 kit-namespace-only
+kit-namespace-only/planted.ts:5:24 kit-namespace-only
