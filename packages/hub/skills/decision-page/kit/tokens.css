@@ -509,6 +509,37 @@
       transparent,
       oklch(from var(--neutral-12) l c h / 0.07)
     );
+    /* A state machine's slab on the design graph: one step down from the well by day; at night, where the well is already the deepest step, the recess (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-graph-slab: light-dark(
+      var(--surface-recess-deep),
+      var(--surface-recess)
+    );
+    /* An edge's ink on the design graph, 3:1 on its slab: the contrast edge by day, the row outline at night (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-graph-edge-ink: light-dark(
+      var(--border-contrast),
+      var(--border-row-outline)
+    );
+    /* The move into the kept state, drawn stronger: the strong coral ink by day (3:1 on the slab), coral itself at night (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-graph-edge-chosen: light-dark(
+      var(--brand-ink-strong),
+      var(--brand-solid)
+    );
+    /* An edge label's badge on the design graph: one step off the slab either way (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-graph-label-bg: light-dark(
+      var(--surface-recess),
+      var(--surface-recess-deep)
+    );
+    /* A chosen clip row's ground in the dock: the house wash at 40% by day, so a choice reads as chosen and not as a failure's red; the wash itself at night (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-chosen-wash: light-dark(
+      color-mix(in oklab, var(--brand-wash) 40%, transparent),
+      var(--brand-wash)
+    );
+    /* A clip that brings its element in: its glyph and its bar's hue (pin 27, "color things differently") (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-clip-enter: var(--data-ok);
+    /* A clip that changes its element where it stands: its glyph and its bar's hue (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-clip-change: var(--status-live-glyph);
+    /* A clip that takes its element away: its glyph and its bar's hue (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-clip-exit: var(--data-bad);
     --shadow-xs: 0 1px 2px var(--shadow-tint);
     --shadow-tile:
       0 1px 2px
@@ -762,8 +793,20 @@
     --c-canvas-skeleton-h: 96px;
     /* An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink). */
     --c-graph-edge: 1.5px;
+    /* The design graph's chosen edge, the move into the kept state: twice an edge's stroke, so the path reads from the rest at a glance (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-graph-edge-lit: calc(2 * var(--c-graph-edge));
     /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink). */
     --c-map-node-w: 264px;
+    /* The design graph's panel beside a component under review on a desk (Projects spec §5.10, "The design graph"; mockup round 28): two 168px states side by side in a machine's region with its padding, and the panel's own. A pane narrower than twice it holds the graph as a drawer at its foot instead. */
+    --c-graph-panel-w: 448px;
+    /* A state on the design graph: its name over its variations' chips, two to a region's row in the 448px panel (mockup round 28). */
+    --c-graph-node-w: 168px;
+    /* The narrowest a state on the design graph is drawn, in a phone's single column (mockup round 22's floor). */
+    --c-graph-node-min-w: 120px;
+    /* A machine's header band on the design graph: its name in the label role across the top of its region (mockup round 27, pin 30). */
+    --c-graph-region-band-h: 24px;
+    /* The design graph's drawer at its first stop on a phone or a narrow pane: the graph in view, the component above it (mockup round 22). */
+    --c-graph-drawer-stop: 45dvh;
     /* The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines. */
     --c-pin-list-share: 0.3;
     /* The Comments panel at its narrowest: a row's text column of 225px beside its disc, where a six-word comment in the body role stands on one line and a 48-word one wraps to its four-line cut. */
@@ -1479,6 +1522,34 @@
     --c-skeleton-card-h: 54px;
     /* The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page). */
     --c-offer-text-basis: 240px;
+    /* An edge's open chevron on the design graph: two legs this long at a right angle, meeting at the tip, in the edge's stroke (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-edge-head-leg: 7px;
+    /* The resize handle's arc stands this far in from the panel's edge: 0.122 of the panel's radius, as iPadOS 26's corner handle stands (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-handle-arc-gap: calc(var(--radius-panel) * 0.122);
+    /* The resize handle's stroke at rest: the house grip's (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-handle-stroke: var(--c-corner-grip-stroke);
+    /* The resize handle's stroke reached or held: twice the grip's, so its run reads against the panel's 1px edge beside it (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-handle-stroke-held: calc(2 * var(--c-corner-grip-stroke));
+    /* How far past the pointer the resize handle's leg reaches along the edge it points at, and its run's taper (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-handle-reach: 24px;
+    /* A resizable edge's hit band on the design graph's panel and dock, taking no room; 44px under a finger (c-side-divider-hit) (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-handle-band: 8px;
+    /* The resize handle's corner square: the one separator a key reaches (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-handle-corner: 24px;
+    /* The tab the design graph's panel folds into at the pane's trailing edge, the graph's glyph in it (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-tucked-tab: 36px;
+    /* A clip's curve drawn large in its controls: its plot and a bézier's two handles (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-curve-editor-w: 120px;
+    /* The curve editor's height: its plot, with room above and below for a curve that overshoots (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-curve-editor-h: 72px;
+    /* How near a duration token a drag or a slider lands before it snaps to it (the owner's pick "snap") (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-detent-snap: 6px;
+    /* The dock's name column: a clip's element, its property and its facts beside its lane; a dock narrower than twice it stacks each row (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-dock-name-w: 280px;
+    /* A clip's bar's end zones: a press there drags that end, elsewhere the bar whole (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-bar-handle-zone: 8px;
+    /* What the dock's ceiling leaves the page under review, so its head and first field stay readable (Projects spec §5.10, "The design graph"; mockup round 29). */
+    --c-page-h-floor: 240px;
     /* The hub band's slot under the bar: over the page column it opens above, its shadow on the page. */
     --layer-band: 20;
     /* The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage. */

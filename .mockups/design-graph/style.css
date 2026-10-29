@@ -1,0 +1,892 @@
+/* The design graph mockup, round 29, on CawCo's tokens (tokens.css above it, built from design/tokens). Every
+   size, ink, radius, duration and curve is a token. The values in :root below are the mockup's token layer:
+   the designs' own, with no token in design/tokens yet; each is listed as a finding in the report. */
+@layer mockup {
+:root {
+  color-scheme: light dark;
+  -webkit-tap-highlight-color: transparent;
+  /* The drawer's grabber (its head's top edge). */
+  --c-edge-grip-len: 36px;
+  /* The split line's taper at each end. */
+  --c-edge-lit-fade: 36px;
+
+  /* ---- Round 29, the designer's section 5 ("Tokens to add") ---- */
+  /* PROPOSED, local to the mockup: the hue-or-ink choice is the owner's, on the page's switch, which labels
+     these as a proposal. If he picks hue, the six hues, their six washes and the held mix below go into
+     design/tokens/cawco.resolver.json in the build; if ink, they go with the option.
+     The clip kinds' hues (section B, `prop-*`), drawn at the designer's strength on the tool-family ladder
+     (DESIGN.md: one hue per family at 50% / 0.12 by day, 74% / 0.11 at night). The designer named opacity teal,
+     position blue, size ochre, colour magenta, text violet, unfold blue-green. The Reserved Hue Rule keeps
+     crimson (22), spark yellow (85), olive and green (122 to 140) and blue (245 to 252) for status, and coral
+     (33) is the action, so position takes indigo (272), the blue nearest status-live's that is not it, and
+     unfold takes 235, 59 degrees from opacity's 176 so the two never read as one. */
+  --prop-opacity: light-dark(oklch(50% 0.12 176), oklch(74% 0.11 176));
+  --prop-position: light-dark(oklch(50% 0.12 272), oklch(74% 0.11 272));
+  --prop-size: light-dark(oklch(50% 0.12 62), oklch(74% 0.11 62));
+  --prop-colour: light-dark(oklch(50% 0.12 335), oklch(74% 0.11 335));
+  --prop-text: light-dark(oklch(50% 0.12 300), oklch(74% 0.11 300));
+  --prop-unfold: light-dark(oklch(50% 0.12 235), oklch(74% 0.11 235));
+  /* A kind's bar wash: its hue as an opaque fill, 92% / 0.05 by day, 34% / 0.06 at night, so it reads as that
+     hue on the paper ground and not as grey (the owner, on 15% tints: "i literally don't see any difference
+     between the two"). A held or pointed bar mixes a fifth of the kind's ink into its wash. */
+  --prop-opacity-wash: light-dark(oklch(92% 0.05 176), oklch(34% 0.06 176));
+  --prop-position-wash: light-dark(oklch(92% 0.05 272), oklch(34% 0.06 272));
+  --prop-size-wash: light-dark(oklch(92% 0.05 62), oklch(34% 0.06 62));
+  --prop-colour-wash: light-dark(oklch(92% 0.05 335), oklch(34% 0.06 335));
+  --prop-text-wash: light-dark(oklch(92% 0.05 300), oklch(34% 0.06 300));
+  --prop-unfold-wash: light-dark(oklch(92% 0.05 235), oklch(34% 0.06 235));
+  --prop-held-mix: 20%;
+  /* The handle (section A). Round 28's measured geometry kept: iPadOS 26's handle on Apple's own picture
+     (support.apple.com 125309), concentric with the corner, its visible gap 0.122 R from the edge, its body
+     65.6° of the circle on the diagonal. The designer's 6px gap assumed a 12px card; on our 16px panel it
+     would leave an 8px arc a person can't read, so the gap stays the measured one (my call). Its stroke is the
+     house grip's 1.5px. */
+  --c-handle-arc-gap: calc(var(--radius-panel) * 0.122);
+  --c-handle-stroke: var(--c-corner-grip-stroke);
+  /* Reached and held, the stroke doubles to 3px so the run reads at a glance against the panel's 1px edge
+     beside it, and takes the strong ink: (round 29 review: "a 1px hairline along a 565px edge" that "barely
+     separates from the panel's own border"). Its body keeps its place; it only thickens. */
+  --c-handle-stroke-held: calc(2 * var(--c-corner-grip-stroke));
+  --c-handle-inset: calc(1px + var(--c-handle-arc-gap) + var(--c-handle-stroke) / 2);
+  --c-handle-sweep: 65.6deg;
+  /* How far past the pointer the reach runs, and the hit areas: an 8px band on each resizable edge, a 24px
+     square at the corner (44px each under a finger, --c-side-divider-hit). */
+  --c-handle-reach: 24px;
+  --c-handle-band: 8px;
+  --c-handle-corner: 24px;
+  /* The house spring (DESIGN.md: 0.4s, no bounce) a finger's flick settles on. */
+  --spring-house-dur: var(--dur-settle);
+  --spring-house-bounce: 0;
+  /* Hide's tucked tab (section D): 36px, the graph's 20px glyph in it. */
+  --c-tucked-tab: 36px;
+  /* Regions (section E): the doorway tab's height. */
+  --c-doorway-tab-h: 28px;
+  /* The slab's ground: one step down from the well by day (--surface-recess-deep). At night the well is
+     already neutral-1, the deepest step (recess-deep is the same neutral-1, 1.0:1, the slab gone), so the slab
+     takes the recess there, the one step the night has (1.09:1) (my call). Its edges' inks are held to 3:1 on
+     it (WCAG 1.4.11): by day row-outline stands 2.80:1 on recess-deep and coral 2.81:1, so by day the edge is
+     border-contrast (4.35:1) and the chosen edge the strong coral ink (4.14:1); by night row-outline (3.47:1)
+     and coral itself (5.23:1). The labels' badge one step from the slab either way. */
+  --c-graph-slab: light-dark(var(--surface-recess-deep), var(--surface-recess));
+  --c-graph-edge-ink: light-dark(var(--border-contrast), var(--border-row-outline));
+  --c-graph-edge-chosen: light-dark(var(--brand-ink-strong), var(--brand-solid));
+  --c-graph-label-bg: light-dark(var(--surface-recess), var(--surface-recess-deep));
+  /* The chosen clip row's wash: by day the house wash at 40%, so a choice reads as chosen and not as the red of
+     a failure or the action (the third review: the solid day wash read as the Save-failed card's pink); at
+     night the house wash itself. */
+  --c-chosen-wash: light-dark(color-mix(in oklab, var(--brand-wash) 40%, transparent), var(--brand-wash));
+  /* Edges (section F): the elbow's radius, the open chevron's legs, the playback dash. */
+  --c-edge-elbow-r: var(--radius-sm);
+  --c-edge-head-leg: 7px;
+  --c-edge-dash-len: 24px;
+  --c-edge-dash-w: calc(2 * var(--c-graph-edge));
+  /* The clip controls' curve editor (section C) and its slider's snap. */
+  --c-curve-editor-w: 120px;
+  --c-curve-editor-h: 72px;
+  --c-detent-snap: 6px;
+
+  /* fable-timeline-design.md: "Name column 280px". */
+  --dock-name-w: 280px;
+  /* fable-timeline-design.md: "ew-resize on the 8px handle zones". */
+  --bar-handle-zone: 8px;
+  /* responsive-design.md, "Proposed tokens". The breakpoints (bp-short 560, bp-desk-wide 1800, bp-ultra
+     2450) live in app.js's BP, which sets html[data-screen]; a media query can't read a custom property. */
+  --c-graph-panel-w: 448px;
+  --c-graph-panel-w-wide: 800px;
+  /* r22 ruling call 3: the dock's ceiling leaves the page this much, its head and first field readable. */
+  --c-page-h-floor: 240px;
+  /* The kit's floating-surface pad (its menu), and One Target's gap round a bare element (the r21 ruling). */
+  --c-floating-pad: 6px;
+  --c-target-gap: 2px;
+  --c-graph-drawer-stop: 45dvh;
+  --c-review-max-w: 2000px;
+  /* The panel's width; a dragged width is set on html's own style and wins. */
+  --panel-w: var(--c-graph-panel-w);
+  /* One component from bp-ultra up: the whole layout stands in a 2000px column, centred, the gutter either
+     side. A percentage, so each fixed box resolves it against the viewport it stands in. */
+  --gutter: max(0px, (100% - var(--c-review-max-w)) / 2);
+  --gutter-start: var(--gutter);
+  --gutter-end: var(--gutter);
+}
+/* The sizes a double-press or a finger's flick animates (WAAPI on html's own style); the dock's height is
+   its rows' until dragged, so it animates its own block-size instead. The handle's lengths are registered so
+   app.js reads them resolved. */
+@property --panel-w { syntax: "<length>"; inherits: true; initial-value: 448px; }
+@property --graph-h { syntax: "<length>"; inherits: true; initial-value: 520px; }
+@property --c-handle-arc-gap { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-handle-stroke { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --c-handle-inset { syntax: "<length>"; inherits: true; initial-value: 0px; }
+/* One component under review: the wide panel from bp-desk-wide. Two or more on screen at once: the 448 panel
+   with the graphs stacked, or twice it with them side by side, and no 2000 cap (all-components-design.md). */
+html:is([data-screen="wide"], [data-screen="ultrawide"]):not([data-multi]) { --panel-w: var(--c-graph-panel-w-wide); }
+html[data-multi] { --panel-default: var(--c-graph-panel-w); --panel-w: var(--panel-default); }
+html[data-multi][data-graphs="row"] { --panel-default: calc(2 * var(--c-graph-panel-w)); }
+html[data-multi] {
+  --gutter-end: max(0px, (100% - (var(--row-w) + 2 * var(--space-5)) - (var(--panel-default) + 2 * var(--space-5))) / 2);
+  --gutter-start: max(0px, 100% - var(--gutter-end) - (var(--row-w) + 2 * var(--space-5)) - (var(--panel-w) + 2 * var(--space-5)));
+}
+html[data-multi][data-wrapped] { --gutter-end: 0px; --gutter-start: 0px; }
+* { box-sizing: border-box; }
+body { margin: 0; min-block-size: 100dvh; font: var(--type-body); background: var(--surface-recess); color: var(--ink-strong); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+button { font: inherit; color: inherit; }
+
+/* ---- The page under the tool: the component being judged ---- */
+.page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: var(--gutter-start) calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; --page-pad-b: var(--space-8); padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--space-5) var(--page-pad-b); display: grid; justify-items: center; align-content: start; }
+/* The round's open choice, over the pages: one segmented control, its label in meta. */
+.review-bar { inline-size: min(100%, 600px); display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-3); row-gap: var(--space-1); margin-block-end: var(--space-5); }
+.review-label { font: var(--type-meta); color: var(--ink-muted); }
+/* The hue option is a proposal: its kit badge in the segment, and one line saying what picking it adds. */
+.review-bar .badge.proposal { block-size: var(--c-badge-h); padding-inline: var(--space-2); font: var(--type-meta); line-height: 1; color: var(--ink-muted); background: var(--surface-recess); }
+.review-note { flex-basis: 100%; margin: 0; font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
+.pages { inline-size: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: var(--space-5); }
+.stage-wrap { position: relative; flex: 0 1 auto; inline-size: min(100%, 600px); container: page / inline-size; }
+.stage-wrap[hidden] { display: none; }
+.frame { padding: var(--space-6); border: 1px solid var(--border-control); border-radius: calc(var(--mock-radius, 8px) + var(--space-1)); background: var(--surface-raised); box-shadow: var(--shadow-tile); }
+.frame label { display: block; margin: 0 0 var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
+.field { margin-block-end: var(--mock-field-gap, var(--space-3)); min-inline-size: 0; }
+.input { min-block-size: var(--c-input-h); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); overflow-wrap: anywhere; }
+.input.tall { min-block-size: calc(2 * var(--c-input-h) - var(--space-2)); }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.line { margin: 0 0 var(--space-3); text-wrap: pretty; }
+.line.read { font-weight: var(--weight-strong); }
+.line.muted { color: var(--ink-muted); }
+.line.fail { color: var(--status-fail-ink); }
+.field .line { margin: var(--space-1) 0 0; }
+/* The page under review scrolls under the house edge fade where more is past its top or its foot. */
+.page[data-fade~="top"] { --page-fade-t: var(--c-edge-fade-len); }
+.page[data-fade~="foot"]:not(:has(.stage .actions)) { --page-fade-b: var(--c-edge-fade-len); }
+.page[data-fade] { mask-image: linear-gradient(transparent, #000 var(--page-fade-t, 0px), #000 calc(100% - var(--page-fade-b, 0px)), transparent); }
+/* The form's actions hold at the page's foot while the form runs on past it, so they never sit under the
+   drawer or the dock: their own band of the frame's surface, the house edge fade (40px) over the form above
+   them while more is under them. Held, the band runs down over the page's foot padding to the page's edge, so
+   no sliver of the form shows under it. At rest their padding is taken back by their margins, so nothing
+   moves. */
+.actions { position: sticky; z-index: 1; inset-block-end: calc(-1 * var(--page-pad-b, 0px)); display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-6)); padding: var(--space-3) var(--space-6); background: var(--surface-raised); }
+.actions::before { content: ""; position: absolute; inset-inline: 0; inset-block-end: 100%; block-size: var(--c-edge-fade-len); background: linear-gradient(transparent, var(--surface-raised)); opacity: 0; pointer-events: none; }
+.page[data-fade~="foot"] .actions::before { opacity: 1; }
+.page[data-fade~="foot"] .actions { padding-block-end: calc(var(--space-3) + var(--page-pad-b, 0px)); }
+.actions .note { font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
+@container page (width < 440px) { .actions .note { grid-column: 1 / -1; } .actions .btn { grid-row: 2; grid-column: 2; } .actions .btn.primary { grid-column: 3; } }
+.btn { display: inline-flex; align-items: center; min-block-size: var(--c-btn-h-sm); padding: 0 var(--space-4); border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); color: var(--ink-strong); font: var(--type-button); white-space: nowrap; }
+.btn.primary { background: var(--action-solid); border-color: var(--action-solid); color: var(--on-action); }
+.done { padding: var(--space-5); border-radius: var(--radius-md); background: var(--surface-recess); }
+.rlist { border: 1px solid var(--border-control); border-radius: calc(var(--mock-radius, 8px) + var(--space-1)); background: var(--surface-raised); box-shadow: var(--shadow-tile); }
+.rrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-row) var(--space-3); align-items: center; padding: var(--mock-row-pad, 12px) var(--space-4); border-block-end: 1px solid var(--border-hairline); }
+.rrow:last-child { border-block-end: 0; }
+.rrow b { font-weight: var(--weight-strong); }
+.rmeta { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); }
+.rstatus { grid-column: 1; font: var(--type-label); font-weight: var(--weight-body); }
+.rstatus.fail { color: var(--status-fail-ink); }
+.rstatus.muted { color: var(--ink-muted); }
+.ractions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: var(--space-2); }
+.dot { display: inline-block; block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: var(--action-solid); vertical-align: middle; }
+
+/* Change marks (clarity §3 B): while a hover previews a state that differs from the kept one, a wash over
+   every value that came in or changed, and one where a value went, at its old box. */
+.marks { position: absolute; inset: 0; pointer-events: none; }
+.wash { position: absolute; opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+.wash.add { background: var(--diff-add-bg); box-shadow: inset 0 0 0 1px var(--data-ok); }
+.wash.del { background: var(--diff-del-bg); box-shadow: inset 0 0 0 1px var(--data-bad); }
+.wash.in { opacity: 1; }
+
+/* ---- The tool: the house floating panel ---- */
+.tool { position: fixed; z-index: var(--layer-dock); color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-overlay-hung); font: var(--type-label); font-weight: var(--weight-body); }
+.tool :focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+/* The panel stands a step over the dock; its surface (fill, edge, shadow) is its shell, below, so Hide can
+   fold that one box into the tab. Its content keeps the 1px edge plus --space-2 in. */
+.panel { z-index: calc(var(--layer-dock) + 1); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border: 0; border-radius: var(--radius-panel); padding: calc(var(--space-2) + 1px); background: none; box-shadow: none; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
+.bar-end { display: flex; align-items: center; gap: var(--space-2); margin-inline-start: auto; flex: none; }
+/* A bar's group (DESIGN.md, The Title Bars Follow Liquid Glass Rule; the top bar's glass group its recipe): one
+   capsule of the panel's glass floating over what is under it, its items bare symbols --c-bar-group-pad in and
+   concentric with it. Its glass is its own layer under its items, so a segmented thumb inside stays over it. Under
+   Increase Contrast or Reduce Transparency it is the solid surface with the 3:1 edge. */
+.glass { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: var(--c-bar-group-pad); min-inline-size: 0; padding: var(--c-bar-group-pad); border-radius: var(--radius-pill); }
+.glass::before { content: ""; position: absolute; z-index: -1; inset: 0; border-radius: inherit; border: 1px solid var(--border-hairline); background: var(--material-panel); box-shadow: var(--shadow-tile); backdrop-filter: blur(calc(var(--material-blur) * 1.4)) saturate(var(--material-saturate)); pointer-events: none; }
+@media (prefers-contrast: more) { .glass::before { border-color: var(--border-contrast); background: var(--surface-raised); backdrop-filter: none; } }
+@media (prefers-reduced-transparency: reduce) { .glass::before { border-color: var(--border-contrast); background: var(--surface-raised); backdrop-filter: none; } }
+.glass :is(.icon-btn, .hide-btn) { inline-size: var(--c-bar-item); block-size: var(--c-bar-item); border-radius: var(--radius-pill); }
+.glass .zoom-fit { block-size: var(--c-bar-item); border-radius: var(--radius-pill); }
+/* A segmented switch as a group: the glass is its groove, the thumb lifted on it, each segment concentric. */
+.glass > .t-tabs { padding: 0; background: none; border-radius: var(--radius-pill); }
+.glass > .t-tabs .t-tab { block-size: var(--c-bar-item); border-radius: var(--radius-pill); }
+.glass > .t-tabs .t-tabs-pill { inset-block-start: 0; block-size: var(--c-bar-item); border-radius: var(--radius-pill); }
+.tabs-group { flex: 0 1 auto; }
+/* The well: the graph's view between two bands of its own, one at its top and one at its foot, where the
+   doorways stand (section E). A door in its band covers nothing of the graph; the view scrolls between them,
+   its ends faded by the house edge fade so what scrolls on reads as going on. */
+.gview { position: relative; display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; padding-block: var(--c-doorway-tab-h); border-radius: calc(var(--radius-panel) - var(--space-2)); background: var(--surface-well); border: 1px solid var(--border-well); }
+.graph { position: relative; flex: 0 1 auto; min-block-size: 0; block-size: var(--graph-h, 520px); overflow: auto; overscroll-behavior: contain; cursor: grab; }
+.graph.panning { cursor: grabbing; }
+/* A band stands only while it holds a door (data-top, data-foot on the well, app.js); empty, the view takes its
+   room, so the well's own height never changes. */
+.gview:not([data-top]) .graph { margin-block-start: calc(-1 * var(--c-doorway-tab-h)); }
+.gview:not([data-foot]) .graph { margin-block-end: calc(-1 * var(--c-doorway-tab-h)); }
+.gview:not([data-top], [data-foot]) .graph { block-size: calc(var(--graph-h, 520px) + 2 * var(--c-doorway-tab-h)); }
+.gview:is([data-top]:not([data-foot]), [data-foot]:not([data-top])) .graph { block-size: calc(var(--graph-h, 520px) + var(--c-doorway-tab-h)); }
+/* The house edge fade at an end with more to scroll past it (data-fade, app.js). */
+.graph[data-fade="top"] { mask-image: linear-gradient(transparent, #000 var(--c-edge-fade-len-phone)); }
+.graph[data-fade="foot"] { mask-image: linear-gradient(#000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+.graph[data-fade="top foot"] { mask-image: linear-gradient(transparent, #000 var(--c-edge-fade-len-phone), #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+.zoomer { position: relative; margin: 0 auto; }
+.world { position: absolute; inset-inline-start: 0; inset-block-start: 0; transform-origin: 0 0; }
+
+/* ---- A machine is a slab (round 29, section E) ----
+   One step down on the well (The Frame Recesses Rule): --surface-recess-deep, the panel's radius, no edge and
+   no dash, --space-5 in. Its name stands inside it, top-left --space-4 in, in the label role, its count in
+   meta; a press fits the slab in the view. The machine the stage plays names itself in the strong ink. */
+.region { position: absolute; padding: var(--space-5); border-radius: var(--radius-panel); background: var(--c-graph-slab); }
+.region-head { all: unset; box-sizing: border-box; position: relative; z-index: 3; display: inline-flex; align-items: baseline; gap: var(--space-2); max-inline-size: calc(100% + 2 * (var(--space-5) - var(--space-4))); min-block-size: var(--c-badge-h); margin: calc(var(--space-4) - var(--space-5)) 0 var(--space-3) calc(var(--space-4) - var(--space-5) - var(--space-1)); padding: 0 var(--space-1); border-radius: var(--radius-xs); cursor: pointer; transition: background-color var(--dur-control) var(--ease-out); }
+.region-head b { font: var(--type-label); color: var(--ink-muted); overflow-wrap: anywhere; transition: color var(--dur-control) var(--ease-out); }
+.region-head span { flex: none; font: var(--type-meta); color: var(--ink-muted); }
+.region.kept-region .region-head b { color: var(--ink-strong); }
+/* Pinned to the view's top while its slab runs on under it: its slab's ground under it, so the states that
+   scroll beneath never read through its words. */
+.region-head[data-pinned] { background: var(--c-graph-slab); }
+@media (hover: hover) { .region-head:hover { background: var(--surface-hover); } }
+.region-head:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.regionBody { position: relative; }
+.world svg { position: absolute; inset-inline-start: 0; inset-block-start: 0; overflow: visible; pointer-events: none; }
+
+/* ---- One edge grammar (round 29, section F) ----
+   1.5px orthogonal runs with 8px elbows, an open chevron head in the same stroke, labels as the kit badge on
+   the line (the line cut --space-1 either side by the badge's own halo in the slab's ground), no dashes. One
+   ink per role on the group, the line and its head in currentColor: ordinary edges 3:1, a hovered one the
+   muted ink, the chosen transition coral. An 8px band along each takes the press. */
+.edge { color: var(--c-graph-edge-ink); transition: color var(--dur-control) var(--ease-out); }
+.edge :is(.line, .head) { fill: none; stroke: currentColor; stroke-width: var(--c-graph-edge); stroke-linecap: round; stroke-linejoin: round; }
+.edge .hit { fill: none; stroke: transparent; stroke-width: var(--c-handle-band); pointer-events: stroke; cursor: pointer; }
+@media (hover: hover) { .edge:hover { color: var(--ink-muted); } }
+.edge.chosen { color: var(--c-graph-edge-chosen); }
+.edge .lbl rect { fill: var(--c-graph-label-bg); stroke: var(--c-graph-slab); stroke-width: calc(2 * var(--space-1)); paint-order: stroke; transition: fill var(--dur-control) var(--ease-out); }
+.edge .lbl text { font: var(--type-meta); fill: var(--ink-muted); }
+.edge.chosen .lbl rect { fill: var(--brand-wash); }
+.edge.chosen .lbl text { fill: var(--brand-ink); }
+/* Playback: one 24px dash travels the chosen edge on the dock's clock, a stroke twice the line's. */
+.edge-dash { fill: none; stroke: var(--c-graph-edge-chosen); stroke-width: var(--c-edge-dash-w); stroke-linecap: round; pointer-events: none; }
+
+/* ---- Doorways to the regions out of view (section E) ----
+   A small raised tab flush to the view's edge nearest the region, square on that side and round inside (the
+   Show tab's shape), its name in meta and a chevron pointing out, along the edge at the region's own place. It
+   comes in over --dur-fade as its region leaves the view and goes over --dur-exit as it returns, sliding 4px
+   from the edge. */
+/* It clips nothing, so a door's 44px touch layer reaches past its 28px band. */
+.doors { position: absolute; inset: 0; pointer-events: none; border-radius: inherit; }
+/* The door is the press: still, transparent, its 44px touch layer standing where it stands. Its face is the
+   drawing: it slides 4px in from the well's edge while a clip on the same clock keeps every frame inside the
+   door's own box, so nothing of it draws past the well (the second review: "clip the drawing, not its touch
+   layer"). Its shadow is kept --space-2 out on the three inner sides (a door stands --space-2 in from the view's
+   sides, so that reach stays in the well); the edge side's is the well's edge. */
+.door { all: unset; box-sizing: border-box; position: absolute; display: flex; block-size: var(--c-doorway-tab-h); max-inline-size: calc(100% - 2 * var(--space-2)); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; pointer-events: none; }
+.door[data-on] { pointer-events: auto; }
+.door-face { box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-1); flex: 1 1 auto; min-inline-size: 0; padding-inline: var(--space-2) var(--space-1); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); opacity: 0; translate: var(--door-out); clip-path: var(--door-clip-out); transition: opacity var(--dur-exit) var(--ease-out), translate var(--dur-exit) var(--ease-out), clip-path var(--dur-exit) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.door[data-on] .door-face { opacity: 1; translate: 0 0; clip-path: var(--door-clip-in); transition: opacity var(--dur-fade) var(--ease-out), translate var(--dur-fade) var(--ease-out), clip-path var(--dur-fade) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.door-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.door svg { flex: none; inline-size: var(--icon-sm); block-size: var(--icon-sm); rotate: var(--door-turn, 0deg); }
+.door[data-band="bottom"] { inset-block-end: 0; --door-out: 0 4px; --door-clip-out: inset(calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 4px calc(-1 * var(--space-2))); --door-clip-in: inset(calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-2))); }
+.door[data-band="bottom"] .door-face { border-block-end: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.door[data-band="top"] { inset-block-start: 0; --door-out: 0 -4px; --door-clip-out: inset(4px calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) calc(-1 * var(--space-2))); --door-clip-in: inset(0 calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) calc(-1 * var(--space-2))); }
+.door[data-band="top"] .door-face { border-block-start: 0; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+@media (hover: hover) { .door:hover .door-face { background: var(--surface-hover); color: var(--ink-strong); } }
+.door:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+@media (prefers-reduced-motion: reduce) { .door .door-face, .door[data-on] .door-face { translate: 0 0; clip-path: var(--door-clip-in); } }
+
+/* A state: three tiers and one meaning for coral (clarity §1). */
+.node { position: absolute; inline-size: var(--node-w, 168px); display: flex; flex-direction: column; gap: var(--space-row); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); cursor: pointer; transition: var(--transition-control); }
+.node b { font: var(--type-label); color: var(--ink-strong); }
+.node p { margin: 0; font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
+@media (hover: hover) { .node:not(.kept, .cur):hover { background: var(--surface-hover); } }
+.node.peek:not(.kept, .cur) { background: var(--surface-hover); }
+.node.cur { background: var(--surface-pressed); border-color: var(--border-contrast); }
+.node.kept { background: var(--selected-bg); border-color: var(--brand-solid); box-shadow: var(--selected-shadow); }
+.node.kept b { color: var(--selected-ink); }
+/* A state that is a failure wears the house's failure inks, never coral (coral is the action): the crimson
+   glyph before its name always, and kept, the failed pair (status-fail-bg, status-fail-ink) with the glyph's
+   crimson for its edge. */
+.node-fail { display: inline-grid; vertical-align: -3px; margin-inline-end: var(--space-1); color: var(--status-fail-glyph); }
+.node-fail svg { inline-size: var(--icon-md); block-size: var(--icon-md); }
+.node.fail.kept { background: var(--status-fail-bg); border-color: var(--status-fail-glyph); }
+.node.fail.kept :is(b, p) { color: var(--status-fail-ink); }
+.node b, .node p { transition: color 0s linear var(--dur-control); }
+.node.cur b, .node:is(.kept, .cur) p { transition: color 0s; }
+.world[data-instant] :is(.node b, .node p) { transition: none; }
+@media (prefers-reduced-motion: reduce) { .node b, .node p { transition: none; } }
+.node.kept:not(.fail) p, .node.cur p { color: var(--ink-row); }
+.vars { display: flex; flex-direction: column; gap: var(--space-1); margin-block-start: var(--space-2); }
+.var { all: unset; display: block; padding: var(--space-row) var(--space-2); border-radius: var(--radius-xs); font: var(--type-meta); color: var(--ink-row); border: 1px solid var(--border-control); background: var(--surface-raised); cursor: pointer; transition: var(--transition-control); }
+@media (hover: hover) { .var:not(.kept, .cur):hover { background: var(--surface-hover); } }
+.var.peek:not(.kept, .cur) { background: var(--surface-hover); }
+.var.kept { background: var(--chip-chosen-bg); border-color: var(--chip-chosen-bg); color: var(--chip-chosen-ink); }
+.node.fail .var.kept { background: var(--surface-raised); border-color: var(--status-fail-glyph); color: var(--status-fail-ink); font-weight: var(--weight-strong); }
+.var.cur { background: var(--surface-pressed); border-color: var(--border-contrast); color: var(--ink-strong); }
+.world[data-instant] :is(.node, .var) { transition: none; }
+.var:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+
+/* The zoom group: its parts stand bare in a row (the house icon rule: the glyph, never a box round it). Its
+   figure is a press: Fit all (⇧1). */
+.zoom { display: flex; align-items: center; gap: var(--space-row); }
+.zoom-fit { all: unset; box-sizing: border-box; display: grid; place-items: center; min-inline-size: 5ch; block-size: var(--c-btn-h-xs); padding-inline: var(--space-1); border-radius: var(--radius-xs); cursor: pointer; transition: var(--transition-control); }
+@media (hover: hover) { .zoom-fit:hover { background: var(--surface-hover); } }
+.zoom-fit:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.icon-btn { all: unset; box-sizing: border-box; display: grid; place-items: center; inline-size: var(--c-btn-h-xs); block-size: var(--c-btn-h-xs); border-radius: var(--radius-xs); color: var(--ink-row); cursor: pointer; transition: var(--transition-control); }
+.icon-btn svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
+/* Outline and Hide: the kit's sm ghost icon button, a 30px hit area round a bare --icon-md glyph. */
+.hide-btn { inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); color: var(--ink-row); }
+.hide-btn svg { inline-size: var(--icon-md); block-size: var(--icon-md); }
+/* An icon is the Solar glyph alone, never a box or a circle (the owner's rule): its hit area keeps its size;
+   under the pointer and while its menu is open the glyph takes the strong ink; a press scales it (The Press
+   Rule). */
+@media (hover: hover) { .icon-btn:hover { color: var(--ink-strong); } }
+.icon-btn:active { scale: var(--press-scale); }
+.icon-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.icon-btn[aria-expanded="true"] { color: var(--ink-strong); }
+
+.graphs { display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; }
+.gsec { display: flex; flex-direction: column; min-block-size: 0; }
+html:not([data-multi]) .gsec:not([data-current]) { display: none; }
+html:not([data-multi]) .gsec-head { display: none; }
+.gsec-head { display: flex; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
+.gsec-name { flex: 1 1 auto; min-inline-size: 0; margin: 0; padding-inline-start: var(--space-1); font: var(--type-label); color: var(--ink-strong); overflow-wrap: anywhere; text-wrap: balance; }
+html[data-multi] .toolbar :is(.tabs-group, .bar-end > .view-group) { display: none; }
+html[data-multi] .graphs { gap: var(--space-4); }
+html[data-graphs="stack"] .panel { block-size: calc(100dvh - 2 * var(--space-5)); }
+html[data-graphs="stack"] .graphs { flex: 1 1 auto; }
+html[data-graphs="stack"] .gsec:first-child { flex: none; }
+html[data-graphs="stack"] .gsec:first-child .graph { flex: none; block-size: var(--split-h, 240px); }
+html[data-graphs="stack"] .gsec:last-child { flex: 1 1 0; }
+html[data-graphs="stack"] .gsec:last-child :is(.gview, .graph) { flex: 1 1 auto; block-size: auto; }
+html[data-graphs="stack"] .sash-h { display: none; }
+html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-3); }
+/* The dials start clear of the corner's hit square. */
+.dials { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; column-gap: var(--space-3); row-gap: var(--space-1); align-items: center; padding: var(--space-2) 0 0 calc(var(--c-handle-corner) - var(--c-handle-band) / 2 - var(--space-2)); }
+.dial { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
+.dial > span:first-child { color: var(--ink-row); }
+.dial output { text-align: end; white-space: nowrap; }
+.dial input[type="range"] { inline-size: 100%; margin: 0; accent-color: var(--ink-solid); }
+
+/* ---- The handle (round 29, section A): a corner arc that reaches, then runs the edge ----
+   One arc per surface, iPadOS 26's corner handle (round 28's measured geometry), in the corner that faces the
+   open field: the panel's bottom-leading, the dock's top-trailing. Nothing else is drawn on any edge. It is one
+   object at three lengths: the arc's body never moves; each leg runs on from it along its edge. Pointing at an
+   edge, that edge's leg reaches to --c-handle-reach past the pointer and follows it, thickened to 3px in the
+   strong ink;
+   held, it sweeps the whole edge in coral (The Coral Is Where You Act Rule); let go, it retracts. Each leg's
+   last 32px fade by the house rim taper (1 − (1 − x)^6, app.js), the stroke whole to its tip.
+   The clock: CSS transitions on four registered values per arc (each leg's reach in px, and its sweep 0 to 1,
+   mixing that reach into the whole edge), retargeted from where they stand; app.js paints the paths from them. */
+@property --reach-a { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --reach-b { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --sweep-a { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --sweep-b { syntax: "<number>"; inherits: false; initial-value: 0; }
+.arc { position: absolute; z-index: 5; inline-size: 1px; block-size: 1px; overflow: visible; pointer-events: none; color: var(--border-row-outline); transition: --reach-a var(--dur-exit) var(--ease-out), --reach-b var(--dur-exit) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-exit) var(--ease-out); }
+.arc path { fill: none; stroke-width: var(--c-handle-stroke); stroke-linecap: round; stroke-linejoin: round; transition: stroke-width var(--dur-exit) var(--ease-out); }
+.arc:is([data-state="reach"], [data-state="follow"], [data-state="settle"], [data-state="sweep"]) path { stroke-width: var(--c-handle-stroke-held); }
+.arc[data-state="reach"] path { transition: stroke-width var(--dur-control) var(--ease-out); }
+.arc[data-state="follow"] path { transition: stroke-width var(--dur-control) var(--ease-out); }
+.arc[data-state="sweep"] path { transition: stroke-width var(--dur-pop) var(--ease-out); }
+.arc .arc-body { stroke: currentColor; }
+.arc stop { stop-color: currentColor; }
+.arc > g { transition: opacity var(--dur-exit) var(--ease-out); }
+#arcP { inset-inline-start: 0; inset-block-end: 0; }
+#arcD { inset-inline-end: -1px; inset-block-start: -1px; }
+/* Approach: the reach grows over --dur-control on ease-out, then follows the pointer on the hover ghost's glide. */
+.arc[data-state="reach"] { color: var(--ink-strong); transition: --reach-a var(--dur-control) var(--ease-out), --reach-b var(--dur-control) var(--ease-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
+.arc[data-state="follow"] { color: var(--ink-strong); transition: --reach-a var(--dur-ghost) var(--ease-in-out), --reach-b var(--dur-ghost) var(--ease-in-out), --sweep-a var(--dur-exit) var(--ease-out), --sweep-b var(--dur-exit) var(--ease-out), color var(--dur-control) var(--ease-out); }
+/* Held: the sweep to the whole edge, the ink to coral, over --dur-pop on ease-out. */
+.arc[data-state="sweep"] { color: var(--brand-solid); transition: --reach-a var(--dur-pop) var(--ease-out), --reach-b var(--dur-pop) var(--ease-out), --sweep-a var(--dur-pop) var(--ease-out), --sweep-b var(--dur-pop) var(--ease-out), color var(--dur-pop) var(--ease-out); }
+/* Let go with the pointer still on it: back to the reach over --dur-exit. */
+.arc[data-state="settle"] { color: var(--ink-strong); }
+@media (prefers-reduced-motion: reduce) {
+  /* The run appears and goes by opacity alone over --dur-control; its length jumps (after the fade, going). */
+  .arc[data-state] { transition: color var(--dur-control) var(--ease-out), --reach-a 0s, --reach-b 0s, --sweep-a 0s, --sweep-b 0s; }
+  .arc[data-state=""] { transition: color var(--dur-control) var(--ease-out), --reach-a 0s linear var(--dur-control), --reach-b 0s linear var(--dur-control), --sweep-a 0s linear var(--dur-control), --sweep-b 0s linear var(--dur-control); }
+  .arc .arc-leg, .arc[data-state] .arc-leg { transition: opacity var(--dur-control) var(--ease-out), stroke-width var(--dur-control) var(--ease-out); }
+  .arc[data-state=""] .arc-leg { opacity: 0; }
+}
+/* Stacked graphs have no foot edge: the corner moves the width alone. */
+
+/* The hit areas: 8px bands that take no layout room and stand over what is under them, a 24px square at the
+   corner (the separator a key reaches, the house ring on its focus); 44px each under a finger. */
+.sash { position: absolute; z-index: 6; touch-action: none; }
+.sash-w { inset-block: var(--radius-panel) var(--c-handle-corner); inset-inline-start: calc(var(--c-handle-band) / -2); inline-size: var(--c-handle-band); cursor: ew-resize; }
+.sash-h { inset-inline: var(--c-handle-corner) var(--radius-panel); inset-block-end: calc(var(--c-handle-band) / -2); block-size: var(--c-handle-band); cursor: ns-resize; }
+.sash-c { inset-inline-start: calc(var(--c-handle-band) / -2); inset-block-end: calc(var(--c-handle-band) / -2); inline-size: var(--c-handle-corner); block-size: var(--c-handle-corner); border-radius: var(--radius-sm); cursor: nesw-resize; }
+html[data-graphs="stack"] .sash-c { cursor: ew-resize; }
+.sash-d { inset-inline: var(--radius-panel) var(--c-handle-corner); inset-block-start: calc(var(--c-handle-band) / -2 - 1px); block-size: var(--c-handle-band); cursor: ns-resize; }
+.sash-dc { inset-inline-end: calc(var(--c-handle-band) / -2 - 1px); inset-block-start: calc(var(--c-handle-band) / -2 - 1px); inline-size: var(--c-handle-corner); block-size: var(--c-handle-corner); border-radius: var(--radius-sm); cursor: ns-resize; }
+.sash:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: 0; }
+.sash-s { inset-inline: var(--radius-panel); block-size: var(--c-handle-band); cursor: ns-resize; }
+.sash-s:focus-visible { outline: none; }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-w { inset-block: calc(var(--c-side-divider-hit) / 2); inset-inline-start: calc(var(--c-side-divider-hit) / -2); inline-size: var(--c-side-divider-hit); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-h { inset-inline: calc(var(--c-side-divider-hit) / 2); inset-block-end: calc(var(--c-side-divider-hit) / -2); block-size: var(--c-side-divider-hit); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-d { inset-inline: var(--radius-panel) calc(var(--c-side-divider-hit) / 2); inset-block-start: calc(var(--c-side-divider-hit) / -2); block-size: var(--c-side-divider-hit); }
+html:is([data-input="touch"], [data-input="touch-hover"]) :is(.sash-c, .sash-dc) { inline-size: var(--c-side-divider-hit); block-size: var(--c-side-divider-hit); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-c { inset-inline-start: calc(var(--c-side-divider-hit) / -2); inset-block-end: calc(var(--c-side-divider-hit) / -2); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-dc { inset-inline-end: calc(var(--c-side-divider-hit) / -2); inset-block-start: calc(var(--c-side-divider-hit) / -2); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-s { block-size: var(--c-side-divider-hit); }
+
+/* The split between stacked graphs: a line across the gap, its ends tapered, shown while pointed at, held or
+   focused. */
+.lit[data-arm="s"] { --lit-ink: var(--ink-muted); position: absolute; z-index: 3; pointer-events: none; inset: auto var(--radius-panel); block-size: var(--c-corner-grip-stroke); border-radius: var(--radius-pill); background: linear-gradient(to right, transparent, var(--lit-ink) var(--c-edge-lit-fade), var(--lit-ink) calc(100% - var(--c-edge-lit-fade)), transparent); opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
+html:not([data-graphs="stack"]) .lit[data-arm="s"] { display: none; }
+.panel:has(.sash-s:focus-visible) .lit[data-arm="s"] { opacity: 1; --lit-ink: var(--focus-ring); transition: none; }
+.panel[data-resizing="s"] .lit[data-arm="s"] { opacity: 1; transition: opacity var(--dur-control) var(--ease-out); }
+@media (hover: hover) { .panel:has(.sash-s:hover) .lit[data-arm="s"] { opacity: 1; transition: opacity var(--dur-control) var(--ease-out) var(--dur-pop); } }
+html[data-resizing] * { user-select: none; }
+html[data-resizing="w"], html[data-resizing="w"] * { cursor: ew-resize !important; }
+html:is([data-resizing="h"], [data-resizing="d"], [data-resizing="s"]), html:is([data-resizing="h"], [data-resizing="d"], [data-resizing="s"]) * { cursor: ns-resize !important; }
+html[data-resizing="wh"], html[data-resizing="wh"] * { cursor: nesw-resize !important; }
+html[data-scrubbing], html[data-scrubbing] * { cursor: ew-resize !important; user-select: none; }
+html[data-dragging], html[data-dragging] * { cursor: grabbing !important; user-select: none; }
+html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !important; }
+html[data-sliding], html[data-sliding] * { cursor: grabbing !important; user-select: none; }
+
+/* ---- Hide and Show (round 29, section D): the panel folds into a tab ----
+   The panel's surface is one box (its shell). Hide tweens that box from the panel's rect to a 36px tab tucked
+   flush to the screen's trailing edge at the head's height (--tab-y, --tab-out from app.js), square on the
+   screen side with no edge there and round on the other, over --dur-panel on --ease-drawer; the content fades
+   out over the first --dur-exit, the graph's glyph fades in over the last 120ms, and the overlay's shadow
+   becomes the tile's on the same clock. Show runs the same transitions back, the content in over the second
+   half. Transitions, so a Show caught mid-Hide turns back from where the box is drawn. A keyboard toggle is
+   instant (data-instant). */
+.panel-shell { all: unset; box-sizing: border-box; position: absolute; z-index: -1; inset: 0; border: 1px solid var(--border-control); border-radius: var(--radius-panel); background: var(--surface-raised); box-shadow: var(--shadow-overlay-hung); pointer-events: none; cursor: pointer; transition: inset-block-start var(--dur-panel) var(--ease-drawer), inset-block-end var(--dur-panel) var(--ease-drawer), inset-inline-start var(--dur-panel) var(--ease-drawer), inset-inline-end var(--dur-panel) var(--ease-drawer), border-radius var(--dur-panel) var(--ease-drawer), border-inline-end-width var(--dur-panel) var(--ease-drawer), box-shadow var(--dur-panel) var(--ease-drawer), background-color var(--dur-panel) var(--ease-drawer), border-color var(--dur-panel) var(--ease-drawer); }
+.tab-glyph { position: absolute; inset-block-start: -1px; inset-inline-start: -1px; display: grid; place-items: center; inline-size: var(--c-tucked-tab); block-size: var(--c-tucked-tab); color: var(--ink-muted); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+.tab-glyph svg { inline-size: var(--icon-lg); block-size: var(--icon-lg); }
+html[data-layout="desk"] .panel > :not(.panel-shell, .arc) { transition: opacity calc(var(--dur-panel) / 2) var(--ease-out) calc(var(--dur-panel) / 2); }
+html[data-layout="desk"] .panel[data-open="false"] { pointer-events: none; }
+html[data-layout="desk"] .panel[data-open="false"] > :not(.panel-shell, .arc) { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
+html[data-layout="desk"] .panel[data-open="false"] .arc > g { opacity: 0; }
+html[data-layout="desk"] .panel[data-open="false"] .panel-shell { inset-block-start: var(--tab-y, var(--space-2)); inset-block-end: calc(100% - var(--tab-y, var(--space-2)) - var(--c-tucked-tab)); inset-inline-start: calc(100% + var(--tab-out, var(--space-5)) - var(--c-tucked-tab)); inset-inline-end: calc(-1 * var(--tab-out, var(--space-5))); border-radius: var(--radius-lg) 0 0 var(--radius-lg); border-inline-end-width: 0; border-color: transparent; background-color: transparent; box-shadow: none; pointer-events: auto; }
+html[data-layout="desk"] .panel[data-open="false"] .tab-glyph { opacity: 1; transition: opacity calc(var(--dur-panel) - var(--dur-exit)) var(--ease-out) var(--dur-exit); }
+@media (hover: hover) { html[data-layout="desk"] .panel[data-open="false"] .panel-shell:hover .tab-glyph { color: var(--ink-strong); } }
+html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyph { scale: var(--press-scale); }
+.panel-shell:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.panel[data-instant], .panel[data-instant] * { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  /* A 120ms cross-fade in place (app.js): out, the box moved, in. */
+  html[data-layout="desk"] .panel :is(.panel-shell, .tab-glyph), html[data-layout="desk"] .panel > * { transition: none !important; }
+}
+
+/* The side sheet's Show: the same tucked tab, at the screen's trailing edge. */
+.show { position: fixed; z-index: var(--layer-dock); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: 0; display: grid; place-items: center; inline-size: var(--c-tucked-tab); block-size: var(--c-tucked-tab); padding: 0; border: 0; border-radius: var(--radius-lg); background: none; color: var(--ink-muted); cursor: pointer; transition: var(--transition-control); }
+.show svg { inline-size: var(--icon-lg); block-size: var(--icon-lg); }
+.show[hidden] { display: none; }
+@media (hover: hover) { .show:hover { color: var(--ink-strong); } }
+.show:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+
+/* ---- The dock: the kept move's clips over time, an editor ---- */
+.dock { container: dock / inline-size; inset-inline-start: calc(var(--gutter-start) + var(--space-5)); inset-inline-end: calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); inset-block-end: var(--space-5); block-size: var(--dock-h, auto); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: 0 var(--space-4); }
+.dock-body { display: contents; }
+/* Its head bar (44px): the move, play, loop and the time; the edits at its end. Dragged to its floor, the dock
+   is this bar alone: a timeline folded to its transport. */
+/* One row, a hairline the dock's whole width under it (pin 14): the head runs out over the dock's inline padding
+   and takes it back inside. */
+.dock-head { flex: none; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-row-h); margin-inline: calc(-1 * var(--space-4)); padding-inline: var(--space-4); border-block-end: 1px solid var(--border-hairline); }
+.transport { display: flex; align-items: center; gap: var(--space-1); flex: none; margin-inline-start: auto; }
+.edits { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.edits:empty { display: none; }
+.ghost-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border-radius: var(--radius-md); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
+@media (hover: hover) { .ghost-btn:hover { background: var(--surface-hover); } }
+.ghost-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.tl { position: relative; flex: 1 1 auto; overflow: hidden auto; overscroll-behavior: contain; min-block-size: 0; margin-inline: calc(-1 * var(--space-2)); padding: 0 var(--space-2) var(--space-3); }
+/* The house edge fade where more rows are past the timeline's top (under its sticky ruler) or its foot. */
+.tl { --fade-t: 0px; --fade-b: 0px; }
+.tl[data-fade~="top"] { --fade-t: var(--c-edge-fade-len); }
+.tl[data-fade~="foot"] { --fade-b: var(--c-edge-fade-len); }
+.tl[data-fade] { mask-image: linear-gradient(#000 var(--tl-fade-from, 0px), transparent var(--tl-fade-from, 0px), #000 calc(var(--tl-fade-from, 0px) + var(--fade-t)), #000 calc(100% - var(--fade-b)), transparent); }
+.tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
+.ruler-row { position: sticky; inset-block-start: 0; z-index: 6; align-items: center; min-block-size: var(--c-pill-h); background: var(--surface-raised); padding-block-end: var(--space-1); }
+.ruler-row .ruler { grid-column: 2; }
+.tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
+.tbtn svg { grid-area: 1 / 1; inline-size: var(--icon-md); block-size: var(--icon-md); transition: opacity var(--dur-control) var(--ease-out), scale var(--dur-control) var(--ease-out), filter var(--dur-control) var(--ease-out); }
+.tbtn .i-play { translate: 1px 0; }
+.tbtn .i-pause, .tbtn[data-playing] .i-play { opacity: 0; scale: var(--pop-scale); filter: blur(var(--c-recall-cross-blur)); }
+.tbtn[data-playing] .i-pause { opacity: 1; scale: 1; filter: none; }
+/* Loop off is the muted glyph, on the strong one: a toggle said by its glyph's ink, with no box. */
+#loop[aria-pressed="false"] { color: var(--ink-muted); }
+.tbtn[aria-pressed="true"] { color: var(--ink-strong); }
+@media (hover: hover) { .tbtn:hover { color: var(--ink-strong); } }
+.tbtn:active { scale: var(--press-scale); }
+/* The time: a Measured figure, "320 / 320 ms". */
+.ruler { position: relative; block-size: var(--c-pill-h); cursor: ew-resize; touch-action: none; user-select: none; }
+.ruler span { position: absolute; inset-block-start: 0; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ruler span.over-end { color: var(--ink-muted); }
+.ruler i { position: absolute; inset-block-end: 0; inline-size: 1px; block-size: var(--space-1); background: var(--ink-subtle); }
+
+/* ---- A clip's row (round 29, section B): dressed by The Row Dress Rule ----
+   The house row grid: the kind's 16px glyph centred in the 28px lead column, the words --space-3 after it. Line
+   1: the element in the label role, then the change. Line 2, the facts, each in its own dress: the length a
+   Measured figure (the token's short name in the kit badge after it only when it is a token), the curve drawn
+   small with its word, the delta as figures. Each fact is a press that opens the clip's controls.
+   html[data-kinds]: "hue" puts the glyph, the figure and the bar in the kind's hue (prop-*); "ink" names the
+   kind by its glyph alone, the bars on surface-fill. */
+.rows { position: relative; }
+.clip { --kind: var(--prop-text); --kind-wash: var(--prop-text-wash); position: relative; z-index: 1; min-block-size: var(--c-row-h-two); padding-block: var(--space-2); align-items: center; }
+.clip[data-prop="opacity"] { --kind: var(--prop-opacity); --kind-wash: var(--prop-opacity-wash); }
+.clip[data-prop="position"] { --kind: var(--prop-position); --kind-wash: var(--prop-position-wash); }
+.clip[data-prop="size"] { --kind: var(--prop-size); --kind-wash: var(--prop-size-wash); }
+.clip[data-prop="colour"] { --kind: var(--prop-colour); --kind-wash: var(--prop-colour-wash); }
+.clip[data-prop="unfold"] { --kind: var(--prop-unfold); --kind-wash: var(--prop-unfold-wash); }
+/* The chosen clip: the brand wash with the card's 1px brand-solid ring (the second review: the recess alone
+   with a ring read as a focused input, not "this one is chosen"). The hover ghost glides under the row a
+   pointer is on. */
+.clip[data-chosen]::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); background: var(--c-chosen-wash); box-shadow: inset 0 0 0 1px var(--brand-solid); }
+.row-ghost { position: absolute; z-index: 0; inset-inline: calc(-1 * var(--space-2)); inset-block-start: 0; block-size: var(--ghost-h, 0px); translate: 0 var(--ghost-y, 0px); border-radius: var(--radius-sm); background: var(--surface-hover); opacity: 0; pointer-events: none; transition: translate var(--dur-ghost) var(--ease-in-out), block-size var(--dur-ghost) var(--ease-in-out), opacity var(--dur-control) var(--ease-out); }
+.row-ghost[data-on] { opacity: 1; }
+.row-ghost[data-fresh] { transition: opacity var(--dur-control) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .row-ghost { transition: opacity var(--dur-control) var(--ease-out); } }
+.clip-name { display: grid; grid-template-columns: var(--c-row-lead) minmax(0, 1fr); column-gap: var(--space-3); align-items: start; min-inline-size: 0; padding-inline-end: var(--space-3); cursor: pointer; }
+.lead { grid-row: 1 / span 2; display: grid; place-items: center; block-size: calc(var(--text-label) * 1.3); color: var(--ink-muted); }
+.lead svg { inline-size: var(--icon-md); block-size: var(--icon-md); }
+html[data-kinds="hue"] .lead { color: var(--kind); }
+.l1 { margin: 0; min-inline-size: 0; font: var(--type-label); color: var(--ink-row); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.l1 .chg { font-weight: var(--weight-body); color: var(--ink-strong); }
+.facts { display: flex; align-items: center; gap: 0; min-inline-size: 0; margin-block-start: var(--space-row); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; }
+.fact { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-1); flex: none; min-block-size: var(--c-badge-h); padding-inline: var(--space-1); border-radius: var(--radius-xs); cursor: pointer; transition: background-color var(--dur-control) var(--ease-out); }
+/* Each fact's ink 8px from the next (two pads); the first's ink on the words' column. */
+.fact:first-child { margin-inline-start: calc(-1 * var(--space-1)); }
+@media (hover: hover) { .fact:hover { background: var(--surface-hover); } }
+.fact:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.fact:active { scale: var(--press-scale); }
+.fact .curve-glyph { inline-size: 16px; block-size: 10px; flex: none; overflow: visible; color: var(--ink-row); }
+.fact .arrow { color: var(--ink-muted); }
+/* A Measured figure (DESIGN.md Typography): JetBrains Mono at its line's size, tabular, set to the cap height;
+   its unit 4px after it in meta, muted. A length's figure takes the kind's hue. */
+.fig { display: inline-flex; align-items: baseline; gap: var(--space-1); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; font-feature-settings: "liga" 0, "calt" 0; color: var(--ink-row); white-space: nowrap; }
+.fig .unit { font: var(--type-meta); color: var(--ink-muted); }
+html[data-kinds="hue"] .fact-dur > .fig { color: var(--kind); }
+/* The person's own edit: the figure on the selection pair, theirs alone. */
+.fact.changed { background: var(--selected-bg); }
+.fact.changed :is(.fig, .unit, .curve-glyph, .word, .arrow) { color: var(--selected-ink) !important; }
+/* The token badge: the kit badge (20px, 5px radius, the recess, the code face), the token's short name. It
+   arrives beside the figure as a value lands on a detent and leaves as it goes off one (reflow pop: in over
+   --dur-pop, out over --dur-exit, on ease-out): its track grows from nothing as it scales and fades in. */
+.tok { display: inline-grid; grid-template-columns: 0fr; opacity: 0; scale: var(--pop-scale); transition: grid-template-columns var(--dur-exit) var(--ease-out), opacity var(--dur-exit) var(--ease-out), scale var(--dur-exit) var(--ease-out); }
+.tok[data-on] { grid-template-columns: 1fr; opacity: 1; scale: 1; transition: grid-template-columns var(--dur-pop) var(--ease-out), opacity var(--dur-pop) var(--ease-out), scale var(--dur-pop) var(--ease-out); }
+.tok-clip { min-inline-size: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .tok, .tok[data-on] { scale: 1; transition: opacity var(--dur-control) var(--ease-out); } .tok { grid-template-columns: 0fr; } .tok[data-on] { grid-template-columns: 1fr; } }
+.badge { display: inline-flex; align-items: center; gap: var(--space-1); block-size: var(--c-badge-h); padding-inline: var(--space-2); border-radius: var(--radius-xs); background: var(--surface-recess); font: var(--type-meta); line-height: 1; color: var(--ink-muted); white-space: nowrap; flex: none; }
+.badge code, code.badge { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-row); }
+.tok .badge { margin-inline-start: var(--space-1); }
+/* A phone's facts line keeps one line: the badge goes first, then the curve's word (data-drop, app.js). */
+.facts[data-drop~="tok"] .tok { display: none; }
+.facts[data-drop~="word"] .word { display: none; }
+.tl-edits { display: flex; align-items: center; gap: var(--space-2); padding-block-end: var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
+.tl-edits[hidden] { display: none; }
+.tl-edits .num { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
+
+/* The lane is the row: bars, ghosts and tails on the bare row. A bar on its kind's opaque wash, its 1px edge in
+   the kind's ink; in ink only, surface-fill with the 3:1 edge. */
+.lane { position: relative; block-size: var(--c-pill-h); user-select: none; touch-action: none; }
+.bar { --bar-fill: var(--kind-wash); --bar-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); background: var(--bar-fill); box-shadow: inset 0 0 0 1px var(--bar-edge); cursor: grab; outline-offset: var(--focus-ring-offset); transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
+/* In ink only the bar stands one step stronger than the row's own fills (the second review: surface-fill at
+   night read 0.31 on about 0.2): surface-fill-strong, its edge border-contrast; under the pointer and held,
+   the edge steps to the muted ink. */
+html[data-kinds="ink"] .bar { --bar-fill: var(--surface-fill-strong); --bar-edge: var(--border-contrast); }
+.bar[data-zone] { cursor: ew-resize; }
+/* A bar's touch layer: its lane's height grown to the touch floor, transparent; shown on touch and phones. */
+.bar-hit { display: none; position: absolute; inset-inline: 0; inset-block: calc((var(--c-pill-h) - var(--c-touch-floor)) / 2); }
+.bar::before, .bar::after { content: ""; position: absolute; inset-block: var(--space-2); inline-size: var(--c-block-drop-line); border-radius: var(--radius-pill); background: var(--bar-edge); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+.bar::before { inset-inline-start: var(--space-1); }
+.bar::after { inset-inline-end: var(--space-1); }
+@media (hover: hover) {
+  html[data-kinds="hue"] .dock:not([data-view="original"]) .bar:hover { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-held-mix), var(--kind-wash)); }
+  html[data-kinds="ink"] .dock:not([data-view="original"]) .bar:hover { --bar-edge: var(--ink-muted); }
+  .dock:not([data-view="original"]) .bar:hover::before, .dock:not([data-view="original"]) .bar:hover::after { opacity: 1; }
+}
+.bar[aria-pressed="true"] { --bar-fill: color-mix(in oklab, var(--kind) var(--prop-held-mix), var(--kind-wash)); }
+html[data-kinds="ink"] .bar[aria-pressed="true"] { --bar-edge: var(--ink-muted); }
+.bar[aria-pressed="true"]::before, .bar[aria-pressed="true"]::after { opacity: 1; }
+.bar.spring { border-start-end-radius: 0; border-end-end-radius: 0; box-shadow: inset 0 1px 0 0 var(--bar-edge), inset 0 -1px 0 0 var(--bar-edge), inset 1px 0 0 0 var(--bar-edge); }
+.lane.rescaling .bar, .lane.rescaling .ghost, .lane.rescaling .tail { transition: left var(--dur-reveal) var(--ease-in-out), width var(--dur-reveal) var(--ease-in-out), background-color var(--dur-control) var(--ease-out); }
+.ghost { position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); border: 1px dashed var(--border-contrast); pointer-events: none; }
+.tail { --tail-fill: var(--kind-wash); --tail-edge: var(--kind); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); background: linear-gradient(to right, var(--tail-edge), transparent) top / 100% 1px no-repeat, linear-gradient(to right, var(--tail-edge), transparent) bottom / 100% 1px no-repeat, linear-gradient(to right, var(--tail-fill), transparent); pointer-events: none; }
+html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-edge: var(--border-contrast); }
+.dock[data-view="original"] .bar { background: none; box-shadow: none; border: 1px dashed var(--border-contrast); cursor: default; }
+.dock[data-view="original"] .bar::before, .dock[data-view="original"] .bar::after { opacity: 0; }
+.dock[data-view="original"] .ghost, .dock[data-view="original"] .tail { display: none; }
+.end-area { position: absolute; inset-block: 0; inset-inline-end: 0; background: var(--surface-recess-deep); pointer-events: none; }
+.tie { position: absolute; inline-size: 1px; background: var(--border-contrast); pointer-events: none; }
+.tie::before, .tie::after { content: ""; position: absolute; inset-inline-start: calc((1px - var(--space-1) - 1px) / 2); block-size: 1px; inline-size: calc(var(--space-1) + 1px); background: var(--border-contrast); }
+.tie::before { inset-block-start: 0; }
+.tie::after { inset-block-end: 0; }
+/* The playhead: 1px of the strong ink down through the rows from the ruler's tick line, its head a pill on the
+   ruler saying the moment the page stands (pin 13), held inside the ruler at its ends. Ink, as a tooltip is:
+   nothing on the ruler is red, coral is the action and crimson a failure. */
+.playhead { position: absolute; inset-block: 0; inline-size: 0; z-index: 4; pointer-events: none; }
+/* The playhead's dot stands on the ruler's tick line, drawn by the ruler (over every row, an open row's
+   controls included); its line runs down under the rows' own open controls. */
+.ruler::after { content: attr(data-t); position: absolute; z-index: 1; inset-block: 0; inset-inline-start: clamp(var(--space-4), var(--ph-x, 0px), calc(100% - var(--space-4))); translate: -50% 0; display: grid; place-items: center; padding-inline: var(--space-1); border-radius: var(--radius-pill); background: var(--ink-solid); color: var(--on-ink); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.playhead::after { content: ""; position: absolute; inset-block: var(--ph-y, 0px) 0; inset-inline-start: -0.5px; inline-size: 1px; background: var(--ink-strong); }
+.snap { position: absolute; inset-block: 0; inline-size: 1px; z-index: 2; background: var(--border-contrast); pointer-events: none; }
+.marquee { position: absolute; z-index: 2; background: var(--selection); border: 1px solid var(--focus-ring); pointer-events: none; }
+.drag-pill { position: absolute; z-index: 4; pointer-events: none; translate: -50% 0; }
+.drag-pill .badge { background: var(--surface-raised); box-shadow: var(--shadow-tile); }
+
+/* ---- A clip's controls (round 29, section C): in the clip's own row ----
+   The owner's pick: the row's last part, across both its columns under its facts and lane, inside the row's
+   chosen wash; on a wide dock its sections stand side by side. It floats over nothing, so it is no dialog. */
+/* An open row stands over the playhead's line and the anchor ties that run down through the rows, its controls
+   on an opaque face of the row's chosen wash, so no line strikes a figure. */
+.clip:has(> .ctl) { z-index: 5; }
+.ctl { position: relative; grid-column: 1 / -1; min-inline-size: 0; margin-block-start: var(--space-2); padding-block-end: var(--space-1); font: var(--type-label); color: var(--ink-strong); background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); cursor: auto; }
+.ctl-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-3) var(--space-5); align-items: start; }
+/* The length and the delta share a column; the actions stand beside the row's name (narrow) or at the
+   controls' top corner (wide). */
+.ctl-col { display: flex; flex-direction: column; gap: var(--space-3); min-inline-size: 0; }
+.clip-name:has(> .ctl-head) { grid-template-columns: var(--c-row-lead) minmax(0, 1fr) auto; }
+.clip-name:has(> .ctl-head) > :is(.l1, .facts) { grid-column: 2; }
+.clip-name > .ctl-head { grid-column: 3; grid-row: 1 / span 2; align-self: start; min-block-size: 0; gap: var(--space-1); cursor: auto; }
+.ctl > .ctl-head { position: absolute; z-index: 1; inset-block-start: 0; inset-inline-end: 0; min-block-size: 0; gap: var(--space-1); }
+@container dock (width < 440px) {
+  /* Stacked, an open row is a column whose head (its name and facts) holds under the ruler while its controls
+     scroll on beneath it. */
+  .clip:has(> .ctl) { display: flex; flex-direction: column; align-items: stretch; }
+  .clip:has(> .ctl) > .clip-name { position: sticky; z-index: 2; inset-block-start: var(--tl-head, 0px); margin-inline: calc(-1 * var(--space-2)); padding-inline-start: var(--space-2); padding-block-end: var(--space-1); background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); }
+}
+.ctl-head { display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-btn-h); }
+.ctl-sec { display: flex; flex-direction: column; gap: var(--space-2); min-inline-size: 0; }
+.ctl-label { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); font: var(--type-meta); color: var(--ink-muted); }
+.ctl-line { display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; }
+/* A spring's parameters: the bounce as a slider and its figure, then mass, stiffness, damping and velocity, two
+   to a line, each its label over its figure. */
+.ctl-spring input[type="range"] { flex: 1 1 auto; min-inline-size: 0; margin: 0; accent-color: var(--ink-solid); }
+.spring-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); }
+.spring-p { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.spring-p .fld { inline-size: auto; }
+/* An agent's own value off the token scale: the kit badge in words. */
+.badge.adhoc { font: var(--type-meta); line-height: 1; color: var(--ink-muted); }
+.facts .badge.adhoc { margin-inline-start: var(--space-1); }
+/* The duration slider: a detent at every --dur-* token, its short name in meta under the tick where it has
+   room; the thumb snaps within --c-detent-snap of a tick while dragged (⌥ frees it). */
+.dslider { position: relative; flex: 1 1 auto; min-inline-size: 0; block-size: calc(var(--c-badge-h) + var(--text-meta) + var(--space-2)); cursor: pointer; touch-action: none; outline: none; }
+.dslider-track { position: absolute; inset-inline: 0; inset-block-start: calc(var(--c-badge-h) / 2 - 1px); block-size: 2px; border-radius: var(--radius-pill); background: var(--surface-fill-strong); }
+.dslider-fill { position: absolute; inset-inline-start: 0; inset-block-start: calc(var(--c-badge-h) / 2 - 1px); block-size: 2px; border-radius: var(--radius-pill); background: var(--ink-row); }
+.dtick { position: absolute; inset-block-start: calc(var(--c-badge-h) / 2 - var(--space-1)); inline-size: 1px; block-size: calc(2 * var(--space-1)); background: var(--border-contrast); translate: -0.5px 0; pointer-events: none; }
+.dtick[data-on] { background: var(--ink-strong); }
+.dname { position: absolute; inset-block-start: calc(var(--c-badge-h) + var(--space-1)); translate: -50% 0; font: var(--type-meta); line-height: 1; color: var(--ink-subtle); white-space: nowrap; pointer-events: none; transition: color var(--dur-control) var(--ease-out); }
+.dname[data-on] { color: var(--ink-strong); }
+.dthumb { position: absolute; inset-block-start: calc(var(--c-badge-h) / 2 - 8px); inline-size: 16px; block-size: 16px; translate: -50% 0; border-radius: var(--radius-pill); background: var(--surface-lift); border: 1px solid var(--border-control); box-shadow: var(--shadow-raised); pointer-events: none; }
+.dslider:focus-visible .dthumb { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+/* The Input's sm size: 30px, the input's own 10px radius, raised, a control edge; its value in mono figures,
+   its unit in meta 4px after. */
+.fld { position: relative; display: flex; align-items: center; gap: var(--space-1); flex: none; inline-size: var(--c-number-field-w); min-inline-size: 0; block-size: var(--c-btn-h-sm); padding-inline: var(--space-2); border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-xs); transition: var(--transition-control); }
+.fld.wide { flex: 1 1 auto; inline-size: auto; }
+.fld:has(input:focus-visible) { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.fld input { all: unset; flex: 1 1 auto; min-inline-size: 0; inline-size: 3ch; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; color: var(--ink-strong); caret-color: var(--brand-solid); }
+.fld input:focus-visible { outline: none; }
+.fld .unit { font: var(--type-meta); color: var(--ink-muted); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size: var(--text-field-floor); }
+.arrow { font: var(--type-meta); color: var(--ink-muted); }
+/* The curve: past four short segments the list (designer's 2C, the inspector's variant control): the house
+   curves as their glyphs and words, Spring, Custom, a radio group in two columns; the chosen one on the fill
+   step in the strong ink. */
+.curve-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-row); }
+.curve-opt { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); min-inline-size: 0; min-block-size: var(--c-btn-h-sm); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); font-weight: var(--weight-body); color: var(--ink-muted); cursor: pointer; transition: background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out); }
+.curve-opt span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.curve-opt svg { flex: none; inline-size: 16px; block-size: 10px; overflow: visible; }
+.curve-opt[aria-checked="true"] { background: var(--surface-fill); color: var(--ink-strong); }
+@media (hover: hover) { .curve-opt:not([aria-checked="true"]):hover { background: var(--surface-hover); color: var(--ink-strong); } }
+.curve-opt:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+/* The chosen curve drawn large, an easing editor: the curve, its two handles to drag, and a live dot
+   that plays the clip's length on the curve after every change. */
+.ceditor { position: relative; flex: none; inline-size: var(--c-curve-editor-w); block-size: var(--c-curve-editor-h); border-radius: var(--radius-sm); background: var(--surface-recess); touch-action: none; }
+.ceditor svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; overflow: visible; }
+.ceditor .grid { fill: none; stroke: var(--border-hairline); stroke-width: 1; }
+.ceditor .curve { fill: none; stroke: var(--ink-strong); stroke-width: var(--c-graph-edge); stroke-linecap: round; }
+.ceditor .arm { stroke: var(--border-contrast); stroke-width: 1; }
+.ceditor .knob { fill: var(--surface-lift); stroke: var(--ink-row); stroke-width: var(--c-graph-edge); cursor: grab; }
+.ceditor .knob-hit { display: none; fill: transparent; cursor: grab; }
+.ceditor .knob:focus-visible { outline: none; stroke: var(--focus-ring); stroke-width: var(--focus-ring-width); }
+.ceditor .live { fill: var(--ink-strong); }
+.curve-side { display: flex; flex-direction: column; gap: var(--space-2); flex: 1 1 auto; min-inline-size: 0; font: var(--type-meta); color: var(--ink-muted); }
+.curve-side .word { font: var(--type-label); color: var(--ink-strong); }
+.curve-side code { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); color: var(--ink-row); overflow-wrap: anywhere; }
+.curve-side input[type="range"] { inline-size: 100%; margin: 0; accent-color: var(--ink-solid); }
+/* The kit's DropdownMenu: a 12px surface, its 1px edge and the kit popover's 6px pad round 5px items. */
+.menu { position: fixed; z-index: calc(var(--layer-float) + 1); min-inline-size: 12rem; display: flex; flex-direction: column; padding: var(--c-floating-pad); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); max-block-size: calc(100dvh - 2 * var(--space-5)); overflow-y: auto; overscroll-behavior: contain; }
+.mi { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-menu-item-h); padding: 0 var(--space-8) 0 var(--c-row-inset); border-radius: var(--radius-xs); font: var(--type-label); font-weight: var(--weight-body); color: var(--ink-strong); cursor: default; position: relative; transition: var(--transition-control); }
+.mi .count { margin-inline-start: auto; font: var(--type-meta); color: var(--ink-muted); }
+.mi[data-highlighted] { background: var(--surface-hover); }
+.mi[aria-checked="true"]::after { content: ""; position: absolute; inset-inline-end: calc(var(--c-row-inset) + (var(--icon-md) - var(--c-block-drop-dot)) / 2); inline-size: var(--c-block-drop-dot); block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: currentColor; }
+.menu-head { padding: var(--space-1) var(--c-row-inset) var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
+.tip { position: fixed; z-index: var(--layer-toast); max-inline-size: 16rem; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--ink-solid); color: var(--on-ink); font: var(--type-meta); pointer-events: none; opacity: 0; scale: 0.96; transition: opacity var(--dur-menu) var(--ease-out), scale var(--dur-menu) var(--ease-out); }
+.tip[data-on] { opacity: 1; scale: 1; }
+
+/* ---- transitions.dev, its variables on our motion tokens ---- */
+:root {
+  --panel-open-dur: var(--dur-panel);
+  --panel-close-dur: var(--dur-exit);
+  --panel-translate-y: 16px;
+  --panel-blur: 2px;
+  --panel-ease: var(--ease-out);
+  --text-soft-dur: var(--dur-fade);
+  --text-soft-blur: 2px;
+  --text-soft-ease: var(--ease-crossfade);
+}
+.dock { --panel-translate-y: 40px; }
+
+/* Panel reveal (07-panel-reveal.md), verbatim */
+.t-panel-slide {
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity   var(--panel-close-dur) var(--panel-ease),
+    filter    var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity   var(--panel-open-dur) var(--panel-ease),
+    filter    var(--panel-open-dur) var(--panel-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-panel-slide { transition: none !important; }
+}
+
+/* The kit's Segmented control (DESIGN.md, Segmented controls and tabs): a recess-deep groove holding a lifted
+   thumb that glides with position and size together over --dur-pop on --ease-in-out. */
+.t-tabs { position: relative; display: inline-flex; align-items: center; padding: var(--c-segmented-pad); border-radius: var(--radius-md); background: var(--surface-recess-deep); min-inline-size: 0; max-inline-size: 100%; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; }
+.t-tab { position: relative; z-index: 1; flex: 0 1 auto; min-inline-size: 0; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); appearance: none; border: 0; background: transparent; block-size: var(--c-btn-h-sm); padding: 0 var(--c-segment-pad-x); border-radius: var(--radius-well); font: var(--type-label); line-height: 1; color: var(--ink-muted); cursor: pointer; transition: color var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+/* A segment's words cut at their end inside it, whatever the width down to 320px, the full name in its title
+   (the tab keeps its own touch layer: the label clips, the tab doesn't). */
+.t-label { display: block; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-tab > .badge { flex: none; }
+.t-tab[aria-selected="true"] { color: var(--ink-strong); }
+@media (hover: hover) { .t-tab:not([aria-selected="true"]):hover { color: var(--ink-strong); } }
+.t-tab:not([aria-selected="true"]):active { background: var(--press-fill); }
+.t-tab:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.t-tabs-pill { position: absolute; z-index: 0; inset-block-start: var(--c-segmented-pad); inset-inline-start: 0; block-size: var(--c-btn-h-sm); inline-size: 0; border-radius: var(--radius-well); background: var(--surface-lift); box-shadow: var(--shadow-raised); pointer-events: none; transition: transform var(--dur-pop) var(--ease-in-out), width var(--dur-pop) var(--ease-in-out); }
+@media (prefers-reduced-motion: reduce) { .t-tabs-pill { transition: none; } }
+.t-tabs[data-fade="end"] { mask-image: linear-gradient(to right, #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+.t-tabs[data-fade="start"] { mask-image: linear-gradient(to left, #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+.t-tabs[data-fade="both"] { mask-image: linear-gradient(to right, transparent, #000 var(--c-edge-fade-len-phone), #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
+
+/* Text swap soft (34-text-swap-soft.md): the cross-fade alone. */
+.t-text-soft { display: inline-grid; justify-items: var(--text-soft-align, start); }
+.t-text-soft > span { grid-area: 1 / 1; white-space: pre; transition: filter var(--text-soft-dur) var(--text-soft-ease), opacity var(--text-soft-dur) var(--text-soft-ease); }
+.t-text-soft-new { opacity: 0; filter: blur(var(--text-soft-blur)); }
+.t-text-soft.is-swapping .t-text-soft-old { opacity: 0; filter: blur(var(--text-soft-blur)); }
+.t-text-soft.is-swapping .t-text-soft-new { opacity: 1; filter: blur(0); }
+@media (prefers-reduced-motion: reduce) { .t-text-soft > span { transition: none !important; } }
+.t-text-soft.is-wrap { display: grid; }
+.t-text-soft.is-wrap > span { white-space: normal; }
+
+/* ---- Every screen (responsive-design.md). app.js sets data-screen, data-layout (desk | drawer | sheet) and
+   data-input (fine | touch | touch-hover) on html. ---- */
+.tools { display: contents; }
+.sheet-head { display: none; }
+
+/* A row narrower than a name column and a usable lane stacks: its name and facts, then the lane across the
+   dock's whole width; lines that run down through the rows at a desk are drawn inside each lane. */
+@container dock (width < 440px) {
+  .tl { --rows: stacked; }
+  .tl-row { grid-template-columns: minmax(0, 1fr); }
+  .ruler-row .ruler { grid-column: 1; }
+  .lane { margin-block-start: max(var(--space-2), var(--lane-gap, 0px)); grid-column: 1; }
+  .end-area { display: none; }
+  .playhead::after { display: none; }
+  .lane::before, .ruler::before { content: ""; position: absolute; inset-block: 0; inset-inline: var(--end-x, 100%) 0; background: var(--surface-recess-deep); pointer-events: none; }
+  .lane::after { content: ""; position: absolute; z-index: 1; inset-block: 0; inset-inline-start: calc(var(--ph-x, 0px) - 0.5px); inline-size: 1px; background: var(--ink-strong); pointer-events: none; }
+}
+
+/* Touch: every target is at least the touch floor; hover-only marks never stick. */
+/* Touch and phones: every target is at least the touch floor (44px). Where a part can grow to it in place it
+   does (a variant chip, a slab's name, a fact, a field, the slider); a glyph or a word in a tight row keeps its
+   size and grows a transparent layer to the floor instead; a bar's layer stands across its lane. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit) { position: relative; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .panel-shell, .show) { touch-action: manipulation; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .panel-shell, .show)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
+/* Touch layers take presses only where nothing clips them and no neighbour's stands over them: a segmented
+   groove lets its segments' layers past its edge (it scrolls only on a desk), and the toolbar's end stands its
+   controls far enough apart that their 44px layers meet without crossing. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .t-tabs { overflow: visible; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-end { gap: calc(var(--c-touch-floor) - var(--c-bar-item)); }
+/* The toolbar's layers reach up to 7px under it (a 24px zoom figure in its 30px row) and a door's 10px over
+   its band: --space-5 between keeps them apart. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .toolbar { margin-block-end: var(--space-5); }
+/* A door's layer reaches 10px out over the well's edge (into the toolbar's foot margin, clear of its layers)
+   and only 6px into the view, so a slab's name at the view's top keeps its own 44px. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .door::before { inset-block: auto; block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .door[data-band="top"]::before { inset-block-start: -10px; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .door[data-band="bottom"]::before { inset-block-end: -10px; }
+/* The head's last control keeps its layer on the screen: the head stands its end that much in. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) #sheetHead { padding-inline-end: calc((var(--c-touch-floor) - var(--c-btn-h-sm)) / 2 + 1px); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .glass { gap: calc(var(--c-touch-floor) - var(--c-bar-item)); }
+/* Stacked rows: a bar's 44px layer reaches 10px over and under its lane, so the lane stands 10px under its
+   facts and the row keeps 10px under it, and no row's layer reaches into a neighbour's. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip { padding-block: calc((var(--c-touch-floor) - var(--c-pill-h)) / 2); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
+/* A fact cut to its glyph (a narrow facts line gives up its words) still takes a finger: the floor wide, its glyph centred. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fact { min-inline-size: var(--c-touch-floor); justify-content: center; }
+/* The row's open controls stand clear of the lane's 44px bar layer. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip > .ctl { margin-block-start: calc(var(--c-touch-floor) - var(--c-pill-h)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fld { block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .ctl input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar { touch-action: none; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-hit { display: block; }
+/* The mock page's own fields keep the touch floor too (the fourth review: they took a press over 42px). */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .stage .input { min-block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .stage .input.tall { min-block-size: calc(2 * var(--c-touch-floor) - var(--space-2)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .tl { --lane-gap: calc((var(--c-touch-floor) - var(--c-pill-h)) / 2); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .edge .hit { stroke-width: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .ceditor .knob-hit { display: inline; }
+html:is([data-input="touch"], [data-input="touch-hover"]) :is(.node, .var) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+html:is([data-input="touch"], [data-input="touch-hover"]) .graph { touch-action: pan-x pan-y; cursor: auto; }
+html:is([data-input="touch"], [data-input="touch-hover"]) .lane { touch-action: pan-y; }
+html:is([data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom :is([data-z="in"], [data-z="out"]) { display: none; }
+
+/* ---- Compact: the drawer (phone and tablet portrait) and the side sheet (short panes). One surface, two
+   faces under the segmented control; no grips. ---- */
+html:not([data-layout="desk"]) .tools { position: fixed; z-index: var(--layer-dock); display: flex; flex-direction: column; color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); font: var(--type-label); font-weight: var(--weight-body); }
+.edge-pill-top { position: absolute; z-index: 5; pointer-events: none; padding: 0; border-radius: var(--radius-pill); background: var(--border-row-outline); block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-block-start: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
+/* The head: no title and no ground. Its title area stays empty; the faces' switch stands in the centre and Hide
+   trailing as a bare symbol; the head itself is the drawer's press and drag. */
+html:not([data-layout="desk"]) .sheet-head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); flex: none; block-size: var(--c-sheet-inspector-head-h); padding-inline: var(--space-2); }
+.faces-group { grid-column: 2; }
+.sheet-end { grid-column: 3; justify-self: end; }
+.faces { flex: none; overflow: visible; }
+/* The grabber is a control for a key and a screen reader; it draws the pill and no box of its own. */
+.grabber { appearance: none; border: 0; margin: 0; }
+.grabber:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: 2px; }
+html:not([data-layout="desk"]) .tools > .tool { position: relative; inset: auto; z-index: auto; inline-size: auto; block-size: auto; max-block-size: none; flex: 1 1 auto; min-block-size: 0; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; transform: none; opacity: 1; filter: none; pointer-events: auto; transition: none; will-change: auto; }
+html:not([data-layout="desk"]) :is(.sash, .lit, .arc, .panel-shell, #hide, .hide-group) { display: none !important; }
+html:not([data-layout="desk"]) .tools[data-face="graph"] > .dock,
+html:not([data-layout="desk"]) .tools[data-face="move"] > .panel { display: none; }
+/* The face clips its content; the toolbar stands a step in from its top so its 44px touch layers fall inside. */
+html:not([data-layout="desk"]) .panel { padding-block-start: var(--space-1); }
+html:not([data-layout="desk"]) :is(.graphs, .gsec[data-current], .gview, .graph) { flex: 1 1 auto; }
+html:not([data-layout="desk"]) .graph { block-size: auto; }
+html:not([data-layout="desk"]) .dock { padding-block-start: var(--space-1); }
+/* The head bar on the face is the touch floor tall, so play and loop take presses over their whole 44px. */
+html:not([data-layout="desk"]) .dock-head { min-block-size: var(--c-touch-floor); }
+
+/* The drawer: the house bottom drawer, three stops (head, peek, full). The page takes the room above it. */
+html[data-layout="drawer"] .tools { inset-inline: 0; inset-block-end: 0; block-size: var(--drawer-h, var(--c-graph-drawer-stop)); border-block-end: 0; border-start-start-radius: var(--radius-panel); border-start-end-radius: var(--radius-panel); box-shadow: var(--shadow-drawer); padding-block-end: env(safe-area-inset-bottom, 0px); transition: block-size var(--dur-panel) var(--ease-drawer); }
+html[data-layout="drawer"] .page { --page-pad-b: var(--space-5); inset: 0 0 var(--dock-room, 0px) 0; padding: max(var(--space-5), env(safe-area-inset-top, 0px)) var(--c-screen-margin) var(--page-pad-b); transition: inset-block-end var(--dur-panel) var(--ease-drawer); }
+html[data-layout="drawer"][data-drawer-drag] :is(.tools, .page) { transition: none; }
+html[data-layout="drawer"] .sheet-head { cursor: grab; touch-action: none; }
+html[data-layout="drawer"] .show { display: none; }
+#sheetHide svg { transition: rotate var(--dur-panel) var(--ease-drawer); }
+#sheetHide[data-folded] svg { rotate: 180deg; }
+@media (prefers-reduced-motion: reduce) { #sheetHide svg { transition: none; } }
+@media (prefers-reduced-motion: reduce) { html[data-layout="drawer"] :is(.tools, .page) { transition: none; } }
+
+/* The side sheet: from the trailing edge at half the pane. Hide folds it to the tucked tab. */
+html[data-layout="sheet"] .tools { inset-block: var(--c-screen-margin); inset-inline-end: max(var(--c-screen-margin), env(safe-area-inset-right, 0px)); inline-size: calc(50% - var(--c-screen-margin)); border-radius: var(--radius-panel); box-shadow: var(--shadow-overlay); overflow: hidden; }
+html[data-layout="sheet"] .page { --page-pad-b: var(--space-5); inset: 0 50% 0 0; padding: var(--space-5) var(--space-5) var(--page-pad-b) max(var(--space-5), env(safe-area-inset-left, 0px)); }
+html[data-layout="sheet"] .edge-pill-top { display: none; }
+html[data-layout="sheet"][data-tools="hidden"] .tools { display: none; }
+html[data-layout="sheet"][data-tools="hidden"] .page { inset-inline-end: var(--c-tucked-tab); }
+}
