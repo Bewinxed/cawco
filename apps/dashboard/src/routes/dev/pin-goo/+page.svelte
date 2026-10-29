@@ -9,8 +9,9 @@
    * of what they change: Stickiness, how far apart the card and its pin
    * still pull a bridge between them (the goo's blur, `--goo-blur`, a prop); Open
    * and Close, in ms (`--dur-goo`, `--dur-goo-exit`), read as each open or
-   * close starts; Stay joined, the card kept joined to its pin by a neck
-   * once open, the pin wearing the card's surface.
+   * close starts; Stay joined, the card standing within the goo's reach of
+   * its pin, so the filter holds a neck between them, the pin wearing the
+   * card's surface.
    */
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
@@ -152,10 +153,10 @@
   }}
 />
 
-{#snippet pillOf(pin: Pin)}
+{#snippet pillOf(pin: Pin, focused: boolean)}
   <PinMark
     dot={dotOf}
-    focused={keyed === pin.id}
+    {focused}
     number={pin.number}
     state={markState(pin)}
     tail="bottom-start"
@@ -189,7 +190,7 @@
   >
     <!-- Held, the card's goo draws the pin as part of itself: the page's own pill steps back. -->
     <span class={["flex", held[pin.id] && "opacity-0"]}>
-      {@render pillOf(pin)}
+      {@render pillOf(pin, keyed === pin.id)}
     </span>
   </button>
 {/snippet}
@@ -350,7 +351,7 @@
         {@const where = at[pin.id]}
         {#key pin.id}
           {#snippet copy()}
-            {@render pillOf(pin)}
+            {@render pillOf(pin, keyed === pin.id)}
           {/snippet}
           <PinFloatGoo
             box={where?.box ?? null}

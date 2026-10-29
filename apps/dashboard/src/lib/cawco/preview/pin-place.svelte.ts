@@ -223,6 +223,8 @@ interface Over {
   besidePill?: boolean;
   /** The box of what the pill stands on, in the well, px. */
   box?: Box | null;
+  /** Its distance from the pill's box, px, where it is not {@link FloatPlace.clear}'s (a goo card joined to its pin stands within the goo's reach). */
+  clear?: number;
   /** The pill's box in the well, px; null while it is not on screen. */
   mark: Box | null;
   room: Room;
@@ -249,13 +251,13 @@ export class FloatPlace {
   natural = $state(0);
   /** Its distance from the well's edges: `--space-2`. */
   readonly gap = $derived(numberOf("--space-2") || 7);
+  readonly #over: () => Over;
   /**
    * Its distance from the pill's box: `--space-2` from the pill as drawn,
    * past its focus ring (PinMark `data-focused`: a 2px outline 2px out), so
-   * nothing of the pill ever stands on it.
+   * nothing of the pill ever stands on it; or what `over` names.
    */
-  readonly clear = $derived(this.gap + 4);
-  readonly #over: () => Over;
+  readonly clear = $derived.by(() => this.#over().clear ?? this.gap + 4);
   readonly #seenOf = lastSeen();
   readonly #hold = heldPlan();
 

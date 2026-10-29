@@ -657,6 +657,10 @@
   --duration-grow-exit: var(--dur-grow-exit);
   --duration-goo: var(--dur-goo);
   --duration-goo-exit: var(--dur-goo-exit);
+  --duration-goo-content: var(--dur-goo-content);
+  --duration-goo-content-delay: var(--dur-goo-content-delay);
+  --duration-goo-content-exit: var(--dur-goo-content-exit);
+  --duration-goo-settle: var(--dur-goo-settle);
   --duration-lift: var(--dur-lift);
   --duration-press-hold: var(--dur-press-hold);
   --duration-settle: var(--dur-settle);
@@ -1042,6 +1046,8 @@
   --ease-arrive: var(--ease-arrive);
   --ease-figure: var(--ease-figure);
   --ease-goo: var(--ease-goo);
+  --ease-goo-exit: var(--ease-goo-exit);
+  --ease-goo-content: var(--ease-goo-content);
   --ease-glide-in: var(--ease-glide-in);
   --ease-glide-out: var(--ease-glide-out);
 }

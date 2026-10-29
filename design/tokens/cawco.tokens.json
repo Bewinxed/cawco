@@ -7559,6 +7559,26 @@
         }
       }
     },
+    "ease-goo-exit": {
+      "$type": "cubicBezier",
+      "$value": [0.22, 1, 0.36, 1],
+      "$description": "A comment's card drawn back into its pill through the goo filter, over --dur-goo-exit, and the dip its pin takes as it closes, over --dur-goo-settle. transitions.dev Gooey plus menu, its close curve and its anticipation's (--pv34, --pv2n).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "ease-goo-content": {
+      "$type": "cubicBezier",
+      "$value": [0.25, 0.1, 0.25, 1],
+      "$description": "What stands on a goo shape (a comment card's thread, its pin's figure) fading in and out as the shape pours and drains, over --dur-goo-content and --dur-goo-content-exit. CSS ease, the curve transitions.dev Gooey plus menu gives its items' icons.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
     "ease-glide-in": {
       "$type": "cubicBezier",
       "$value": [0.3333, 0, 0.6667, 0.3333],
@@ -7732,7 +7752,59 @@
         "value": 250,
         "unit": "ms"
       },
-      "$description": "A comment's card drawn back into its pill through the goo filter, on --ease-out, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g).",
+      "$description": "A comment's card drawn back into its pill through the goo filter, on --ease-goo-exit, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "dur-goo-content": {
+      "$type": "duration",
+      "$value": {
+        "value": 180,
+        "unit": "ms"
+      },
+      "$description": "What stands on a goo shape fading in, on --ease-goo-content after --dur-goo-content-delay. transitions.dev Gooey plus menu, its items' icons in (180ms; their 2px blur is left out: a transitioned filter can hang WebKit).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "dur-goo-content-delay": {
+      "$type": "duration",
+      "$value": {
+        "value": 120,
+        "unit": "ms"
+      },
+      "$description": "How long what stands on a goo shape waits as the shape pours out before it resolves in: the shape has most of its room by then. transitions.dev Gooey plus menu, its items' icons (+120ms).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "dur-goo-content-exit": {
+      "$type": "duration",
+      "$value": {
+        "value": 120,
+        "unit": "ms"
+      },
+      "$description": "What stands on a goo shape fading out as the shape drains, at once, on --ease-goo-content. transitions.dev Gooey plus menu, its items' icons out (120ms).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "dur-goo-settle": {
+      "$type": "duration",
+      "$value": {
+        "value": 700,
+        "unit": "ms"
+      },
+      "$description": "The dip a goo shape's anchor takes as what poured out of it drains back: down --goo-dip at 30% and home, on --ease-goo-exit. A comment's pin as its card closes. transitions.dev Gooey plus menu, its anticipation (--pv2w).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -7928,6 +8000,19 @@
       "$type": "number",
       "$value": 18,
       "$description": "The goo filter's alpha slope, its feColorMatrix alpha row `slope (0.5 - slope × 5/12)`: how hard the blurred edge is cut back to a shape. transitions.dev Gooey plus menu (--pv2o: 18).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "goo-dip": {
+      "$type": "dimension",
+      "$value": {
+        "value": 5,
+        "unit": "px"
+      },
+      "$description": "How far a goo shape's anchor dips as what poured out of it drains back, over --dur-goo-settle. transitions.dev Gooey plus menu (--pv49: 5px).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
