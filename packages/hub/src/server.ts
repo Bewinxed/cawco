@@ -404,6 +404,7 @@ import {
   withPresenceLine,
   workWords,
 } from "@cawco/core";
+import { PROJECT_SETTINGS } from "@cawco/core/asks";
 import { readTrial } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
@@ -452,7 +453,6 @@ import {
   isHubPreview,
   originsFor,
 } from "@cawco/core/hub-previews";
-import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/long-calls";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
@@ -736,7 +736,7 @@ import { hubId } from "./hub-id";
 import { recordHubEvent } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
-import { createHubTools } from "./hub-tools";
+import { createHubTools, installBuild } from "./hub-tools";
 import { createIngress, type Ingress, ingressRoutes } from "./ingress";
 import { createInstalls } from "./installs";
 import { jevAccess } from "./jev";
@@ -831,6 +831,7 @@ import {
   readMarketplace,
   resolveMarketplacePlugins,
 } from "./plugins";
+import { machinesUpdatedWords } from "./presenters/hub";
 import { handle as idHandle } from "./presenters/words";
 import {
   createPreviewListeners,
@@ -1684,8 +1685,6 @@ const WAKES_AT_REST: ReadonlySet<string> = new Set([
   LIMIT_ORIGIN,
   // The turn a restart or a kill cut, handed back once (`resumeCutTurn`).
   "restore",
-  // The person's answer to its admin ask (admin-asks.ts).
-  "admin",
   // A project's Caw, woken by his project's events (caw.ts).
   "caw",
   // Its looping delegate, for it as that delegate's lead (fleet-watch.ts).
@@ -3568,21 +3567,35 @@ export const createServer = (
   // The relay (relay.ts), made further down with ingress; an approved
   // `relay_create` kept across a restart reaches it through this.
   let relay: Relay | undefined;
-  // Admin writes from any door wait on the person (admin-asks.ts). Made before
-  // the settlement listener below: the boot sweep settles the asks of
-  // sessions that did not survive the restart, and that listener withdraws
-  // their admin writes, so it must find this already made.
+  // Admin writes from any door are the person's asks (admin-asks.ts): each a
+  // row, answered at once, run by the hub once approved. Made before the
+  // settlement listener below, which hears their ends with every other ask's.
   const adminAsks = createAdminAsks({
-    // Kept across a restart, as a session's own asks are.
-    park: (envelope) => parkForPerson(envelope, true),
-    parked: (requestId) => pending.get(requestId),
-    settle: (requestId) => {
-      pending.resolve(requestId);
+    asks: db.asks,
+    // Over for good: stopped, its workspace archived, stranded, or gone.
+    ended: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return !row || ENDED_STATUSES.has(row.status) || stranded(row);
+    },
+    instance: (instanceId) => db.getInstancesByIds([instanceId])[0],
+    declined: (name, input, asker) => {
+      if (name === PROJECT_SETTINGS) {
+        projectSettings?.runDeclined(asker, input);
+      }
+    },
+    // Not kept with the session asks: its row is (pending.ts `askEnvelope`).
+    park: (envelope) => parkForPerson(envelope),
+    settle: (id, outcome) => {
+      if ("cut" in outcome) {
+        pending.resolve(id, "cancelled", { cut: outcome.cut });
+      } else {
+        pending.resolve(id, "answered", { answer: outcome.answer });
+      }
     },
     sourceFacts: (name, input) =>
       sourceFacts(name, input, () => db.fleetConfig().marketplaces),
-    // An ask approved after a restart: the hub runs the write itself.
-    run: async (name, input, instanceId) => {
+    // The hub runs an approved ask itself, as the session that asked.
+    run: async (name, input, asker) => {
       // A relay's opening asks as an admin write does (relay.ts).
       if (name === "relay_create") {
         if (!relay) {
@@ -3592,11 +3605,19 @@ export const createServer = (
       }
       // Caw's project setting he asked about (project-settings.ts).
       if (name === PROJECT_SETTINGS) {
-        const [asker] = db.getInstancesByIds([instanceId]);
-        if (!(asker && projectSettings)) {
-          throw new Error("The session that asked is gone; nothing changed.");
+        if (!projectSettings) {
+          throw new Error("The hub's project settings aren't made yet.");
         }
         return await projectSettings.runApproved(asker, input);
+      }
+      // An install the hub asked about while it requires paired devices (hub-tools.ts).
+      if (name === "update_machines") {
+        const machines = Array.isArray(input.machines)
+          ? input.machines.filter(
+              (one): one is string => typeof one === "string"
+            )
+          : [];
+        return machinesUpdatedWords(await installBuild(machines));
       }
       const entry = adminTools().find((tool) => tool.name === name);
       if (!entry) {
@@ -3608,8 +3629,8 @@ export const createServer = (
         .join("\n")
         .trim();
     },
-    tell: (instanceId, text) =>
-      tellSession(instanceId, text, { name: "admin" }),
+    tell: (instanceId, text, origin) =>
+      tellSession(instanceId, text, { name: origin }),
     // A project's Caw asks in his thread (caw.ts, made further down).
     threadOf: (actor) => lead?.askThread(actor),
   });
@@ -3988,14 +4009,13 @@ export const createServer = (
     push.onSettled(parked.requestId);
     // Over on every device: its push taken down.
     notifications.clear([askCollapseId(parked.requestId)], "settled");
-    // An admin write whose ask left unanswered (its session ended) is refused.
+    // An ask that left unanswered (its session ended) never runs.
     if (outcome === "cancelled") {
       // One of Caw's calls on your card never runs: its row says why.
       leadGate.cut(
         parked.requestId,
         said?.cut ?? said?.why ?? ASK_CUT.withdrawn
       );
-      adminAsks.withdrawn(parked.requestId);
       browserAsks.withdrawn(parked.requestId);
       connectAsks.withdrawn(parked.requestId);
     }
@@ -5642,6 +5662,8 @@ export const createServer = (
     /** What its failed sends offer back, beside `why` (a wake's refusal, {@link wakeOf}). */
     refusal?: StoredSendRefusal
   ): void => {
+    // Its asks the hub owns stay unless it ended for good (admin-asks.ts).
+    adminAsks.withdrawEnded(instanceId);
     if (!outlived) {
       // What it had asked the person is asked again if it runs again.
       if (keep === "all") {
@@ -21979,6 +22001,12 @@ export const createServer = (
     from: AnswerFrom
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, hub-raised answers, delivery receipts and concurrent process death before reporting success.
   ): Promise<void> => {
+    // An ask the hub owns (admin-asks.ts), named by its id alone: taken once
+    // from its row, which runs what it asked as it was shown; a second
+    // answer is refused there, saying who gave the first and when.
+    if (adminAsks.answer(requestId, answer, from)) {
+      return;
+    }
     const parked = pending.get(requestId);
     if (!parked || parked.instanceId !== instanceId) {
       throw new Error("That request is no longer pending.");
@@ -22032,10 +22060,9 @@ export const createServer = (
         }
         return;
       }
-      // A hub-raised ask is settled here, never delivered to a machine: an
-      // admin write waiting on the person.
+      // A hub-raised ask is settled here, never delivered to a machine: a
+      // held post, a move.
       if (
-        adminAsks.answer(requestId, result) ||
         upstreamAsks.answer(requestId, result) ||
         moves.answer(requestId, result)
       ) {
@@ -26853,10 +26880,10 @@ export const createServer = (
         if (!answer) {
           throw new Error("A permission answer names no request.");
         }
-        if (adminAsks.has(answer.requestId)) {
+        if (db.asks.get(answer.requestId)) {
           throw new WorkItemRefusal(
             403,
-            "That ask is a fleet-settings change waiting on the person; only they answer it."
+            "That ask is a change waiting on the person; only they answer it."
           );
         }
         if (heldPostOf(pending.get(answer.requestId))) {
@@ -27975,6 +28002,9 @@ export const createServer = (
   };
 
   noteWithdrawn(droppedAtStart);
+  // An approved ask this hub was running when it went is told, never run
+  // again; the asks of sessions that ended meanwhile are withdrawn.
+  adminAsks.boot();
 
   /** A cut turn's hand-back, with the questions its process took with it to be asked again. */
   const askAgain = (instanceId: string, words: string): string => {
@@ -29994,9 +30024,7 @@ export const createServer = (
             input.name === "generate_image" ||
             input.name === "continue_session" ||
             input.name === "delegate" ||
-            input.name === "finish_item" ||
-            // An admin write waits on the person as long as they take.
-            isAdminWrite(input.name)
+            input.name === "finish_item"
           ) {
             server?.timeout(request, 0);
           }
@@ -34993,6 +35021,7 @@ export const createServer = (
               for (const parked of pending.list()) {
                 const [owner] = db.getInstancesByIds([parked.instanceId ?? ""]);
                 if (
+                  !outlivesSession(parked) &&
                   parked.machineId === message.machineId &&
                   custody.state === "available" &&
                   !(

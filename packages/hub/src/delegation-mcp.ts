@@ -8,12 +8,9 @@ import {
   parseConnectionTool,
   type SendPayload,
 } from "@cawco/core";
+import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import { detach } from "@cawco/core/detach";
-import {
-  isAdminWrite,
-  LONG_CALLS,
-  PROJECT_SETTINGS,
-} from "@cawco/core/long-calls";
+import { LONG_CALLS } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -113,9 +110,6 @@ const CREDENTIAL_TOKEN =
  * github.com/modelcontextprotocol/python-sdk/issues/2579).
  */
 const TOOL_USE_META = CLAUDE_CALL_META;
-
-/** What an admin write's progress heartbeat says while the person decides. */
-const ASKING = "Waiting for the person to approve this fleet-settings change";
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
@@ -355,16 +349,16 @@ export function createDelegationMcp(options: {
    */
   connections?: Pick<Connections, "callAs" | "sessionTools">;
   /**
-   * Parks an admin write as the person's ask and waits: resolves when they
-   * approve it, rejects with the refusal when they deny it; a session in
-   * Full Send is approved at once (admin-asks.ts).
+   * Records an admin write as the person's ask and answers at once with what
+   * the session reads; the hub runs it once they approve (admin-asks.ts).
+   * Undefined for a session in Full Send: it runs now.
    */
   askPerson: (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
     toolUseId?: string
-  ) => Promise<void>;
+  ) => Promise<string | undefined>;
   /** The once-per-key rule of the calls that start or send (call-keys.ts). */
   callKeys: Pick<CallKeys, "once">;
   /** `send_to_user`'s push to the person's paired devices (push.ts `userMessage`); its transcript row is the call itself. */
@@ -620,10 +614,10 @@ export function createDelegationMcp(options: {
   };
 
   /**
-   * An `admin_*` call, its role already checked. A write, from any door,
-   * waits for the person to approve it (admin-asks.ts) and then runs once,
-   * with the arguments they were shown; a refusal is the caller's error. A
-   * session in Full Send is approved at once.
+   * An `admin_*` call, its role already checked. A write, from any door, is
+   * recorded as the person's ask and answered at once (admin-asks.ts); the
+   * hub runs it once they approve, with the arguments they were shown. A
+   * session in Full Send runs it now.
    */
   const administer = async (
     actor: InstanceRow,
@@ -641,8 +635,11 @@ export function createDelegationMcp(options: {
     if (answered !== undefined) {
       return { content: [{ type: "text", text: answered }] };
     }
-    if (isAdminWrite(name)) {
-      await options.askPerson(actor, name, input, toolUseId);
+    const recorded = isAdminWrite(name)
+      ? await options.askPerson(actor, name, input, toolUseId)
+      : undefined;
+    if (recorded !== undefined) {
+      return { content: [{ type: "text", text: recorded }] };
     }
     return await entry.call(input);
   };
@@ -1178,13 +1175,7 @@ export function createDelegationMcp(options: {
     server.setRequestHandler(CallToolRequestSchema, async (message, extra) => {
       const token = message.params._meta?.progressToken;
       let elapsed = 0;
-      // An admin write waits on the person as long as they take.
-      const doing =
-        LONG_CALLS[message.params.name] ??
-        (isAdminWrite(message.params.name) ? ASKING : undefined) ??
-        (message.params.name === PROJECT_SETTINGS
-          ? "Applying, or waiting for the person to answer, this project-settings change"
-          : undefined);
+      const doing = LONG_CALLS[message.params.name];
       const heartbeat =
         doing && token !== undefined
           ? options.lifetime.every(15_000, () => {

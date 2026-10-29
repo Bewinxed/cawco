@@ -1,6 +1,13 @@
-import type { AskAnswer, Envelope, PermissionResult } from "@cawco/core";
+import type {
+  AskAnswer,
+  Envelope,
+  InstanceRow,
+  PermissionResult,
+} from "@cawco/core";
+import type { AskRecord } from "@cawco/core/asks";
 import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";
+import { parkedToolAsk } from "./parked-ask";
 
 /**
  * Permission and dialog requests the agent is blocked on, keyed by SDK
@@ -9,9 +16,9 @@ import { Db, type DbShape } from "./db";
  * A session's own asks outlive this hub, as the process blocked on them does:
  * they are kept in the database and read back as it boots, so the hub that
  * comes back holds them before any agent has replayed its own, and every
- * screen that reads `/api/pending` meanwhile still shows them. An ask the hub
- * raised itself (an admin write) is answered by a
- * waiter in this process, and goes with it.
+ * screen that reads `/api/pending` meanwhile still shows them. An ask the
+ * hub owns (core asks.ts, its `asks` row) is listed here as the envelope
+ * every screen reads ({@link askEnvelope}), from its row as the hub boots.
  */
 export interface PendingShape {
   /**
@@ -82,13 +89,41 @@ type SettledListener = (
 type Presenter = (envelope: Envelope) => void;
 
 /**
- * Whether an ask stays when its session's process ends: a post held for the
- * person (upstream-asks.ts), which the hub holds and makes itself, so no
- * process waits on it.
+ * An ask the hub owns (core asks.ts) as the `permission_request` every
+ * screen, push and answer reads today: the one shim from its row to the
+ * ledger, until the screens read the rows themselves.
  */
-export const outlivesSession = (envelope: Envelope): boolean =>
-  (envelope.payload as { upstreamPost?: unknown } | undefined)?.upstreamPost !==
-  undefined;
+export const askEnvelope = (
+  ask: AskRecord,
+  asker: Pick<InstanceRow, "harness" | "id" | "machineId">
+): Envelope =>
+  parkedToolAsk(
+    asker,
+    ask.id,
+    `mcp__cawco__${ask.asked.tool}`,
+    ask.asked.input,
+    {
+      adminWrite: ask.asked.tool,
+      raisedAt: ask.raisedAt,
+      ...(ask.asked.source ? { sourceFacts: ask.asked.source } : {}),
+      ...(ask.threadId ? { threadId: ask.threadId } : {}),
+      ...(ask.toolUseId ? { toolUseId: ask.toolUseId } : {}),
+    }
+  );
+
+/**
+ * Whether an ask stays when its session's process ends: one the hub owns
+ * ({@link askEnvelope}), or a post held for the person (upstream-asks.ts),
+ * which the hub makes itself. No process waits on either; an owned ask goes
+ * only when its session ends for good (admin-asks.ts `withdrawEnded`).
+ */
+export const outlivesSession = (envelope: Envelope): boolean => {
+  const payload = envelope.payload as
+    { adminWrite?: unknown; upstreamPost?: unknown } | undefined;
+  return (
+    payload?.upstreamPost !== undefined || payload?.adminWrite !== undefined
+  );
+};
 
 const isPermissionAsk = (envelope: Envelope): boolean =>
   (envelope.payload as { kind?: unknown } | undefined)?.kind ===
@@ -134,14 +169,27 @@ const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
   return typeof at === "number" ? at : undefined;
 };
 
-const make = (kept: DbShape["parkedAsks"]): PendingShape => {
+/** The open asks the hub owns, as envelopes; one whose session is gone is withdrawn at boot (admin-asks.ts). */
+const ownedAsks = (db: DbShape): Envelope[] => {
+  const open = db.asks.open();
+  const askers = new Map(
+    db
+      .getInstancesByIds(open.map((ask) => ask.instanceId))
+      .map((row) => [row.id, row] as const)
+  );
+  return open.flatMap((ask) => {
+    const asker = askers.get(ask.instanceId);
+    return asker ? [askEnvelope(ask, asker)] : [];
+  });
+};
+
+const make = (db: DbShape): PendingShape => {
+  const kept = db.parkedAsks;
   // What the hub held parked when it last stopped, by request id.
   const requests = new Map<string, Envelope>(
-    kept
-      .list()
-      .flatMap((envelope) =>
-        envelope.requestId ? [[envelope.requestId, envelope] as const] : []
-      )
+    [...kept.list(), ...ownedAsks(db)].flatMap((envelope) =>
+      envelope.requestId ? [[envelope.requestId, envelope] as const] : []
+    )
   );
   // A daemon replay must not resurrect a request that already left this ledger.
   const settledIds = new Set<string>();
@@ -218,6 +266,6 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
 export const PendingLayer = Layer.effect(Pending)(
   Effect.gen(function* () {
     const db = yield* Db;
-    return make(db.parkedAsks);
+    return make(db);
   })
 );

@@ -125,6 +125,7 @@ import type { MoveState } from "../moves";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
 import { type ArtifactsDb, artifactsDb, projectPage } from "./artifacts";
+import { type AsksDb, asksDb } from "./asks";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
 import { type BrowsersDb, browsersDb } from "./browsers";
@@ -740,6 +741,8 @@ export interface DbShape {
   ) => ThreadRow | undefined;
   /** Artifacts and their documents' update logs (artifacts/). */
   readonly artifacts: ArtifactsDb;
+  /** What sessions asked the person, and what the hub carried out (admin-asks.ts). */
+  readonly asks: AsksDb;
   /** Sessions held at their account's limit, summaries kept ahead of it, and the lines it wrote. */
   readonly atLimit: AtLimitDb;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
@@ -3813,6 +3816,7 @@ const make = async (path: string): Promise<DbShape> => {
     ["artifacts", "made_by"],
     ["routines", "made_by"],
     ["design_proposals", "instance_id"],
+    ["asks", "instance_id"],
     ["session_lines", "instance_id"],
     ["line_anchors", "instance_id"],
     ["completed_turns", "instance_id", "once"],
@@ -10364,6 +10368,7 @@ const make = async (path: string): Promise<DbShape> => {
     connections: connectionsDb(db),
     ingress: ingressDb(db),
     relays: relaysDb(db),
+    asks: asksDb(db),
     sshMachines: sshMachinesDb(db),
     memoryFacts: memoryFactsDb(db),
     trackers: trackersDb(db),

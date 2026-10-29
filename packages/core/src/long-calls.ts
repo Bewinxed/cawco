@@ -21,23 +21,12 @@ export const LONG_CALLS: Readonly<Record<string, string>> = {
   start_session: "Waiting for the machine to start the session",
 };
 
-/** The tool that changes a project's settings, asking the person first unless it is in Full Send. */
-export const PROJECT_SETTINGS = "project_settings";
-
-const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/u;
-
-/** Whether a tool is an admin write: the hub asks the person before each call runs, unless its session is in Full Send (hub admin-asks.ts). */
-export const isAdminWrite = (name: string): boolean =>
-  ADMIN_WRITE_TOOL.test(name);
-
 /**
  * Whether a CawCo tool (by its own name, the harness's prefix off) may run
- * past a quick call's deadline: a long call, a designed wait
- * ({@link FLEET_WATCH_WAITS}), or one that waits on the person's answer.
- * Such a call is bounded by {@link LONG_CALL_WALL_MS} alone.
+ * past a quick call's deadline: a long call, or a designed wait
+ * ({@link FLEET_WATCH_WAITS}). Such a call is bounded by
+ * {@link LONG_CALL_WALL_MS} alone. A call that asks the person answers at
+ * once (core asks.ts), so none is here.
  */
 export const runsLong = (name: string): boolean =>
-  Object.hasOwn(LONG_CALLS, name) ||
-  FLEET_WATCH_WAITS.has(name) ||
-  isAdminWrite(name) ||
-  name === PROJECT_SETTINGS;
+  Object.hasOwn(LONG_CALLS, name) || FLEET_WATCH_WAITS.has(name);

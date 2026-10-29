@@ -55,6 +55,7 @@ import type {
   ToolStatus,
   WorkspaceKind,
 } from "@cawco/core";
+import { ASK_STORED, type AskState } from "@cawco/core/asks";
 import { DECIDES_ROUTES, DECISION_KINDS } from "@cawco/core/decides";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { storedJson } from "@cawco/core/stored-json";
@@ -5482,6 +5483,28 @@ export const parkedAsks = sqliteTable(
     envelope: storedJson(EnvelopeSchema)("envelope").notNull(),
   },
   (table) => [index("parked_asks_instance").on(table.instanceId)]
+);
+
+/**
+ * What a session asked the person and the hub carries out (core asks.ts):
+ * one row per ask, open until answered or withdrawn, kept after as its
+ * record. The asker, its state and when it was raised are columns, so a
+ * session's fold moves its asks and a boot reads the open ones without the
+ * record; the rest is `record`.
+ */
+export const asks = sqliteTable(
+  "asks",
+  {
+    id: text("id").primaryKey(),
+    instanceId: text("instance_id").notNull(),
+    state: text("state").$type<AskState>().notNull(),
+    raisedAt: integer("raised_at").notNull(),
+    record: storedJson(ASK_STORED)("record").notNull(),
+  },
+  (table) => [
+    index("asks_instance").on(table.instanceId),
+    index("asks_state").on(table.state),
+  ]
 );
 
 /**

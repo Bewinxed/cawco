@@ -6,8 +6,9 @@
  *
  * - `update_machines`, for `POST /api/binary-updates/check` and `POST
  *   /api/agents/:id/update`: the check runs at once; installing asks the
- *   person first when the hub requires paired devices (admin-asks.ts), and
- *   runs at once while it trusts its network.
+ *   person first when the hub requires paired devices (admin-asks.ts), the
+ *   hub installing it once they approve ({@link installBuild}), and runs at
+ *   once while it trusts its network.
  * - `design_write`: the project's design system, written at the root of the
  *   caller's repository or in its project's folder (design-system.ts): a
  *   system being built is written at once; a change to one the project
@@ -64,13 +65,71 @@ export interface DesignVerdict {
   summary: string;
 }
 
+/** A hub route's answer, read as JSON; its own words when it refuses. */
+const said = async (response: Response): Promise<unknown> => {
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `the hub answered ${response.status}`);
+  }
+  return JSON.parse(text) as unknown;
+};
+
+/** The newest CawCo build, looked for and told to every machine. */
+const lookForBuild = async () =>
+  (await said(
+    await selfFetch(`${hubHttpUrl()}/api/binary-updates/check`, {
+      method: "POST",
+    })
+  )) as { version: string };
+
+/**
+ * The newest build installed on `machines`, each answering for itself: what
+ * `update_machines` runs, at once or once the person approved it
+ * (admin-asks.ts `carryOut`).
+ */
+export const installBuild = async (machines: readonly string[]) => {
+  const found = await lookForBuild();
+  const updates = await Promise.all(
+    machines.map(async (id) => {
+      try {
+        return {
+          machine: id,
+          report: await said(
+            await selfFetch(
+              `${hubHttpUrl()}/api/agents/${encodeURIComponent(id)}/update`,
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  version: found.version,
+                  commandId: crypto.randomUUID(),
+                }),
+                timeout: false,
+              }
+            )
+          ),
+        };
+      } catch (error) {
+        return {
+          machine: id,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    })
+  );
+  return { found, updates };
+};
+
 export interface HubToolsDeps {
-  /** Parks the call as the person's ask and waits for their answer (admin-asks.ts). */
+  /**
+   * Records the call as the person's ask (admin-asks.ts): what the call
+   * answers; undefined in Full Send, when it runs now.
+   */
   askPerson: (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>
-  ) => Promise<void>;
+  ) => Promise<string | undefined>;
   /** A design check's verdict from its verifier (design-verify.ts `verdict`). */
   designVerdict: (
     actor: InstanceRow,
@@ -103,13 +162,6 @@ export const createHubTools =
       }
       return actor;
     };
-    const said = async (response: Response): Promise<unknown> => {
-      const text = await response.text();
-      if (!response.ok) {
-        throw new Error(text || `the hub answered ${response.status}`);
-      }
-      return JSON.parse(text) as unknown;
-    };
     return [
       tool(
         "update_machines",
@@ -128,54 +180,22 @@ export const createHubTools =
         },
         async (input) => {
           const caller = me();
+          if (input.check_only) {
+            return { found: await lookForBuild() };
+          }
           const machines = input.machine ? [input.machine] : deps.machineIds();
           // The person first, before anything runs: installing the newest
           // build on these machines.
-          if (!input.check_only && deps.pairing()) {
-            await deps.askPerson(caller, "update_machines", {
-              ...input,
-              machines,
-            });
-          }
-          const found = (await said(
-            await selfFetch(`${hubHttpUrl()}/api/binary-updates/check`, {
-              method: "POST",
-            })
-          )) as { version: string };
-          if (input.check_only) {
-            return { found };
-          }
-          const updates = await Promise.all(
-            machines.map(async (id) => {
-              try {
-                return {
-                  machine: id,
-                  report: await said(
-                    await selfFetch(
-                      `${hubHttpUrl()}/api/agents/${encodeURIComponent(id)}/update`,
-                      {
-                        method: "POST",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({
-                          version: found.version,
-                          commandId: crypto.randomUUID(),
-                        }),
-                        timeout: false,
-                      }
-                    )
-                  ),
-                };
-              } catch (error) {
-                return {
-                  machine: id,
-                  error: error instanceof Error ? error.message : String(error),
-                };
-              }
-            })
-          );
-          return { found, updates };
+          const recorded = deps.pairing()
+            ? await deps.askPerson(caller, "update_machines", {
+                ...input,
+                machines,
+              })
+            : undefined;
+          return recorded ?? (await installBuild(machines));
         },
-        machinesUpdatedWords
+        (answer) =>
+          typeof answer === "string" ? answer : machinesUpdatedWords(answer)
       ),
       tool(
         "design_write",

@@ -209,6 +209,7 @@
     "./words/common": "./src/words/common.ts",
     "./question": "./src/question.ts",
     "./connect-ask": "./src/connect-ask.ts",
+    "./asks": "./src/asks.ts",
     "./words/transcript": "./src/words/transcript.ts",
     "./words/asks": "./src/words/asks.ts",
     "./attachments": "./src/attachments.ts",

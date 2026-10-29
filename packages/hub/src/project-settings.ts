@@ -4,9 +4,10 @@
  * lead's change applies at once, through the same code the person's own
  * change runs, and is noted in his thread with what changed. When the
  * change is one Caw judges the person should decide, he asks with `ask:
- * true`: the change parks as the person's ask in that thread (admin-asks.ts,
- * the one park-and-wait path), Approve applies it and Deny declines it, and
- * the call answers Caw either way.
+ * true`: the change is recorded as the person's ask in that thread
+ * (admin-asks.ts) and the call answers at once; Approve has the hub apply it
+ * ({@link ProjectSettings.runApproved}) and Deny notes it declined, and Caw
+ * is told either way.
  *
  * A closed set of changes, each validated before anything applies:
  * - `grant_connection`: a connection that exists joins the project's
@@ -56,7 +57,7 @@ import {
   publishedWords,
   type ThreadNote,
 } from "@cawco/core";
-import { PROJECT_SETTINGS } from "@cawco/core/long-calls";
+import { PROJECT_SETTINGS } from "@cawco/core/asks";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import type { Connections } from "./connections";
@@ -260,12 +261,15 @@ const alreadyWords = (change: DispatchSetting): string => {
 };
 
 export interface ProjectSettingsDeps {
-  /** Parks the change as the person's ask in Caw's thread and waits; rejects with their refusal (admin-asks.ts). */
+  /**
+   * Records the change as the person's ask in Caw's thread (admin-asks.ts):
+   * what the call answers; undefined in Full Send, when it applies now.
+   */
   readonly ask: (
     actor: InstanceRow,
     input: Record<string, unknown>,
     toolUseId: string | undefined
-  ) => Promise<void>;
+  ) => Promise<string | undefined>;
   /** Turns the project's Caw on or off, as his switch does (caw.ts `configure`). */
   readonly caw: (projectId: string, on: boolean) => unknown;
   readonly connections: Pick<Connections, "get" | "list" | "update">;
@@ -655,19 +659,13 @@ export const createProjectSettings = ({
       });
       return `Applied: ${said.join("; ")}. It is noted in the thread.`;
     }
-    try {
-      await ask(actor, { changes, reason, project: project.name }, toolUseId);
-    } catch (declined) {
-      note(actor, {
-        title: "You declined a project setting",
-        body: noteBody(changes.map(projectSettingWords), changes, reason),
-        event: {
-          kind: "project",
-          what: "settings-declined",
-          name: project.name,
-        },
-      });
-      throw declined;
+    const recorded = await ask(
+      actor,
+      { changes, reason, project: project.name },
+      toolUseId
+    );
+    if (recorded !== undefined) {
+      return recorded;
     }
     const said = await approved(actor, input.changes, reason, changes);
     return `The person approved it, and it applied: ${said.join("; ")}.`;
@@ -692,28 +690,54 @@ export const createProjectSettings = ({
       { inputHelp: INPUT_HELP }
     );
 
-  /** An ask approved after a hub restart (admin-asks.ts `carryOut`): applied for its asker now. */
+  /** The card's changes, as the ask's input holds them, checked then. */
+  const cardOf = (input: Record<string, unknown>): ProjectSettingChange[] =>
+    (Array.isArray(input.changes)
+      ? input.changes
+      : []) as ProjectSettingChange[];
+
+  /** The asker's own words on why, as the ask's input holds them. */
+  const reasonIn = (input: Record<string, unknown>): string =>
+    typeof input.reason === "string" ? input.reason : "";
+
+  /** An approved ask (admin-asks.ts `carryOut`): applied for its asker now. */
   const runApproved = async (
     actor: InstanceRow,
     input: Record<string, unknown>
   ): Promise<string> => {
-    // The parked input carries the card's changes, as checked then: each
+    // The ask's input carries the card's changes, as checked then: each
     // is checked again as the tool takes it.
-    const card = (
-      Array.isArray(input.changes) ? input.changes : []
-    ) as ProjectSettingChange[];
+    const card = cardOf(input);
     const said = await approved(
       actor,
       card.map(askedOf),
-      typeof input.reason === "string" ? input.reason : "",
+      reasonIn(input),
       card
     );
     return `Applied: ${said.join("; ")}.`;
   };
 
+  /** A declined ask (admin-asks.ts `carryOut`): noted in the thread, nothing applied. */
+  const runDeclined = (
+    actor: InstanceRow,
+    input: Record<string, unknown>
+  ): void => {
+    const card = cardOf(input);
+    note(actor, {
+      title: "You declined a project setting",
+      body: noteBody(card.map(projectSettingWords), card, reasonIn(input)),
+      event: {
+        kind: "project",
+        what: "settings-declined",
+        name: typeof input.project === "string" ? input.project : "",
+      },
+    });
+  };
+
   return {
     tool: definitionFor,
     runApproved,
+    runDeclined,
     definition: definitionFor(undefined),
   };
 };

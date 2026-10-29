@@ -10,6 +10,7 @@
  */
 
 import { accountMoveWords } from "./accounts";
+import { ASK_ORIGIN, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type {
   CompactionFailure,
@@ -63,7 +64,7 @@ import type {
   TranscriptBlock,
   TranscriptBranch,
 } from "./transcript-types";
-import { noticeLine } from "./words/notices";
+import { noticeLine, noticeWords } from "./words/notices";
 
 type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
 
@@ -2058,6 +2059,11 @@ function cawcoRow(
       },
     };
   }
+  // Your answer to one of its asks says how it went.
+  const answered =
+    origin.name === ASK_ORIGIN && typeof said.content === "string"
+      ? parseAskAnswered(said.content)
+      : null;
   return {
     type: "ui.system_note",
     content: said.content,
@@ -2065,7 +2071,9 @@ function cawcoRow(
       ...carried,
       subtype: CAWCO_NOTICE,
       noteKind: "CawCo",
-      noteTitle: noticeLine(origin),
+      noteTitle: answered
+        ? noticeWords.askAnswered[answered.outcome]
+        : noticeLine(origin),
       notice: origin.name ?? "",
     },
   };

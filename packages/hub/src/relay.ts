@@ -36,9 +36,9 @@
  *   live, so an owner step taken later (approving Funnel, setting the
  *   operator) is picked up without anyone asking. Not live, a relay says why
  *   in `reason`, and the GitHub poller keeps bringing events in.
- * - **Opening a path asks the owner.** A session's `relay_create` parks as
- *   the person's ask (admin-asks.ts), naming what goes public; it runs once
- *   approved. The hub route is the owner's own door; `cawco relay on` from
+ * - **Opening a path asks the owner.** A session's `relay_create` is the
+ *   person's ask (admin-asks.ts), naming what goes public; the hub opens it
+ *   once approved. The hub route is the owner's own door; `cawco relay on` from
  *   the owner's terminal shows the same sentence and asks before calling it.
  * - **Secrets stay in the hub.** A relay's secret is a sealed column; no
  *   route, tool or log line carries it. One the hub mints goes only to
@@ -151,12 +151,15 @@ export interface RelayCreated {
 }
 
 export interface RelayDeps {
-  /** Parks a session's ask for the person and waits (admin-asks.ts). */
+  /**
+   * Records a session's ask for the person (admin-asks.ts): what the call
+   * answers; undefined in Full Send, when it runs now.
+   */
   readonly askPerson: (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>
-  ) => Promise<void>;
+  ) => Promise<string | undefined>;
   readonly connections: Pick<Connections, "get" | "githubClient">;
   readonly db: Pick<DbShape, "ingress" | "project" | "relays" | "routines">;
   /** Tailscale; the real CLI unless a probe names another. */
@@ -1144,7 +1147,7 @@ export const createRelay = ({
     requested_by: z.string(),
   });
 
-  /** A `relay_create` the owner approved after a hub restart, run by the hub with the arguments shown. */
+  /** A `relay_create` the owner approved, run by the hub with the arguments shown (admin-asks.ts `carryOut`). */
   const runApproved = async (
     input: Record<string, unknown>
   ): Promise<string> => {
@@ -1154,13 +1157,16 @@ export const createRelay = ({
     );
   };
 
-  /** Asks the person to approve opening a relay (admin-asks.ts), then makes it. */
+  /**
+   * Asks the person to approve opening a relay (admin-asks.ts): the words
+   * the session reads while it waits; made now in Full Send.
+   */
   const askThenCreate = async (
     asker: InstanceRow,
     input: RelayInput
-  ): Promise<RelayCreated> => {
+  ): Promise<RelayCreated | string> => {
     const made = checked(input);
-    await askPerson(asker, "relay_create", {
+    const recorded = await askPerson(asker, "relay_create", {
       public: publicText(made),
       project: made.projectId,
       project_name: projectOf(made.projectId).name,
@@ -1171,7 +1177,7 @@ export const createRelay = ({
       id_path: made.idPath,
       requested_by: asker.id,
     });
-    return create(made, asker.id);
+    return recorded ?? create(made, asker.id);
   };
 
   /** The relay tools, bound to the calling session; with none, the definitions for discovery. */
@@ -1208,7 +1214,8 @@ export const createRelay = ({
         },
         (input) =>
           run(() => askThenCreate(me(), inputOf(projectOfMe(), input))),
-        relayCreatedWords
+        (answer) =>
+          typeof answer === "string" ? answer : relayCreatedWords(answer)
       ),
       tool(
         "relay_list",

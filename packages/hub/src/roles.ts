@@ -8,8 +8,8 @@
  * (a leaf gets no spawning tools, only a work item gets `finish_item`).
  *
  * - **worker**: a session you started. Everything, fleet settings included
- *   (an `admin_*_write` waits for you to approve it, admin-asks.ts; in Full
- *   Send it runs at once).
+ *   (an `admin_*_write` is your ask, run once you approve it, admin-asks.ts;
+ *   in Full Send it runs at once).
  * - **delegate**: a delegated session or work item: the session tools, reads
  *   of its project's tasks, folder and its own task's to-dos; changes to tasks and
  *   fleet settings go to its parent through handoff. A coordinator (an

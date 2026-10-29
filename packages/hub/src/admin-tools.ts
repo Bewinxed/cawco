@@ -297,8 +297,9 @@ export const answeredWithoutAsking = (
  * One group of fleet settings as two tools, named group first (§5.3):
  * `admin_<group>_read`, which takes only its read actions, and
  * `admin_<group>_write`, which takes the rest with the fields they need. One
- * handler serves both, through the hub's own REST routes; a write runs only
- * once the person approves it, or at once in Full Send (admin-asks.ts).
+ * handler serves both, through the hub's own REST routes; a write is the
+ * person's ask, run by the hub once they approve it, or at once in Full Send
+ * (admin-asks.ts).
  */
 function admin<T extends z.ZodRawShape>(
   group: string,
@@ -330,7 +331,7 @@ function admin<T extends z.ZodRawShape>(
   );
   const write = tool(
     `admin_${group}_write`,
-    `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} Waits for the person to approve it, unless in Full Send.`,
+    `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The person approves it first, unless in Full Send; their answer arrives as a message.`,
     { action: z.enum(writes), reason, ...input },
     // The reason is the person's to read on the approval, not a setting.
     (args) => {

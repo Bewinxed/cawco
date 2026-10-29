@@ -21,6 +21,7 @@
  */
 
 import { CLAUDE_PROVIDER } from "./accounts";
+import { ASK_ORIGIN } from "./asks";
 import { everyOf } from "./every-of";
 import { HOUR_MS } from "./time";
 import { harnessWords } from "./words/harness";
@@ -389,15 +390,16 @@ export const PLAN_ORIGIN = "plan";
 /**
  * Whether a send is the person's own act: their words, their picks or
  * comments on one of the session's artifacts ({@link ARTIFACT_ORIGIN}),
- * their answer to its held upstream post ({@link UPSTREAM_ORIGIN}), or their
- * changes to a plan ({@link PLAN_ORIGIN}). Any of them may wake a stopped
- * session and reopen finished work.
+ * their answer to its held upstream post ({@link UPSTREAM_ORIGIN}) or to its
+ * ask ({@link ASK_ORIGIN}), or their changes to a plan ({@link PLAN_ORIGIN}).
+ * Any of them may wake a stopped session and reopen finished work.
  */
 export const byPerson = (origin: NeutralOrigin): boolean =>
   origin.kind === "human" ||
   (origin.kind === "system" &&
     (origin.name === ARTIFACT_ORIGIN ||
       origin.name === UPSTREAM_ORIGIN ||
+      origin.name === ASK_ORIGIN ||
       origin.name === PLAN_ORIGIN));
 
 /**

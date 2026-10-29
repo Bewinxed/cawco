@@ -13,9 +13,11 @@
  * here ({@link noticeLine}).
  */
 
+import type { AskOutcome } from "../asks";
+
 /** Each notice kind's line, by its `system` origin's name, for one made with no line of its own. */
 const BY_KIND: Readonly<Record<string, string>> = {
-  admin: "Told how an admin change went",
+  ask: "Told your answer on its ask",
   browser: "Told about the browser",
   caw: "Woke Caw",
   compaction: "Asked to file its open items and compact",
@@ -68,6 +70,13 @@ export const noticeWords = {
       : `Told the account move ended ${tasks === 1 ? "1 background task" : `${tasks} background tasks`}`,
   /** A session reaches a container runtime with no door of CawCo's. */
   containersUntracked: "Containers it starts won't stop with it",
+  /** Your answer to one of its asks (core asks.ts), by how it went. */
+  askAnswered: {
+    ran: "Told you approved it; it ran",
+    failed: "Told you approved it; it failed",
+    declined: "Told you declined it",
+    cut: "Told you approved it; the hub restarted before it finished",
+  } satisfies Record<AskOutcome, string>,
 };
 
 /** What a notice is about, without its live state: the line written where it was made, else its kind's. */
