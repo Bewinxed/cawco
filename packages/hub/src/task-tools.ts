@@ -231,7 +231,7 @@ const stepParameter = () =>
       .string()
       .optional()
       .describe(
-        `What it waits on, as task_link's waits_on takes it: ${WAIT_TARGETS}. '' clears.`
+        `What it waits on, as task_link's waits_on takes it: ${WAIT_TARGETS}. Absent or '': none.`
       ),
   });
 
@@ -264,7 +264,7 @@ const stepsOf = async (
       status: step.status,
       depth,
       ...(step.priority ? { priority: step.priority } : {}),
-      ...(step.waitsOn === undefined ? {} : { waitsOn: waits[index] ?? null }),
+      ...(waits[index] ? { waitsOn: waits[index] } : {}),
     };
   });
 };

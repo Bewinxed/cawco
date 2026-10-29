@@ -10,11 +10,15 @@
  *
  * The person changes a plan too ({@link Plans.edit}): each change is applied
  * to the steps here and kept as a row in their words (`plan_changes`);
- * plan-changes.ts decides who hears it and when. A step keeps the person's
- * comments and its wait across the session's own writes, by id. A step's
- * wait is a task's wait (wait-targets.ts): the hub's one resolver settles it
- * (task-waits.ts `settled`), and a settled wait is dropped; and a write of the session's steps that would undo a change it has
- * not written over since is refused once, naming the change
+ * plan-changes.ts decides who hears it and when. A write of the session's
+ * steps names every step's wait whole: a step it gives none waits on
+ * nothing. What the hub and the person put on a step (its page wait, their
+ * comments) stays with that step alone: the one of the same id and the same
+ * words ({@link sameStep}), since an id the session gives no step is only
+ * its place. A step's wait is a task's wait (wait-targets.ts): the hub's one
+ * resolver settles it (task-waits.ts `settled`), and a settled wait is
+ * dropped; and a write of the session's steps that would undo a change it
+ * has not written over since is refused once, naming the change
  * ({@link Plans.write}).
  *
  * Live, a session's followers (stream.ts) hear the plan as AG-UI state
@@ -76,15 +80,23 @@ interface Held {
 const CHANGES_SHOWN = 20;
 
 /**
- * A step as the session writes it (`todo_write`): its `waitsOn` set, kept
- * when left out, cleared with null. Comments are the person's: never written.
+ * A step as the session writes it (`todo_write`): its `waitsOn` the whole of
+ * what it waits on, none when left out. Comments are the person's and a page
+ * wait the hub's: never written.
  */
-export type WrittenStep = Omit<
-  PlanStep,
-  "comments" | "waitsOn" | "waitsOnPage"
-> & {
-  waitsOn?: string | null;
-};
+export type WrittenStep = Omit<PlanStep, "comments" | "waitsOnPage">;
+
+/**
+ * The stored step a written one is: the same id and the same words. An id
+ * the session gives no step is its place (task-tools.ts `stepsOf`), so the
+ * id alone would hand one step's page wait and comments to whatever step
+ * stands in its place after a rewrite.
+ */
+const sameStep = (
+  before: readonly PlanStep[],
+  step: WrittenStep
+): PlanStep | undefined =>
+  before.find((one) => one.id === step.id && one.content === step.content);
 
 /** The receiver's key, as `plan_changes.receiver` holds it. */
 export const receiverKey = (to: PlanReceiver): string =>
@@ -616,8 +628,9 @@ export const createPlans = (deps: PlansDeps) => {
 
     /**
      * `todo_write`'s session scope: the session's steps, its spec, or both,
-     * each replaced whole. Each step keeps the person's comments, and its
-     * wait unless the write names one or clears it, by id. A write of steps
+     * each replaced whole, every step's `waitsOn` with them: exactly what the
+     * write names. The same step ({@link sameStep}) keeps the person's
+     * comments and the hub's page wait. A write of steps
      * that would undo a change the person made since the session last wrote
      * them is refused, naming each and the plan as it stands; the next write
      * goes through, whatever it says: the session has heard them.
@@ -640,13 +653,11 @@ export const createPlans = (deps: PlansDeps) => {
         }
         db.putSessionSteps(
           row.id,
-          steps.map(({ waitsOn: given, ...step }) => {
-            const kept = before.find((one) => one.id === step.id);
-            const wait = given === undefined ? kept?.waitsOn : given;
+          steps.map((step) => {
+            const kept = sameStep(before, step);
             return {
               ...step,
               ...(kept?.comments ? { comments: kept.comments } : {}),
-              ...(wait ? { waitsOn: wait } : {}),
               ...(kept?.waitsOnPage ? { waitsOnPage: kept.waitsOnPage } : {}),
             };
           })
