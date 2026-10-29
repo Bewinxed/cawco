@@ -326,6 +326,12 @@ import type { Tasks } from "./tasks";
  * routine matched as text. About 45 tokens for the lead and the worker
  * (lead 18,684 measured). Raised deliberately, by that, for the lead; the
  * worker fits.
+ * 2026-10-29: a project's own tools follow scope, not role (one-session
+ * design §6, slice 1): a session you started in its project's place lists
+ * view_draft, view_query, folder_read, folder_write, project_setup,
+ * project_settings, routine_result and memory_propose, as Caw does. About
+ * 1,530 tokens for the worker (worker 27,652 measured), the lead unchanged.
+ * The worker fits.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_805,
@@ -339,8 +345,10 @@ const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
 /**
  * A typical session of each role: a session you started, a leaf work item, a
  * project's Caw, triage, a web-facing work item. The worker and the delegate
- * are in a project: one in none is listed fewer tools (delegation-mcp.ts
- * `PROJECT_ONLY`), and the budget holds the most a role is listed.
+ * are in a project, and each sample works in its project's place: one in
+ * none, or elsewhere, is listed fewer tools (delegation-mcp.ts
+ * `PROJECT_ONLY`, roles.ts `allows`), and the budget holds the most a role
+ * is listed.
  */
 const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
   worker: { projectId: "project" },
@@ -414,6 +422,8 @@ export const listRoleTools = (): RoleTools[] => {
   const lifetime = makeLifetime();
   const mcp = createDelegationMcp({
     lifetime,
+    // Every sample is in its project's place ({@link SAMPLES}).
+    inPlace: () => true,
     instancesByIds: (ids) => rows.filter((row) => ids.includes(row.id)),
     runningOf: (harness) =>
       rows.filter((row) => row.harness === harness && row.status === "running"),

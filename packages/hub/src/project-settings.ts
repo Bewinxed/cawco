@@ -1,13 +1,14 @@
 /**
- * A project's Caw changes his own project's settings (`project_settings`).
- * The owner's word: "caw should be able to do whatever it wants", so the
- * lead's change applies at once, through the same code the person's own
- * change runs, and is noted in his thread with what changed. When the
- * change is one Caw judges the person should decide, he asks with `ask:
- * true`: the change is recorded as the person's ask in that thread
- * (admin-asks.ts) and the call answers at once; Approve has the hub apply it
- * ({@link ProjectSettings.runApproved}) and Deny notes it declined, and Caw
- * is told either way.
+ * A session in its project's place (Caw among them: roles.ts `allows`)
+ * changes that project's settings (`project_settings`). The owner's word:
+ * "caw should be able to do whatever it wants", so the change applies at
+ * once, through the same code the person's own change runs, and is noted in
+ * the thread its turn answers with what changed. When the change is one the
+ * session judges the person should decide, it asks with `ask: true`: the
+ * change is recorded as the person's ask in that thread (admin-asks.ts) and
+ * the call answers at once; Approve has the hub apply it
+ * ({@link ProjectSettings.runApproved}) and Deny notes it declined, and the
+ * session is told either way.
  *
  * A closed set of changes, each validated before anything applies:
  * - `grant_connection`: a connection that exists joins the project's
@@ -43,8 +44,8 @@
  *   finish: his own turn is one of them.
  * Called with no changes, it answers the project's settings as they stand,
  * each named by the change that sets it, and what dispatch would do now.
- * Only Caw's own project, named by its id or its name in any case: naming
- * another is refused. What its work's landing gate runs is the project's
+ * Only the session's own project, named by its id or its name in any case:
+ * naming another is refused. What its work's landing gate runs is the project's
  * gate.md (gate-file.ts), not a setting.
  */
 import {
@@ -70,7 +71,6 @@ import {
 import { type McpTool, sentence, tool } from "./mcp-tool";
 import { type ProjectEdit, projectName } from "./project-edit";
 import type { RepoPublish } from "./repo-publish";
-import { roleOf } from "./roles";
 import { runsOnValue } from "./runs-on";
 import { budgetParameter } from "./task-tools";
 
@@ -308,18 +308,15 @@ export const createProjectSettings = ({
   publish,
 }: ProjectSettingsDeps) => {
   /**
-   * Caw's own project, and nothing else: the caller must be its lead, and
-   * `named` must be it, by its id or its name in any case (`cawco-dev` is
-   * the project Cawco-Dev).
+   * The caller's own project, and nothing else: its scope already holds
+   * (roles.ts `allows`), and `named` must be it, by its id or its name in
+   * any case (`cawco-dev` is the project Cawco-Dev).
    */
   const ownProject = (actor: InstanceRow, named?: string): ProjectRow => {
-    const project =
-      roleOf(actor) === "lead" && actor.projectId
-        ? db.project(actor.projectId)
-        : undefined;
+    const project = actor.projectId ? db.project(actor.projectId) : undefined;
     if (!project) {
       return refuse(
-        "project_settings changes the project you lead, and this session leads none."
+        "project_settings changes this session's project, and this session is in none."
       );
     }
     const asked = named?.trim().toLowerCase();

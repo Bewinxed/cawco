@@ -1024,6 +1024,8 @@ const PAGE_SOURCE =
 const NOT_NAME = /[^a-z0-9]+/gu;
 const NAME_ENDS = /^-+|-+$/gu;
 const NAME_TAIL = /-+$/u;
+/** A folder's trailing slashes, which a place's path never keeps. */
+const TRAILING_SLASHES = /\/+$/u;
 /** A URL's IPv6 host in its brackets, as `URL.hostname` keeps it. */
 const IPV6_BRACKETS = /^\[|\]$/gu;
 
@@ -24046,6 +24048,10 @@ export const createServer = (
       .map((agent) => agent.machineId)
       .filter((machineId) => registry.agent(machineId));
 
+  /** Caw's own folder for a project, under a machine's home ({@link leadHome}). */
+  const cawHome = (projectId: string): string =>
+    posix.join(".cawco", "caw", projectId);
+
   /**
    * Where a project's Caw starts before any checkout of it is online (D2):
    * its folder on the hub, on the hub's machine, when that machine runs an
@@ -24081,7 +24087,26 @@ export const createServer = (
         `${machineName(machineId)} did not say where its home folder is, so Caw has no folder there: ${home.stderr.trim() || `exit ${home.exitCode}`}`
       );
     }
-    return { machineId, cwd: posix.join(path, ".cawco", "caw", projectId) };
+    return { machineId, cwd: posix.join(path, cawHome(projectId)) };
+  };
+
+  /**
+   * Whether `row`'s folder is its project's own place, the scope a project's
+   * own tools follow (roles.ts `allows`): a checkout of it on its machine or
+   * a folder inside one (db `projectHolding`), its folder on the hub on the
+   * hub's machine, or Caw's own folder for it ({@link leadHome}).
+   */
+  const worksInPlace = (row: InstanceRow): boolean => {
+    const { projectId } = row;
+    if (!projectId) {
+      return false;
+    }
+    const cwd = row.cwd.replace(TRAILING_SLASHES, "");
+    return (
+      db.projectHolding(row.machineId, cwd) === projectId ||
+      (row.machineId === ownMachineIdRead && cwd === projectRoot(projectId)) ||
+      cwd.endsWith(`/${cawHome(projectId)}`)
+    );
   };
 
   /**
@@ -26672,6 +26697,7 @@ export const createServer = (
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   const delegationMcp = createDelegationMcp({
     lifetime,
+    inPlace: worksInPlace,
     // Kept with the relayed calls' keys, whose table tool-call-keys prunes.
     callKeys: createCallKeys({ db: db.toolCallKeys }),
     tasks,

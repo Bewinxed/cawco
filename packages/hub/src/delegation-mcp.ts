@@ -60,7 +60,7 @@ import {
   CAW_TOOLS,
   memoryRoleOf,
   refusal,
-  roleOf,
+  type Scoped,
   TRIAGE_TOOLS,
 } from "./roles";
 import { ROUTINE_TOOLS, type Routines } from "./routines";
@@ -117,9 +117,9 @@ declare const __CAWCO_RELEASE__: boolean | undefined;
 const searcher = (row: InstanceRow | undefined): boolean =>
   row !== undefined && memoryRoleOf(row) === "orchestrator";
 
-/** Whether `row` files and links tasks: its core task tools load upfront together ({@link loadsUpfront}). */
-const filesTasks = (row: InstanceRow | undefined): boolean =>
-  row !== undefined && allows(roleOf(row), "task_link");
+/** Whether `session` files and links tasks: its core task tools load upfront together ({@link loadsUpfront}). */
+const filesTasks = (session: Scoped | undefined): boolean =>
+  session !== undefined && allows(session, "task_link");
 
 /**
  * A tool as `tools/list` answers it to `row`. One that loads upfront for it
@@ -130,7 +130,7 @@ const filesTasks = (row: InstanceRow | undefined): boolean =>
  * stays deferred.
  */
 const listedFor =
-  (row: InstanceRow | undefined) =>
+  (session: Scoped | undefined) =>
   ({
     name,
     description,
@@ -145,7 +145,7 @@ const listedFor =
     description,
     inputSchema: inputSchema as { type: "object" },
     ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-    ...(loadsUpfront(name, searcher(row), filesTasks(row))
+    ...(loadsUpfront(name, searcher(session?.row), filesTasks(session))
       ? { _meta: { "anthropic/alwaysLoad": true } }
       : {}),
   });
@@ -230,6 +230,12 @@ export function createDelegationMcp(options: {
   fleet: Fleet;
   /** Every former id, by the id its session has now (db `formerIds`). */
   formerIds: () => Record<string, string>;
+  /**
+   * Whether a session's folder is its project's own place (server.ts
+   * `worksInPlace`): with its project, the scope a project's own tools
+   * follow (roles.ts `allows`).
+   */
+  inPlace: (row: InstanceRow) => boolean;
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
   ledBy?: (instanceId: string, leadId: string) => boolean;
   /** The sessions `instanceId` was forked from, nearest first (server.ts `forkLineage`). */
@@ -419,18 +425,30 @@ export function createDelegationMcp(options: {
     });
   }
 
+  /** `row` as its tools are decided (roles.ts `Scoped`): its place read once, and only for a project's tool. */
+  const scopedOf = (row: InstanceRow): Scoped => {
+    let held: boolean | undefined;
+    return {
+      row,
+      inPlace: () => {
+        held ??= options.inPlace(row);
+        return held;
+      },
+    };
+  };
+
   /** How the work item a session runs lands, when it runs one. */
   const landsOf = (actor: InstanceRow | undefined): ItemEnd | undefined =>
     actor?.workItemId ? options.workItemLands?.(actor.workItemId) : undefined;
 
   /**
-   * The tools a session is listed: its role's (roles.ts), narrowed by its own
-   * context (a leaf gets no spawning tools, only a work item `finish_item`,
-   * only a session in a project the
-   * project's tools, only one that may be made a project
-   * `project_from_session`, only a design check's verifier
-   * `design_verdict`). Without a session — OpenCode's shared
-   * discovery — every role's, the superset; the call enforces.
+   * The tools a session is listed: its role's and its scope's (roles.ts),
+   * narrowed by its own context (a leaf gets no spawning tools, only a work
+   * item `finish_item`, only a session in a project the project's tools,
+   * only one that may be made a project `project_from_session`, only a
+   * design check's verifier `design_verdict`). Without a session —
+   * OpenCode's shared discovery — every role's, the superset; the call
+   * enforces.
    */
   const toolsFor = (actor: InstanceRow | undefined) => {
     const all = [
@@ -484,11 +502,11 @@ export function createDelegationMcp(options: {
     if (!actor) {
       return [...all, ...connections];
     }
-    const role = roleOf(actor);
+    const session = scopedOf(actor);
     return [
       ...all.filter(
         (tool) =>
-          allows(role, tool.name) &&
+          allows(session, tool.name) &&
           (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
           (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor)) &&
           // Only a work item hands in a result on its task.
@@ -652,7 +670,7 @@ export function createDelegationMcp(options: {
   ): Promise<CallToolResult> => {
     // A session whose role files tasks names any task's to-dos; one that
     // does not writes only its own work item's.
-    const mainline = allows(roleOf(actor), "task_create");
+    const mainline = allows(scopedOf(actor), "task_create");
     const entry =
       options.tasks &&
       taskTools({
@@ -914,10 +932,10 @@ export function createDelegationMcp(options: {
       if (options.connections && parseConnectionTool(name)) {
         return await options.connections.callAs(actor, name, input);
       }
-      // The one place a role holds: what it does not list, it cannot call.
-      const role = roleOf(actor);
-      if (!allows(role, name)) {
-        throw new Error(refusal(role, name));
+      // The one place a role and a scope hold: what it does not list, it cannot call.
+      const session = scopedOf(actor);
+      if (!allows(session, name)) {
+        throw new Error(refusal(session, name));
       }
       return (
         (await route(actor, name, input, toolUseId)) ??
@@ -994,7 +1012,7 @@ export function createDelegationMcp(options: {
 
   /** The hash of what a connection bound to `row` is listed now. */
   const toolsHash = (row: InstanceRow | undefined): string =>
-    hashOf(toolsFor(row).map(listedFor(row)));
+    hashOf(toolsFor(row).map(listedFor(row && scopedOf(row))));
 
   /**
    * Each connection's open GET stream, where the client hears what the server
@@ -1082,7 +1100,11 @@ export function createDelegationMcp(options: {
     const upfrontOf = (listed: string[]) =>
       new Set(
         listed.filter((name) =>
-          loadsUpfront(name, searcher(bound), filesTasks(bound))
+          loadsUpfront(
+            name,
+            searcher(bound),
+            filesTasks(bound && scopedOf(bound))
+          )
         )
       );
     if (!bound) {
@@ -1168,7 +1190,7 @@ export function createDelegationMcp(options: {
     server.setRequestHandler(ListToolsRequestSchema, () => {
       // Read fresh, so a re-list after list_changed answers the new role.
       const row = boundRow(binding);
-      const answered = toolsFor(row).map(listedFor(row));
+      const answered = toolsFor(row).map(listedFor(row && scopedOf(row)));
       options.putToolListing(listingOf(binding), hashOf(answered));
       return Promise.resolve({ tools: answered });
     });
@@ -1332,7 +1354,7 @@ export function createDelegationMcp(options: {
     if (instanceId !== undefined && !actor) {
       return;
     }
-    const answered = toolsFor(actor).map(listedFor(actor));
+    const answered = toolsFor(actor).map(listedFor(actor && scopedOf(actor)));
     if (own && actor) {
       options.putToolListing(actor.id, hashOf(answered));
     }

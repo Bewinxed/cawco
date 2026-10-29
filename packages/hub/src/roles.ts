@@ -15,14 +15,11 @@
  *   fleet settings go to its parent through handoff. A coordinator (an
  *   attempt at a whole) starts its parts with task_start.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
- *   drafting views, its project's folder on the hub and decision pages in it
- *   with their graph,
- *   its routines, its ingress and relays (opening a relay asks you),
- *   proposing approved actions, its own project's settings and memory
- *   (applied at once, or asked about first: project-settings.ts, memory.ts),
- *   delegating and steering the project's work, the person's phone. Its
- *   harness's shell and edit tools run inside its place's boundary, each
- *   call decided by the hub first (lead-gate.ts).
+ *   decision pages with their graph, its routines, its ingress and relays
+ *   (opening a relay asks you), proposing approved actions, delegating and
+ *   steering the project's work, the person's phone. Its harness's shell and
+ *   edit tools run inside its place's boundary, each call decided by the hub
+ *   first (lead-gate.ts).
  * - **overseer**: fleet-watch triage (fleet-watch.ts): it reads the fleet
  *   and the session's task, and decides once with `triage_decide` (nudge the
  *   lead, interrupt, stop, tell you, or leave it), which the hub carries
@@ -35,13 +32,20 @@
  *   archives the notes that are not lasting facts, and finishes. No edit,
  *   shell or web tools in its harness either (caw.ts `withCawDenials`).
  *
+ * A project's own tools ({@link PROJECT_TOOLS}: its views, its folder on the
+ * hub, its Setup's steps and settings, a routine run's answer, memory
+ * writes) follow a session's scope, never its role: a worker or a lead whose
+ * folder is its project's own place has them, any other has not. A role
+ * with a closed list (delegate, overseer, web-facing, curator) has only its
+ * list (one-session design §6, slice 1).
+ *
  * Every session that works (the worker, the delegate, the lead) searches
  * what was said and made with `find` (find-tool.ts), the dashboard's Find.
  *
  * Memory (§5.4): the worker, the delegate and the lead write notes into
- * their project's inbox (`memory_note`); only the lead and the curator
- * call `memory_propose` (the lead's commits, the curator's waits for you),
- * and only the curator sorts the inbox.
+ * their project's inbox (`memory_note`); a session in its project's place
+ * and the curator call `memory_propose` (the session's commits, the
+ * curator's waits for you), and only the curator sorts the inbox.
  */
 import {
   type InstanceRow,
@@ -101,13 +105,11 @@ const TASK_WRITE = [
   "task_archive",
 ] as const satisfies readonly TaskTool[];
 
-/**
- * Caw's own: a project's conversations with it, the views it drafts, its
- * folder on the hub, and its Setup's steps (caw.ts).
- */
-export const CAW_TOOLS = [
-  "thread_read",
-  "thread_reply",
+/** A project's conversations with Caw (caw.ts): his alone until a thread is a session. */
+const THREAD_TOOLS = ["thread_read", "thread_reply"] as const;
+
+/** The project's own tools caw.ts answers: its views, its folder on the hub, its Setup's steps. */
+const CAW_PROJECT_TOOLS = [
   "view_draft",
   "view_query",
   "folder_read",
@@ -115,11 +117,20 @@ export const CAW_TOOLS = [
   "project_setup",
 ] as const;
 
+/** The tools caw.ts answers (its `tools`): threads, views, the folder, Setup's steps. */
+export const CAW_TOOLS = [...THREAD_TOOLS, ...CAW_PROJECT_TOOLS] as const;
+
 /**
- * The lead's alone: how a routine's run that woke Caw went (routines.ts),
- * and his own project's settings (project-settings.ts).
+ * A project's own tools: caw.ts's, its settings (project-settings.ts), how
+ * a routine's run that woke the session went (routines.ts) and its memory
+ * writes (memory.ts). Listed by scope ({@link allows}).
  */
-const LEAD_OWN = ["routine_result", "project_settings"] as const;
+const PROJECT_TOOLS: ReadonlySet<string> = new Set([
+  ...CAW_PROJECT_TOOLS,
+  "project_settings",
+  "routine_result",
+  "memory_propose",
+]);
 
 /** Fleet watch's triage decision (fleet-watch.ts), the overseer's alone. */
 export const TRIAGE_TOOLS = ["triage_decide"] as const;
@@ -176,8 +187,9 @@ const DELEGATE_SESSION = [
 ] as const;
 
 /**
- * Each role's tools, by name; the worker's is every tool there is but Caw's
- * own ({@link allows}).
+ * Each closed role's tools, by name, and the lead's but the project's own;
+ * the worker's is every tool there is but {@link NOT_THE_WORKERS}
+ * ({@link allows}).
  */
 const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   delegate: new Set([
@@ -209,14 +221,12 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...CONNECT,
     ...TASK_READ,
     ...TASK_WRITE,
-    ...CAW_TOOLS,
+    ...THREAD_TOOLS,
     "memory_note",
-    "memory_propose",
     "find",
     // Decision pages: Caw builds them from his folder's decisions/<name>/page.oui.
     ...ARTIFACT_TOOLS,
     ...ROUTINE,
-    ...LEAD_OWN,
     ...INGRESS,
     ...ACTION,
     ...RELAY,
@@ -249,22 +259,47 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
 };
 
 /**
- * What a worker never has: Caw's own, the curator's (proposing is the lead's
- * and the curator's), and triage's.
+ * What a worker never has: Caw's threads, the curator's own, triage's, and a
+ * design check's verdict.
  */
 const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
-  ...CAW_TOOLS,
-  ...LEAD_OWN,
+  ...THREAD_TOOLS,
   ...CURATOR_OWN,
-  "memory_propose",
   ...TRIAGE_TOOLS,
   // A design check's verifier's alone, which is a delegate (design-verify.ts).
   "design_verdict",
 ]);
 
-/** Whether a session in `role` may see and call the tool `name`. */
-export const allows = (role: SessionRole, name: string): boolean =>
+/**
+ * A session as its tools are decided: its row, and whether its folder is its
+ * project's own place (a checkout of it, its folder on the hub, Caw's folder
+ * for it: server.ts `worksInPlace`), read only for a project's tool.
+ */
+export interface Scoped {
+  readonly inPlace: () => boolean;
+  readonly row: InstanceRow;
+}
+
+/** Whether a session in `role` lists `name` by its role alone. */
+const listed = (role: SessionRole, name: string): boolean =>
   role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
+
+/** Whether `role`'s toolset is a closed list, which a project's tools follow too. */
+const closed = (role: SessionRole): boolean =>
+  role !== "worker" && role !== "lead";
+
+/**
+ * Whether the session may see and call the tool `name`. A project's own
+ * tool ({@link PROJECT_TOOLS}) follows its scope: it has a project and works
+ * in that project's place. A closed role has only its list.
+ */
+export const allows = ({ row, inPlace }: Scoped, name: string): boolean => {
+  const role = roleOf(row);
+  if (PROJECT_TOOLS.has(name) && !closed(role)) {
+    return !!row.projectId && inPlace();
+  }
+  return listed(role, name);
+};
 
 /**
  * Which role-scoped memory a session loads (core fleet.ts `MemoryRole`): an
@@ -273,7 +308,7 @@ export const allows = (role: SessionRole, name: string): boolean =>
  * keeps the spawning tools from it whatever its role); a leaf's otherwise.
  */
 export const memoryRoleOf = (row: InstanceRow): MemoryRole =>
-  row.canDelegate !== false && allows(roleOf(row), "delegate")
+  row.canDelegate !== false && listed(roleOf(row), "delegate")
     ? "orchestrator"
     : "leaf";
 
@@ -292,8 +327,14 @@ export const connectionToolsFor = (
   return role === "web-facing" ? "read-only" : "none";
 };
 
-/** What a session hears when it calls a tool its role does not have. */
-export const refusal = (role: SessionRole, name: string): string => {
+/** What a session hears when it calls a tool it does not have ({@link allows}). */
+export const refusal = ({ row }: Scoped, name: string): string => {
+  const role = roleOf(row);
+  if (PROJECT_TOOLS.has(name) && !closed(role)) {
+    return row.projectId
+      ? `${name} is the project's own tool: a session has it when its folder is the project's place, a checkout of it or its folder on the hub, and this one works elsewhere. Hand the change to a session there.`
+      : `${name} is a project's own tool, and this session is in no project.`;
+  }
   switch (role) {
     case "lead":
       return `${name} isn't available to Caw: the lead works through the board, threads, delegates and his own shell in his place, with no fleet-settings tools. Delegate the work instead.`;
@@ -307,9 +348,6 @@ export const refusal = (role: SessionRole, name: string): string => {
       return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
     case "worker":
       break;
-  }
-  if (name === "memory_propose") {
-    return "memory_propose belongs to a project's Caw and its memory curator: write what you learned with memory_note, and the curator proposes it to the person.";
   }
   if (TRIAGE_TOOLS.includes(name as (typeof TRIAGE_TOOLS)[number])) {
     return `${name} belongs to a fleet-watch triage run.`;

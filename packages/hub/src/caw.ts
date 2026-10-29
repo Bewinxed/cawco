@@ -142,7 +142,6 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
-import { roleOf } from "./roles";
 import {
   type RelayOffer,
   SETUP_PARTS,
@@ -3148,19 +3147,30 @@ export const createCaw = ({
     },
 
     /**
-     * Caw's thread, view and folder tools, for the session
-     * `actor` and its call `toolUseId` (where a proposal it parks is drawn);
-     * refused to any session but its project's lead.
+     * Caw's threads, and the project's views, folder and Setup's steps, for
+     * the session `actor` and its call `toolUseId` (where a proposal it
+     * parks is drawn). Threads are its project's lead's alone; the rest are
+     * any session's its scope lists them to (roles.ts `allows`).
      */
     tools(actor: InstanceRow | undefined, toolUseId?: string) {
       const mine = (): string => {
         const project = leadOf(actor);
         if (!project) {
           throw new Error(
-            "Threads and views are the project lead's: this session is not its project's Caw."
+            "Threads are the project lead's: this session is not its project's Caw."
           );
         }
         return project.id;
+      };
+      /** The calling session's project, whose views, folder and Setup these are. */
+      const ours = (): string => {
+        const projectId = actor?.projectId;
+        if (!(projectId && db.project(projectId))) {
+          throw new Error(
+            "This session belongs to no project, so it has no project folder, views or Setup."
+          );
+        }
+        return projectId;
       };
       /** The lead calling: discovery, with no session, executes nothing. */
       const me = (): InstanceRow => {
@@ -3168,22 +3178,6 @@ export const createCaw = ({
           throw new Error("Discovery cannot execute tools");
         }
         return actor;
-      };
-      /**
-       * The project whose folder `folder_read` reads: the lead's, or a
-       * delegate's own project (roles.ts), what one delegate hands in for the
-       * next to read on any machine. Never another's.
-       */
-      const readsFolder = (): string => {
-        if (actor && roleOf(actor) === "delegate") {
-          if (!(actor.projectId && db.project(actor.projectId))) {
-            throw new Error(
-              "This delegate belongs to no project, so it has no project folder to read."
-            );
-          }
-          return actor.projectId;
-        }
-        return mine();
       };
       return [
         tool(
@@ -3250,7 +3244,7 @@ export const createCaw = ({
           "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
           { path: z.string().optional() },
           async ({ path }) => {
-            const projectId = readsFolder();
+            const projectId = ours();
             return await folderCall(() =>
               readFolderFile(projectId, path ?? "").catch((error: unknown) => {
                 // No path, or a folder: its listing.
@@ -3275,7 +3269,7 @@ export const createCaw = ({
             encoding: z.enum(FOLDER_ENCODINGS).optional(),
           },
           async ({ path, content, encoding }) => {
-            const projectId = mine();
+            const projectId = ours();
             const rel = await folderCall(() => folderPath(path));
             const theirs = personsTier(rel);
             if (theirs) {
@@ -3318,7 +3312,7 @@ export const createCaw = ({
             position: z.number().int().min(0).optional(),
           },
           async (input) => {
-            const projectId = mine();
+            const projectId = ours();
             const drafted = await draftView(projectId, input);
             noteIn(
               projectId,
@@ -3340,7 +3334,7 @@ export const createCaw = ({
             args: z.record(z.string(), z.unknown()).optional(),
           },
           async ({ tool: name, args }) => {
-            const projectId = mine();
+            const projectId = ours();
             return await folderCall(() =>
               views.query(projectId, name, args ?? {})
             );
@@ -3358,7 +3352,7 @@ export const createCaw = ({
               .describe("Answered parts to ask again."),
           },
           async ({ thread: asked, change }) => {
-            const projectId = mine();
+            const projectId = ours();
             const thread = threadNamed(projectId, asked);
             threadIn(projectId, thread);
             const stages = await folderCall(() => stagesOf(projectId));
