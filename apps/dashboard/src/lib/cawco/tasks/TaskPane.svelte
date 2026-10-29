@@ -26,8 +26,10 @@
    * where the task is; the rest are listed, disabled, so the stages read in
    * order. The hub checks the move again either way.
    *
-   * The external items it links stand under the title (TaskExternalLinks), its
-   * record first; the record's fault offers Sync now.
+   * The outside items it links open its details (TaskExternalLinks): its
+   * record first, each with the comments carried from it; a link whose read
+   * failed is read again from its source (the tracker's sync for the record
+   * and Linear, the GitHub poll for the rest), and the task with it.
    */
   import { commonWords } from "@cawco/core/words/common";
   import { type Snippet, untrack } from "svelte";
@@ -62,6 +64,7 @@
     changeTodo,
     flagsOf,
     linkTask,
+    pollGitHub,
     readHistory,
     readTask,
     reviewOf,
@@ -531,15 +534,6 @@
         </h2>
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
-      {#if shown && shown.links.length > 0}
-        <TaskExternalLinks
-          links={shown.links}
-          onsync={async () => {
-            await syncTracker(projectId);
-            await read(taskId);
-          }}
-        />
-      {/if}
       {#if decided}
         <p data-slot="decided" class="m-0 type-meta text-ink-muted">
           Decided on <a class="text-link-ink" href={decided.href}
@@ -624,6 +618,22 @@
           <Alert variant="warning">
             <AlertDescription>{shown.problems.join(" ")}</AlertDescription>
           </Alert>
+        {/if}
+
+        {#if shown.links.length > 0}
+          <!-- Out by the rows' own inset, so their words stand on the pane's column and a row's hover fills the pane's inset. -->
+          <div class="-mx-space-2">
+            <TaskExternalLinks
+              comments={shown.comments}
+              links={shown.links}
+              onretry={async (each) => {
+                await (each.mode === "record" || each.source === "linear"
+                  ? syncTracker(projectId)
+                  : pollGitHub(projectId));
+                await read(taskId);
+              }}
+            />
+          </div>
         {/if}
 
         <TextSection

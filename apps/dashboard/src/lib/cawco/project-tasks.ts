@@ -312,6 +312,15 @@ export const setTracker = (
 export const syncTracker = (projectId: string): Promise<TrackerView> =>
   send(`${base(projectId)}/tracker/sync`, { method: "POST" });
 
+/**
+ * The project's GitHub poll run now (the hub's ingress.ts `pollGitHubNow`):
+ * among what it reads are the GitHub links due a read, a link whose last
+ * read failed among them.
+ */
+export const pollGitHub = async (projectId: string): Promise<void> => {
+  await send(`${base(projectId)}/ingress/github/poll`, { method: "POST" });
+};
+
 /** The repositories or teams a connection reaches, for a project to be bound to one. */
 export const trackerTargets = (
   connection: string

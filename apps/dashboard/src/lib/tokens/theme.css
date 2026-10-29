@@ -1098,6 +1098,11 @@
   font: var(--type-body);
 }
 
+@utility type-row {
+  --tw-sort: vertical-align;
+  font: var(--type-row);
+}
+
 @utility type-prose {
   --tw-sort: vertical-align;
   font: var(--type-prose);
@@ -1139,6 +1144,10 @@
 
 @utility text-size-body {
   font-size: var(--text-body);
+}
+
+@utility text-size-row {
+  font-size: var(--text-row);
 }
 
 @utility text-size-code {

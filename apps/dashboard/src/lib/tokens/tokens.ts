@@ -252,6 +252,7 @@ export type TokenSize =
   | "type.text-meta"
   | "type.text-label"
   | "type.text-body"
+  | "type.text-row"
   | "type.text-code"
   | "type.text-title"
   | "type.text-kpi"

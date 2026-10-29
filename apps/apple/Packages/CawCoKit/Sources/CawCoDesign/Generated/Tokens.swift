@@ -413,6 +413,8 @@ public enum TypeScale {
     public static let textMeta: Double = 12
     public static let textLabel: Double = 13
     public static let textBody: Double = 14
+    /// A list row's title where the row is a thing to read, not a name to scan: a task's linked items. Between body and title.
+    public static let textRow: Double = 16
     /// Code runs a step under body: JetBrains Mono sets large.
     public static let textCode: Double = 12
     /// Fluid on the web (clamp); its bounds in points.
@@ -473,6 +475,7 @@ public enum TypeScale {
     public static let typeMeta = TypeRole(weight: .regular, size: 12...12, leading: 1.35, family: FontFamily.fontBody)
     public static let typeLabel = TypeRole(weight: .medium, size: 13...13, leading: 1.3, family: FontFamily.fontBody)
     public static let typeBody = TypeRole(weight: .regular, size: 14...14, leading: 1.45, family: FontFamily.fontBody)
+    public static let typeRow = TypeRole(weight: .medium, size: 16...16, leading: 1.3, family: FontFamily.fontBody)
     public static let typeProse = TypeRole(weight: .regular, size: 14...14, leading: 1.55, family: FontFamily.fontBody)
     public static let typeButton = TypeRole(weight: .medium, size: 14...14, leading: 1, family: FontFamily.fontBody)
     /// Set with its tracking: the web's `text-title` utility carries it (app.css @theme, `--text-title--letter-spacing`), and the native role carries the same token.

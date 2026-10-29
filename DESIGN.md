@@ -618,6 +618,7 @@ Live, done and fail chips are the hue's 3-step mixed 24% toward its 9-step, with
 - **Meta** (400, 12px, 1.35): timestamps, counts, units, hints, table data on the board, toast meta.
 - **Label** (500, 13px, 1.3): names, group headings, badges, chips, small buttons, menu items, segment labels.
 - **Body** (400, 14px, 1.45): sentences, descriptions, alert text, prose. Running text measures 60 to 72ch.
+- **Row** (500, 16px, 1.3): the title of a row that is a thing to read, not a name to scan: a task's linked items (TaskExternalLinks). Its facts line under it is label size at 400.
 - **Button** (500, 14px, 1, −0.01em): the default 36px button.
 - **Prose** (400, 14px, 1.55): transcript prose and rendered markdown.
 - **Title** (500, 18→20px, 1.25, −0.01em): page titles, dialog titles, empty-state titles. It scales with the viewport between 390px and 1024px.

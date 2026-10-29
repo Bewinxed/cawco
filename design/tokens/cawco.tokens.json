@@ -3553,6 +3553,14 @@
         "unit": "rem"
       }
     },
+    "text-row": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "rem"
+      },
+      "$description": "A list row's title where the row is a thing to read, not a name to scan: a task's linked items. Between body and title."
+    },
     "text-code": {
       "$type": "dimension",
       "$value": {
@@ -3794,6 +3802,19 @@
           "unit": "px"
         },
         "lineHeight": 1.45
+      }
+    },
+    "type-row": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": "{type.text-row}",
+        "fontWeight": 500,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1.3
       }
     },
     "type-prose": {
