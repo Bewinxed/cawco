@@ -11,8 +11,10 @@ import {
   FLEET_ACK_MS,
   type FleetItemStatus,
   type FleetSyncReport,
+  fleetFaultWords,
+  isHarnessConfigKind,
 } from "@cawco/core";
-import { type ProjectPart, projectItemOf } from "@cawco/core/fleet-items";
+import { itemKind, projectItemOf } from "@cawco/core/fleet-items";
 import { unhandled } from "@cawco/core/unhandled";
 
 /** Whether a machine's own reported build is level with the hub's. */
@@ -139,31 +141,34 @@ export function syncNotice(
   }
 }
 
-/** A project row's part in words, before its key. */
-const PROJECT_PART_WORDS: Record<Exclude<ProjectPart, "checkout">, string> = {
-  skill: "skill",
-  mcp: "MCP server",
-  memory: "memory document",
-  hook: "hook",
-  harnessConfig: "setting",
-};
+/** A harness config row's key, `<kind>:<name>` and a placed copy's `@<place id>`, in words. */
+function harnessConfigWords(key: string): string {
+  const colon = key.indexOf(":");
+  const kind = key.slice(0, colon);
+  const at = key.indexOf("@", colon);
+  const name = key.slice(colon + 1, at < 0 ? undefined : at);
+  return colon > 0 && isHarnessConfigKind(kind)
+    ? fleetFaultWords.harnessConfigRow(kind, name)
+    : key;
+}
 
-/** What a fleet item is, in words: "MCP server chrome-devtools", "skill show", "the memory". */
+/**
+ * What a fleet item is, in words: "MCP server chrome-devtools", "skill show",
+ * "the memory". Every kind is named below, so a kind added to core's
+ * `FleetItemKind` fails the types here until it has its words.
+ */
 function itemWords(id: string): string {
-  const project = projectItemOf(id);
-  if (project) {
-    return project.part === "checkout"
-      ? "the project's checkout"
-      : `${PROJECT_PART_WORDS[project.part]} ${project.key}`;
-  }
-  const colon = id.indexOf(":");
-  const kind = colon < 0 ? id : id.slice(0, colon);
-  const key = colon < 0 ? "" : id.slice(colon + 1);
+  const kind = itemKind(id);
+  const key =
+    projectItemOf(id)?.key ??
+    (id.includes(":") ? id.slice(id.indexOf(":") + 1) : "");
   const name = key.includes("@") ? key.slice(0, key.lastIndexOf("@")) : key;
   switch (kind) {
     case "mcp":
+    case "projectMcp":
       return `MCP server ${name}`;
     case "skill":
+    case "projectSkill":
       return `skill ${name}`;
     case "marketplace":
       return `marketplace ${name}`;
@@ -173,15 +178,20 @@ function itemWords(id: string): string {
     case "memory":
       return "the memory";
     case "memoryDoc":
-      return `memory document ${name}`;
+    case "projectMemory":
+      return `memory document ${key}`;
     case "hook":
-      return `hook ${name}`;
+    case "projectHook":
+      return `hook ${key}`;
+    case "harnessConfig":
+    case "projectHarnessConfig":
+      return harnessConfigWords(key);
+    case "projectCheckout":
+      return "the project's checkout";
     case "policy":
       return "the fleet's denied tools";
     case "hubOnly":
       return "the hub-only marketplaces";
-    default:
-      return id;
   }
 }
 
