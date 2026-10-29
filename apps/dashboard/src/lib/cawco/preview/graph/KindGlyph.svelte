@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { designGraphWords as words } from "@cawco/core";
   /**
    * What a clip changes on its element (the owner's pick "Its own colour
    * per kind" on design-graph-finish; mockup round 29's six kinds): its
@@ -8,6 +7,7 @@
    * and its bar.
    */
   import type { ClipKind } from "@cawco/core/design-graph";
+  import { designGraphWords as words } from "@cawco/core/words/design-graph";
   import {
     IconClipColour,
     IconClipOpacity,

@@ -18,7 +18,7 @@
    * Rule). It tells the page the room it takes, so the component stands
    * clear of it and never moves as it folds.
    */
-  import { designGraphWords as words } from "@cawco/core";
+  import { designGraphWords as words } from "@cawco/core/words/design-graph";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
@@ -424,6 +424,21 @@
   /** A band's place on its side, in px; `auto` where the side is free. */
   const place = (value: number | undefined) =>
     value === undefined ? "auto" : `${value}px`;
+  /** A handle's box on its custom properties (its classes read them): each side, its height and width. */
+  const placed =
+    (vars: Record<string, number>) =>
+    (node: HTMLElement): void => {
+      for (const [property, side] of [
+        ["--b", "b"],
+        ["--l", "l"],
+        ["--r", "r"],
+        ["--sh", "h"],
+        ["--sw", "w"],
+        ["--t", "t"],
+      ] as const) {
+        node.style.setProperty(property, place(vars[side]));
+      }
+    };
   const SHELL_OPEN =
     "rounded-panel border-e shadow-overlay-hung pointer-events-none";
   const SHELL_FOLDED =
@@ -529,17 +544,12 @@
           "absolute z-6 top-(--t) right-(--r) bottom-(--b) left-(--l) h-(--sh) w-(--sw) touch-none",
           cursor,
         ]}
+        {@attach placed(vars)}
         data-sash={name}
         ondblclick={() => restore(which, edge)}
         onpointerdown={(event) => resizeDown(which, edge, event)}
         onpointerleave={() => reach(which, edge, null)}
         onpointermove={(event) => reach(which, edge, event)}
-        style:--b={place(vars.b)}
-        style:--l={place(vars.l)}
-        style:--r={place(vars.r)}
-        style:--sh={place(vars.h)}
-        style:--sw={place(vars.w)}
-        style:--t={place(vars.t)}
       ></div>
     {/snippet}
     {#snippet corner(
@@ -561,6 +571,7 @@
           cursor,
           RING,
         ]}
+        {@attach placed(vars)}
         data-sash={name}
         ondblclick={() => restore(which, edge)}
         onkeydown={(event) => resizeKey(which, event)}
@@ -568,12 +579,6 @@
         onpointerleave={() => reach(which, edge, null)}
         onpointermove={(event) => reach(which, edge, event)}
         role="separator"
-        style:--b={place(vars.b)}
-        style:--l={place(vars.l)}
-        style:--r={place(vars.r)}
-        style:--sh={place(vars.h)}
-        style:--sw={place(vars.w)}
-        style:--t={place(vars.t)}
         tabindex="0"
       ></div>
     {/snippet}

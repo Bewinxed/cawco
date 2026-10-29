@@ -39,7 +39,7 @@ import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
-import { interactionOf } from "@cawco/core/stage";
+import { INTERACTIONS, interactionOf } from "@cawco/core/stage";
 import {
   type Anchorable,
   anchorable,
@@ -3344,7 +3344,7 @@ function moveAskOf(said: unknown): MoveAsk | null {
 /** The most room a pane says its design graph takes from the page, in CSS px. Ours: past any screen. */
 const STAGE_ROOM_MAX = 10_000;
 /** The interactions a stage point may force (core stage.ts `Interaction`). */
-const STAGE_INTERACTIONS = new Set(["rest", "hover", "focus", "pressed"]);
+const STAGE_INTERACTIONS: ReadonlySet<unknown> = new Set(INTERACTIONS);
 /** A stage point the pane said, bounded (core design-graph.ts `StagePoint`); null when it is not one. */
 function stagePoint(
   said: unknown
