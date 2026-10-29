@@ -17,9 +17,14 @@
  * continuation, a restore, a fork, a wait's end, a pause, a leak, an
  * undelivered send, a fleet rule) moves nothing; anything else is outside.
  *
- * Kept in memory, as the lead's wakes were: a hub that restarts finds every
- * turn its principal's until the next outside read. A machine that connects
- * again is told every outside turn of its sessions ({@link resend}).
+ * Kept in memory. What a turn read goes with a hub restart, so the rule
+ * fails closed (core `restartedTurn`): as each machine first connects to a
+ * hub that has just started, every one of its sessions with a turn under
+ * way (its row's open turn, db `turnOpenAt`, which outlives the hub) and
+ * none this hub has seen is outside until that turn ends. A machine that
+ * connects again is told every outside turn of its sessions
+ * ({@link connected}). Kept in memory rather than in a table: the open turn
+ * is already durable, and it is all a restart needs to know.
  */
 import {
   ARTIFACT_ORIGIN,
@@ -31,6 +36,7 @@ import {
   PLAN_ORIGIN,
   PRINCIPALS_TURN,
   parseReportMarker,
+  restartedTurn,
   type SendFrom,
   type Turn,
   type TurnEvent,
@@ -201,6 +207,8 @@ export const createTurnProvenance = ({
   const turns = new Map<string, { machineId: string; turn: Turn }>();
   /** What each send the hub woke a project's Caw with was, by its uuid (caw.ts `wake`). */
   const wakes = new Map<string, WakeSource>();
+  /** The machines that have connected since this hub started: a later connect is a machine's, not the hub's, restart. */
+  const met = new Set<string>();
 
   /** `session`'s turn after `event`, its machine told when whether it is outside changed. */
   const move = (
@@ -310,8 +318,25 @@ export const createTurnProvenance = ({
       turns.delete(instanceId);
     },
 
-    /** A machine connected again: each of its sessions whose turn is outside is told so, as it forgot. */
-    resend(machineId: string): void {
+    /**
+     * A machine connected (server.ts register), `underWay` its live sessions
+     * whose row has a turn open. Its first connect to this hub: each of
+     * those this hub has not seen is outside until its turn ends, as what it
+     * read went with the restart. Then each of its sessions whose turn is
+     * outside is told so, as the machine may have forgotten.
+     */
+    connected(machineId: string, underWay: readonly string[]): void {
+      if (!met.has(machineId)) {
+        met.add(machineId);
+        for (const id of underWay) {
+          if (!turns.has(id)) {
+            turns.set(id, { machineId, turn: restartedTurn(true) });
+            console.log(
+              `[turn-provenance] ${id}: its turn was under way across the hub's restart; outside until it ends`
+            );
+          }
+        }
+      }
       for (const [id, held] of turns) {
         if (held.machineId === machineId && held.turn.outside !== null) {
           tell({ id, machineId }, held.turn.outside);

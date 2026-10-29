@@ -15,6 +15,8 @@
  *   person, whatever the mode would have done, with one clause saying why.
  *   Plan mode keeps its own word: it writes nothing anyway.
  * - It returns to its principal's when the turn ends.
+ * - A hub restart forgets what a turn read, so a turn under way across one
+ *   is outside until it ends ({@link restartedTurn}): the rule fails closed.
  *
  * {@link turnStep} is the state machine and {@link turnCall} the decision,
  * both pure; the hub keeps one {@link Turn} per session (hub
@@ -111,6 +113,18 @@ export const turnStep = (turn: Turn, event: TurnEvent): Turn => {
       return PRINCIPALS_TURN;
   }
 };
+
+/**
+ * A turn as a hub that has just restarted finds it. What a turn read lives
+ * in the hub's memory and goes with a restart, so one that was under way
+ * across it (its row's open turn, hub db `turnOpenAt`, which outlives the
+ * hub) is outside until it ends: not knowing what it read never makes it
+ * its principal's. Any other is its principal's.
+ */
+export const restartedTurn = (underWay: boolean): Turn =>
+  underWay
+    ? { begun: true, outside: turnProvenanceWords.restarted, reading: {} }
+    : PRINCIPALS_TURN;
 
 /** What provenance makes of one call: its mode decides, or it asks the person, saying why. */
 export type TurnCall = { kind: "mode" } | { kind: "ask"; why: string };

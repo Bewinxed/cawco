@@ -11,6 +11,8 @@ export const turnProvenanceWords = {
   /** What an outside send did to the turn: it began it, or came into it. */
   startedBy: (what: string) => `this turn was started by ${what}`,
   read: (what: string) => `this turn read ${what}`,
+  /** A turn under way when the hub restarted: what it read is not known. */
+  restarted: "this turn was under way when the hub restarted",
   /** A web read whose result came back into the turn. */
   readWeb: (what: string) => `this turn went on after reading ${what}`,
 

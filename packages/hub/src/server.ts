@@ -3987,7 +3987,7 @@ export const createServer = (
     tell: (session, outside) => {
       const agent = registry.agent(session.machineId);
       if (!agent) {
-        // Told again when the machine connects (`resend`).
+        // Told again when the machine connects (`connected`).
         return;
       }
       const requestId = crypto.randomUUID();
@@ -35575,8 +35575,16 @@ export const createServer = (
               // Behind its ack, which it waits for to take requests: what
               // was held for it while it was away goes again.
               resendHeld(message.machineId);
-              // Each outside turn of its sessions, which it forgot.
-              turnProvenance.resend(message.machineId);
+              // Each outside turn of its sessions, which it may have
+              // forgotten; on its first connect to this hub, each turn
+              // under way across the restart is outside until it ends.
+              turnProvenance.connected(
+                message.machineId,
+                db
+                  .ownedByIds(message.machineId, peekInstances(message.payload))
+                  .filter((row) => row.turnOpenAt !== null)
+                  .map((row) => row.id)
+              );
               handAgain(message.machineId, peekInstances(message.payload));
               for (const row of toEnd) {
                 endSession(row.id, "stop", {

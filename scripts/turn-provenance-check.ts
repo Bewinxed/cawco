@@ -5,8 +5,9 @@
  * every schedule of up to {@link MAX_EVENTS} events of one session's turns:
  * a send from its principal, from CawCo, from two outside senders; two web
  * calls and their results, and a result of a call that read nothing; the
- * turn's end. After every step, for every permission mode and every kind of
- * call, the laws:
+ * turn's end; and a hub restart, which forgets every turn but the hub's
+ * durable word on whether one is under way (`restartedTurn`). After every
+ * step, for every permission mode and every kind of call, the laws:
  *
  * - Law A: a turn is its principal's exactly while, since its last end, it
  *   has read no outside send and no result of a web call it made.
@@ -16,9 +17,12 @@
  * - Law C: an ask's reason is one clause naming the first outside thing the
  *   turn read: "started by" when it began the turn, "read" when it came
  *   into one, "went on after reading" for a web result.
+ * - Law D: a hub restart never turns an outside turn back into its
+ *   principal's: a turn under way across one is outside, saying so, until
+ *   it ends; one between turns starts its principal's.
  *
  * Then every named mutant (a break the rule could have, as a change to
- * `turnStep` or `turnCall`) must fail it, as scripts/protocol-sweep.ts
+ * `turnStep`, `turnCall` or `restartedTurn`) must fail it, as scripts/protocol-sweep.ts
  * holds the handover reducer.
  *
  * Run by `bun run check` (scripts/check.ts); it fails on any law broken or
@@ -28,6 +32,7 @@ import { WIRE_PERMISSION_MODES } from "../packages/core/src/harness";
 import {
   PRINCIPALS_TURN,
   type ProvenanceKind,
+  restartedTurn,
   type Turn,
   type TurnCall,
   type TurnEvent,
@@ -43,8 +48,11 @@ const RETRO = turnProvenanceWords.report("Retro");
 const ROUTINE = turnProvenanceWords.routine;
 const PAGE = "https://example.com/page";
 
+/** What a schedule sweeps: the turn's own events, and a hub restart. */
+type SweptEvent = TurnEvent | { kind: "restart" };
+
 /** Every event a schedule may take next. */
-const EVENTS: readonly TurnEvent[] = [
+const EVENTS: readonly SweptEvent[] = [
   { kind: "send", from: { kind: "principal" } },
   { kind: "send", from: { kind: "cawco" } },
   { kind: "send", from: { kind: "outside", what: RETRO } },
@@ -55,10 +63,12 @@ const EVENTS: readonly TurnEvent[] = [
   { kind: "result", id: "w2" },
   { kind: "result", id: "read-only" },
   { kind: "ended" },
+  { kind: "restart" },
 ];
 
 type Step = (turn: Turn, event: TurnEvent) => Turn;
 type Call = typeof turnCall;
+type Restart = typeof restartedTurn;
 
 /**
  * The reference the laws read: what the events since the turn's last end
@@ -69,16 +79,34 @@ interface Reference {
   begun: boolean;
   calls: Record<string, string>;
   clause: string | null;
+  /** The hub's durable word that the turn is under way (db `turnOpenAt`): it began, and has not ended. */
+  underWay: boolean;
 }
 
-const FRESH: Reference = { begun: false, calls: {}, clause: null };
+const FRESH: Reference = {
+  begun: false,
+  calls: {},
+  clause: null,
+  underWay: false,
+};
 
 /** The reference after `event`, by the laws' own reading. */
-const expect = (ref: Reference, event: TurnEvent): Reference => {
+const expect = (ref: Reference, event: SweptEvent): Reference => {
   switch (event.kind) {
+    case "restart":
+      // All the hub kept is whether the turn is under way.
+      return ref.underWay
+        ? {
+            begun: true,
+            calls: {},
+            clause: turnProvenanceWords.restarted,
+            underWay: true,
+          }
+        : FRESH;
     case "send":
       return {
         ...ref,
+        underWay: true,
         begun: true,
         clause:
           ref.clause ??
@@ -89,12 +117,20 @@ const expect = (ref: Reference, event: TurnEvent): Reference => {
             : null),
       };
     case "web-call":
-      return { ...ref, calls: { ...ref.calls, [event.id]: event.what } };
+      return {
+        ...ref,
+        underWay: true,
+        calls: { ...ref.calls, [event.id]: event.what },
+      };
     case "result": {
       const what = ref.calls[event.id];
       return what === undefined
-        ? ref
-        : { ...ref, clause: ref.clause ?? turnProvenanceWords.readWeb(what) };
+        ? { ...ref, underWay: true }
+        : {
+            ...ref,
+            underWay: true,
+            clause: ref.clause ?? turnProvenanceWords.readWeb(what),
+          };
     }
     case "ended":
       return FRESH;
@@ -131,26 +167,45 @@ const broken = (turn: Turn, ref: Reference, call: Call): string | undefined => {
   return undefined;
 };
 
+/** Law D, read across one step: a restart never turns an outside turn into its principal's. */
+const restartLaw = (
+  before: Turn,
+  after: Turn,
+  event: SweptEvent
+): string | undefined =>
+  event.kind === "restart" && before.outside !== null && after.outside === null
+    ? "Law D: a hub restart turned an outside turn back into its principal's"
+    : undefined;
+
 /**
  * Every schedule of up to {@link MAX_EVENTS} events, breadth-first, a state
  * reached twice expanded once (the laws read the state as it stands): the
  * first broken law with its schedule, and how many states it saw.
  */
-const sweep = (step: Step, call: Call): { law?: string; states: number } => {
+const sweep = (
+  step: Step,
+  call: Call,
+  restart: Restart
+): { law?: string; states: number } => {
   const seen = new Set<string>();
   let frontier = [
-    { turn: PRINCIPALS_TURN, ref: FRESH, schedule: [] as TurnEvent[] },
+    { turn: PRINCIPALS_TURN, ref: FRESH, schedule: [] as SweptEvent[] },
   ];
   for (let depth = 0; depth < MAX_EVENTS; depth += 1) {
     const next: typeof frontier = [];
     for (const { turn, ref, schedule } of frontier) {
       for (const event of EVENTS) {
         const node = {
-          turn: step(turn, event),
+          turn:
+            event.kind === "restart"
+              ? restart(ref.underWay)
+              : step(turn, event),
           ref: expect(ref, event),
           schedule: [...schedule, event],
         };
-        const law = broken(node.turn, node.ref, call);
+        const law =
+          restartLaw(turn, node.turn, event) ??
+          broken(node.turn, node.ref, call);
         if (law) {
           return {
             law: `${law}\n    schedule: ${node.schedule.map((each) => JSON.stringify(each)).join(" → ")}`,
@@ -169,8 +224,13 @@ const sweep = (step: Step, call: Call): { law?: string; states: number } => {
   return { states: seen.size };
 };
 
-/** Breaks the rule could have, each as a change to the step or the call. */
-const MUTANTS: { name: string; step?: Step; call?: Call }[] = [
+/** Breaks the rule could have, each as a change to the step, the call or the restart. */
+const MUTANTS: {
+  name: string;
+  step?: Step;
+  call?: Call;
+  restart?: Restart;
+}[] = [
   {
     name: "ignore a web read's result",
     step: (turn, event) =>
@@ -218,6 +278,10 @@ const MUTANTS: { name: string; step?: Step; call?: Call }[] = [
       mode === "fullSend" ? { kind: "mode" } : turnCall(outside, mode, kind),
   },
   {
+    name: "forget a turn's provenance on a hub restart",
+    restart: () => PRINCIPALS_TURN,
+  },
+  {
     name: "ask in plan mode",
     call: (outside, mode, kind) =>
       mode === "plan" && outside !== null && kind !== "other"
@@ -227,14 +291,18 @@ const MUTANTS: { name: string; step?: Step; call?: Call }[] = [
 ];
 
 const started = performance.now();
-const real = sweep(turnStep, turnCall);
+const real = sweep(turnStep, turnCall, restartedTurn);
 if (real.law) {
   console.error(`turn-provenance: ${real.law}`);
   process.exit(1);
 }
 const survived: string[] = [];
 for (const mutant of MUTANTS) {
-  const { law } = sweep(mutant.step ?? turnStep, mutant.call ?? turnCall);
+  const { law } = sweep(
+    mutant.step ?? turnStep,
+    mutant.call ?? turnCall,
+    mutant.restart ?? restartedTurn
+  );
   if (law) {
     console.log(`  mutant "${mutant.name}": caught: ${law.split("\n")[0]}`);
   } else {
@@ -248,5 +316,5 @@ if (survived.length > 0) {
   process.exit(1);
 }
 console.log(
-  `turn-provenance: every schedule of up to ${MAX_EVENTS} events (${real.states} states) holds laws A–C in ${WIRE_PERMISSION_MODES.length} modes; ${MUTANTS.length} of ${MUTANTS.length} mutants caught (${Math.round(performance.now() - started)} ms)`
+  `turn-provenance: every schedule of up to ${MAX_EVENTS} events (${real.states} states) holds laws A–D in ${WIRE_PERMISSION_MODES.length} modes; ${MUTANTS.length} of ${MUTANTS.length} mutants caught (${Math.round(performance.now() - started)} ms)`
 );
