@@ -52,12 +52,11 @@ root = Decisions("Price the hosted plan", [shape, trial])
 shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.")
 seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.", true, "Nothing: today's billing.")
 machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.", false, "A machine count in billing and a new price page.")
-trial = Decision("trial", "How long is the trial?", [week, month], "A month covers a whole project.", [path], ["shape"])
+trial = Decision("trial", "How long is the trial?", [week, month], "A month covers a whole project.", [], ["shape"])
 week = Option("week", "A week", "People decide fast.", false, [], "Too short to finish a real project.")
 month = Option("month", "A month", "Thirty days, then pay.", true, [], "Revenue starts a month later.")
-path = Diagram("flowchart LR\nSign up --> Trial --> Pay", "Where a trial leads")
 
-trial = Decision("trial", "How long is the free trial?", [week, month, quarter], "A month covers a whole project.", [path], ["shape"])
+trial = Decision("trial", "How long is the free trial?", [week, month, quarter], "A month covers a whole project.", [], ["shape"])
 quarter = Option("quarter", "A quarter", "Time for a team to settle in.", false, [], "A season of hosting unpaid.")
 
 
