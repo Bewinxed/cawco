@@ -1,10 +1,9 @@
+import type { Deleted, FleetItemState } from "@cawco/core/fleet";
 import type {
-  Deleted,
   FleetHook,
-  FleetItemState,
   HookDraft,
   HookVersion as KeptHookVersion,
-} from "@cawco/core";
+} from "@cawco/core/hooks";
 import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
 import type { Machine } from "./client.svelte";
 
@@ -20,7 +19,7 @@ import type { Machine } from "./client.svelte";
  * `fetch` wrappers rather than the socket.
  */
 
-export type { FleetHook, HookDraft } from "@cawco/core";
+export type { FleetHook, HookDraft } from "@cawco/core/hooks";
 /** One superseded version of a hook as `GET /api/fleet/hooks/history` sends it: core's, its `createdAt` the ISO string. */
 export type HookVersion = Omit<KeptHookVersion, "createdAt"> & {
   createdAt: string;

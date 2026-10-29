@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { ViewTask } from "@cawco/core";
+  import type { ViewTask } from "@cawco/core/views";
 
   /** A task's own dates, the ones the hub keeps for every task left out. */
   const DAY_ONLY = /^\d{4}-\d{2}-\d{2}$/u;

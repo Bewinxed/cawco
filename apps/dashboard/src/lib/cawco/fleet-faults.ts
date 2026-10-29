@@ -30,10 +30,10 @@ import {
   type FleetReportSection,
   type FleetSkillMeta,
   type FleetSyncReport,
-  fleetFaultWords,
-  type HarnessKind,
-  isHarnessConfigKind,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
+import type { HarnessKind } from "@cawco/core/harness";
+import { isHarnessConfigKind } from "@cawco/core/harness-config";
+import { fleetFaultWords } from "@cawco/core/words/fleet-faults";
 
 /**
  * What a cause means and what to do about it, in the operator's language.

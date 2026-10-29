@@ -11,7 +11,7 @@
    * - a project file's path (`title`), the longest, beside icon actions.
    * The probe reads every word and the ring of the name against every action.
    */
-  import { planWords } from "@cawco/core";
+  import { planWords } from "@cawco/core/words/plan";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Button } from "#lib/components/ui/button/index.js";

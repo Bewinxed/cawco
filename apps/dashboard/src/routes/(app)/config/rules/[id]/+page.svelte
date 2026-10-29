@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import RuleEditor from "#lib/cawco/config/editors/RuleEditor.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";

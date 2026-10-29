@@ -13,7 +13,7 @@
  * A setup that has not made its account yet keys its flows by `new:…`, and
  * hands them to the account's key once it is made (`adoptFlows`).
  */
-import type { PendingAccountSignin } from "@cawco/core";
+import type { PendingAccountSignin } from "@cawco/core/accounts";
 import { SvelteMap } from "svelte/reactivity";
 import { cawco, takeAccounts } from "../client.svelte";
 import { DeviceFlow } from "./device.svelte";

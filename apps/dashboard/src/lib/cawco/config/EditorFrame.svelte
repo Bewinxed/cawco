@@ -16,7 +16,7 @@
    * its place to them in its reveal (motion/curves `reveal`), in their final
    * places.
    */
-  import { configureWords } from "@cawco/core";
+  import { configureWords } from "@cawco/core/words/configure";
   import { onMount, type Snippet, untrack } from "svelte";
   import {
     CURVE,

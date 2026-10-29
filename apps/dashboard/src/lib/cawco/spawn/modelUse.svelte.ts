@@ -1,5 +1,5 @@
 /** biome-ignore-all lint/style/useFilenamingConvention: the spec fixes this public module name. */
-import type { HarnessKind } from "@cawco/core";
+import type { HarnessKind } from "@cawco/core/harness";
 import { z } from "zod";
 import { HarnessKindSchema, ModelUseSchema } from "#lib/cawco/stored-shapes.js";
 import { MODEL_STORAGE_PREFIX } from "../models.svelte";

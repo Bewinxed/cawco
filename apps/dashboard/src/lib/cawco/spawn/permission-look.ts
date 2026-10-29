@@ -1,4 +1,4 @@
-import type { HarnessKind, PermissionMode } from "@cawco/core";
+import type { HarnessKind, PermissionMode } from "@cawco/core/harness";
 import type { Component } from "svelte";
 import {
   IconWarningTriangle as Danger,

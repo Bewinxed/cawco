@@ -11,15 +11,15 @@
  * the hub refuses (ARTIFACT_SESSION_REFUSED: the device is not paired, the
  * artifact is gone) is opened no more, and the tab says the hub's reason.
  */
+
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { ListedBrowser } from "@cawco/core/browser";
 import {
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
   type ArtifactSessionFrame,
-  type FsEntry,
-  type FsPayload,
-} from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { ListedBrowser } from "@cawco/core/browser";
+} from "@cawco/core/frames";
+import type { FsEntry, FsPayload } from "@cawco/core/protocol";
 import { ArtifactSessionHeardSchema } from "#lib/cawco/stored-shapes.js";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";

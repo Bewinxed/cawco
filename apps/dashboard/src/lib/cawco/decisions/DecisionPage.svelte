@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { StageKind } from "@cawco/core";
+  import type {
+    DecisionPageRead,
+    DecisionPageSummary,
+  } from "@cawco/core/decisions";
+  import type { StageKind } from "@cawco/core/views";
   /**
    * A decision page opened in the Decisions tab's pane (Open Page Rule: in
    * place, nothing modal). Its bar is one row with no ground of its own
@@ -17,11 +21,7 @@
    * optional next step, until its tasks are filed; then none. A refusal
    * stays the page as it was and says why in the composer's line.
    */
-  import { decisionsWords as words } from "@cawco/core";
-  import type {
-    DecisionPageRead,
-    DecisionPageSummary,
-  } from "@cawco/core/decisions";
+  import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";

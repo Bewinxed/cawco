@@ -3,7 +3,7 @@ import {
   CONFIG_SECTIONS,
   type ConfigSectionDefinition,
   type ConfigSlug,
-} from "@cawco/core";
+} from "@cawco/core/words/configure";
 import type { Component } from "svelte";
 import {
   IconAccounts,

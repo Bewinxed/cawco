@@ -1,5 +1,7 @@
 <script lang="ts">
-  import type { Account, AccountHue } from "@cawco/core";
+  import type { Account, AccountHue } from "@cawco/core/accounts";
+  import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+  import { machineLabel } from "@cawco/core/machine-names";
   /**
    * CAW'S NOTICES BENCH (dev only) — the real CawPanel in the real popover
    * shell (a HangCard on the top bar's own glass, as NeedsCaw hangs it),
@@ -11,8 +13,7 @@
    * viewport is a phone's, so the panel's own phone rules apply. Every
    * switch is in the URL, so a script opens any state directly.
    */
-  import { cawHeadWords, machineLabel } from "@cawco/core";
-  import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+  import { cawHeadWords } from "@cawco/core/words/caw-head";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
   import { barGlass, glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
   import CawPanel from "#lib/cawco/home/CawPanel.svelte";

@@ -11,7 +11,7 @@
    * brings it back with Unarchive, and a new message in it brings it back
    * on its own.
    */
-  import { threadWords } from "@cawco/core";
+  import { threadWords } from "@cawco/core/words/threads";
   import type { Snippet } from "svelte";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { IconArchive, IconExternal, IconUnarchive } from "#lib/icons.js";

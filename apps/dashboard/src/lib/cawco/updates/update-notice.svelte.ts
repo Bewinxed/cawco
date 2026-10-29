@@ -10,8 +10,9 @@
  * and device, and a reload never brings it back. Nothing else acknowledges a
  * landing: not a reload for the new build, not a page viewed.
  */
-import { machineLabel } from "@cawco/core";
+
 import { detach } from "@cawco/core/detach";
+import { machineLabel } from "@cawco/core/machine-names";
 import { cawco } from "../client.svelte";
 import { notices } from "../notices.svelte";
 import { newerBuild } from "../served-build.svelte";

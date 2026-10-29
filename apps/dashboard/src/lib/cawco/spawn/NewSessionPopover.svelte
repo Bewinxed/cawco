@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * The New Session form on a desk: a popover hanging from the trigger
    * pressed (the rail's Start session, the session strip's "+", a project's

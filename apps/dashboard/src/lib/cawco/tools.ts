@@ -3,8 +3,9 @@
  * table over REST, and per-machine installs over the app socket. Nothing here
  * knows a tool by name — the catalog is data the hub hands over.
  */
-import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core";
+
 import type { Bounded } from "@cawco/core/bounded";
+import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { machineControl } from "./client.svelte";
 

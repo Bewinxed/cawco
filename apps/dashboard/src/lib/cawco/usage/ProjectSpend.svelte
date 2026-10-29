@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CapPeriod, OnCap, ProjectSpend } from "@cawco/core";
+  import type { CapPeriod, OnCap, ProjectSpend } from "@cawco/core/threads";
   import {
     cawco,
     projectSpend,

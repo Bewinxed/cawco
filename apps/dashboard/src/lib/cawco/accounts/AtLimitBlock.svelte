@@ -8,7 +8,8 @@
    * the terms. Under them, on or off, how long past its reset a stopped
    * session is still carried on by itself (core `AtLimit.staleAfterHours`).
    */
-  import { type Account, type AtLimit, accountsWords } from "@cawco/core";
+  import type { Account, AtLimit } from "@cawco/core/accounts";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";

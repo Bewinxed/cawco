@@ -35,11 +35,11 @@
    */
   import {
     artifactName,
-    commonWords,
     deliverableKind,
     type ResultArtifact,
-    taskReviewWords as words,
-  } from "@cawco/core";
+  } from "@cawco/core/deliverables";
+  import { commonWords } from "@cawco/core/words/common";
+  import { taskReviewWords as words } from "@cawco/core/words/task-review";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

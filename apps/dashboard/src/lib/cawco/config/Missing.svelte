@@ -1,6 +1,6 @@
 <script lang="ts">
   /** What an editor URL shows when the row it names is not in the list. */
-  import { configureWords as words } from "@cawco/core";
+  import { configureWords as words } from "@cawco/core/words/configure";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import SectionFrame from "./SectionFrame.svelte";

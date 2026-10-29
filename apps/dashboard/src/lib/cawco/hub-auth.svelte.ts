@@ -21,7 +21,7 @@ import type {
   PairingRequest,
   PairingStart,
   WaitingMachine,
-} from "@cawco/core";
+} from "@cawco/core/hub-auth";
 import { KeptPairingSchema } from "#lib/cawco/stored-shapes.js";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { failureWords, hubRefusal } from "./hub-read";

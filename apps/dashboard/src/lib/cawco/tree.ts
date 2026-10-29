@@ -19,7 +19,8 @@
  * a parent turning from context to a listed row, or back, keeps its place.
  */
 
-import { type MemberTreeRow, type SessionOrigin, topsIn } from "@cawco/core";
+import { type MemberTreeRow, topsIn } from "@cawco/core/project-membership";
+import type { SessionOrigin } from "@cawco/core/protocol";
 import { isThreadTab } from "./thread-tabs";
 
 export type TreeRow = MemberTreeRow;

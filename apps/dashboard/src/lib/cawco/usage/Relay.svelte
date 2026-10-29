@@ -14,7 +14,7 @@
    * band arriving fades in (--dur-fade), one leaving fades out (--dur-exit).
    * The minute moving on re-lays them in place. Reduced motion: at once.
    */
-  import type { CarrySpan } from "@cawco/core";
+  import type { CarrySpan } from "@cawco/core/accounts";
   import { fade } from "svelte/transition";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { dur, easeOut, motionOk } from "../motion/curves.svelte";

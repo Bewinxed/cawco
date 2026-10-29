@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Pin, ThreadEntry } from "@cawco/core/comments";
   /**
    * PIN WORKING BENCH — a comment's thread (the real PinCard in the real
    * PinFloat, as the artifact panel stands it beside its pill) while the
@@ -11,8 +12,7 @@
    * and `show` close and open the card again, so the probe reads it grow
    * out of its pill and rise to stand whole.
    */
-  import { accountsWords } from "@cawco/core";
-  import type { Pin, ThreadEntry } from "@cawco/core/comments";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";

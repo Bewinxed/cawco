@@ -1,13 +1,13 @@
 <script lang="ts">
-  import type { HookDraft, HookEvent, HookHandler } from "@cawco/core";
+  import type { HookDraft, HookEvent, HookHandler } from "@cawco/core/hooks";
   import {
     HOOK_EVENTS,
     hookEventInfo,
     hookProblem,
     hookSentence,
     hookTakesMatcher,
-    machineLabel,
-  } from "@cawco/core";
+  } from "@cawco/core/hooks";
+  import { machineLabel } from "@cawco/core/machine-names";
   import { untrack } from "svelte";
   import {
     appear,

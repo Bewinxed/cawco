@@ -1,4 +1,9 @@
 <script lang="ts">
+  import {
+    DRAFT_LIMITS,
+    type InstallRoute,
+    type InstallSignIn,
+  } from "@cawco/core/install";
   /**
    * Reach: the window's details for a machine not yet added, under the two
    * ways in as tabs (Over SSH, By a command), the one the entry point
@@ -21,13 +26,8 @@
    * A tab switches in place: the panes cross-fade inside the window's
    * resize, and what was typed in each stays (the draft is the hub's).
    */
-  import {
-    commonWords,
-    connectWords,
-    DRAFT_LIMITS,
-    type InstallRoute,
-    type InstallSignIn,
-  } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
+  import { connectWords } from "@cawco/core/words/connect";
   import { flushSync } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import {

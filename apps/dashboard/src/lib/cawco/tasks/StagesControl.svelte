@@ -10,8 +10,8 @@
    * It is asked for from the project head's ⋯ (Pick stages…), and opens
    * from the control that asked (`anchor`).
    */
-  import type { StagesTemplate } from "@cawco/core";
-  import { projectWords } from "@cawco/core";
+  import type { StagesTemplate } from "@cawco/core/views";
+  import { projectWords } from "@cawco/core/words/project";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { afterSkeleton, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import {

@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { userLayerLabel } from "@cawco/core/claude-dirs";
+  import { detach } from "@cawco/core/detach";
   import {
     agentProblem,
-    commonWords,
     type FleetAgent,
     parseAgentFrontMatter,
-    userLayerLabel,
-  } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  } from "@cawco/core/fleet";
+  import { commonWords } from "@cawco/core/words/common";
   import { untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";

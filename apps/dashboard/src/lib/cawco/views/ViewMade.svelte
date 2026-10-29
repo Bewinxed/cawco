@@ -7,7 +7,7 @@
    * an image's thumbnail). One press opens the task, where each is drawn
    * whole.
    */
-  import { madeWords } from "@cawco/core";
+  import { madeWords } from "@cawco/core/words/made";
   import { IconNeedsYou } from "#lib/icons.js";
   import { stageLabel, type TaskSummary } from "../project-tasks";
   import TaskOutput from "../tasks/TaskOutput.svelte";

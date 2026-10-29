@@ -15,12 +15,13 @@
  * opened (hub `shown`). A preview or a component has no address of its own
  * and runs a server to be drawn, so it is drawn by the pane alone.
  */
+
 import {
-  type ArtifactSummary,
+  PICTURE_VIEW,
   PREVIEW_LOCKED_MESSAGE,
   projectPagePlace,
-} from "@cawco/core";
-import { PICTURE_VIEW } from "@cawco/core/frames";
+} from "@cawco/core/frames";
+import type { ArtifactSummary } from "@cawco/core/protocol";
 import { theme } from "#lib/theme.svelte.js";
 import { keepThumbnail } from "../artifact-api";
 import { pageSource } from "../preview/page-source";

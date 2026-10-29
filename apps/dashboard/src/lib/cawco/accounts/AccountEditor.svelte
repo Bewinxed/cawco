@@ -7,8 +7,9 @@
    * Remove signs it out everywhere first, and a refusal (a session still on
    * it, a machine away) is the hub's sentence.
    */
-  import { type Account, accountsWords as words } from "@cawco/core";
+  import type { Account } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
+  import { accountsWords as words } from "@cawco/core/words/accounts";
   import { untrack } from "svelte";
   import {
     cawco,

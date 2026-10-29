@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { type FleetMcpServer, mcpWords as words } from "@cawco/core";
+  import type { FleetMcpServer } from "@cawco/core/fleet";
+  import { mcpWords as words } from "@cawco/core/words/mcp";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { deleteMcpServer } from "#lib/cawco/config/deletes.js";
   import FleetEmpty from "#lib/cawco/config/FleetEmpty.svelte";

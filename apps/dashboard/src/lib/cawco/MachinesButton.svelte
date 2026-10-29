@@ -22,7 +22,7 @@
    * added counts as soon as its install runs, and an install that failed
    * turns the glyph to attention until the person acts on it (connect/).
    */
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
   import { mergeProps } from "bits-ui";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconServer } from "#lib/icons.js";

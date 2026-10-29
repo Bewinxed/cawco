@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { spawnWords } from "@cawco/core";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";

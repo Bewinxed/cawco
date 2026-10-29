@@ -2,15 +2,16 @@
  * Usage & cost helpers for the /usage page and the sidebar meter. The summary and limits JSON shapes are core's
  * (`UsageSummary`, `UsageLimitsResponse`); this module reads them.
  */
+
+import type { ProjectCap } from "@cawco/core/threads";
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type {
   ClaudeExtraUsage,
   ClaudeLimits,
   LimitWindow,
-  ProjectCap,
   UsageSpend,
   UsageSummary,
-} from "@cawco/core";
-import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+} from "@cawco/core/usage/types";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start

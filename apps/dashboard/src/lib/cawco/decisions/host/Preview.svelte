@@ -50,7 +50,6 @@
   holds says so in words where it would stand.
 -->
 <script lang="ts">
-  import { commonWords, PREVIEW_DOWNS, type PreviewDown } from "@cawco/core";
   import {
     askHubReach,
     PREVIEW_REACH_PATH,
@@ -59,6 +58,7 @@
     previewUnreachedWords,
     probePreview,
   } from "@cawco/core/preview-reach";
+  import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/protocol";
   import {
     CANVAS_EMBED_FAILED,
     CANVAS_EMBED_FETCHED,
@@ -71,6 +71,7 @@
     type EmbedShape,
     storiesKey,
   } from "@cawco/core/stage";
+  import { commonWords } from "@cawco/core/words/common";
   import { decisionsWords } from "@cawco/core/words/decisions";
   import {
     type FrameObserver,

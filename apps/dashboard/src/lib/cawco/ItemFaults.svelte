@@ -8,7 +8,7 @@
    * told and recoverable). 141 items that failed for one reason read as one
    * failure (niftybot.art, 2026-10-23).
    */
-  import type { FleetItemStatus } from "@cawco/core";
+  import type { FleetItemStatus } from "@cawco/core/fleet";
   import { failureDetails, failureGroups, failureReason } from "./convergence";
   import RowFault from "./RowFault.svelte";
 

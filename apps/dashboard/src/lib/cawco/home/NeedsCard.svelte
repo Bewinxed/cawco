@@ -60,30 +60,30 @@
    * and the first line's ✕ is Not now: it leaves Needs you, stays in Files
    * with its dot, and comes back when it is raised again.
    */
-  import {
-    type ArtifactKind,
-    artifactWords,
-    askWords,
-    causeLine,
-    configurePage,
-    connectWords,
-    contactWords,
-    mcpWords,
-    pairingWords,
-    presenceWords,
-    questionsOf,
-    reasonLine,
-    type TailnetHttps,
-    type TailnetHttpsTodo,
-    tailnetWords,
-  } from "@cawco/core";
+  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
+  import { reasonLine } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
+  import { causeLine } from "@cawco/core/install";
+  import { questionsOf } from "@cawco/core/question";
+  import type {
+    TailnetHttps,
+    TailnetHttpsTodo,
+  } from "@cawco/core/tailnet-https";
   import {
     UPSTREAM_POSTS,
     UPSTREAM_WORDS,
     type UpstreamPosts,
     upstreamPostsWords,
   } from "@cawco/core/upstream-guard";
+  import { artifactWords } from "@cawco/core/words/artifacts";
+  import { askWords } from "@cawco/core/words/asks";
+  import { configurePage } from "@cawco/core/words/configure";
+  import { connectWords } from "@cawco/core/words/connect";
+  import { contactWords } from "@cawco/core/words/contact";
+  import { mcpWords } from "@cawco/core/words/mcp";
+  import { pairingWords } from "@cawco/core/words/pairing";
+  import { presenceWords } from "@cawco/core/words/presence";
+  import { tailnetWords } from "@cawco/core/words/tailnet";
   import type { Component } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";

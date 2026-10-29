@@ -5,7 +5,7 @@
    * machine's window on the outcome, whose closing parks it here; its ✕
    * removes it, and the push of it comes down everywhere (hub installs.ts).
    */
-  import type { Install } from "@cawco/core";
+  import type { Install } from "@cawco/core/install";
   import { IconSuccess } from "#lib/icons.js";
   import NoticeRow from "../home/NoticeRow.svelte";
   import { connect } from "./installs.svelte";

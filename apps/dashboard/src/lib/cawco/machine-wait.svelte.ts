@@ -10,7 +10,7 @@
  * keyed by what the surface asked (a machine's compare, its settle), is let
  * go with the component.
  */
-import { machineLabel } from "@cawco/core";
+import { machineLabel } from "@cawco/core/machine-names";
 import { cawco } from "./client.svelte";
 import { MachineAwayError } from "./hub-read";
 

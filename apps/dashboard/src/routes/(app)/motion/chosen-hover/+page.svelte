@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Pin } from "@cawco/core/comments";
   /**
    * The controls that mark a chosen or current item, each with one item
    * chosen and one not, for the chosen-hover probe: the new-session chips'
@@ -15,8 +16,7 @@
    * `data-active` the probe sets), and two rows on a half pixel under a
    * list's ghost and pill (`data-probe="half"`).
    */
-  import { CAPABILITIES_NONE } from "@cawco/core";
-  import type { Pin } from "@cawco/core/comments";
+  import { CAPABILITIES_NONE } from "@cawco/core/harness";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
   import CommentRail from "#lib/cawco/preview/CommentRail.svelte";

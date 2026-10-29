@@ -5,7 +5,7 @@
  * (`noticesSeen`), so a notice acknowledged anywhere leaves this tab live and
  * is never shown after a reload. Nothing here is kept in the tab.
  */
-import type { DamagedHubRecord } from "@cawco/core";
+import type { DamagedHubRecord } from "@cawco/core/protocol";
 import { SvelteSet } from "svelte/reactivity";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 

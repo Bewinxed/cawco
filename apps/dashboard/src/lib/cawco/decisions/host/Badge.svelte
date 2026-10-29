@@ -1,6 +1,6 @@
 <!-- A short label: the kit Badge, a status pair only where the program names a status (DESIGN.md, The Reserved Hue Rule). -->
 <script lang="ts">
-  import { STATUS_PAIRS } from "@cawco/core";
+  import { STATUS_PAIRS } from "@cawco/core/views";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { delegateTypesWords as words } from "@cawco/core";
+  import { delegateTypesWords as words } from "@cawco/core/words/delegate-types";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import DelegateTypeEditor from "#lib/cawco/config/editors/DelegateTypeEditor.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";

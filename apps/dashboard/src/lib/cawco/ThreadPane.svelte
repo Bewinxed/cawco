@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
+  import type { PermissionResult } from "@cawco/core/harness";
   /**
    * A thread with a project's Caw, as a session tab (design §3). A thread is
    * addressed as a session (`thread:<id>`) and the hub serves it as one
@@ -26,8 +28,7 @@
    * composer. He stands there instead of on the composer; your first words
    * send him from the hero to his seat on it.
    */
-  import { CAW_NO_MACHINE, type PermissionResult } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  import { CAW_NO_MACHINE } from "@cawco/core/threads";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";

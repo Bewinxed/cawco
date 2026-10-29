@@ -21,7 +21,7 @@
    * pane closes its own content; with nothing left the split collapses. Its
    * width and expansion are the conversation's own, kept across visits.
    */
-  import { sideWords } from "@cawco/core";
+  import { sideWords } from "@cawco/core/words/side";
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import {

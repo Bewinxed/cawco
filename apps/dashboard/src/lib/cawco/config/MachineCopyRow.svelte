@@ -5,7 +5,8 @@
    * refused or waits for the machine; what it reported failing; and its
    * copy folded open under it, read and diffed against ours.
    */
-  import { machineLabel, memoryWords as words } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { memoryWords as words } from "@cawco/core/words/memory";
   import MachineAway from "#lib/cawco/MachineAway.svelte";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";

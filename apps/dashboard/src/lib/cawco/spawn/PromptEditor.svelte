@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { spawnWords } from "@cawco/core";
+  import { spawnWords } from "@cawco/core/words/spawn";
   /**
    * The first-prompt editor (§1.4, §2.3): a contenteditable that grows from
    * `c-row-h` to `c-prompt-grown-h`, detects `@` / `/` at the caret and inserts chips. The prompt

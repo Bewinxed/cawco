@@ -1,4 +1,5 @@
-import type { DelegateType, Deleted } from "@cawco/core";
+import type { DelegateType } from "@cawco/core/delegate-types";
+import type { Deleted } from "@cawco/core/fleet";
 import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
 
 /**
@@ -11,7 +12,7 @@ import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
  * rather than re-derived, so the form's refusals agree with the hub's own.
  */
 
-export type { DelegateType } from "@cawco/core";
+export type { DelegateType } from "@cawco/core/delegate-types";
 
 export interface DelegateTypesPayload {
   types: DelegateType[];

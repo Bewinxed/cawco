@@ -12,7 +12,7 @@
 
 <script lang="ts">
   /** A row's ⋯ menu: every action a row has beyond opening it and its switch. */
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconMore } from "#lib/icons.js";
 

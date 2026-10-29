@@ -3,7 +3,7 @@
    * Adding an account: the stepped setup, once the accounts and the
    * providers the fleet knows have been read (its first step lists them).
    */
-  import { accountsWords } from "@cawco/core";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import AccountSetup from "#lib/cawco/accounts/AccountSetup.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";

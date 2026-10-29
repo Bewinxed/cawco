@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * A session's transcript drawn inside another view, in a recessed well of
    * its own: what a delegate's card opens onto in its parent's chat. The rows come from the store

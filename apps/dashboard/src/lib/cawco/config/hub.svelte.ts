@@ -1,4 +1,4 @@
-import { configureWords } from "@cawco/core";
+import { configureWords } from "@cawco/core/words/configure";
 import { cawco } from "../client.svelte";
 
 /**

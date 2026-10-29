@@ -11,7 +11,7 @@
  * leaves open is no longer this one's to watch, so only its expiry is; a
  * landing still reaches the card through the hub.
  */
-import type { ConnectAccess } from "@cawco/core";
+import type { ConnectAccess } from "@cawco/core/frames";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { ConnectSignInSchema } from "#lib/cawco/stored-shapes.js";

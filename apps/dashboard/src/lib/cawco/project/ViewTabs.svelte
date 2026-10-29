@@ -32,7 +32,7 @@
    * Until they are read (the server's paint) every tab stands, the strip's
    * list ending at the room it has.
    */
-  import { viewsWords } from "@cawco/core";
+  import { viewsWords } from "@cawco/core/words/views";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

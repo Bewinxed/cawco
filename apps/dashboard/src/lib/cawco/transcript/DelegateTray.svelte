@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { WorkItemState } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import type { WorkItemState } from "@cawco/core/work-items";
   /**
    * The delegate tray: one compact chip per child this session has working
    * (its delegates, and the sessions it started with `start_session`,

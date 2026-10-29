@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { spawnWords } from "@cawco/core";
+  import { spawnWords } from "@cawco/core/words/spawn";
   /**
    * Footer (§1.9): Cancel and Start, and why Start is held when it is,
    * beside it at the row's start (PRODUCT.md: a control that can't act is

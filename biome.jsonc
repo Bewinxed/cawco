@@ -337,6 +337,26 @@
       },
     },
     {
+      // The dashboard imports core by subpath, so a page loads the modules it
+      // uses, not every module of core. The sheet override below restates
+      // this path beside its own, as an override's options replace these.
+      "includes": ["apps/dashboard/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@cawco/core": "@cawco/core is every module of core; import the subpath you need, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
       // A sheet mounts the piece, not the app around it (design-explore
       // skill): a story, a sheet's fixture folder (`<piece>/preview/`) and a
       // folder preview's source import none of the live shell. The

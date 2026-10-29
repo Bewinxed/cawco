@@ -48,7 +48,7 @@
    * each under the session that started it; a parent the tab does not list
    * stands in as a quiet context line, not counted and taking no room.
    */
-  import type { StatusPair } from "@cawco/core";
+  import type { StatusPair } from "@cawco/core/views";
   import { untrack } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

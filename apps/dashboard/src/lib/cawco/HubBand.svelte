@@ -56,7 +56,7 @@
    * holds through every try after; merely connecting on a page that has
    * had the hub, once the grace has run out.
    */
-  import { connectionWords } from "@cawco/core";
+  import { connectionWords } from "@cawco/core/words/connection";
   import { shellWords } from "@cawco/core/words/shell";
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";

@@ -28,7 +28,7 @@
 </script>
 
 <script lang="ts">
-  import { spawnWords } from "@cawco/core";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
    * The New session form's account chip, among the chosen model's tool

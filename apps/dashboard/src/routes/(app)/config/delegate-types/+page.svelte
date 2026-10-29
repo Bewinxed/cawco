@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { delegateTypesWords as words } from "@cawco/core";
+  import { delegateTypesWords as words } from "@cawco/core/words/delegate-types";
   import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
   import { deleteDelegateType } from "#lib/cawco/config/deletes.js";
   import FleetEmpty from "#lib/cawco/config/FleetEmpty.svelte";

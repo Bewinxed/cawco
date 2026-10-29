@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { CHECK_WORDS, INSTALL_CHECKS } from "@cawco/core";
+  import { CHECK_WORDS, INSTALL_CHECKS } from "@cawco/core/install";
   import { departBox } from "../motion/share.svelte";
 
   /** The key a check's chip departs under, and its row in Running lands. */

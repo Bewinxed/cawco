@@ -5,7 +5,7 @@
    * a Details fold. New session's step 2 and the pane's approval card both
    * draw it, from the hub's words (core `MoveAsk`).
    */
-  import type { MoveAsk } from "@cawco/core";
+  import type { MoveAsk } from "@cawco/core/move";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { IconChevronRight } from "#lib/icons.js";

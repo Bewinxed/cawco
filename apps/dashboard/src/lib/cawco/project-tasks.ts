@@ -9,14 +9,19 @@
  * Not to be confused with a session's own plan (plan), which is
  * the hub's too, held in the client by `plan.ts`.
  */
+
+import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
+import type { ExternalComment, ExternalRef } from "@cawco/core/external-items";
+import type { LandsMode } from "@cawco/core/injected";
+import type { ProjectGate } from "@cawco/core/project-gate";
+import type {
+  ProjectStarter,
+  StarterGlyph,
+  StarterPlace,
+} from "@cawco/core/starters";
 import type {
   AttemptStart,
-  ExternalComment,
-  ExternalRef,
-  LandsMode,
   Stage,
-  StageKind,
-  StagesTemplate,
   StagesView,
   TaskAttempt,
   TaskFlags,
@@ -27,21 +32,15 @@ import type {
   TaskSummary,
   TaskTimes,
   TaskWait,
-  WorkItemState,
-} from "@cawco/core";
-import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
-import type { ProjectGate } from "@cawco/core/project-gate";
-import type {
-  ProjectStarter,
-  StarterGlyph,
-  StarterPlace,
-} from "@cawco/core/starters";
+} from "@cawco/core/task-views";
 import type {
   GithubProjectsView,
   IssueTracker,
   TrackerTarget,
   TrackerView,
 } from "@cawco/core/trackers";
+import type { StageKind, StagesTemplate } from "@cawco/core/views";
+import type { WorkItemState } from "@cawco/core/work-items";
 import {
   HUB_UNREACHABLE,
   HubUnreachable,
@@ -50,21 +49,23 @@ import {
   unreachedAnswer,
 } from "./hub-read";
 
+export type {
+  ProjectStarter,
+  StarterGlyph,
+  StarterPlace,
+} from "@cawco/core/starters";
 /** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); StarterCards draws its glyph. */
 export type {
   AttemptStart,
-  ProjectStarter,
   Stage,
   StagesView,
-  StarterGlyph,
-  StarterPlace,
   TaskAttempt,
   TaskHistory,
   TaskHistoryEvent,
   TaskList,
   TaskSummary,
   TaskWait,
-} from "@cawco/core";
+} from "@cawco/core/task-views";
 
 /**
  * A sentence to Caw a press puts in the composer, and its glyph: what

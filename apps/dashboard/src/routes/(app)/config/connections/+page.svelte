@@ -1,10 +1,10 @@
 <script lang="ts" module>
+  import type { GhSignIn } from "@cawco/core/connections";
   import {
     CONNECTION_SERVICES,
     type ConnectionService,
     type ConnectionWay,
-    type GhSignIn,
-  } from "@cawco/core";
+  } from "@cawco/core/words/connections";
 
   /** One way the hub signs in to a service (core `ConnectionWay`). */
   export type Way = ConnectionWay;
@@ -89,13 +89,11 @@
    * ⋯ holds Projects… (a checklist) and Remove, which goes through at once
    * with Undo in its toast (JOURNEY.md Flow 5).
    */
-  import {
-    type ConnectionView,
-    configureWords,
-    type Deleted,
-    connectionsWords as words,
-  } from "@cawco/core";
+  import type { ConnectionView } from "@cawco/core/connections";
   import { detach } from "@cawco/core/detach";
+  import type { Deleted } from "@cawco/core/fleet";
+  import { configureWords } from "@cawco/core/words/configure";
+  import { connectionsWords as words } from "@cawco/core/words/connections";
   import { onMount } from "svelte";
   import { z } from "zod";
   import { cawco } from "#lib/cawco/client.svelte.js";

@@ -1,5 +1,6 @@
 <script lang="ts" module>
-  import { type ApprovedActionView, routinesWords as words } from "@cawco/core";
+  import type { ApprovedActionView } from "@cawco/core/actions";
+  import { routinesWords as words } from "@cawco/core/words/routines";
   import type { Status } from "./RunStatus.svelte";
 
   /**

@@ -1,4 +1,4 @@
-import type { TranscriptPage } from "@cawco/core";
+import type { TranscriptPage } from "@cawco/core/transcript-types";
 import type { ServerTail } from "#lib/cawco/client.svelte.js";
 import { hubFailure, machineAway } from "#lib/cawco/hub-read.js";
 import { transcriptUrl } from "#lib/cawco/links.js";

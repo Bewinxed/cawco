@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
+  import { detach } from "@cawco/core/detach";
   /**
    * A task, whole, in the page beside what it was opened from (DESIGN.md,
    * The Open Page Rule): on a desk the side card of a split (Split, through
@@ -27,9 +29,7 @@
    * The external items it links stand under the title (TaskExternalLinks), its
    * record first; the record's fault offers Sync now.
    */
-  import { commonWords } from "@cawco/core";
-  import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
-  import { detach } from "@cawco/core/detach";
+  import { commonWords } from "@cawco/core/words/common";
   import { type Snippet, untrack } from "svelte";
   import { readDecision } from "#lib/cawco/decisions/decisions-api.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";

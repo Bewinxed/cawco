@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * Who may run the fleet (hub hub-auth.ts): the one setting, "Require
    * paired devices", off unless the person turns it on; the paired devices,
@@ -12,12 +13,9 @@
    * find-secrets.ts), on unless you turn it off, kept at the hub so a reload
    * and every other device read the same.
    */
-  import {
-    type FindSettings,
-    findSecretWords,
-    type OwnerDevice,
-  } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  import type { FindSettings } from "@cawco/core/find";
+  import type { OwnerDevice } from "@cawco/core/hub-auth";
+  import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { onMount } from "svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";

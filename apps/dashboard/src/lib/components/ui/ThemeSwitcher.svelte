@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { shellWords } from "@cawco/core";
+  import { shellWords } from "@cawco/core/words/shell";
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconMoon, IconSun } from "#lib/icons.js";

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { sidebarWords, topsIn } from "@cawco/core";
   import type { Activity } from "@cawco/core/activity";
+  import { topsIn } from "@cawco/core/project-membership";
+  import { sidebarWords } from "@cawco/core/words/sidebar";
   /**
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
    * (ui/sidebar/*), following the Fluid Functionalism inset preset pattern:

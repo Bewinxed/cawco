@@ -14,7 +14,7 @@
    * rail beside the scrolling columns, so it is in view however wide the
    * board runs; pressed, the rail opens into a column of its own, quieter.
    */
-  import type { StageKind } from "@cawco/core";
+  import type { StageKind } from "@cawco/core/views";
   import { tick } from "svelte";
   import {
     type Stage,

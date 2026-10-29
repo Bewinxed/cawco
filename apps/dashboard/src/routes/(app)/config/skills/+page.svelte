@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import {
     type FleetMarketplace,
     type FleetPlugin,
@@ -7,9 +8,8 @@
     type FleetVersioned,
     isLoopbackSource,
     type MarketplacePluginInfo,
-    skillsWords as words,
-  } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  } from "@cawco/core/fleet";
+  import { skillsWords as words } from "@cawco/core/words/skills";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import {
     deleteMarketplace,

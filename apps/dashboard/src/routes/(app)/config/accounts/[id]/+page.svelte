@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { accountsWords } from "@cawco/core";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import AccountEditor from "#lib/cawco/accounts/AccountEditor.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";

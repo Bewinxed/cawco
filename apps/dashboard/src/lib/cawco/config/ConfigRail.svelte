@@ -4,7 +4,7 @@
    * and how many of them are failing somewhere. As `list` it is the whole
    * screen under 900px — the same entries at a touch height.
    */
-  import { configureWords as words } from "@cawco/core";
+  import { configureWords as words } from "@cawco/core/words/configure";
   import {
     dur,
     easeOut,

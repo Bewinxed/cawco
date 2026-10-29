@@ -5,7 +5,7 @@
  * around the view (ViewOpenUI) sets this, so a card in a drawn view opens
  * the same sheet as the board's.
  */
-import type { StageKind } from "@cawco/core";
+import type { StageKind } from "@cawco/core/views";
 import { getContext, setContext } from "svelte";
 import { stageLabel, type TaskSummary } from "#lib/cawco/project-tasks.js";
 import { dateTimeText } from "#lib/cawco/usage.js";

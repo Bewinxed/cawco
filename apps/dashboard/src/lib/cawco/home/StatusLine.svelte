@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * The home's first line: whether the first read of the fleet is in. Live
    * and read is the quiet default, and says nothing: the line is not drawn

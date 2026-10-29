@@ -7,7 +7,8 @@
    * name the dashboard shows it by) and the folder; Cancel or Escape answers
    * null.
    */
-  import { machineLabel, placePickWords as words } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { placePickWords as words } from "@cawco/core/words/place";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
   import { Button } from "#lib/components/ui/button/index.js";

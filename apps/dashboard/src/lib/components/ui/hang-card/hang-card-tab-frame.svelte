@@ -11,7 +11,7 @@
    * under the phone's screen.
    */
   // bits-ui's own popover, as PaneTabs hangs it: its bare content in one portal.
-  import { transcriptWords } from "@cawco/core";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   import { Popover } from "bits-ui";
   import { cardWidthIn, placeUnder } from "#lib/cawco/workspace/hang-place.js";
   import {

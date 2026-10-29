@@ -4,8 +4,9 @@
  * (`decisionsWords`, which the native app reads as `Words.Decisions`).
  * Nothing here names a card, an option or a page by its id.
  */
-import { decisionsWords as words } from "@cawco/core";
+
 import type { DecisionPageSummary } from "@cawco/core/decisions";
+import { decisionsWords as words } from "@cawco/core/words/decisions";
 import { formatAgeShort } from "#lib/utils/time.js";
 
 /** Whether a page shows its record: his Send of its picks wrote it. */

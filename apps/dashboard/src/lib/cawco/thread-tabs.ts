@@ -11,12 +11,12 @@
  * ({@link newThreadTab}): its first send carries its project, and the hub
  * makes the thread under that id.
  */
+import type { InstanceRow } from "@cawco/core/protocol";
 import {
-  type InstanceRow,
   type ThreadSummary,
   threadTarget,
   threadTargetOf,
-} from "@cawco/core";
+} from "@cawco/core/threads";
 import { z } from "zod";
 import type { ProjectRow } from "./client.svelte";
 import { newId } from "./id";

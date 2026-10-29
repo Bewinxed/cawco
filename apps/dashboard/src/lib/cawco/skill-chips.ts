@@ -8,7 +8,7 @@
  * (`src/clean-copy`) or a word glued to punctuation stays as written. Only a
  * skill the session has is one; any other `/word` is plain text.
  */
-import type { AvailableCommand } from "@cawco/core";
+import type { AvailableCommand } from "@cawco/core/fleet";
 import { getContext, setContext } from "svelte";
 
 export interface Skill {

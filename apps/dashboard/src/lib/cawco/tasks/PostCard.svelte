@@ -16,8 +16,8 @@
     type PostFile,
     postLength,
     withFirstParagraph,
-    madeWords as words,
-  } from "@cawco/core";
+  } from "@cawco/core/deliverables";
+  import { madeWords as words } from "@cawco/core/words/made";
   import {
     TabItem,
     Tabs,

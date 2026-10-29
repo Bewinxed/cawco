@@ -6,8 +6,9 @@
  * tab's one-session socket (artifact-session.svelte.ts, set by that tab).
  * The pane is the same component in both; it reads the store its tree set.
  */
-import type { PreviewFrame } from "@cawco/core";
+
 import type { ListedBrowser } from "@cawco/core/browser";
+import type { PreviewFrame } from "@cawco/core/frames";
 import { createContext } from "svelte";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import type { PageThumbnail } from "./wire";

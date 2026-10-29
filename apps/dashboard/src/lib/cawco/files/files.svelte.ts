@@ -20,9 +20,10 @@
  * session's own panel, and Files goes (owner: "if i open an artifact from
  * the folder tab, it doesn't dismiss the panel").
  */
-import type { ArtifactSummary, SessionAttachment } from "@cawco/core";
+
 import { field, KIND_WORDS, matchOf, parse } from "@cawco/core/find-match";
 import { machineCalled, machineFaultWords } from "@cawco/core/machine-names";
+import type { ArtifactSummary, SessionAttachment } from "@cawco/core/protocol";
 import { SvelteMap } from "svelte/reactivity";
 import { z } from "zod";
 import { listAttachments, listFiles } from "../artifact-api";

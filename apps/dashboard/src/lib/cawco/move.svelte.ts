@@ -5,7 +5,7 @@
  * it, and asks the hub to stop or retry it. What a job is doing reaches
  * every screen on the `moves` frame (`cawco.moves`).
  */
-import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core";
+import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core/move";
 import { cawco, heardMove } from "./client.svelte";
 import { hubRefusal } from "./hub-read";
 

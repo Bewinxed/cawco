@@ -24,15 +24,15 @@
  * panel says it too (project-caps.ts in the hub).
  */
 
-import type { CawStatus } from "@cawco/core";
+import type { HarnessKind } from "@cawco/core/harness";
+import type { StarterPlace } from "@cawco/core/starters";
+import type { CawStatus } from "@cawco/core/threads";
 import {
   CAW_NO_MACHINE,
   type CawInitiated,
   type CawView,
-  type HarnessKind,
   type ProjectCap,
-  type StarterPlace,
-} from "@cawco/core";
+} from "@cawco/core/threads";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
 import {

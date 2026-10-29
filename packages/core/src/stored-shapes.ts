@@ -143,24 +143,6 @@ import type {
   HookMcpToolHandler as HookMcpToolHandlerType,
   HookPromptHandler as HookPromptHandlerType,
 } from "./hooks";
-import type {
-  AgentRow as AgentRowType,
-  ArtifactThumbnail as ArtifactThumbnailType,
-  BuildInfo as BuildInfoType,
-  DelegateAskStatus as DelegateAskStatusType,
-  DelegateEventPayload as DelegateEventPayloadType,
-  DelegateEvent as DelegateEventType,
-  Envelope as EnvelopeType,
-  RunKind as RunKindType,
-  ScratchWorktree as ScratchWorktreeType,
-  SendPayload as SendPayloadType,
-  SessionCommands as SessionCommandsType,
-  SessionCustody as SessionCustodyType,
-  SessionTooling as SessionToolingType,
-  SpawnPayload as SpawnPayloadType,
-  StoppedCommands as StoppedCommandsType,
-  Verb as VerbType,
-} from "./index";
 import type { CheckoutMove as CheckoutMoveType } from "./injected";
 import type {
   InstallCheck as InstallCheckType,
@@ -198,6 +180,24 @@ import type {
   PlanStep as PlanStepType,
 } from "./plan";
 import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "./plan";
+import type {
+  AgentRow as AgentRowType,
+  ArtifactThumbnail as ArtifactThumbnailType,
+  BuildInfo as BuildInfoType,
+  DelegateAskStatus as DelegateAskStatusType,
+  DelegateEventPayload as DelegateEventPayloadType,
+  DelegateEvent as DelegateEventType,
+  Envelope as EnvelopeType,
+  RunKind as RunKindType,
+  ScratchWorktree as ScratchWorktreeType,
+  SendPayload as SendPayloadType,
+  SessionCommands as SessionCommandsType,
+  SessionCustody as SessionCustodyType,
+  SessionTooling as SessionToolingType,
+  SpawnPayload as SpawnPayloadType,
+  StoppedCommands as StoppedCommandsType,
+  Verb as VerbType,
+} from "./protocol";
 import type {
   RelayProvider as RelayProviderType,
   RelayState as RelayStateType,

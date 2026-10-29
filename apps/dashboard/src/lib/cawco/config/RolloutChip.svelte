@@ -1,9 +1,7 @@
 <script lang="ts">
-  import {
-    commonWords,
-    type FleetReportSection,
-    machineLabel,
-  } from "@cawco/core";
+  import type { FleetReportSection } from "@cawco/core/fleet";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * Where one row has landed: "2/2 machines" on the row, and machine by
    * machine in the popover. A machine that refused it opens the full fault —

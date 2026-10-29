@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { bucketStart, type LimitWindow } from "@cawco/core";
+  import { bucketStart } from "@cawco/core/usage/tokens";
+  import type { LimitWindow } from "@cawco/core/usage/types";
   /**
    * Usage: will it last, first. The Limits block
    * leads with the window that stops you first and every window under it;

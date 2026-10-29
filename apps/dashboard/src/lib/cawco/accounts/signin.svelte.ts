@@ -8,11 +8,8 @@
  * the machine answers: a tab opened after an `await` is a popup the
  * browser blocks.
  */
-import {
-  type AccountJoined,
-  accountsWords,
-  type PendingAccountSignin,
-} from "@cawco/core";
+import type { AccountJoined, PendingAccountSignin } from "@cawco/core/accounts";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { beginSignin, completeSignin } from "../client.svelte";
 import { failureWords } from "../hub-read";
 

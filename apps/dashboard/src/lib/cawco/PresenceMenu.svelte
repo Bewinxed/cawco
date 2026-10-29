@@ -24,8 +24,8 @@
   import {
     AWAY_AFTER_CHOICES_MS,
     AWAY_AFTER_DEFAULT_MS,
-    presenceWords,
-  } from "@cawco/core";
+  } from "@cawco/core/notifications";
+  import { presenceWords } from "@cawco/core/words/presence";
   import { mergeProps } from "bits-ui";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";

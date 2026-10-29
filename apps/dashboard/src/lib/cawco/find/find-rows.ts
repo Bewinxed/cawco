@@ -10,9 +10,10 @@
  * Stopped, Failed, Unreachable) and core/words' nouns (session, delegate,
  * thread, task, routine, preview, decision, report, machine, project).
  */
-import type { ArtifactKind, StatusPair } from "@cawco/core";
+import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { FindSecrets, SecretSpan } from "@cawco/core/find";
 import { markedRuns } from "@cawco/core/find-match";
+import type { StatusPair } from "@cawco/core/views";
 import { findSecretWords } from "@cawco/core/words/find-secrets";
 import { workWords } from "@cawco/core/words/work";
 import type { Component } from "svelte";

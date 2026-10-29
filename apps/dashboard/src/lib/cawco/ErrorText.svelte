@@ -4,7 +4,7 @@
    * button: it opens {@link ErrorDialog} with the whole text, selectable and
    * copyable, so nothing a failure said is lost to an ellipsis.
    */
-  import { shellWords } from "@cawco/core";
+  import { shellWords } from "@cawco/core/words/shell";
   import type { Snippet } from "svelte";
   import { cn } from "#lib/utils.js";
   import ErrorDialog from "./ErrorDialog.svelte";

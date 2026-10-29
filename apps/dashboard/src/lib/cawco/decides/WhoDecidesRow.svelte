@@ -25,7 +25,7 @@
     type FleetDecides,
     fleetRoutes,
     ROUTE_WORDS,
-  } from "@cawco/core";
+  } from "@cawco/core/decides";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { folderFileHref } from "#lib/cawco/project-tasks.js";

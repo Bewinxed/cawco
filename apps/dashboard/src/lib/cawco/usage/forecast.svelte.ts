@@ -10,7 +10,7 @@
  * and morphs figures; the minute moving on ("clock") changes the words in
  * place, with nothing animated for it.
  */
-import type { CarrySpan, ProviderForecast } from "@cawco/core";
+import type { CarrySpan, ProviderForecast } from "@cawco/core/accounts";
 import { cawco, followAccounts } from "../client.svelte";
 import { devDebug } from "../dev-debug";
 import { speakingReading } from "../usage";

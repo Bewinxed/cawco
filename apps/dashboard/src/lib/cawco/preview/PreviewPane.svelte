@@ -1,22 +1,5 @@
 <script lang="ts">
   import {
-    artifactWords,
-    browserWords,
-    commentWords,
-    commonWords,
-    machineLabel,
-    PREVIEW_DOWNS,
-    PREVIEW_LOCKED_MESSAGE,
-    type PreviewDown,
-    type PreviewSettings,
-    previewRoute,
-    previewWords,
-    projectPagePlace,
-    type ShownFailure,
-    sheetWords,
-    shellWords,
-  } from "@cawco/core";
-  import {
     type ActivityLine,
     type ChangedItem,
     newAnswer,
@@ -28,6 +11,13 @@
     type ThreadEntry,
   } from "@cawco/core/comments";
   import { detach } from "@cawco/core/detach";
+  import {
+    PREVIEW_LOCKED_MESSAGE,
+    type PreviewSettings,
+    previewRoute,
+    projectPagePlace,
+  } from "@cawco/core/frames";
+  import { machineLabel } from "@cawco/core/machine-names";
   import { pinName } from "@cawco/core/pin-name";
   import {
     askHubReach,
@@ -37,12 +27,24 @@
     previewUnreachedWords,
     probePreview,
   } from "@cawco/core/preview-reach";
+  import {
+    PREVIEW_DOWNS,
+    type PreviewDown,
+    type ShownFailure,
+  } from "@cawco/core/protocol";
   import type { PaneKey } from "@cawco/core/shell-shortcuts";
   import {
     STAGE_CLONE_MS,
     STAGE_READY_MS,
     type StageErrorKind,
   } from "@cawco/core/stage";
+  import { artifactWords } from "@cawco/core/words/artifacts";
+  import { browserWords } from "@cawco/core/words/browser";
+  import { commentWords } from "@cawco/core/words/comments";
+  import { commonWords } from "@cawco/core/words/common";
+  import { previewWords } from "@cawco/core/words/preview";
+  import { sheetWords } from "@cawco/core/words/sheet";
+  import { shellWords } from "@cawco/core/words/shell";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { z } from "zod";

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { externalItemWords, projectWords } from "@cawco/core";
+  import { externalItemWords } from "@cawco/core/words/external-items";
+  import { projectWords } from "@cawco/core/words/project";
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
   import { flagsOf, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import { isRetry } from "#lib/cawco/tasks/retry.js";

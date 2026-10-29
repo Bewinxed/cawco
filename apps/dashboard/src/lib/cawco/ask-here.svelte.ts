@@ -19,7 +19,7 @@
  * skill). It is read live, so a session that ends while the question stands
  * shows it. A single delete names its one thing in words.
  */
-import type { ThreadStatus } from "@cawco/core";
+import type { ThreadStatus } from "@cawco/core/threads";
 import type { Component } from "svelte";
 import type { SVGAttributes } from "svelte/elements";
 import type { MarkStatus } from "./TreeMark.svelte";

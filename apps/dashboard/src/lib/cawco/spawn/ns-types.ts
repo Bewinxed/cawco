@@ -1,4 +1,4 @@
-import type { HarnessKind } from "@cawco/core";
+import type { HarnessKind } from "@cawco/core/harness";
 import type { Component } from "svelte";
 
 /** One row of the `@` / `/` trigger menu (PORT-SPEC §2.3). */

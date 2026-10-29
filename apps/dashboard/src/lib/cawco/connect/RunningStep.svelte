@@ -15,8 +15,9 @@
    * Copy command (the steps above say what follows it). Stop asks in the
    * page under the footer, with what stopping leaves on the machine.
    */
-  import type { Install } from "@cawco/core";
-  import { commonWords, connectWords } from "@cawco/core";
+  import type { Install } from "@cawco/core/install";
+  import { commonWords } from "@cawco/core/words/common";
+  import { connectWords } from "@cawco/core/words/connect";
   import { Button } from "#lib/components/ui/button/index.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";

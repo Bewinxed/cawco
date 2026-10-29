@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { spawnWords } from "@cawco/core";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
    * Location as a composer chip: where the session works — an existing folder

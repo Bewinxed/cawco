@@ -19,7 +19,7 @@
    * now. The hub's answer is the switch's state: a refusal leaves it where
    * the hub says Caw is, its words under it.
    */
-  import type { CawInitiated, CawRunning } from "@cawco/core";
+  import type { CawInitiated, CawRunning } from "@cawco/core/threads";
   import { onProjectStop } from "#lib/cawco/client.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import StopParked from "#lib/cawco/StopParked.svelte";

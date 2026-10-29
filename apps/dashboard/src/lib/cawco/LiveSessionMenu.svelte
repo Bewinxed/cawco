@@ -19,9 +19,9 @@
   import {
     CONTROL_SPIN_OFF_HELD,
     holdsNothing,
-    machineLabel,
     type SpinOffHeld,
-  } from "@cawco/core";
+  } from "@cawco/core/harness";
+  import { machineLabel } from "@cawco/core/machine-names";
   import { unhandled } from "@cawco/core/unhandled";
   import type { Snippet } from "svelte";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";

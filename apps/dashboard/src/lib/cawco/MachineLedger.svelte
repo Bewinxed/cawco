@@ -15,7 +15,7 @@
    * "offline" said in words), then `cells`. Under 640px each row is the
    * board's two-line card. Configure's tool matrix and Updates draw one.
    */
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
   import type { Snippet } from "svelte";
   import type { HTMLTdAttributes } from "svelte/elements";
   import * as Table from "#lib/components/ui/table/index.js";

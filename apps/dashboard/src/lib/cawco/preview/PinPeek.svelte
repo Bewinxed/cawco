@@ -10,9 +10,9 @@
   at once.
 -->
 <script lang="ts">
-  import { commentWords as said } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
+  import { commentWords as said } from "@cawco/core/words/comments";
   import { IconAgent, IconPaperclip } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { frameObserver } from "../frame-observer";

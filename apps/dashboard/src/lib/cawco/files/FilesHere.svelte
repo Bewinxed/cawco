@@ -10,7 +10,7 @@
    * (`leave`); Show in conversation takes the transcript to the message and
    * puts Files away.
    */
-  import type { ArtifactSummary } from "@cawco/core";
+  import type { ArtifactSummary } from "@cawco/core/protocol";
   import { untrack } from "svelte";
   import { showArtifact } from "../artifact-api";
   import { barGlass } from "../bar-glass.svelte";

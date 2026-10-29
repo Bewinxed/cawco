@@ -14,7 +14,8 @@
    * parked (The Work Outlives Its Surface Rule): its second line says the
    * step it stands at, and the row opens the setup there again.
    */
-  import { type Account, accountsWords as words } from "@cawco/core";
+  import type { Account } from "@cawco/core/accounts";
+  import { accountsWords as words } from "@cawco/core/words/accounts";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconChevronRight, IconWarningTriangle } from "#lib/icons.js";
   import { hueVar, nameOf, problemOf } from "./model.svelte";

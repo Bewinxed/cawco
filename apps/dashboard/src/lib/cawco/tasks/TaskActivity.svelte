@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * A task's activity: what was said about it (its `## Comments`) and what
    * happened to it (its file's history, task-history.ts), in one stream,
@@ -15,8 +16,8 @@
    * under its author's login with the source's mark and a link out to it
    * there; "edited" when its words were changed there since.
    */
-  import { type ExternalComment, externalItemWords } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  import type { ExternalComment } from "@cawco/core/external-items";
+  import { externalItemWords } from "@cawco/core/words/external-items";
   import Choice from "#lib/cawco/config/Choice.svelte";
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * A component canvas's Map mode (canvas-view.svelte.ts `map`), over the
    * page in the panel's well, the page staying loaded under it: the

@@ -19,7 +19,7 @@
     type DecidesRoute,
     type DecisionKind,
     ROUTE_WORDS,
-  } from "@cawco/core";
+  } from "@cawco/core/decides";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import * as NativeSelect from "#lib/components/ui/native-select/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";

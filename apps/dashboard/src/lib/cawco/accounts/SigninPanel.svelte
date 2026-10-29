@@ -5,7 +5,7 @@
    * A refusal from the hub stands under the field in its own words, the field
    * marked invalid; signed in, it says as whom.
    */
-  import { accountsWords } from "@cawco/core";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";

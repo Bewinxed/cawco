@@ -8,7 +8,7 @@
    * the library does not have is left out and named over the view; a tool
    * that fails says so; anything that throws stays inside this frame.
    */
-  import { type ProjectView, VIEW_TOOLS } from "@cawco/core";
+  import { type ProjectView, VIEW_TOOLS } from "@cawco/core/views";
   import type { OpenUIError } from "@openuidev/lang-core";
   import { viewTool } from "#lib/cawco/views-api.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";

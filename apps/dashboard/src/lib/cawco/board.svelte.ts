@@ -12,7 +12,7 @@
  * does not hold, and its `set` of one its readers share with no walk,
  * wake every reader of its version, which is every row a list asks about.
  */
-import type { SessionPulse } from "@cawco/core";
+import type { SessionPulse } from "@cawco/core/protocol";
 
 /**
  * A value held under its key. A class, never a plain object, so the store's

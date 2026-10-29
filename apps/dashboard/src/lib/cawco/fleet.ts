@@ -6,8 +6,9 @@
  * ever loops over machines — it changes the fleet's mind and lets the
  * `instances` frames say what came of it.
  */
-import { type FsEntry, PACKAGE_MANAGERS } from "@cawco/core";
+
 import type { Bounded } from "@cawco/core/bounded";
+import { PACKAGE_MANAGERS } from "@cawco/core/deps";
 import {
   CAWCO_OAUTH_URL,
   type ConfigInspection,
@@ -34,6 +35,7 @@ import type {
   McpSSEServerConfig,
 } from "@cawco/core/harness";
 import type { FleetHook } from "@cawco/core/hooks";
+import type { FsEntry } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";

@@ -7,7 +7,7 @@
    * capitalises it. It lives in this page alone (connect.password): never
    * kept by the hub, gone with a reload, which its placeholder then says.
    */
-  import { connectWords } from "@cawco/core";
+  import { connectWords } from "@cawco/core/words/connect";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { IconEye, IconEyeClosed } from "#lib/icons.js";
   import { connect } from "./installs.svelte";

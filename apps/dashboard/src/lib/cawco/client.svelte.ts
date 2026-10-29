@@ -5,26 +5,6 @@
  */
 
 import type {
-  AgentRow,
-  BuildInfo,
-  ContinuationJob,
-  ControlPayload,
-  DelegateEvent,
-  Envelope,
-  FramePayload,
-  FsPayload,
-  InstanceRow,
-  NamedSpawn,
-  PreviewSettings,
-  ProjectOfferAccepted,
-  SendPayload,
-  SessionPulse,
-  SessionTooling,
-  SpawnPayload,
-  StopRequest,
-  WorkItemSummary,
-} from "@cawco/core";
-import type {
   Account,
   AccountBench,
   AccountCatalog,
@@ -66,6 +46,8 @@ import type {
   FleetFetchFrame,
   HarnessFailed,
   HarnessUnanswered,
+  PreviewSettings,
+  ProjectOfferAccepted,
   ProjectOfferSummary,
   ProjectStopFrame,
 } from "@cawco/core/frames";
@@ -94,6 +76,24 @@ import { machineFaultWords, machineLabel } from "@cawco/core/machine-names";
 import type { MoveJob } from "@cawco/core/move";
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
 import type { SessionPlan } from "@cawco/core/plan";
+import type {
+  AgentRow,
+  BuildInfo,
+  ContinuationJob,
+  ControlPayload,
+  DelegateEvent,
+  Envelope,
+  FramePayload,
+  FsPayload,
+  InstanceRow,
+  NamedSpawn,
+  SendPayload,
+  SessionPulse,
+  SessionTooling,
+  SpawnPayload,
+  StopRequest,
+  WorkItemSummary,
+} from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
@@ -269,7 +269,7 @@ const OUTAGE_GRACE = 4000;
 export type Machine = AgentRow;
 
 /** A session the hub knows about (`GET /api/instances`, and `instances` frames). */
-export type { InstanceRow } from "@cawco/core";
+export type { InstanceRow } from "@cawco/core/protocol";
 export type { BoardRow } from "./links";
 
 /**
@@ -1129,7 +1129,7 @@ const leadSessions = $derived.by<ReadonlySet<string>>(() => {
 const staleInstances = $derived.by(keepsLast(() => instances.filter(isStale)));
 
 const state = $state({
-  fleetMcp: null as import("@cawco/core").FleetMcpServer[] | null,
+  fleetMcp: null as import("@cawco/core/fleet").FleetMcpServer[] | null,
   previews: {} as Record<
     string,
     Extract<FramePayload, { kind: "preview" }> & {

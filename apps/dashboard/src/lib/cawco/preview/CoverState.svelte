@@ -14,7 +14,7 @@
    * to an ellipsis first so its last folder stays, then that folder's end;
    * the whole path on hover.
    */
-  import { sheetWords } from "@cawco/core";
+  import { sheetWords } from "@cawco/core/words/sheet";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
 
   let { waiting }: { waiting: CoverWaiting } = $props();

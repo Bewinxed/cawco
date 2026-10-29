@@ -24,14 +24,12 @@
    * can be judged without its page's live store. A press here goes nowhere;
    * on its surface it puts the words where they go.
    */
-  import {
-    CAW_NO_MACHINE,
-    connectWords,
-    delegateTypesWords,
-    mcpWords,
-    memoryWords,
-    routinesWords,
-  } from "@cawco/core";
+  import { CAW_NO_MACHINE } from "@cawco/core/threads";
+  import { connectWords } from "@cawco/core/words/connect";
+  import { delegateTypesWords } from "@cawco/core/words/delegate-types";
+  import { mcpWords } from "@cawco/core/words/mcp";
+  import { memoryWords } from "@cawco/core/words/memory";
+  import { routinesWords } from "@cawco/core/words/routines";
   import CantStart from "#lib/cawco/CantStart.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";

@@ -12,7 +12,12 @@
  * landed before the hub answered or while its body was still arriving, and
  * the caller drops it.
  */
-import type { FindAnswer, FindBy, FindKind, WaitingAnswer } from "@cawco/core";
+import type {
+  FindAnswer,
+  FindBy,
+  FindKind,
+  WaitingAnswer,
+} from "@cawco/core/find";
 import { hubFailure, unreachable, unreachedAnswer } from "../hub-read";
 
 export type {
@@ -34,7 +39,7 @@ export type {
   MomentAuthor,
   WaitingAnswer,
   WaitingItem,
-} from "@cawco/core";
+} from "@cawco/core/find";
 
 /** How a read ended. */
 export type Read<T> =

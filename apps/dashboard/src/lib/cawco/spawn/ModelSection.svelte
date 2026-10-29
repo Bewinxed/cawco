@@ -1,15 +1,12 @@
 <script lang="ts">
+  import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
   /**
    * Model (§1.6, §2.9): harness tabs, one search/custom-id field, the model
    * list with the slide-swap on harness change. Codex is shown but disabled
    * ("Coming soon"); the list is the app's catalogue, canonical names only.
    */
-  import {
-    accountsWords,
-    HARNESSES,
-    type HarnessKind,
-    spawnWords,
-  } from "@cawco/core";
+  import { accountsWords } from "@cawco/core/words/accounts";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
   import { crossfade } from "svelte/transition";
   import { frameSize } from "#lib/cawco/frame-observer.js";

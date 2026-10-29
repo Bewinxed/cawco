@@ -5,7 +5,7 @@
  * but the revision held is a gap: nothing is applied, and the hub is asked
  * for the plan whole (`plan.resync`), once per gap.
  */
-import type { PlanDelta, PlanSnapshot, SessionPlan } from "@cawco/core";
+import type { PlanDelta, PlanSnapshot, SessionPlan } from "@cawco/core/plan";
 import { applyPatch, type Operation } from "rfc6902";
 import { SessionPlanSchema } from "#lib/cawco/stored-shapes.js";
 

@@ -1,10 +1,8 @@
 <script lang="ts">
-  import {
-    type Activity,
-    type DelegateAskStatus,
-    threadTarget,
-  } from "@cawco/core";
+  import type { Activity } from "@cawco/core/activity";
   import { detach } from "@cawco/core/detach";
+  import type { DelegateAskStatus } from "@cawco/core/protocol";
+  import { threadTarget } from "@cawco/core/threads";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   /**

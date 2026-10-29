@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Words in one of the house text roles; plain text only. */
-  import { VIEW_TEXT_ROLES } from "@cawco/core";
+  import { VIEW_TEXT_ROLES } from "@cawco/core/views";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
   let { props }: OpenUIRenderProps<{ text: unknown; variant?: string }> =

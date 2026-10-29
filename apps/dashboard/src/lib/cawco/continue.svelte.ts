@@ -9,12 +9,13 @@
  * tab's parked starts (spawn/parked), which follow it to its end whatever
  * happens to the form.
  */
+
 import type {
-  ContinuationJob,
   EffortLevel,
   HarnessKind,
   PermissionMode,
-} from "@cawco/core";
+} from "@cawco/core/harness";
+import type { ContinuationJob } from "@cawco/core/protocol";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
 import { cawco, type SendExtras } from "./client.svelte";

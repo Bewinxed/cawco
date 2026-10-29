@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * What a task needs from you, first, each reason with the way to act on it
    * here (DESIGN.md, The Stay In Context Rule):

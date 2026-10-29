@@ -9,7 +9,7 @@
    * with its rows' own markup and corners (`machineRowRadius`). Each opens
    * its surface on the page (bits-ui's portal), under its chip.
    */
-  import type { PermissionMode } from "@cawco/core";
+  import type { PermissionMode } from "@cawco/core/harness";
   import { MachineRow } from "#lib/components/ui/machine-row/index.js";
   import {
     IconChevronDown as Down,

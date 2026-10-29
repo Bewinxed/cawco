@@ -17,7 +17,7 @@
  * session aged off the board is drawn as itself, never as "Fleet", a bare
  * id or a transcript that never loads.
  */
-import type { FindConversation, FindThread } from "@cawco/core";
+import type { FindConversation, FindThread } from "@cawco/core/find";
 import { SvelteMap } from "svelte/reactivity";
 import { browser } from "$app/env";
 import { cawco } from "./client.svelte";

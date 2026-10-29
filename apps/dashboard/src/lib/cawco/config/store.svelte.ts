@@ -1,13 +1,12 @@
 import type {
   FleetAgent,
   FleetConfig,
-  FleetFetchFrame,
   FleetSkillMeta,
   MarketplaceLink,
-  RuleRow,
-  ToolPolicy,
-  ToolSpec,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
+import type { FleetFetchFrame } from "@cawco/core/frames";
+import type { RuleRow } from "@cawco/core/rules";
+import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { getContext, setContext } from "svelte";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import type { ProjectRow } from "../client.svelte";

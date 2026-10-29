@@ -1,9 +1,10 @@
-import { configureWords, type Deleted } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import type { Deleted } from "@cawco/core/fleet";
+import { configureWords } from "@cawco/core/words/configure";
 import { toast } from "../toasts";
 import { restore } from "./unrestored.svelte";
 
-export type { Deleted } from "@cawco/core";
+export type { Deleted } from "@cawco/core/fleet";
 
 /**
  * The toast after a config item's delete, which goes through at once, with

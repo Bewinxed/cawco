@@ -1,13 +1,13 @@
 <script lang="ts">
+  import type { BinaryUpdatePhase } from "@cawco/core/binary-updates";
+  import { detach } from "@cawco/core/detach";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { connectWords } from "@cawco/core/words/connect";
   import {
-    connectWords,
-    machineLabel,
     workspaceNeedsDetails,
     workspaceNeedsReason,
     workspaceNeedsWords,
-  } from "@cawco/core";
-  import type { BinaryUpdatePhase } from "@cawco/core/binary-updates";
-  import { detach } from "@cawco/core/detach";
+  } from "@cawco/core/words/workspace-needs";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
    * The machines as a list: every install under way or waiting on the

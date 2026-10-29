@@ -1,11 +1,8 @@
 <script lang="ts">
-  import {
-    CONTINUED_IN,
-    commonWords,
-    type HarnessKind,
-    type PermissionResult,
-  } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import type { HarnessKind, PermissionResult } from "@cawco/core/harness";
+  import { CONTINUED_IN } from "@cawco/core/relaunch";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission

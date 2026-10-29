@@ -15,10 +15,10 @@
    */
   import {
     deliverableKind,
-    madeWords,
     type PostFile,
     parsePost,
-  } from "@cawco/core";
+  } from "@cawco/core/deliverables";
+  import { madeWords } from "@cawco/core/words/made";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { track } from "#lib/cawco/track.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";

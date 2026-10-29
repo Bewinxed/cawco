@@ -3,12 +3,11 @@
  * (`liveFeed`, NeedsCaw's) or a fixture (/motion/caw-notices). The panel
  * reads nothing else, so a preview drives the real panel with no hub.
  */
-import type {
-  ArtifactNeedNotice,
-  DamagedHubRecord,
-  RebalanceNotice,
-} from "@cawco/core";
+
+import type { RebalanceNotice } from "@cawco/core/accounts";
+import type { ArtifactNeedNotice } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
+import type { DamagedHubRecord } from "@cawco/core/protocol";
 import type { MovedLogin } from "../accounts/model.svelte";
 import { notices } from "../notices.svelte";
 import type { Notice } from "../updates/model";

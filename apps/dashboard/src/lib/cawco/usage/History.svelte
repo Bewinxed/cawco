@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
+  import { HOUR_MS } from "@cawco/core/time";
   /**
    * History: what each harness cost over the
    * page's range, as two small charts — one per harness, each on its own
@@ -6,9 +8,7 @@
    * kind of money. Hours for a window or a day, the hub's days for a week or
    * a month. Table swaps both charts for their figures.
    */
-  import type { UsageSummary } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
-  import { HOUR_MS } from "@cawco/core/time";
+  import type { UsageSummary } from "@cawco/core/usage/types";
   import {
     TabItem,
     Tabs,

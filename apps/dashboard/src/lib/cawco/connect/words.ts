@@ -8,15 +8,15 @@
  */
 import {
   CHECK_WORDS,
-  configurePage,
-  connectWords,
   type Install,
   type InstallProblem,
   installerRan,
   stepWords,
   targetHost,
-} from "@cawco/core";
+} from "@cawco/core/install";
 import { unhandled } from "@cawco/core/unhandled";
+import { configurePage } from "@cawco/core/words/configure";
+import { connectWords } from "@cawco/core/words/connect";
 
 /** An IPv4 or IPv6 address, which has no first label to name a machine by. */
 const ADDRESS = /^[\d.]+$|:/u;

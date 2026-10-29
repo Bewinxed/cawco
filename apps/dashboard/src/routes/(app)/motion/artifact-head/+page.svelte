@@ -14,8 +14,10 @@
    * frame carries to the head's line. The probe answers the pane's reach
    * check (`/__cawco/ping`) itself.
    */
-  import { type ArtifactKind, type FsEntry, sideWords } from "@cawco/core";
+  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import type { Bounded } from "@cawco/core/bounded";
+  import type { FsEntry } from "@cawco/core/protocol";
+  import { sideWords } from "@cawco/core/words/side";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
     type PaneFleet,

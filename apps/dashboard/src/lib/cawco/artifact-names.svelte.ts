@@ -17,8 +17,10 @@
  * has its page and its pins, and is taken once ({@link takeOpen}), so a
  * press made before the page is ready still lands.
  */
-import { type ArtifactKind, type ChoiceEntry, pinReference } from "@cawco/core";
+import type { ArtifactKind } from "@cawco/core/artifact-kinds";
+import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Pin } from "@cawco/core/comments";
+import { pinReference } from "@cawco/core/references";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
 import { ArtifactRefused, findArtifact } from "./artifact-api";

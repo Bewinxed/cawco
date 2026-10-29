@@ -6,7 +6,7 @@
  * Rule): the control says {@link copyRefused} on its own line (RowFault),
  * with Try again and the text itself under Show details to copy by hand.
  */
-import { shellWords } from "@cawco/core";
+import { shellWords } from "@cawco/core/words/shell";
 import { toast } from "./toasts";
 
 export async function copyToClipboard(

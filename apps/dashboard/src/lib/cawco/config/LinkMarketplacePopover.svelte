@@ -52,11 +52,8 @@
    * popover away into that row, which carries Open link back here, and a
    * reload opens it again as it was (`draft`).
    */
-  import {
-    type FleetMarketplace,
-    type MarketplaceLink,
-    skillsWords as words,
-  } from "@cawco/core";
+  import type { FleetMarketplace, MarketplaceLink } from "@cawco/core/fleet";
+  import { skillsWords as words } from "@cawco/core/words/skills";
   import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Input } from "#lib/components/ui/input/index.js";

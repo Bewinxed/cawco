@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { FleetWatchSettings } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import type { FleetWatchSettings } from "@cawco/core/fleet-watch";
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
   import Field from "#lib/cawco/config/Field.svelte";

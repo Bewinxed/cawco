@@ -6,7 +6,7 @@
    * name, else the draft; a task in it opens the project's page on it, or in
    * the app, the app's own task sheet.
    */
-  import type { ProjectView } from "@cawco/core";
+  import type { ProjectView } from "@cawco/core/views";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { provideMarkdownFleet } from "#lib/cawco/markdown-fleet.js";
   import { liveMarkdown } from "#lib/cawco/markdown-live.js";

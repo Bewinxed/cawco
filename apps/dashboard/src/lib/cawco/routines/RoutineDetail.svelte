@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { type ApprovedActionView, routinesWords as words } from "@cawco/core";
+  import type { ApprovedActionView } from "@cawco/core/actions";
+  import { routinesWords as words } from "@cawco/core/words/routines";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   /**
    * A routine opened in place under its row: only what the row does not say

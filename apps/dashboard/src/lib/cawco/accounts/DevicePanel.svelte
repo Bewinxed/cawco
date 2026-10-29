@@ -12,7 +12,7 @@
    * The well arrives as a transcript row does: its place opens, then its
    * content fades up 3px into it.
    */
-  import { accountsWords } from "@cawco/core";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import type { TransitionConfig } from "svelte/transition";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";

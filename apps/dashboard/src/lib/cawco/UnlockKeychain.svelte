@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { AuthState } from "@cawco/core";
-  import { configurePage, machineWords } from "@cawco/core";
+  import type { AuthState } from "@cawco/core/harness";
   import { unhandled } from "@cawco/core/unhandled";
+  import { configurePage } from "@cawco/core/words/configure";
+  import { machineWords } from "@cawco/core/words/machine";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";

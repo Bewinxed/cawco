@@ -7,7 +7,8 @@
    * out to the item. When a read or sync of one stopped short, the source's
    * words stand under its row; the record's with Sync now.
    */
-  import { type ExternalRef, externalItemWords } from "@cawco/core";
+  import type { ExternalRef } from "@cawco/core/external-items";
+  import { externalItemWords } from "@cawco/core/words/external-items";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { IconArrowUpRight } from "#lib/icons.js";
   import RowFault from "../RowFault.svelte";

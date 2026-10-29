@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { ResultArtifact } from "@cawco/core";
+  import type { ResultArtifact } from "@cawco/core/deliverables";
 
   /** What a session can present: the kinds a stage draws. */
   export type PresentedArtifact = Extract<ResultArtifact, { kind: "artifact" }>;

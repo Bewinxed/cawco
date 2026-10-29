@@ -40,7 +40,7 @@
    * the save runs and draws a check for --dur-hold when it ends well, and
    * for that same hold the label says "Saved".
    */
-  import { configureWords } from "@cawco/core";
+  import { configureWords } from "@cawco/core/words/configure";
   import type { Snippet } from "svelte";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Button } from "#lib/components/ui/button/index.js";

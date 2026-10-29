@@ -32,16 +32,16 @@
     type Account,
     type AccountHue,
     type AccountJoined,
-    accountsWords,
     CLAUDE_PROVIDER,
-    configureWords,
     DEFAULT_AT_LIMIT,
     defaultRouting,
-    type HarnessKind,
     type ProviderChoice,
     type StrategyChoice,
-  } from "@cawco/core";
+  } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
+  import type { HarnessKind } from "@cawco/core/harness";
+  import { accountsWords } from "@cawco/core/words/accounts";
+  import { configureWords } from "@cawco/core/words/configure";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { z } from "zod";

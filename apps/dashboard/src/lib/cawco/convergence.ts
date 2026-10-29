@@ -5,17 +5,17 @@
  * on a decision nobody was asked to make. Every reader here is pure: given the frame data a
  * machine already carries, no reach into the network.
  */
+
 import {
-  type AgentRow,
-  type BuildInfo,
   FLEET_ACK_MS,
   type FleetItemStatus,
   type FleetSyncReport,
-  fleetFaultWords,
-  isHarnessConfigKind,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
 import { itemKind, projectItemOf } from "@cawco/core/fleet-items";
+import { isHarnessConfigKind } from "@cawco/core/harness-config";
+import type { AgentRow, BuildInfo } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
+import { fleetFaultWords } from "@cawco/core/words/fleet-faults";
 
 /** Whether a machine's own reported build is level with the hub's. */
 export type BuildConvergence = "unknown" | "current" | "behind";

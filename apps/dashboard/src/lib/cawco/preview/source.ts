@@ -1,4 +1,5 @@
-import type { ArtifactKind, PreviewSource } from "@cawco/core";
+import type { ArtifactKind } from "@cawco/core/artifact-kinds";
+import type { PreviewSource } from "@cawco/core/protocol";
 import { parseReference } from "@cawco/core/references";
 import { pathLeaf, resultField } from "@cawco/core/tool-presentation";
 import { CalledArtifactShape } from "#lib/cawco/stored-shapes.js";

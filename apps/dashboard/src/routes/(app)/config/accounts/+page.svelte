@@ -6,7 +6,8 @@
    * card holds the accounts in fill-first order, each row one link to the
    * account. Groups and rows arriving or leaving reflow (motion/rows).
    */
-  import { hasRouting, accountsWords as words } from "@cawco/core";
+  import { hasRouting } from "@cawco/core/accounts";
+  import { accountsWords as words } from "@cawco/core/words/accounts";
   import AccountListRow from "#lib/cawco/accounts/AccountListRow.svelte";
   import { groupsOf } from "#lib/cawco/accounts/model.svelte.js";
   import ProviderMark from "#lib/cawco/accounts/ProviderMark.svelte";

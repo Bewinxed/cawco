@@ -11,16 +11,14 @@
 </script>
 
 <script lang="ts">
-  import {
-    askWords,
-    damagedWords,
-    getToolGlance,
-    machineLabel,
-    planWords,
-    questionsOf,
-  } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { damagedWords } from "@cawco/core/protocol";
+  import { questionsOf } from "@cawco/core/question";
   import { humanize, mcpParts } from "@cawco/core/tool-presentation";
+  import { getToolGlance } from "@cawco/core/transcript-rules";
+  import { askWords } from "@cawco/core/words/asks";
+  import { planWords } from "@cawco/core/words/plan";
   /**
    * The middle step of the board's loop: glance at the fleet, peek at one
    * session, dive into it. A peek answers "what is this one actually doing"

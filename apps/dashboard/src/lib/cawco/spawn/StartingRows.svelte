@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { spawnWords } from "@cawco/core";
+  import { spawnWords } from "@cawco/core/words/spawn";
   /**
    * The starts the New Session form left running (spawn/parked), each as its
    * own row in the home, over Working and Finished (DESIGN.md, The Work

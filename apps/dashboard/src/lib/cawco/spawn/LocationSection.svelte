@@ -25,8 +25,8 @@
    * browser lists the selected machine's real filesystem through `machineFs`.
    * No branch API exists, so the design's branch panel is not rendered.
    */
-  import type { FsEntry } from "@cawco/core";
-  import { spawnWords } from "@cawco/core";
+  import type { FsEntry } from "@cawco/core/protocol";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";

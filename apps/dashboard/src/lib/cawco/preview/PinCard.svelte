@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { commentWords as said, artifactWords as words } from "@cawco/core";
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; DESIGN.md,
    * A thread beside its pin). Its head's first row: the pin's pill, only
@@ -34,6 +33,8 @@
    * by a press on the page. Delete is asked in the card itself.
    */
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
+  import { artifactWords as words } from "@cawco/core/words/artifacts";
+  import { commentWords as said } from "@cawco/core/words/comments";
   import { type Snippet, tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";

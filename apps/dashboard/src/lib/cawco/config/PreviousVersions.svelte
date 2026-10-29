@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
   import { cawco } from "../client.svelte";
 
   /** Where a kept version came from, in words: the fleet's own row, or the machine whose edited copy an overwrite took off it. */

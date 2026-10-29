@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { InstanceRow, PulseFrame, SessionPulse } from "@cawco/core";
+  import type { PulseFrame } from "@cawco/core/frames";
+  import type { InstanceRow, SessionPulse } from "@cawco/core/protocol";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import WorkTabs from "#lib/cawco/home/WorkTabs.svelte";

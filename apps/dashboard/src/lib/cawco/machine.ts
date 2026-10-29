@@ -1,11 +1,10 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
-import {
-  type AgentRow,
-  configurePage,
-  type HarnessKind,
-  machineLabel,
-  machineWords,
-} from "@cawco/core";
+
+import type { HarnessKind } from "@cawco/core/harness";
+import { machineLabel } from "@cawco/core/machine-names";
+import type { AgentRow } from "@cawco/core/protocol";
+import { configurePage } from "@cawco/core/words/configure";
+import { machineWords } from "@cawco/core/words/machine";
 
 /**
  * Splits the daemon's `platform-arch` fingerprint into something readable.

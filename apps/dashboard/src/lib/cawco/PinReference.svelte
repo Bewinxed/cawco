@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { newAnswer } from "@cawco/core/comments";
+  import { pinName } from "@cawco/core/pin-name";
+  import { pinReference } from "@cawco/core/references";
   /**
    * A pin named in written words (`[label](cawco:pin/<artifact>/<number>)`,
    * core references.ts), drawn as its chip: the inline chip (ui/chip
@@ -10,9 +13,7 @@
    * unread (core `newAnswer`). Pressed, the artifact comes to the front of
    * the panel with the pin's thread open (reference-open.svelte.ts).
    */
-  import { commentWords, pinReference } from "@cawco/core";
-  import { newAnswer } from "@cawco/core/comments";
-  import { pinName } from "@cawco/core/pin-name";
+  import { commentWords } from "@cawco/core/words/comments";
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
   import { pinNamed } from "./artifact-names.svelte";

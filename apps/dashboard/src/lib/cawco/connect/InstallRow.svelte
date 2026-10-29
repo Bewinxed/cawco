@@ -22,7 +22,7 @@
     type Install,
     type InstallStep,
     installName,
-  } from "@cawco/core";
+  } from "@cawco/core/install";
   import { unhandled } from "@cawco/core/unhandled";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import {

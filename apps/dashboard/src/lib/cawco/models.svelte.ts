@@ -7,8 +7,9 @@
  * why ({@link models}`.unread`).
  */
 
-import type { ModelInfo } from "@cawco/core";
-import { isEffortLevel, machineLabel } from "@cawco/core";
+import type { ModelInfo } from "@cawco/core/harness";
+import { isEffortLevel } from "@cawco/core/harness";
+import { machineLabel } from "@cawco/core/machine-names";
 import { z } from "zod";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { cawco } from "./client.svelte";

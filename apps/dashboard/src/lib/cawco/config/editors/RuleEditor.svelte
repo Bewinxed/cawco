@@ -1,19 +1,16 @@
 <script lang="ts">
+  import type { HarnessKind } from "@cawco/core/harness";
+  import { HARNESSES } from "@cawco/core/harness";
   import type {
-    HarnessKind,
     RuleDraft,
     RuleMatchKind,
     RuleRow,
     RuleTiming,
     RuleWatch,
-  } from "@cawco/core";
-  import {
-    commonWords,
-    HARNESSES,
-    ruleProblem,
-    ruleSentence,
-    rulesWords,
-  } from "@cawco/core";
+  } from "@cawco/core/rules";
+  import { ruleProblem, ruleSentence } from "@cawco/core/rules";
+  import { commonWords } from "@cawco/core/words/common";
+  import { rulesWords } from "@cawco/core/words/rules";
   import { onMount, untrack } from "svelte";
   import {
     crossIn,

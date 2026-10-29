@@ -10,7 +10,8 @@
    * Right-click on a machine's heading — what you can do to the box, not to
    * a session. What it asks stands under the row (`AskHere`).
    */
-  import { machineLabel, machineWords } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { machineWords } from "@cawco/core/words/machine";
   import type { Snippet } from "svelte";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {

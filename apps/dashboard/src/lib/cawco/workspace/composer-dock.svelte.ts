@@ -9,7 +9,7 @@
  * its parked ask, its controls — under its id, and its group
  * (`PaneLeaf`) draws one composer over whichever id is its active tab.
  */
-import type { AvailableCommand } from "@cawco/core";
+import type { AvailableCommand } from "@cawco/core/fleet";
 import type { Snippet } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import type { SendExtras } from "../client.svelte";

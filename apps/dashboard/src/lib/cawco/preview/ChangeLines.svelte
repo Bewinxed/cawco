@@ -29,7 +29,7 @@
    * at its foot, which opens the line in place to every word, and Less
    * folds it again. Nothing it says is out of reach.
    */
-  import { commentWords } from "@cawco/core";
+  import { commentWords } from "@cawco/core/words/comments";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
   import { frameObserver } from "#lib/cawco/frame-observer.js";

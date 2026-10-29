@@ -3,12 +3,13 @@
  * `TranscriptBlock`), plus what only this tab knows — its own sends before the
  * hub has them, and its own failure lines.
  */
+
+import type { SendState } from "@cawco/core/harness";
+import type { DelegateEvent } from "@cawco/core/protocol";
 import type {
   BlockMetadata,
-  DelegateEvent,
-  SendState,
   TranscriptBlock,
-} from "@cawco/core";
+} from "@cawco/core/transcript-types";
 
 type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =

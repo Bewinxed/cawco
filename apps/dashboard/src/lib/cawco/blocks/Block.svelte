@@ -20,11 +20,9 @@
    * across that edge in the gap, its dot at the leading end. A width change
    * tweens the box (`morph`, while `resizing`).
    */
-  import {
-    type BlockWidth,
-    commonWords,
-    blocksWords as words,
-  } from "@cawco/core";
+  import type { BlockWidth } from "@cawco/core/blocks";
+  import { blocksWords as words } from "@cawco/core/words/blocks";
+  import { commonWords } from "@cawco/core/words/common";
   import type { Component, Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";

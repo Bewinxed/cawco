@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/frames";
   /**
    * A decision page in the Decisions tab's pane, live: the project's page, on
    * the project's own preview origin at `/__cawco/page/<id>/`, whichever
@@ -11,7 +12,7 @@
    * previews (page-source.ts); turned away later, it enters once more and
    * loads again (preview/pass.ts).
    */
-  import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
+  import { decisionsWords } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";

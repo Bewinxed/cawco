@@ -12,7 +12,7 @@
    * Dock, Undock, Done and Remove, which go to whoever holds the slot it
    * stands in.
    */
-  import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
+  import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/frames";
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
   import { theme } from "#lib/theme.svelte.js";

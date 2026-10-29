@@ -7,7 +7,7 @@
    * sends those names to the hub. The hub tries a host pattern before it
    * keeps it, and says why when it doesn't.
    */
-  import type { PreviewSettings } from "@cawco/core";
+  import type { PreviewSettings } from "@cawco/core/frames";
   import { onMount } from "svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";

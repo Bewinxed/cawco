@@ -7,11 +7,8 @@
    * the email drops under the nickname when there is no room, rather than
    * ending in an ellipsis.
    */
-  import {
-    type Account,
-    accountsWords,
-    type NameableAccount,
-  } from "@cawco/core";
+  import type { Account, NameableAccount } from "@cawco/core/accounts";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { nameOf } from "./model.svelte";
 
   let {

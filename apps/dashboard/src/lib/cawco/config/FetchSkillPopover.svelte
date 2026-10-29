@@ -43,6 +43,11 @@
 </script>
 
 <script lang="ts">
+  import {
+    projectClaudeRelative,
+    userLayerLabel,
+  } from "@cawco/core/claude-dirs";
+  import { detach } from "@cawco/core/detach";
   /**
    * Fetch a skill, from the section's primary button: a source and a name,
    * then — when the repo holds several — which one. The hub downloads the
@@ -53,13 +58,8 @@
    * fetch goes and carries Open fetch back here; a reload opens it again as
    * it was (`draft`). It closes for good into the row once the fetch lands.
    */
-  import {
-    type FleetSkillMeta,
-    projectClaudeRelative,
-    userLayerLabel,
-    skillsWords as words,
-  } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  import type { FleetSkillMeta } from "@cawco/core/fleet";
+  import { skillsWords as words } from "@cawco/core/words/skills";
   import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";

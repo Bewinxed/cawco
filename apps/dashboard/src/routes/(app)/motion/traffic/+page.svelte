@@ -24,7 +24,7 @@
    * row fold and the arrival decision. A fixture that stubbed either would have
    * rendered the bug invisible.
    */
-  import { COMPACT_SUMMARY_KIND } from "@cawco/core";
+  import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
   import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
   import { buildRowsFrom } from "#lib/cawco/transcript/rows.js";
   import Transcript from "#lib/cawco/transcript/Transcript.svelte";

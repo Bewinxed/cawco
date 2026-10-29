@@ -15,7 +15,7 @@
    * Choose a mode, its Send edited message), which takes the focus back as
    * it closes.
    */
-  import type { HarnessKind, PermissionMode } from "@cawco/core";
+  import type { HarnessKind, PermissionMode } from "@cawco/core/harness";
   import { cawco } from "../client.svelte";
   import { modeRefusal, permissionModesFor } from "../permission-modes";
   import NsPopover from "../spawn/NsPopover.svelte";

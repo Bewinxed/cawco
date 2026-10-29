@@ -9,7 +9,7 @@
    * of the panel scrolled to the card, outlined for a moment
    * (reference-open.svelte.ts).
    */
-  import { decisionReference } from "@cawco/core";
+  import { decisionReference } from "@cawco/core/references";
   import { IconDecisions } from "#lib/icons.js";
   import { artifactMarks } from "./artifact-names.svelte";
   import ReferenceChip from "./ReferenceChip.svelte";

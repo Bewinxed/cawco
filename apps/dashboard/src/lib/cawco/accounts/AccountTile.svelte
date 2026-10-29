@@ -3,7 +3,7 @@
    * An account's tile: its provider's mark in one ink, the account's colour,
    * on that colour at a low alpha.
    */
-  import type { AccountHue } from "@cawco/core";
+  import type { AccountHue } from "@cawco/core/accounts";
   import { hueVar } from "./model.svelte";
   import ProviderMark from "./ProviderMark.svelte";
 

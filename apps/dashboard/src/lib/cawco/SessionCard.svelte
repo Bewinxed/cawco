@@ -23,7 +23,7 @@
 </script>
 
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * A session's card, as the house hover panel (HoverPanel) draws it: its
    * mark, title and state, then what its row cannot show: its live tail and

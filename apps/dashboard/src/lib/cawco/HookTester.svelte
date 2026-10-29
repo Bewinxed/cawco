@@ -1,6 +1,10 @@
 <script lang="ts">
-  import type { HookEvent, HookMatcherKind } from "@cawco/core";
-  import { hookEventInfo, hookMatcherKind, hookMatches } from "@cawco/core";
+  import type { HookEvent, HookMatcherKind } from "@cawco/core/hooks";
+  import {
+    hookEventInfo,
+    hookMatcherKind,
+    hookMatches,
+  } from "@cawco/core/hooks";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";

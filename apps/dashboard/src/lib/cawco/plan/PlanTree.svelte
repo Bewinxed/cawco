@@ -3,7 +3,7 @@
     type PlanStepStatus,
     type SessionPlan,
     todoGroups,
-  } from "@cawco/core";
+  } from "@cawco/core/plan";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   /** One row of a plan's tree: a step or a to-do, its children under it. */
   export interface PlanNode {

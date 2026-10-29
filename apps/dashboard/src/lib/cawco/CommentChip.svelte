@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { Pin } from "@cawco/core/comments";
+  import { pinName } from "@cawco/core/pin-name";
   /**
    * The comment a `comment_reply` or `comment_resolve` call answered, drawn
    * under the call's line in a conversation (ToolGroup) as one chip, like
@@ -22,9 +24,7 @@
    * outside it and the chip, Escape, the chip scrolling out of view or the
    * page navigating puts it away (ChipPanel's rules, HoverPanel's own).
    */
-  import { pinReference } from "@cawco/core";
-  import type { Pin } from "@cawco/core/comments";
-  import { pinName } from "@cawco/core/pin-name";
+  import { pinReference } from "@cawco/core/references";
   import { Portal } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";

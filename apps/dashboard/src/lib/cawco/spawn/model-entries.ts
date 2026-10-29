@@ -1,4 +1,4 @@
-import type { EffortLevel, ModelInfo } from "@cawco/core";
+import type { EffortLevel, ModelInfo } from "@cawco/core/harness";
 import type { ModelUse } from "./modelUse.svelte";
 
 export interface ModelEntry {

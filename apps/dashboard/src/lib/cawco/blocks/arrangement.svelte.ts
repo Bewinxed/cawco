@@ -18,7 +18,7 @@ import {
   SHOWN_BLOCK_PAGES,
   type ShownBlockPage,
   viewBlock,
-} from "@cawco/core";
+} from "@cawco/core/blocks";
 import { failureWords } from "../hub-read";
 import { json, send } from "../project-tasks";
 

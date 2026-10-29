@@ -1,14 +1,12 @@
 <script lang="ts">
+  import { userLayerLabel } from "@cawco/core/claude-dirs";
   /**
    * A new memory document, from the section's primary button: its path under
    * ~/.claude/memories/, then the editor. A write to a path the hub has never
    * seen is how a document comes into being.
    */
-  import {
-    memoryDocProblem,
-    userLayerLabel,
-    memoryWords as words,
-  } from "@cawco/core";
+  import { memoryDocProblem } from "@cawco/core/fleet";
+  import { memoryWords as words } from "@cawco/core/words/memory";
   import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";

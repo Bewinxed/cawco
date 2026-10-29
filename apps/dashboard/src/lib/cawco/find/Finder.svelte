@@ -23,7 +23,7 @@
    * The field keeps the focus (a WAI-ARIA combobox over a listbox): ↑↓ move
    * the active row, ↵ opens it, → peeks it in place, ← folds, Escape closes.
    */
-  import { findSecretWords } from "@cawco/core";
+  import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { tick, untrack } from "svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";

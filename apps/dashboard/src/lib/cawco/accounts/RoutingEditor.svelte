@@ -8,11 +8,8 @@
    * on, and the place takes the new height. Save writes the routing, then
    * the order of every account whose place changed.
    */
-  import {
-    type Account,
-    accountsWords,
-    type ProviderRouting,
-  } from "@cawco/core";
+  import type { Account, ProviderRouting } from "@cawco/core/accounts";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { patchAccount, putRouting } from "#lib/cawco/client.svelte.js";

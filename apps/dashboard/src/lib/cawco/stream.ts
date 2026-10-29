@@ -33,7 +33,7 @@ import type {
   StreamClientMessage,
   StreamDelta,
   StreamReset,
-} from "@cawco/core";
+} from "@cawco/core/stream";
 import { COMMAND_ACK_STAGES } from "@cawco/core/stream";
 
 /** How long a submitted command may go unacknowledged before it is called off. */

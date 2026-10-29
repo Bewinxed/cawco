@@ -16,6 +16,8 @@
 </script>
 
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
+  import type { PropMeta } from "@cawco/core/stage";
   /**
    * A sheet's inspector (live components spec §5): the chosen story's
    * props as controls, from the stage's docgen. An enum is the variant
@@ -28,9 +30,7 @@
    * place). A right panel beside the page on a desk; a sheet over the
    * page's foot on a phone.
    */
-  import { artifactWords as words } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
-  import type { PropMeta } from "@cawco/core/stage";
+  import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,

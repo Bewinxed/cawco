@@ -24,7 +24,9 @@
    *   composer staying where it is. Ask Caw (the head's
    *   button, the views bar's "+") shows a new thread here (`lead.fresh`).
    */
-  import { CAW_DENIED_TOOLS, type HarnessKind, threadWords } from "@cawco/core";
+  import { CAW_DENIED_TOOLS } from "@cawco/core/delegate-types";
+  import type { HarnessKind } from "@cawco/core/harness";
+  import { threadWords } from "@cawco/core/words/threads";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { cawco, threadsOf } from "#lib/cawco/client.svelte.js";

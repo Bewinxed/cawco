@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * Where it goes (owner pick f): one block, one
    * harness at a time, by session, model or machine, over the page's range.
@@ -20,13 +21,12 @@
    * machine ran sessions of both. Each group's height is driven
    * (motion/relay-boxes) so an old row never overflows into the group below.
    */
+  import type { HarnessKind } from "@cawco/core/harness";
   import type {
-    HarnessKind,
     UsageGroupBy,
     UsageSummary,
     UsageSummaryRow,
-  } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  } from "@cawco/core/usage/types";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {

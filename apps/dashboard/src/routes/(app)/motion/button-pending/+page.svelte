@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { commonWords, taskReviewWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
+  import { taskReviewWords } from "@cawco/core/words/task-review";
   /**
    * BUTTON BENCH: the kit Button's label and its pending wording
    * (pending-content), read by the `button-pending` spec. A label-only

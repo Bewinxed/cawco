@@ -12,7 +12,7 @@ import {
   type DecisionKind,
   decidesFileOf,
   type FleetDecides,
-} from "@cawco/core";
+} from "@cawco/core/decides";
 import { hubFailure } from "#lib/cawco/hub-read.js";
 import { json, send } from "#lib/cawco/project-tasks.js";
 

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { StatusPair } from "@cawco/core";
+  import type { StatusPair } from "@cawco/core/views";
 
   /** What a row is doing, as its mark says it. */
   export type MarkStatus = StatusPair | "idle";

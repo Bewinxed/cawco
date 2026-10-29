@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   import { onMount } from "svelte";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { page } from "$app/state";

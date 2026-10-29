@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { RuleDraft } from "@cawco/core";
-  import { ruleHits } from "@cawco/core";
+  import type { RuleDraft } from "@cawco/core/rules";
+  import { ruleHits } from "@cawco/core/rules";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
 

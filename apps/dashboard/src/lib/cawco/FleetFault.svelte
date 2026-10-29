@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { commonWords, fleetFaultWords, machineLabel } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { commonWords } from "@cawco/core/words/common";
+  import { fleetFaultWords } from "@cawco/core/words/fleet-faults";
   /**
    * One fault, rendered the same way everywhere it appears.
    *

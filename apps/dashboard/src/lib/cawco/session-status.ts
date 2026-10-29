@@ -5,8 +5,8 @@
  * whose pin card asks in place) draws marks too.
  */
 
-import type { ThreadStatus } from "@cawco/core";
-import { commonWords } from "@cawco/core";
+import type { ThreadStatus } from "@cawco/core/threads";
+import { commonWords } from "@cawco/core/words/common";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
 import { type BoardRow, cawco, isFailed, isStale } from "./client.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";

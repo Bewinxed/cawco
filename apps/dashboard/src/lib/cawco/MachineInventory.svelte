@@ -5,8 +5,9 @@
     DiscoveredSkill,
     FleetMcpServer,
     FleetSkillMeta,
-  } from "@cawco/core";
-  import { machineLabel, skillsWords as words } from "@cawco/core";
+  } from "@cawco/core/fleet";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { skillsWords as words } from "@cawco/core/words/skills";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";

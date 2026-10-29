@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * One independently failing part of the page (the composer, a transcript,
    * a side panel, a conversation, the sidebar, the tabs, a page): an error

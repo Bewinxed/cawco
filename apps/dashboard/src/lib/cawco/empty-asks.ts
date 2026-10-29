@@ -16,7 +16,7 @@
  * The words live here, not in core's words, because they are the
  * dashboard's alone: the app draws none of these surfaces.
  */
-import { accountsWords } from "@cawco/core";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { cawco } from "./client.svelte";
 import { newSession, type SpawnPrefill } from "./spawn/new-session.svelte";
 import { spawnPrefs } from "./spawnPrefs.svelte";

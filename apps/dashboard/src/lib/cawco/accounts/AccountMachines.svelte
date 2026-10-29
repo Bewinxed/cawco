@@ -23,7 +23,8 @@
    * parks on the row. Once it lands the popover offers the sign-in, saying
    * which Claude Code is there now.
    */
-  import { type Account, accountsWords as words } from "@cawco/core";
+  import type { Account } from "@cawco/core/accounts";
+  import { accountsWords as words } from "@cawco/core/words/accounts";
   import { SvelteMap } from "svelte/reactivity";
   import { z } from "zod";
   import { cawco, signOutOn } from "#lib/cawco/client.svelte.js";

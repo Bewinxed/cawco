@@ -6,7 +6,7 @@
  * (a component on the stage, a comment card's thread) draws each reference
  * as its written label, a code span as code, and never loads the store.
  */
-import type { ReferenceKind } from "@cawco/core";
+import type { ReferenceKind } from "@cawco/core/references";
 import type { Component } from "svelte";
 import { getContext, setContext } from "svelte";
 import type { Skill } from "./skill-chips";

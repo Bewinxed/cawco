@@ -18,7 +18,7 @@ import {
   parseReference,
   pinReference,
   type ReferenceKind,
-} from "@cawco/core";
+} from "@cawco/core/references";
 import type { Component } from "svelte";
 import ArtifactReference from "./ArtifactReference.svelte";
 import { artifactMarksKnown, artifactNamed } from "./artifact-names.svelte";

@@ -15,7 +15,7 @@
    * With `present` off the words fade and Caw leaves; `ongone` says when he
    * has, and the place lets it go.
    */
-  import { shellWords } from "@cawco/core";
+  import { shellWords } from "@cawco/core/words/shell";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {

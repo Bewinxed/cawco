@@ -5,7 +5,8 @@
    * the others make room on the list's reflow (motion/rows), and the row
    * drops into its place. Up and down arrows move a focused row a place.
    */
-  import { type Account, accountsWords } from "@cawco/core";
+  import type { Account } from "@cawco/core/accounts";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { tick } from "svelte";
   import { dur, ease, motionOk } from "../motion/curves.svelte";
   import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";

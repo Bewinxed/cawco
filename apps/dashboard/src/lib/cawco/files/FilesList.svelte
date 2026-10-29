@@ -37,7 +37,9 @@
    * the chosen list filling the rest of the drawer (owner: "aren't tabs for
    * attachments and artifacts a better fit here?").
    */
-  import { type ArtifactSummary, accountsWords, filesWords } from "@cawco/core";
+  import type { ArtifactSummary } from "@cawco/core/protocol";
+  import { accountsWords } from "@cawco/core/words/accounts";
+  import { filesWords } from "@cawco/core/words/files";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { Button } from "#lib/components/ui/button/index.js";

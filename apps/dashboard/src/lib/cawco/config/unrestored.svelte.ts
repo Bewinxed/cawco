@@ -1,4 +1,4 @@
-import type { Deleted } from "@cawco/core";
+import type { Deleted } from "@cawco/core/fleet";
 import { failureClause, hubRefusal } from "../hub-read";
 import { refusals } from "../refusals.svelte";
 

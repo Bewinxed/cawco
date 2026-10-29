@@ -11,10 +11,10 @@
   import {
     type Account,
     type AccountProvider,
-    accountsWords,
     type StrategyChoice,
     strategiesFor,
-  } from "@cawco/core";
+  } from "@cawco/core/accounts";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { tick } from "svelte";
   import {
     NativeSelect,

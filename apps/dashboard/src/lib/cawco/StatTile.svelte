@@ -8,7 +8,7 @@
    * moves the figure or the tile's height. `action` is a control the figure
    * is changed with (the budget's Set budget), under the figure in the well.
    */
-  import type { ViewTone } from "@cawco/core";
+  import type { ViewTone } from "@cawco/core/views";
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";

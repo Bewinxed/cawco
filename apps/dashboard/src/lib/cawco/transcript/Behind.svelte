@@ -26,7 +26,8 @@
   column a few letters wide.
 -->
 <script lang="ts">
-  import { commonWords, machineLabel } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { commonWords } from "@cawco/core/words/common";
   import { rise } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { cawco, type ReadFault, reconnectingNow } from "../client.svelte";

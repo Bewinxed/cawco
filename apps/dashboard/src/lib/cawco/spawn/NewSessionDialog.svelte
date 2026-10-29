@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * The New Session form on a phone: the kit drawer's bottom sheet under
    * 640px (DESIGN.md: "the new-session dialog becomes a bottom sheet"). A

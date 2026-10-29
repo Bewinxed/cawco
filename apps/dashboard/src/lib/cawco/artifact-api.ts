@@ -4,14 +4,15 @@
  * alike. Its own module, apart from the fleet store, so an artifact's tab
  * reaches them without loading the fleet.
  */
+
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type {
   ArtifactHit,
   ArtifactSummary,
   ArtifactThumbnail,
   SessionAttachments,
   ShownFailure,
-} from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/protocol";
 import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { currentClientId } from "./client-id";

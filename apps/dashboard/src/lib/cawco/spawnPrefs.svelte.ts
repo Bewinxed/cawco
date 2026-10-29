@@ -4,7 +4,7 @@ import {
   type HarnessKind,
   harnessNamed,
   type PermissionMode,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import { z } from "zod";
 import { SpawnPrefsShape } from "#lib/cawco/stored-shapes.js";
 import { MODEL_DEFAULT } from "./models.svelte";

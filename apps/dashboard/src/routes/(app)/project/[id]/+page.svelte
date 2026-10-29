@@ -1,4 +1,12 @@
 <script lang="ts">
+  import {
+    BLOCK_PAGE_TITLES,
+    type ShownBlockPage as BlockPageId,
+    SHOWN_BLOCK_PAGES,
+    viewOfBlock,
+  } from "@cawco/core/blocks";
+  import { detach } from "@cawco/core/detach";
+  import { todoProgress } from "@cawco/core/plan";
   /**
    * The project's views (design §2, PRD §5.2): the head with Caw as the
    * lead's face, then the view; the view strip stands in the shell's bar on
@@ -27,20 +35,11 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
-  import type { StageKind } from "@cawco/core";
-  import {
-    BLOCK_PAGE_TITLES,
-    type ShownBlockPage as BlockPageId,
-    blocksWords,
-    commonWords,
-    madeWords,
-    type ProjectView,
-    SHOWN_BLOCK_PAGES,
-    todoProgress,
-    viewOfBlock,
-    viewsWords,
-  } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  import type { ProjectView, StageKind } from "@cawco/core/views";
+  import { blocksWords } from "@cawco/core/words/blocks";
+  import { commonWords } from "@cawco/core/words/common";
+  import { madeWords } from "@cawco/core/words/made";
+  import { viewsWords } from "@cawco/core/words/views";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";

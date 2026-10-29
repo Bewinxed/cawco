@@ -3,7 +3,9 @@
  * beside a conversation, where the app's one socket already holds them all.
  * The app's layout sets it for every pane under it.
  */
-import type { FsEntry, NeutralSessionInfo } from "@cawco/core";
+
+import type { NeutralSessionInfo } from "@cawco/core/harness";
+import type { FsEntry } from "@cawco/core/protocol";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { cawco, closePreview, didntAnswer, machineFs } from "../client.svelte";
 import { conversationHref } from "../links";

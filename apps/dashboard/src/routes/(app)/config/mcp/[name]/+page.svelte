@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { mcpWords as words } from "@cawco/core";
+  import { mcpWords as words } from "@cawco/core/words/mcp";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import McpEditor from "#lib/cawco/config/editors/McpEditor.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";

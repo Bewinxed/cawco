@@ -3,8 +3,8 @@
     RULE_TEMPLATES,
     type RuleRow,
     ruleSentence,
-    rulesWords,
-  } from "@cawco/core";
+  } from "@cawco/core/rules";
+  import { rulesWords } from "@cawco/core/words/rules";
   import { deleteRule } from "#lib/cawco/config/deletes.js";
   import FleetStarters from "#lib/cawco/config/FleetStarters.svelte";
   import RowActFaults from "#lib/cawco/config/RowActFaults.svelte";

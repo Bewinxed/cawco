@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { StageKind } from "@cawco/core";
+  import type { StageKind } from "@cawco/core/views";
   /**
    * The project page's Decisions tab: its decision pages as one list
    * (DecisionsList, the owner's pick of 10-24), each row opening its page in
@@ -10,7 +10,7 @@
    * read, its frame's skeleton stands (The Claim Of Nothing Rule). The page
    * and the card live in the URL.
    */
-  import { decisionsWords as words } from "@cawco/core";
+  import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";

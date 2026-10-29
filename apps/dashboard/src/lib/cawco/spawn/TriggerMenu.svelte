@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { spawnWords } from "@cawco/core";
+  import { spawnWords } from "@cawco/core/words/spawn";
   /**
    * The `@` / `/` menu (§2.3): caret-anchored, keyboard-driven, 300px wide.
    * Its rows and their fill are concentric with the snug surface (The

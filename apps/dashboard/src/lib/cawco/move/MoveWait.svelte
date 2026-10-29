@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { PermissionResult } from "@cawco/core/harness";
   /**
    * A session whose project is moving to its machine (its row on the board
    * as `moving` from the move's start), before its process exists, and the
@@ -19,9 +20,8 @@
     type MoveJob,
     type MoveStep,
     moveSourceName,
-    type PermissionResult,
     moveSize as sizeWords,
-  } from "@cawco/core";
+  } from "@cawco/core/move";
   import { type Component, untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { msOf } from "#lib/cawco/motion/time.js";

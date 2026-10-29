@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * The one section template: a recessed ground holding one raised body. The
    * header carries the title, the section's purpose in one line, and its
@@ -11,8 +12,7 @@
    * does not move. With no height kept yet, three
    * skeleton rows.
    */
-  import { configureWords } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  import { configureWords } from "@cawco/core/words/configure";
   import { type Snippet, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { reveal } from "#lib/cawco/motion/curves.svelte.js";

@@ -1,9 +1,5 @@
-import {
-  type MemoryScope,
-  scoped,
-  scopeWords,
-  userLayerLabel,
-} from "@cawco/core";
+import { userLayerLabel } from "@cawco/core/claude-dirs";
+import { type MemoryScope, scoped, scopeWords } from "@cawco/core/fleet";
 import type { Machine } from "../client.svelte";
 
 /**

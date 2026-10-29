@@ -4,7 +4,7 @@
  * send carries the reference the hub answers. An XHR rather than `fetch`,
  * because only it says how far an upload has gone.
  */
-import type { FileAttachment } from "@cawco/core";
+import type { FileAttachment } from "@cawco/core/attachments";
 import { z } from "zod";
 
 export function uploadFile(

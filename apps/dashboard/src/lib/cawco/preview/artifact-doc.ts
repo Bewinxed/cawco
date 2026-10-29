@@ -1,4 +1,4 @@
-import type { ArtifactChoices, ChoiceEntry } from "@cawco/core";
+import type { ArtifactChoices, ChoiceEntry } from "@cawco/core/choices";
 import {
   type ActivityLine,
   type ArtifactChanges,

@@ -1,11 +1,9 @@
 <script lang="ts">
-  import {
-    CAW_NO_MACHINE,
-    connectWords,
-    routinesWords as words,
-  } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import { CAW_NO_MACHINE } from "@cawco/core/threads";
   import { DAY_MS } from "@cawco/core/time";
+  import { connectWords } from "@cawco/core/words/connect";
+  import { routinesWords as words } from "@cawco/core/words/routines";
   import { untrack } from "svelte";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
   import BlockPage, {

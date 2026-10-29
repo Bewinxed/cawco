@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { type Install, installerRan } from "@cawco/core/install";
   /**
    * Outcome: how the install ended, standing until the person acts on it
    * (Retry or Remove install); closing the window parks it in its row.
@@ -21,7 +22,7 @@
    * Retry keeps every detail; a password sign-in asks for its password
    * again, which was used once and forgotten.
    */
-  import { connectWords, type Install, installerRan } from "@cawco/core";
+  import { connectWords } from "@cawco/core/words/connect";
   import { Button } from "#lib/components/ui/button/index.js";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";

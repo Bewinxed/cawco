@@ -1,12 +1,12 @@
-import {
-  configureWords,
-  type FleetAgent,
-  type FleetMarketplace,
-  type FleetMcpServer,
-  type FleetPlugin,
-  type FleetSkillMeta,
-  type RuleRow,
-} from "@cawco/core";
+import type {
+  FleetAgent,
+  FleetMarketplace,
+  FleetMcpServer,
+  FleetPlugin,
+  FleetSkillMeta,
+} from "@cawco/core/fleet";
+import type { RuleRow } from "@cawco/core/rules";
+import { configureWords } from "@cawco/core/words/configure";
 import { type DelegateType, removeDelegateType } from "../delegate-types";
 import {
   type FleetMemoryDocRow,

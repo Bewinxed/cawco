@@ -18,9 +18,10 @@
  * with Reopen.
  */
 
-import type { ContinuationJob } from "@cawco/core";
-import { commonWords, spawnWords } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import type { ContinuationJob } from "@cawco/core/protocol";
+import { commonWords } from "@cawco/core/words/common";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { z } from "zod";
 import { ParkedStartSchema } from "#lib/cawco/stored-shapes.js";
 import { track } from "#lib/cawco/track.js";

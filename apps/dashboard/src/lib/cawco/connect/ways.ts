@@ -4,8 +4,8 @@
  * machine on its own tab.
  */
 
-import type { InstallRoute } from "@cawco/core";
-import { connectWords } from "@cawco/core";
+import type { InstallRoute } from "@cawco/core/install";
+import { connectWords } from "@cawco/core/words/connect";
 import type { Component } from "svelte";
 import { IconKey, IconTerminal } from "#lib/icons.js";
 

@@ -3,7 +3,7 @@
  * Provides type safety for node data across all flow components
  */
 
-import type { TranscriptBranch } from "@cawco/core";
+import type { TranscriptBranch } from "@cawco/core/transcript-types";
 import type { Message } from "#lib/cawco/types.js";
 
 /**

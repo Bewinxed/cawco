@@ -1,4 +1,8 @@
 <script lang="ts">
+  import type {
+    ProjectOfferAccepted,
+    ProjectOfferSummary,
+  } from "@cawco/core/frames";
   /**
    * "Make this a project" (Projects §2, "Caw suggests, you escalate"): the
    * one offer a plain session gets when it outgrows itself, standing over the
@@ -6,11 +10,7 @@
    * attention hue, one sentence naming why, and two answers. Either answer is
    * the last word: a session is never offered again.
    */
-  import {
-    offerWords,
-    type ProjectOfferAccepted,
-    type ProjectOfferSummary,
-  } from "@cawco/core";
+  import { offerWords } from "@cawco/core/words/offers";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose, IconFolder } from "#lib/icons.js";

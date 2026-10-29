@@ -34,8 +34,9 @@
 </script>
 
 <script lang="ts">
-  import { commonWords, transcriptWords } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import { commonWords } from "@cawco/core/words/common";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * The scrolling transcript: the folded rows, virtualized. The live tail rides
    * as rows of its own (see `buildRowsFrom`), so streaming text, an open reasoning

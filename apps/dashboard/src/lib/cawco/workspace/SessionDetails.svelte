@@ -3,14 +3,15 @@
 </script>
 
 <script lang="ts">
-  import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
-  import {
-    accountsWords,
-    commonWords,
-    EFFORT_NONE,
-    isEffortLevel,
-  } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import type {
+    EffortLevel,
+    HarnessKind,
+    PermissionMode,
+  } from "@cawco/core/harness";
+  import { EFFORT_NONE, isEffortLevel } from "@cawco/core/harness";
+  import { accountsWords } from "@cawco/core/words/accounts";
+  import { commonWords } from "@cawco/core/words/common";
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";

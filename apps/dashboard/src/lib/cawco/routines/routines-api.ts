@@ -6,15 +6,15 @@
  * proposed (actions.ts). A row's actions are the hub's routine routes; a
  * refusal is thrown in the hub's own sentence.
  */
-import {
-  type ApprovedActionView,
-  type ConnectionView,
-  type RelayView,
-  type RoutineOutcome,
-  type RoutineRunState,
-  type RoutineTarget,
-  routinesWords,
-} from "@cawco/core";
+import type { ApprovedActionView } from "@cawco/core/actions";
+import type { ConnectionView } from "@cawco/core/connections";
+import type { RelayView } from "@cawco/core/relays";
+import type {
+  RoutineOutcome,
+  RoutineRunState,
+  RoutineTarget,
+} from "@cawco/core/routine-kinds";
+import { routinesWords } from "@cawco/core/words/routines";
 import { json, send } from "#lib/cawco/project-tasks.js";
 
 /** One run, as the hub answers it (times in ms). */

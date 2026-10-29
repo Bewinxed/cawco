@@ -10,13 +10,13 @@
    * panel at its first stop, which is a look: what a revision changed and a
    * closing answer leave with it. One no session holds says its words alone.
    */
+  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import {
-    type ArtifactKind,
     type ArtifactNeedNotice,
-    artifactWords,
     noticePartWords,
-  } from "@cawco/core";
+  } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
+  import { artifactWords } from "@cawco/core/words/artifacts";
   import type { Component } from "svelte";
   import {
     IconArtifactCanvas,

@@ -9,8 +9,9 @@
  * per conversation for as long as the conversation is open, and keeps it
  * across a reload through `draft-store.ts`.
  */
-import type { StarterPlace } from "@cawco/core";
+
 import { detach } from "@cawco/core/detach";
+import type { StarterPlace } from "@cawco/core/starters";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/cawco/hub-read.js";

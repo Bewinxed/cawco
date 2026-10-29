@@ -1,6 +1,6 @@
 <script lang="ts">
   /** One figure with its label: the app's StatTile. */
-  import { VIEW_TONES } from "@cawco/core";
+  import { VIEW_TONES } from "@cawco/core/views";
   import StatTile from "#lib/cawco/StatTile.svelte";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 

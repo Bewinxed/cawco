@@ -12,7 +12,7 @@
     type DecisionKind,
     type FleetDecides,
     fleetRoutes,
-  } from "@cawco/core";
+  } from "@cawco/core/decides";
   import type { DelegateTypesPayload } from "#lib/cawco/delegate-types.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { send } from "#lib/cawco/project-tasks.js";

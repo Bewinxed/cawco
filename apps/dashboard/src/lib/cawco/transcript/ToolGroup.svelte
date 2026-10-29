@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { parseReference } from "@cawco/core";
   import {
     shownAttachments,
     sidecarOf,
     VIDEO_FILE,
   } from "@cawco/core/attachments";
+  import { parseReference } from "@cawco/core/references";
   import {
     hasBody as bodyFor,
     inputFields,

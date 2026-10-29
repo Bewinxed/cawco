@@ -16,8 +16,10 @@
  * from the hub: a stop under way whose session no longer runs has landed,
  * one still listed is still stopping, and the end runs once none is left.
  */
-import type { CawRunning, CawView, ProjectStopFrame } from "@cawco/core";
+
 import { detach } from "@cawco/core/detach";
+import type { ProjectStopFrame } from "@cawco/core/frames";
+import type { CawRunning, CawView } from "@cawco/core/threads";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";

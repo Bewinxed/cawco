@@ -25,7 +25,7 @@ const CALL_MS = 15_000;
 const RANGES_MS = DAY_MS;
 
 /** Cloudflare's v4 envelope. */
-interface Envelope<T> {
+interface CloudflareEnvelope<T> {
   errors?: { code?: number; message?: string }[];
   result?: T;
   success?: boolean;
@@ -78,7 +78,9 @@ const call = async <T>(
         return {
           ok: sent.ok,
           status: sent.status,
-          envelope: (await sent.json().catch(() => ({}))) as Envelope<T>,
+          envelope: (await sent
+            .json()
+            .catch(() => ({}))) as CloudflareEnvelope<T>,
         };
       }
     );

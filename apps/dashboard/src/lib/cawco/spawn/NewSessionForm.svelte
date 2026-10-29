@@ -3,26 +3,28 @@
     type AccountProvider,
     accountNameAmong,
     CLAUDE_PROVIDER,
-    commonWords,
-    configurePage,
+    type PlacementPreview,
+    providerOf,
+  } from "@cawco/core/accounts";
+  import type { Bounded } from "@cawco/core/bounded";
+  import {
     contextFitRefusal,
+    SUMMARISER_OUTPUT_RESERVE_TOKENS,
+    TARGET_HEADROOM_TOKENS,
+  } from "@cawco/core/continuation";
+  import { detach } from "@cawco/core/detach";
+  import {
     type EffortLevel,
     HARNESSES,
     type HarnessKind,
-    isGitUrl,
-    type MoveEstimate,
     type PermissionMode,
-    type PlacementPreview,
-    providerOf,
-    repoPath,
-    SUMMARISER_OUTPUT_RESERVE_TOKENS,
-    moveSize as sizeWords,
-    spawnWords,
-    TARGET_HEADROOM_TOKENS,
-  } from "@cawco/core";
-  import type { Bounded } from "@cawco/core/bounded";
-  import { detach } from "@cawco/core/detach";
+  } from "@cawco/core/harness";
+  import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";
+  import { isGitUrl, repoPath } from "@cawco/core/protocol";
   import { unhandled } from "@cawco/core/unhandled";
+  import { commonWords } from "@cawco/core/words/common";
+  import { configurePage } from "@cawco/core/words/configure";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { tick, untrack } from "svelte";
   import { z } from "zod";
   import { awayOf, failureWords, hubRefusal } from "#lib/cawco/hub-read.js";

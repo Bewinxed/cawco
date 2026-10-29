@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ListedBrowser } from "@cawco/core/browser";
   /**
    * A browser artifact in the panel (Projects spec §5.11, "The view"): under
    * the head, an address band with the page's origin and who has control
@@ -15,8 +16,9 @@
    * didn't start, the view's link lost or refused, the stream that found no
    * way here (the stream relay's settings), a codec this browser can't play.
    */
-  import { browserWords, commonWords, shellWords } from "@cawco/core";
-  import type { ListedBrowser } from "@cawco/core/browser";
+  import { browserWords } from "@cawco/core/words/browser";
+  import { commonWords } from "@cawco/core/words/common";
+  import { shellWords } from "@cawco/core/words/shell";
   import { untrack } from "svelte";
   import { track } from "#lib/cawco/track.js";
   import { Badge } from "#lib/components/ui/badge/index.js";

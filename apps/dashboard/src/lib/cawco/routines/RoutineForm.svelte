@@ -22,7 +22,7 @@
    * The hub is a prop (`hub`), and so is the state it opens in (`draft`,
    * `saving`, `failure`), so its states file draws each state with no hub.
    */
-  import { routinesWords as words } from "@cawco/core";
+  import { routinesWords as words } from "@cawco/core/words/routines";
   import { untrack } from "svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { cawHeadWords } from "@cawco/core";
+  import { cawHeadWords } from "@cawco/core/words/caw-head";
   import { home } from "./home/home-state.svelte";
 
   /**

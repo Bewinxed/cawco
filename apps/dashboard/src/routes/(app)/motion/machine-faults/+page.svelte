@@ -15,7 +15,7 @@
     FleetItemState,
     FleetItemStatus,
     FleetSyncReport,
-  } from "@cawco/core";
+  } from "@cawco/core/fleet";
   import { signInsWaiting } from "#lib/cawco/fleet-faults.js";
   import ItemFaults from "#lib/cawco/ItemFaults.svelte";
   import SignInWaits from "#lib/cawco/SignInWaits.svelte";

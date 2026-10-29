@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ArtifactKind } from "@cawco/core";
+  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import { ARTIFACT_RESPONSES, MOVED_HERE } from "@cawco/core/harness";
   import type { Component } from "svelte";
   import { showArtifact } from "#lib/cawco/artifact-api.js";

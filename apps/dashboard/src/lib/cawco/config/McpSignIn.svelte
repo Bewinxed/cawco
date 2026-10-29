@@ -7,7 +7,8 @@
    * sign-in tab closed before it finished, or a start the hub refused, is
    * said under the button, which tries again.
    */
-  import { type FleetMcpServer, mcpWords as words } from "@cawco/core";
+  import type { FleetMcpServer } from "@cawco/core/fleet";
+  import { mcpWords as words } from "@cawco/core/words/mcp";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconKey } from "#lib/icons.js";

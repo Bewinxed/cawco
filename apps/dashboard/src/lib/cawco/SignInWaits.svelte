@@ -7,7 +7,7 @@
    * in, to the server's page in Configure, where its sign-in runs
    * (McpSignIn) (DESIGN.md: a failure is told and recoverable).
    */
-  import { mcpWords } from "@cawco/core";
+  import { mcpWords } from "@cawco/core/words/mcp";
   import { IconKey } from "#lib/icons.js";
   import RowFault from "./RowFault.svelte";
 

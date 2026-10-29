@@ -6,7 +6,8 @@
    * machine made of it stands on its row; the field empties once it is sent.
    * With one machine (the account page's popover) there is nothing to tick.
    */
-  import { type AccountJoined, accountsWords } from "@cawco/core";
+  import type { AccountJoined } from "@cawco/core/accounts";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { untrack } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { sendAccountKey } from "#lib/cawco/client.svelte.js";

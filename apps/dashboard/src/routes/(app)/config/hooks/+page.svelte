@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { HOOK_TEMPLATES, hookSentence } from "@cawco/core";
+  import { HOOK_TEMPLATES, hookSentence } from "@cawco/core/hooks";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { deleteHook } from "#lib/cawco/config/deletes.js";
   import FleetStarters from "#lib/cawco/config/FleetStarters.svelte";

@@ -1,14 +1,14 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import {
     isMemoryRole,
     type MemoryScope,
-    machineLabel,
     placedOnly,
     scoped,
     scopeKey,
-    memoryWords as words,
-  } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  } from "@cawco/core/fleet";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import { memoryWords as words } from "@cawco/core/words/memory";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";

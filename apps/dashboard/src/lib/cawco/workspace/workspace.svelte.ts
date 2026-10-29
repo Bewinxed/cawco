@@ -17,10 +17,11 @@
  * is open. `workingSet` only remembers what a conversation is called and
  * where a stored one lives.
  */
-import type { TabNamed } from "@cawco/core";
+
 import { artifactStopOf } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
+import type { TabNamed } from "@cawco/core/protocol";
 import { SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";

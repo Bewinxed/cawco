@@ -21,11 +21,9 @@
    * after the menu closed goes to `onrefused`, which the pane says on its
    * own failure line.
    */
-  import {
-    type ArtifactKind,
-    type ArtifactSummary,
-    artifactWords,
-  } from "@cawco/core";
+  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
+  import type { ArtifactSummary } from "@cawco/core/protocol";
+  import { artifactWords } from "@cawco/core/words/artifacts";
   import type { Component } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";

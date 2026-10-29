@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { PulseFrame } from "@cawco/core/frames";
   /**
    * DELEGATE TRAY BENCH: the delegate tray's row (transcript/DelegateTray),
    * no hub. The real SessionPane and the group's composer lent to it as
@@ -17,13 +18,8 @@
    * efforts: its mode chip opens the picker, Full Send's question in it,
    * and its effort chip the sibling the picker's surface glides to.
    */
-  import {
-    CAPABILITIES_NONE,
-    type InstanceRow,
-    PERMISSION_MODES,
-    type PulseFrame,
-    type WorkItemSummary,
-  } from "@cawco/core";
+  import { CAPABILITIES_NONE, PERMISSION_MODES } from "@cawco/core/harness";
+  import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { onMount } from "svelte";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
   import type { HeldPlan } from "#lib/cawco/plan.js";

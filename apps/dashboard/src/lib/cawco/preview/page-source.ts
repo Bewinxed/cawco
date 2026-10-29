@@ -9,12 +9,13 @@
  * (preview/pass.ts): every preview origin turns a browser without a pass
  * away.
  */
+
 import {
-  decisionsWords,
   PREVIEW_PING_PATH,
   type PreviewAddress,
   previewRoute,
-} from "@cawco/core";
+} from "@cawco/core/frames";
+import { decisionsWords } from "@cawco/core/words/decisions";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { enterPreviews } from "./pass";
 

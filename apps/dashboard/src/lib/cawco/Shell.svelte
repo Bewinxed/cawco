@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { shellWords, sidebarWords } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
   import {
     type ShellShortcut,
     shellShortcutOf,
   } from "@cawco/core/shell-shortcuts";
+  import { shellWords } from "@cawco/core/words/shell";
+  import { sidebarWords } from "@cawco/core/words/sidebar";
   /**
    * The app chrome: the management rail on the left, a slim bar across the top,
    * and everything else underneath. Ported from mocks/v2-fleet.html (`aside` +

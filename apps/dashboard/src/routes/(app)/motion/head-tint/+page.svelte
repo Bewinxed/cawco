@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { PulseFrame, SessionPulse } from "@cawco/core";
+  import type { PulseFrame } from "@cawco/core/frames";
+  import type { SessionPulse } from "@cawco/core/protocol";
   import { HOUR_MS } from "@cawco/core/time";
   import { onMount, untrack } from "svelte";
   import { blankSession } from "#lib/cawco/client.svelte.js";

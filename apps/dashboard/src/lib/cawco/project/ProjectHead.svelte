@@ -10,6 +10,12 @@
 </script>
 
 <script lang="ts">
+  import { machineLabel } from "@cawco/core/machine-names";
+  import {
+    UPSTREAM_WORDS,
+    type UpstreamPosts,
+    upstreamPostsWords,
+  } from "@cawco/core/upstream-guard";
   /**
    * The project's head: one row at every width, nothing wraps (DESIGN.md,
    * The Title Bars Follow Liquid Glass Rule: "One bar, one row"), as tall as
@@ -47,17 +53,9 @@
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
    */
-  import {
-    commonWords,
-    machineLabel,
-    projectWords,
-    viewsWords,
-  } from "@cawco/core";
-  import {
-    UPSTREAM_WORDS,
-    type UpstreamPosts,
-    upstreamPostsWords,
-  } from "@cawco/core/upstream-guard";
+  import { commonWords } from "@cawco/core/words/common";
+  import { projectWords } from "@cawco/core/words/project";
+  import { viewsWords } from "@cawco/core/words/views";
   import { mergeProps } from "bits-ui";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";

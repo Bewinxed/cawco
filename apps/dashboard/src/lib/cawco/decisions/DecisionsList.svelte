@@ -1,4 +1,8 @@
 <script lang="ts">
+  import type {
+    DecisionLink,
+    DecisionPageSummary,
+  } from "@cawco/core/decisions";
   /**
    * The project's decision pages as one list (design-previews/decisions-list,
    * the owner's pick of 10-24: "A list, links as words on the cards"): a
@@ -23,11 +27,7 @@
    * or decided page with no tasks, takes the age's place while a resting
    * pointer is on the row; on a phone it is the page's own.
    */
-  import { decisionsWords as words } from "@cawco/core";
-  import type {
-    DecisionLink,
-    DecisionPageSummary,
-  } from "@cawco/core/decisions";
+  import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";

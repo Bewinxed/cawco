@@ -1,6 +1,6 @@
 <script lang="ts" module>
-  import type { FsEntry } from "@cawco/core";
   import type { Bounded } from "@cawco/core/bounded";
+  import type { FsEntry } from "@cawco/core/protocol";
   import { unhandled } from "@cawco/core/unhandled";
   import { failureWords } from "#lib/cawco/hub-read.js";
 

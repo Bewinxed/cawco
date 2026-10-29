@@ -14,7 +14,7 @@ import {
   stepLimit,
   stepsOf,
   stepWords,
-} from "@cawco/core";
+} from "@cawco/core/install";
 
 /** Where a step stands: its status glyph (DESIGN.md, Status displays). */
 export type MarkState = "done" | "current" | "failed" | "stopped" | "future";

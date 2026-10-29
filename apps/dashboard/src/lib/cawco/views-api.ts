@@ -4,7 +4,7 @@
  * them alike. Its own module, apart from the fleet store, so that route
  * loads only what the view needs.
  */
-import type { ProjectView, ViewToolName } from "@cawco/core";
+import type { ProjectView, ViewToolName } from "@cawco/core/views";
 import { send as askHub, json } from "./project-tasks";
 
 const projectPath = (projectId: string) =>

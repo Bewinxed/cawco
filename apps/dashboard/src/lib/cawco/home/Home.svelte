@@ -11,7 +11,7 @@
    * Then the rows stay as last known and greyed, there is no Caw, and the
    * status line says the hub is gone.
    */
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
   import MachinesEmpty from "../MachinesEmpty.svelte";

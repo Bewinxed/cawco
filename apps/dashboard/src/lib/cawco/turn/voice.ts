@@ -5,7 +5,7 @@
  * turn in flight); `tasks` draws the tasks a turn is about under it, and
  * `files` the project folder's files it says it wrote.
  */
-import { CAW_EVENT_NOTE } from "@cawco/core";
+import { CAW_EVENT_NOTE } from "@cawco/core/threads";
 import { getContext, type Snippet, setContext } from "svelte";
 
 export interface TranscriptVoice {

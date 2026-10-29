@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { commonWords, connectWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
+  import { connectWords } from "@cawco/core/words/connect";
   /**
    * A Configure group that is about machines, with none joined yet: the kit's
    * empty block (DESIGN.md, Empty: a 20px mark, a title, one line saying

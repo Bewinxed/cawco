@@ -14,7 +14,7 @@
  * storyboards these are. The lanes' clocks and fills are illustrations of a
  * strategy, not anybody's readings.
  */
-import { accountsWords } from "@cawco/core";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { ease } from "../motion/curves.svelte";
 
 export type Board = "pinned" | "fill" | "spread" | "soonest" | "limit";

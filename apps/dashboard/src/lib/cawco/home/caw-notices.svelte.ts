@@ -7,7 +7,7 @@
  * (notices.svelte.ts). The panel is their one surface; his label counts
  * them, and his rim does not (the rim counts needs you only).
  */
-import type { ArtifactNeedNotice } from "@cawco/core";
+import type { ArtifactNeedNotice } from "@cawco/core/artifact-needs";
 import { movedLogins, rebalancesUnseen } from "../accounts/model.svelte";
 import { cawco } from "../client.svelte";
 import { connect } from "../connect/installs.svelte";

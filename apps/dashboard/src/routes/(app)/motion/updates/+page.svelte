@@ -1,4 +1,10 @@
 <script lang="ts">
+  import type {
+    BinaryUpdateChannels,
+    BinaryUpdatePolicy,
+    BinaryUpdateState,
+    KeptProcess,
+  } from "@cawco/core/binary-updates";
   /**
    * UPDATE STATES — every look of the update screens from fixtures, with no
    * hub needed: the channel cards (the fleet on Stable, then on Nightly with
@@ -7,13 +13,7 @@
    * holds), and the
    * notices as the update row of Caw's panel.
    */
-  import { machineLabel } from "@cawco/core";
-  import type {
-    BinaryUpdateChannels,
-    BinaryUpdatePolicy,
-    BinaryUpdateState,
-    KeptProcess,
-  } from "@cawco/core/binary-updates";
+  import { machineLabel } from "@cawco/core/machine-names";
   import UpdateCard from "#lib/cawco/home/UpdateCard.svelte";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {

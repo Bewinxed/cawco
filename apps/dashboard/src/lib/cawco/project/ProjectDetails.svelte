@@ -39,25 +39,22 @@
    * (RowFault). Every value is the project as the hub last said it, which
    * `projects.changed` brings to every open dashboard.
    */
+  import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
+  import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import type { DeclaredStep, ProjectGate } from "@cawco/core/project-gate";
   import {
-    type ConnectionView,
-    type DeclaredStep,
     type GithubProjectChoice,
     type IssueTracker,
-    LANDS_MODES,
-    type LandsMode,
-    lfsWords,
-    machineLabel,
-    type ProjectGate,
-    projectWords,
-    readsGitHubApi,
     statusOptionFor,
     TRACKER_NAMES,
     type Tracker,
     type TrackerBindingView,
     type TrackerTarget,
     type TrackerView,
-  } from "@cawco/core";
+  } from "@cawco/core/trackers";
+  import { lfsWords } from "@cawco/core/words/lfs";
+  import { projectWords } from "@cawco/core/words/project";
   import { onMount, type Snippet } from "svelte";
   import {
     addProjectPlace,

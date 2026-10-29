@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { HOUR_MS } from "@cawco/core/time";
   /**
    * The session details' stats strip on a bench, with no hub: the Context
    * bar (what is used) beside the provider's limit (what is left,
@@ -7,8 +8,7 @@
    * in its window; burning faster than it lasts; at its limit; and out of
    * date. In the reader's theme.
    */
-  import type { LimitWindow } from "@cawco/core";
-  import { HOUR_MS } from "@cawco/core/time";
+  import type { LimitWindow } from "@cawco/core/usage/types";
   import LimitBar from "#lib/cawco/usage/LimitBar.svelte";
   import ProviderLimit from "#lib/cawco/usage/ProviderLimit.svelte";
   import { fillState, firstToStop, limitRows } from "#lib/cawco/usage.js";

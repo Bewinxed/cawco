@@ -4,10 +4,6 @@
  * output is proved below to be its type exactly.
  */
 import type {
-  PreviewSource as PreviewSourceType,
-  SendPayload as SendPayloadType,
-} from "@cawco/core";
-import type {
   AtLimit as AtLimitType,
   PlacementStrategy as PlacementStrategyType,
   StrategyChoice as StrategyChoiceType,
@@ -70,6 +66,10 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
+import type {
+  PreviewSource as PreviewSourceType,
+  SendPayload as SendPayloadType,
+} from "@cawco/core/protocol";
 import type {
   CanvasShapes as CanvasShapesType,
   EmbedShape as EmbedShapeType,

@@ -1,10 +1,7 @@
 <script lang="ts">
-  import {
-    delegateTypeProblem,
-    EFFORT_LEVELS,
-    HARNESSES,
-    delegateTypesWords as words,
-  } from "@cawco/core";
+  import { delegateTypeProblem } from "@cawco/core/delegate-types";
+  import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness";
+  import { delegateTypesWords as words } from "@cawco/core/words/delegate-types";
   import { untrack } from "svelte";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import * as Alert from "#lib/components/ui/alert/index.js";

@@ -9,8 +9,11 @@
  * it. Claude's figure (the API price of work the plan covers) and opencode's
  * (real money) stay in their own columns, never one.
  */
-import { accountsWords, machineLabel, type UsageSummaryRow } from "@cawco/core";
+
+import { machineLabel } from "@cawco/core/machine-names";
 import { unhandled } from "@cawco/core/unhandled";
+import type { UsageSummaryRow } from "@cawco/core/usage/types";
+import { accountsWords } from "@cawco/core/words/accounts";
 import {
   type ContextRead,
   cawco,

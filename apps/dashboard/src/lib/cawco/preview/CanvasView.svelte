@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { PreviewScheme } from "@cawco/core/comments";
   /**
    * A component canvas's view in the panel's head (canvas-view.svelte.ts):
    * the kit's dropdown menu under the head's own button (the `sm` ghost, as
@@ -8,8 +9,7 @@
    * waits while it is on); Verify last, a design system round whose verdict
    * goes to the session.
    */
-  import { previewWords } from "@cawco/core";
-  import type { PreviewScheme } from "@cawco/core/comments";
+  import { previewWords } from "@cawco/core/words/preview";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconLayers } from "#lib/icons.js";
   import {

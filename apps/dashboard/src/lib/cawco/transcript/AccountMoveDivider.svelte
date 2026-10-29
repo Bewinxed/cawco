@@ -38,7 +38,7 @@
     type AccountMove,
     accountMoveWords,
     accountRunWords,
-  } from "@cawco/core";
+  } from "@cawco/core/accounts";
   // The chevron in Solar's linear cut, a glyph and not a mark (DESIGN.md,
   // The Solar Duotone Rule).
   import { IconChevronRight as IconChevron, IconTransfer } from "#lib/icons.js";

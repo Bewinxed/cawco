@@ -1,9 +1,6 @@
 <script lang="ts">
-  import {
-    type FleetMcpConfig,
-    type FleetMcpServer,
-    mcpWords as words,
-  } from "@cawco/core";
+  import type { FleetMcpConfig, FleetMcpServer } from "@cawco/core/fleet";
+  import { mcpWords as words } from "@cawco/core/words/mcp";
   import { untrack } from "svelte";
   import {
     appear,

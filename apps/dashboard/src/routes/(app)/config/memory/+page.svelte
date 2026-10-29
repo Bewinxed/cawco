@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { memoryWords as words } from "@cawco/core";
+  import { memoryWords as words } from "@cawco/core/words/memory";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { deleteMemory, notDeleted } from "#lib/cawco/config/deletes.js";
   import { drafts } from "#lib/cawco/config/drafts.svelte.js";

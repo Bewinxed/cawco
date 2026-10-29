@@ -12,7 +12,7 @@
    * mark a pin's unread answer wears (DESIGN.md, Status dot; A pin's pill).
    * The dot is decoration: the chip's name says it.
    */
-  import { planWords } from "@cawco/core";
+  import { planWords } from "@cawco/core/words/plan";
   import { presenceWords } from "@cawco/core/words/presence";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconToolTodo } from "#lib/icons.js";

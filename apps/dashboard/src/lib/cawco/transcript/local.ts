@@ -3,7 +3,8 @@
  * it, a failure it saw, and an ask it saw withdrawn or answered elsewhere.
  * Everything else in a transcript is the hub's.
  */
-import type { AskAnswer, SendPayload } from "@cawco/core";
+import type { AskAnswer } from "@cawco/core/frames";
+import type { SendPayload } from "@cawco/core/protocol";
 import { newId } from "../id";
 import type { Message } from "../types";
 

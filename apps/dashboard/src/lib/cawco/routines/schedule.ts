@@ -11,8 +11,9 @@
  *
  * The words are core's (`routinesWords`), which the app reads as `Words.Routines`.
  */
-import { routinesWords as words } from "@cawco/core";
+
 import { DAY_MS } from "@cawco/core/time";
+import { routinesWords as words } from "@cawco/core/words/routines";
 
 const DAY_NAMES = words.dayNames;
 

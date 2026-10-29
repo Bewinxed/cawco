@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { StageKind } from "@cawco/core";
+  import type { RecordCard } from "@cawco/core/decisions";
+  import type { StageKind } from "@cawco/core/views";
   /**
    * One card of a decided page, settled: the record is the cards the person
    * picked on, nothing restated in a block of its own (the decided record's
@@ -11,8 +12,7 @@
    * and the writer's Recommended mark. Nothing shows a card, option or page
    * id.
    */
-  import { decisionsWords as words } from "@cawco/core";
-  import type { RecordCard } from "@cawco/core/decisions";
+  import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

@@ -6,7 +6,7 @@
    * mark's, and the row says the status in its name (session-status.ts
    * `statusWord`). It reads no fleet: what it draws comes in its props.
    */
-  import type { ThreadStatus } from "@cawco/core";
+  import type { ThreadStatus } from "@cawco/core/threads";
   import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
   import TreeMark, { type MarkStatus } from "./TreeMark.svelte";

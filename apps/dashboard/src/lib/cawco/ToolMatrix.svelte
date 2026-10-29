@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { ToolPolicy, ToolSpec } from "@cawco/core";
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
   import { unhandled } from "@cawco/core/unhandled";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";

@@ -1,12 +1,12 @@
+import type { Deleted } from "@cawco/core/fleet";
 import {
-  type Deleted,
   type RULE_TEMPLATES,
   type Rule,
   type RuleDraft,
   type RuleRow,
-  routinesWords,
   ruleSettings,
-} from "@cawco/core";
+} from "@cawco/core/rules";
+import { routinesWords } from "@cawco/core/words/routines";
 import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
 
 /**
@@ -19,7 +19,7 @@ import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
  * fires, and the form's refusals must be the hub's own words.
  */
 
-export type { Rule, RuleDraft } from "@cawco/core";
+export type { Rule, RuleDraft } from "@cawco/core/rules";
 /** What `GET /api/rules` answers with. */
 export interface RulesPayload {
   rules: RuleRow[];

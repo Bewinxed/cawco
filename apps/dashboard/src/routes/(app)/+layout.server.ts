@@ -1,10 +1,6 @@
-import {
-  type AgentRow,
-  type HubAuthState,
-  harnessNamed,
-  type InstanceRow,
-  type SessionPulse,
-} from "@cawco/core";
+import { harnessNamed } from "@cawco/core/harness";
+import type { HubAuthState } from "@cawco/core/hub-auth";
+import type { AgentRow, InstanceRow, SessionPulse } from "@cawco/core/protocol";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
 import {

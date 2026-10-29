@@ -49,13 +49,10 @@
    * every width. Home and End go to the first and last; nothing wraps. A
    * card is still its button: Enter and Space open it as a press does.
    */
-  import {
-    type ArtifactKind,
-    type ArtifactSummary,
-    artifactWords,
-    reasonLine,
-    reasonShort,
-  } from "@cawco/core";
+  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
+  import { reasonLine, reasonShort } from "@cawco/core/artifact-needs";
+  import type { ArtifactSummary } from "@cawco/core/protocol";
+  import { artifactWords } from "@cawco/core/words/artifacts";
   import { type Component, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";

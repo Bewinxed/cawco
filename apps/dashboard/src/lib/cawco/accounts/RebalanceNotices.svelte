@@ -11,7 +11,7 @@
    * moved off accounts forecast to run out, and the held sessions
    * re-decided.
    */
-  import { type RebalanceNotice, rebalanceWords } from "@cawco/core";
+  import { type RebalanceNotice, rebalanceWords } from "@cawco/core/accounts";
   import AccountTile from "#lib/cawco/accounts/AccountTile.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import NoticeRow from "#lib/cawco/home/NoticeRow.svelte";

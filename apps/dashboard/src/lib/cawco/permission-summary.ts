@@ -1,7 +1,7 @@
 import type {
   PermissionUpdate,
   PermissionUpdateDestination,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 
 /*
  * What an ask says (its summary, the change, its fields) is the hub's reading,

@@ -10,13 +10,13 @@
  * away leaves it waiting (flows.svelte.ts keeps it), and a reload takes up
  * the code the hub kept (`resume`) and waits on it again.
  */
-import {
-  type AccountJoined,
-  accountsWords,
-  type PendingAccountSignin,
-  type ProviderSigninChallenge,
-} from "@cawco/core";
+import type {
+  AccountJoined,
+  PendingAccountSignin,
+  ProviderSigninChallenge,
+} from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
 

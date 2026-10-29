@@ -49,13 +49,13 @@
    * Hidden blocks wait at the page's end, each shown again from there; a
    * refused write is said there in the hub's words.
    */
-  import {
-    type BlockPlace,
-    type BlockWidth,
-    type ShownBlockPage,
-    blocksWords as words,
-  } from "@cawco/core";
+  import type {
+    BlockPlace,
+    BlockWidth,
+    ShownBlockPage,
+  } from "@cawco/core/blocks";
   import { detach } from "@cawco/core/detach";
+  import { blocksWords as words } from "@cawco/core/words/blocks";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";

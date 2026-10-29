@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { hasRouting } from "@cawco/core/accounts";
+  import { detach } from "@cawco/core/detach";
   /**
    * A provider's routing. It is a choice among its accounts, so it exists
    * only from core's `hasRouting` count; with fewer the address goes back to
    * the list.
    */
-  import { accountsWords, hasRouting } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  import { accountsWords } from "@cawco/core/words/accounts";
   import { accountsOf, routingOf } from "#lib/cawco/accounts/model.svelte.js";
   import RoutingEditor from "#lib/cawco/accounts/RoutingEditor.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";

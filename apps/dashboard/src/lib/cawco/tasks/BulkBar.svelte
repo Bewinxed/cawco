@@ -11,7 +11,7 @@
 </script>
 
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * What acts on the picked tasks, floating at the page's foot while any
    * are picked. "N selected · Move to ▾ · Label ▾ · Archive · Drop

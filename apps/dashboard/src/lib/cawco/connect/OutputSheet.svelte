@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * An install's whole output: the one surface of Add machine that scrolls.
    * On the desk the house sheet from the right, 480 wide; on a phone a
@@ -14,8 +15,8 @@
    * output (installs.svelte.ts `closeOutput`); with no window to come back
    * to, focus goes to where the install is parked (`parkedAt`).
    */
-  import { causeLine, connectWords, type Install } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
+  import { causeLine, type Install } from "@cawco/core/install";
+  import { connectWords } from "@cawco/core/words/connect";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";

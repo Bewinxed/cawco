@@ -11,7 +11,8 @@
    * it, its ring pinging, with its comment's thread open
    * (reference-open.svelte.ts, PreviewPane's open at a change).
    */
-  import { changeReference, commentWords } from "@cawco/core";
+  import { changeReference } from "@cawco/core/references";
+  import { commentWords } from "@cawco/core/words/comments";
   import { IconRefresh } from "#lib/icons.js";
   import ReferenceChip from "./ReferenceChip.svelte";
 

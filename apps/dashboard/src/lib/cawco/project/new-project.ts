@@ -3,7 +3,7 @@
  * what the person typed, and the name the project takes from it.
  */
 
-import type { StagesTemplate } from "@cawco/core";
+import type { StagesTemplate } from "@cawco/core/views";
 import type { Component } from "svelte";
 import {
   IconChat,

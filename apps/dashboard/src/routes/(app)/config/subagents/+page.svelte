@@ -1,10 +1,7 @@
 <script lang="ts">
-  import {
-    type FleetAgent,
-    machineLabel,
-    parseAgentFrontMatter,
-  } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
+  import { type FleetAgent, parseAgentFrontMatter } from "@cawco/core/fleet";
+  import { machineLabel } from "@cawco/core/machine-names";
   import { unhandled } from "@cawco/core/unhandled";
   import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
   import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";

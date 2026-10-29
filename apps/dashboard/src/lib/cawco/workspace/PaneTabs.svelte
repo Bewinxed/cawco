@@ -20,13 +20,11 @@
 </script>
 
 <script lang="ts">
-  import {
-    commonWords,
-    type ThreadStatus,
-    threadWords,
-    transcriptWords,
-  } from "@cawco/core";
   import type { Activity } from "@cawco/core/activity";
+  import type { ThreadStatus } from "@cawco/core/threads";
+  import { commonWords } from "@cawco/core/words/common";
+  import { threadWords } from "@cawco/core/words/threads";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,

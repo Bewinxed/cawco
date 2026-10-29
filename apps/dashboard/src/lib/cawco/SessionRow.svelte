@@ -98,7 +98,7 @@
    * opacity on the link): a parent's mark stands over the rows folding
    * under it only while that holds (app.css, by the group under the row).
    */
-  import type { NeutralSessionInfo } from "@cawco/core";
+  import type { NeutralSessionInfo } from "@cawco/core/harness";
   import type { Attachment } from "svelte/attachments";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";

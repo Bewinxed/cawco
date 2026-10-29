@@ -8,7 +8,7 @@
  * new account, the row's dot shows the account it is moving to and the menu
  * says so.
  */
-import type { Account, AccountProvider } from "@cawco/core";
+import type { Account, AccountProvider } from "@cawco/core/accounts";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import {

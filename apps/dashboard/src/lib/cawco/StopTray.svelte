@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords } from "@cawco/core";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * The running-sessions tray: one tray that changes shape as a stop goes,
    * never a second dialog (Family, benji.org/family-values: trays that
