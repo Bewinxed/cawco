@@ -115,7 +115,11 @@ export const copyStrays = async (
       left.push(`${entry}: neither a file nor a folder`);
     }
   };
-  await mkdir(folder, { mode: 0o700 });
+  // The whole path: `folder` may be a part of a carry not yet made (a folder
+  // workspace's `<carry>/changes`, workspace.ts `carryChanged`). Made one
+  // level at a time, every folder workspace's carry failed on 2026-10-29
+  // with ENOENT, and its workspace was tried again every minute.
+  await mkdir(folder, { recursive: true, mode: 0o700 });
   for (const entry of entries) {
     await copy(entry);
   }

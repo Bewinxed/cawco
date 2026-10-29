@@ -129,7 +129,7 @@ import { ownCommitsShell } from "@cawco/core/own-commits";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import type { WaitWitness } from "@cawco/core/task-views";
-import { DAY_MS } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import {
   CONTROL_FORGE_POST,
@@ -1232,6 +1232,15 @@ const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: WORK_ITEM_ORIGIN };
  * stop: well inside the hub's 120 s HTTP idle timeout (index.ts).
  */
 const ARCHIVE_STOP_WAIT_MS = 30_000;
+
+/** A failed settle's first wait before the sweep tries it again (work-items.ts `settleFailed`): the sweep's minute. */
+const SETTLE_RETRY_MS = MINUTE_MS;
+
+/** The longest a failed settle waits between tries: an hour. */
+const SETTLE_RETRY_MAX_MS = HOUR_MS;
+
+/** Failures in a row after which a settle's failure is lasting, and its session is told once. */
+const SETTLE_FAILS_LASTING = 3;
 
 /** The last path segment — how the rail names a session. */
 /**
@@ -4240,8 +4249,61 @@ export const createWorkItems = ({
       ? stageRuns?.(workspace.stageFor)
       : holdOn(workspace, items);
 
-  /** The last failure each workspace's settle logged: one line per change, not per sweep. */
-  const settleFailures = new Map<string, string>();
+  /**
+   * Each workspace's settle failures in a row ({@link settle}): how many,
+   * when the sweep may try it again ({@link settleBackoffMs}), and whether
+   * its session was told. On 2026-10-29 five workspaces failed every minute,
+   * each failure a log line of its own (its carry's path, stamped with the
+   * time, made each reason new), and nobody was told.
+   */
+  const settleFailures = new Map<
+    string,
+    { count: number; retryAt: number; told: boolean }
+  >();
+
+  /** A settle's wait after `count` failures in a row: a sweep's minute, doubled each time, an hour at most. */
+  const settleBackoffMs = (count: number): number =>
+    Math.min(SETTLE_RETRY_MS * 2 ** (count - 1), SETTLE_RETRY_MAX_MS);
+
+  /**
+   * A settle that failed: its first failure logged, the next try put off
+   * ({@link settleBackoffMs}), and once it has failed
+   * {@link SETTLE_FAILS_LASTING} times in a row, the session that started its
+   * work told once, as a notice, and the log says so once.
+   */
+  const settleFailed = (workspace: WorkspaceRow, reason: string): void => {
+    const machine = machineName(workspace.machineId);
+    const was = settleFailures.get(workspace.id);
+    const count = (was?.count ?? 0) + 1;
+    const wait = settleBackoffMs(count);
+    const failure = {
+      count,
+      retryAt: Date.now() + wait,
+      told: was?.told ?? false,
+    };
+    if (count === 1) {
+      console.warn(
+        `[workspaces] ${workspace.id} on ${machine}: ${workWords.notRetired(reason)} ${workWords.retriedIn(wait / MINUTE_MS)}`
+      );
+    }
+    if (count >= SETTLE_FAILS_LASTING && !failure.told) {
+      failure.told = true;
+      console.warn(
+        `[workspaces] ${workspace.id} on ${machine}: ${workWords.stillNotRetired(count, reason)}`
+      );
+      workspaceNotice(workspace, (latest) => ({
+        text: workWords.notRetiredNotice(
+          handle(workspace.id),
+          latest.title,
+          machine,
+          count,
+          reason
+        ),
+        headline: workWords.notRetiredHeadline(workspace.id.slice(0, 8)),
+      }));
+    }
+    settleFailures.set(workspace.id, failure);
+  };
 
   /**
    * A settled workspace closed on its machine ({@link closeWorkspace}): a
@@ -4487,17 +4549,11 @@ export const createWorkItems = ({
       endLeftWork(workspace, items, hold);
       return { kind: "deferred", hold };
     }
-    const machine = machineName(workspace.machineId);
     try {
       return await closeSettled(workspace, items);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      if (settleFailures.get(workspace.id) !== reason) {
-        console.warn(
-          `[workspaces] ${workspace.id} on ${machine}: ${workWords.notRetired(reason)}`
-        );
-      }
-      settleFailures.set(workspace.id, reason);
+      settleFailed(workspace, reason);
       return { kind: "failed", reason };
     }
   };
@@ -9989,15 +10045,23 @@ export const createWorkItems = ({
      * {@link settle} for each active workspace on `machineId`, one after
      * another, then each archived one whose clone is still there closed
      * again ({@link closeLeftClones}): the sweep's look (workspace-retire.ts).
-     * Answers each one's outcome by id.
+     * A timed look passes over a workspace whose last settle failed until its
+     * wait is over ({@link settleFailed}); a look someone `asked` for tries
+     * it now. Answers each one's outcome by id.
      */
     async settleOn(
-      machineId: string
+      machineId: string,
+      asked: boolean
     ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> {
       const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
       for (const workspace of db.activeWorkspacesOn(machineId)) {
-        // Something runs in its turn now: the sweep's next look settles it.
-        if (workspaceTurns.has(workspace.id)) {
+        // Something runs in its turn now, or its last settle failed and its
+        // wait is not over: a later look settles it.
+        if (
+          workspaceTurns.has(workspace.id) ||
+          (!asked &&
+            (settleFailures.get(workspace.id)?.retryAt ?? 0) > Date.now())
+        ) {
           continue;
         }
         done.push({ workspace, outcome: await settleNow(workspace.id) });

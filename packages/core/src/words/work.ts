@@ -118,6 +118,23 @@ export const workWords = {
     `What its workspace ${ws} holds could not be read now (${error}): if it holds work that is nowhere else it is held as its session ends, and you are told then.`,
   /** The hub's log line for a settle whose close failed (hub work-items.ts `settle`): `reason` its machine's words. */
   notRetired: (reason: string) => `not retired: ${reason}`,
+  /** What follows {@link workWords.notRetired} in that line: when the sweep tries it again. */
+  retriedIn: (minutes: number) =>
+    `Tried again in ${minutes} min, then less often.`,
+  /** The hub's log line once a settle has failed `count` times in a row: said once, as its notice goes. */
+  stillNotRetired: (count: number, reason: string) =>
+    `still not retired after ${count} tries, so its session is told: ${reason}`,
+  /** The notice to the session that started its work once its retirement keeps failing: `title` its latest item's. */
+  notRetiredNotice: (
+    ws: string,
+    title: string,
+    machine: string,
+    count: number,
+    reason: string
+  ) =>
+    `Workspace ${ws} of “${title}” on ${machine} could not be retired ${count} times in a row, and stays as it is: ${reason} CawCo tries again less often, up to once an hour, and does not tell you again. Archive or discard it (discard_workspace with workspace: "${ws}") once the cause is fixed.`,
+  /** That notice's headline. */
+  notRetiredHeadline: (ws: string) => `Workspace ${ws} could not be retired.`,
   /** The hub's log line as a settle ends what an ended item's awake sessions left running (hub work-items.ts `endLeftWork`). */
   workEnding: (sessions: readonly string[], hold: string) =>
     `its items have all ended, so what ${sessions.length === 1 ? `its session ${sessions[0]}` : `its sessions ${sessions.join(", ")}`} left running there ends; not retired while ${hold}`,

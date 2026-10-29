@@ -57,10 +57,11 @@ export interface WorkspaceRetireDeps {
 export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   let running: Promise<RetireSweep> | undefined;
 
-  const sweepOnce = async (): Promise<RetireSweep> => {
+  /** One look at every online machine; `asked`, someone asked for it, so a workspace whose settle failed is tried now. */
+  const sweepOnce = async (asked: boolean): Promise<RetireSweep> => {
     const done: RetireSweep = { failed: [], held: [], kept: [], retired: [] };
     for (const machineId of deps.online()) {
-      const settled = await deps.workItems.settleOn(machineId);
+      const settled = await deps.workItems.settleOn(machineId, asked);
       for (const { workspace, outcome } of settled) {
         switch (outcome.kind) {
           case "retired":
@@ -91,20 +92,21 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   };
 
   /** One sweep now; a sweep already running is that one's answer. */
-  const sweep = (): Promise<RetireSweep> => {
-    running ??= sweepOnce().finally(() => {
+  const sweep = (asked: boolean): Promise<RetireSweep> => {
+    running ??= sweepOnce(asked).finally(() => {
       running = undefined;
     });
     return running;
   };
 
   deps.lifetime.every(RETIRE_SWEEP_MS, () => {
-    sweep().catch((error: unknown) =>
+    sweep(false).catch((error: unknown) =>
       console.warn(
         `[workspace-retire] the sweep failed: ${error instanceof Error ? error.message : String(error)}`
       )
     );
   });
 
-  return { sweep };
+  /** A sweep someone asked for (`POST /api/workspaces/retire`): every workspace tried now. */
+  return { sweep: () => sweep(true) };
 };

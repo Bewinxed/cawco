@@ -1812,6 +1812,15 @@ const holding = async (
   landed: readonly string[] | undefined
 ): Promise<Held> => {
   if (access.layer.kind === "folder") {
+    // A folder's copy already deleted holds nothing of the delegate's: read
+    // against its base, every file of the folder would count as deleted, and
+    // a carry of those deletes would be written for work that is gone.
+    if (
+      access.layer.form === "copy" &&
+      !(await lstat(access.layer.path).catch(() => undefined))
+    ) {
+      return NOTHING_HELD;
+    }
     return {
       ...NOTHING_HELD,
       dirty: (await changesOf(access.layer)).length,
