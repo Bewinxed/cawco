@@ -78,11 +78,23 @@ const kept = new Set<string>();
 const flying = new Set<string>();
 let pending = false;
 
-/** The nearest box `el` scrolls in (a decision page scrolls its cards in its own, Decisions.svelte `page-scroll`); null where only the window scrolls it. */
+/**
+ * The nearest box `el` scrolls up and down in (a decision page scrolls its
+ * cards in its own, Decisions.svelte `page-scroll`): one whose overflow-y
+ * scrolls and whose content is taller than it. A well wider than its card
+ * scrolls sideways (`overflow-x-auto`, Well.svelte), which computes its
+ * overflow-y to auto too, yet it holds its piece at the piece's own height
+ * and never scrolls up and down: taken as the scroller, every wide Preview
+ * stood in its own well's view, mounted and drew at once, and was ranked
+ * from its well, not the page. Null where only the window scrolls it.
+ */
 export function scrollerOf(el: Element): Element | null {
   for (let up = el.parentElement; up; up = up.parentElement) {
     const scrolls = getComputedStyle(up).overflowY;
-    if (scrolls === "auto" || scrolls === "scroll") {
+    if (
+      (scrolls === "auto" || scrolls === "scroll") &&
+      up.scrollHeight > up.clientHeight + 1
+    ) {
       return up;
     }
   }

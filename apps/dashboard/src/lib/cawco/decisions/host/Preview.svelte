@@ -38,7 +38,9 @@
   embed of its stories said, in any browser, else its stories as the stage
   drew them; the kit's picture where none was ever drawn) until it stands
   drawn, never an empty box; past the
-  grace Caw and the line stand over either (DESIGN.md, Skeleton, The Claim
+  grace of its draw (a canvas's from when its card comes close; held back
+  farther out it rests as its skeleton, saying nothing) Caw and the line
+  stand over either (DESIGN.md, Skeleton, The Claim
   Of Nothing Rule, The Real Wait Rule). One that can't stand says why in
   one line in its place and shape, with Try again: an origin unreached, the
   proxy's own page in its frame (`cawco:down`: its workspace not running,
@@ -432,7 +434,7 @@
         return hop satisfies never;
     }
   };
-  /** The wait has outlasted `--dur-wait-grace`: its line, or the failure, may show. */
+  /** Its draw's wait ({@link drawing}) has outlasted `--dur-wait-grace`: its line, or the failure, may show. */
   let slow = $state(false);
   /** Each Try again asks the origin again from the start. */
   let attempt = $state(0);
@@ -542,7 +544,6 @@
     told = false;
     drawn = false;
     failed = null;
-    slow = false;
     if (!embed) {
       return;
     }
@@ -553,9 +554,6 @@
     }
     const address = canvas ? canvasEmbedUrl(embed, stories) : embed;
     let gone = false;
-    const after = setTimeout(() => {
-      slow = true;
-    }, grace());
     const at = new URL(embed);
     /** The hub asked whether it reaches `origin`, and how its previews are reached heard with it. */
     const hubReach = (origin: string) =>
@@ -632,13 +630,32 @@
     return () => {
       gone = true;
       asking = false;
-      clearTimeout(after);
       turn?.done();
       turn = undefined;
     };
   });
 
-  /** What the embed's status says: nothing until the wait outlasts its grace, nothing once it stands at its shape or failed. */
+  /**
+   * Its draw has begun, so a wait is a wait: a screen's as its origin is
+   * asked; a canvas's once its card is {@link close}. A canvas held back
+   * farther from the view (fetching its graph, or asking nothing yet) is
+   * not loading, so it rests as its skeleton, no Caw and no line, and its
+   * grace counts from when it comes close.
+   */
+  const drawing = $derived(!!held?.embed && (screen || close));
+  $effect(() => {
+    track(attempt);
+    slow = false;
+    if (!drawing) {
+      return;
+    }
+    const after = setTimeout(() => {
+      slow = true;
+    }, grace());
+    return () => clearTimeout(after);
+  });
+
+  /** What the embed's status says: nothing until its draw's wait outlasts its grace ({@link drawing}), nothing once it stands at its shape or failed. */
   const waitLine = $derived.by(() => {
     if (!held?.embed || shaped || failed || !slow) {
       return "";
