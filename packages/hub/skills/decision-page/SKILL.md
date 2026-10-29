@@ -30,7 +30,7 @@ A choice reaches the person only as a decision card on a page, so every pick is 
 
 **Design options are drawn live.** The component canvas (`design-explore`, `component-canvas`) is your working drawing, never a page for the person. For a design choice, give each option a component canvas of its own: a states file holding that option's story (`Row.quiet.stories.ts`), opened with `artifact_create({ kind: "component", does: "judge", ask, file })`, and the Option's media a `Preview` of it naming the stories the card shows and the widest one's own width (`Preview(id, null, ["Review", "PhoneReview"], 640)`, its `parameters.viewport`): every story is drawn at its real size, 1 CSS px per px, never scaled, so the person judges the real pixels: the page widens to the story, a card's options stand side by side only where every one fits at its width (two 390px phone designs sit side by side, two 1440px desk designs stand one under another), a design wider than the panel scrolls sideways in its well, and a page taller than the window scrolls inside its frame; each stands alone from its start, none of the canvas's working chrome. A Preview of a whole screen (a page, a dev server's or a folder's preview: a timeline, a dashboard) takes the card's full width: name its own layout width as `width` and it stands at it where the card holds it, scaled down to fit where it doesn't (never under 10px words); name none and it lays itself out to the card's width. Under it, Open full size brings it to the front of your panel. A choice that isn't visual needs no media.
 
-**Settled fixes from the person's pins** are one compact card, a Decision with id `pins`: the question "Fixed from your pins: does it look right now?", their words quoted in its `why`, the fixed state live in its media, and two options, "Looks right" (recommended) and "Not yet". Answer each pin in its own thread too (`comment_reply`).
+**Settled fixes from the person's pins** are one compact card, a `look` Decision with id `pins`: the question "Fixed from your pins: does it look right now?", their words quoted in its `why`, the fixed state live in its media, and two options, "Looks right" (recommended) and "Not yet". Answer each pin in its own thread too (`comment_reply`).
 
 ## Who decides
 
@@ -74,7 +74,7 @@ Each row refuses the page until it is fixed.
 
 | Refuse | Fix |
 | --- | --- |
-| A `look` card with an option lacking a picture | Give every option an `Image`, `Preview` or `Canvas` in its media: how something looks is shown, never told |
+| A `look` card with an option lacking a picture | Give every option an `Image`, `Preview` or `Canvas` in its media, or, for a verdict on one design (the `pins` card), the Decision the picture and its options none |
 | A card with no question | Ask the choice in the person's words, ending in "?" |
 | An option with no cost line | Give its `cost`: what picking it takes away or makes harder |
 | Two Recommended on one card, or none | Mark exactly one, and say why in the card's `why` |

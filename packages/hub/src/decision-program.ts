@@ -13,8 +13,9 @@
  *   and its own on the page, every option's its own in its decision, and an
  *   `after` on the same page names a decision the page has.
  * - Every decision names its kind (core decides.ts), and a `look` one gives
- *   each option a picture (Image, Preview or Canvas): a choice of how
- *   something looks reaches the person drawn, never told. A page kept
+ *   each option a picture (Image, Preview or Canvas), or, as a verdict on
+ *   one design, the Decision a picture and its options none: a choice of
+ *   how something looks reaches the person drawn, never told. A page kept
  *   before these rules still loads ({@link readKept}); its next revision
  *   meets them.
  * - It cannot run code or reach the network: no Query, Mutation, `$state`
@@ -340,19 +341,36 @@ const decisionsIn = (value: unknown): ElementNode[] => {
     : decisionsIn(value.props.children);
 };
 
-/** A look decision whose options don't each carry a picture: a choice of how something looks is shown, never told. */
+/**
+ * A look decision that doesn't show what the person judges: it passes when
+ * every option carries a picture (a choice between looks), or when the
+ * Decision's own media does and no option does (a verdict on one design,
+ * like the pins card's "Right" / "Still wrong"). A mix is refused, so a
+ * choice between looks never falls back to words.
+ */
 const lookProblems = (root: ElementNode | null): string[] =>
   decisionsIn(root).flatMap(({ props }) => {
     if (props.kind !== "look" || !Array.isArray(props.options)) {
       return [];
     }
-    const bare = props.options
-      .filter(isElement)
-      .filter((option) => !holdsPicture(option.props.media))
-      .map((option) => `"${String(option.props.id)}"`);
+    const options = props.options.filter(isElement);
+    const idsOf = (list: ElementNode[]): string =>
+      list.map((option) => `"${String(option.props.id)}"`).join(", ");
+    const pictured = options.filter((option) =>
+      holdsPicture(option.props.media)
+    );
+    const bare = options.filter((option) => !pictured.includes(option));
+    const lead = `Decision "${String(props.id)}" is about how something looks`;
+    if (holdsPicture(props.media)) {
+      return pictured.length > 0
+        ? [
+            `${lead}: with a picture on the Decision it is a verdict on one design, so its options carry none (${idsOf(pictured)} ${pictured.length === 1 ? "has one" : "have them"}); or give every option a picture and the Decision none.`,
+          ]
+        : [];
+    }
     return bare.length > 0
       ? [
-          `Decision "${String(props.id)}" is about how something looks: give each option a picture (Image, Preview or Canvas); ${bare.join(", ")} ${bare.length === 1 ? "has" : "have"} none.`,
+          `${lead}: give each option a picture (Image, Preview or Canvas), or, for a verdict on one design, give the Decision the picture and its options none; ${idsOf(bare)} ${bare.length === 1 ? "has" : "have"} none.`,
         ]
       : [];
   });
