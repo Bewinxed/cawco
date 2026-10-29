@@ -422,9 +422,60 @@ const holdingSource = async <T>(
 };
 
 /**
+ * The hub remote origin-less source repository `repoRoot` of project
+ * `projectId` takes (core hub-repo.ts): the project's main repository when
+ * that has no default branch yet (this one becomes it), when `repoRoot`
+ * holds the commit at its HEAD (a checkout of it), or when `repoRoot` has no
+ * commit to key by; otherwise one of its own, keyed by its root commit, so
+ * an unrelated repository never cuts from or lands on the main one's
+ * branches. Two such repositories cut at once into a project whose main
+ * repository has no branch yet can both take it: the second's push of its
+ * branch is then refused.
+ */
+const hubRemoteOf = async (
+  repoRoot: string,
+  projectId: string,
+  deadline: number
+): Promise<string> => {
+  const plain = gitUntil(deadline);
+  const main = hubRepo(projectId);
+  const root = await plain(
+    repoRoot,
+    "rev-list",
+    "--max-parents=0",
+    "--first-parent",
+    "HEAD"
+  ).catch(() => "");
+  if (!root) {
+    return main;
+  }
+  const [head = ""] = (
+    await gitUntil(deadline, hubGitEnv(main))(
+      repoRoot,
+      "ls-remote",
+      main,
+      "HEAD"
+    )
+  ).split("\t");
+  if (!head) {
+    return main;
+  }
+  const holds = await plain(
+    repoRoot,
+    "cat-file",
+    "-e",
+    `${head}^{commit}`
+  ).then(
+    () => true,
+    () => false
+  );
+  return holds ? main : hubRepo(projectId, root);
+};
+
+/**
  * Readies source repository `repoRoot` for a workspace cut from it, inside
- * {@link inSource}: its `origin` (the hub's remote of `projectId` when it has
- * none), the hub's credential helper in its config when that is the hub and
+ * {@link inSource}: its `origin` (the hub's remote of it in `projectId` when
+ * it has none, {@link hubRemoteOf}), the hub's credential helper in its config when that is the hub and
  * `source` (another workspace's clone, whose config is that workspace's) is
  * none, and the branch the workspace starts from ({@link hubBase}). `hub` is
  * that origin's URL when it is the hub's, which every git that reaches it
@@ -450,10 +501,10 @@ const readySource = (
           `${repoRoot} has no origin remote and belongs to no project, so it has no hub remote to cut a workspace from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
         );
       }
-      origin = hubRepo(projectId);
+      origin = await hubRemoteOf(repoRoot, projectId, deadline);
       await plain(repoRoot, "remote", "add", "origin", origin);
       console.info(
-        `[workspace] ${repoRoot} had no origin: the hub's remote of project ${projectId} is its origin now`
+        `[workspace] ${repoRoot} had no origin: ${origin}, the hub's remote of it in project ${projectId}, is its origin now`
       );
     }
     // A clone of a workspace's clone reaches the hub as that workspace does.

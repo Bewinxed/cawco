@@ -100,9 +100,13 @@ export interface UpstreamWrite {
   readonly what: string;
 }
 
-/** A project's identity when the hub is its remote: the same from every machine, whatever address it reaches the hub by. */
-export const hubRemoteIdentity = (projectId: string): string =>
-  `cawco/${projectId.toLowerCase()}`;
+/**
+ * A project's repository's identity when the hub is its remote: the same from
+ * every machine, whatever address it reaches the hub by. `root` names one of
+ * the project's other repositories (core hub-repo.ts); absent, its main one.
+ */
+export const hubRemoteIdentity = (projectId: string, root?: string): string =>
+  `cawco/${projectId.toLowerCase()}${root ? `/${root}` : ""}`;
 
 /** A scheme URL: `https://`, `ssh://`, `git://`, `file://`. */
 const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//iu;
@@ -111,9 +115,9 @@ const SCP = /^(?:[^@/]+@)?([^:/]+):(.+)$/u;
 const EDGE_SLASHES = /^\/+|\/+$/gu;
 const DOT_GIT = /\.git$/iu;
 const TRAILING_SLASHES = /\/+$/u;
-/** The hub's own git remote for a project (git-remote.ts): `/git/<project uuid>.git`. */
+/** The hub's own git remote of a project's repository (core hub-repo.ts): `/git/<project uuid>[.<root commit>].git`. */
 const HUB_REMOTE_PATH =
-  /^\/git\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\.git)?\/?$/iu;
+  /^\/git\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\.([0-9a-f]{40}|[0-9a-f]{64}))?(?:\.git)?\/?$/iu;
 
 /**
  * A remote URL as `host/owner/repo`: the host lowercased, credentials, port
@@ -140,7 +144,7 @@ export const normaliseRemote = (url: string): string | null => {
     }
     const hub = HUB_REMOTE_PATH.exec(path);
     if (hub) {
-      return hubRemoteIdentity(hub[1] as string);
+      return hubRemoteIdentity(hub[1] as string, hub[2]?.toLowerCase());
     }
   } else {
     const scp = SCP.exec(raw);

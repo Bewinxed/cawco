@@ -118,6 +118,7 @@
     "./fleet-items": "./src/fleet-items.ts",
     "./workspace-judge": "./src/workspace-judge.ts",
     "./upstream-guard": "./src/upstream-guard.ts",
+    "./hub-repo": "./src/hub-repo.ts",
     "./upstream-post": "./src/upstream-post.ts",
     "./claude-dirs": "./src/claude-dirs.ts",
     "./clone-denies": "./src/clone-denies.ts",

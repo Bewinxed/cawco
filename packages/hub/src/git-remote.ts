@@ -1,6 +1,8 @@
 /**
  * The hub as a git remote (Projects spec §5.1, "A project runs on any
- * machine"): a bare repository per project under the hub's data folder,
+ * machine"): a bare repository per repository of each project under the
+ * hub's data folder (core hub-repo.ts: the main one at `<projectId>.git`,
+ * each other keyed by its root commit),
  * served by git's own smart HTTP CGI (`git http-backend`), and a Git LFS
  * server beside it (the Batch API and the `basic` transfer adapter), its
  * objects kept once each by sha256.
@@ -21,6 +23,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { detach } from "@cawco/core/detach";
+import {
+  type HubRepoKey,
+  hubRepoSegment,
+  parseHubRepoSegment,
+} from "@cawco/core/hub-repo";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { placeStreamedFile } from "@cawco/core/state-file";
 import { startedPath } from "@cawco/core/workspace-needs";
@@ -35,12 +42,10 @@ export interface GitRemoteDeps {
   readonly lfsRoot: string;
   /** Only a project the hub has gets a repository. */
   readonly projectExists: (projectId: string) => boolean;
-  /** `GIT_PROJECT_ROOT`: each project's bare repository is `<root>/<projectId>.git`. */
+  /** `GIT_PROJECT_ROOT`: each repository's bare one is `<root>/<segment>` (core `hubRepoSegment`). */
   readonly root: string;
 }
 
-/** A repository's segment of the path: `<projectId>.git`. */
-const REPO = /^([A-Za-z0-9][A-Za-z0-9_-]{0,127})\.git$/u;
 const OID = /^[0-9a-f]{64}$/u;
 const RANGE = /^bytes=(\d+)-(\d*)$/u;
 const HEADER_LINE = /^([^:]+):\s*(.*)$/u;
@@ -51,11 +56,7 @@ const ACTION_EXPIRES_S = 3600;
 /** The tail of a CGI's stderr kept for the log. */
 const STDERR_KEPT = 4000;
 
-/** The project id a repository segment names, or undefined. */
-const repoProject = (segment: string): string | undefined =>
-  REPO.exec(segment)?.[1];
-
-/** The bare repository of `projectId` under `root`. */
+/** The bare main repository of `projectId` under `root`. */
 export const bareRepoPath = (root: string, projectId: string): string =>
   join(root, `${projectId}.git`);
 
@@ -231,14 +232,14 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
   const making = new Map<string, Promise<string>>();
 
   /**
-   * The project's bare repository, made on first use with `http.receivepack`
-   * on. Undefined for a project the hub does not have.
+   * `key`'s bare repository, made on first use with `http.receivepack` on.
+   * Undefined for a project the hub does not have.
    */
-  const repository = (projectId: string): Promise<string> | undefined => {
-    if (!deps.projectExists(projectId)) {
+  const repository = (key: HubRepoKey): Promise<string> | undefined => {
+    if (!deps.projectExists(key.projectId)) {
       return undefined;
     }
-    const path = bareRepoPath(deps.root, projectId);
+    const path = join(deps.root, hubRepoSegment(key));
     const made = making.get(path);
     if (made !== undefined) {
       return made;
@@ -267,7 +268,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
   /** The environment `git http-backend` reads (git-http-backend(1), "ENVIRONMENT"). */
   const cgiEnv = (
     request: Request,
-    projectId: string,
+    key: HubRepoKey,
     service: string,
     user: string
   ): Record<string, string> => {
@@ -278,7 +279,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
       ...GIT_LOCALE,
       GIT_PROJECT_ROOT: deps.root,
       GIT_HTTP_EXPORT_ALL: "1",
-      PATH_INFO: `/${projectId}.git/${service}`,
+      PATH_INFO: `/${hubRepoSegment(key)}/${service}`,
       REMOTE_USER: user,
       REQUEST_METHOD: request.method,
       QUERY_STRING: new URL(request.url).search.slice(1),
@@ -291,9 +292,9 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
       // Protocol v2 rides this header (git-http-backend: GIT_PROTOCOL).
       ["GIT_PROTOCOL", header("git-protocol")],
     ];
-    for (const [key, value] of optional) {
+    for (const [name, value] of optional) {
       if (value) {
-        env[key] = value;
+        env[name] = value;
       }
     }
     return env;
@@ -306,19 +307,19 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
    */
   const backend = async (
     request: Request,
-    projectId: string,
+    key: HubRepoKey,
     service: string,
     user: string
   ): Promise<Response> => {
-    const made = repository(projectId);
+    const made = repository(key);
     if (!made) {
-      return new Response(`There is no project ${projectId}.\n`, {
+      return new Response(`There is no project ${key.projectId}.\n`, {
         status: 404,
       });
     }
     const repo = await made;
     const child = Bun.spawn(["git", "http-backend"], {
-      env: cgiEnv(request, projectId, service, user),
+      env: cgiEnv(request, key, service, user),
       stdin: request.body ?? "ignore",
       stdout: "pipe",
       stderr: "pipe",
@@ -334,7 +335,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         const code = await child.exited;
         if (code !== 0 || stderr.trim()) {
           console.warn(
-            `[git] ${service} for ${projectId} by ${user} exited ${code}: ${stderr.trim()}`
+            `[git] ${service} for ${hubRepoSegment(key)} by ${user} exited ${code}: ${stderr.trim()}`
           );
         }
         if (service === "git-receive-pack" && code === 0) {
@@ -542,9 +543,9 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
       if (!user) {
         return unauthorized();
       }
-      const projectId = repoProject(params.repo);
-      return projectId
-        ? backend(request, projectId, service, user)
+      const key = parseHubRepoSegment(params.repo);
+      return key
+        ? backend(request, key, service, user)
         : new Response("Not a repository.\n", { status: 404 });
     };
 
@@ -559,7 +560,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         "/git/:repo/info/lfs/objects/batch",
         opts,
         async ({ params, request }) => {
-          const projectId = repoProject(params.repo);
+          const projectId = parseHubRepoSegment(params.repo)?.projectId;
           const user = caller(request);
           if (!user) {
             return lfsError(401, "This remote takes a CawCo credential.");
@@ -597,7 +598,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
           logLfs(
             request,
             user,
-            `batch ${operation} of ${objects.length} object(s) for ${projectId}`
+            `batch ${operation} of ${objects.length} object(s) for ${params.repo}`
           );
           return new Response(
             JSON.stringify({

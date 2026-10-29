@@ -42,6 +42,7 @@ import {
   type MoveSnapshotRequest,
   type MoveSnapshotResult,
 } from "@cawco/core";
+import { hubRepoSegment } from "@cawco/core/hub-repo";
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -87,9 +88,9 @@ const hubOrigin = (): string => {
   return url.origin;
 };
 
-/** The project's repository on the hub. */
-export const hubRepo = (projectId: string): string =>
-  `${hubOrigin()}/git/${projectId}.git`;
+/** The project's main repository on the hub, or with `root` the one of its repositories that root commit keys (core hub-repo.ts). */
+export const hubRepo = (projectId: string, root?: string): string =>
+  `${hubOrigin()}/git/${hubRepoSegment(root ? { projectId, root } : { projectId })}`;
 
 /**
  * Whether `url` names one of the hub's repositories, under any address the
