@@ -1613,6 +1613,26 @@
           "css": "oklch(from {color.action-hover} calc(l - 0.03) c h)"
         }
       }
+    },
+    "c-graph-slab": {
+      "$type": "color",
+      "$value": "{color.surface-recess}"
+    },
+    "c-graph-edge-ink": {
+      "$type": "color",
+      "$value": "{color.border-row-outline}"
+    },
+    "c-graph-edge-chosen": {
+      "$type": "color",
+      "$value": "{color.brand-solid}"
+    },
+    "c-graph-label-bg": {
+      "$type": "color",
+      "$value": "{color.surface-recess-deep}"
+    },
+    "c-chosen-wash": {
+      "$type": "color",
+      "$value": "{color.brand-wash}"
     }
   },
   "effect": {

@@ -9,6 +9,7 @@
    * waits while it is on); Verify last, a design system round whose verdict
    * goes to the session.
    */
+  import { designGraphWords } from "@cawco/core/words/design-graph";
   import { previewWords } from "@cawco/core/words/preview";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconLayers } from "#lib/icons.js";
@@ -18,10 +19,18 @@
     type CanvasViewState,
     type CanvasWidth,
   } from "./canvas-view.svelte";
+  import {
+    CLIP_CONTROLS,
+    CLIP_CONTROLS_PICKED,
+    type ClipControlsAt,
+  } from "./graph/clip-controls";
+  import type { DesignGraph } from "./graph/design-graph.svelte";
 
   interface Props {
     /** `sub`: More's submenu; the head's own button otherwise. */
     as?: "button" | "sub";
+    /** The canvas's design graph: where a clip's controls open stands here as the owner's review switch until he picks (clip-controls.ts). */
+    graph?: DesignGraph | null;
     /** Verify: asks the hub for a design system round on the canvas. */
     onverify: () => void;
     /** A Verify on its way to the hub. */
@@ -29,7 +38,13 @@
     view: CanvasViewState;
   }
 
-  let { as = "button", onverify, verifying = false, view }: Props = $props();
+  let {
+    as = "button",
+    onverify,
+    verifying = false,
+    view,
+    graph = null,
+  }: Props = $props();
 </script>
 
 <!-- One of the view's settings: its heading, and its values to pick one of. -->
@@ -62,6 +77,24 @@
   {@render choice("Width", CANVAS_WIDTHS, view.chosen.width, (value) =>
     view.send({ ...view.chosen, width: value as CanvasWidth })
   )}
+  {#if graph && CLIP_CONTROLS_PICKED === null}
+    <DropdownMenu.Separator />
+    <DropdownMenu.Group>
+      <DropdownMenu.GroupHeading
+        >{designGraphWords.clipControls}</DropdownMenu.GroupHeading
+      >
+      <DropdownMenu.RadioGroup
+        onValueChange={(value) => graph?.setControlsAt(value as ClipControlsAt)}
+        value={graph.controlsAt}
+      >
+        {#each CLIP_CONTROLS as [value, key] (value)}
+          <DropdownMenu.RadioItem {value}
+            >{designGraphWords[key]}</DropdownMenu.RadioItem
+          >
+        {/each}
+      </DropdownMenu.RadioGroup>
+    </DropdownMenu.Group>
+  {/if}
   <DropdownMenu.Separator />
   <DropdownMenu.CheckboxItem
     checked={view.chosen.motion === "reduce"}

@@ -35,6 +35,7 @@
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { commentWords as said } from "@cawco/core/words/comments";
+  import { designGraphWords } from "@cawco/core/words/design-graph";
   import { type Snippet, tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -576,6 +577,15 @@
       </li>
     {/each}
   </ol>
+  {#if pin.state}
+    <!-- The design graph's kept state when it was placed, under the person's words (the owner's pick "pins"). -->
+    <p
+      class="mt-space-1 mx-0 mb-0 min-w-0 text-ink-muted type-meta text-pretty wrap-anywhere"
+      data-slot="pin-state"
+    >
+      {designGraphWords.pinKept(pin.state)}
+    </p>
+  {/if}
   {#if changes}
     <div class="mt-space-2" data-slot="pin-changes">{@render changes(pin)}</div>
   {/if}

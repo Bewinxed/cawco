@@ -252,17 +252,13 @@ const VIRTUAL = "cawco:sheet/";
 /** The canvas's own modules: its entry, runtime, adapter and Svelte props holder. */
 const VIRTUAL_STAGE = "cawco:stage/";
 
-/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens, and DialKit's vanilla build and stylesheet. */
+/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens and the house faces. */
 declare const __CANVAS_RUNTIME__: string;
 declare const __CANVAS_TOKENS__: string;
-declare const __DIALKIT_JS__: string;
-declare const __DIALKIT_CSS__: string;
 declare const __CANVAS_FACES__: string;
 declare const __CANVAS_FACE_FILES__: Record<string, string>;
 const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
 const CANVAS_TOKENS = __CANVAS_TOKENS__;
-const DIALKIT_JS = __DIALKIT_JS__;
-const DIALKIT_CSS = __DIALKIT_CSS__;
 const CANVAS_FACES = __CANVAS_FACES__;
 const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
@@ -1014,9 +1010,12 @@ function canvasPage(): string {
   const viewport = VIEWPORT_META.test(html)
     ? ""
     : '<meta name="viewport" content="width=device-width, initial-scale=1" />';
+  // Its encoding said in the page too, first in its head, where a shell declares none (a Vite app with no index.html): with only the header to go by, WebKit drew the probe's canvas page as windows-1252 (its `document.characterSet`), and the overlay's "·" stood as "Â·" in every pin's title.
+  const charset = CHARSET_META.test(html) ? "" : '<meta charset="utf-8" />';
   return html
     .replace(PLACEHOLDER, "")
     .replace(INLINE_SCRIPT, "")
+    .replace(HEAD_TAG, (open) => `${open}${charset}`)
     .replace("</head>", `${viewport}${COLLECTOR}</head>`)
     .replace(
       "</body>",
@@ -1243,14 +1242,11 @@ async function reportOf(files: string[]): Promise<RenderReport> {
 }
 
 /**
- * DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT),
- * served beside the canvas for its timeline and dials, and the house faces'
- * woff2 pieces (core house-faces.ts, cut from the repository's own Figtree
- * and JetBrains Mono, OFL) its `faces` rules name, at `faces/<file>`.
+ * The house faces' woff2 pieces (core house-faces.ts, cut from the
+ * repository's own Figtree and JetBrains Mono, OFL) the canvas's `faces`
+ * rules name, at `faces/<file>`.
  */
 const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
-  "/@cawco/dialkit.js": { body: DIALKIT_JS, type: "text/javascript" },
-  "/@cawco/dialkit.css": { body: DIALKIT_CSS, type: "text/css" },
   ...Object.fromEntries(
     Object.entries(__CANVAS_FACE_FILES__).map(([name, base64]) => [
       `/@cawco/faces/${name}`,
@@ -1261,6 +1257,11 @@ const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
 
 const BODY = /(<body\b[^>]*>)[\s\S]*(<\/body>)/iu;
 const VIEWPORT_META = /<meta\b[^>]*\bname=["']viewport["']/iu;
+/** A page's head tag, where its encoding goes first. */
+const HEAD_TAG = /<head\b[^>]*>/iu;
+/** A page's own declared encoding: `<meta charset>` or its `http-equiv` form. */
+const CHARSET_META =
+  /<meta\b[^>]*\b(?:charset|http-equiv=["']content-type["'])/iu;
 /** `%sveltekit.head%`, `%sveltekit.assets%` … and a project's own (`%cawco.tab-icon%`). */
 const PLACEHOLDER = /%[\w.-]+%/gu;
 const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/giu;
@@ -1343,7 +1344,8 @@ async function serveCanvas(
       ),
       key
     );
-    res.setHeader("content-type", "text/html");
+    // Written from strings, so UTF-8 whatever the app's shell declares (a Vite app with no index.html declares none): the page and every script it loads without a charset of its own, the overlay's among them, read as written.
+    res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", "no-store");
     res.end(html);
   } catch (error) {
