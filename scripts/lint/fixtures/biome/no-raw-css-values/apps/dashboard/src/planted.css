@@ -1,0 +1,34 @@
+/* Planted: a size, a hex, a colour function, a named colour and a
+   breakpoint written out; then what the rule allows. */
+.planted {
+  width: 52px;
+  color: #fff;
+  background: oklch(50% 0.1 30);
+  border-color: red;
+}
+@media (width < 900px) {
+  .planted {
+    margin: 12rem;
+  }
+}
+
+.allowed {
+  width: var(--c-btn-h);
+  border: 1px solid var(--border-hairline);
+  margin: -2px 0;
+  padding-block: calc((1lh - 1ex) / 2);
+  min-block-size: 2lh;
+  max-block-size: 55dvh;
+  color: oklch(from var(--ink-strong) l c h);
+  background: color-mix(in oklch, var(--surface-raised) 50%, transparent);
+  white-space: nowrap;
+}
+@media (width < --theme(--breakpoint-desk)) {
+  .allowed {
+    margin: 0;
+  }
+}
+.kept {
+  /* biome-ignore lint/plugin/no-raw-css-values: a fixture's own suppression, which must hold. */
+  inset: -9999px;
+}

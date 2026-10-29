@@ -1,0 +1,27 @@
+# Every finding each Biome plugin must report in its fixtures (scripts/lint/biome-plugins.ts
+# holds a run to this list): `<plugin>/<path>:<line>:<column>`, then the plugin.
+no-raw-deadline/planted.ts:4:23 no-raw-deadline
+no-raw-deadline/planted.ts:6:3 no-raw-deadline
+no-raw-deadline/planted.ts:8:22 no-raw-deadline
+no-raw-deadline/planted.ts:9:24 no-raw-deadline
+no-time-constants/planted.ts:3:8 no-time-constants
+no-time-constants/planted.ts:3:24 no-time-constants
+no-time-constants/planted.ts:4:20 no-time-constants
+no-time-constants/planted.ts:5:21 no-time-constants
+no-system-path/packages/planted.ts:3:20 no-system-path
+no-system-path/packages/planted.ts:4:22 no-system-path
+no-exit-code/packages/planted.ts:2:1 no-exit-code
+uncaught-handlers-exit/planted.ts:5:1 uncaught-handlers-exit
+uncaught-handlers-exit/planted.ts:8:1 uncaught-handlers-exit
+stored-json/apps/planted.ts:13:23 stored-json
+stored-json/apps/planted.ts:14:21 stored-json
+no-hand-unhandled/planted.ts:9:7 no-hand-unhandled
+no-raw-css-values/apps/dashboard/src/Planted.svelte:6:18 no-raw-css-values
+no-raw-css-values/apps/dashboard/src/planted.css:4:10 no-raw-css-values
+no-raw-css-values/apps/dashboard/src/planted.css:5:10 no-raw-css-values
+no-raw-css-values/apps/dashboard/src/planted.css:6:15 no-raw-css-values
+no-raw-css-values/apps/dashboard/src/planted.css:7:17 no-raw-css-values
+no-raw-css-values/apps/dashboard/src/planted.css:9:17 no-raw-css-values
+no-raw-css-values/apps/dashboard/src/planted.css:11:13 no-raw-css-values
+no-raw-css-values/packages/hub/skills/decision-page/kit/page.css:3:11 no-raw-css-values
+kit-namespace-only/planted.ts:3:24 kit-namespace-only

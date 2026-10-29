@@ -567,6 +567,12 @@ const gated: Gated[] = [
     "packages/hub/skills/decision-page/kit/",
   ]),
   bun("scripts/token-alias-check.ts", ["design/tokens/"]),
+  // Each Biome plugin reports its planted mistakes and nothing else.
+  bun("scripts/lint/biome-plugins.ts", [
+    "scripts/lint/",
+    "biome.jsonc",
+    "bun.lock",
+  ]),
   bun("scripts/token-contrast-check.ts", [
     ...DASH,
     "packages/hub/src/design-tokens.ts",

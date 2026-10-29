@@ -1,0 +1,4 @@
+/* Outside the dashboard and the kit: the rule does not read it. */
+.outside {
+  width: 52px;
+}

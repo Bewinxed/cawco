@@ -112,6 +112,8 @@ export default {
         "golar.config.ts",
         // scripts/check.ts:458
         "scripts/lint/golar-lint.ts",
+        // scripts/check.ts:570
+        "scripts/lint/biome-plugins.ts",
         // scripts/check.ts:533
         "scripts/case-clash-check.ts",
         // scripts/check.ts:538
