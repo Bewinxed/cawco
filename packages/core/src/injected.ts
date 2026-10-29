@@ -628,7 +628,7 @@ export interface ArtifactComments {
 
 /** The words a comments notice opens with, before its sections. */
 const commentsLine = ({ id, kind, name }: ArtifactComments): string =>
-  `[CawCo] The person commented on the ${kind} "${name}" (artifact ${id}). Answer each pin in its thread with comment_reply({ pin, text }), and comment_resolve once a change settles it; comment_read has the history. To name a pin to the person, write its Link.\n\n`;
+  `[CawCo] The person commented on the ${kind} "${name}" (artifact ${id}). Each pin's answer goes in its thread with comment_reply({ pin, text }): they read it there, so the thread is the whole answer. comment_resolve once a change settles it; comment_read has the history. To name a pin to the person, write its Link.\n\n`;
 
 export const artifactCommentsNotice = (
   artifact: ArtifactComments,

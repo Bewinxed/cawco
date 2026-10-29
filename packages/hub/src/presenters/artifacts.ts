@@ -713,7 +713,7 @@ export const commentReadWords = (
 
 /** `comment_reply`. */
 export const commentRepliedWords = (replied: CommentReplied): string =>
-  `Answered ${replied.link} in its thread${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}${replied.entry.asks ? "; it asks the person in Needs you until they reply or resolve" : ""}.`;
+  `Answered ${replied.link} in its thread, where they read it${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}${replied.entry.asks ? "; it asks the person in Needs you until they reply or resolve" : ""}.`;
 
 /** `comment_resolve`. */
 export const commentResolvedWords = (resolved: CommentResolved): string =>
