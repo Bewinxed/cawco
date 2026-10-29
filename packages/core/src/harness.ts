@@ -1935,6 +1935,15 @@ export const CONTROL_SLEEP = "sleep";
 export const CONTROL_RESTLESS = "restless";
 
 /**
+ * Instance-scoped, from the hub: whether the session's turn is outside now
+ * (core turn-provenance.ts), arg the clause why or null for its principal's.
+ * The machine keeps it for the session, and each of its harness's per-call
+ * permission points reads it on every call (agent `HarnessContext.outside`).
+ * Answers nothing.
+ */
+export const CONTROL_TURN_PROVENANCE = "turnProvenance";
+
+/**
  * Instance-scoped: what a session's process holds for later that ending it
  * would lose, and no resume brings back (a background command, a one-time
  * wake-up), answered {@link WorkInFlight}, or null when it holds none or has

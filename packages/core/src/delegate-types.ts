@@ -197,6 +197,11 @@ export type SessionRole = (typeof SESSION_ROLES)[number];
  * - `powershell`: Claude Code's Windows `PowerShell` (agent SDK 0.3.302's
  *   `BUILTIN_TOOL_NAMES`), pi 1.3.0's built-in `powershell`
  *   (dist/core/tools/index.js); OpenCode 2.0 has none.
+ * - `edit`: the tools that write files, by the name each asks permission
+ *   under. Claude Code's `Edit`, `Write`, `MultiEdit` and `NotebookEdit`;
+ *   OpenCode 2.0's `edit`, which covers `write` and `patch` ("In V2, use
+ *   permissions, shell, and subagent instead of permission, bash, and
+ *   task", opencode.ai/v2/docs/permissions); pi 1.3.0's `edit` and `write`.
  * - `fetch` and `search`: the built-in web tools. Claude Code's `WebFetch`
  *   and `WebSearch`, OpenCode 2.0's `webfetch` and `websearch`; pi has no
  *   web tool of its own ({@link PI_EQUIVALENTS}).
@@ -205,19 +210,30 @@ export const HARNESS_TOOLS = {
   claude: {
     shell: ["Bash"],
     powershell: ["PowerShell"],
+    edit: ["Edit", "Write", "MultiEdit", "NotebookEdit"],
     fetch: ["WebFetch"],
     search: ["WebSearch"],
   },
   opencode: {
     shell: ["shell"],
     powershell: [],
+    edit: ["edit"],
     fetch: ["webfetch"],
     search: ["websearch"],
   },
-  pi: { shell: ["bash"], powershell: ["powershell"], fetch: [], search: [] },
+  pi: {
+    shell: ["bash"],
+    powershell: ["powershell"],
+    edit: ["edit", "write"],
+    fetch: [],
+    search: [],
+  },
 } as const satisfies Record<
   HarnessKind,
-  Record<"fetch" | "powershell" | "search" | "shell", readonly string[]>
+  Record<
+    "edit" | "fetch" | "powershell" | "search" | "shell",
+    readonly string[]
+  >
 >;
 
 /** A kind of tool {@link HARNESS_TOOLS} names on each harness. */
@@ -251,16 +267,12 @@ export const CAW_DENIED_TOOLS = {
 
 /**
  * Caw's shell and edit tools, by the name each harness asks permission
- * under: every call of one is a permission ask (Claude Code's `ask` rules,
- * its Windows `PowerShell` beside `Bash`, a built-in of Claude Code 0.3.302's
- * `BUILTIN_TOOL_NAMES` that "Set CLAUDE_CODE_USE_POWERSHELL_TOOL=1"
- * turns on;
- * OpenCode's `ask` rules) that the hub's gate decides (hub lead-gate.ts),
- * whatever the session's mode. OpenCode's are 2.0's permission actions:
- * `shell`, and `edit`, which covers `write` and `patch` ("In V2, use
- * permissions, shell, and subagent instead of permission, bash, and task",
- * opencode.ai/v2/docs/permissions). pi's are its built-in `bash`, `edit`
- * and `write`, each put to the hub by CawCo's `tool_call` handler, which pi
+ * under ({@link HARNESS_TOOLS}' shells and edits): every call of one is a
+ * permission ask (Claude Code's `ask` rules, its Windows `PowerShell` beside
+ * `Bash`, a built-in of Claude Code 0.3.302's `BUILTIN_TOOL_NAMES` that "Set
+ * CLAUDE_CODE_USE_POWERSHELL_TOOL=1" turns on; OpenCode's `ask` rules) that
+ * the hub's gate decides (hub lead-gate.ts), whatever the session's mode.
+ * pi's are each put to the hub by CawCo's `tool_call` handler, which pi
  * awaits before the call runs and which blocks it on a deny ("Fired before a
  * tool executes. Can block.", pi 1.3.0 extensions/types.d.ts `ToolCallEvent`).
  */
@@ -268,13 +280,10 @@ export const LEAD_GATED_TOOLS = {
   claude: [
     ...HARNESS_TOOLS.claude.shell,
     ...HARNESS_TOOLS.claude.powershell,
-    "Edit",
-    "Write",
-    "MultiEdit",
-    "NotebookEdit",
+    ...HARNESS_TOOLS.claude.edit,
   ],
-  opencode: [...HARNESS_TOOLS.opencode.shell, "edit"],
-  pi: [...HARNESS_TOOLS.pi.shell, "edit", "write"],
+  opencode: [...HARNESS_TOOLS.opencode.shell, ...HARNESS_TOOLS.opencode.edit],
+  pi: [...HARNESS_TOOLS.pi.shell, ...HARNESS_TOOLS.pi.edit],
 } as const satisfies Record<HarnessKind, readonly string[]>;
 
 /** Every harness's tools of `kinds`, by their own names ({@link HARNESS_TOOLS}). */
@@ -289,6 +298,8 @@ const harnessToolsOf = (
 
 /** The shell tools, by every harness's name: what a lead's gate holds as shell (the rest edit files), what a session's turn runs commands with, and what web-reads.ts reads a command of. */
 export const SHELL_TOOLS = harnessToolsOf("shell", "powershell");
+/** The tools that write files, by every harness's name ({@link HARNESS_TOOLS}' `edit`). */
+export const EDIT_TOOLS = harnessToolsOf("edit");
 /** The PowerShell tools, by every harness's name: shells whose lines a POSIX reader cannot read. */
 export const POWERSHELL_TOOLS = harnessToolsOf("powershell");
 /** The harnesses' own web fetch tools, by every harness's name: a URL argument decides whether one read the web. */

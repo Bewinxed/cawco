@@ -69,10 +69,12 @@ import {
   offeredMode,
   PROVIDER_RETRY,
   pricedRequest,
+  provenanceKindOf,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   SERVER_STOPPED_MID_TURN,
   SPAWNING_TOOLS,
+  turnCall,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -679,7 +681,7 @@ export interface OpencodeSessionOptions {
   lead: boolean;
   model: string | undefined;
   onRelease: () => void;
-  permissionMode: string | undefined;
+  permissionMode: PermissionMode | undefined;
   /** The harness's own work before a dispatch: its server up, the session on it. */
   prepareDispatch: () => Promise<void>;
   /** Whether the server says this session is running a turn now. */
@@ -771,7 +773,7 @@ export class OpencodeSession implements HarnessSession {
   readonly #directory: string;
   #model: string | undefined;
   #effort: EffortLevel | undefined;
-  #permissionMode: string | undefined;
+  #permissionMode: PermissionMode | undefined;
   readonly #applied: Applied;
   readonly #deniedRules: OpencodeRule[];
   readonly #fence: boolean;
@@ -1984,10 +1986,18 @@ export class OpencodeSession implements HarnessSession {
     this.#seenGates.add(asked.id);
     // OpenCode asks; the daemon is where a session's mode is enforced. A
     // lead's shell and edit asks are the hub's gate's to answer, never his
-    // mode's ({@link leadAsks}).
+    // mode's ({@link leadAsks}); and a shell or edit call in a turn that is
+    // not the session's principal's is the person's (core
+    // turn-provenance.ts), whatever the mode would answer.
     const gated = this.#lead && LEAD_ASKED.has(asked.action);
+    const provenance = turnCall(
+      this.#ctx.outside?.() ?? null,
+      this.#permissionMode,
+      provenanceKindOf(asked.action)
+    );
     if (
       !gated &&
+      provenance.kind === "mode" &&
       (autoAllows(this.#permissionMode, "tool") ||
         (this.#permissionMode === "acceptEdits" && asked.action === "edit"))
     ) {

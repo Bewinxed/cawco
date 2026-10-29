@@ -25,6 +25,8 @@ import {
   MESSAGES_READ,
   piToolsFor,
   pricedRequest,
+  provenanceKindOf,
+  turnCall,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -761,10 +763,18 @@ const cawcosExtensionsAlone = (
 });
 
 /**
+ * Every pi session's per-call permission point. pi has no permission modes,
+ * so a session's calls run; but in a turn that is not its principal's (core
+ * turn-provenance.ts, the flag the hub last told its machine, read on every
+ * call since "Tool calls from one assistant message can run in parallel",
+ * pi docs extensions.md) each shell and edit call is put to the person as a
+ * permission ask before it runs, saying why.
+ *
  * A project's Caw on pi (`SpawnPayload.lead`): each call of his shell and
  * edit tools is put to the hub as a permission ask before it runs, and runs
  * only once the hub's gate allows it (hub lead-gate.ts), as Claude Code's
- * `ask` rules and OpenCode's put his calls there. pi's own point for it:
+ * `ask` rules and OpenCode's put his calls there; his gate reads the same
+ * turn provenance. pi's own point for it:
  * "`tool_call` can mutate input or block execution" (pi docs
  * extensions.md); pi awaits each handler before the call runs
  * (agent-session.js `_beforeToolCall`), a script's calls included ("Nested
@@ -783,8 +793,10 @@ const cawcosExtensionsAlone = (
  * pi's readers, and the MCP servers' tools, which Caw has as any session
  * does ({@link cawcosTool}).
  */
-class PiLeadGate {
+class PiGate {
   readonly #ctx: HarnessContext;
+  /** A project's Caw: his shell and edit calls, and his own extensions' tools, are all the hub's gate's. */
+  readonly #lead: boolean;
   /** The asks the hub has not answered, by request: each with its call's answer. */
   readonly #waiting = new Map<
     string,
@@ -794,19 +806,31 @@ class PiLeadGate {
     }
   >();
 
-  constructor(ctx: HarnessContext) {
+  constructor(ctx: HarnessContext, lead: boolean) {
     this.#ctx = ctx;
+    this.#lead = lead;
   }
 
   /** The inline extension: every gated call waits on the hub. */
   extension(): ExtensionFactory {
     return (pi) => {
       pi.on("tool_call", (event, context) =>
-        LEAD_GATED_ON_PI.has(event.toolName) || !cawcosTool(pi, event.toolName)
+        this.#gated(pi, event.toolName)
           ? this.#put(event, context.signal)
           : undefined
       );
     };
+  }
+
+  /** Whether a call of `tool` is put to the hub: a lead's gated or foreign tool, or any session's shell or edit in an outside turn. */
+  #gated(pi: ExtensionAPI, tool: string): boolean {
+    if (this.#lead) {
+      return LEAD_GATED_ON_PI.has(tool) || !cawcosTool(pi, tool);
+    }
+    return (
+      turnCall(this.#ctx.outside?.() ?? null, undefined, provenanceKindOf(tool))
+        .kind === "ask"
+    );
   }
 
   /**
@@ -941,7 +965,7 @@ class PiSession implements HarnessSession {
   /** Its shell commands, which a send moves to the background. */
   readonly #shells: PiShells;
   /** A project's Caw's gate: his shell and edit calls, each put to the hub. */
-  readonly #gate: PiLeadGate | undefined;
+  readonly #gate: PiGate;
   readonly #unread: string[] = [];
   #reading: string | undefined;
   /** What the turn's requests spent so far: its answers' and any compaction's. */
@@ -1013,7 +1037,7 @@ class PiSession implements HarnessSession {
     runtime: ModelRuntime,
     shells: PiShells,
     fleetMcp: FleetMcp | undefined,
-    gate: PiLeadGate | undefined
+    gate: PiGate
   ) {
     this.#ctx = ctx;
     this.#gate = gate;
@@ -1477,10 +1501,10 @@ class PiSession implements HarnessSession {
     }
   }
   resolvePermission(requestId: string, result: PermissionResult): void {
-    this.#gate?.answer(requestId, result);
+    this.#gate.answer(requestId, result);
   }
   withdrawPermission(requestId: string, message: string): void {
-    this.#gate?.withdraw(requestId, message);
+    this.#gate.withdraw(requestId, message);
   }
   /**
    * Cuts the turn and ends the commands it moved to the background, each
@@ -1620,7 +1644,7 @@ export async function startPiHost(
         ),
       ]
     : [];
-  const gate = spec.lead ? new PiLeadGate(ctx) : undefined;
+  const gate = new PiGate(ctx, spec.lead === true);
   // The fleet's hooks, and its folder's project's (`FleetHooks`); a fenced
   // session runs none, as it takes no fleet MCP server.
   const hooks = fenced
@@ -1651,7 +1675,7 @@ export async function startPiHost(
       ...mcp,
       ...(hooks ? [hooks.extension()] : []),
       // Last, so its verdict is on the input the call runs with.
-      ...(gate ? [gate.extension()] : []),
+      gate.extension(),
     ],
     ...(fenced ? { extensionsOverride: cawcosExtensionsAlone } : {}),
     agentsFilesOverride: (base) => ({

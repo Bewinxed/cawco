@@ -226,6 +226,7 @@ import {
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_SLEEP,
   CONTROL_TRANSCRIPT_TURNS,
+  CONTROL_TURN_PROVENANCE,
   CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -974,6 +975,7 @@ import {
   type TranscriptPayload,
 } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
+import { createTurnProvenance } from "./turn-provenance";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
 import { upstreamRuleOf, upstreamRules } from "./upstream";
@@ -3976,21 +3978,32 @@ export const createServer = (
     put: (row) => db.putSessionTaint(row),
   });
   /**
-   * The gate on a project's Caw's shell and edit calls (lead-gate.ts): each
-   * of his asks is decided here before it parks, his wake's source read from
-   * the sends his harness reads and the web content his turn reads.
+   * Every session's turn provenance (turn-provenance.ts): whose its turn is,
+   * read from the sends its harness reads and the web content its turn
+   * reads, its machine told each time it turns outside or back, so its
+   * harness asks the person before a shell or edit call in an outside turn.
    */
-  const leadGate = createLeadGate({
-    cawEdits: projectCawEdits,
-    db,
-    gone: (envelope) =>
-      askRefusal(
-        db.getInstancesByIds([envelope.instanceId ?? ""])[0],
-        envelope
-      ),
-    note: (instanceId, note) => lead?.noteCall(instanceId, note),
-    shared: (row) => sharedPlace(row),
-    thread: (row) => lead?.askThread(row),
+  const turnProvenance = createTurnProvenance({
+    tell: (session, outside) => {
+      const agent = registry.agent(session.machineId);
+      if (!agent) {
+        // Told again when the machine connects (`resend`).
+        return;
+      }
+      const requestId = crypto.randomUUID();
+      sendFrame(agent, {
+        verb: "control",
+        machineId: session.machineId,
+        instanceId: session.id,
+        requestId,
+        payload: {
+          instanceId: session.id,
+          requestId,
+          method: CONTROL_TURN_PROVENANCE,
+          args: [outside],
+        },
+      });
+    },
     webContext: () => ({
       fleet: new Set(
         [
@@ -4005,6 +4018,24 @@ export const createServer = (
         return config && "url" in config ? config.url : undefined;
       },
     }),
+  });
+  /**
+   * The gate on a project's Caw's shell and edit calls (lead-gate.ts): each
+   * of his asks is decided here before it parks, whose his turn is read
+   * from its provenance, as every session's is.
+   */
+  const leadGate = createLeadGate({
+    cawEdits: projectCawEdits,
+    db,
+    gone: (envelope) =>
+      askRefusal(
+        db.getInstancesByIds([envelope.instanceId ?? ""])[0],
+        envelope
+      ),
+    note: (instanceId, note) => lead?.noteCall(instanceId, note),
+    outside: (instanceId) => turnProvenance.outside(instanceId),
+    shared: (row) => sharedPlace(row),
+    thread: (row) => lead?.askThread(row),
   });
   /**
    * Whether a lead's place is a shared checkout: the project's folder on the
@@ -5734,6 +5765,9 @@ export const createServer = (
       // its agent may still be in its turn, which its adoption says.
       transcripts.processGone(instanceId);
       workItems.turnOver(instanceId);
+      // Its turn's provenance with it; one that outlived its agent keeps
+      // its turn, and the machine is told it again as it connects.
+      turnProvenance.ended(instanceId);
     }
     // A lead's turn ends with its process: its thread is no longer working.
     lead?.sessionEnded(instanceId);
@@ -7152,9 +7186,9 @@ export const createServer = (
       }
       // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
       memoryWatch.read(instanceId, row.body?.origin);
-      // Whose a lead's wake is: your words alone, or outside text (lead-gate.ts).
+      // Whose the session's turn is: its principal's, or outside (turn-provenance.ts).
       if (reader && !isKeepAlive(row.body)) {
-        leadGate.read(reader, row.uuid, row.body?.origin);
+        turnProvenance.read(reader, row.uuid, row.body);
       }
       readSend(row, true);
     }
@@ -23967,7 +24001,11 @@ export const createServer = (
   // than folded into the routes below.
   const { delegateTypes } = db;
   // What each ask says on every surface, read as it parks (ask-presentation.ts).
-  pending.presentWith(createAskPresenter(db, delegateTypes));
+  pending.presentWith(
+    createAskPresenter(db, delegateTypes, (instanceId) =>
+      turnProvenance.outside(instanceId)
+    )
+  );
   // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.
   const projectTypes = makeProjectDelegateTypes(delegateTypes);
   /**
@@ -24315,18 +24353,26 @@ export const createServer = (
 
   /**
    * Whether `row`'s folder is its project's own place, the scope a project's
-   * own tools follow (roles.ts `allows`): a checkout of it on its machine or
-   * a folder inside one (db `projectHolding`), its folder on the hub on the
-   * hub's machine, or Caw's own folder for it ({@link leadHome}).
+   * own tools follow (roles.ts `allows`): one of its checkouts itself, on its
+   * machine; its folder on the hub, on the hub's machine; or Caw's own folder
+   * for it ({@link leadHome}). A folder under a checkout is not: a project
+   * placed at a broad folder (a home) would make every folder under it the
+   * project's place.
    */
   const worksInPlace = (row: InstanceRow): boolean => {
     const { projectId } = row;
-    if (!projectId) {
+    const project = projectId ? db.project(projectId) : undefined;
+    if (!(projectId && project)) {
       return false;
     }
     const cwd = row.cwd.replace(TRAILING_SLASHES, "");
     return (
-      db.projectHolding(row.machineId, cwd) === projectId ||
+      project.places.some(
+        (place) =>
+          place.kind === "checkout" &&
+          place.machineId === row.machineId &&
+          place.path.replace(TRAILING_SLASHES, "") === cwd
+      ) ||
       (row.machineId === ownMachineIdRead && cwd === projectRoot(projectId)) ||
       cwd.endsWith(`/${cawHome(projectId)}`)
     );
@@ -25411,7 +25457,7 @@ export const createServer = (
     turnEnded: (instanceId, why, gone) =>
       routines.leadTurnEnded(instanceId, why, gone),
     views,
-    wakeSent: (uuid, kind) => leadGate.woke(uuid, kind),
+    wakeSent: (uuid, kind) => turnProvenance.woke(uuid, kind),
     refreshPlace: (row) => ensureIdentityWorkspace(row),
   });
   lead = caw;
@@ -35529,6 +35575,8 @@ export const createServer = (
               // Behind its ack, which it waits for to take requests: what
               // was held for it while it was away goes again.
               resendHeld(message.machineId);
+              // Each outside turn of its sessions, which it forgot.
+              turnProvenance.resend(message.machineId);
               handAgain(message.machineId, peekInstances(message.payload));
               for (const row of toEnd) {
                 endSession(row.id, "stop", {
@@ -36451,6 +36499,12 @@ export const createServer = (
                   );
                   if (framed?.role === "lead") {
                     leadGate.frame(framed, admitted.message);
+                  }
+                  // Every session's web reads and turn's end move its
+                  // provenance (turn-provenance.ts), after his gate read
+                  // whose the turn that ends was.
+                  if (framed) {
+                    turnProvenance.frame(framed, admitted.message);
                   }
                 }
               }

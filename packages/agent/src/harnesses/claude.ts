@@ -108,6 +108,7 @@ import {
   type OfferedMode,
   offeredMode,
   type PermissionMode,
+  provenanceKindOf,
   RATE_LIMIT_READ,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
@@ -117,6 +118,7 @@ import {
   SESSION_DIR_READ,
   SESSION_STOPPED,
   settledQuestionResult,
+  turnCall,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -1174,6 +1176,13 @@ const CREDENTIAL_REFUSED_WORDS =
 const STOP_HOOK_TIMEOUT_S = 5;
 
 /**
+ * How long the CLI waits on the `PreToolUse` hook this adapter registers,
+ * in seconds: it reads a flag in memory ({@link HarnessContext.outside}) and
+ * answers at once.
+ */
+const PROVENANCE_HOOK_TIMEOUT_S = 5;
+
+/**
  * How long an attached session whose scheduled wake-ups are not known must
  * have been at rest before it counts as having none: a day and an hour. A
  * self-paced wake-up fires within an hour (`ScheduleWakeup` clamps its delay
@@ -2121,6 +2130,12 @@ class ClaudeSession implements HarnessSession {
   readonly #ctx: HarnessContext;
   readonly #permissions = new Map<string, PermissionResolver>();
   /**
+   * The tool calls this session's turn provenance put to the person (its
+   * `PreToolUse` hook's `ask`, core turn-provenance.ts): Full Send never
+   * answers one of them here ({@link SessionMode.answersHostSide}).
+   */
+  readonly #provenanceAsks = new Set<string>();
+  /**
    * The open `AskUserQuestion` permissions, keyed by request id, holding the
    * tool call they park and the questions they ask. A dismissal is a denial,
    * and the CLI answers a denied tool call with prose and no `toolUseResult`
@@ -2380,6 +2395,48 @@ class ClaudeSession implements HarnessSession {
         // turn that ends while no agent is attached ends five seconds late,
         // and the agent that attaches reads the list off the ring.
         hooks: {
+          // THE PROVENANCE POINT (core turn-provenance.ts): a shell or edit
+          // call in a turn that is not its principal's asks the person,
+          // whatever the session's mode. "`"ask"` prompts the user to
+          // confirm", and the CLI's prompt here is `canUseTool`
+          // (code.claude.com/docs/en/hooks, PreToolUse decision control); in
+          // its principal's turn the hook says nothing and the mode decides.
+          PreToolUse: [
+            {
+              timeout: PROVENANCE_HOOK_TIMEOUT_S,
+              hooks: [
+                // biome-ignore lint/suspicious/useAwait: the SDK's HookCallback returns a promise
+                async (asked: unknown) => {
+                  const { tool_name: tool, tool_use_id: use } = asked as {
+                    tool_name?: unknown;
+                    tool_use_id?: unknown;
+                  };
+                  if (typeof tool !== "string") {
+                    return {};
+                  }
+                  const call = turnCall(
+                    ctx.outside?.() ?? null,
+                    this.#mode.reported,
+                    provenanceKindOf(tool)
+                  );
+                  if (call.kind === "mode") {
+                    return {};
+                  }
+                  if (typeof use === "string") {
+                    this.#provenanceAsks.add(use);
+                  }
+                  console.log(`[claude] ${tool} asks: ${call.why}`);
+                  return {
+                    hookSpecificOutput: {
+                      hookEventName: "PreToolUse",
+                      permissionDecision: "ask",
+                      permissionDecisionReason: call.why,
+                    },
+                  };
+                },
+              ],
+            },
+          ],
           Stop: [
             {
               timeout: STOP_HOOK_TIMEOUT_S,
@@ -2497,8 +2554,12 @@ class ClaudeSession implements HarnessSession {
           }
         ) =>
           new Promise<PermissionResult>((resolve) => {
-            // Full Send answers here what the CLI still asks in bypass ({@link SessionMode}); plain bypass does not.
-            const answered = this.#mode.answersHostSide(toolName, lead);
+            // Full Send answers here what the CLI still asks in bypass
+            // ({@link SessionMode}); plain bypass does not, nor does Full
+            // Send answer a call its turn's provenance put to the person.
+            const provenance = this.#provenanceAsks.delete(toolUseID);
+            const answered =
+              !provenance && this.#mode.answersHostSide(toolName, lead);
             console.log(
               askLine(
                 toolName,

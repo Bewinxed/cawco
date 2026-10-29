@@ -82,6 +82,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
   CONTROL_SPIN_OFF_HELD,
+  CONTROL_TURN_PROVENANCE,
   CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
@@ -1160,6 +1161,12 @@ export class SessionSupervisor {
   /** Claude processes that ran a manual `/compact`, until the relaunch that replaces them ({@link COMPACT_RELAUNCH}). */
   readonly #compactedHere = new WeakSet<HarnessSession>();
   readonly #keepAlive = new Map<string, string>();
+  /**
+   * Each session whose turn is outside, with the hub's clause why
+   * ({@link CONTROL_TURN_PROVENANCE}): what its harness's per-call
+   * permission point reads ({@link HarnessContext.outside}).
+   */
+  readonly #outside = new Map<string, string>();
   /**
    * Each session's run of identical failed turns since its last send: the
    * failure's words and how many times in a row ({@link #watchFailure}).
@@ -2647,6 +2654,8 @@ export class SessionSupervisor {
    */
   #forgetPulse(instanceId: string): void {
     this.#cacheCold.delete(instanceId);
+    // Its turn went with its process.
+    this.#outside.delete(instanceId);
     this.#keepAlive.delete(instanceId);
     this.#failureRun.delete(instanceId);
     this.#busy.delete(instanceId);
@@ -3731,6 +3740,7 @@ export class SessionSupervisor {
           }
         }
       },
+      outside: () => this.#outside.get(instanceId) ?? null,
       permission: (request) => {
         if (this.#openAsks.has(request.requestId)) {
           return;
@@ -6727,6 +6737,16 @@ export class SessionSupervisor {
       throw new Error(`unknown session function: ${method}`);
     }
 
+    if (method === CONTROL_TURN_PROVENANCE) {
+      const outside = typeof args[0] === "string" ? args[0] : null;
+      if (outside === null) {
+        this.#outside.delete(instanceId);
+      } else {
+        this.#outside.set(instanceId, outside);
+      }
+      this.#sessions.get(instanceId)?.outsideChanged?.();
+      return undefined;
+    }
     if (method === RESOLVE_PERMISSION) {
       this.#session(instanceId).resolvePermission(
         args[0] as string,

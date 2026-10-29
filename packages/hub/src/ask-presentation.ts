@@ -12,9 +12,11 @@ import {
   type PermissionRequestFrame,
   type PermissionResult,
   presentPermission,
+  provenanceKindOf,
   questionsOf,
   redact,
   type SourceFacts,
+  turnCall,
 } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
@@ -74,7 +76,9 @@ export const answeredWithOriginal = (
 
 export const createAskPresenter = (
   db: DbShape,
-  delegateTypes: DelegateTypesShape
+  delegateTypes: DelegateTypesShape,
+  /** Why a session's turn is outside now, as a card's clause says it; null while it is its principal's (turn-provenance.ts). */
+  outside: (instanceId: string) => string | null
 ) => {
   /**
    * The session that asked, as the board names it (a project's lead is Caw;
@@ -192,15 +196,27 @@ export const createAskPresenter = (
       proposer?: unknown;
       sourceFacts?: SourceFacts;
     };
-    // A Caw call his gate put to you says which rule did (lead-gate.ts).
+    // A Caw call his gate put to you says which rule did (lead-gate.ts);
+    // any session's shell or edit call in an outside turn says what made the
+    // turn so (core turn-provenance.ts).
     const gated = envelope.requestId
       ? db.leadCalls.ofRequest(envelope.requestId)
       : undefined;
+    const asker = envelope.instanceId ?? payload.instanceId;
+    const provenance = turnCall(
+      asker ? outside(asker) : null,
+      undefined,
+      provenanceKindOf(payload.toolName)
+    );
+    let askedBecause: string | undefined;
+    if (gated?.outcome === "asked" && gated.why) {
+      askedBecause = gated.why;
+    } else if (provenance.kind === "ask") {
+      askedBecause = provenance.why;
+    }
     payload.presentation = presentPermission(payload.toolName, payload.input, {
-      ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
-      ...(gated?.outcome === "asked" && gated.why
-        ? { askedBecause: gated.why }
-        : {}),
+      ...askerOf(asker, payload),
+      ...(askedBecause ? { askedBecause } : {}),
       memory,
       current,
       projectName,

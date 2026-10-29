@@ -115,7 +115,6 @@ import type { Origin, WorkOrigin } from "./db/schema";
 import { sendWords } from "./db/words";
 import { byHandle } from "./handles";
 import { inboxText } from "./ingress";
-import type { WakeSource } from "./lead-gate";
 import { sentence, tool } from "./mcp-tool";
 import { mediaBase64 } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
@@ -152,6 +151,7 @@ import {
 import { readStages, templateText } from "./stages";
 import type { TaskEvent, TaskView } from "./tasks";
 import { cardOn } from "./thread-transcript";
+import type { WakeSource } from "./turn-provenance";
 import type { Views } from "./views";
 
 /** A thread's handle as find and a chip write it: `thread#1a2b3c4d`. */

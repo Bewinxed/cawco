@@ -26,26 +26,24 @@
  *    its file neither refused nor guessed at; a gate.md that does not read
  *    refuses it, naming its problems. An edit that would take the wake past
  *    {@link FILES_PER_WAKE} files is refused: "file a task".
- * 4. **Reads run**: a shell line that only reads ({@link readOnly}: readers
+ * 4. **Turn provenance**, the one rule every session runs under (core
+ *    turn-provenance.ts, kept by turn-provenance.ts): in a turn that is not
+ *    the owner's (an event, a routine, a report, a nudge, an inbox of outside
+ *    events or a web read came into it) every shell and edit call raises the
+ *    Approve card, saying what made the turn outside.
+ * 5. **The owner's turn**: a line that only reads ({@link readOnly}: readers
  *    and reading git, `git -C <path>` and `git fetch` of a named remote among
  *    them, the machine's own listings (`ps`, `ss`, `ip addr`), a `curl` GET,
- *    output only into `/dev/null` or another descriptor) runs without asking
- *    whatever woke him: it writes nothing in the tree, publishes nothing, and
- *    reaches a host only as his WebFetch on Claude and OpenCode, which no
- *    gate holds, already does.
- * 5. **Wake source**: a turn whose every read send is the owner's message
- *    (a thread message, a view request, his own words straight into the
- *    session) with no outside text riding on it, and that has read no web
- *    content, also runs `git init`, `git add <paths>` and `git commit` where
- *    no one else works ({@link allowlisted}), and an edit of a file his
- *    project's Caw edits list. Anything else (an edit with no list, any other
- *    write, a line the gate cannot read; or those writes in a turn an event,
- *    a routine, a report, a nudge, an inbox of outside events or a web read
- *    woke) raises the Approve card, the ask parked as any session's is. A
- *    PowerShell line, which the gate's POSIX reader cannot read, and a pi
- *    lead's call of a tool from the person's own extensions, which may do
- *    anything, always raise it. The card says, in one line, which rule sent
- *    the call there ("Asked because …", kept as the call's `why`).
+ *    output only into `/dev/null` or another descriptor) runs; so do
+ *    `git init`, `git add <paths>` and `git commit` where no one else works
+ *    ({@link allowlisted}), and an edit of a file his project's Caw edits
+ *    list. Anything else (an edit with no list, any other write, a line the
+ *    gate cannot read) raises the Approve card, the ask parked as any
+ *    session's is. A PowerShell line, which the gate's POSIX reader cannot
+ *    read, and a pi lead's call of a tool from the person's own extensions,
+ *    which may do anything, always raise it. The card says, in one line,
+ *    which rule sent the call there ("Asked because …", kept as the call's
+ *    `why`).
  * 6. **Visible**: every call is a `lead_calls` row and a note in the thread
  *    his turn answers: the command, its exit, the files it touched; a
  *    refusal with why, your Deny as yours.
@@ -67,25 +65,21 @@ import {
   type InstanceRow,
   LEAD_GATED_TOOLS,
   type NeutralMessage,
-  type NeutralOrigin,
   type PermissionRequestFrame,
   type PermissionResult,
   POWERSHELL_TOOLS,
   SHELL_TOOLS,
   type ThreadNote,
+  turnCall,
 } from "@cawco/core";
 import { GIT_VALUED_OPTIONS, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import type { DbShape, LeadCallRow } from "./db";
 import type { CawEdits } from "./gate-file";
-import type { WebContext } from "./web-reads";
-import { readsWeb } from "./web-reads";
 
 /** The most shell or edit calls Caw makes in one wake. */
 const CALLS_PER_WAKE = 20;
 /** The most files his edits touch in one wake. */
 const FILES_PER_WAKE = 5;
-/** The wakes kept for their sends to be read ({@link createLeadGate}'s `woke`). */
-const SENDS_KEPT = 2000;
 
 /**
  * What the gate answers a call: run it now, refuse it with words, or put it
@@ -123,7 +117,7 @@ const UNREAD_SHELLS = POWERSHELL_TOOLS;
  * What a lead's call is, by its tool: a shell line, a file edit, or any
  * other tool. That last kind is a pi lead's: his host puts to the gate every
  * call of a tool CawCo did not give him, one a person's own pi extension
- * registered (agent pi-runtime.ts `PiLeadGate`).
+ * registered (agent pi-runtime.ts `PiGate`).
  */
 type CallKind = "shell" | "edit" | "tool";
 
@@ -1995,58 +1989,14 @@ const inPlace = (place: string, file: string): string =>
 
 // --- the gate --------------------------------------------------------------
 
-/** One wake of a lead, as the gate keeps it: whose it is, and what it spent. */
+/** One wake of a lead, as the gate keeps it: what it spent. Whose it is is its turn's provenance (turn-provenance.ts). */
 interface Wake {
   calls: number;
   /** The files its edits touched or asked to. */
   files: Set<string>;
-  /** It read outside text: an event's wake, a routine's, a report, an inbox of outside events. */
-  outside: boolean;
-  /** It read your words: a thread message, a view request, a message straight into his session. */
-  owner: boolean;
-  /** Its web reads still waiting on their result, by call. */
-  reading: Set<string>;
-  /** The first outside text it read, as an ask names it ("a routine", "a message from Fix tray"). */
-  source: string | undefined;
-  /** It read web content: a result of a call that reads the web came back. */
-  web: boolean;
 }
 
-const fresh = (): Wake => ({
-  calls: 0,
-  files: new Set(),
-  outside: false,
-  owner: false,
-  reading: new Set(),
-  source: undefined,
-  web: false,
-});
-
-/**
- * What a send the hub woke a lead with was (caw.ts `sourceOf`): your words
- * alone, or outside text: an event, a routine's run, or your words with
- * outside events riding on them.
- */
-export type WakeSource = "owner" | "event" | "routine" | "inbox";
-
-/** An outside wake's source, as an ask names what woke the turn. */
-const SOURCE_WORDS: Record<Exclude<WakeSource, "owner">, string> = {
-  event: "a CawCo event",
-  routine: "a routine",
-  inbox: "outside events that came with your message",
-};
-
-/** A send whose wake the hub did not mark, by who sent it, as an ask names it. */
-const originWords = (origin: NeutralOrigin | undefined): string => {
-  if (origin?.kind === "peer") {
-    return origin.name
-      ? `a message from ${origin.name}`
-      : "another session's message";
-  }
-  return origin?.kind === "system"
-    ? "a CawCo notice"
-    : "a message that wasn't yours";
-};
+const fresh = (): Wake => ({ calls: 0, files: new Set() });
 
 export interface LeadGateDeps {
   /** The files the lead's project declares its Caw edits (gate-file.ts `projectCawEdits`). */
@@ -2056,12 +2006,12 @@ export interface LeadGateDeps {
   readonly gone: (envelope: Envelope) => string | undefined;
   /** A note in the thread the lead's turn answers (caw.ts `noteCall`). */
   readonly note: (instanceId: string, note: ThreadNote) => void;
+  /** Why the lead's turn is not the owner's, as a card's clause says it; null while it is (turn-provenance.ts `outside`). */
+  readonly outside: (instanceId: string) => string | null;
   /** Whether the lead's place is a shared checkout: one another live session uses, or the project's folder on the hub. */
   readonly shared: (lead: InstanceRow) => boolean;
   /** The thread the lead's turn answers now (caw.ts `askThread`). */
   readonly thread: (lead: InstanceRow) => string | undefined;
-  /** What a web read is judged by (web-reads.ts). */
-  readonly webContext: () => WebContext;
 }
 
 /** A command or file as a note's title names it: its first line, cut. */
@@ -2098,51 +2048,25 @@ interface Call {
   tool: string;
 }
 
-/** Whether a wake is yours: it read your words and nothing from outside, and no web content. */
-const yours = (wake: Wake): boolean => wake.owner && !wake.outside && !wake.web;
-
-/** Why a wake is not yours, in words, as an ask's reason says it. */
-const wakeWords = (wake: Wake): string => {
-  if (wake.web) {
-    return "this turn read web content";
-  }
-  if (wake.outside) {
-    return `this turn was woken by ${wake.source ?? "something other than your words"}`;
-  }
-  return "nothing you said woke this turn";
-};
-
 /** A call put on your card, with the rule that put it there: "Asked because …". */
 const card = (why: string): GateVerdict => ({
   kind: "card",
   why: `Asked because ${why}.`,
 });
 
-/**
- * An edit past the refusals: a file the project lists runs in a turn your
- * words woke; with no list, or in any other turn, it is put to you.
- */
-const editVerdict = (wake: Wake, edits: CawEdits): GateVerdict => {
-  if (edits.kind !== "declared") {
-    return card("no Caw edits list names this file");
-  }
-  return yours(wake)
+/** An edit past the refusals, in the owner's turn: a file the project lists runs; with no list, it is put to you. */
+const editVerdict = (edits: CawEdits): GateVerdict =>
+  edits.kind === "declared"
     ? { kind: "allow" }
-    : card(
-        `${wakeWords(wake)}, and Caw edits a file unasked only in a turn your words woke`
-      );
-};
+    : card("no Caw edits list names this file");
 
 /**
- * Why a shell line goes to your card, in words: the first thing in it that
- * is more than a read; and, for a write a turn your words woke would run,
- * what makes this turn or this place not one that runs it.
+ * Why a shell line goes to your card in the owner's turn, in words: the
+ * first thing in it that is more than a read; and, for a write his own
+ * place would run, that this place is a shared checkout.
  */
-const shellAsk = (command: string, wake: Wake, isShared: boolean): string => {
+const shellAsk = (command: string, isShared: boolean): string => {
   const blocker = readBlocker(command) ?? "";
-  if (allowlisted(command, isShared)) {
-    return `${wakeWords(wake)}, and ${blocker}`;
-  }
   return isShared && allowlisted(command, false)
     ? `this place is a shared checkout, and ${blocker}`
     : blocker;
@@ -2323,9 +2247,9 @@ export const createLeadGate = ({
   db,
   gone,
   note,
+  outside,
   shared,
   thread,
-  webContext,
 }: LeadGateDeps) => {
   /** Each lead's wake under way, by session. */
   const wakes = new Map<string, Wake>();
@@ -2334,8 +2258,6 @@ export const createLeadGate = ({
    * are, and why the ask was over meanwhile, once it was.
    */
   const reading = new Map<string, { instanceId: string; over?: string }>();
-  /** What each send the hub woke a lead with was: your words alone, or outside text, by its uuid (caw.ts `wake`). */
-  const sends = new Map<string, WakeSource>();
   const wakeOf = (instanceId: string): Wake => {
     let wake = wakes.get(instanceId);
     if (!wake) {
@@ -2382,13 +2304,6 @@ export const createLeadGate = ({
   };
 
   /**
-   * The verdict on one of a lead's calls, from the rules in order: budget,
-   * shared checkout, the project's Caw edits and size, wake source. `edits`
-   * is what the project declares, for an edit. Any other tool's call (a pi
-   * lead's tool from the person's own extensions) may do anything, so past
-   * the budget it is put to you.
-   */
-  /**
    * Why a call is refused outright, by the budget, the shared checkout or
    * the project's Caw edits; nothing for one that is not. `again`: a call
    * on your card judged again, which was inside its wake's budget as it was
@@ -2434,21 +2349,26 @@ export const createLeadGate = ({
       for (const file of call.files) {
         wake.files.add(file);
       }
-      return editVerdict(wake, edits);
+    }
+    // The one rule every session runs under: a turn that is not the
+    // owner's puts each shell and edit call to you, saying what made it so.
+    const provenance = turnCall(outside(lead.id), undefined, call.kind);
+    if (provenance.kind === "ask") {
+      return { kind: "card", why: provenance.why };
+    }
+    if (call.kind === "edit") {
+      return editVerdict(edits);
     }
     if (!call.readable) {
       return card(`the gate can't read ${call.tool}`);
     }
-    // A line that only reads runs whatever woke him; the tidy writes only
-    // in a turn your words woke; anything else, and any line the gate cannot
-    // read, is put to you, with the rule that sent it.
-    if (
-      readOnly(call.command) ||
-      (yours(wake) && allowlisted(call.command, isShared))
-    ) {
+    // In the owner's turn a line that only reads runs, and the tidy writes
+    // where no one else works; anything else is put to you, with the rule
+    // that sent it.
+    if (readOnly(call.command) || allowlisted(call.command, isShared)) {
       return { kind: "allow" };
     }
-    return card(shellAsk(call.command, wake, isShared));
+    return card(shellAsk(call.command, isShared));
   };
 
   /** A call's note in his thread, once its outcome is known. */
@@ -2465,40 +2385,12 @@ export const createLeadGate = ({
     wakes.delete(instanceId);
     if (wake) {
       console.log(
-        `[lead-gate] ${instanceId}: wake ended after ${wake.calls} call(s) (${yours(wake) ? "yours" : "external"})`
+        `[lead-gate] ${instanceId}: wake ended after ${wake.calls} call(s) (${outside(instanceId) ?? "the owner's"})`
       );
     }
   };
 
-  /** The calls a lead's message makes that read the web: their results make his wake external. */
-  const calledWeb = (
-    instanceId: string,
-    content: readonly { type: string }[]
-  ): void => {
-    const context = webContext();
-    for (const block of content) {
-      const use = block as {
-        id?: string;
-        input?: unknown;
-        name?: string;
-        type: string;
-      };
-      if (
-        use.type === "tool_use" &&
-        use.id &&
-        use.name &&
-        readsWeb(
-          use.name,
-          (use.input ?? {}) as Record<string, unknown>,
-          context
-        )
-      ) {
-        wakeOf(instanceId).reading.add(use.id);
-      }
-    }
-  };
-
-  /** One of a lead's tool results: a web read's makes his wake external; a ran call's says its exit. */
+  /** One of a lead's tool results: a ran call's says its exit. */
   const resulted = (
     instanceId: string,
     block: {
@@ -2508,13 +2400,6 @@ export const createLeadGate = ({
       tool_use_id: string;
     }
   ): void => {
-    const wake = wakes.get(instanceId);
-    if (wake?.reading.delete(block.tool_use_id)) {
-      wake.web = true;
-      console.log(
-        `[lead-gate] ${instanceId}: read web content; its wake is external from here`
-      );
-    }
     const row = db.leadCalls.ofToolUse(instanceId, block.tool_use_id);
     if (row?.outcome !== "ran" || row.exit !== null) {
       return;
@@ -2711,50 +2596,13 @@ export const createLeadGate = ({
       noteOf({ ...row, outcome: "cut", why });
     },
 
-    /** The hub woke a lead with a send (caw.ts `wake`): your words alone, or outside text with them. */
-    woke(uuid: string, source: WakeSource): void {
-      sends.set(uuid, source);
-      // One never read is let go with the oldest; unread, it says nothing.
-      if (sends.size > SENDS_KEPT) {
-        const [oldest] = sends.keys();
-        if (oldest !== undefined) {
-          sends.delete(oldest);
-        }
-      }
-    },
-
-    /** A lead's harness read a send: its wake is yours only while all it read is your words. */
-    read(
-      instance: InstanceRow,
-      uuid: string,
-      origin: NeutralOrigin | undefined
-    ): void {
-      if (instance.role !== "lead") {
-        return;
-      }
-      const wake = wakeOf(instance.id);
-      const woke = sends.get(uuid);
-      sends.delete(uuid);
-      if (
-        woke === "owner" ||
-        (woke === undefined && origin?.kind === "human")
-      ) {
-        wake.owner = true;
-      } else {
-        wake.outside = true;
-        wake.source ??= woke ? SOURCE_WORDS[woke] : originWords(origin);
-      }
-    },
-
-    /** A frame a lead's harness streamed: its web reads, its calls' results, its turn's end. */
+    /** A frame a lead's harness streamed: its calls' results, its turn's end. */
     frame(instance: InstanceRow, neutral: NeutralMessage): void {
       if (instance.role !== "lead") {
         return;
       }
       if (neutral.type === "result") {
         wakeEnded(instance.id);
-      } else if (neutral.type === "assistant") {
-        calledWeb(instance.id, neutral.message.content);
       } else if (
         neutral.type === "user" &&
         Array.isArray(neutral.message.content)
