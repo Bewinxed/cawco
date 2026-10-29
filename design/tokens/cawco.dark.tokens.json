@@ -1614,6 +1614,90 @@
         }
       }
     },
+    "c-clip-opacity": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 176]
+      }
+    },
+    "c-clip-opacity-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.34, 0.06, 176]
+      }
+    },
+    "c-clip-position": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 272]
+      }
+    },
+    "c-clip-position-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.34, 0.06, 272]
+      }
+    },
+    "c-clip-size": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 62]
+      }
+    },
+    "c-clip-size-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.34, 0.06, 62]
+      }
+    },
+    "c-clip-colour": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 335]
+      }
+    },
+    "c-clip-colour-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.34, 0.06, 335]
+      }
+    },
+    "c-clip-text": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 300]
+      }
+    },
+    "c-clip-text-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.34, 0.06, 300]
+      }
+    },
+    "c-clip-unfold": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 235]
+      }
+    },
+    "c-clip-unfold-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.34, 0.06, 235]
+      }
+    },
     "c-graph-slab": {
       "$type": "color",
       "$value": "{color.surface-recess}"
@@ -1633,6 +1717,78 @@
     "c-chosen-wash": {
       "$type": "color",
       "$value": "{color.brand-wash}"
+    },
+    "c-clip-opacity-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.42, -0.069829, 0.004883]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-opacity} 20%, {color.c-clip-opacity-wash})"
+        }
+      }
+    },
+    "c-clip-position-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.42, 0.002443, -0.069957]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-position} 20%, {color.c-clip-position-wash})"
+        }
+      }
+    },
+    "c-clip-size-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.42, 0.032863, 0.061806]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-size} 20%, {color.c-clip-size-wash})"
+        }
+      }
+    },
+    "c-clip-colour-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.42, 0.063442, -0.029583]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-colour} 20%, {color.c-clip-colour-wash})"
+        }
+      }
+    },
+    "c-clip-text-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.42, 0.035, -0.060622]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-text} 20%, {color.c-clip-text-wash})"
+        }
+      }
+    },
+    "c-clip-unfold-held": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.42, -0.04015, -0.057341]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-unfold} 20%, {color.c-clip-unfold-wash})"
+        }
+      }
     }
   },
   "effect": {

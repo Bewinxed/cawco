@@ -3827,23 +3827,12 @@
 {#snippet viewBar()}
   {#if canvasView}
     <!-- A component canvas's view: its frames' scheme, widths, motion and zoom. -->
-    <CanvasView
-      graph={designGraph}
-      onverify={verify}
-      view={canvasView}
-      {verifying}
-    />
+    <CanvasView onverify={verify} view={canvasView} {verifying} />
   {/if}
 {/snippet}
 {#snippet viewMenu()}
   {#if canvasView}
-    <CanvasView
-      as="sub"
-      graph={designGraph}
-      onverify={verify}
-      view={canvasView}
-      {verifying}
-    />
+    <CanvasView as="sub" onverify={verify} view={canvasView} {verifying} />
   {/if}
 {/snippet}
 
