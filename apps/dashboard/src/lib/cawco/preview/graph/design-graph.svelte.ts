@@ -8,8 +8,8 @@
  *
  * The dock's state too: the kept move as its page played it (`cawco:move`),
  * the agent's timing of each clip and the person's edits of it (Original |
- * Edited, the owner's pick "segments"), the playhead, and where a clip's
- * controls open (clip-controls.ts). Every edit's timing goes to the page as
+ * Edited, the owner's pick "segments") and the playhead; a clip's
+ * controls open in its row (his pick). Every edit's timing goes to the page as
  * runs to play (`cawco:move-ask`) and to the artifact as `tuned`, each value
  * marked a token or ad hoc.
  */
@@ -35,7 +35,6 @@ import {
 } from "@cawco/core/design-graph";
 import type { Interaction } from "@cawco/core/stage";
 import { store, stored } from "../../storage";
-import { type ClipControlsAt, clipControlsAt } from "./clip-controls";
 
 const INTERACTIONS = new Set<Interaction>([
   "rest",
@@ -163,8 +162,6 @@ export class DesignGraph {
   time = $state<number | null>(null);
   playing = $state(false);
   looping = $state(false);
-  /** Where a clip's controls open: the owner's pick, row or inspector, behind one switch (clip-controls.ts). */
-  controlsAt = $state<ClipControlsAt>(clipControlsAt());
 
   /** The agent's dials and the values its frames draw with. */
   dials = $state.raw<DialsModel | null>(null);
@@ -389,7 +386,8 @@ export class DesignGraph {
     const length = this.playLength;
     const started = performance.now();
     const tick = (now: number) => {
-      const at = now - started;
+      // A frame's time is when the frame began, which can stand before the press's own `performance.now()`: never under 0.
+      const at = Math.max(0, now - started);
       if (at < length) {
         this.time = at;
         this.#clock = requestAnimationFrame(tick);
@@ -499,12 +497,6 @@ export class DesignGraph {
     if (was) {
       this.editClip(id, () => ({ ...was }), { replay: true });
     }
-  }
-
-  /** Where a clip's controls open, from the review switch (clip-controls.ts). */
-  setControlsAt(at: ClipControlsAt): void {
-    this.controlsAt = at;
-    clipControlsAt(at);
   }
 
   /** The person's timing as `tuned`, once they stop: each changed clip, its tokens or ad hoc. */

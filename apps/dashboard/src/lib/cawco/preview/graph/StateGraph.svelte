@@ -640,15 +640,7 @@
           style:--x={`${at?.x ?? 0}px`}
           style:--y={`${at?.y ?? 0}px`}
         >
-          {#if machine.name}
-            <!-- The machine's name, its slab's header: the label role, on the brand wash where the kept state stands. -->
-            <h4
-              class="m-0 flex min-h-c-graph-region-band-h w-0 min-w-full items-center px-space-3 py-space-row type-label text-ink-row text-pretty wrap-anywhere transition-colors duration-(--dur-control) ease-out group-data-kept/region:bg-brand-wash group-data-kept/region:text-brand-ink"
-              data-band
-            >
-              {machine.name}
-            </h4>
-          {/if}
+          <!-- No header naming the machine (the owner, on machine names: "neither, the state machines are already namedin the grpah, stop adding redundant/useless copy"): its slab groups its states, its name is a reader's alone. -->
           <div
             class="relative m-space-2 h-(--ih) w-(--iw)"
             style:--ih={`${inner?.h ?? 0}px`}

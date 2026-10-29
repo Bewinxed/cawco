@@ -314,11 +314,65 @@ export function pathOf(
 /* --- The dock: the kept move's clips ----------------------------------- */
 
 /**
- * What a clip does to its element (pin 27, "color things differently"):
- * it brings it in, changes it where it stands, or takes it away. Read by
- * the page from where the element stood before and after the move.
+ * What a clip changes on its element (the owner's pick "Its own colour per
+ * kind" on design-graph-finish; mockup round 29's six kinds): its opacity,
+ * its position, its size, its colour, its words (a text swap), or its
+ * height as it unfolds or folds. Each kind its own glyph and hue.
  */
-export type ClipKind = "enter" | "change" | "exit";
+export type ClipKind =
+  "opacity" | "position" | "size" | "colour" | "text" | "unfold";
+
+/** Every kind, in the dock's order. */
+export const CLIP_KINDS: readonly ClipKind[] = [
+  "opacity",
+  "position",
+  "size",
+  "colour",
+  "text",
+  "unfold",
+];
+
+const SPACED = /[\s,]+/;
+const UNFOLDS =
+  /^(height|max-height|min-height|block-size|grid-template-rows)$/;
+const BOX_EDGES = /^(padding|margin|border)(-.*)?(-width)?$/;
+const SIZES =
+  /^(width|height|inline-size|block-size|min-.*|max-.*|scale|zoom)$/;
+const MOVES =
+  /^(transform|translate|rotate|top|left|right|bottom|inset.*|offset.*)$/;
+const COLOURS =
+  /(colou?r|background|fill|stroke|shadow|gradient|filter-colou?r|accent|caret)/;
+
+/**
+ * A clip's kind from what it runs and what its element said: a text swap
+ * where its element's words changed with it; an unfold where a height runs
+ * with the box edges it folds (Svelte's `slide`, the house's `unfold`); a
+ * size, a position or a colour by its properties (CSS's spelling or a
+ * keyframe's camelCase); else its opacity.
+ */
+export function kindOfClip(property: string, wordsChanged: boolean): ClipKind {
+  if (wordsChanged) {
+    return "text";
+  }
+  const names = property
+    .split(SPACED)
+    .filter(Boolean)
+    .map((one) => one.replaceAll(/[A-Z]/g, (c) => `-${c.toLowerCase()}`));
+  const has = (rule: RegExp) => names.some((one) => rule.test(one));
+  if (has(UNFOLDS) && (has(BOX_EDGES) || names.length > 1)) {
+    return "unfold";
+  }
+  if (has(SIZES)) {
+    return "size";
+  }
+  if (has(MOVES)) {
+    return "position";
+  }
+  if (has(COLOURS)) {
+    return "colour";
+  }
+  return "opacity";
+}
 
 /** One animation the kept move fired, as the dock draws its row and bar. */
 export interface MoveClip {
