@@ -6,7 +6,9 @@
  * migration added since runs over real row shapes, as it will on a hub
  * updating from that nightly. A table the fixture had rows in must still
  * have rows: a migration that empties one is caught here, and one that drops
- * a table the schema still declares. A table the schema no longer declares
+ * a table the schema still declares, unless every row it had is one a
+ * migration declares it moves ({@link MOVES}), and each of those is found
+ * where it went. A table the schema no longer declares
  * may be dropped, its rows with it. Every foreign key
  * the schema declares stands in the migrated database with the same
  * ON DELETE and ON UPDATE ({@link foreignKeyDrift}). The journal's `when`
@@ -85,6 +87,91 @@ const read = (path: string) => {
     applied,
     migrations: rows.get("__drizzle_migrations") ?? 0,
   };
+};
+
+/**
+ * Rows a migration moves out of a table on purpose: `rows`, a condition on
+ * `from` naming them as its SQL does; `key`, an expression over each giving
+ * the key it has where it went; `arrived`, a condition on `to` that its row
+ * meets, `?` its key. Read only over a database the migration runs on.
+ */
+interface Move {
+  arrived: string;
+  from: string;
+  key: string;
+  /** The migration's tag, as the journal names it. */
+  migration: string;
+  rows: string;
+  to: string;
+  why: string;
+}
+
+const MOVES: readonly Move[] = [
+  {
+    migration: "0337_asks",
+    from: "parked_asks",
+    rows: "json_type(`envelope`, '$.payload.adminWrite') = 'text'",
+    key: "'ask_' || `request_id`",
+    to: "asks",
+    // Open as the migration writes it, or withdrawn by the hub's own start
+    // (admin-asks.ts `boot`: its session had ended), which says so.
+    arrived:
+      "`id` = ? AND (`state` = 'open' OR (`state` = 'withdrawn' AND json_extract(`record`, '$.withdrawn.by') = 'hub'))",
+    why: "an admin write parked before the ask became an open `approve` ask (core asks.ts)",
+  },
+];
+
+/** What each move that runs on the database at `path` takes, by its source table: the keys its rows have where they go. */
+const moving = (
+  path: string,
+  runs: (migration: string) => boolean
+): Map<Move, string[]> => {
+  const sqlite = new Database(path, { readwrite: true });
+  const tables = new Set(
+    sqlite
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+      )
+      .all()
+      .map(({ name }) => name)
+  );
+  const taken = new Map(
+    MOVES.filter((move) => runs(move.migration) && tables.has(move.from)).map(
+      (move) => [
+        move,
+        sqlite
+          .query<{ key: string }, []>(
+            `SELECT ${move.key} AS key FROM "${move.from}" WHERE ${move.rows}`
+          )
+          .all()
+          .map(({ key }) => key),
+      ]
+    )
+  );
+  sqlite.close();
+  return taken;
+};
+
+/** Every moved row not found where its move says it went, one line each. */
+const notArrived = (path: string, moved: Map<Move, string[]>): string[] => {
+  const sqlite = new Database(path, { readwrite: true });
+  const lost = [...moved].flatMap(([move, keys]) =>
+    keys
+      .filter(
+        (key) =>
+          !sqlite
+            .query<{ n: number }, [string]>(
+              `SELECT count(*) AS n FROM "${move.to}" WHERE ${move.arrived}`
+            )
+            .get(key)?.n
+      )
+      .map(
+        (key) =>
+          `${move.migration} moves ${move.from} row ${key} to ${move.to} (${move.why}); it is not there.`
+      )
+  );
+  sqlite.close();
+  return lost;
 };
 
 /** A foreign key as `table.col, … → target(col, …)`, the key both sides are matched by. */
@@ -257,6 +344,14 @@ try {
     );
   }
   const before = read(dbPath);
+  // A move runs on this database when its migration is newer than the
+  // newest the database records, as drizzle applies it.
+  const whenOf = new Map(entries.map((entry) => [entry.tag, entry.when]));
+  const newestBefore = Math.max(0, ...before.applied);
+  const moved = moving(
+    dbPath,
+    (migration) => (whenOf.get(migration) ?? 0) > newestBefore
+  );
   const { hub, lifetime } = await hubInProcess(dbPath, join(scratch, "home"));
   const answers: string[] = [];
   const answer = async (path: string): Promise<unknown> => {
@@ -284,9 +379,8 @@ try {
   const journal = entries.length;
   // A given database is a live hub's: drizzle applies only what is newer
   // than the newest it records, so that is what must be recorded after.
-  const newest = Math.max(0, ...before.applied);
   const unapplied = entries.filter(
-    (entry) => entry.when > newest && !after.applied.has(entry.when)
+    (entry) => entry.when > newestBefore && !after.applied.has(entry.when)
   );
   if (GIVEN && unapplied.length) {
     throw new Error(
@@ -318,12 +412,18 @@ try {
       is(value, SQLiteTable) ? [getTableConfig(value).name] : []
     )
   );
+  // Rows each table had that a migration declares it moves.
+  const movedOut = new Map<string, number>();
+  for (const [move, keys] of moved) {
+    movedOut.set(move.from, (movedOut.get(move.from) ?? 0) + keys.length);
+  }
   const emptied = [...before.rows]
     .filter(
       ([name, n]) =>
         n > 0 &&
         (after.rows.has(name) || declared.has(name)) &&
-        (after.rows.get(name) ?? 0) === 0
+        (after.rows.get(name) ?? 0) === 0 &&
+        movedOut.get(name) !== n
     )
     .filter(([name]) => !startEmpties(name))
     .map(([name]) => name);
@@ -331,6 +431,10 @@ try {
     throw new Error(
       `A migration emptied ${emptied.join(", ")}, which the fixture had rows in`
     );
+  }
+  const lost = notArrived(dbPath, moved);
+  if (lost.length) {
+    throw new Error(lost.join("\n"));
   }
   const dangling = new Database(dbPath, { readwrite: true })
     .query<{ parent: string; rowid: number; table: string }, []>(
