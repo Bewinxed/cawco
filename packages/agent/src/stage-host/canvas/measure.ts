@@ -56,7 +56,7 @@ function describe(el: Element | null): string {
 }
 
 /** Where an element is written, `file:line:column`, when the dev build marks it. */
-function sourceOf(el: Element, root: string): string | null {
+export function sourceOf(el: Element, root: string): string | null {
   const meta = (el as DevElement).__svelte_meta?.loc;
   if (meta) {
     return `${fromRoot(meta.file, root)}:${meta.line}:${meta.column + 1}`;

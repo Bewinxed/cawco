@@ -14,7 +14,6 @@
  * marked a token or ad hoc.
  */
 
-import { designGraphWords } from "@cawco/core";
 import {
   type ClipTiming,
   curveOf,
@@ -33,15 +32,12 @@ import {
   samePoint,
   type TunedClip,
 } from "@cawco/core/design-graph";
-import type { Interaction } from "@cawco/core/stage";
+import { INTERACTIONS } from "@cawco/core/stage";
+import { designGraphWords } from "@cawco/core/words/design-graph";
 import { store, stored } from "../../storage";
 
-const INTERACTIONS = new Set<Interaction>([
-  "rest",
-  "hover",
-  "focus",
-  "pressed",
-]);
+/** Every interaction a kept point may stand at (core stage.ts `INTERACTIONS`). */
+const KNOWN_INTERACTIONS: ReadonlySet<unknown> = new Set(INTERACTIONS);
 
 /** What a session keeps of its graph: the tab, each file's kept state, the panel's and dock's sizes, and the person's edits. */
 interface Kept {
@@ -69,18 +65,26 @@ const sizeOf = (value: unknown): number | null =>
     ? value
     : null;
 
+/** A kept point as storage holds it: a file, a story, an interaction it reaches. */
+const isPoint = (value: unknown): value is StagePoint => {
+  const point: Partial<Record<keyof StagePoint, unknown>> | null =
+    value && typeof value === "object" ? value : null;
+  return (
+    typeof point?.file === "string" &&
+    typeof point.story === "string" &&
+    KNOWN_INTERACTIONS.has(point.interaction)
+  );
+};
+
 function keptOf(key: string): Kept {
   try {
-    const raw = JSON.parse(
-      stored("local", key) ?? "null"
-    ) as Partial<Kept> | null;
+    const parsed: unknown = JSON.parse(stored("local", key) ?? "null");
+    const raw: Partial<Record<keyof Kept, unknown>> | null =
+      parsed && typeof parsed === "object" ? parsed : null;
     const kept = Object.fromEntries(
-      Object.entries(raw?.kept ?? {}).filter(
-        ([, point]) =>
-          typeof point?.file === "string" &&
-          typeof point.story === "string" &&
-          INTERACTIONS.has(point.interaction)
-      )
+      Object.entries(
+        raw?.kept && typeof raw.kept === "object" ? raw.kept : {}
+      ).filter((entry): entry is [string, StagePoint] => isPoint(entry[1]))
     );
     return {
       file: typeof raw?.file === "string" ? raw.file : null,
@@ -117,7 +121,7 @@ const holds = (section: GraphSection, point: StagePoint): boolean => {
 };
 
 /** Two timings that run alike. */
-export const sameTiming = (a: ClipTiming, b: ClipTiming): boolean =>
+const sameTiming = (a: ClipTiming, b: ClipTiming): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /** A clip's timing as the agent wrote it, from what the page read of it. */

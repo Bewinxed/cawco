@@ -77,7 +77,7 @@ function seenWords(el: Element): string {
       words.push(node.textContent ?? "");
     }
   }
-  return words.join(" ").replaceAll(/\s+/g, " ").trim();
+  return words.join(" ").replaceAll(/\s+/gu, " ").trim();
 }
 
 /**
@@ -85,16 +85,20 @@ function seenWords(el: Element): string {
  * its accessible name, else the words a person sees in it, else its tag and
  * class as `describe` writes them.
  */
+/** The words an element holds itself, outside its children, on one line. */
+export const ownText = (el: Element): string =>
+  [...el.childNodes]
+    .filter((one) => one.nodeType === Node.TEXT_NODE)
+    .map((one) => one.textContent ?? "")
+    .join(" ")
+    .replaceAll(/\s+/gu, " ")
+    .trim();
+
 export function elementWords(el: Element | null, described: string): string {
   if (!el) {
     return described;
   }
-  const own = [...el.childNodes]
-    .filter((one) => one.nodeType === Node.TEXT_NODE)
-    .map((one) => one.textContent ?? "")
-    .join(" ")
-    .replaceAll(/\s+/g, " ")
-    .trim();
+  const own = ownText(el);
   const said = own || el.getAttribute("aria-label")?.trim() || seenWords(el);
   if (!said) {
     return described;
@@ -104,9 +108,9 @@ export function elementWords(el: Element | null, described: string): string {
     : said;
 }
 
-const TIME = /^(-?[\d.]+)(ms|s)$/;
-const ROOT_SELECTOR = /(^|,)\s*(:root|html)\b/;
-const VAR_ONLY = /^var\(\s*(--[\w-]+)\s*\)$/;
+const TIME = /^(-?[\d.]+)(ms|s)$/u;
+const ROOT_SELECTOR = /(^|,)\s*(:root|html)\b/u;
+const VAR_ONLY = /^var\(\s*(--[\w-]+)\s*\)$/u;
 
 /** A declaration block's custom properties, the first of each name kept. */
 function customProperties(
@@ -217,7 +221,7 @@ export function motionTokens(sheets: readonly CSSStyleSheet[]): MoveTokens {
  * the effect's own is what the dock reads and edits. An effect of more
  * keyframes keeps each keyframe's.
  */
-export function effectEasing(
+function effectEasing(
   read: AnimationRead,
   keyframes: Keyframe[]
 ): {
