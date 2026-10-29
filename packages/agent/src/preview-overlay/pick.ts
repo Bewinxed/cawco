@@ -9,11 +9,23 @@
  * triple click on its words) is the person reading them, never a pick. The
  * overlay runs it against the page's doc (page.ts); the probe kit runs this
  * same module against its stand-in bridge (probe-kit decision-embeds.ts).
+ *
+ * In Comment mode the overlay's layer takes the press, so the page never
+ * hears it; the overlay hands a press that lands on an option to the pick
+ * `listenForPicks` answers (page.ts `commentAt`): pressing an option picks
+ * it, or lets it go, in every mode (the owner: "clicking the pick should
+ * click the pick").
  */
 
 /** The choice an option belongs to. */
 export const choiceOf = (option: Element): Element | null =>
   option.closest("[data-cawco-choice]");
+
+/** The option `el` stands in, when that option is a choice's: its pick control. */
+export const optionOf = (el: Element): Element | null => {
+  const option = el.closest("[data-option]");
+  return option && choiceOf(option) ? option : null;
+};
 
 export interface PickWiring {
   /** Writes a choice's pick: one option, several, or none. */
@@ -37,8 +49,34 @@ function selected(at: Window): { range: Range; words: string } | null {
   return words ? { range, words } : null;
 }
 
-/** Hears every press on an option in `at`'s document and writes its pick. */
-export function listenForPicks(at: Window, wiring: PickWiring): void {
+/** Writes the pick a press on `option` makes: taken, let go, or toggled among its choice's picks. */
+function press(option: Element, wiring: PickWiring): void {
+  const holder = choiceOf(option);
+  const choice = holder?.getAttribute("data-cawco-choice");
+  const value = option.getAttribute("data-option");
+  if (!(holder && choice && value)) {
+    return;
+  }
+  const current = wiring.picked(choice);
+  let next: string[] | string | null;
+  if (holder.hasAttribute("data-cawco-multiple")) {
+    next = current.includes(value)
+      ? current.filter((picked) => picked !== value)
+      : [...current, value];
+  } else {
+    next = current.includes(value) ? null : value;
+  }
+  wiring.choose(choice, next).catch(wiring.refused);
+}
+
+/**
+ * Hears every press on an option in `at`'s document and writes its pick.
+ * Answers the pick itself, for a press the page never hears (Comment mode's).
+ */
+export function listenForPicks(
+  at: Window,
+  wiring: PickWiring
+): (option: Element) => void {
   /** The words selected as the press began: a selection the press made is new. */
   let before = "";
   const began = () => {
@@ -64,28 +102,18 @@ export function listenForPicks(at: Window, wiring: PickWiring): void {
       if (!(wiring.interacting() && event.target instanceof Element)) {
         return;
       }
-      const option = event.target.closest("[data-option]");
+      const option = optionOf(event.target);
       const holder = option && choiceOf(option);
-      const choice = holder?.getAttribute("data-cawco-choice");
-      const value = option?.getAttribute("data-option");
-      if (!(holder && choice && value)) {
+      if (!(option && holder)) {
         return;
       }
       if (readingIn(holder)) {
         event.preventDefault();
         return;
       }
-      const current = wiring.picked(choice);
-      let next: string[] | string | null;
-      if (holder.hasAttribute("data-cawco-multiple")) {
-        next = current.includes(value)
-          ? current.filter((picked) => picked !== value)
-          : [...current, value];
-      } else {
-        next = current.includes(value) ? null : value;
-      }
-      wiring.choose(choice, next).catch(wiring.refused);
+      press(option, wiring);
     },
     true
   );
+  return (option) => press(option, wiring);
 }

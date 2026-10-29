@@ -68,7 +68,7 @@ import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
-import { choiceOf, listenForPicks } from "./pick";
+import { choiceOf, listenForPicks, optionOf } from "./pick";
 import { cropPicture } from "./picture";
 import { type DraftTarget, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
@@ -140,6 +140,7 @@ const sheet = document.createElement("style");
 sheet.textContent = `
   .layer { position:fixed; inset:0; pointer-events:none; cursor:crosshair; }
   .layer.comment { pointer-events:auto; }
+  .layer.comment.picking { cursor:default; }
   .layer.draw { pointer-events:auto; touch-action:none; }
   .rect { position:fixed; pointer-events:none; outline:var(--c-target-stroke) solid var(--brand-solid); outline-offset:0; border-radius:var(--radius-xs); background:var(--c-target-tint); }
   .rect[data-bare] { outline-offset:var(--c-target-gap); }
@@ -1027,7 +1028,8 @@ function choose(
 /** A refusal the host was already told of; the page stays as stored. */
 const toldHost = () => undefined;
 
-listenForPicks(window, {
+/** Writes the pick a press on an option makes: Comment mode's, which the page never hears. */
+const pick = listenForPicks(window, {
   choose,
   interacting: () => modeNow === "interact",
   picked: (choice) => artifact.state()[choice]?.options ?? [],
@@ -1169,6 +1171,7 @@ function mode(next: PreviewMode, again: string | null = null) {
   placing = next === "comment" ? again : null;
   layer.classList.toggle("comment", next === "comment");
   layer.classList.toggle("draw", next === "draw");
+  layer.classList.remove("picking");
   hovered = null;
   pinLeads = false;
   paint();
@@ -2081,6 +2084,14 @@ window.addEventListener(
       return;
     }
     const el = contentAt(event.clientX, event.clientY);
+    // Over an option's pick a press picks, so nothing stands to be pinned there.
+    const picking = !!el && !!optionOf(el);
+    layer.classList.toggle("picking", picking);
+    if (picking) {
+      pointing += 1;
+      hover(null);
+      return;
+    }
     // Over an embed, nothing of this page's stands while its answer comes:
     // the target its last answer named stays, or none.
     if (
@@ -2099,16 +2110,34 @@ window.addEventListener(
 );
 
 let touchCaptured = false;
+/** When the press under way began (its pointerdown's time stamp): a touch held past `--dur-press-hold` pins. */
+let pressBegan = 0;
 
-/** A tap in Comment mode: a comment's composer opened where it landed, or the moved pin being placed again. */
-function commentAt(clientX: number, clientY: number) {
+/** How long a touch rests before it pins what it rests on rather than pressing it (`--dur-press-hold`). */
+const pressHold = (): number =>
+  Number.parseFloat(
+    getComputedStyle(host).getPropertyValue("--dur-press-hold")
+  ) || 0;
+
+/**
+ * A tap in Comment mode: a comment's composer opened where it landed, or the
+ * moved pin being placed again. A tap on an option's pick picks, as it does
+ * out of Comment mode; a touch `held` on it pins it.
+ */
+function commentAt(clientX: number, clientY: number, held = false) {
   // A tap on a pin's own pill opens that pin, as it does out of Comment mode.
   const pill = pinUnder(clientX, clientY);
   if (pill) {
     pins.open(pill);
     return;
   }
-  pointed(contentAt(clientX, clientY), clientX, clientY, (el) => {
+  const at = contentAt(clientX, clientY);
+  const option = !held && at && optionOf(at);
+  if (option) {
+    pick(option);
+    return;
+  }
+  pointed(at, clientX, clientY, (el) => {
     if (commenting()) {
       pressedOn(el, clientX, clientY);
     }
@@ -2523,12 +2552,17 @@ for (const type of [
           }
         } else if (event.type === "pointerdown") {
           touchCaptured = false;
+          pressBegan = event.timeStamp;
         } else if (event.type === "touchend") {
           const [touch] = (event as TouchEvent).changedTouches;
           if (touch) {
             // Compatibility clicks belong to this same, already captured press.
             touchCaptured = true;
-            commentAt(touch.clientX, touch.clientY);
+            commentAt(
+              touch.clientX,
+              touch.clientY,
+              event.timeStamp - pressBegan >= pressHold()
+            );
           }
         }
       }
