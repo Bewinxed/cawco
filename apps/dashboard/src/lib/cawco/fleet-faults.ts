@@ -22,14 +22,17 @@
  *    produce; the producer is named in each case's comment. Anything unmatched
  *    keeps its raw text and says so, rather than being guessed at.
  */
-import type {
-  FaultCause,
-  FaultScope,
-  FleetItemState,
-  FleetPlugin,
-  FleetSkillMeta,
-  FleetSyncReport,
-  HarnessKind,
+import {
+  type FaultCause,
+  FLEET_REPORT_SECTIONS,
+  type FleetItemState,
+  type FleetPlugin,
+  type FleetReportSection,
+  type FleetSkillMeta,
+  type FleetSyncReport,
+  fleetFaultWords,
+  type HarnessKind,
+  isHarnessConfigKind,
 } from "@cawco/core";
 
 /**
@@ -269,7 +272,7 @@ export interface Fault {
   /** Which machine refused it; absent for a hub-side fault, which belongs to no machine. */
   machineId?: string;
   origin: FaultOrigin;
-  scope: FaultScope;
+  scope: FleetReportSection;
 }
 
 /**
@@ -278,7 +281,7 @@ export interface Fault {
  * machine), which nothing on the machine can or should change.
  */
 const scan = (
-  scope: FaultScope,
+  scope: FleetReportSection,
   machineId: string,
   record: Record<string, FleetItemState> | undefined
 ): Fault[] =>
@@ -293,7 +296,11 @@ const scan = (
       cause: item.state === "needs-auth" ? item.state : causeOf(item.detail),
     }));
 
-/** Every row one machine's report says it could not apply. */
+/**
+ * Every row one machine's report says it could not apply: each section of
+ * {@link FLEET_REPORT_SECTIONS}, each named in the switch below, so a
+ * section the report gains fails the types here until it is read.
+ */
 export function machineFaults(
   machineId: string,
   fleet: FleetSyncReport | undefined
@@ -301,38 +308,40 @@ export function machineFaults(
   if (!fleet) {
     return [];
   }
-  const single = (
-    scope: FaultScope,
-    item: FleetItemState | undefined
-  ): Fault[] =>
-    item?.state === "failed"
-      ? [
-          {
-            origin: "machine" as const,
-            scope,
-            key: "",
-            machineId,
-            ...(item.detail ? { detail: item.detail } : {}),
-            cause: causeOf(item.detail),
-          },
-        ]
-      : [];
-  return [
-    ...(fleet.mcpByHarness
-      ? Object.entries(fleet.mcpByHarness).flatMap(([harness, rows]) =>
-          scan("mcp", machineId, rows).map((fault) => ({
-            ...fault,
-            harness: harness as HarnessKind,
-          }))
-        )
-      : scan("mcp", machineId, fleet.mcp)),
-    ...scan("marketplaces", machineId, fleet.marketplaces),
-    ...scan("plugins", machineId, fleet.plugins),
-    ...scan("skills", machineId, fleet.skills),
-    ...scan("memoryDocs", machineId, fleet.memoryDocs),
-    ...scan("hooks", machineId, fleet.hooks),
-    ...single("memory", fleet.memory),
-  ];
+  const inSection = (section: FleetReportSection): Fault[] => {
+    switch (section) {
+      case "memory":
+        return fleet.memory?.state === "failed"
+          ? [
+              {
+                origin: "machine" as const,
+                scope: section,
+                key: "",
+                machineId,
+                ...(fleet.memory.detail ? { detail: fleet.memory.detail } : {}),
+                cause: causeOf(fleet.memory.detail),
+              },
+            ]
+          : [];
+      case "mcp":
+        return fleet.mcpByHarness
+          ? Object.entries(fleet.mcpByHarness).flatMap(([harness, rows]) =>
+              scan(section, machineId, rows).map((fault) => ({
+                ...fault,
+                harness: harness as HarnessKind,
+              }))
+            )
+          : scan(section, machineId, fleet.mcp);
+      case "marketplaces":
+      case "plugins":
+      case "skills":
+      case "memoryDocs":
+      case "hooks":
+      case "harnessConfig":
+        return scan(section, machineId, fleet[section]);
+    }
+  };
+  return FLEET_REPORT_SECTIONS.flatMap(inSection);
 }
 
 /**
@@ -397,19 +406,12 @@ export function hubFaults(
   ];
 }
 
-/** What each scope is called in a sentence, singular. */
-export const SCOPE_NOUN: Record<FaultScope, string> = {
-  mcp: "MCP server",
-  marketplaces: "marketplace",
-  plugins: "plugin",
-  skills: "skill",
-  memory: "memory",
-  memoryDocs: "memory document",
-  hooks: "hook",
-};
-
-/** Which Configure section owns the affordance for a scope — a fault links there, never re-creates it. */
-export const SCOPE_ANCHOR: Record<FaultScope, string> = {
+/**
+ * Which Configure section owns the affordance for a scope — a fault links
+ * there, never re-creates it. The fleet's harness config has no section: its
+ * fault is said on its machine's row, with the machine's own remedy.
+ */
+export const SCOPE_ANCHOR: Record<FleetReportSection, string | null> = {
   mcp: "/config/mcp",
   marketplaces: "/config/skills",
   plugins: "/config/skills",
@@ -417,13 +419,14 @@ export const SCOPE_ANCHOR: Record<FaultScope, string> = {
   memory: "/config/memory",
   memoryDocs: "/config/memory",
   hooks: "/config/hooks",
+  harnessConfig: null,
 };
 
 /**
  * Where a fault is settled: the section, or — for a memory file or a hook —
  * its own editor, which is where its per-machine copies are compared.
  */
-export function faultHref(fault: Pick<Fault, "scope" | "key">): string {
+export function faultHref(fault: Pick<Fault, "scope" | "key">): string | null {
   if (fault.scope === "mcp") {
     return `/config/mcp/${encodeURIComponent(fault.key)}`;
   }
@@ -439,9 +442,21 @@ export function faultHref(fault: Pick<Fault, "scope" | "key">): string {
   return SCOPE_ANCHOR[fault.scope];
 }
 
-/** The row's own name for a reader: the key, or the scope's noun for the singular rows. */
-export const faultLabel = (fault: Fault): string =>
-  fault.key || SCOPE_NOUN[fault.scope];
+/**
+ * The row's own name for a reader: the key, a harness config row by its kind
+ * and name (its key is `<kind>:<name>`), or the scope's noun for the singular
+ * rows.
+ */
+export const faultLabel = (fault: Fault): string => {
+  if (fault.scope === "harnessConfig") {
+    const colon = fault.key.indexOf(":");
+    const kind = fault.key.slice(0, colon);
+    if (colon > 0 && isHarnessConfigKind(kind)) {
+      return fleetFaultWords.harnessConfigRow(kind, fault.key.slice(colon + 1));
+    }
+  }
+  return fault.key || fleetFaultWords.noun[fault.scope];
+};
 
 /**
  * Faults grouped by what they are, not by where they were found. A fleet where
@@ -455,7 +470,7 @@ export interface FaultGroup {
   harness?: HarnessKind;
   machineId?: string;
   origin: FaultOrigin;
-  scope: FaultScope;
+  scope: FleetReportSection;
 }
 
 export function groupFaults(faults: readonly Fault[]): FaultGroup[] {

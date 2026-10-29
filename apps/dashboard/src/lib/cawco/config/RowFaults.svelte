@@ -5,7 +5,7 @@
    * mark of the row list's `reflow()`: a fault that clears closes away and
    * the rows below slide up; one that arrives opens.
    */
-  import type { FaultScope } from "@cawco/core";
+  import type { FleetReportSection } from "@cawco/core";
   import type { Machine } from "../client.svelte";
   import FleetFault from "../FleetFault.svelte";
   import { type Fault, groupFaults, machineFaults } from "../fleet-faults";
@@ -19,7 +19,7 @@
     onresolved,
   }: {
     /** Which record of a machine's report the row lives in. */
-    kind: FaultScope;
+    kind: FleetReportSection;
     key: string;
     machines: Machine[];
     /** Faults the hub itself holds for this row. */

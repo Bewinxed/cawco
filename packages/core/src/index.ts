@@ -1971,6 +1971,7 @@ export * from "./words/delegate-types";
 export * from "./words/external-items";
 export * from "./words/files";
 export * from "./words/find-secrets";
+export * from "./words/fleet-faults";
 export * from "./words/gate";
 export * from "./words/harness";
 export * from "./words/helpers";

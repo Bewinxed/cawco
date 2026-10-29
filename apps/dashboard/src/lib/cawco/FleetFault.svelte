@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords, machineLabel } from "@cawco/core";
+  import { commonWords, fleetFaultWords, machineLabel } from "@cawco/core";
   /**
    * One fault, rendered the same way everywhere it appears.
    *
@@ -38,7 +38,6 @@
     faultHref,
     faultLabel,
     readToolchain,
-    SCOPE_NOUN,
   } from "./fleet-faults";
   import MachineAway from "./MachineAway.svelte";
   import { MachineWait } from "./machine-wait.svelte";
@@ -64,6 +63,8 @@
   } = $props();
 
   const copy = $derived(CAUSE[group.cause]);
+  /** The section that settles it; none for a scope said only on its machine. */
+  const href = $derived(faultHref(group.faults[0]));
   const machine = $derived(
     machines.find((one) => one.machineId === group.machineId)
   );
@@ -324,7 +325,7 @@
           class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
         >
           <span class="text-size-meta font-normal opacity-80"
-            >{SCOPE_NOUN[group.scope]}
+            >{fleetFaultWords.noun[group.scope]}
             {group.faults.length === 1 ? "" : "s"}:</span
           >
           {#each shown as fault (fault.scope + fault.key)}
@@ -495,22 +496,16 @@
               >Adopt this machine’s copy into the fleet, or overwrite it with
               the fleet’s.</span
             >
-          {:else if copy.action === "settle"}
-            <Button
-              href={faultHref(group.faults[0])}
-              size="xs"
-              variant="outline">Compare the two copies</Button
+          {:else if copy.action === "settle" && href}
+            <Button {href} size="xs" variant="outline"
+              >Compare the two copies</Button
             >
             <span class="text-size-meta font-normal opacity-80"
               >Adopt this machine’s copy into the fleet, or overwrite it with
               the fleet’s.</span
             >
-          {:else}
-            <Button
-              href={faultHref(group.faults[0])}
-              size="xs"
-              variant="outline">Open the section</Button
-            >
+          {:else if href}
+            <Button {href} size="xs" variant="outline">Open the section</Button>
           {/if}
         </div>
         <MachineAway away={waits.away("act")} />

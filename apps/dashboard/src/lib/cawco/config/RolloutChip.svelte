@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { commonWords, type FaultScope, machineLabel } from "@cawco/core";
+  import {
+    commonWords,
+    type FleetReportSection,
+    machineLabel,
+  } from "@cawco/core";
   /**
    * Where one row has landed: "2/2 machines" on the row, and machine by
    * machine in the popover. A machine that refused it opens the full fault —
@@ -44,7 +48,7 @@
   }: {
     machines: Machine[];
     /** Which record of the machine's report this row lives in. */
-    kind: FaultScope;
+    kind: FleetReportSection;
     /** The row's key in that record; ignored for the singular memory row. */
     name: string;
     what: string;

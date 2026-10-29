@@ -1102,13 +1102,6 @@ export const FLEET_REPORT_SECTIONS = [
 ] as const;
 export type FleetReportSection = (typeof FLEET_REPORT_SECTIONS)[number];
 
-/**
- * The sections a fault is shown and settled in: each has its Configure page
- * (the dashboard's fleet-faults.ts `SCOPE_ANCHOR`). The fleet's harness
- * config has none, so its rows are said on the machine, never as a fault.
- */
-export type FaultScope = Exclude<FleetReportSection, "harnessConfig">;
-
 /** The report sections a project's rows are said in, per place ({@link FleetSyncReport.placed}). */
 export const PLACED_SECTIONS = [
   "mcp",
