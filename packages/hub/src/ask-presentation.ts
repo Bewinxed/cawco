@@ -196,27 +196,17 @@ export const createAskPresenter = (
       proposer?: unknown;
       sourceFacts?: SourceFacts;
     };
-    // A Caw call his gate put to you says which rule did (lead-gate.ts);
-    // any session's shell or edit call in an outside turn says what made the
-    // turn so (core turn-provenance.ts).
-    const gated = envelope.requestId
-      ? db.leadCalls.ofRequest(envelope.requestId)
-      : undefined;
+    // A shell or edit call in a turn that is not its principal's says what
+    // made the turn so (core turn-provenance.ts).
     const asker = envelope.instanceId ?? payload.instanceId;
     const provenance = turnCall(
       asker ? outside(asker) : null,
       undefined,
       provenanceKindOf(payload.toolName)
     );
-    let askedBecause: string | undefined;
-    if (gated?.outcome === "asked" && gated.why) {
-      askedBecause = gated.why;
-    } else if (provenance.kind === "ask") {
-      askedBecause = provenance.why;
-    }
     payload.presentation = presentPermission(payload.toolName, payload.input, {
       ...askerOf(asker, payload),
-      ...(askedBecause ? { askedBecause } : {}),
+      ...(provenance.kind === "ask" ? { askedBecause: provenance.why } : {}),
       memory,
       current,
       projectName,

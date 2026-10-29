@@ -239,53 +239,6 @@ export const HARNESS_TOOLS = {
 /** A kind of tool {@link HARNESS_TOOLS} names on each harness. */
 export type HarnessToolKind = keyof (typeof HARNESS_TOOLS)[HarnessKind];
 
-/**
- * What a project's Caw may never call, in Claude's names, per harness: no
- * subagent, no shell the hub cannot see a command of, and no git worktree.
- * Claude's `Monitor` runs a script outside the per-call gate and
- * `EnterWorktree`/`ExitWorktree` make and remove git worktrees; `Agent` (its
- * old name `Task`) and `Workflow` start subagents. OpenCode's `Agent` is its
- * `subagent`. His shell and edit tools are his, inside the boundary of his
- * place, each call put to the hub's gate first ({@link LEAD_GATED_TOOLS},
- * hub lead-gate.ts). pi has no subagent, monitor or worktree tool; its one
- * shell the gate does not read is `powershell`, a built-in pi registers
- * beside `bash` (pi 1.3.0 dist/core/tools/index.js). pi's gate is CawCo's
- * `tool_call` handler and its denial `excludeTools` (agent pi-runtime.ts).
- */
-export const CAW_DENIED_TOOLS = {
-  claude: [
-    "Monitor",
-    "EnterWorktree",
-    "ExitWorktree",
-    "Agent",
-    "Task",
-    "Workflow",
-  ],
-  opencode: ["Agent"],
-  pi: HARNESS_TOOLS.pi.powershell,
-} as const satisfies Record<HarnessKind, readonly string[]>;
-
-/**
- * Caw's shell and edit tools, by the name each harness asks permission
- * under ({@link HARNESS_TOOLS}' shells and edits): every call of one is a
- * permission ask (Claude Code's `ask` rules, its Windows `PowerShell` beside
- * `Bash`, a built-in of Claude Code 0.3.302's `BUILTIN_TOOL_NAMES` that "Set
- * CLAUDE_CODE_USE_POWERSHELL_TOOL=1" turns on; OpenCode's `ask` rules) that
- * the hub's gate decides (hub lead-gate.ts), whatever the session's mode.
- * pi's are each put to the hub by CawCo's `tool_call` handler, which pi
- * awaits before the call runs and which blocks it on a deny ("Fired before a
- * tool executes. Can block.", pi 1.3.0 extensions/types.d.ts `ToolCallEvent`).
- */
-export const LEAD_GATED_TOOLS = {
-  claude: [
-    ...HARNESS_TOOLS.claude.shell,
-    ...HARNESS_TOOLS.claude.powershell,
-    ...HARNESS_TOOLS.claude.edit,
-  ],
-  opencode: [...HARNESS_TOOLS.opencode.shell, ...HARNESS_TOOLS.opencode.edit],
-  pi: [...HARNESS_TOOLS.pi.shell, ...HARNESS_TOOLS.pi.edit],
-} as const satisfies Record<HarnessKind, readonly string[]>;
-
 /** Every harness's tools of `kinds`, by their own names ({@link HARNESS_TOOLS}). */
 const harnessToolsOf = (
   ...kinds: readonly HarnessToolKind[]
@@ -296,7 +249,7 @@ const harnessToolsOf = (
     )
   );
 
-/** The shell tools, by every harness's name: what a lead's gate holds as shell (the rest edit files), what a session's turn runs commands with, and what web-reads.ts reads a command of. */
+/** The shell tools, by every harness's name: what a session's turn runs commands with (core turn-provenance.ts), and what web-reads.ts reads a command of. */
 export const SHELL_TOOLS = harnessToolsOf("shell", "powershell");
 /** The tools that write files, by every harness's name ({@link HARNESS_TOOLS}' `edit`). */
 export const EDIT_TOOLS = harnessToolsOf("edit");
@@ -329,14 +282,31 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * What a session on the board alone may never call: no edit, shell or
- * subagent tools. A fleet-watch triage run (`overseer`) decides one thing and
- * exits; it is {@link CAW_DENIED_TOOLS} and Caw's gated tools together.
+ * What a session on the board alone may never call: no subagent, monitor,
+ * worktree, shell or edit tool. A fleet-watch triage run (`overseer`)
+ * decides one thing and exits. Claude's `Monitor` runs a script and
+ * `EnterWorktree`/`ExitWorktree` make and remove git worktrees; `Agent` (its
+ * old name `Task`) and `Workflow` start subagents; OpenCode's `Agent` is its
+ * `subagent`. pi has no subagent, monitor or worktree tool.
  */
 export const BOARD_ONLY_DENIED_TOOLS = {
-  claude: [...CAW_DENIED_TOOLS.claude, ...LEAD_GATED_TOOLS.claude],
-  opencode: [...CAW_DENIED_TOOLS.opencode, "Bash", "Edit", "Write"],
-  pi: [...CAW_DENIED_TOOLS.pi, ...LEAD_GATED_TOOLS.pi],
+  claude: [
+    "Monitor",
+    "EnterWorktree",
+    "ExitWorktree",
+    "Agent",
+    "Task",
+    "Workflow",
+    ...HARNESS_TOOLS.claude.shell,
+    ...HARNESS_TOOLS.claude.powershell,
+    ...HARNESS_TOOLS.claude.edit,
+  ],
+  opencode: ["Agent", "Bash", "Edit", "Write"],
+  pi: [
+    ...HARNESS_TOOLS.pi.powershell,
+    ...HARNESS_TOOLS.pi.shell,
+    ...HARNESS_TOOLS.pi.edit,
+  ],
 } as const satisfies Record<HarnessKind, readonly string[]>;
 
 /** Claude Code's web tools, the names a denied-tool list is written in (the OpenCode adapter maps each to its own). */
@@ -349,8 +319,8 @@ const CLAUDE_WEB_TOOLS = [
  * What a project's memory curator may never call (Projects spec §5.4): the
  * board-only list, and the web. It reads agents' inbox notes, which are
  * untrusted words, and answers only with proposals the person approves; it
- * has no reason to fetch anything, so a note cannot send it to a page. Like
- * Caw it gets CawCo's MCP server and no other (`SpawnPayload.lead`).
+ * has no reason to fetch anything, so a note cannot send it to a page. It
+ * gets CawCo's MCP server and no other (`SpawnPayload.fence`).
  */
 export const CURATOR_DENIED_TOOLS = {
   claude: [...BOARD_ONLY_DENIED_TOOLS.claude, ...CLAUDE_WEB_TOOLS],

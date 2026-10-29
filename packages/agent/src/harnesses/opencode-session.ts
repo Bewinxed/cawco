@@ -61,7 +61,6 @@ import {
   EFFORT_LEVELS,
   EFFORT_READ,
   INSTALL_SESSION_CREDENTIAL,
-  LEAD_GATED_TOOLS,
   MCP_NOT_CONNECTED,
   MESSAGES_READ,
   MESSAGES_STORED,
@@ -308,17 +307,6 @@ const deny = (action: string): OpencodeRule => ({
   resource: "*",
   effect: "deny",
 });
-
-/**
- * A project's Caw on OpenCode (`SpawnPayload.lead`): each of his shell and
- * edit calls asks (`LEAD_GATED_TOOLS`), and the ask goes to the hub whatever
- * his mode ({@link OpencodeSession}'s `#asked`), whose gate answers it.
- * OpenCode 2.0's `edit` covers `write` and `patch`.
- */
-const leadAsks: readonly OpencodeRule[] = LEAD_GATED_TOOLS.opencode.map(
-  (action) => ({ action, resource: "*", effect: "ask" })
-);
-const LEAD_ASKED: ReadonlySet<string> = new Set(LEAD_GATED_TOOLS.opencode);
 
 /** The CawCo tools that start or steer other sessions, by OpenCode's names for them: off for a session that may not delegate. */
 const DELEGATION_TOOLS = [...SPAWNING_TOOLS].map((name) => `cawco_${name}`);
@@ -677,8 +665,6 @@ export interface OpencodeSessionOptions {
    * which a server being retired does not hold.
    */
   isConfigGateHeld: (joinsTurn?: boolean) => boolean;
-  /** A project's Caw: each of his shell and edit calls asks, and the hub's gate answers it ({@link leadAsks}). */
-  lead: boolean;
   model: string | undefined;
   onRelease: () => void;
   permissionMode: PermissionMode | undefined;
@@ -777,7 +763,6 @@ export class OpencodeSession implements HarnessSession {
   readonly #applied: Applied;
   readonly #deniedRules: OpencodeRule[];
   readonly #fence: boolean;
-  readonly #lead: boolean;
   readonly #canDelegate?: boolean;
   /** The instruction entries put on the session, by key, as the hash of the value put. */
   readonly #instructions = new Map<string, string>();
@@ -907,7 +892,6 @@ export class OpencodeSession implements HarnessSession {
     this.#applied = { ...options.applied };
     this.#deniedRules = options.deniedRules;
     this.#fence = options.fence;
-    this.#lead = options.lead;
     this.#canDelegate = options.canDelegate;
     this.#scopedInstructions = options.instructions ?? [];
     this.#registerChild = options.registerChild;
@@ -1029,15 +1013,13 @@ export class OpencodeSession implements HarnessSession {
 
   /**
    * The whole permission ruleset the session runs on: its denials, the tools
-   * its role leaves out, a fenced session's fence, and last, so no rule
-   * before it can allow one, a lead's asks ({@link leadAsks}).
+   * its role leaves out, and a fenced session's fence.
    */
   async #rules(): Promise<OpencodeRule[]> {
     return [
       ...(this.#canDelegate === false ? DELEGATION_TOOLS.map(deny) : []),
       ...this.#deniedRules,
       ...(this.#fence ? await mcpFence(this.#client, this.#directory) : []),
-      ...(this.#lead ? leadAsks : []),
     ];
   }
 
@@ -1985,18 +1967,14 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#seenGates.add(asked.id);
     // OpenCode asks; the daemon is where a session's mode is enforced. A
-    // lead's shell and edit asks are the hub's gate's to answer, never his
-    // mode's ({@link leadAsks}); and a shell or edit call in a turn that is
-    // not the session's principal's is the person's (core
-    // turn-provenance.ts), whatever the mode would answer.
-    const gated = this.#lead && LEAD_ASKED.has(asked.action);
+    // shell or edit call in a turn that is not the session's principal's is
+    // the person's (core turn-provenance.ts), whatever the mode would answer.
     const provenance = turnCall(
       this.#ctx.outside?.() ?? null,
       this.#permissionMode,
       provenanceKindOf(asked.action)
     );
     if (
-      !gated &&
       provenance.kind === "mode" &&
       (autoAllows(this.#permissionMode, "tool") ||
         (this.#permissionMode === "acceptEdits" && asked.action === "edit"))

@@ -32369,11 +32369,6 @@
             "description": "The in-flight maintenance send a surviving Claude process is answering.",
             "type": "string"
           },
-          "lead": {
-            "description": "This spawn is a project's Caw (a `lead` row): the machine puts each of\nhis shell and edit calls to the hub as a permission ask\n(`LEAD_GATED_TOOLS`), whatever his mode, and answers none of them\nitself; the hub's gate decides each (hub lead-gate.ts). Set by the hub\nalone, on every launch of a lead row, and never taken from a caller.",
-            "const": true,
-            "type": "boolean"
-          },
           "model": {
             "description": "Which model answers, from the session's first turn. Hoisted for the same\nreason as `permissionMode`. Absent leaves the choice to the harness.",
             "type": "string"
@@ -34577,7 +34572,7 @@
         ]
       },
       "ProjectGate": {
-        "description": "A project's gate: `none` with no gate.md; `declared`, its steps (none\nwhen its block names none) and its `Caw edits:` globs when it lists them\n(hub lead-gate.ts); `unreadable`, what is wrong with it.",
+        "description": "A project's gate: `none` with no gate.md; `declared`, its steps (none\nwhen its block names none); `unreadable`, what is wrong with it.",
         "anyOf": [
           {
             "type": "object",
@@ -34606,12 +34601,6 @@
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/DeclaredStep"
-                }
-              },
-              "cawEdits": {
-                "type": "array",
-                "items": {
-                  "type": "string"
                 }
               }
             },
@@ -57850,7 +57839,7 @@
         "type": "object",
         "properties": {
           "askedBecause": {
-            "description": "A project's Caw's call his gate put to the person (hub lead-gate.ts):\nwhich rule sent it, in one line (\"Asked because this turn was woken by a\nroutine, and this command writes: `git commit`.\"), drawn under the\ncommand or the change. Absent on any other ask.",
+            "description": "A shell or edit call its turn's provenance put to the person (core\nturn-provenance.ts): what made the turn outside, in one line (\"Asked\nbecause this turn was started by a report from Retro.\"), drawn under the\ncommand or the change. Absent on any other ask.",
             "type": "string"
           },
           "asker": {

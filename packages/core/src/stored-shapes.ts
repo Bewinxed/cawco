@@ -1815,7 +1815,6 @@ const SpawnPayloadShape = z.object({
   instanceId: z.string(),
   instructions: z.array(SessionInstructionShape).optional(),
   keepAliveTurn: z.string().optional(),
-  lead: z.literal(true).optional(),
   model: z.string().optional(),
   options: z.unknown().optional(),
   parent: z

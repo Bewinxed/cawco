@@ -9,7 +9,7 @@
  */
 
 /** What starts the line, before srt's own message. */
-export const SRT_REFUSED = "cawco: srt refused to build the sandbox";
+const SRT_REFUSED = "cawco: srt refused to build the sandbox";
 
 /** The line for srt's refusal `error`, in srt's own words. */
 export const srtRefusedLine = (error: unknown): string =>

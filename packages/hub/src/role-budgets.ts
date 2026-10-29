@@ -332,11 +332,16 @@ import type { Tasks } from "./tasks";
  * project_settings, routine_result and memory_propose, as Caw does. About
  * 1,530 tokens for the worker (worker 27,652 measured), the lead unchanged.
  * The worker fits.
+ * 2026-10-30: Caw is a plain session (one-session design §6, slice 3): his
+ * toolset is the worker's and his project's threads, in place of the
+ * board-only list the hub's gate kept him to. About 9,400 tokens for the
+ * lead (lead 28,058 measured). Raised deliberately, to the worker's budget
+ * and his two thread tools.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_805,
   delegate: 10_224,
-  lead: 18_690,
+  lead: 28_300,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -483,7 +488,6 @@ export const listRoleTools = (): RoleTools[] => {
         turnEnded: () => undefined,
         views: {} as never,
         wakeSent: () => undefined,
-        refreshPlace: () => Promise.resolve(),
       }).tools(actor),
     routineTools: (actor) =>
       createRoutines({

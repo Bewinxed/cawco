@@ -54,11 +54,12 @@
  *   `curator` role: no edit, shell or web tools, CawCo's MCP server only, and
  *   of CawCo's tools only these: it reads, proposes, and archives what is not
  *   a lasting fact.
- * - **Caw's memory writes** (`memory_propose` from a project's lead): the
- *   owner's word, "caw should be able to do whatever it wants". The files'
- *   whole new text, checked as a proposal is (the files, the notes it cites,
- *   their taint), commits at once as Caw, its notes archived as applied, and
- *   is noted in the thread his turn answers. With `ask: true` it is a
+ * - **A session's memory writes** (`memory_propose` from a session in its
+ *   project's place, Caw among them): the owner's word, "caw should be able
+ *   to do whatever it wants". The files' whole new text, checked as a
+ *   proposal is (the files, the notes it cites, their taint), commits at once
+ *   as that session, its notes archived as applied, and is noted in the
+ *   thread its turn answers. With `ask: true` it is a
  *   proposal instead, parked in that thread.
  * - **Proposals** (`memory_propose` from the curator, or Caw's `ask`; Jev's
  *   sort; the hub's archive and a withdrawal; and Caw's `folder_write` of a
@@ -241,7 +242,6 @@ const ANCESTRY = 12;
 
 const HUB: FolderAuthor = { name: "CawCo hub" };
 const JEV: FolderAuthor = { name: "Jev" };
-const CAW: FolderAuthor = { name: "Caw" };
 /** Who a curator run's proposals are by. */
 const CURATOR_NAME = "Memory curator";
 
@@ -2771,10 +2771,10 @@ export const createMemory = ({
       ...(toolUseId ? { toolUseId } : {}),
     };
     if (!(curatorRun || asked.ask)) {
-      const sha = await apply(proposal, CAW, false);
+      const sha = await apply(proposal, { name: proposal.by }, false);
       notice(projectId, threadId ?? null, {
-        title: `Caw wrote ${pathsOf(proposal)}`,
-        body: `Committed as Caw ${sha.slice(0, 9)}.\n\nWhy: ${why}`,
+        title: `${proposal.by} wrote ${pathsOf(proposal)}`,
+        body: `Committed as ${proposal.by} ${sha.slice(0, 9)}.\n\nWhy: ${why}`,
         event: { kind: "file", what: "wrote", path: paths[0] ?? "", sha },
       });
       return { paths, sha, notes, committed: true };

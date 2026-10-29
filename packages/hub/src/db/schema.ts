@@ -23,7 +23,6 @@ import type {
   HookEvent,
   InstanceStatus,
   LandsMode,
-  LeadCallOutcome,
   LimitWindow,
   MachineState,
   MemoryRole,
@@ -440,7 +439,7 @@ export const projects = sqliteTable("projects", {
    * before it, and off means nothing for the project wakes a model.
    */
   caw: integer("caw", { mode: "boolean" }).notNull().default(false),
-  /** The harness Caw runs on: one whose every shell and edit call the hub's gate decides. */
+  /** The harness Caw runs on. */
   cawHarness: text("caw_harness")
     .$type<HarnessKind>()
     .notNull()
@@ -4598,46 +4597,6 @@ export const purgedSessions = sqliteTable(
     purgedAt: timestamp("purged_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.machineId, table.sessionId] })]
-);
-
-/**
- * Every shell or edit call a project's Caw made (lead-gate.ts), one row each,
- * so his thread shows it and a hub restart keeps what you approved: a task
- * whose only changes are his own edits passes review only once you approved
- * them (tasks.ts `moveTo`).
- */
-export const leadCalls = sqliteTable(
-  "lead_calls",
-  {
-    id: text("id").primaryKey(),
-    projectId: projectKey(),
-    instanceId: text("instance_id").notNull(),
-    /** The thread his turn answered: a task named in it owns the call's changes. */
-    threadId: text("thread_id"),
-    /** The permission ask it came as. */
-    requestId: text("request_id").notNull(),
-    /** The tool call, as its transcript names it; its result carries the exit. */
-    toolUseId: text("tool_use_id"),
-    tool: text("tool").notNull(),
-    /** The shell command, or the file an edit names. */
-    command: text("command").notNull(),
-    /** The files it names that it changes. */
-    files: storedJson(z.array(z.string()))("files").notNull(),
-    /** Whether it changes anything: every edit, and every shell call but a read-only one. */
-    writes: integer("writes", { mode: "boolean" }).notNull(),
-    outcome: text("outcome").$type<LeadCallOutcome>().notNull(),
-    /** You approved it on its card. */
-    approved: integer("approved", { mode: "boolean" }).notNull().default(false),
-    /** Why the hub refused it, or, for one put on your card, the rule that put it there ("Asked because …"). */
-    why: text("why"),
-    /** Its exit as its result said it: a code, or `failed` for an edit that did not apply. */
-    exit: text("exit"),
-    at: timestamp("at").notNull(),
-  },
-  (table) => [
-    index("lead_calls_project_at").on(table.projectId, table.at),
-    uniqueIndex("lead_calls_request").on(table.requestId),
-  ]
 );
 
 /** A conversation with a project's Caw (caw.ts). */

@@ -24,8 +24,7 @@
    *   composer staying where it is. Ask Caw (the head's
    *   button, the views bar's "+") shows a new thread here (`lead.fresh`).
    */
-  import { CAW_DENIED_TOOLS } from "@cawco/core/delegate-types";
-  import type { HarnessKind } from "@cawco/core/harness";
+  import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
   import { threadWords } from "@cawco/core/words/threads";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -232,8 +231,6 @@
   }
   $effect(() => () => clearTimeout(cardTimer));
 
-  /** The harnesses Caw runs on, as the hub lists them (its `CAW_HARNESSES`). */
-  const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as HarnessKind[];
   /** A model was picked in the card: its pending and refusal are the card's model line. */
   let choosing = $state(false);
   /**
@@ -246,7 +243,8 @@
       ? {
           harness: lead.harness,
           model: lead.model,
-          harnesses: CAW_HARNESSES,
+          // Caw runs on every harness CawCo runs.
+          harnesses: [...HARNESSES],
           onchoose: ({
             harness,
             model,

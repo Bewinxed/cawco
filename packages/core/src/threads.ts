@@ -143,8 +143,8 @@ export interface ThreadSummary {
 
 /**
  * The questions the lead asked you in a thread (its AskUserQuestion), from
- * before his choices became decision pages (hub lead-gate.ts refuses his
- * questions now): kept so the answers you gave then still read.
+ * before his choices became decision pages: kept so the answers you gave
+ * then still read.
  */
 export interface ThreadQuestion {
   questions: UserQuestion[];
@@ -216,7 +216,8 @@ export interface RoutineSchedule {
 }
 
 /**
- * What became of one of Caw's shell or edit calls (hub lead-gate.ts): `asked`
+ * What became of one of Caw's shell or edit calls while a gate decided them
+ * (until one-session design slice 3), as his threads' notes keep it: `asked`
  * while it waits on your Approve card, `ran` once it was let run (its exit
  * once its result came), `refused` by the hub's rules, `denied` by you,
  * `cut` when its ask left unanswered (its process ended or withdrew it).
@@ -276,7 +277,7 @@ export type ThreadEvent =
       title: string;
     }
   | {
-      /** The command or file of one of Caw's gated calls; absent for a wake. */
+      /** The command or file of one of Caw's calls while a gate decided them; absent for a wake. */
       command?: string;
       kind: "caw";
       what:

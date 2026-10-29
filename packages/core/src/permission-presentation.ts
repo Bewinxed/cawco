@@ -50,9 +50,9 @@ export interface PermissionField {
 
 export interface PermissionPresentation {
   /**
-   * A project's Caw's call his gate put to the person (hub lead-gate.ts):
-   * which rule sent it, in one line ("Asked because this turn was woken by a
-   * routine, and this command writes: `git commit`."), drawn under the
+   * A shell or edit call its turn's provenance put to the person (core
+   * turn-provenance.ts): what made the turn outside, in one line ("Asked
+   * because this turn was started by a report from Retro."), drawn under the
    * command or the change. Absent on any other ask.
    */
   askedBecause?: string;
@@ -141,7 +141,7 @@ export interface SourceFacts {
 }
 
 export interface PresentationContext {
-  /** Why the gate put a Caw call to the person ({@link PermissionPresentation.askedBecause}). */
+  /** Why its turn's provenance put the call to the person ({@link PermissionPresentation.askedBecause}). */
   askedBecause?: string;
   /** The asking session's name. */
   asker: string;

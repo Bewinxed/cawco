@@ -196,7 +196,6 @@ import {
   instanceConversations,
   instances,
   jevSettings,
-  leadCalls,
   leadTurnReading,
   leadTurns,
   leadTurnWaiting,
@@ -450,8 +449,6 @@ export type PlanChangeRow = typeof planChanges.$inferSelect;
 export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
   subagents: OpenSubagent[];
 };
-/** One of Caw's shell or edit calls (lead-gate.ts). */
-export type LeadCallRow = typeof leadCalls.$inferSelect;
 /**
  * A lead's turn (caw.ts `turns`): the threads its turn under way read
  * (`lead_turn_reading`), and its unread wakes by send uuid, each the thread
@@ -1172,21 +1169,6 @@ export interface DbShape {
     id: string
   ) => { cwd: MachinePath } | { unknown: true } | undefined;
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
-  /** Caw's shell and edit calls (lead-gate.ts): kept, read back and changed as each one's outcome is known. */
-  readonly leadCalls: {
-    readonly add: (row: LeadCallRow) => void;
-    readonly ofRequest: (requestId: string) => LeadCallRow | undefined;
-    readonly ofToolUse: (
-      instanceId: string,
-      toolUseId: string
-    ) => LeadCallRow | undefined;
-    readonly set: (
-      id: string,
-      patch: Partial<Omit<LeadCallRow, "id" | "projectId">>
-    ) => void;
-    /** A project's calls from `since` on, oldest first. */
-    readonly since: (projectId: string, since: Date) => LeadCallRow[];
-  };
   /** The sends to a project's Caw sessions (role `lead`) accepted after `after`, oldest first. */
   readonly leadSends: (projectId: string, after: Date) => SessionSendRow[];
   /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
@@ -8198,40 +8180,6 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .get()?.usd ?? 0),
-    leadCalls: {
-      add: (row) => {
-        db.insert(leadCalls).values(row).onConflictDoNothing().run();
-      },
-      ofRequest: (requestId) =>
-        db
-          .select()
-          .from(leadCalls)
-          .where(eq(leadCalls.requestId, requestId))
-          .get(),
-      ofToolUse: (instanceId, toolUseId) =>
-        db
-          .select()
-          .from(leadCalls)
-          .where(
-            and(
-              eq(leadCalls.instanceId, instanceId),
-              eq(leadCalls.toolUseId, toolUseId)
-            )
-          )
-          .get(),
-      set: (id, patch) => {
-        db.update(leadCalls).set(patch).where(eq(leadCalls.id, id)).run();
-      },
-      since: (projectId, since) =>
-        db
-          .select()
-          .from(leadCalls)
-          .where(
-            and(eq(leadCalls.projectId, projectId), gte(leadCalls.at, since))
-          )
-          .orderBy(leadCalls.at)
-          .all(),
-    },
     leadTurns: () => {
       const reading = new Map<string, string[]>();
       for (const { instanceId, threadId } of db
@@ -9436,7 +9384,6 @@ const make = async (path: string): Promise<DbShape> => {
           relays,
           moves,
           leadTurns,
-          leadCalls,
           artifacts,
           fleetWatchNotices,
         ]) {

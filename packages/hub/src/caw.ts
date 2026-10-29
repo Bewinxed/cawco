@@ -16,10 +16,10 @@
  *   project's items. Only the hub sets
  *   it: it starts the session on your words or, while Caw is on, the first
  *   event, on a checkout of the project on a machine that is online, with
- *   the role `lead`, so the `cawco` server lists it the lead's tools. Every
- *   spawn of its row (server.ts `bounded`) runs it inside its place's
- *   boundary ({@link leadPlaceRef}), and puts each of its shell and edit
- *   calls to the hub's gate (lead-gate.ts).
+ *   the role `lead`, which keeps his threads his (roles.ts). It is a plain
+ *   spawn otherwise: on the place's folder, in the permission mode you last
+ *   chose for its harness on that machine, every call decided by that mode
+ *   and his turn's provenance, as any session's is (core turn-provenance.ts).
  * - **Woken by your words and, while on, by events**, never a timer: your
  *   message in a thread, your ask for a view; an attempt at a task landing
  *   or failing (its report, or a line from here while the project has no Caw
@@ -62,7 +62,6 @@ import {
   BLOCK_PAGES,
   type BlockPage,
   BOARD_ONLY_DENIED_TOOLS,
-  CAW_DENIED_TOOLS,
   CAW_NO_MACHINE,
   type CawInitiated,
   type CawRunning,
@@ -70,12 +69,13 @@ import {
   type ConnectionView,
   CURATOR_DENIED_TOOLS,
   type Envelope,
+  HARNESSES,
   type HarnessKind,
   handoffMarker,
+  harnessNamed,
   type InstanceRow,
   type ItemEnd,
   type NeutralOrigin,
-  type PermissionMode,
   type ProjectSpend,
   type ProjectStopFrame,
   type ProjectView,
@@ -115,6 +115,7 @@ import type { Origin, WorkOrigin } from "./db/schema";
 import { sendWords } from "./db/words";
 import { byHandle } from "./handles";
 import { inboxText } from "./ingress";
+import { boardTitle } from "./labels";
 import { sentence, tool } from "./mcp-tool";
 import { mediaBase64 } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
@@ -181,19 +182,6 @@ const modelAfter = (
   return rehomed ? null : had;
 };
 
-/** The harnesses Caw runs on, in the order a picker offers them. */
-const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as HarnessKind[];
-
-/** Caw's denied tools on `harness`; refused on a harness whose shell and edit calls the hub's gate cannot decide. */
-const cawDenied = (harness: string): readonly string[] => {
-  if (!(harness in CAW_DENIED_TOOLS)) {
-    throw new Error(
-      `Caw does not run on ${harness}: it cannot put each of Caw's shell and edit calls to the hub first.`
-    );
-  }
-  return CAW_DENIED_TOOLS[harness as HarnessKind];
-};
-
 /** A fleet-watch triage run's denied tools on `harness` (core `BOARD_ONLY_DENIED_TOOLS`): the board alone. */
 const boardOnlyDenied = (harness: string): readonly string[] => {
   if (!(harness in BOARD_ONLY_DENIED_TOOLS)) {
@@ -215,27 +203,21 @@ const curatorDenied = (harness: string): readonly string[] => {
 };
 
 /**
- * A spawn as it reaches a machine: a lead row's (a project's Caw) also
- * denies Caw's subagent, Monitor and worktree tools on `harness` (his shell
- * and edit calls each go to the hub's gate, lead-gate.ts); an overseer row's
- * (a fleet-watch triage run, fleet-watch.ts) the board-only list; a curator
- * row's (a project's memory curator run) that and the web, whatever else it
- * denies. A lead's says so ({@link SpawnPayload.lead}): the machine asks the
- * hub before each of his shell and edit calls, and he has the fleet's MCP
- * servers as any session does. An overseer's and a curator's say they are
- * fenced ({@link SpawnPayload.fence}): CawCo's MCP server and no other. Any
- * other row's spawn says it is neither, whatever its caller sent.
+ * A spawn as it reaches a machine: an overseer row's (a fleet-watch triage
+ * run, fleet-watch.ts) denies the board-only list; a curator row's (a
+ * project's memory curator run) that and the web, whatever else it denies.
+ * Each says it is fenced ({@link SpawnPayload.fence}): CawCo's MCP server
+ * and no other. Any other row's spawn says it is not, whatever its caller
+ * sent.
  */
-export const withCawDenials = (
+export const fencedSpawn = (
   payload: SpawnPayload,
   row: Pick<InstanceRow, "role">,
   harness: string
 ): SpawnPayload => {
-  const { lead: _callerLead, fence: _callerFence, ...asked } = payload;
+  const { fence: _callerFence, ...asked } = payload;
   let denied: readonly string[];
-  if (row.role === "lead") {
-    denied = cawDenied(harness);
-  } else if (row.role === "overseer") {
+  if (row.role === "overseer") {
     denied = boardOnlyDenied(harness);
   } else if (row.role === "curator") {
     denied = curatorDenied(harness);
@@ -244,42 +226,15 @@ export const withCawDenials = (
   }
   return {
     ...asked,
-    ...(row.role === "lead"
-      ? { lead: true as const }
-      : { fence: true as const }),
+    fence: true as const,
     denyTools: [...new Set([...(asked.denyTools ?? []), ...denied])],
   };
 };
 
 /**
- * The boundary of the place Caw runs in: his project's checkout, its folder
- * on the hub, or a folder of his own. Every spawn of his row carries it, as a
- * work item's carries its workspace, so his shell and file tools write only
- * there and in its scratch dir, read no credential store, reach no service
- * manager and see no other session's processes, exactly as a delegate's. Its
- * id names the project, machine and folder (the first 8 characters name its
- * scratch and door dirs, so they are the hash's), and ends
- * {@link PLACE_SUFFIX}, which the machine's policy reads as a place
- * (workspace-policy.ts `isPlace`). None for any other row.
- */
-export const leadPlaceRef = (
-  row: Pick<InstanceRow, "role" | "projectId" | "machineId" | "cwd">
-): WorkspaceRef | undefined =>
-  row.role === "lead" && row.projectId
-    ? {
-        id: `${createHash("sha256")
-          .update(`${row.projectId}\0${row.machineId}\0${row.cwd}`)
-          .digest("hex")
-          .slice(0, 8)}${PLACE_SUFFIX}`,
-        path: row.cwd,
-      }
-    : undefined;
-
-/**
  * The place a sheet's stage is named by for a session with no workspace of
- * its own (live components): Caw's place ({@link leadPlaceRef}); for any
- * other session, a place over the folder it works in, on its machine. The
- * machine runs the stage in that place's stage clone (agent stage-clone.ts):
+ * its own (live components): a place over the folder it works in, on its
+ * machine. The machine runs the stage in that place's stage clone (agent stage-clone.ts):
  * a clone of the checkout at its HEAD with its uncommitted changes, kept in
  * step with it, in a boundary of its own, so the toolchain writes its own
  * tree and never the person's, while the session's own commands stay on the
@@ -287,15 +242,14 @@ export const leadPlaceRef = (
  * one stage.
  */
 export const stagePlaceRef = (
-  row: Pick<InstanceRow, "role" | "projectId" | "machineId" | "cwd">
-): WorkspaceRef =>
-  leadPlaceRef(row) ?? {
-    id: `${createHash("sha256")
-      .update(`${row.machineId}\0${row.cwd}`)
-      .digest("hex")
-      .slice(0, 8)}${PLACE_SUFFIX}`,
-    path: row.cwd,
-  };
+  row: Pick<InstanceRow, "machineId" | "cwd">
+): WorkspaceRef => ({
+  id: `${createHash("sha256")
+    .update(`${row.machineId}\0${row.cwd}`)
+    .digest("hex")
+    .slice(0, 8)}${PLACE_SUFFIX}`,
+  path: row.cwd,
+});
 
 /**
  * What wakes Caw: who it is from (`you`, the person's own words: a thread, a
@@ -323,9 +277,9 @@ export interface CawEvent {
 }
 
 /**
- * Whose a wake is, for his gate (lead-gate.ts): your words alone are yours;
- * an event, a routine, or outside events riding on it make it outside, and
- * an ask in its turn names which.
+ * Whose a wake is, for his turn's provenance (turn-provenance.ts): your
+ * words alone are yours; an event, a routine, or outside events riding on
+ * it make it outside, and an ask in its turn names which.
  */
 const sourceOf = (event: CawEvent, inboxed: number): WakeSource => {
   if (event.routine) {
@@ -531,13 +485,13 @@ const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
     "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, decisions/, and delegates/, where a type you write is a proposal the person approves or declines before it is committed), decision pages (the decision-page skill: write decisions/<name>/page.oui, a program over the decision library, or decisions/<name>/page.html when a pick is not an option (a machine and folder from cawco.pickPlace, a field they edit), then artifact_create with kind page, the name, does: pick and an ask (one line in the person's words) builds and shows it; artifact_read has the picks; artifact_update's statements revise it; a decision's after naming another page's decision (page#id) links the two pages on the Decisions tab), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
-    "You have shell and edit tools, inside the boundary of your place, this folder: you write only here and in $TMPDIR, read no credential store, reach no service manager and see no other session's processes, and files only their owner may read are hidden from you. The hub decides each call before it runs. Read-only commands (ls, cat, grep, find, file, stat, du, wc, head, tail, git that only reads, chained with ; && || or |, output only into /dev/null or 2>&1) run without asking whatever woke you. In a turn the person's own message woke, so do git init, git add <paths> and git commit where no one else works; every other shell or edit call raises an Approve card the person answers, wherever they are. In a turn anything else woke (an event, a routine, a report, outside text riding on your wake) every call but a read-only command raises the card, and so does every such call after you read web content in a turn. In a shared checkout git checkout, switch, restore, reset, stash, clean, rebase and push, git add -A or git add ., and any git alias are refused: file a task. Your edits are docs, config and assets only, 5 files a wake at most: anything bigger, file a task. At most 20 shell or edit calls a wake: delegate the rest. Every call shows in your thread. A task whose only changes are your own passes review only once the person approved them.",
+    "You have shell and edit tools in this folder, under the permission mode the person chose for this harness on this machine, as any of their sessions does. In a turn that read anything but the person's own words (an event, a routine, a report, another session's message, web content), each shell or edit call asks them first, saying why.",
     "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must. Whenever the person asks you to set the project up, in any thread and in their own words (the first time, again, or one part of it), call project_setup with that thread and follow its steps there.",
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
     "Your project's settings are yours to read and change with project_settings (no changes reads them): rename it, grant it a connection, link its GitHub repository, set where its work lands and runs, whether attempts start on their own, how many run at once, where dispatch pauses for review and what each may spend, turn yourself on or off (set_caw), publish its place to a new private GitHub repository (create_repo), or turn Review before done on or off (set_review: whether every task waits for the person before done is theirs to choose, so it and create_repo are always an Approve card first). Each other change applies at once and is noted in the thread. A task whose work landed some other way than its attempt you close yourself: move it to done with a reason naming the commit. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer them in plain text: what you say in the turn after reading their words is posted in that thread as your reply when the turn ends, and they watch it in the thread as you write it, so say nothing in plain text you would not say to them. When a reply names tasks (its `tasks`, shown as cards) or files you wrote, or belongs in another thread, send it with thread_reply instead: a thread_reply to their thread is your reply there, and what you say in plain text after it stays in your session.",
-    'Every choice that reaches the person is a decision card on a page, never AskUserQuestion, which is refused to you. Ask it as a decision page with one card, or a few for one topic (the decision-page skill): write decisions/<name>/page.oui with folder_write, give each Decision its kind from Who decides (look, behaviour, scope, approach, rules, tools), then artifact_create with kind page, the name, does: pick and an ask. Name each card in your reply by the link artifact_create answers for it: the thread draws it as the card\'s chip. Then end your turn; the card waits. One routed to the person waits on them; an advisor\'s or common practice\'s is settled by the delegate the hub starts; one routed to you, settle yourself. When the picks come ("The page … has new responses"), read them with artifact_read and answer: your turn answers the thread you asked in. Work that rests on a card waits on it (waits_on: "<page>#<card>"). Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with a card.',
+    'Every choice that reaches the person is a decision card on a page, never AskUserQuestion. Ask it as a decision page with one card, or a few for one topic (the decision-page skill): write decisions/<name>/page.oui with folder_write, give each Decision its kind from Who decides (look, behaviour, scope, approach, rules, tools), then artifact_create with kind page, the name, does: pick and an ask. Name each card in your reply by the link artifact_create answers for it: the thread draws it as the card\'s chip. Then end your turn; the card waits. One routed to the person waits on them; an advisor\'s or common practice\'s is settled by the delegate the hub starts; one routed to you, settle yourself. When the picks come ("The page … has new responses"), read them with artifact_read and answer: your turn answers the thread you asked in. Work that rests on a card waits on it (waits_on: "<page>#<card>"). Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with a card.',
     "A view-request event is the person asking for a view of the project: it carries how to write one, and the page to stand it on when they asked from one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it. A view-change event is the person asking to change a kept view: it carries the view's program; draft the change under the same name.",
     "When the person asks for a design system, file one task with task_create, its title “Build the design system” and nothing else (a stage only if they named one): the hub writes its description and acceptance, the design-system skill's steps with its decision page among them, and refuses it when the project already has a system or a build is open. Refused because it has one, answer: \"This project has one; say what to change.\" Filed, say what the build will read (the repository's styles and components, the site named in knowledge/, the brand kit in knowledge/brand/, the fonts and pictures in assets/: the ones the project has) and that you filed it. Never build one yourself, and never start one the person did not ask for: the hub asks them once when the work needs one.",
     "A project with no code yet starts as real code from its first screen. When the person asks for a screen, a component or a design to look at and the repository has no app, name the stack: the one they named, or ask once with a one-card decision page (SvelteKit, Vite with React or Vue, Astro, Nuxt). Then file one task that scaffolds it with that framework's own creator and builds the first screen as a real component with its sheet, its description naming the stack and the screen skill.",
@@ -580,7 +534,6 @@ export interface CawDeps {
     | "threadOfTask"
     | "threadSends"
     | "touchThread"
-    | "updateKeepAlive"
     | "updateWorkItem"
     | "workItem"
   >;
@@ -630,13 +583,6 @@ export interface CawDeps {
    * broadcast).
    */
   readonly publish: (frame: ThreadUpsertFrame | ProjectStopFrame) => void;
-  /**
-   * Ensures a lead's place boundary on his machine again (server.ts
-   * `ensureIdentityWorkspace`): the machine reads its policy anew and hands
-   * over to a boundary of the new one when it changed. Refused when the
-   * machine cannot hold it: the wake does not go out.
-   */
-  readonly refreshPlace: (lead: InstanceRow) => Promise<void>;
   /** The setup page's stream relay card, while it is to be asked (with the domain the person last reached CawCo through); null once the fleet has a relay or a journey, or the card was answered and not asked `again`. */
   readonly relayOffer: (again: boolean) => RelayOffer | null;
   /** Caw replied in a thread: the person's phone hears it, unless they looked at the thread since (push.ts `threadReply`). */
@@ -660,12 +606,11 @@ export interface CawDeps {
       failed?: string
     ) => SentMessageRow;
   };
-  /** Starts a session in `mode` where its harness has modes, resolved once its machine says it is in place. */
-  readonly spawn: (
-    machineId: string,
-    payload: SpawnPayload,
-    mode: PermissionMode
-  ) => Promise<void>;
+  /**
+   * Starts Caw's session as any session starts (server.ts `spawnSession`),
+   * in the permission mode you last chose for its harness on that machine.
+   */
+  readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
   /**
    * A project's forget stop path (project-stops.ts): its running sessions as
    * a tree, and their stop, each end reported as `project.stop` once its
@@ -707,7 +652,7 @@ export interface CawDeps {
   /**
    * A wake went out as send `uuid`: your words alone (`owner`), or outside
    * text: an event's, a routine's, or outside events riding on your words.
-   * His gate reads it when his harness reads the send (lead-gate.ts).
+   * His turn's provenance reads it when his harness reads the send (turn-provenance.ts).
    */
   readonly wakeSent: (uuid: string, source: WakeSource) => void;
 }
@@ -731,7 +676,6 @@ export const createCaw = ({
   projectsChanged,
   proposeType,
   publish,
-  refreshPlace,
   replied,
   send,
   sends,
@@ -1278,35 +1222,17 @@ export const createCaw = ({
       (await placeFor(project)) ??
       refuse(409, problemOf(project) ?? CAW_NO_MACHINE);
     const instanceId = crypto.randomUUID();
-    cawDenied(project.cawHarness);
-    await spawn(
-      place.machineId,
-      {
-        instanceId,
-        cwd: place.cwd,
-        harness: project.cawHarness,
-        ...(project.cawModel ? { model: project.cawModel } : {}),
-        projectId: project.id,
-        title: "Caw",
-        role: "lead",
-        requestId: crypto.randomUUID(),
-      },
-      // Caw's own mode: no tool ask parks for a person, as every shell and
-      // edit call of his is put to the hub's gate instead (lead-gate.ts).
-      "bypassPermissions"
-    );
+    await spawn(place.machineId, {
+      instanceId,
+      cwd: place.cwd,
+      harness: project.cawHarness,
+      ...(project.cawModel ? { model: project.cawModel } : {}),
+      projectId: project.id,
+      title: "Caw",
+      role: "lead",
+      requestId: crypto.randomUUID(),
+    });
     setLead(project.id, instanceId);
-    // A Claude lead's context is the project's whole history, and an idle
-    // hour costs it a full rewrite: kept warm, under keep-alive's cap of one
-    // rewrite's worth of pings (caw-cost.md: $1.01 of pings against $10.18
-    // of rewrites over 10-15/16).
-    if (project.cawHarness === "claude") {
-      db.updateKeepAlive(instanceId, {
-        keepAliveEnabled: true,
-        keepAliveStopped: null,
-        keepAliveSent: 0,
-      });
-    }
     const lead = row(instanceId);
     if (!lead) {
       throw new Error(`Caw's session ${instanceId} has no row on this hub.`);
@@ -1449,7 +1375,7 @@ export const createCaw = ({
 
   /**
    * A wake's message to his session, its words ready: his session (started
-   * for it when he has none), his place's boundary read again, the message,
+   * for it when he has none), the message,
    * and its thread following the turn. `notOut` gives back what the wake
    * took and answers why it went no further.
    */
@@ -1477,13 +1403,6 @@ export const createCaw = ({
     if (!lead) {
       return failed(CAW_OFF);
     }
-    try {
-      // His place's boundary read again before he reads this: what became
-      // only its owner's since it started is hidden from him too.
-      await placeFresh(lead);
-    } catch (error) {
-      return failed(errorWords(error), error);
-    }
     const sent = lead.started
       ? lead.sent
       : message(lead.row, text, event.by, event.routine, carry);
@@ -1505,20 +1424,6 @@ export const createCaw = ({
       throw woke.thrown;
     }
     return woke.woke;
-  };
-
-  /**
-   * A standing lead's place boundary, ensured on his machine again
-   * ({@link CawDeps.refreshPlace}): its policy is read anew, so files only
-   * their owner may read that appeared since it started are hidden too. A
-   * lead started for this wake has just had it ensured by his spawn.
-   */
-  const placeFresh = async (
-    lead: Awaited<ReturnType<typeof leadFor>>
-  ): Promise<void> => {
-    if (lead && !lead.started) {
-      await refreshPlace(lead.row);
-    }
   };
 
   /**
@@ -1934,6 +1839,8 @@ export const createCaw = ({
    */
   const draftView = async (
     projectId: string,
+    /** Whose draft it is, by the name the board gives the session (labels.ts `boardTitle`). */
+    by: string,
     input: {
       name: string;
       page?: BlockPage;
@@ -1950,7 +1857,7 @@ export const createCaw = ({
       );
     }
     const drafted = await folderCall(() =>
-      views.draft(projectId, input.name, input.source, { name: "Caw" })
+      views.draft(projectId, input.name, input.source, { name: by })
     );
     const proposed = input.page
       ? blocks.propose(
@@ -1958,7 +1865,7 @@ export const createCaw = ({
           drafted.name,
           input.page,
           input.position ?? null,
-          "Caw"
+          by
         )
       : null;
     return {
@@ -2483,14 +2390,11 @@ export const createCaw = ({
       }
     ): CawView {
       const project = projectOf(projectId);
-      if (change.harness !== undefined) {
-        try {
-          cawDenied(change.harness);
-        } catch (error) {
-          refuse(400, (error as Error).message);
-        }
-      }
-      const harness = (change.harness as HarnessKind | undefined) ?? undefined;
+      const harness =
+        change.harness === undefined
+          ? undefined
+          : (harnessNamed(change.harness) ??
+            refuse(400, `CawCo runs no harness called ${change.harness}.`));
       const on = change.on ?? project.caw;
       const rehomed = harness !== undefined && harness !== project.cawHarness;
       const model = modelAfter(project.cawModel, change.model, rehomed);
@@ -3035,23 +2939,6 @@ export const createCaw = ({
         : undefined;
     },
 
-    /**
-     * One of his shell or edit calls, noted in the thread his turn answers,
-     * else the project's newest conversation (lead-gate.ts): nothing for a session that
-     * is no project's lead.
-     */
-    noteCall(instanceId: string, note: ThreadNote): void {
-      const project = leadOf(row(instanceId));
-      if (!project) {
-        return;
-      }
-      // A turn under way answers its own thread, or none (the project's
-      // newest conversation); only a call after its turn's record ended
-      // goes where that turn answered.
-      const turn = turns.get(instanceId);
-      noteIn(project.id, turn ? turn.threadId : answered.get(instanceId), note);
-    },
-
     /** An ask tagged to a thread was parked or settled: its status moved. */
     asksChanged(threadId: string): void {
       upsert(db.thread(threadId));
@@ -3291,7 +3178,7 @@ export const createCaw = ({
             }
             const written = await folderCall(() =>
               writeFolderFile(projectId, rel, body, {
-                author: { name: "Caw" },
+                author: { name: boardTitle(me()) },
               })
             );
             folderChanged(projectId);
@@ -3313,12 +3200,13 @@ export const createCaw = ({
           },
           async (input) => {
             const projectId = ours();
-            const drafted = await draftView(projectId, input);
+            const by = boardTitle(me());
+            const drafted = await draftView(projectId, by, input);
             noteIn(
               projectId,
               actor ? turns.get(actor.id)?.threadId : undefined,
               {
-                title: `View · Caw drafted “${drafted.view}”`,
+                title: `View · ${by} drafted “${drafted.view}”`,
                 event: { kind: "view", name: drafted.view },
               }
             );
@@ -3381,7 +3269,7 @@ const answer = refusalAnswer(CawRefusal, (error) =>
   status(502, error instanceof Error ? error.message : String(error))
 );
 
-const HARNESS = t.Union(CAW_HARNESSES.map((harness) => t.Literal(harness)));
+const HARNESS = t.Union(HARNESSES.map((harness) => t.Literal(harness)));
 const BLOCK_PAGE = t.Union(BLOCK_PAGES.map((page) => t.Literal(page)));
 
 /** The routes for a project's Caw, its threads and your asks for views. */

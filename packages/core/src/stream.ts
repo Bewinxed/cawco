@@ -176,12 +176,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    `orphanedComments`, and a step no longer carries `waitsOnPage`. A page
  *    built for 34 reads a `waitsOnPage` the hub no longer sends, so it
  *    reloads first.
+ * 36: a project's gate no longer carries `cawEdits`: Caw edits under the
+ *    person's permission mode and his turn's provenance, as every session
+ *    does (one-session design slice 3). A page built for 35 reads a
+ *    `cawEdits` the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 35;
+export const WIRE_PROTOCOL = 36;
 
 /**
  * What a session's stream carries: the changes each frame made to its

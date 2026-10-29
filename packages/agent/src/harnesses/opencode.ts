@@ -5834,7 +5834,6 @@ export class OpencodeHarness implements Harness {
       account,
       view,
       fence: spec.fence === true,
-      lead: spec.lead === true,
       applied,
       ready,
       // Only the machine's server sends with the machine's own sign-ins; an

@@ -280,8 +280,8 @@ export interface SessiondAdoption {
   /**
    * Takes back the child `spec`'s session runs in. `spec` is the spawn the
    * hub sent for it, read by the same rules as a launch's, so the session
-   * runs under every option it launched with (its mode, a lead's gate, a
-   * fence, its denials, its account).
+   * runs under every option it launched with (its mode, a fence, its
+   * denials, its account).
    */
   adopt: (
     spec: SpawnPayload,

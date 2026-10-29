@@ -92,6 +92,7 @@ import { byHandle } from "./handles";
 import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
+import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
@@ -1670,7 +1671,14 @@ export const createRoutines = ({
     if (isHeld(run.id)) {
       return refuse(409, `Run ${runId} has already ended failed.`);
     }
-    answered(run.id, resultOf(result), "Caw", null, actor.id, false);
+    answered(
+      run.id,
+      resultOf(result),
+      boardTitle(actor),
+      null,
+      actor.id,
+      false
+    );
     return runView(store.run(run.id) ?? run);
   };
 
@@ -2536,7 +2544,6 @@ const ROUTINE_TOOL_NAMES = [
   "routine_run_now",
   "routine_result",
 ] as const;
-export type RoutineTool = (typeof ROUTINE_TOOL_NAMES)[number];
 export const ROUTINE_TOOLS: ReadonlySet<string> = new Set(ROUTINE_TOOL_NAMES);
 
 /** Runs a route's work, a refusal answered with its status. */

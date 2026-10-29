@@ -1025,8 +1025,8 @@
           {/if}
         </div>
       {/if}
-      <!-- Why Caw's gate put this call to you, not ran it: the rule, in one
-           line under the command (hub lead-gate.ts). -->
+      <!-- Why this call asks you, not runs: what made its turn outside, in
+           one line under the command (core turn-provenance.ts). -->
       {#if presentation.askedBecause}
         <p
           data-slot="asked-because"

@@ -101,7 +101,6 @@ import {
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
   identityOf,
-  LEAD_GATED_TOOLS,
   MESSAGES_HELD,
   MESSAGES_READ,
   mcpGatewayPort,
@@ -1436,17 +1435,13 @@ class SessionMode {
    * with the CLI in bypass, approves every one (the owner, 2026-10-22: "FULL
    * SEND LITERALLY MEANS FULL SEND"): the CLI's safety checks, a plan
    * approval, an ask his own `permissions.ask` rule forced. Never a question
-   * to him, which needs his answer, and never a project's Caw's shell or
-   * edit call (`lead`, {@link LEAD_SETTINGS}): the hub's gate decides those.
-   * The CLI does not say which rule forced an ask (no `matchedAskRule` on a
-   * rule's own ask, 2.1.302), so the lead's calls are known by the tool.
+   * to him, which needs his answer.
    */
-  answersHostSide(toolName: string, lead: boolean): boolean {
+  answersHostSide(toolName: string): boolean {
     return (
       this.#fullSend &&
       this.#cli === "bypassPermissions" &&
-      toolName !== ASK_USER_QUESTION &&
-      !(lead && LEAD_GATED_ON_CLAUDE.has(toolName))
+      toolName !== ASK_USER_QUESTION
     );
   }
 }
@@ -1518,25 +1513,6 @@ const SESSION_SETTINGS = { totalTokensReminder: "off" } as const;
  */
 const FENCE_SETTINGS = { disableClaudeAiConnectors: true } as const;
 
-/**
- * Flag settings a project's Caw launches with besides
- * ({@link SpawnPayload.lead}): an `ask` rule on each of his shell and edit
- * tools, so every call of one is put to the hub (`canUseTool`, then the
- * hub's gate, lead-gate.ts) whatever his mode: "If an ask rule matches, the
- * call falls through to your `canUseTool` callback for confirmation, even in
- * `bypassPermissions` mode" (code.claude.com/docs/en/agent-sdk/permissions).
- * Full Send never answers one of his gated calls ({@link SessionMode}). Flag
- * settings outrank every settings file, so none in his place turns it off.
- */
-const LEAD_SETTINGS: { permissions: { ask: string[] } } = {
-  permissions: { ask: [...LEAD_GATED_TOOLS.claude] },
-};
-
-/** Caw's gated tools on Claude Code, by the CLI's names ({@link LEAD_SETTINGS}). */
-const LEAD_GATED_ON_CLAUDE: ReadonlySet<string> = new Set(
-  LEAD_GATED_TOOLS.claude
-);
-
 /** The `hooks` of flag settings, by event. */
 type FlagHooks = NonNullable<Settings["hooks"]>;
 /** One matcher's entry of a `hooks` event, as flag settings hold it. */
@@ -1585,9 +1561,8 @@ const placedHookEntries = (
  * {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its
  * `settings` over the fleet's Claude Code settings (`fleetSettings`), the
  * project's hooks placed at the session's folder (`placed`,
- * fleet-harness-set.ts) joined to the boundary's, and a lead's
- * {@link LEAD_SETTINGS} or a fenced session's {@link FENCE_SETTINGS} over
- * them. The boundary's `PreToolUse` entry comes last of that event's. The
+ * fleet-harness-set.ts) joined to the boundary's, and a fenced session's
+ * {@link FENCE_SETTINGS} over them. The boundary's `PreToolUse` entry comes last of that event's. The
  * order decides no verdict: "When an event fires, Claude Code runs the
  * matching hooks in parallel", and "For `PreToolUse` permission decisions,
  * the most restrictive answer applies" (code.claude.com/docs/en/hooks-guide),
@@ -1598,7 +1573,6 @@ const placedHookEntries = (
  */
 const sessionSettingsOptions = (
   boundary: HarnessContext["boundary"],
-  lead: boolean,
   fence: boolean,
   placed: readonly SetHook[],
   fleetSettings: Record<string, unknown>
@@ -1620,7 +1594,6 @@ const sessionSettingsOptions = (
       ...SESSION_SETTINGS,
       ...("settings" in bounded ? bounded.settings : {}),
       ...(Object.keys(hooks).length > 0 ? { hooks } : {}),
-      ...(lead ? LEAD_SETTINGS : {}),
       ...(fence ? FENCE_SETTINGS : {}),
     },
   };
@@ -1867,12 +1840,12 @@ interface CallerOptions {
  * What a session runs under, read from the spawn the hub sent for it: the
  * caller's options with its account's config dir in their env, its mode,
  * model and effort, the conversation it goes on with, its skills and
- * denials, and how the hub marked it (a project's Caw, a fence) with its
+ * denials, and how the hub marked it (a fence) with its
  * scoped memory. One reading ({@link sessionSpecOf}) for a launch and for
  * an attach after an agent restart: the hub sends an attach the same spawn
- * it launches the session with (hub server.ts `restore`, its row's lead,
- * fence, mode and denials on it), so Caw's gate, a fence, Full Send and
- * every other rule of the session hold across a restart.
+ * it launches the session with (hub server.ts `restore`, its row's fence,
+ * mode and denials on it), so a fence, Full Send and every other rule of
+ * the session hold across a restart.
  */
 interface SessionSpec {
   denyTools: string[] | undefined;
@@ -1881,8 +1854,6 @@ interface SessionSpec {
   fence: boolean;
   /** Its scoped memory documents ({@link SpawnPayload.instructions}). */
   instructions: readonly SessionInstruction[];
-  /** A project's Caw: his shell and edit calls are the hub's gate's ({@link SpawnPayload.lead}). */
-  lead: boolean;
   model: string | undefined;
   options: CallerOptions;
   permissionMode: OfferedMode | undefined;
@@ -1902,7 +1873,6 @@ const sessionSpecOf = (
     effort: spec.effort,
     fence: spec.fence === true,
     instructions: spec.instructions ?? [],
-    lead: spec.lead === true,
     model: spec.model,
     options: {
       ...options,
@@ -1967,7 +1937,6 @@ const launchFleet = async (
  */
 const launchSettings = (
   ctx: HarnessContext,
-  lead: boolean,
   fence: boolean,
   launch: {
     fleetMcp?: Record<string, McpServerConfig>;
@@ -1977,7 +1946,6 @@ const launchSettings = (
 ) => {
   const options = sessionSettingsOptions(
     ctx.boundary,
-    lead,
     fence,
     launch.placedHooks ?? [],
     launch.fleetSettings ?? {}
@@ -2040,16 +2008,13 @@ const sessionMcpServers = (
  * A fenced session launches with `--no-chrome` and no caller's flags: on
  * `--chrome` the browser's MCP server joins the launch's own
  * (`le={...le,...w}`, which `--strict-mcp-config` keeps: CLI 2.1.296), and a
- * caller's `mcp-config` would add servers of its own. A project's Caw
- * launches with `--no-chrome` too: every delegate type denies Claude in
- * Chrome, and he is of none.
+ * caller's `mcp-config` would add servers of its own.
  */
 const sessionExtraArgs = (
   options: unknown,
-  fence: boolean,
-  lead: boolean
+  fence: boolean
 ): Record<string, string | null> => {
-  if (fence || lead) {
+  if (fence) {
     return { "no-chrome": null };
   }
   const callerArgs =
@@ -2264,8 +2229,6 @@ class ClaudeSession implements HarnessSession {
   #ownedMcp: Set<string> | undefined;
   /** Launched with CawCo's MCP server alone ({@link SpawnPayload.fence}): it takes no fleet server. */
   readonly #fence: boolean;
-  /** A project's Caw ({@link SpawnPayload.lead}): its flag settings carry his gate's rules. */
-  readonly #lead: boolean;
   /**
    * The flag settings its CLI holds as CawCo last set them: as launched, then
    * as each {@link #takeFleetSettings} applied them. Unknown at an attach,
@@ -2332,7 +2295,6 @@ class ClaudeSession implements HarnessSession {
       persistSession,
       skills,
       denyTools,
-      lead,
       fence,
       instructions,
     } = session;
@@ -2346,7 +2308,6 @@ class ClaudeSession implements HarnessSession {
     this.#launchMcp = new Set(Object.keys(mcpServers));
     this.#ownedMcp = fleetMcp ? new Set(Object.keys(fleetMcp)) : undefined;
     this.#fence = fence;
-    this.#lead = lead;
     this.#workdir = workdir;
     const env = sessionEnv(
       (options as { env?: Record<string, string | undefined> } | undefined)
@@ -2363,11 +2324,10 @@ class ClaudeSession implements HarnessSession {
     this.#input = input;
     const turn = new Turn();
     this.#turn = turn;
-    const extraArgs = sessionExtraArgs(options, fence, lead);
+    const extraArgs = sessionExtraArgs(options, fence);
 
     const { options: launchedOptions, handed } = launchSettings(
       ctx,
-      lead,
       fence,
       launch
     );
@@ -2559,7 +2519,7 @@ class ClaudeSession implements HarnessSession {
             // Send answer a call its turn's provenance put to the person.
             const provenance = this.#provenanceAsks.delete(toolUseID);
             const answered =
-              !provenance && this.#mode.answersHostSide(toolName, lead);
+              !provenance && this.#mode.answersHostSide(toolName);
             console.log(
               askLine(
                 toolName,
@@ -3890,7 +3850,6 @@ class ClaudeSession implements HarnessSession {
     const place = await placeSetAt(this.#workdir);
     const next = sessionSettingsOptions(
       this.#ctx.boundary,
-      this.#lead,
       false,
       Object.values(place?.hooks ?? {}),
       launchedSettings(set, place)
@@ -5034,7 +4993,7 @@ class ClaudeHarness implements Harness {
     }
     // It runs under what its spawn says, read as a launch reads it
     // ({@link sessionSpecOf}): its mode goes in at construction, ahead of
-    // the prelude's asks, and Caw's gate, a fence and its caller's MCP
+    // the prelude's asks, and a fence and its caller's MCP
     // servers with it. Its account is the one its process runs on, which the
     // hub sends an attach. What only a launch uses (its flags, its fleet
     // servers, the fleet's denials it was started with) its CLI holds

@@ -66,21 +66,21 @@ export type PiHostCommand =
   | { type: "control"; id: string; method: string; args: unknown[] }
   | { type: "snapshot"; id: string }
   | { type: "stop"; id: string }
-  /** The hub's answer to one of a lead's gated calls (pi-runtime `PiGate`). */
+  /** The hub's answer to one of the calls its gate put to it (pi-runtime `PiGate`). */
   | { type: "permission"; requestId: string; result: PermissionResult }
   /** One of them taken back, unshown: its call does not run. */
   | { type: "withdraw"; requestId: string; message: string }
   /** Whether its turn is outside now, as the hub said ({@link HarnessContext.outside}): its gate reads it on every call. */
   | { type: "outside"; why: string | null };
 
-/** One of a lead's calls a pi host put to the hub (pi-runtime `PiGate`), as its agent parks it. */
+/** One of the calls a pi host's gate put to the hub (pi-runtime `PiGate`), as its agent parks it. */
 export type PiGateAsk = Parameters<HarnessContext["permission"]>[0];
 
 export interface PiHostState {
   /**
-   * The lead's calls the host put to the hub and holds unanswered: an agent
-   * that attaches raises them again, and one the hub already judged is
-   * answered again by its row (hub lead-gate.ts `decide`).
+   * The calls the host's gate put to the hub and holds unanswered: an agent
+   * that attaches raises them again, and the hub parks each as it parks
+   * any replayed ask.
    */
   asks?: PiGateAsk[];
   /**
@@ -378,7 +378,7 @@ class PiRemoteSession implements HarnessSession {
   }
 
   /**
-   * A frame, or a lead's ask or its end, in the order the host said them: an
+   * A frame, or a gate's ask or its end, in the order the host said them: an
    * ask after the frame of the call it gates, its end after the ask.
    */
   #inOrder(seq: number, event: InOrder): void {
@@ -586,7 +586,7 @@ class PiRemoteSession implements HarnessSession {
   async interrupt(): Promise<void> {
     await this.control(CONTROL_INTERRUPT, []);
   }
-  /** The hub's answer to a lead's call, to the host that waits on it. */
+  /** The hub's answer to a gated call, to the host that waits on it. */
   resolvePermission(requestId: string, result: PermissionResult): void {
     this.#answer({ type: "permission", requestId, result });
   }

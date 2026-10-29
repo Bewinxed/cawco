@@ -958,12 +958,6 @@ export interface WorkItemDeps {
     instanceId: string
   ) => string | undefined;
   /**
-   * The boundary of a project's Caw, his place's (caw.ts `leadPlaceRef`);
-   * none for any other session. With a work item's workspace, what tells
-   * whether a session runs inside a boundary at all.
-   */
-  readonly leadPlace: (row: InstanceRow) => WorkspaceRef | undefined;
-  /**
    * The origin of the turn a project's Caw is in (caw.ts `turnOrigin`), when
    * `instanceId` is a project's lead; undefined for any other session.
    */
@@ -2411,7 +2405,6 @@ export const createWorkItems = ({
   between,
   missingFor,
   unblocked,
-  leadPlace,
   leadTurn,
   machineFree,
   machinePaused,
@@ -2751,14 +2744,13 @@ export const createWorkItems = ({
       : projectLead(item.projectId, item.instanceId);
 
   /**
-   * The boundary a session runs inside: its work item's workspace, else its
-   * Caw place's ({@link WorkItemDeps.leadPlace}); none for a session the
-   * person started (server.ts `sessionWorkspace`, every spawn's).
+   * The boundary a session runs inside: its work item's workspace; none for
+   * any other session (server.ts `sessionWorkspace`, every spawn's).
    */
   const boundOf = (row: InstanceRow): WorkspaceRef | undefined => {
     const item = itemOf(row);
     const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-    return workspace ? boundaryOf(workspace) : leadPlace(row);
+    return workspace ? boundaryOf(workspace) : undefined;
   };
 
   /** The pause of the machine a workspace is on, in words; undefined when it is not paused. */

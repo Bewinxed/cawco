@@ -155,9 +155,8 @@ export const excludedPaths = (
 
 /**
  * A place: the workspace id the hub gives the boundary of a person's own
- * folder, never a delegate's. A project lead's (Caw's) is the folder he
- * starts in (hub `leadPlaceRef`); a session with no workspace of its own
- * has one over the folder it works in, which names its stage (hub
+ * folder, never a delegate's. A session with no workspace of its own has
+ * one over the folder it works in, which names its stage (hub
  * `stagePlaceRef`; the stage itself runs in a clone of that checkout, agent
  * stage-clone.ts). It is a person's own folder, not a disposable clone, so its
  * boundary never writes into it (no stand-ins, no copied inodes, no exclude
@@ -425,9 +424,9 @@ const SRT_PATHS = BWRAP_MAX_ARGS / BWRAP_ARGS_PER_PATH;
  * what it protects. Our call, from srt's cap and that profile.
  */
 const PLACE_PATHS = (SRT_PATHS * 2) / 3;
-export const PROTECTED_MAX = PLACE_PATHS / 4;
-export const OWNER_ONLY_MAX = PLACE_PATHS / 4;
-export const LINKED_MAX = PLACE_PATHS / 4;
+const PROTECTED_MAX = PLACE_PATHS / 4;
+const OWNER_ONLY_MAX = PLACE_PATHS / 4;
+const LINKED_MAX = PLACE_PATHS / 4;
 
 const depthOf = (path: string): number => path.split("/").length;
 

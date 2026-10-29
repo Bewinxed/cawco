@@ -154,9 +154,8 @@ export const workspaceHolding = (
  * The boundary a spawn that names none runs in: a delegation workspace's,
  * when `path` is inside its clone ({@link workspaceHolding}), and never a
  * place. A place is a person's own folder (core `isPlace`), bounded only
- * for a spawn that names it, as the hub names Caw's on every spawn of his
- * (hub caw.ts `leadPlaceRef`); a person's session in that folder runs on
- * the host.
+ * for a spawn that names it; a person's session in that folder runs on the
+ * host.
  */
 export const cloneHolding = (path: string): Promise<WorkspaceRef | undefined> =>
   holding(path, (ref) => !isPlace(ref.id));

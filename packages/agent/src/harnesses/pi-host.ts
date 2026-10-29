@@ -36,7 +36,7 @@ let session: HarnessSession | undefined;
 /** Why its turn is outside, as its agent last said (core turn-provenance.ts); null: its principal's. */
 let outside: string | null = null;
 let starting: Promise<void> | undefined;
-/** A lead's calls put to the hub and not answered yet, by request ({@link PiHostState.asks}). */
+/** The gate's calls put to the hub and not answered yet, by request ({@link PiHostState.asks}). */
 const asks = new Map<string, PiGateAsk>();
 
 function start(

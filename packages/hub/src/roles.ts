@@ -14,12 +14,10 @@
  *   of its project's tasks, folder and its own task's to-dos; changes to tasks and
  *   fleet settings go to its parent through handoff. A coordinator (an
  *   attempt at a whole) starts its parts with task_start.
- * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
- *   decision pages with their graph, its routines, its ingress and relays
- *   (opening a relay asks you), proposing approved actions, delegating and
- *   steering the project's work, the person's phone. Its harness's shell and
- *   edit tools run inside its place's boundary, each call decided by the hub
- *   first (lead-gate.ts).
+ * - **lead**: a project's Caw, a plain session (one-session design §6,
+ *   slice 3): the worker's tools, and its project's threads until a thread
+ *   is a session. Its harness's shell and edit calls are decided by its
+ *   mode and its turn's provenance, as every session's are.
  * - **overseer**: fleet-watch triage (fleet-watch.ts): it reads the fleet
  *   and the session's task, and decides once with `triage_decide` (nudge the
  *   lead, interrupt, stop, tell you, or leave it), which the hub carries
@@ -30,7 +28,7 @@
  * - **curator**: a project's memory curator run (memory.ts): it reads the
  *   inbox, proposes changes to AGENTS.md and `knowledge/` for you to approve,
  *   archives the notes that are not lasting facts, and finishes. No edit,
- *   shell or web tools in its harness either (caw.ts `withCawDenials`).
+ *   shell or web tools in its harness either (caw.ts `fencedSpawn`).
  *
  * A project's own tools ({@link PROJECT_TOOLS}: its views, its folder on the
  * hub, its Setup's steps and settings, a routine run's answer, memory
@@ -54,8 +52,6 @@ import {
   SPAWNING_TOOLS,
 } from "@cawco/core";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
-import { INGRESS_TOOLS } from "./ingress";
-import type { RoutineTool } from "./routines";
 import type { TaskTool } from "./task-tools";
 
 /**
@@ -95,16 +91,6 @@ const TASK_READ = [
   "task_comment",
 ] as const satisfies readonly TaskTool[];
 
-/** The tools that file, change or start tasks. */
-const TASK_WRITE = [
-  "task_create",
-  "task_update",
-  "task_link",
-  "task_start",
-  "task_retry",
-  "task_archive",
-] as const satisfies readonly TaskTool[];
-
 /** A project's conversations with Caw (caw.ts): his alone until a thread is a session. */
 const THREAD_TOOLS = ["thread_read", "thread_reply"] as const;
 
@@ -135,37 +121,6 @@ const PROJECT_TOOLS: ReadonlySet<string> = new Set([
 /** Fleet watch's triage decision (fleet-watch.ts), the overseer's alone. */
 export const TRIAGE_TOOLS = ["triage_decide"] as const;
 
-/**
- * A project's routines (routines.ts): made, changed and run by the roles that
- * run a project, a session you started and the project's Caw.
- */
-const ROUTINE = [
-  "routine_create",
-  "routine_list",
-  "routine_update",
-  "routine_delete",
-  "routine_run_now",
-] as const satisfies readonly RoutineTool[];
-
-/**
- * A project's ingress (ingress.ts): its event routes and connector polls,
- * made and changed by the same roles as its routines, which they feed.
- */
-const INGRESS = [...INGRESS_TOOLS];
-
-/**
- * Approved actions (actions.ts): one exact call proposed for you to approve,
- * by the same roles as routines; never a delegate, triage or a web-facing
- * session, which have no posting tools.
- */
-const ACTION = ["action_propose", "action_list", "action_cancel"] as const;
-
-/**
- * A project's relays (relay.ts): its public webhook paths, by the same roles
- * as its ingress, which they feed; opening one waits for you to approve it.
- */
-const RELAY = ["relay_create", "relay_list", "relay_remove"] as const;
-
 /** A memory curator run's own (memory.ts): never a worker's. */
 const CURATOR_OWN = ["memory_read", "memory_classify"] as const;
 
@@ -187,11 +142,14 @@ const DELEGATE_SESSION = [
 ] as const;
 
 /**
- * Each closed role's tools, by name, and the lead's but the project's own;
- * the worker's is every tool there is but {@link NOT_THE_WORKERS}
+ * Each closed role's tools, by name; the worker's is every tool there is
+ * but {@link NOT_THE_WORKERS}, and the lead's that and its threads
  * ({@link allows}).
  */
-const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
+const TOOLS: Record<
+  Exclude<SessionRole, "worker" | "lead">,
+  ReadonlySet<string>
+> = {
   delegate: new Set([
     ...CORE,
     ...BROWSER,
@@ -214,30 +172,6 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     // to any session that is not one (design-verify.ts).
     "design_write",
     "design_verdict",
-  ]),
-  lead: new Set([
-    ...CORE,
-    ...BROWSER,
-    ...CONNECT,
-    ...TASK_READ,
-    ...TASK_WRITE,
-    ...THREAD_TOOLS,
-    "memory_note",
-    "find",
-    // Decision pages: Caw builds them from his folder's decisions/<name>/page.oui.
-    ...ARTIFACT_TOOLS,
-    ...ROUTINE,
-    ...INGRESS,
-    ...ACTION,
-    ...RELAY,
-    "delegate",
-    "delegate_list",
-    "list_delegate_types",
-    "list_sessions",
-    "stop_delegate",
-    "interrupt_delegate",
-    "answer_delegate",
-    "discard_workspace",
   ]),
   overseer: new Set([...TRIAGE_TOOLS, "task_read", "list_sessions"]),
   "web-facing": new Set([
@@ -280,9 +214,15 @@ export interface Scoped {
   readonly row: InstanceRow;
 }
 
-/** Whether a session in `role` lists `name` by its role alone. */
-const listed = (role: SessionRole, name: string): boolean =>
-  role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
+/** Whether a session in `role` lists `name` by its role alone: the lead's are the worker's and its project's threads. */
+const listed = (role: SessionRole, name: string): boolean => {
+  if (role === "lead") {
+    return THREADS.has(name) || !NOT_THE_WORKERS.has(name);
+  }
+  return role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
+};
+
+const THREADS: ReadonlySet<string> = new Set(THREAD_TOOLS);
 
 /** Whether `role`'s toolset is a closed list, which a project's tools follow too. */
 const closed = (role: SessionRole): boolean =>
@@ -314,14 +254,14 @@ export const memoryRoleOf = (row: InstanceRow): MemoryRole =>
 
 /**
  * Which of a granted connection's tools (connections.ts) a role gets: a
- * worker or a delegate every one; a web-facing session only those the server
- * marks read-only, since it has no posting tools; Caw and fleet-watch triage
- * none, their toolsets being the board's and the fleet's.
+ * worker, Caw or a delegate every one; a web-facing session only those the
+ * server marks read-only, since it has no posting tools; fleet-watch triage
+ * none, its toolset being the fleet's.
  */
 export const connectionToolsFor = (
   role: SessionRole
 ): "all" | "read-only" | "none" => {
-  if (role === "worker" || role === "delegate") {
+  if (role === "worker" || role === "lead" || role === "delegate") {
     return "all";
   }
   return role === "web-facing" ? "read-only" : "none";
@@ -336,8 +276,6 @@ export const refusal = ({ row }: Scoped, name: string): string => {
       : `${name} is a project's own tool, and this session is in no project.`;
   }
   switch (role) {
-    case "lead":
-      return `${name} isn't available to Caw: the lead works through the board, threads, delegates and his own shell in his place, with no fleet-settings tools. Delegate the work instead.`;
     case "web-facing":
       return `${name} isn't available here: this session reads the outside world, so it has no posting, spawning or admin tools. Say what should happen in finish_item or with handoff.`;
     case "overseer":
@@ -347,6 +285,7 @@ export const refusal = ({ row }: Scoped, name: string): string => {
     case "curator":
       return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
     case "worker":
+    case "lead":
       break;
   }
   if (TRIAGE_TOOLS.includes(name as (typeof TRIAGE_TOOLS)[number])) {

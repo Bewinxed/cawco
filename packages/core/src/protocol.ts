@@ -192,14 +192,6 @@ export interface SpawnPayload {
   /** The in-flight maintenance send a surviving Claude process is answering. */
   keepAliveTurn?: string;
   /**
-   * This spawn is a project's Caw (a `lead` row): the machine puts each of
-   * his shell and edit calls to the hub as a permission ask
-   * (`LEAD_GATED_TOOLS`), whatever his mode, and answers none of them
-   * itself; the hub's gate decides each (hub lead-gate.ts). Set by the hub
-   * alone, on every launch of a lead row, and never taken from a caller.
-   */
-  lead?: true;
-  /**
    * Which model answers, from the session's first turn. Hoisted for the same
    * reason as `permissionMode`. Absent leaves the choice to the harness.
    */

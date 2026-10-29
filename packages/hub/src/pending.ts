@@ -23,10 +23,9 @@ import { parkedToolAsk } from "./parked-ask";
 export interface PendingShape {
   /**
    * A relaunch or a death answers every question its process had open; a
-   * held post stays ({@link outlivesSession}). `cut`: what ended the
-   * process, as each ask's {@link Settlement.cut} says it.
+   * held post stays ({@link outlivesSession}).
    */
-  readonly forget: (instanceId: string, cut: string) => void;
+  readonly forget: (instanceId: string) => void;
   /** The parked ask itself, for whoever answers it away from a dashboard. */
   readonly get: (requestId: string) => Envelope | undefined;
   readonly list: () => Envelope[];
@@ -64,13 +63,6 @@ export interface PendingShape {
 interface Settlement {
   /** An answered ask: what won and where it came from. */
   answer?: AskAnswer;
-  /**
-   * An ask that left unanswered because the process that raised it ended:
-   * what ended it ("its session restarted"). Said on the ask's own record
-   * (lead-gate.ts `cut`), not as `why`, which every screen reads as an ask
-   * it was never shown.
-   */
-  cut?: string;
   /**
    * A cancellation the hub can explain: an ask it could not show anyone
    * (`askRefusal` in server.ts).
@@ -252,10 +244,10 @@ const make = (db: DbShape): PendingShape => {
     },
     get: (requestId) => requests.get(requestId),
     resolve,
-    forget: (instanceId, cut) => {
+    forget: (instanceId) => {
       for (const [requestId, envelope] of requests) {
         if (envelope.instanceId === instanceId && !outlivesSession(envelope)) {
-          resolve(requestId, "cancelled", { cut });
+          resolve(requestId, "cancelled");
         }
       }
     },

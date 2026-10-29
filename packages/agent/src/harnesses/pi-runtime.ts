@@ -21,7 +21,6 @@ import {
   hookToolCall,
   hookToolInputBack,
   INSTALL_SESSION_CREDENTIAL,
-  LEAD_GATED_TOOLS,
   MESSAGES_READ,
   piToolsFor,
   pricedRequest,
@@ -546,8 +545,8 @@ const resultText = (content: readonly { type: string; text?: string }[]) =>
  *   another turn, whose Stop hooks are told `stop_hook_active`, as Claude
  *   Code tells them.
  *
- * It comes before the lead's gate, so a call a hook refuses is never put to
- * the hub.
+ * It comes before the session's gate ({@link PiGate}), so a call a hook
+ * refuses is never put to the hub.
  */
 class FleetHooks {
   readonly #place: HookPlace;
@@ -713,31 +712,9 @@ class FleetHooks {
   }
 }
 
-/** Caw's shell and edit tools on pi, by pi's own names (core `LEAD_GATED_TOOLS`). */
-const LEAD_GATED_ON_PI: ReadonlySet<string> = new Set(LEAD_GATED_TOOLS.pi);
-
 /** Why a gated call did not run when its turn was aborted before the hub answered. */
 const INTERRUPTED =
   "The turn was interrupted before the hub answered this call.";
-
-/**
- * Where a tool CawCo gave the session comes from, as pi's registry keeps it
- * (`ToolInfo.sourceInfo.path`, extensions/types.d.ts): pi's built-ins
- * (`builtin:<name>`), the SDK's custom tools CawCo hands `createAgentSession`
- * (`<sdk:<name>>`), and CawCo's inline extensions (`<inline:<n>>`,
- * resource-loader.js `loadExtensionFactories`). A tool any of the person's
- * own extensions registers carries its file's path; one that takes a
- * built-in's name takes its place in the registry, path and all
- * (agent-session.js `_refreshToolRegistry`).
- */
-const CAWCO_TOOL_SOURCE = /^(?:builtin:|<sdk:|<inline:)/u;
-
-/** Whether the tool `name` stands in pi's registry as one CawCo gave the session ({@link CAWCO_TOOL_SOURCE}); a name pi does not hold is not. */
-const cawcosTool = (pi: ExtensionAPI, name: string): boolean => {
-  const path = pi.getAllTools().find((tool) => tool.name === name)
-    ?.sourceInfo.path;
-  return path !== undefined && CAWCO_TOOL_SOURCE.test(path);
-};
 
 /**
  * A fenced session's extensions (`SpawnPayload.fence`: a fleet-watch triage
@@ -768,13 +745,7 @@ const cawcosExtensionsAlone = (
  * turn-provenance.ts, the flag the hub last told its machine, read on every
  * call since "Tool calls from one assistant message can run in parallel",
  * pi docs extensions.md) each shell and edit call is put to the person as a
- * permission ask before it runs, saying why.
- *
- * A project's Caw on pi (`SpawnPayload.lead`): each call of his shell and
- * edit tools is put to the hub as a permission ask before it runs, and runs
- * only once the hub's gate allows it (hub lead-gate.ts), as Claude Code's
- * `ask` rules and OpenCode's put his calls there; his gate reads the same
- * turn provenance. pi's own point for it:
+ * permission ask before it runs, saying why. pi's own point for it:
  * "`tool_call` can mutate input or block execution" (pi docs
  * extensions.md); pi awaits each handler before the call runs
  * (agent-session.js `_beforeToolCall`), a script's calls included ("Nested
@@ -785,18 +756,9 @@ const cawcosExtensionsAlone = (
  * input after the hub judged it ("Later `tool_call` handlers see earlier
  * mutations", types.d.ts `ToolCallEvent`; inline extensions load after the
  * person's own, resource-loader.js `loadFinalExtensionSet`).
- *
- * A tool the person's own pi extensions registered (or put in place of a
- * built-in) is put to the hub too, whatever its name: his extensions keep
- * working, each call of theirs decided by the gate (lead-gate.ts `isGated`,
- * your card). CawCo's own tools run as on every harness: its board tools,
- * pi's readers, and the MCP servers' tools, which Caw has as any session
- * does ({@link cawcosTool}).
  */
 class PiGate {
   readonly #ctx: HarnessContext;
-  /** A project's Caw: his shell and edit calls, and his own extensions' tools, are all the hub's gate's. */
-  readonly #lead: boolean;
   /** The asks the hub has not answered, by request: each with its call's answer. */
   readonly #waiting = new Map<
     string,
@@ -806,27 +768,23 @@ class PiGate {
     }
   >();
 
-  constructor(ctx: HarnessContext, lead: boolean) {
+  constructor(ctx: HarnessContext) {
     this.#ctx = ctx;
-    this.#lead = lead;
   }
 
   /** The inline extension: every gated call waits on the hub. */
   extension(): ExtensionFactory {
     return (pi) => {
       pi.on("tool_call", (event, context) =>
-        this.#gated(pi, event.toolName)
+        this.#gated(event.toolName)
           ? this.#put(event, context.signal)
           : undefined
       );
     };
   }
 
-  /** Whether a call of `tool` is put to the hub: a lead's gated or foreign tool, or any session's shell or edit in an outside turn. */
-  #gated(pi: ExtensionAPI, tool: string): boolean {
-    if (this.#lead) {
-      return LEAD_GATED_ON_PI.has(tool) || !cawcosTool(pi, tool);
-    }
+  /** Whether a call of `tool` is put to the hub: a shell or edit call in an outside turn. */
+  #gated(tool: string): boolean {
     return (
       turnCall(this.#ctx.outside?.() ?? null, undefined, provenanceKindOf(tool))
         .kind === "ask"
@@ -964,7 +922,7 @@ class PiSession implements HarnessSession {
   readonly #runtime: ModelRuntime;
   /** Its shell commands, which a send moves to the background. */
   readonly #shells: PiShells;
-  /** A project's Caw's gate: his shell and edit calls, each put to the hub. */
+  /** Its per-call gate: a shell or edit call in an outside turn, put to the hub. */
   readonly #gate: PiGate;
   readonly #unread: string[] = [];
   #reading: string | undefined;
@@ -1644,7 +1602,7 @@ export async function startPiHost(
         ),
       ]
     : [];
-  const gate = new PiGate(ctx, spec.lead === true);
+  const gate = new PiGate(ctx);
   // The fleet's hooks, and its folder's project's (`FleetHooks`); a fenced
   // session runs none, as it takes no fleet MCP server.
   const hooks = fenced
@@ -1701,7 +1659,7 @@ export async function startPiHost(
     sessionManager: await sessionManagerFor(spec, ctx.cwd),
     settingsManager,
     resourceLoader,
-    // Its denied tools (its delegate type's, a lead's), by pi's own names:
+    // Its denied tools (its delegate type's), by pi's own names:
     // "Whether `--tools` and `--exclude-tools` keep the tool registered"
     // (agent-session.js `_isAllowedTool`), so an excluded tool is in no list
     // the model reads, and nothing can activate or call it.

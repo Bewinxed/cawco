@@ -68,6 +68,7 @@ import {
   type DispatchView,
   dispatchProblem,
 } from "./dispatch";
+import { boardTitle } from "./labels";
 import { type McpTool, sentence, tool } from "./mcp-tool";
 import { type ProjectEdit, projectName } from "./project-edit";
 import type { RepoPublish } from "./repo-publish";
@@ -646,7 +647,7 @@ export const createProjectSettings = ({
     if (!asking) {
       const said = await apply(project, changes);
       note(actor, {
-        title: "Caw changed this project's settings",
+        title: `${boardTitle(actor)} changed this project's settings`,
         body: noteBody(said, changes, reason),
         event: {
           kind: "project",

@@ -8,7 +8,7 @@
  * `turnProvenance`). Each harness's per-call permission point reads that
  * there, on every call: Claude Code's `PreToolUse`, OpenCode's
  * `permission.asked`, pi's `tool_call`. A project's Caw is judged by the same
- * turn: his gate reads {@link TurnProvenance.outside} (lead-gate.ts).
+ * turn, as any session's.
  *
  * Who a send is from ({@link sendFrom}): its principal's word is the person's
  * own act (core `byPerson`, but GitHub's answer to a post, which carries
