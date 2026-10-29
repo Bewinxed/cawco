@@ -180,7 +180,13 @@ export { default as IconListRows } from "~icons/solar/list-bold-duotone";
 export { default as IconListCheck } from "~icons/solar/list-check-bold-duotone";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
-export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
+/** A design graph clip that brings its element in. */
+export { default as IconClipEnter } from "~icons/solar/login-2-bold-duotone";
+/** A design graph clip that takes its element away. */
+export {
+  default as IconLogout,
+  default as IconClipExit,
+} from "~icons/solar/logout-2-bold-duotone";
 export { default as IconSparkles } from "~icons/solar/magic-stick-3-bold-duotone";
 export {
   default as IconSearch,
@@ -191,6 +197,7 @@ export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
+export { default as IconZoomOut } from "~icons/solar/minimalistic-magnifer-zoom-out-bold-duotone";
 export { default as IconMinimize } from "~icons/solar/minimize-bold-duotone";
 /**
  * Minus, Solar's bare linear cut: a checkbox's mixed state, zoom out, and the
@@ -244,14 +251,18 @@ export {
   default as IconRenew,
   default as IconWorking,
 } from "~icons/solar/refresh-bold-duotone";
+/** Loop: the design graph's dock plays its move again and again. */
+export { default as IconRepeat } from "~icons/solar/repeat-bold-duotone";
 /** Reopen a resolved pin. */
 export { default as IconReopen } from "~icons/solar/restart-bold-duotone";
+export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";
 /*
  * The marks a folder can be given by hand (see `FOLDER_MARKS` in
  * lib/cawco/folder-prefs.svelte.ts), picked to span the kinds of work a
  * directory holds rather than to be a complete icon set.
  */
-export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";
+/** A design graph clip that changes its element where it stands. */
+export { default as IconClipChange } from "~icons/solar/round-transfer-horizontal-bold-duotone";
 /** Hooks: a lifecycle event branching into what runs. */
 export { default as IconHook } from "~icons/solar/routing-2-bold-duotone";
 /** A design system: the project's look, written down (StarterCards' `system`). */

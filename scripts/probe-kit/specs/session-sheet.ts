@@ -940,19 +940,8 @@ async function describedOf(page: Page) {
   )?.contentFrame();
   const inner = frame
     ? await frame.evaluate((name) => {
-        // The chrome's shadow root has no innerText: its drawn text nodes, so
-        // the band's name, hidden in a frame (chrome.ts), counts none.
-        const root = document.getElementById("cawco-chrome")?.shadowRoot;
-        const shown: string[] = [];
-        if (root) {
-          const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-          for (let node = walk.nextNode(); node; node = walk.nextNode()) {
-            if (node.parentElement?.checkVisibility()) {
-              shown.push(node.textContent ?? "");
-            }
-          }
-        }
-        const text = `${document.body.innerText}\n${shown.join("\n")}`;
+        // What the canvas page draws in words: its sections and frames, never the canvas's name.
+        const text = document.body.innerText;
         return {
           names: text.split(name).length - 1,
           route: text.includes("/@cawco/"),

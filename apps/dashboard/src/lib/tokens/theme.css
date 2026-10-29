@@ -267,6 +267,14 @@
   --color-tab-shade: var(--tab-shade);
   --color-tab-shade-chosen: var(--tab-shade-chosen);
   --color-night-ring: var(--night-ring);
+  --color-c-graph-slab: var(--c-graph-slab);
+  --color-c-graph-edge-ink: var(--c-graph-edge-ink);
+  --color-c-graph-edge-chosen: var(--c-graph-edge-chosen);
+  --color-c-graph-label-bg: var(--c-graph-label-bg);
+  --color-c-chosen-wash: var(--c-chosen-wash);
+  --color-c-clip-enter: var(--c-clip-enter);
+  --color-c-clip-change: var(--c-clip-change);
+  --color-c-clip-exit: var(--c-clip-exit);
 
   --shadow-surface-shadow-1: var(--surface-shadow-1);
   --shadow-surface-shadow-2: var(--surface-shadow-2);
@@ -326,7 +334,13 @@
   --spacing-c-canvas-skeleton-w: var(--c-canvas-skeleton-w);
   --spacing-c-canvas-skeleton-h: var(--c-canvas-skeleton-h);
   --spacing-c-graph-edge: var(--c-graph-edge);
+  --spacing-c-graph-edge-lit: var(--c-graph-edge-lit);
   --spacing-c-map-node-w: var(--c-map-node-w);
+  --spacing-c-graph-panel-w: var(--c-graph-panel-w);
+  --spacing-c-graph-node-w: var(--c-graph-node-w);
+  --spacing-c-graph-node-min-w: var(--c-graph-node-min-w);
+  --spacing-c-graph-region-band-h: var(--c-graph-region-band-h);
+  --spacing-c-graph-drawer-stop: var(--c-graph-drawer-stop);
   --spacing-c-pin-list-min: var(--c-pin-list-min);
   --spacing-c-pin-list-max: var(--c-pin-list-max);
   --spacing-c-review-words: var(--c-review-words);
@@ -637,6 +651,20 @@
   --spacing-c-draft-line: var(--c-draft-line);
   --spacing-c-skeleton-card-h: var(--c-skeleton-card-h);
   --spacing-c-offer-text-basis: var(--c-offer-text-basis);
+  --spacing-c-edge-head-leg: var(--c-edge-head-leg);
+  --spacing-c-handle-arc-gap: var(--c-handle-arc-gap);
+  --spacing-c-handle-stroke: var(--c-handle-stroke);
+  --spacing-c-handle-stroke-held: var(--c-handle-stroke-held);
+  --spacing-c-handle-reach: var(--c-handle-reach);
+  --spacing-c-handle-band: var(--c-handle-band);
+  --spacing-c-handle-corner: var(--c-handle-corner);
+  --spacing-c-tucked-tab: var(--c-tucked-tab);
+  --spacing-c-curve-editor-w: var(--c-curve-editor-w);
+  --spacing-c-curve-editor-h: var(--c-curve-editor-h);
+  --spacing-c-detent-snap: var(--c-detent-snap);
+  --spacing-c-dock-name-w: var(--c-dock-name-w);
+  --spacing-c-bar-handle-zone: var(--c-bar-handle-zone);
+  --spacing-c-page-h-floor: var(--c-page-h-floor);
 
   --radius-well-r: var(--well-r);
   --radius-row-mark: var(--row-mark-r);

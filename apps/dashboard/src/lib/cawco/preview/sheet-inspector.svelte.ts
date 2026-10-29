@@ -19,14 +19,12 @@ import type {
 import { failureWords } from "#lib/cawco/hub-read.js";
 import type { SheetChange } from "../artifact-api";
 
-/** What the inspector says to the sheet's page. */
-type ToPage =
-  | {
-      args: Record<string, unknown> | null;
-      story: string;
-      type: "cawco:story-args";
-    }
-  | { story: string | null; type: "cawco:story-select" };
+/** What the inspector says to the sheet's page: a story mounted again with the person's args. */
+interface ToPage {
+  args: Record<string, unknown> | null;
+  story: string;
+  type: "cawco:story-args";
+}
 
 /** A story's name the file can take: an identifier starting with a capital (story-file.ts `STORY_NAME`). */
 export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
@@ -67,7 +65,6 @@ export class SheetInspector {
         this.#forget(name);
       }
     }
-    this.#post({ type: "cawco:story-select", story: this.chosen });
     for (const name of names) {
       if (this.dirtyOf(name)) {
         this.#live(name);
@@ -75,10 +72,10 @@ export class SheetInspector {
     }
   }
 
+  /** The story the controls are for: the design graph's kept state's, as it is kept. */
   choose(name: string): void {
     this.chosen = name;
     this.problem = null;
-    this.#post({ type: "cawco:story-select", story: name });
   }
 
   get story(): Story | null {
