@@ -1,7 +1,6 @@
 <script lang="ts" module>
   import type { Pin, PinState } from "@cawco/core/comments";
   import { pinUnsent } from "@cawco/core/comments";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
 
   /** Where pin `pin` stands: hollow while the session hasn't heard it, filled once sent, recessed once resolved. */
   export const markState = (pin: Pin): PinState => {
@@ -30,6 +29,8 @@
 </script>
 
 <script lang="ts">
+  import PinDot from "./PinDot.svelte";
+
   /**
    * A comment's pill as the pane draws it (a rail's row, a thread's head, a
    * peek), the same as the page's (overlay pins.ts): `--c-pin` tall, as wide
@@ -80,26 +81,5 @@
   data-wide={number !== null && number >= 10 ? "" : undefined}
 >
   {#if number !== null}<span data-figure>{number}</span>{/if}
-  {#if dot === "live"}
-    <!-- The live dot, breathing on the one shared breath as every live dot does (the owner's pick: "One breath everywhere"). -->
-    <LiveDot
-      class="absolute -end-space-row -top-space-row"
-      cut
-      data-dot="live"
-      data-live
-    />
-  {:else if dot === "unread"}
-    <span
-      aria-hidden="true"
-      class="absolute -end-space-row -top-space-row size-(--status-dot-size) rounded-pill bg-status-attn-glyph ring-(length:--status-dot-cut) ring-surface-raised"
-      data-dot="unread"
-      data-unread
-    >
-      <!-- The needs-you dot's echo: three loops, then still. -->
-      <span
-        class="absolute inset-0 rounded-pill bg-status-attn-glyph opacity-0 motion-safe:opacity-100 motion-safe:animate-attn-echo"
-        data-echo
-      ></span>
-    </span>
-  {/if}
+  {#if dot}<PinDot {dot} />{/if}
 </span>

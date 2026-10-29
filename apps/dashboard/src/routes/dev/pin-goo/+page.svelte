@@ -43,13 +43,22 @@
   };
 
   /** The controls, at their tokens' values (the goo's blur, its open and its close), joined. */
-  const DEFAULTS = { stickiness: 6, openMs: 350, closeMs: 250, joined: true };
+  const DEFAULTS = {
+    stickiness: 6,
+    openMs: 350,
+    closeMs: 250,
+    joined: true,
+    dot: "live" as "live" | "unread" | "none",
+  };
   let stickiness = $state(DEFAULTS.stickiness);
   let openMs = $state(DEFAULTS.openMs);
   let closeMs = $state(DEFAULTS.closeMs);
   let joined = $state(DEFAULTS.joined);
+  /** The pins' status dot: the agent working, an answer unread, or none. */
+  let dot = $state(DEFAULTS.dot);
+  const dotOf = $derived(dot === "none" ? null : dot);
   const reset = () => {
-    ({ stickiness, openMs, closeMs, joined } = DEFAULTS);
+    ({ stickiness, openMs, closeMs, joined, dot } = DEFAULTS);
   };
 
   let well = $state<HTMLElement>();
@@ -59,8 +68,28 @@
   const targets = $state<Record<string, HTMLElement>>({});
   /** The pills the goo draws as part of its shape: each steps back, its edge and its ring with it. */
   const held = $state<Record<string, boolean>>({});
-  /** The pill with keyboard focus (`:focus-visible`), by its pin. */
+  /**
+   * The pill with keyboard focus, by its pin: the one source of its focus
+   * ring. Set by a navigation key alone, never a modifier (Chromium matches
+   * `:focus-visible` on a pressed pill once any key, Shift included, goes
+   * down), and cleared by a press.
+   */
   let keyed = $state<string | null>(null);
+  /** The keys that move or act by keyboard: they make focus visible. */
+  const NAVIGATION = new Set([
+    "Tab",
+    "Enter",
+    " ",
+    "Escape",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "Home",
+    "End",
+  ]);
+  /** The last input moved by keyboard: a pill focused now shows its ring. */
+  let byKeys = false;
   /** Each pill and what it stands on, in the well, px; its mark null while it is out of view. */
   let at = $state<Record<string, { box: Box; mark: Box | null }>>({});
   const inWell = (rect: DOMRect, frame: DOMRect): Box => ({
@@ -126,15 +155,23 @@
 
 <svelte:window
   onkeydown={(event) => {
+    if (NAVIGATION.has(event.key)) {
+      byKeys = true;
+    }
     if (event.key === "Escape" && open) {
       open = null;
     }
+  }}
+  onpointerdown={() => {
+    byKeys = false;
+    keyed = null;
   }}
 />
 
 {#snippet pillOf(pin: Pin)}
   <PinMark
-    focused={open === pin.id}
+    dot={dotOf}
+    focused={keyed === pin.id}
     number={pin.number}
     state={markState(pin)}
     tail="bottom-start"
@@ -147,22 +184,20 @@
     aria-expanded={open === pin.id}
     aria-label="Comment {pin.number}"
     bind:this={pills[pin.id]}
-    class={[
-      "absolute start-(--at-x) top-(--at-y) z-1 flex -translate-y-full border-none bg-transparent p-0 rounded-full",
-      !held[pin.id] &&
-        "focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring",
-    ]}
+    class="absolute start-(--at-x) top-(--at-y) z-1 flex -translate-y-full border-none bg-transparent p-0 rounded-full outline-hidden"
     data-slot="page-pill"
     onblur={() => {
       keyed = null;
     }}
     onclick={() => press(pin.id)}
-    onfocus={(event) => {
-      keyed = event.currentTarget.matches(":focus-visible") ? pin.id : null;
+    onfocus={() => {
+      keyed = byKeys ? pin.id : null;
     }}
-    onkeyup={(event) => {
-      // A key on a pill focused by a press makes its focus visible.
-      keyed = event.currentTarget.matches(":focus-visible") ? pin.id : null;
+    onkeydown={(event) => {
+      // A navigation key on a pill focused by a press makes its focus visible; a modifier alone never does.
+      if (NAVIGATION.has(event.key)) {
+        keyed = pin.id;
+      }
     }}
     style:--at-x={pin.number === 1 ? "70%" : "var(--space-5)"}
     style:--at-y={pin.number === 1 ? "50%" : "var(--space-4)"}
@@ -228,6 +263,14 @@
         type="checkbox"
       />
       <span>Stay joined</span>
+    </label>
+    <label class="flex items-center gap-space-2">
+      <span>Dot</span>
+      <select bind:value={dot} class="type-meta">
+        <option value="live">Working</option>
+        <option value="unread">Unread</option>
+        <option value="none">None</option>
+      </select>
     </label>
     <label class="flex items-center gap-space-2">
       <input
@@ -327,6 +370,7 @@
           {/snippet}
           <PinFloatGoo
             box={where?.box ?? null}
+            dot={dotOf}
             {exit}
             focused={keyed === pin.id}
             {joined}

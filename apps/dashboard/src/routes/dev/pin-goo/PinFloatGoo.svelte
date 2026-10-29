@@ -56,6 +56,7 @@
     numberOf,
   } from "#lib/cawco/motion/curves.svelte.js";
   import type { PopSide } from "#lib/cawco/motion/pop.svelte.js";
+  import PinDot from "#lib/cawco/preview/PinDot.svelte";
   import {
     type Box,
     drawnShift,
@@ -80,9 +81,12 @@
     joined = true,
     stickiness = numberOf("--goo-blur"),
     focused = false,
+    dot = null,
     onhold,
     children,
   }: {
+    /** The pin's status dot, which its joined face keeps by its figure as its mark does. */
+    dot?: "live" | "unread" | null;
     /** The pin has keyboard focus: while the goo holds it, the one ring runs round the whole shape. */
     focused?: boolean;
     /** Whether the goo draws the pin itself (pouring, draining, or joined): the page's own pill, its edge and its ring step back while it does. */
@@ -464,24 +468,37 @@
     neck: Neck,
     open: boolean,
     timing: { duration: number; easing: string; fill?: FillMode }
-  ) {
+  ): Animation[] {
     if (!neckBlob) {
-      return;
+      return [];
+    }
+    // A join or a parting caught mid-run turns from where it is drawn.
+    for (const one of [neckBlob, markFace, joinedFace]) {
+      for (const anim of one?.getAnimations() ?? []) {
+        anim.commitStyles?.();
+        anim.cancel();
+      }
     }
     neckBlob.setAttribute("d", neck.d);
     neckBlob.style.setProperty("--neck-origin", neck.origin);
     neckBlob.classList.remove("hidden");
     const at = [{ transform: neck.bead }, { transform: "none" }];
-    neckBlob.animate(open ? at : at.reverse(), timing);
     const own = open ? [1, 0] : [0, 1];
-    markFace?.animate(
-      own.map((opacity) => ({ opacity })),
-      timing
-    );
-    joinedFace?.animate(
-      own.map((opacity) => ({ opacity: 1 - opacity })),
-      timing
-    );
+    return [
+      neckBlob.animate(open ? at : at.reverse(), timing),
+      ...[markFace, joinedFace].flatMap((face, i) =>
+        face
+          ? [
+              face.animate(
+                own.map((opacity) => ({
+                  opacity: i === 0 ? opacity : 1 - opacity,
+                })),
+                timing
+              ),
+            ]
+          : []
+      ),
+    ];
   }
 
   $effect(() => {
@@ -499,22 +516,39 @@
    * page scrolls under a still card; null when the card stands apart (not
    * joined, its pill out of view, or too far from it to hold a neck).
    */
+  /** The pill where it stands now, in the card's own coordinates; null while it is out of view. */
+  const pinHere = $derived(
+    mark
+      ? {
+          x: mark.x - place.left,
+          y: mark.y - place.top,
+          w: mark.w,
+          h: mark.h,
+        }
+      : null
+  );
   const joint = $derived.by(() => {
-    if (!(joined && mark)) {
+    if (!(joined && pinHere)) {
       return null;
     }
-    const p = {
-      x: mark.x - place.left,
-      y: mark.y - place.top,
-      w: mark.w,
-      h: mark.h,
-    };
-    const neck = neckOf(p);
-    return neck ? { pin: pillShape(p), neck } : null;
+    const neck = neckOf(pinHere);
+    return neck ? { pin: pillShape(pinHere), neck } : null;
   });
+  /**
+   * The neck as it lets go, the pin having left its reach: it goes back
+   * into its bead where they parted, on the drain's curve, while the pin
+   * goes on with the page and takes its own face back.
+   */
+  let parting = $state<Neck | null>(null);
+  /** The neck as drawn: joined, or letting go. */
+  const shownNeck = $derived(joint?.neck ?? parting);
 
-  /** The pill in the goo and its faces, where it stands: joined at rest, or where a pour started. */
-  const pillAt = $derived(joint?.pin ?? (pouring ? runPill : null));
+  /** The pill in the goo and its faces, where it stands: joined at rest, letting go, or where a pour started. */
+  const pillAt = $derived(
+    joint?.pin ??
+      (parting && pinHere ? pillShape(pinHere) : null) ??
+      (pouring ? runPill : null)
+  );
 
   /** A pour that grows a neck: the pin is part of the shape from its first frame. */
   let pourJoins = $state(false);
@@ -523,7 +557,9 @@
    * neck. Then the shape's edge, shadow and focus ring are the only ones;
    * the pin's own (and the page's pill under it) step back.
    */
-  const merged = $derived(pouring ? pourJoins : joint !== null);
+  const merged = $derived(
+    pouring ? pourJoins : joint !== null || parting !== null
+  );
   $effect(() => {
     onhold?.(merged);
   });
@@ -532,21 +568,45 @@
 
   // A neck that joins again at rest (after a travel, or the pin coming back
   // beside it) grows out of the pin as a bead, over --dur-morph on
-  // --ease-out, never appearing whole.
-  let neckWas = false;
+  // --ease-out, never appearing whole. One that loses its pin (gone past
+  // the card's edge, or out of view) lets go the way a drain does: back
+  // into its bead over --dur-goo-exit on --ease-out, the pin's own face
+  // returning in step.
+  let neckWas: Neck | null = null;
   $effect(() => {
-    const now = joint;
-    if (pouring) {
-      neckWas = !!now;
+    const now = joint?.neck ?? null;
+    const was = neckWas;
+    neckWas = now;
+    if (now) {
+      parting = null;
+    }
+    if (pouring || !(motionOk.current && untrack(() => opened))) {
       return;
     }
-    if (now && !neckWas && motionOk.current && untrack(() => opened)) {
-      grow(now.neck, true, {
+    if (now && !was) {
+      grow(now, true, {
         duration: dur("--dur-morph"),
         easing: ease("--ease-out"),
       });
+    } else if (was && !now) {
+      parting = was;
+      const runs = grow(was, false, {
+        duration: knob("--dur-goo-exit"),
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+      runs[0]?.finished.then(
+        () => {
+          if (parting === was) {
+            parting = null;
+          }
+          for (const anim of runs) {
+            anim.cancel();
+          }
+        },
+        () => undefined
+      );
     }
-    neckWas = !!now;
   });
 
   /** The filter's region: the card and, where it holds one, the pill, with room for the blur and the shadow. */
@@ -561,9 +621,9 @@
   }
   $effect(() => {
     // The region follows the card's size and its joined pin at rest.
-    const joinedPin = joint?.pin ?? null;
+    const heldPin = pillAt;
     if (placed.width + placed.height >= 0 && !pouring) {
-      region(joinedPin, stickiness);
+      region(heldPin, stickiness);
     }
   });
 
@@ -807,10 +867,10 @@
         bind:this={neckBlob}
         class={[
           "fill-surface-raised origin-(--neck-origin)",
-          !joint && "hidden",
+          !shownNeck && "hidden",
         ]}
-        d={joint?.neck.d ?? ""}
-        style:--neck-origin={joint?.neck.origin}
+        d={shownNeck?.d ?? ""}
+        style:--neck-origin={shownNeck?.origin}
       />
       <rect
         bind:this={cardBlob}
@@ -840,17 +900,19 @@
     <div bind:this={pinShift} class="relative flex">
       <div
         bind:this={markFace}
-        class={["flex", joint && !pouring && "opacity-0"]}
+        class={["flex", shownNeck && !pouring && "opacity-0"]}
       >
         {@render pill?.()}
       </div>
+      <!-- mark-line: the dot stands on the pin's top-end corner, absolutely, not beside its figure -->
       <span
         bind:this={joinedFace}
         class={[
           "absolute inset-0 flex items-center justify-center type-caps num leading-none text-action-solid",
-          !joint && "opacity-0",
+          !shownNeck && "opacity-0",
         ]}
-        data-slot="pin-joined-face">{pin}</span
+        data-slot="pin-joined-face"
+        ><span data-figure>{pin}</span>{#if dot}<PinDot {dot} />{/if}</span
       >
     </div>
   </div>
