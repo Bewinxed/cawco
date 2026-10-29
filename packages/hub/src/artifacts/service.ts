@@ -45,15 +45,15 @@ import {
   machineLabel,
   noteText,
   PICTURE_VIEW,
-  type PlanStep,
+  type PlanWaits,
   type PreviewAddress,
   type PreviewSource,
   pinLink,
+  planWaitsOnArtifact,
   type SendAttachment,
   type SettledBy,
   type ShownFailure,
   sessionLink,
-  stepWaitsOnArtifact,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -1498,7 +1498,7 @@ export interface ArtifactServiceDeps {
    * a one-time entry and a pass of the session's own in host mode.
    */
   browse: (instance: InstanceRow, row: ArtifactRow) => Browsed;
-  /** Nothing on the artifact waits on the person: no step of the session waits on it whole (plans.ts `clearArtifactWait`). */
+  /** Nothing on the artifact waits on the person: the session's plan waits on it whole no more (plans.ts `clearArtifactWait`). */
   clearArtifactWait: (instanceId: string, artifactId: string) => void;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => void;
@@ -1789,8 +1789,6 @@ export interface ArtifactServiceDeps {
    * Throws an {@link ArtifactRefusal} saying why it can't.
    */
   stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
-  /** The session's plan steps: what a wait on its artifacts stands on (plans.ts `steps`). */
-  steps: (instanceId: string) => PlanStep[];
   /**
    * Whether a session can no longer act, ever: no one, its parent and the
    * person included, can give it a turn again. Its item ended and its
@@ -1823,6 +1821,8 @@ export interface ArtifactServiceDeps {
   verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
   /** The session's current step waits on the artifact; the step that does, or null (plans.ts `waitOn`). */
   waitOn: (instanceId: string, artifactId: string) => string | null;
+  /** The session's plan's page waits and steps: what a wait on its artifacts stands on (plans.ts `waits`). */
+  waits: (instanceId: string) => PlanWaits;
   /**
    * One stage warmed for a decision page as it goes out (agent stage.ts
    * `warmStage`): started or woken there and every canvas of `warm` compiled
@@ -6028,7 +6028,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ended: !owner || deps.finished(owner),
       harness: owner?.harness ?? null,
       machineId: owner?.machineId ?? null,
-      steps: writer ? deps.steps(writer) : [],
+      waits: writer ? deps.waits(writer) : { pageWaits: [], steps: [] },
     };
   };
 
@@ -6063,7 +6063,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const sessions = sessionsOf(row, kept);
     return !(
-      sessions.ended || movedOn(row.id, askOf(row, kept), sessions.steps)
+      sessions.ended || movedOn(row.id, askOf(row, kept), sessions.waits)
     );
   };
 
@@ -6398,7 +6398,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * Session `instanceId`'s turn ended at `endedAt`, the one before it at
      * `before` (server.ts, at every result, on every harness). Each ask it
-     * made before this turn began, still asked, with no step of its plan
+     * made before this turn began, still asked, with nothing of its plan
      * waiting on it, is one it moved on from (needs.ts rule 2): this turn
      * was its next.
      */
@@ -6411,7 +6411,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return;
       }
       const from = before.toISOString();
-      const steps = deps.steps(instanceId);
+      const waits = deps.waits(instanceId);
       let moved = false;
       for (const row of db.asking()) {
         const facts = factsOf(row);
@@ -6421,8 +6421,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           asked.by !== instanceId ||
           asked.movedAt ||
           asked.at >= from ||
-          movedOn(row.id, asked, steps) ||
-          steps.some((step) => stepWaitsOnArtifact(step, row.id)) ||
+          movedOn(row.id, asked, waits) ||
+          planWaitsOnArtifact(waits, row.id) ||
           !pendingFor(row)
         ) {
           continue;

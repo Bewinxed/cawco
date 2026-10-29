@@ -171,12 +171,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    a comment carried from GitHub or Linear names its source in `via`. A
  *    page built for 33 reads an `issue` the hub no longer sends, so it
  *    reloads first.
+ * 35: a page a session asked the person on is its plan's wait, not a
+ *    step's: a plan carries `needs` (the pages no open step names) and
+ *    `orphanedComments`, and a step no longer carries `waitsOnPage`. A page
+ *    built for 34 reads a `waitsOnPage` the hub no longer sends, so it
+ *    reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 34;
+export const WIRE_PROTOCOL = 35;
 
 /**
  * What a session's stream carries: the changes each frame made to its

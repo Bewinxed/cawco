@@ -29,11 +29,14 @@
  * How it leaves, by rule:
  * 1. Answered: its reasons go as they are answered, a partial answer
  *    leaving the rest.
- * 2. The writer moved on: the plan step the hub set waiting on it
- *    ({@link ArtifactAsked.step}) ticked or removed, or with no step waiting
- *    on it, the writer's next turn ended ({@link ArtifactAsked.movedAt}),
- *    with no new show of it. That retires its ask (not opened, picks), never
- *    the person's own unsent picks or an answer he hasn't read.
+ * 2. The writer moved on: with its plan not waiting on it (core plan.ts
+ *    `planWaitsOnArtifact`: no page wait the hub set
+ *    ({@link ArtifactAsked.step}) and no open step naming a card or pin of
+ *    it), the writer's next turn ended ({@link ArtifactAsked.movedAt}), with
+ *    no new show of it. A page wait stands until the page is answered or
+ *    deleted, whatever the plan's steps are rewritten to. That retires its
+ *    ask (not opened, picks), never the person's own unsent picks or an
+ *    answer he hasn't read.
  * 3. Superseded: a revision, or a same-name create, is the same artifact:
  *    its item changes in place.
  * 4. Its session ended: it leaves Needs you and is one notice, "<harness>
@@ -54,17 +57,18 @@ import {
   artifactStopHref,
   type HarnessKind,
   notNowId,
-  type PlanStep,
-  stepWaitsOnArtifact,
+  type PlanWaits,
+  planWaitsOnArtifact,
 } from "@cawco/core";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactRow } from "../db/artifacts";
 
 /**
  * The artifact's latest ask, kept in its doc (`meta.asked`): the session
- * whose tool call made it (create, update, revise, show), when, the plan
- * step the hub set waiting on it, and when the writer's next turn ended
- * with no step waiting on it and no new show.
+ * whose tool call made it (create, update, revise, show), when, the step
+ * in progress when the hub set its plan waiting on the page (`step`: set
+ * means the plan waited on it), and when the writer's next turn ended with
+ * its plan not waiting on it and no new show.
  */
 export interface ArtifactAsked {
   at: string;
@@ -112,8 +116,8 @@ export interface ArtifactSessions {
   harness: HarnessKind | null;
   /** The holder's machine; null when the hub holds no session. */
   machineId: string | null;
-  /** The writer's plan: the steps a wait on it stands on. */
-  steps: PlanStep[];
+  /** The writer's plan: the page waits and steps a wait on it stands on. */
+  waits: PlanWaits;
 }
 
 const ms = (iso: string | null | undefined): number => {
@@ -168,19 +172,19 @@ export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
         row.openedRevision < row.revision)));
 
 /**
- * Rule 2: the writer moved on. A step of its plan waiting on the artifact
- * holds the ask; the step the hub set ticked, removed or no longer waiting
- * lets it go, and so does the writer's next turn ending with none waiting.
+ * Rule 2: the writer moved on. Its plan waiting on the artifact holds the
+ * ask; the page wait the hub set gone (answered or deleted) lets it go, and
+ * so does the writer's next turn ending with nothing of its plan waiting.
  */
 export const movedOn = (
   id: string,
   asked: ArtifactAsked | null,
-  steps: readonly PlanStep[]
+  waits: PlanWaits
 ): boolean => {
   if (!asked) {
     return false;
   }
-  if (steps.some((step) => stepWaitsOnArtifact(step, id))) {
+  if (planWaitsOnArtifact(waits, id)) {
     return false;
   }
   return asked.step !== undefined || asked.movedAt !== undefined;
@@ -194,11 +198,11 @@ export const movedOn = (
 const reasonsOf = (
   row: ArtifactRow,
   facts: ArtifactFacts,
-  steps: readonly PlanStep[]
+  waits: PlanWaits
 ): ArtifactReason[] => {
   const reasons: ArtifactReason[] = [];
   if (asks(row, facts)) {
-    const retired = movedOn(row.id, facts.asked, steps);
+    const retired = movedOn(row.id, facts.asked, waits);
     if (!retired && unjudged(row)) {
       reasons.push({ kind: "unopened" });
     }
@@ -253,7 +257,7 @@ export const pendingOf = (
   facts: ArtifactFacts,
   sessions: ArtifactSessions
 ): ArtifactPending | null => {
-  const pending = reasonsOf(row, facts, sessions.steps);
+  const pending = reasonsOf(row, facts, sessions.waits);
   return pending.length > 0
     ? { pending, raisedAt: raisedAtOf(row, facts) }
     : null;
@@ -268,7 +272,7 @@ export const needOf = (
   if (row.instanceId === null || sessions.ended || !sessions.machineId) {
     return null;
   }
-  const pending = reasonsOf(row, facts, sessions.steps);
+  const pending = reasonsOf(row, facts, sessions.waits);
   if (pending.length === 0) {
     return null;
   }
@@ -308,7 +312,7 @@ export const noticeOf = (
   ) {
     return null;
   }
-  const reasons = reasonsOf(row, facts, sessions.steps);
+  const reasons = reasonsOf(row, facts, sessions.waits);
   const parts: ArtifactNeedNoticePart[] = [];
   let at = 0;
   const ended = row.instanceId === null || sessions.ended;

@@ -324,7 +324,7 @@ import {
   PLAN_ORIGIN,
   type PlacementPreview,
   type PlacementStrategy,
-  type PlanStep,
+  type PlanWaits,
   PREVIEW_FOLDERS,
   PREVIEW_START,
   PREVIEW_STOP,
@@ -380,6 +380,7 @@ import {
   sameIdentity,
   sessionLink,
   startRefused,
+  stepNamesArtifact,
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
@@ -9588,26 +9589,40 @@ export const createServer = (
   };
 
   /**
-   * What waits on the person, read from the plan as it stands: each open
-   * step waiting on a page, with the page by its chip, never a copy of the
-   * page's state.
+   * What waits on the person, read from the plan as it stands: each page an
+   * open step's `waitsOn` names, on that step, then each page the plan waits
+   * on whole that no step names, on the plan; each page by its chip, never a
+   * copy of its state.
    */
-  const waitingOn = (session: string, steps: readonly PlanStep[]): AwayWait[] =>
-    steps.flatMap((step) => {
+  const waitingOn = (
+    session: string,
+    plan: PlanWaits | undefined
+  ): AwayWait[] => {
+    const steps = plan?.steps ?? [];
+    const onSteps = steps.flatMap((step) => {
       const pageId =
-        step.waitsOnPage ?? (step.waitsOn && waitArtifact(step.waitsOn));
+        step.status === "completed" || !step.waitsOn
+          ? undefined
+          : waitArtifact(step.waitsOn);
       const page = pageId ? db.artifacts.get(pageId) : undefined;
-      return page && step.status !== "completed"
+      return page
         ? [
             {
               session,
-              step: step.id,
-              content: step.content,
+              step: { id: step.id, content: step.content },
               artifact: { id: page.id, name: page.name },
             },
           ]
         : [];
     });
+    const onPlan = (plan?.pageWaits ?? []).flatMap((pageId) => {
+      const page = db.artifacts.get(pageId);
+      return page && !steps.some((step) => stepNamesArtifact(step, pageId))
+        ? [{ session, artifact: { id: page.id, name: page.name } }]
+        : [];
+    });
+    return [...onSteps, ...onPlan];
+  };
 
   /** HH:MM on the hub's clock, as the presence line and the notes' heading say a time. */
   const clockOf = (at: number): string =>
@@ -9638,7 +9653,7 @@ export const createServer = (
       return { kind: "on" };
     }
     detach(plans.seeAway(instanceId), "away notes recapped are seen");
-    const waiting = waitingOn(instanceId, plan?.steps ?? []);
+    const waiting = waitingOn(instanceId, plan);
     return {
       kind: "on",
       recap: {
@@ -14313,7 +14328,7 @@ export const createServer = (
     looked: (id) => {
       notifications.clear([artifactCollapseId(id)], "look");
     },
-    steps: (instanceId) => plans.steps(instanceId),
+    waits: (instanceId) => plans.waits(instanceId),
     waitOn: (instanceId, artifactId) => plans.waitOn(instanceId, artifactId),
     clearArtifactWait: (instanceId, artifactId) =>
       plans.clearArtifactWait(instanceId, artifactId),

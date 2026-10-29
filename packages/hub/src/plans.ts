@@ -12,10 +12,14 @@
  * to the steps here and kept as a row in their words (`plan_changes`);
  * plan-changes.ts decides who hears it and when. A write of the session's
  * steps names every step's wait whole: a step it gives none waits on
- * nothing. What the hub and the person put on a step (its page wait, their
- * comments) stays with that step alone: the one of the same id and the same
- * words ({@link sameStep}), since an id the session gives no step is only
- * its place. A step's wait is a task's wait (wait-targets.ts): the hub's one
+ * nothing. An id the session gives no step is only its place, so nothing is
+ * kept by id across its writes. A page the session asked the person on is
+ * the plan's wait, not a step's ({@link Plans.waitOn}): it stands while the
+ * page is unanswered and not deleted, whatever the steps become, shown on
+ * the open step whose `waitsOn` names the page, else in the plan's `needs`.
+ * The person's comments stay on the step of the same words, wherever it
+ * stands, else on the plan as orphaned comments ({@link keepComments}).
+ * A step's wait is a task's wait (wait-targets.ts): the hub's one
  * resolver settles it (task-waits.ts `settled`), and a settled wait is
  * dropped; and a write of the session's steps that would undo a change it
  * has not written over since is refused once, naming the change
@@ -31,15 +35,18 @@ import {
   artifactLink,
   awayNotesOf,
   type InstanceRow,
+  type OrphanedComments,
   type PlanChange,
+  type PlanComment,
   type PlanDelta,
   type PlanEdit,
   type PlanReceiver,
   type PlanSnapshot,
   type PlanStep,
+  type PlanWaits,
   type SessionPlan,
   stepLink,
-  stepWaitsOnArtifact,
+  stepNamesArtifact,
   waitArtifact,
   waitTarget,
 } from "@cawco/core";
@@ -58,6 +65,7 @@ export interface PlansDeps {
     | "getInstancesByIds"
     | "planChangesOf"
     | "putAwaySeen"
+    | "putPageWaits"
     | "putPlanChange"
     | "putSessionSpec"
     | "putSessionSteps"
@@ -81,22 +89,47 @@ const CHANGES_SHOWN = 20;
 
 /**
  * A step as the session writes it (`todo_write`): its `waitsOn` the whole of
- * what it waits on, none when left out. Comments are the person's and a page
- * wait the hub's: never written.
+ * what it waits on, none when left out. Comments are the person's: never
+ * written.
  */
-export type WrittenStep = Omit<PlanStep, "comments" | "waitsOnPage">;
+export type WrittenStep = Omit<PlanStep, "comments">;
 
 /**
- * The stored step a written one is: the same id and the same words. An id
- * the session gives no step is its place (task-tools.ts `stepsOf`), so the
- * id alone would hand one step's page wait and comments to whatever step
- * stands in its place after a rewrite.
+ * The person's comments through a write of the session's steps: each old
+ * step's, and each orphaned one's, go to the first new step of the same
+ * words, wherever it stands; those whose words no new step has are the
+ * plan's orphaned comments. Never by id: an id the session gives no step is
+ * its place (task-tools.ts `stepsOf`).
  */
-const sameStep = (
+const keepComments = (
   before: readonly PlanStep[],
-  step: WrittenStep
-): PlanStep | undefined =>
-  before.find((one) => one.id === step.id && one.content === step.content);
+  orphaned: readonly OrphanedComments[],
+  written: readonly WrittenStep[]
+): { orphaned: OrphanedComments[]; steps: PlanStep[] } => {
+  const byWords = new Map<string, PlanComment[]>();
+  for (const { step, comments } of [
+    ...orphaned,
+    ...before.map((one) => ({ step: one.content, comments: one.comments })),
+  ]) {
+    if (comments?.length) {
+      byWords.set(step, [...(byWords.get(step) ?? []), ...comments]);
+    }
+  }
+  const steps = written.map((step): PlanStep => {
+    const comments = byWords.get(step.content);
+    byWords.delete(step.content);
+    return comments
+      ? {
+          ...step,
+          comments: comments.toSorted((a, b) => a.at.localeCompare(b.at)),
+        }
+      : step;
+  });
+  return {
+    steps,
+    orphaned: [...byWords].map(([step, comments]) => ({ step, comments })),
+  };
+};
 
 /** The receiver's key, as `plan_changes.receiver` holds it. */
 export const receiverKey = (to: PlanReceiver): string =>
@@ -240,12 +273,9 @@ export const stepLines = (
     : steps
         .map((step) => {
           const box = BOX[step.status];
-          let wait = "";
-          if (step.waitsOn) {
-            wait = ` (waiting on ${waitWords(db, step.waitsOn)})`;
-          } else if (step.waitsOnPage) {
-            wait = ` (waiting on the person on ${pageNamed(db, step.waitsOnPage)})`;
-          }
+          const wait = step.waitsOn
+            ? ` (waiting on ${waitWords(db, step.waitsOn)})`
+            : "";
           return `${"  ".repeat(step.depth)}- ${box} ${stepLink(session, step.id, step.content)}${wait}`;
         })
         .join("\n");
@@ -487,12 +517,20 @@ export const createPlans = (deps: PlansDeps) => {
         : {};
     const changes = db.planChangesOf(row.id, CHANGES_SHOWN).map(changeOf);
     const away = awayNotesOf(own?.spec ?? undefined);
+    const steps = own?.steps ?? [];
+    const needs = (own?.pageWaits ?? []).filter(
+      (page) => !steps.some((step) => stepNamesArtifact(step, page))
+    );
     return {
       ...(away && away.notes !== own?.awaySeen
         ? { awayUnseen: { since: away.since } }
         : {}),
       source: "cawco",
-      steps: own?.steps ?? [],
+      steps,
+      ...(needs.length > 0 ? { needs } : {}),
+      ...(own?.orphanedComments.length
+        ? { orphanedComments: own.orphanedComments }
+        : {}),
       ...(changes.length > 0 ? { changes } : {}),
       ...(own?.spec && own.specAt
         ? { spec: { markdown: own.spec, at: own.specAt.toISOString() } }
@@ -544,10 +582,20 @@ export const createPlans = (deps: PlansDeps) => {
     }
   };
 
+  /** A page the plan waits on that is deleted waits on no one: it goes. */
+  const dropGonePages = (instanceId: string): void => {
+    const pageWaits = db.sessionPlan(instanceId)?.pageWaits ?? [];
+    const standing = pageWaits.filter((page) => db.artifacts.get(page));
+    if (standing.length < pageWaits.length) {
+      db.putPageWaits(instanceId, standing);
+    }
+  };
+
   const settle = (instanceId: string): Promise<Held> =>
     inTurn(instanceId, async () => {
       const row = rowOf(instanceId);
       await dropSettled(row);
+      dropGonePages(instanceId);
       const plan = await compute(row);
       const before = held.get(instanceId);
       if (!before) {
@@ -571,19 +619,15 @@ export const createPlans = (deps: PlansDeps) => {
       return after;
     });
 
-  /** Each step of the session's plan waiting on page `artifactId` whole stops waiting; its followers hear it. */
-  const dropPageWaits = (instanceId: string, artifactId: string): void => {
-    const own = db.sessionPlan(instanceId);
-    if (!own?.steps.some((step) => step.waitsOnPage === artifactId)) {
+  /** The session's plan stops waiting on page `artifactId` whole; its followers hear it. */
+  const dropPageWait = (instanceId: string, artifactId: string): void => {
+    const pageWaits = db.sessionPlan(instanceId)?.pageWaits ?? [];
+    if (!pageWaits.includes(artifactId)) {
       return;
     }
-    db.putSessionSteps(
+    db.putPageWaits(
       instanceId,
-      own.steps.map(({ waitsOnPage, ...step }) =>
-        waitsOnPage === artifactId
-          ? step
-          : { ...step, ...(waitsOnPage ? { waitsOnPage } : {}) }
-      )
+      pageWaits.filter((page) => page !== artifactId)
     );
     settleQuietly(instanceId);
   };
@@ -629,8 +673,9 @@ export const createPlans = (deps: PlansDeps) => {
     /**
      * `todo_write`'s session scope: the session's steps, its spec, or both,
      * each replaced whole, every step's `waitsOn` with them: exactly what the
-     * write names. The same step ({@link sameStep}) keeps the person's
-     * comments and the hub's page wait. A write of steps
+     * write names. The person's comments stay on the step of the same words,
+     * else on the plan ({@link keepComments}); its page waits are the plan's
+     * and stand as they were. A write of steps
      * that would undo a change the person made since the session last wrote
      * them is refused, naming each and the plan as it stands; the next write
      * goes through, whatever it says: the session has heard them.
@@ -651,17 +696,12 @@ export const createPlans = (deps: PlansDeps) => {
             `Not written: the person changed your plan since you last wrote it, and these steps would undo it:\n${undone.map((change) => `- ${changeLine(change)}`).join("\n")}\n\nYour plan as it stands now:\n${stepLines(db, row.id, before)}\n\nWrite your steps again from it: the next write goes through as you give it.`
           );
         }
-        db.putSessionSteps(
-          row.id,
-          steps.map((step) => {
-            const kept = sameStep(before, step);
-            return {
-              ...step,
-              ...(kept?.comments ? { comments: kept.comments } : {}),
-              ...(kept?.waitsOnPage ? { waitsOnPage: kept.waitsOnPage } : {}),
-            };
-          })
+        const kept = keepComments(
+          before,
+          db.sessionPlan(row.id)?.orphanedComments ?? [],
+          steps
         );
+        db.putSessionSteps(row.id, kept.steps, kept.orphaned);
       }
       if (written.spec !== undefined) {
         db.putSessionSpec(row.id, written.spec);
@@ -729,44 +769,47 @@ export const createPlans = (deps: PlansDeps) => {
 
     /**
      * Artifact `artifactId` waits on the person (its maker's `artifact_create`
-     * or `artifact_update` with `does: pick` or `judge` returned): the
-     * session's current step, its first in progress, waits on it, unless it
-     * waits on something already. Answers the step that waits on it now, or
-     * null when no step does (the session has no step in progress).
+     * or `artifact_update` with `does: pick` or `judge` returned): while the
+     * session is at work on its plan (an open step names the page, or one is
+     * in progress), the plan waits on the page whole, until the page is
+     * answered or deleted ({@link clearArtifactWait}), whatever its steps are
+     * rewritten to. Answers the step it was asked at: the one naming it, else
+     * the first in progress; null when there is none and the plan waits on
+     * nothing.
      */
     waitOn(instanceId: string, artifactId: string): string | null {
-      const steps = db.sessionPlan(instanceId)?.steps ?? [];
-      const waiting = steps.find((step) =>
-        stepWaitsOnArtifact(step, artifactId)
-      );
-      if (waiting) {
-        return waiting.id;
-      }
-      const current = steps.find((step) => step.status === "in_progress");
-      if (!current || current.waitsOn || current.waitsOnPage) {
+      const own = db.sessionPlan(instanceId);
+      const steps = own?.steps ?? [];
+      const at =
+        steps.find((step) => stepNamesArtifact(step, artifactId)) ??
+        steps.find((step) => step.status === "in_progress");
+      if (!at) {
         return null;
       }
-      db.putSessionSteps(
-        instanceId,
-        steps.map((step) =>
-          step.id === current.id ? { ...step, waitsOnPage: artifactId } : step
-        )
-      );
-      settleQuietly(instanceId);
-      return current.id;
+      const pageWaits = own?.pageWaits ?? [];
+      if (!pageWaits.includes(artifactId)) {
+        db.putPageWaits(instanceId, [...pageWaits, artifactId]);
+        settleQuietly(instanceId);
+      }
+      return at.id;
     },
 
-    /** Nothing on artifact `artifactId` waits on the person now: no step of the session waits on it whole. */
+    /** Nothing on artifact `artifactId` waits on the person now: the session's plan waits on it whole no more. */
     clearArtifactWait(instanceId: string, artifactId: string): void {
-      dropPageWaits(instanceId, artifactId);
+      dropPageWait(instanceId, artifactId);
     },
 
-    /** The session's steps as they stand: what its artifacts' waits are read against. */
-    steps(instanceId: string): PlanStep[] {
-      return db.sessionPlan(instanceId)?.steps ?? [];
+    /** The session's page waits and steps as they stand: what its artifacts' waits are read against. */
+    waits(instanceId: string): PlanWaits {
+      const own = db.sessionPlan(instanceId);
+      return { pageWaits: own?.pageWaits ?? [], steps: own?.steps ?? [] };
     },
 
-    /** A session's steps start another's plan: the new session that goes on from an ended one. */
+    /**
+     * A session's steps start another's plan: the new session that goes on
+     * from an ended one. Its page waits stay the ended session's: each page
+     * was asked by it (needs.ts `ArtifactAsked.by`).
+     */
     copySteps(from: string, to: string): void {
       const steps = db.sessionPlan(from)?.steps;
       if (steps?.length) {

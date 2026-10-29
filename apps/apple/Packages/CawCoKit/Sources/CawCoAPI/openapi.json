@@ -40772,6 +40772,20 @@
               "$ref": "#/components/schemas/PlanChange"
             }
           },
+          "needs": {
+            "description": "The plan's own needs: each page it waits on the person on whole (hub\nplans.ts `waitOn`), by artifact id, that no open step's `waitsOn` names.\nA page a step names shows on that step. Absent when there are none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "orphanedComments": {
+            "description": "The person's step comments whose step's words are gone from the list, oldest step first. Absent when none.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrphanedComments"
+            }
+          },
           "source": {
             "description": "Always `cawco`: the steps are CawCo's list on every harness. Still sent\nbecause the apps on TestFlight 20261015 through 20261018 decode it as\nrequired (hub openapi.ts's wire check); it goes in the change that\nexpires those builds.",
             "type": "string",
@@ -40907,6 +40921,43 @@
           }
         ]
       },
+      "OrphanedComments": {
+        "description": "The person's comments on a step whose words no write of the session's has kept: the step's words, and the comments.",
+        "type": "object",
+        "properties": {
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanComment"
+            }
+          },
+          "step": {
+            "description": "The words of the step they were written on.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comments",
+          "step"
+        ]
+      },
+      "PlanComment": {
+        "description": "The person's comment on a step, in their words.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When they wrote it, ISO 8601.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "text"
+        ]
+      },
       "PlanSpec": {
         "description": "The session's spec, as it last wrote it.",
         "type": "object",
@@ -40929,7 +40980,7 @@
         "type": "object",
         "properties": {
           "comments": {
-            "description": "The person's comments on it, oldest first; kept by id across the session's writes.",
+            "description": "The person's comments on it, oldest first. A session's write keeps them\non the step of the same words, wherever it stands; with no such step\nthey go to the plan's {@link SessionPlan.orphanedComments}.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PlanComment"
@@ -40955,10 +41006,6 @@
           "waitsOn": {
             "description": "What it waits on, set by the session (`todo_write`'s `waitsOn`): a\ntask, a card, a pin, a pull request, a run or a session, as a task's\n`waits_on` keeps it (wait-targets.ts), settled by the hub's one resolver\n(hub task-waits.ts). The hub drops it once it settles.",
             "type": "string"
-          },
-          "waitsOnPage": {
-            "description": "The page it waits on the person on, whole, by its artifact id: set by\nthe hub on the session's current step when its `artifact_create` or\n`artifact_update` with `does: pick` or `judge` returns (hub plans.ts\n`waitOn`), gone once nothing on the page waits on the person (core\nartifact-needs.ts). While it waits, the page's Needs-you item stands.",
-            "type": "string"
           }
         },
         "required": [
@@ -40966,23 +41013,6 @@
           "depth",
           "id",
           "status"
-        ]
-      },
-      "PlanComment": {
-        "description": "The person's comment on a step, in their words.",
-        "type": "object",
-        "properties": {
-          "at": {
-            "description": "When they wrote it, ISO 8601.",
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "at",
-          "text"
         ]
       },
       "PlanStepStatus": {
@@ -53947,6 +53977,20 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PlanChange"
+            }
+          },
+          "needs": {
+            "description": "The plan's own needs: each page it waits on the person on whole (hub\nplans.ts `waitOn`), by artifact id, that no open step's `waitsOn` names.\nA page a step names shows on that step. Absent when there are none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "orphanedComments": {
+            "description": "The person's step comments whose step's words are gone from the list, oldest step first. Absent when none.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrphanedComments"
             }
           },
           "source": {

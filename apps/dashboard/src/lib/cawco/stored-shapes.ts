@@ -50,6 +50,7 @@ import type {
 } from "@cawco/core/harness";
 import { HARNESSES, WIRE_PERMISSION_MODES } from "@cawco/core/harness";
 import type {
+  OrphanedComments as OrphanedCommentsType,
   PlanChange as PlanChangeType,
   PlanComment as PlanCommentType,
   PlanEditKind as PlanEditKindType,
@@ -294,9 +295,14 @@ const PlanChangeShape = z.object({
   words: z.string(),
 });
 
-const PlanSpecShape = z.object({ at: z.string(), markdown: z.string() });
-
 const PlanCommentShape = z.object({ at: z.string(), text: z.string() });
+
+const OrphanedCommentsShape = z.object({
+  comments: z.array(PlanCommentShape),
+  step: z.string(),
+});
+
+const PlanSpecShape = z.object({ at: z.string(), markdown: z.string() });
 
 const PlanStepPriorityShape = z.enum(PLAN_STEP_PRIORITIES);
 
@@ -310,7 +316,6 @@ const PlanStepShape = z.object({
   priority: PlanStepPriorityShape.optional(),
   status: PlanStepStatusShape,
   waitsOn: z.string().optional(),
-  waitsOnPage: z.string().optional(),
 });
 
 const TaskTodoShape = z.object({
@@ -326,6 +331,8 @@ const TaskTodoShape = z.object({
 const SessionPlanShape = z.object({
   awayUnseen: z.object({ since: z.string() }).optional(),
   changes: z.array(PlanChangeShape).optional(),
+  needs: z.array(z.string()).optional(),
+  orphanedComments: z.array(OrphanedCommentsShape).optional(),
   source: z.literal("cawco"),
   spec: PlanSpecShape.optional(),
   steps: z.array(PlanStepShape),
@@ -988,8 +995,9 @@ prove<
     Same<z.output<typeof PlanEditKindShape>, PlanEditKindType>,
     Same<z.output<typeof PlanReceiverShape>, PlanReceiverType>,
     Same<z.output<typeof PlanChangeShape>, PlanChangeType>,
-    Same<z.output<typeof PlanSpecShape>, PlanSpecType>,
     Same<z.output<typeof PlanCommentShape>, PlanCommentType>,
+    Same<z.output<typeof OrphanedCommentsShape>, OrphanedCommentsType>,
+    Same<z.output<typeof PlanSpecShape>, PlanSpecType>,
     Same<z.output<typeof PlanStepPriorityShape>, PlanStepPriorityType>,
     Same<z.output<typeof PlanStepStatusShape>, PlanStepStatusType>,
     Same<z.output<typeof PlanStepShape>, PlanStepType>,

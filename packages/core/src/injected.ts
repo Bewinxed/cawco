@@ -460,24 +460,25 @@ export type PresenceSaid =
   | { kind: "elsewhere" }
   | { kind: "away"; since: string | null };
 
-/** A plan step waiting on the person's pick on a page (core plan.ts `PlanStep` `waitsOn`), by its chip. */
+/**
+ * A page a plan waits on the person on (core plan.ts `PlanWaits`), by its
+ * chip: on the open step whose `waitsOn` names it, or on the plan itself
+ * when no step does (`SessionPlan.needs`).
+ */
 export interface AwayWait {
   /** The page's artifact id and name: its `cawco:artifact` chip. */
   artifact: { id: string; name: string };
-  content: string;
   /** The session whose plan it is: the step's `cawco:step` chip. */
   session: string;
-  step: string;
+  /** The step that names it, by id and words; absent when no step does. */
+  step?: { content: string; id: string };
 }
 
-/** A waiting step as the recap names it: the step's chip, labelled by its words, then its page's chip. */
-export const waitLine = ({
-  artifact,
-  content,
-  session,
-  step,
-}: AwayWait): string =>
-  `- ${stepLink(session, step, content)} waits on ${artifactLink(artifact.id, artifact.name)}`;
+/** A wait as the recap names it: the step's chip, labelled by its words, then its page's chip; the page alone when no step names it. */
+export const waitLine = ({ artifact, session, step }: AwayWait): string =>
+  step
+    ? `- ${stepLink(session, step.id, step.content)} waits on ${artifactLink(artifact.id, artifact.name)}`
+    : `- ${artifactLink(artifact.id, artifact.name)}, which no step names`;
 
 /** The heading a session's away notes open with in its plan's spec: `## Since 12:18 (you were away)`. */
 export const awayNotesHeading = (since: string): string =>

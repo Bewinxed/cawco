@@ -174,6 +174,7 @@ import type {
 import { MOVE_JOB_STEPS } from "./move";
 import type { PairingOffAnswer as PairingOffAnswerType } from "./paths";
 import type {
+  OrphanedComments as OrphanedCommentsType,
   PlanComment as PlanCommentType,
   PlanStepPriority as PlanStepPriorityType,
   PlanStepStatus as PlanStepStatusType,
@@ -1684,6 +1685,15 @@ const OpenCodeGoLimitsShape = z.object({
 export const OpenCodeGoLimitsSchema: z.ZodType<OpenCodeGoLimitsType> =
   OpenCodeGoLimitsShape;
 
+const PlanCommentShape = z.object({ at: z.string(), text: z.string() });
+
+const OrphanedCommentsShape = z.object({
+  comments: z.array(PlanCommentShape),
+  step: z.string(),
+});
+export const OrphanedCommentsSchema: z.ZodType<OrphanedCommentsType> =
+  OrphanedCommentsShape;
+
 const PlaceLfsRowShape = z.object({
   bytes: z.number(),
   count: z.number(),
@@ -1691,8 +1701,6 @@ const PlaceLfsRowShape = z.object({
   pattern: z.string(),
 });
 export const PlaceLfsRowSchema: z.ZodType<PlaceLfsRowType> = PlaceLfsRowShape;
-
-const PlanCommentShape = z.object({ at: z.string(), text: z.string() });
 
 const PlanStepPriorityShape = z.enum(PLAN_STEP_PRIORITIES);
 
@@ -1706,7 +1714,6 @@ const PlanStepShape = z.object({
   priority: PlanStepPriorityShape.optional(),
   status: PlanStepStatusShape,
   waitsOn: z.string().optional(),
-  waitsOnPage: z.string().optional(),
 });
 export const PlanStepSchema: z.ZodType<PlanStepType> = PlanStepShape;
 
@@ -2417,8 +2424,9 @@ prove<
     Same<z.output<typeof NeutralUserMessageShape>, NeutralUserMessageType>,
     Same<z.output<typeof LimitWindowShape>, LimitWindowType>,
     Same<z.output<typeof OpenCodeGoLimitsShape>, OpenCodeGoLimitsType>,
-    Same<z.output<typeof PlaceLfsRowShape>, PlaceLfsRowType>,
     Same<z.output<typeof PlanCommentShape>, PlanCommentType>,
+    Same<z.output<typeof OrphanedCommentsShape>, OrphanedCommentsType>,
+    Same<z.output<typeof PlaceLfsRowShape>, PlaceLfsRowType>,
     Same<z.output<typeof PlanStepPriorityShape>, PlanStepPriorityType>,
     Same<z.output<typeof PlanStepStatusShape>, PlanStepStatusType>,
     Same<z.output<typeof PlanStepShape>, PlanStepType>,

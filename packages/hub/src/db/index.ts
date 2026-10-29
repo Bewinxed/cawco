@@ -38,6 +38,7 @@ import type {
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
+  OrphanedComments,
   PermissionMode,
   PlanStep,
   Rule,
@@ -1887,6 +1888,8 @@ export interface DbShape {
     machineId: string,
     openCodeGo: OpenCodeGoLimits | null
   ) => void;
+  /** Replaces the pages a session's plan waits on the person on whole (plans.ts `waitOn`). */
+  readonly putPageWaits: (instanceId: string, pageWaits: string[]) => void;
   /** Keeps one change the person made to a session's plan (plan-changes.ts). */
   readonly putPlanChange: (row: PlanChangeRow) => void;
   readonly putPlugin: (plugin: {
@@ -1914,8 +1917,15 @@ export interface DbShape {
   readonly putRule: (rule: Rule) => Rule;
   /** Replaces a session's spec whole, its steps kept. */
   readonly putSessionSpec: (instanceId: string, spec: string) => void;
-  /** Replaces a session's own steps whole, its spec kept. */
-  readonly putSessionSteps: (instanceId: string, steps: PlanStep[]) => void;
+  /**
+   * Replaces a session's own steps whole, its spec and page waits kept;
+   * `orphanedComments` given, those too.
+   */
+  readonly putSessionSteps: (
+    instanceId: string,
+    steps: PlanStep[],
+    orphanedComments?: OrphanedComments[]
+  ) => void;
   /** Stores what a session has done that taints its memory notes (memory.ts), replacing what it had. */
   readonly putSessionTaint: (row: SessionTaintRow) => void;
   /** Upsert of a resolve's outcome: the files it read, or the sentence it failed with. */
@@ -8006,14 +8016,15 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .run();
     },
-    putSessionSteps: (instanceId, steps) => {
+    putSessionSteps: (instanceId, steps, orphanedComments) => {
       const updatedAt = new Date();
+      const kept = orphanedComments ? { orphanedComments } : {};
       db.transaction((tx) => {
         tx.insert(sessionPlans)
-          .values({ instanceId, steps, updatedAt })
+          .values({ instanceId, steps, updatedAt, ...kept })
           .onConflictDoUpdate({
             target: sessionPlans.instanceId,
-            set: { steps, updatedAt },
+            set: { steps, updatedAt, ...kept },
           })
           .run();
         // Its waits on pull requests are its plan's link rows, as a task's are its file's.
@@ -8031,6 +8042,16 @@ const make = async (path: string): Promise<DbShape> => {
           );
         }
       });
+    },
+    putPageWaits: (instanceId, pageWaits) => {
+      const updatedAt = new Date();
+      db.insert(sessionPlans)
+        .values({ instanceId, steps: [], pageWaits, updatedAt })
+        .onConflictDoUpdate({
+          target: sessionPlans.instanceId,
+          set: { pageWaits, updatedAt },
+        })
+        .run();
     },
     putAwaySeen: (instanceId, notes) => {
       db.update(sessionPlans)

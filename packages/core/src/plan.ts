@@ -48,7 +48,11 @@ export interface PlanComment {
 
 /** One step of a session's plan: an ACP plan entry, with an id and a nesting depth. */
 export interface PlanStep {
-  /** The person's comments on it, oldest first; kept by id across the session's writes. */
+  /**
+   * The person's comments on it, oldest first. A session's write keeps them
+   * on the step of the same words, wherever it stands; with no such step
+   * they go to the plan's {@link SessionPlan.orphanedComments}.
+   */
   comments?: PlanComment[];
   content: string;
   /** Nesting by indent: 0 for a top-level step, one more than its parent's for a sub-step. */
@@ -64,24 +68,42 @@ export interface PlanStep {
    * (hub task-waits.ts). The hub drops it once it settles.
    */
   waitsOn?: string;
-  /**
-   * The page it waits on the person on, whole, by its artifact id: set by
-   * the hub on the session's current step when its `artifact_create` or
-   * `artifact_update` with `does: pick` or `judge` returns (hub plans.ts
-   * `waitOn`), gone once nothing on the page waits on the person (core
-   * artifact-needs.ts). While it waits, the page's Needs-you item stands.
-   */
-  waitsOnPage?: string;
 }
 
-/** Whether an open step waits on artifact `artifactId`: on the page whole, or on a card or pin of it. */
-export const stepWaitsOnArtifact = (
+/** Whether an open step's `waitsOn` names artifact `artifactId`: a card or pin of it. */
+export const stepNamesArtifact = (
   step: PlanStep,
   artifactId: string
 ): boolean =>
   step.status !== "completed" &&
-  (step.waitsOnPage === artifactId ||
-    (step.waitsOn !== undefined && waitArtifact(step.waitsOn) === artifactId));
+  step.waitsOn !== undefined &&
+  waitArtifact(step.waitsOn) === artifactId;
+
+/**
+ * What of a session's plan waits on artifacts: its steps' waits, and the
+ * pages it asked the person on whole (hub plans.ts `waitOn`), by artifact
+ * id. A page wait is the page's, never a step's: it stands while the page is
+ * unanswered and not deleted, whatever the steps are rewritten to.
+ */
+export interface PlanWaits {
+  pageWaits: readonly string[];
+  steps: readonly PlanStep[];
+}
+
+/** Whether a plan waits on artifact `artifactId`: the page whole, or an open step naming a card or pin of it. */
+export const planWaitsOnArtifact = (
+  plan: PlanWaits,
+  artifactId: string
+): boolean =>
+  plan.pageWaits.includes(artifactId) ||
+  plan.steps.some((step) => stepNamesArtifact(step, artifactId));
+
+/** The person's comments on a step whose words no write of the session's has kept: the step's words, and the comments. */
+export interface OrphanedComments {
+  comments: PlanComment[];
+  /** The words of the step they were written on. */
+  step: string;
+}
 
 /** The person's changes to a plan, by what they do. */
 export const PLAN_EDIT_KINDS = [
@@ -226,6 +248,14 @@ export interface SessionPlan {
   awayUnseen?: { since: string };
   /** The person's latest changes to it, newest last. */
   changes?: PlanChange[];
+  /**
+   * The plan's own needs: each page it waits on the person on whole (hub
+   * plans.ts `waitOn`), by artifact id, that no open step's `waitsOn` names.
+   * A page a step names shows on that step. Absent when there are none.
+   */
+  needs?: string[];
+  /** The person's step comments whose step's words are gone from the list, oldest step first. Absent when none. */
+  orphanedComments?: OrphanedComments[];
   /**
    * Always `cawco`: the steps are CawCo's list on every harness. Still sent
    * because the apps on TestFlight 20261015 through 20261018 decode it as
