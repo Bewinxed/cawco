@@ -33,7 +33,9 @@
    * the row, clamped to `--span`, growing from `--origin`), or to the
    * `right` of a list at `--x`/`--y` in the viewport. Either way a 4px
    * bridge on the side facing the trigger keeps the pointer over the panel
-   * as it crosses the gap.
+   * as it crosses the gap. A `right` panel placed under or over its trigger
+   * instead (a comment's chip) names its `edge` nearest the trigger: it
+   * comes in along the vertical axis from that edge, 4px, and grows from it.
    *
    * A panel never outlives the place it was opened from. A conversation
    * left is kept mounted (SessionSurface), its panels with it, so while
@@ -63,6 +65,7 @@
     watch = null,
     gliding = false,
     side,
+    edge,
     onclose,
     children,
     ...rest
@@ -76,6 +79,11 @@
     /** Moving from one trigger to the next: the panel travels. */
     gliding?: boolean;
     side: "above" | "right";
+    /**
+     * Where a `right` panel stands under (`top`) or over (`bottom`) its
+     * trigger, its edge nearest it: it enters from that edge, never sideways.
+     */
+    edge?: "top" | "bottom";
     children: Snippet<[string]>;
   } = $props();
 
@@ -205,16 +213,22 @@
     };
   });
 
+  /** Where a `right` panel grows from, down from its trigger's top (--y): its row's centre, or its own bottom edge over its trigger. */
+  const growsFrom = $derived(edge === "bottom" ? "100%" : "var(--origin)");
+
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {
       return { duration: dur("--dur-menu"), css: (t) => `opacity: ${t}` };
     }
-    const lift = side === "above" ? "translateY" : "translateX";
+    // Out of its trigger: up from a row of chips or a chip under it, down
+    // from a chip over it, in from the left beside a list.
+    const lift = side === "above" || edge ? "translateY" : "translateX";
+    const from = side === "above" || edge === "bottom" ? 4 : -4;
     return {
       duration: dur("--dur-menu"),
       easing: easeOut,
       css: (t, u) =>
-        `opacity: ${t}; transform: ${lift}(${(u * (side === "above" ? 4 : -4)).toFixed(2)}px) scale(${(0.98 + 0.02 * t).toFixed(4)})`,
+        `opacity: ${t}; transform: ${lift}(${(u * from).toFixed(2)}px) scale(${(0.98 + 0.02 * t).toFixed(4)})`,
     };
   }
   function panelOut(_node: Element): TransitionConfig {
@@ -258,7 +272,8 @@
        between them. Beside a list (`right`): level with its row, pulled back
        inside the viewport by its own height (the 100%), --hover-panel-inset
        clear of either edge; it grows from its row's centre, which is --origin
-       under the row's top (--y) wherever the panel's own top (--top) ends up.
+       under the row's top (--y) wherever the panel's own top (--top) ends up;
+       standing over its trigger (`edge` bottom), from its own bottom edge.
        The 4px bridge between the panel and its trigger is its `after:`. -->
   <div
     {...rest}
@@ -267,7 +282,7 @@
     data-side={side}
     style:--panel-bottom="calc(100% + var(--space-1) + var(--rise, 0px))"
     style:--panel-origin-above="var(--origin) 100%"
-    style:--panel-origin-right="0 calc(var(--y) + var(--origin) - var(--top))"
+    style:--panel-origin-right="0 calc(var(--y) + {growsFrom} - var(--top))"
     style:--panel-x="max(0px, min(var(--x), calc(var(--span) - 100%)))"
     style:--top={"clamp(var(--hover-panel-inset), var(--y), calc(100dvh - 100% - var(--hover-panel-inset)))"}
     onintroend={() => {

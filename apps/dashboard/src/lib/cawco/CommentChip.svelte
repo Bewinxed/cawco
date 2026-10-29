@@ -130,7 +130,14 @@
   let chip = $state<HTMLButtonElement>();
   let open = $state(false);
   /** Where the panel stands in the viewport: under the chip, or over it where the room under it is short. */
-  let place = $state({ x: 0, y: "0px", room: "0px", span: 0 });
+  let place = $state<{
+    x: number;
+    y: string;
+    room: string;
+    span: number;
+    /** The panel's edge nearest the chip: `top` under it, `bottom` over it. */
+    edge: "top" | "bottom";
+  }>({ x: 0, y: "0px", room: "0px", span: 0, edge: "top" });
   const draft = new ComposerDraft({ byReference: true });
   let problem = $state<string | null>(null);
 
@@ -163,6 +170,7 @@
         y: `${Math.round(box.bottom + gap)}px`,
         room: `${Math.round(under)}px`,
         span,
+        edge: "top",
       };
     } else {
       place = {
@@ -170,6 +178,7 @@
         y: `calc(${Math.round(box.top - gap)}px - 100%)`,
         room: `${Math.round(over)}px`,
         span,
+        edge: "bottom",
       };
     }
   }
@@ -477,6 +486,7 @@
     <HoverPanel
       aria-label={words}
       data-comment-chip-panel={panelId}
+      edge={place.edge}
       id={panelId}
       key={open ? id : null}
       onclose={() => close(false)}
