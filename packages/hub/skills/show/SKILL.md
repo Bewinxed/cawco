@@ -18,7 +18,7 @@ The person's panel is where they act, never where they look. An artifact is open
    | `does` | Build | Skill |
    | --- | --- | --- |
    | pick | a decision page: one card per question in dependency order, options drawn live, gets and costs, one Recommended with its reason | `decision-page` |
-   | judge | a component canvas of the real component's states, one frame each, pins with `file:line`; a preview at its `path` when the whole surface is judged; an image or diagram canvas for a picture or a structure; an HTML page only where the stack has no stage | `component-canvas` (`design-explore` for directions), `screen` for a whole screen |
+   | judge | a component canvas of the real component's states, one frame each, pins with `file:line`; a preview at its `path` when the whole surface is judged; an image canvas for a picture; an HTML page only where the stack has no stage | `component-canvas` (`design-explore` for directions), `screen` for a whole screen |
    | try | a preview opened at the flow's first screen: `port` with `serve` in a workspace, or `dir` | `screen`, or the project's own run |
    | draw | a canvas, empty or with elements | none |
    A pick on a canvas or preview, a try on a program, a drawing on anything but a canvas, and a page or folder for judging with more than two desk captures are refused by the hub with the primitive to use instead.
