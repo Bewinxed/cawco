@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { designGraphWords as words } from "@cawco/core";
   /**
    * The dock (Projects spec §5.10, "The dock"; round 29, section B): the
    * kept move's clips over time, shown only while the move into the kept
@@ -23,6 +22,7 @@
     runEnd,
     stateName,
   } from "@cawco/core/design-graph";
+  import { designGraphWords as words } from "@cawco/core/words/design-graph";
   import { tick } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
