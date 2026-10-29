@@ -79,8 +79,14 @@
     pill,
     joined = true,
     stickiness = numberOf("--goo-blur"),
+    focused = false,
+    onhold,
     children,
   }: {
+    /** The pin has keyboard focus: while the goo holds it, the one ring runs round the whole shape. */
+    focused?: boolean;
+    /** Whether the goo draws the pin itself (pouring, draining, or joined): the page's own pill, its edge and its ring step back while it does. */
+    onhold?: (holding: boolean) => void;
     /** How it goes: `fade`, or `cut` where another pin's card takes its place in the same press. */
     exit?: { at: "fade" | "cut" };
     /** The pill's box in the well, px; null while it is not on screen. */
@@ -224,6 +230,10 @@
         : []
     );
   });
+
+  /** The focus ring's offset and width, px, from their tokens. */
+  const ringOffset = numberOf("--focus-ring-offset");
+  const ringWidth = numberOf("--focus-ring-width");
 
   /** An `feFlood`'s colour, a token: a filter primitive's flood is no Tailwind colour. */
   const flood = (token: `--${string}`) => (node: SVGFEFloodElement) => {
@@ -444,7 +454,12 @@
     return { d, origin: `${cx}px ${cy}px`, bead };
   }
 
-  /** The neck grows out of its bead (`open`) or back into it, drawn where `neck` says, on `timing`. */
+  /**
+   * The neck grows out of its bead (`open`) or back into it, drawn where
+   * `neck` says, on `timing`; the pin's own face (its fill, ring and
+   * shadow) hands over to its joined face in step, so the shape's one edge
+   * is the pin's from the first frame of a join and the last of a parting.
+   */
   function grow(
     neck: Neck,
     open: boolean,
@@ -458,6 +473,15 @@
     neckBlob.classList.remove("hidden");
     const at = [{ transform: neck.bead }, { transform: "none" }];
     neckBlob.animate(open ? at : at.reverse(), timing);
+    const own = open ? [1, 0] : [0, 1];
+    markFace?.animate(
+      own.map((opacity) => ({ opacity })),
+      timing
+    );
+    joinedFace?.animate(
+      own.map((opacity) => ({ opacity: 1 - opacity })),
+      timing
+    );
   }
 
   $effect(() => {
@@ -491,6 +515,20 @@
 
   /** The pill in the goo and its faces, where it stands: joined at rest, or where a pour started. */
   const pillAt = $derived(joint?.pin ?? (pouring ? runPill : null));
+
+  /** A pour that grows a neck: the pin is part of the shape from its first frame. */
+  let pourJoins = $state(false);
+  /**
+   * The pin is part of the one shape: joined at rest, or pouring with a
+   * neck. Then the shape's edge, shadow and focus ring are the only ones;
+   * the pin's own (and the page's pill under it) step back.
+   */
+  const merged = $derived(pouring ? pourJoins : joint !== null);
+  $effect(() => {
+    onhold?.(merged);
+  });
+  // Gone (after its drain), it holds the pin no more.
+  $effect(() => () => untrack(() => onhold)?.(false));
 
   // A neck that joins again at rest (after a travel, or the pin coming back
   // beside it) grows out of the pin as a bead, over --dur-morph on
@@ -560,17 +598,6 @@
     if (neck) {
       grow(neck, open, timing);
     }
-    const faces = open ? [1, 0] : [0, 1];
-    if (neck) {
-      markFace?.animate(
-        faces.map((opacity) => ({ opacity })),
-        timing
-      );
-      joinedFace?.animate(
-        faces.map((opacity) => ({ opacity: 1 - opacity })),
-        timing
-      );
-    }
     body?.animate(
       [
         { clipPath: clipOf(from), opacity: open ? 0 : 1 },
@@ -599,6 +626,7 @@
     }
     const neck = joined ? neckOf(from) : null;
     runPill = from;
+    pourJoins = neck !== null;
     pouring = true;
     flushSync();
     region(from, blur);
@@ -641,8 +669,12 @@
       }
     }
     const neck = joined ? neckOf(to) : null;
-    // The template stands still through an outro: the pill is stood by hand.
+    // The template stands still through an outro: the pill is stood by
+    // hand, and the shape holds it until it is gone.
     standPill(to);
+    if (neck) {
+      onhold?.(true);
+    }
     region(to, blur);
     run(
       from,
@@ -725,10 +757,39 @@
         <feOffset dy="3" in="lift-b" result="lift-o" />
         <feFlood {@attach flood("--shadow-tint-2")} result="lift-c" />
         <feComposite in="lift-c" in2="lift-o" operator="in" result="lift" />
+        <!-- The one focus ring (the One Ring Rule: 2px of `focus-ring`, 2px
+             outside), round the merged silhouette rather than any part of it:
+             the shape's edge, then the offset, then the ring's width. Its
+             colour is set at rest; focus only switches it on. -->
+        <feMorphology
+          in="solid"
+          operator="dilate"
+          radius={1 + ringOffset}
+          result="ring-in"
+        />
+        <feMorphology
+          in="solid"
+          operator="dilate"
+          radius={1 + ringOffset + ringWidth}
+          result="ring-out"
+        />
+        <feComposite
+          in="ring-out"
+          in2="ring-in"
+          operator="out"
+          result="ring-a"
+        />
+        <feFlood
+          {@attach flood("--focus-ring")}
+          flood-opacity={merged && focused ? 1 : 0}
+          result="ring-c"
+        />
+        <feComposite in="ring-c" in2="ring-a" operator="in" result="ring" />
         <feMerge>
           <feMergeNode in="lift" />
           <feMergeNode in="edge" />
           <feMergeNode in="shape" />
+          <feMergeNode in="ring" />
         </feMerge>
       </filter>
     </defs>

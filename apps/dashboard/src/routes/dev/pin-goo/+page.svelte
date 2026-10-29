@@ -57,6 +57,10 @@
   let roomH = $state(0);
   const pills = $state<Record<string, HTMLElement>>({});
   const targets = $state<Record<string, HTMLElement>>({});
+  /** The pills the goo draws as part of its shape: each steps back, its edge and its ring with it. */
+  const held = $state<Record<string, boolean>>({});
+  /** The pill with keyboard focus (`:focus-visible`), by its pin. */
+  let keyed = $state<string | null>(null);
   /** Each pill and what it stands on, in the well, px; its mark null while it is out of view. */
   let at = $state<Record<string, { box: Box; mark: Box | null }>>({});
   const inWell = (rect: DOMRect, frame: DOMRect): Box => ({
@@ -143,15 +147,29 @@
     aria-expanded={open === pin.id}
     aria-label="Comment {pin.number}"
     bind:this={pills[pin.id]}
-    class="absolute start-(--at-x) top-(--at-y) z-1 flex -translate-y-full border-none bg-transparent p-0 rounded-full focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+    class={[
+      "absolute start-(--at-x) top-(--at-y) z-1 flex -translate-y-full border-none bg-transparent p-0 rounded-full",
+      !held[pin.id] &&
+        "focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring",
+    ]}
     data-slot="page-pill"
+    onblur={() => {
+      keyed = null;
+    }}
     onclick={() => press(pin.id)}
+    onfocus={(event) => {
+      keyed = event.currentTarget.matches(":focus-visible") ? pin.id : null;
+    }}
+    onkeyup={(event) => {
+      // A key on a pill focused by a press makes its focus visible.
+      keyed = event.currentTarget.matches(":focus-visible") ? pin.id : null;
+    }}
     style:--at-x={pin.number === 1 ? "70%" : "var(--space-5)"}
     style:--at-y={pin.number === 1 ? "50%" : "var(--space-4)"}
     type="button"
   >
-    <!-- Joined, the card's goo draws the pin as part of itself: the page's own pill steps back. -->
-    <span class={["flex", joined && open === pin.id && "opacity-0"]}>
+    <!-- Held, the card's goo draws the pin as part of itself: the page's own pill steps back. -->
+    <span class={["flex", held[pin.id] && "opacity-0"]}>
       {@render pillOf(pin)}
     </span>
   </button>
@@ -310,7 +328,11 @@
           <PinFloatGoo
             box={where?.box ?? null}
             {exit}
+            focused={keyed === pin.id}
             {joined}
+            onhold={(holding) => {
+              held[pin.id] = holding;
+            }}
             {stickiness}
             label="Comment {pin.number}"
             mark={where?.mark ?? null}
