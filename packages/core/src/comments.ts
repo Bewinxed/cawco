@@ -326,6 +326,12 @@ export interface Pin {
   seenAt?: string;
   /** When it was first delivered to the session. */
   sentAt?: string;
+  /**
+   * The design graph's kept state when it was placed (Projects spec §5.10,
+   * the owner's pick "pins"): its machine, state and variation in words,
+   * shown under the person's words; none on a page with no graph.
+   */
+  state?: string;
   /** Oldest first. */
   thread: ThreadEntry[];
   /**
@@ -337,7 +343,10 @@ export interface Pin {
 }
 
 /** A pin's head (`pins`): what it is, written once as it is made. */
-type PinHead = Pick<Pin, "at" | "by" | "id" | "kind" | "number" | "title">;
+type PinHead = Pick<
+  Pin,
+  "at" | "by" | "id" | "kind" | "number" | "state" | "title"
+>;
 
 /** Where a pin stands (`places`): moved by the page as its anchor finds its element again, or by the person placing it again. */
 export type PinPlace = Pick<
@@ -1454,6 +1463,8 @@ export interface CommentTarget {
   ink?: string;
   /** Where on its element the press landed: fractions of the element's box. */
   point?: { x: number; y: number };
+  /** The design graph's kept state as it is placed, in words ({@link Pin} `state`). */
+  state?: string;
   /** What it stands on, in words, as the pin's title (core pin-name.ts `pinName`). */
   title?: string;
 }
@@ -1490,6 +1501,7 @@ export function commentOn(
     ...(target.ink ? { ink: target.ink } : {}),
     ...(target.point ? { point: target.point } : {}),
     ...(target.title ? { title: target.title } : {}),
+    ...(target.state ? { state: target.state } : {}),
     thread: [entry],
   };
   writePin(doc, pin);

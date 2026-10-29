@@ -174,7 +174,8 @@ export async function overlayResponse(
   const text = await overlayText(parents);
   const current = asked !== null && asked === (await overlayKey(parents));
   const headers = {
-    "content-type": "text/javascript",
+    // UTF-8 named: a page of another encoding (or none declared) decodes a script by its own, which turned the overlay's "·" into "Â·" in every pin's title.
+    "content-type": "text/javascript; charset=utf-8",
     "cache-control": current ? IMMUTABLE : "no-store",
     vary: "accept-encoding",
   };

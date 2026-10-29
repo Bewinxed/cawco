@@ -342,6 +342,22 @@ public enum Palette {
     public static let tabShadeChosen = Palette.named("tab-shade-chosen")
     /// At night every raised shadow adds a 1px inner ring of ink.
     public static let nightRing = Palette.named("night-ring")
+    /// A state machine's slab on the design graph: one step down from the well by day; at night, where the well is already the deepest step, the recess (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cGraphSlab = Palette.named("c-graph-slab")
+    /// An edge's ink on the design graph, 3:1 on its slab: the contrast edge by day, the row outline at night (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cGraphEdgeInk = Palette.named("c-graph-edge-ink")
+    /// The move into the kept state, drawn stronger: the strong coral ink by day (3:1 on the slab), coral itself at night (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cGraphEdgeChosen = Palette.named("c-graph-edge-chosen")
+    /// An edge label's badge on the design graph: one step off the slab either way (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cGraphLabelBg = Palette.named("c-graph-label-bg")
+    /// A chosen clip row's ground in the dock: the house wash at 40% by day, so a choice reads as chosen and not as a failure's red; the wash itself at night (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cChosenWash = Palette.named("c-chosen-wash")
+    /// A clip that brings its element in: its glyph and its bar's hue (pin 27, "color things differently") (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cClipEnter = Palette.named("c-clip-enter")
+    /// A clip that changes its element where it stands: its glyph and its bar's hue (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cClipChange = Palette.named("c-clip-change")
+    /// A clip that takes its element away: its glyph and its bar's hue (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cClipExit = Palette.named("c-clip-exit")
 }
 
 public enum Shadow {
@@ -581,8 +597,20 @@ public enum Size {
     public static let cCanvasSkeletonH: Double = 96
     /// An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink).
     public static let cGraphEdge: Double = 1.5
+    /// The design graph's chosen edge, the move into the kept state: twice an edge's stroke, so the path reads from the rest at a glance (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cGraphEdgeLit: Double = 3
     /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
     public static let cMapNodeW: Double = 264
+    /// The design graph's panel beside a component under review on a desk (Projects spec §5.10, "The design graph"; mockup round 28): two 168px states side by side in a machine's region with its padding, and the panel's own. A pane narrower than twice it holds the graph as a drawer at its foot instead.
+    public static let cGraphPanelW: Double = 448
+    /// A state on the design graph: its name over its variations' chips, two to a region's row in the 448px panel (mockup round 28).
+    public static let cGraphNodeW: Double = 168
+    /// The narrowest a state on the design graph is drawn, in a phone's single column (mockup round 22's floor).
+    public static let cGraphNodeMinW: Double = 120
+    /// A machine's header band on the design graph: its name in the label role across the top of its region (mockup round 27, pin 30).
+    public static let cGraphRegionBandH: Double = 24
+    /// The design graph's drawer at its first stop on a phone or a narrow pane: the graph in view, the component above it (mockup round 22).
+    public static let cGraphDrawerStop: Double = 379.8
     /// The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines.
     public static let cPinListShare: Double = 0.3
     /// The Comments panel at its narrowest: a row's text column of 225px beside its disc, where a six-word comment in the body role stands on one line and a 48-word one wraps to its four-line cut.
@@ -1303,6 +1331,34 @@ public enum Size {
     public static let cSkeletonCardH: Double = 54
     /// The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page).
     public static let cOfferTextBasis: Double = 240
+    /// An edge's open chevron on the design graph: two legs this long at a right angle, meeting at the tip, in the edge's stroke (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cEdgeHeadLeg: Double = 7
+    /// The resize handle's arc stands this far in from the panel's edge: 0.122 of the panel's radius, as iPadOS 26's corner handle stands (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cHandleArcGap: Double = 1.952
+    /// The resize handle's stroke at rest: the house grip's (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cHandleStroke: Double = 1.5
+    /// The resize handle's stroke reached or held: twice the grip's, so its run reads against the panel's 1px edge beside it (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cHandleStrokeHeld: Double = 3
+    /// How far past the pointer the resize handle's leg reaches along the edge it points at, and its run's taper (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cHandleReach: Double = 24
+    /// A resizable edge's hit band on the design graph's panel and dock, taking no room; 44px under a finger (c-side-divider-hit) (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cHandleBand: Double = 8
+    /// The resize handle's corner square: the one separator a key reaches (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cHandleCorner: Double = 24
+    /// The tab the design graph's panel folds into at the pane's trailing edge, the graph's glyph in it (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cTuckedTab: Double = 36
+    /// A clip's curve drawn large in its controls: its plot and a bézier's two handles (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cCurveEditorW: Double = 120
+    /// The curve editor's height: its plot, with room above and below for a curve that overshoots (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cCurveEditorH: Double = 72
+    /// How near a duration token a drag or a slider lands before it snaps to it (the owner's pick "snap") (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cDetentSnap: Double = 6
+    /// The dock's name column: a clip's element, its property and its facts beside its lane; a dock narrower than twice it stacks each row (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cDockNameW: Double = 280
+    /// A clip's bar's end zones: a press there drags that end, elsewhere the bar whole (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cBarHandleZone: Double = 8
+    /// What the dock's ceiling leaves the page under review, so its head and first field stay readable (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cPageHFloor: Double = 240
 }
 
 public enum Layer {
