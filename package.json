@@ -26,6 +26,7 @@
     "dev:hub": "bun run --filter '@cawco/hub' dev",
     "dupes": "jscpd",
     "duplicate-lists:check": "bun scripts/duplicate-lists-check.ts",
+    "fmt": "bun scripts/fmt.ts",
     "hub": "bun run --filter '@cawco/hub' dev",
     "knip": "knip",
     "lint:fix": "ultracite fix && bun scripts/fmt.ts",

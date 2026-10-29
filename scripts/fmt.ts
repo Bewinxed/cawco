@@ -2,6 +2,10 @@
  * `bun scripts/fmt.ts [--check] [paths…]`: the repository's
  * formatter, `bun fmt`. Biome lints; this formats.
  *
+ * - `bun fmt` runs this from anywhere: the root's and every package's
+ *   `fmt` script is this file (a package's over `.`, its own files), and a
+ *   run fails while one the formatter reads lacks it.
+ *
  * - The files are the ones git sees (`git ls-files -co --exclude-standard`,
  *   under the paths given, or every one): what git ignores, including
  *   `.git/info/exclude` (a cawco workspace's read-only stand-ins such as
@@ -24,7 +28,7 @@
  * with that.
  */
 import { availableParallelism } from "node:os";
-import { relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
 /** The first stable Bun with `bun fmt` (bun.com/blog/bun-v1.4.4). */
@@ -43,6 +47,50 @@ const bun = (): string =>
       )
     : process.execPath;
 
+/**
+ * Bun's own formatter. `--no-script`: a package.json `fmt` script is what
+ * `bun fmt` runs (bun.com/docs/format, "If package.json has a fmt script,
+ * bun fmt runs that script"), and each of ours runs this file.
+ */
+const formatter = (): string[] => [bun(), "fmt", "--no-script"];
+
+/** This file, as a `fmt` script names it from the package in `dir` (relative to the root). */
+const fmtScript = (dir: string): string =>
+  dir === "."
+    ? "bun scripts/fmt.ts"
+    : `bun ${relative(join(ROOT, dir), join(ROOT, "scripts/fmt.ts"))} .`;
+
+/**
+ * Every package.json the formatter reads, and so every package `bun fmt`
+ * can start in, whose `fmt` script is not {@link fmtScript}. Bun's own
+ * formatter reads `.prettierignore` from the directory it starts in alone
+ * (bun.com/docs/format, "Ignore files"), so a package without the script
+ * formats what the root leaves as written: drizzle's snapshots, the skills.
+ */
+async function packagesWithoutScript(): Promise<string[]> {
+  const manifests = repoFiles().filter(
+    (file) => file === "package.json" || file.endsWith("/package.json")
+  );
+  const listed = Bun.spawnSync(
+    [...formatter(), "--list-files", "--ignore-unknown", ...manifests],
+    { cwd: ROOT, stdout: "pipe", stderr: "inherit" }
+  );
+  if (listed.exitCode !== 0) {
+    fail(`bun fmt --list-files exited ${listed.exitCode}`);
+  }
+  const read = listed.stdout.toString().split("\n").filter(Boolean);
+  const wrong = await Promise.all(
+    read.map(async (file) => {
+      const pkg = (await Bun.file(join(ROOT, file)).json()) as {
+        scripts?: Record<string, string>;
+      };
+      const want = fmtScript(dirname(file));
+      return pkg.scripts?.fmt === want ? null : `${file}: "fmt": "${want}"`;
+    })
+  );
+  return wrong.filter((line) => line !== null);
+}
+
 /** How `bun fmt` says a file is no language it formats. */
 const NO_PARSER = "No parser could be inferred";
 /** Formatter processes at once: each is short, and a generator may hand over hundreds of files. */
@@ -52,7 +100,7 @@ const waiting: (() => void)[] = [];
 
 /** One formatter run over `text` as the file at `file` (absolute). */
 async function formatOne(file: string, text: string): Promise<string> {
-  const child = Bun.spawn([bun(), "fmt", `--stdin-filepath=${file}`], {
+  const child = Bun.spawn([...formatter(), `--stdin-filepath=${file}`], {
     cwd: ROOT,
     stdin: Buffer.from(text),
     stdout: "pipe",
@@ -186,6 +234,14 @@ async function main(): Promise<number> {
     fail(`unknown flag ${unknown.join(", ")}`);
   }
 
+  const unrouted = await packagesWithoutScript();
+  if (unrouted.length > 0) {
+    console.error(
+      `fmt: \`bun fmt\` in these packages is Bun's formatter without the root's .prettierignore; give each this script:\n${unrouted.join("\n")}`
+    );
+    return 1;
+  }
+
   const files = [...new Set(repoFiles(paths))];
   // `bun fmt` with no paths formats the whole directory: an empty list is done.
   if (files.length === 0) {
@@ -194,8 +250,7 @@ async function main(): Promise<number> {
 
   const child = Bun.spawn(
     [
-      bun(),
-      "fmt",
+      ...formatter(),
       ...(check ? ["--check"] : []),
       // The list is git's, so a file with no formatter is simply not ours to format.
       "--ignore-unknown",

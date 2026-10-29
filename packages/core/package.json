@@ -273,6 +273,7 @@
   "scripts": {
     "faces": "bun scripts/house-faces.ts",
     "faces:check": "bun scripts/house-faces.ts --check",
+    "fmt": "bun ../../scripts/fmt.ts .",
     "openui": "OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun scripts/openui-views.ts",
     "openui:check": "OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun scripts/openui-views.ts --check",
     "pricing": "bun scripts/pricing-snapshot.ts",

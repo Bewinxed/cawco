@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "node scripts/build.mjs",
     "check": "bun ../scripts/fmt.ts --check . && biome check . && tsc6 --noEmit",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "fmt": "bun ../scripts/fmt.ts ."
   },
   "dependencies": {
     "@fontsource-variable/figtree": "^5.3.0",

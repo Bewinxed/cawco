@@ -10,6 +10,7 @@
     "db:push": "NODE_PATH=$PWD/node_modules CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun node_modules/drizzle-kit/bin.cjs push",
     "dev": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun --watch src/index.ts",
     "fixture-db": "bun scripts/fixture-db.ts",
+    "fmt": "bun ../../scripts/fmt.ts .",
     "migrations:check": "bun scripts/migrations-check.ts",
     "openapi": "bun scripts/openapi.ts",
     "openapi:check": "bun scripts/openapi.ts --check",

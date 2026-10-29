@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dry-run": "wrangler deploy --dry-run --outdir dist"
+    "dry-run": "wrangler deploy --dry-run --outdir dist",
+    "fmt": "bun ../../scripts/fmt.ts ."
   },
   "dependencies": {
     "@apple/app-store-server-library": "3.1.0"
