@@ -695,11 +695,11 @@ export const STAGE_READY_MS = 60_000;
 /** How long a place's stage clone's git may take, each cut or step (agent `stage-clone.ts`). Ours: a one-commit fetch from the same disk. */
 export const STAGE_CLONE_GIT_MS = 60_000;
 
-/** How long a place's stage clone's install inside its boundary may take (agent `stage-clone.ts` `installAt`). Ours. */
-export const STAGE_CLONE_INSTALL_MS = 180_000;
+/** How long a stage's install of its project inside its boundary may take (agent `stage-install.ts` `installProject`), before it starts. Ours. */
+export const STAGE_INSTALL_MS = 180_000;
 
 /** How long a place's stage clone may take before its stage starts (agent `stage-clone.ts`): its git, then its project's install (`installStage`). */
-export const STAGE_CLONE_MS = STAGE_CLONE_GIT_MS + STAGE_CLONE_INSTALL_MS;
+export const STAGE_CLONE_MS = STAGE_CLONE_GIT_MS + STAGE_INSTALL_MS;
 
 /** How often the daemon asks a running stage whether it serves. The spec's number. */
 export const STAGE_HEALTH_MS = 15_000;

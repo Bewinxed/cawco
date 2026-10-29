@@ -17,10 +17,9 @@
  *   secret files, under a workspace id of its own (core `stageCloneId`),
  *   never a place's: its `node_modules` are its own to write;
  * - installed by the project's own package manager inside its boundary
- *   ({@link installStage}): the `packageManager` its package.json names
- *   (Corepack's field), else the one its lockfile names, with that manager's
- *   frozen install, where its bun links from the workspaces' cache
- *   (boundary.ts `writeBunConfig`);
+ *   ({@link installStage}, stage-install.ts, every stage's one install
+ *   path), where its bun links from the workspaces' cache (boundary.ts
+ *   `writeBunConfig`);
  * - kept in step with the checkout ({@link syncStageClone}): a new HEAD
  *   fetched and checked out, then every path the checkout's `git status`
  *   names, and every one it named the time before, made in the clone as it
@@ -40,7 +39,6 @@
  * no index there), its HEAD fetched from it. Only the story file a person's
  * sheet edit names is written back.
  */
-import { createHash } from "node:crypto";
 import { constants, existsSync } from "node:fs";
 import {
   chmod,
@@ -57,31 +55,22 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import {
-  LOCKFILES,
-  PACKAGE_MANAGERS,
-  type PackageManager,
-  type WorkspaceRef,
-} from "@cawco/core";
+import type { WorkspaceRef } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
 import { workspaceScratchDir, workspaceStateDir } from "@cawco/core/paths";
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import {
-  STAGE_CLONE_GIT_MS,
-  STAGE_CLONE_INSTALL_MS,
-  type StageCloneFrame,
-} from "@cawco/core/stage";
+import { STAGE_CLONE_GIT_MS, type StageCloneFrame } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
 import { expandHome } from "./fs";
-import { runHubCommand } from "./hub-command";
 import { removeTree } from "./remove-tree";
+import { forgetInstalls, installProject } from "./stage-install";
 import { copyOwnSecrets, gitUntil } from "./workspace";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
@@ -102,8 +91,6 @@ const KeptSchema = z.object({
   form: z.number().optional(),
   /** The checkout's HEAD the clone is at. */
   head: z.string(),
-  /** Each folder the stage installed, from the clone's root, with what it installed from ({@link installAt}). */
-  installed: z.record(z.string(), z.string()).optional(),
   /** The paths the checkout's status named at the last mirror, from the repository's root. */
   mirrored: z.array(z.string()),
   /** The checkout's repository root it was cut from, as a real path. */
@@ -404,210 +391,14 @@ const mirror = async (
   return { changed, kept: { ...kept, head, mirrored: paths } };
 };
 
-/** Each lockfile and the manager it names, in core move.ts `LOCKFILES` order. */
-const LOCK_MANAGER: Record<(typeof LOCKFILES)[number], PackageManager> = {
-  "bun.lock": "bun",
-  "bun.lockb": "bun",
-  "pnpm-lock.yaml": "pnpm",
-  "package-lock.json": "npm",
-  "yarn.lock": "yarn",
-};
-
-/** How a machine gets each manager, from its own install page. */
-const HOW_TO_GET: Record<PackageManager, string> = {
-  npm: "install Node.js, which brings npm (nodejs.org/en/download)",
-  pnpm: "run `corepack enable pnpm` or `npm install -g pnpm` (pnpm.io/installation)",
-  yarn: "run `corepack enable yarn` or `npm install -g yarn` (yarnpkg.com/getting-started/install)",
-  bun: "run `curl -fsSL https://bun.com/install | bash` (bun.com/docs/installation)",
-};
-
-/** What a missing manager's check prints, for the daemon to read. */
-const NO_MANAGER = "cawco-stage: no package manager";
-
-/** The project a toolchain root installs as: its folder, its manager and what named it. */
-interface Install {
-  dir: string;
-  /** The major version its `packageManager` names, when it names one. */
-  major?: number;
-  manager: PackageManager;
-  /** What named the manager, in words: `its packageManager pnpm@9.1.0`, `its yarn.lock`. */
-  named: string;
-}
-
-/** A folder's package.json's `packageManager`, or nothing where it has no package.json or names none; one that does not parse is refused with why. */
-const packageManagerIn = async (dir: string): Promise<string | undefined> => {
-  const file = join(dir, "package.json");
-  const text = await readFile(file, "utf8").catch(() => undefined);
-  if (text === undefined) {
-    return;
-  }
-  let field: unknown;
-  try {
-    field = z
-      .object({ packageManager: z.unknown().optional() })
-      .parse(JSON.parse(text)).packageManager;
-  } catch (error) {
-    throw new Error(
-      `${file} does not parse as JSON (${error instanceof Error ? error.message : String(error)}), so the stage can't read which package manager installs it.`,
-      { cause: error }
-    );
-  }
-  return typeof field === "string" && field ? field : undefined;
-};
-
-/**
- * The project the toolchain root `from` installs as: the nearest folder from
- * it up to the clone's root whose package.json names a `packageManager`
- * (nodejs.org/api/corepack.html: it "defines which package manager is
- * expected to be used"), else that holds a lockfile, which names it. Refused
- * in words when none does: the stage never guesses a manager.
- */
-const installOf = async (
-  clone: string,
-  repo: string,
-  from: string
-): Promise<Install> => {
-  for (let dir = from; ; dir = dirname(dir)) {
-    const field = await packageManagerIn(dir);
-    if (field) {
-      const [name = "", version = ""] = field.split("@");
-      const manager = PACKAGE_MANAGERS.find((one) => one === name);
-      if (!manager) {
-        throw new Error(
-          `${join(repo, relative(clone, dir))}'s package.json names ${field} as its packageManager, and a sheet's stage installs with npm, pnpm, yarn or bun.`
-        );
-      }
-      const major = Number.parseInt(version, 10);
-      return {
-        dir,
-        manager,
-        named: `its packageManager ${field}`,
-        ...(Number.isNaN(major) ? {} : { major }),
-      };
-    }
-    const lock = LOCKFILES.find((name) => existsSync(join(dir, name)));
-    if (lock) {
-      return { dir, manager: LOCK_MANAGER[lock], named: `its ${lock}` };
-    }
-    if (dir === clone || relative(clone, dir).startsWith("..")) {
-      break;
-    }
-  }
-  throw new Error(
-    `${join(repo, relative(clone, from))} has no lockfile (${LOCKFILES.join(", ")}) and no packageManager in a package.json up to its repository's root, so the stage can't tell which package manager installs it: commit the project's lockfile, then call again.`
-  );
-};
-
-/** The files a project installs from: a change to one installs it again. */
-const MANIFESTS: ReadonlySet<string> = new Set(["package.json", ...LOCKFILES]);
-
-/** What an install leaves in its folder: `node_modules`, or Yarn Plug'n'Play's loader in its place. */
-const INSTALLED = ["node_modules", ".pnp.cjs"];
-
-/** A manager's frozen install: the lockfile as committed, never rewritten. */
-const frozenInstall = (install: Install): string => {
-  switch (install.manager) {
-    case "npm":
-      return "npm ci";
-    case "pnpm":
-      return "pnpm install --frozen-lockfile";
-    case "bun":
-      return "bun install --frozen-lockfile";
-    case "yarn":
-      // Yarn 2 on refuses `--frozen-lockfile` for `--immutable`; Yarn 1 has only the first.
-      if (install.major === undefined) {
-        return 'if [ "$(yarn --version | cut -d. -f1)" -ge 2 ]; then yarn install --immutable; else yarn install --frozen-lockfile; fi';
-      }
-      return install.major >= 2
-        ? "yarn install --immutable"
-        : "yarn install --frozen-lockfile";
-    default:
-      unhandled("manager", install.manager);
-  }
-};
-
-/** What the install at `dir` installs from: its command, lockfiles and package.json, hashed. */
-const inputsOf = async (dir: string, command: string): Promise<string> => {
-  const hash = createHash("sha256").update(command);
-  for (const name of ["package.json", ...LOCKFILES]) {
-    const bytes = await readFile(join(dir, name)).catch(() => undefined);
-    hash.update(`\0${name}\0`);
-    if (bytes) {
-      hash.update(bytes);
-    }
-  }
-  return hash.digest("hex");
-};
-
-/**
- * The project the toolchain root `root` (absolute, in the clone) installs as
- * ({@link installOf}), installed inside the clone's boundary by its manager's
- * frozen install, unless it is installed from the same inputs already.
- * Refused in words when the machine has no such manager, or the install
- * fails. Answers the record with what it installed.
- */
-const installAt = async (
-  boundary: WorkspaceRef,
-  kept: Kept,
-  root: string
-): Promise<Kept> => {
-  const install = await installOf(boundary.path, kept.repo, root);
-  const command = frozenInstall(install);
-  const key = relative(boundary.path, install.dir) || ".";
-  const inputs = await inputsOf(install.dir, command);
-  if (
-    kept.installed?.[key] === inputs &&
-    INSTALLED.some((name) => existsSync(join(install.dir, name)))
-  ) {
-    return kept;
-  }
-  const where = join(kept.repo, relative(boundary.path, install.dir));
-  const result = await runHubCommand(
-    install.dir,
-    `command -v ${install.manager} >/dev/null 2>&1 || { echo '${NO_MANAGER}'; exit 127; }\n${command}`,
-    STAGE_CLONE_INSTALL_MS,
-    boundary,
-    undefined,
-    // A heavy run: it waits for one of the machine's heavy-work slots.
-    `the stage's install of ${where}@${boundary.id.slice(0, 8)}`
-  );
-  if (result.stdout.includes(NO_MANAGER)) {
-    throw new Error(
-      `${where} installs with ${install.manager} (${install.named}), and this machine has no ${install.manager}: ${HOW_TO_GET[install.manager]}, then call again.`
-    );
-  }
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `${where} did not install in the stage's clone: \`${command}\` (${install.named}) exited ${result.exitCode}: ${(result.stderr || result.stdout).trim().split("\n").slice(-3).join(" ")}`
-    );
-  }
-  console.info(
-    `[stage] ${boundary.id}: ${key} installed with \`${command}\` (${install.named})`
-  );
-  return { ...kept, installed: { ...kept.installed, [key]: inputs } };
-};
-
 /**
  * A whole clone brought in step ({@link mirror}), its record kept when
- * anything moved; a package manifest or lockfile among what changed installs
- * each project it installed before again ({@link installAt}, which installs
- * only when its inputs changed). The paths it changed.
+ * anything moved. A lockfile or package.json among what changed is the
+ * stage's to install, as it looks at its project while it serves (stage.ts,
+ * stage-install.ts `installMoved`). The paths it changed.
  */
 const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
-  const { changed, kept: mirrored } = await mirror(boundary, kept);
-  let now = mirrored;
-  const manifests = changed.some((path) => MANIFESTS.has(basename(path)));
-  if (manifests) {
-    for (const key of Object.keys(now.installed ?? {})) {
-      try {
-        now = await installAt(boundary, now, join(boundary.path, key));
-      } catch (error) {
-        console.warn(
-          `[stage] ${boundary.id}: ${key} did not install again: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-  }
+  const { changed, kept: now } = await mirror(boundary, kept);
   if (JSON.stringify(now) !== JSON.stringify(kept)) {
     await keep(boundary.id, now);
   }
@@ -634,6 +425,7 @@ const cut = async (
   await removeTree(boundary.path);
   await mkdir(state, { recursive: true });
   await rm(join(state, KEPT), { force: true });
+  await forgetInstalls(boundary.id);
   // Written before the clone: the boundary and every scan of this machine's clones find it by this record.
   await writeStateFile(
     join(state, "create.json"),
@@ -739,8 +531,8 @@ export const stageCloneOf = (place: WorkspaceRef): Promise<StageClone> => {
 
 /**
  * The project the stage at toolchain root `root` (absolute, in the clone)
- * runs installed in place `place`'s stage clone ({@link installAt}), in the
- * clone's turn.
+ * runs installed in place `place`'s stage clone (stage-install.ts
+ * `installProject`), in the clone's turn.
  */
 export const installStage = (
   place: WorkspaceRef,
@@ -754,10 +546,10 @@ export const installStage = (
         `The stage for ${place.path} has no clone of its checkout to install: call again.`
       );
     }
-    const now = await installAt(clone.boundary, kept, root);
-    if (now !== kept) {
-      await keep(clone.boundary.id, now);
-    }
+    await installProject(
+      { boundary: clone.boundary, from: root, shownAs: kept.repo },
+      true
+    );
   });
 
 /**

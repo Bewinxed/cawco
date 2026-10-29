@@ -474,6 +474,7 @@ import {
   STAGE_COMPONENTS,
   STAGE_ENSURE,
   STAGE_IDLE_MS,
+  STAGE_INSTALL_MS,
   STAGE_READY_MS,
   STAGE_RENDER,
   STAGE_RENDER_MS,
@@ -14159,14 +14160,15 @@ export const createServer = (
         `The sheet's workspace ${workspace.id.slice(0, 8)} is on no machine the hub knows, so its stage can't run.`
       );
     }
-    // A place's stage runs in a clone of its checkout, cut and installed on
+    // A stage installs its project first when its lockfile moved (agent
+    // stage-install.ts); a place's runs in a clone of its checkout, cut on
     // its first use (agent stage-clone.ts): its call waits for that too.
     const asked = await callAgent(
       machineId,
       method,
       [workspace, arg],
       STAGE_READY_MS +
-        (isPlace(workspace.id) ? STAGE_CLONE_MS : 0) +
+        (isPlace(workspace.id) ? STAGE_CLONE_MS : STAGE_INSTALL_MS) +
         (method === STAGE_RENDER ? STAGE_RENDER_MS : 0) +
         15_000
     );
@@ -14643,7 +14645,8 @@ export const createServer = (
         machineId,
         STAGE_SERVE,
         [workspace, serve],
-        STAGE_READY_MS + 15_000
+        // Its project installed first when its lockfile moved (agent stage-install.ts).
+        STAGE_READY_MS + STAGE_INSTALL_MS + 15_000
       );
       switch (asked.kind) {
         case "unanswered":

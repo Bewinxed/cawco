@@ -21,6 +21,10 @@
  *   a Preview of one of its sheets ({@link warmStage}, created or revised),
  *   or the first request a preview of it relays ({@link wakeSource}),
  *   answering `live` within {@link STAGE_READY_MS} or `error`;
+ * - installs its project first when its lockfile or package.json moved past
+ *   its last install (stage-install.ts), and, live, is installed and started
+ *   again once they move ({@link reinstall}); a failed install is its
+ *   `error`, in the installer's words;
  * - is asked {@link HEALTH_PATH} every {@link STAGE_HEALTH_MS}; a stage that
  *   ends or stops answering is started again, {@link STAGE_RESTARTS} times
  *   with a growing wait, then stays in `error`; one that never served (its
@@ -116,6 +120,7 @@ import {
   syncStageClone,
 } from "./stage-clone";
 import { stageHost } from "./stage-host/build";
+import { installMoved, installProject, type ProjectAt } from "./stage-install";
 import { type RenderAsk, type Rendered, renderCanvas } from "./stage-render";
 import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
@@ -315,20 +320,55 @@ const treeOf = async (workspace: WorkspaceRef): Promise<Tree> =>
     : { ref: workspace, folder: workspace.path, boundary: workspace };
 
 /**
- * A place's project, the one of the toolchain root at or above `from`,
- * installed in its stage clone by its own package manager (stage-clone.ts
- * `installStage`) before the stage reads what is installed. A workspace's
- * is its delegate's to install.
+ * The project of the toolchain root at or above `from` installed by its own
+ * package manager when its lockfile moved past its install (stage-install.ts;
+ * a place's in its stage clone, stage-clone.ts `installStage`), before the
+ * stage reads what is installed. A stage running on that root installs on
+ * its own wake instead, and starts again on what it installed ({@link wake}).
  */
 const installedFor = async (tree: Tree, from: string): Promise<void> => {
-  if (!isPlace(tree.ref.id)) {
+  const root = upFrom(from, tree.folder).find(toolchainAt);
+  if (!root) {
     return;
   }
-  const root = upFrom(from, tree.folder).find(toolchainAt);
-  if (root) {
-    await installStage(tree.ref, tree, root);
+  const running = stages.get(
+    sheetKey(tree.ref.id, relative(tree.folder, root) || ".")
+  );
+  if (running && running.status !== "asleep" && running.status !== "error") {
+    return;
   }
+  await (isPlace(tree.ref.id)
+    ? installStage(tree.ref, tree, root)
+    : installProject(
+        { boundary: tree.boundary, from: root, shownAs: tree.ref.path },
+        false
+      ));
 };
+
+/** Where a stage's project installs: its boundary and its folder. */
+const projectOf = (stage: Stage): ProjectAt => ({
+  boundary: stage.boundary,
+  from: stage.root,
+  shownAs: stage.boundary.path,
+});
+
+/**
+ * A stage's project installed when its lockfile or package.json moved past
+ * its install, or its `node_modules` went (stage-install.ts): a place's in
+ * its stage clone, cut again or brought in step with its checkout first.
+ */
+const installFor = async (stage: Stage): Promise<void> => {
+  if (isPlace(stage.workspace.id)) {
+    const clone = await stageCloneOf(stage.workspace);
+    await installStage(stage.workspace, clone, stage.root);
+    return;
+  }
+  await installProject(projectOf(stage), false);
+};
+
+/** Whether a stage's project moved past its install; a look that fails is no move, and the start after says why. */
+const depsMoved = (stage: Stage): Promise<boolean> =>
+  installMoved(projectOf(stage)).catch(() => false);
 
 /**
  * Whether a sheet stage runs in place stage clone `id` (starting, waking or
@@ -910,7 +950,39 @@ const IDLE_MS = process.env.CAWCO_STAGE_IDLE_MS
   ? Number(process.env.CAWCO_STAGE_IDLE_MS)
   : STAGE_IDLE_MS;
 
-/** Its health look and its sleep, every {@link STAGE_HEALTH_MS} while it is live. */
+/** What a live stage's health look found: a crash, or a whole look's time live. */
+function looked(stage: Stage, look: Bounded<boolean>): void {
+  switch (look.kind) {
+    case "answered":
+      if (!look.value) {
+        crashed(
+          stage,
+          stage.runs.kind === "sheet"
+            ? `it stopped answering ${HEALTH_PATH}`
+            : `nothing listens on port ${stage.port} any more`
+        );
+      } else if (stage.restarts > 0) {
+        // A whole look's time live: its next crash starts its restarts afresh.
+        stage.restarts = 0;
+      }
+      break;
+    case "unanswered":
+      // A sheet's host silent for a whole look is the crash it watches for,
+      // said as silence. A server's look asks no request of it, so a look
+      // that ran out is this machine's slowness: the next look asks again.
+      if (stage.runs.kind === "sheet") {
+        crashed(
+          stage,
+          `it did not answer ${HEALTH_PATH} within ${HEALTH_WAIT_MS / 1000} s`
+        );
+      }
+      break;
+    default:
+      unhandled("read", look);
+  }
+}
+
+/** Its health look, its lockfile's look and its sleep, every {@link STAGE_HEALTH_MS} while it is live. */
 function watch(stage: Stage): void {
   clearInterval(stage.health);
   stage.health = setInterval(async () => {
@@ -921,36 +993,30 @@ function watch(stage: Stage): void {
       sleep(stage);
       return;
     }
-    const look = await healthy(stage, HEALTH_WAIT_MS);
-    switch (look.kind) {
-      case "answered":
-        if (!look.value) {
-          crashed(
-            stage,
-            stage.runs.kind === "sheet"
-              ? `it stopped answering ${HEALTH_PATH}`
-              : `nothing listens on port ${stage.port} any more`
-          );
-        } else if (stage.restarts > 0) {
-          // A whole look's time live: its next crash starts its restarts afresh.
-          stage.restarts = 0;
-        }
-        break;
-      case "unanswered":
-        // A sheet's host silent for a whole look is the crash it watches for,
-        // said as silence. A server's look asks no request of it, so a look
-        // that ran out is this machine's slowness: the next look asks again.
-        if (stage.runs.kind === "sheet") {
-          crashed(
-            stage,
-            `it did not answer ${HEALTH_PATH} within ${HEALTH_WAIT_MS / 1000} s`
-          );
-        }
-        break;
-      default:
-        unhandled("read", look);
+    if (await depsMoved(stage)) {
+      if (stage.status === "live") {
+        reinstall(stage);
+      }
+      return;
     }
+    looked(stage, await healthy(stage, HEALTH_WAIT_MS));
   }, STAGE_HEALTH_MS);
+}
+
+/**
+ * A live stage whose project moved past its install (a fast-forward or a
+ * rebase brought a new lockfile): ended, then started again, which installs
+ * first ({@link start}), so it never serves on the dependencies it had.
+ */
+function reinstall(stage: Stage): void {
+  stage.stopping = true;
+  kill(stage);
+  stage.status = "starting";
+  stage.restarts = 0;
+  stage.message = "its lockfile changed: installing, then starting it again";
+  tell(stage);
+  stage.ready = start(stage);
+  stage.ready.catch(() => undefined);
 }
 
 /** Asleep: stopped for want of a viewer, started again on the next use. */
@@ -1127,14 +1193,18 @@ const servesBy = async (
  */
 async function start(stage: Stage): Promise<void> {
   stage.stopping = false;
+  // Every stage starts on its project as its lockfile names it: one whose
+  // workspace was fast-forwarded past its install served a 500 on every
+  // page (2026-10-29). A place's starts on its checkout as it is now: one
+  // woken after its sleep has missed every edit since, and its clone may
+  // have retired meanwhile (stage-clone.ts), which this cuts again. An
+  // install that fails is the stage's error, in the installer's words.
+  try {
+    await installFor(stage);
+  } catch (error) {
+    refusedStart(stage, error instanceof Error ? error.message : String(error));
+  }
   if (stage.runs.kind === "sheet") {
-    // A place's stage starts on its checkout as it is now, installed: one
-    // woken after its sleep has missed every edit since, and its clone may
-    // have retired meanwhile (stage-clone.ts), which this cuts again.
-    if (isPlace(stage.workspace.id)) {
-      const clone = await stageCloneOf(stage.workspace);
-      await installStage(stage.workspace, clone, stage.root);
-    }
     await writeHost(stage);
     // The host a failed health look ended (`crashed` → `kill`: its
     // executor's TERM has the boundary's runner TERM the host's group, then
@@ -1654,7 +1724,12 @@ const used = (stage: Stage, by: string): void => {
 async function wake(stage: Stage, by: string, restart = true): Promise<void> {
   used(stage, by);
   if (stage.status === "live") {
-    return;
+    // A page's load or an agent's use finds a lockfile that moved since the
+    // last look at once; a background request waits for the next look.
+    if (!(restart && (await depsMoved(stage)) && stage.status === "live")) {
+      return;
+    }
+    reinstall(stage);
   }
   if (stage.status === "error" && !restart) {
     throw new StageRefusal(
