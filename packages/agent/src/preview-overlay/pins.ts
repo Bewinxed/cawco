@@ -11,8 +11,10 @@
  * fill says where it stands: hollow while the session hasn't heard it (no
  * number yet while it is being written), filled once sent, recessed when
  * resolved, which is drawn only while its thread is open. A 2px raised ring
- * and the xs shadow lift it off the page; an open or stepped-to pin adds a
- * second ring in the focus ink; a dot on its top end says the agent is
+ * and the xs shadow lift it off the page; a pin reached by the keyboard (the
+ * host's J and K, a row taken by keys) adds a second ring in the focus ink,
+ * until a press; an open pin is marked by its open card, never by a ring
+ * (DESIGN.md, The One Ring Rule); a dot on its top end says the agent is
  * working on it (the live dot, breathing) or has answered and the person
  * hasn't looked (the needs-you dot, echoing three loops, then still).
  *
@@ -183,8 +185,18 @@ export interface Pins {
   /** The layer fixed to the viewport, where pins on the page as a whole stand. */
   fixed: SVGSVGElement;
   /** The pin the host focused (J, K, its row), outlined and brought into view out from under the host's chrome; or none. */
-  /** Pin `id` focused, and with `scroll` brought into view: in one step with `instant` (a thread opening, whose card stands where the pill lands), else a glide. */
-  focus: (id: string | null, scroll: boolean, instant?: boolean) => void;
+  /**
+   * Pin `id` focused, and with `scroll` brought into view: in one step with
+   * `instant` (a thread opening, whose card stands where the pill lands),
+   * else a glide. `keyed`, it was reached by the keyboard: its pill wears
+   * the focus ring until a press.
+   */
+  focus: (
+    id: string | null,
+    scroll: boolean,
+    instant?: boolean,
+    keyed?: boolean
+  ) => void;
   /** The pin whose row in the host's list the pointer or the keyboard rests on, its element chosen; none gives the focused pin's back. */
   hover: (id: string | null) => void;
   /** After a re-publish or an HMR update: the open thread's pin, if it now stands under the host's chrome, brought out again. */
@@ -446,6 +458,8 @@ export function startPins(deps: PinsDeps): Pins {
   let drafted: (DraftTarget & { standing?: Standing; pill?: Pill }) | null =
     null;
   let focused: string | null = null;
+  /** The focused pin was reached by the keyboard: its pill wears the focus ring, until a press. */
+  let keyed = false;
   let tracked: string | null = null;
   let live = new Set<string>();
   let unread = new Set<string>();
@@ -718,7 +732,7 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   /**
-   * One pill drawn: its focus ring when open or stepped to, its raised ring
+   * One pill drawn: its focus ring when the keyboard reached it, its raised ring
    * with the xs shadow, its face by state (DESIGN.md, A pin's pill), its
    * number, and its dot.
    */
@@ -732,7 +746,7 @@ export function startPins(deps: PinsDeps): Pins {
     g.setAttribute("data-state", state);
     g.setAttribute("data-tail", pill.tail);
     const { box, tail } = pill;
-    if (pin && (pin.id === focused || pin.id === tracked)) {
+    if (pin && keyed && pin.id === focused) {
       const focus = pathEl(
         shapePath(grow(box, 2 * RING), corners(box.h, tail, 2 * RING)),
         paint.focus
@@ -1163,6 +1177,17 @@ export function startPins(deps: PinsDeps): Pins {
     }
   };
   addEventListener("scroll", onScroll, { capture: true, passive: true });
+  // A press ends keyboard focus: the focused pin's ring goes.
+  addEventListener(
+    "pointerdown",
+    () => {
+      if (keyed) {
+        keyed = false;
+        draw();
+      }
+    },
+    { capture: true, passive: true }
+  );
   // The viewport's width moves the pins on the page as a whole, and which side a pill's tail takes.
   addEventListener("resize", () => draw(), { passive: true });
   // Asking for less motion stops a live dot's breath at once, and asking
@@ -1434,16 +1459,18 @@ export function startPins(deps: PinsDeps): Pins {
       });
       open(id);
     },
-    focus: (id, scroll, instant = false) => {
+    focus: (id, scroll, instant = false, byKey = false) => {
       const before = focused;
+      const ringed = keyed;
       focused = id;
+      keyed = byKey && id !== null;
       const stale = staleInset();
       const el: Element | null = id ? (placed.get(id)?.el ?? null) : null;
       if (scroll && id) {
         reveal(id, instant);
       }
       deps.outline(el, true);
-      if (before !== id || stale) {
+      if (before !== id || ringed !== keyed || stale) {
         // Its pill takes, or gives back, the focus ring.
         draw();
       }

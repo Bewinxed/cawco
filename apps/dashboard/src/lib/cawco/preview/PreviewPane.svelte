@@ -2349,6 +2349,21 @@
     text: string
   ) => ({ text, attachments: commentAttachments(draft.unsent?.files ?? []) });
 
+  /**
+   * Pin `id` focused on the page, with `scroll` brought into view (`instant`
+   * in one step). Its pill wears the focus ring only when the keyboard got
+   * it there (`keyed`, by default the last input): an open or stepped-to pin
+   * reached by a press is marked by its card and its row, never a ring
+   * (DESIGN.md, The One Ring Rule).
+   */
+  function focusPin(
+    id: string,
+    scroll: boolean,
+    { instant = false, keyed = lastInput.current === "key" } = {}
+  ) {
+    post({ type: "cawco:focus-pin", id, scroll, instant, keyed });
+  }
+
   /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
   function openCard(id: string, via: "key" | "pointer" = "pointer") {
     loadKit();
@@ -2372,7 +2387,7 @@
     post({ type: "cawco:track-pin", id });
     // Brought into view in one step, not a glide: its card stands where its
     // pill lands, and the page tells that place once.
-    post({ type: "cawco:focus-pin", id, scroll: true, instant: true });
+    focusPin(id, true, { instant: true, keyed: via === "key" });
   }
   /**
    * The thread closes: its Close, Esc, another row or pin opened (`swap`:
@@ -2545,7 +2560,8 @@
     const next =
       stepping[(at + by + stepping.length) % stepping.length] ?? stepping[0];
     focusedPin = next.id;
-    post({ type: "cawco:focus-pin", id: next.id, scroll: true });
+    // J and K are the keyboard's own steps.
+    focusPin(next.id, true, { keyed: true });
     if (openPin) {
       openCard(next.id, "key");
     }
@@ -2731,7 +2747,7 @@
     const next = at === -1 ? null : (rest[at] ?? rest[at - 1] ?? null);
     focusedPin = next;
     if (next) {
-      post({ type: "cawco:focus-pin", id: next, scroll: false });
+      focusPin(next, false);
     }
   }
   /**
@@ -4514,8 +4530,7 @@
             onclose={() => closeCard()}
             ondelete={deleteOpenPin}
             ondraft={() => drafts?.changed(pin.id)}
-            onfind={() =>
-              post({ type: "cawco:focus-pin", id: pin.id, scroll: true })}
+            onfind={() => focusPin(pin.id, true)}
             onplace={placeElsewhere}
             onreply={(text) => reply(text)}
             onresolve={(resolved) => resolvePin(resolved)}

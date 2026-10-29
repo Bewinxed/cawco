@@ -3003,7 +3003,8 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       pins.focus(
         idOf(message),
         message.scroll === true,
-        message.instant === true
+        message.instant === true,
+        message.keyed === true
       ),
     // What changed that the person hasn't looked at, and the pins with an answer he hasn't: ringed, their stops told.
     "cawco:changes": (message) =>

@@ -40,7 +40,8 @@
    * bare, unsent hollow with its figure in the action ink, sent solid,
    * resolved recessed. `tail` names the corner that stands on the pressed
    * point, a `--radius-hair` corner; none is the round pill (the page as a
-   * whole). Focused, a second ring in the focus ink; a dot on its top end
+   * whole). `focused` is keyboard focus alone, a second ring in the focus
+   * ink: an open pin is marked by its open card, never by a ring; a dot on its top end
    * says the agent is working (the live dot, ui/live-dot, on the shared
    * breath) or
    * an answer is unread (the needs-you dot, in `status-attn-glyph`, its

@@ -19,6 +19,10 @@
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import {
+    keyboardUse,
+    lastInput,
+  } from "#lib/components/ui/fluid-tabs/last-input.js";
   import PinFloatGoo from "./PinFloatGoo.svelte";
   import { AGENT, PINS } from "./pins";
 
@@ -70,26 +74,10 @@
   const held = $state<Record<string, boolean>>({});
   /**
    * The pill with keyboard focus, by its pin: the one source of its focus
-   * ring. Set by a navigation key alone, never a modifier (Chromium matches
-   * `:focus-visible` on a pressed pill once any key, Shift included, goes
-   * down), and cleared by a press.
+   * ring, by the house rule (`lastInput`, `keyboardUse`): a key that acts
+   * sets it, a modifier held alone never does, a press clears it.
    */
   let keyed = $state<string | null>(null);
-  /** The keys that move or act by keyboard: they make focus visible. */
-  const NAVIGATION = new Set([
-    "Tab",
-    "Enter",
-    " ",
-    "Escape",
-    "ArrowUp",
-    "ArrowDown",
-    "ArrowLeft",
-    "ArrowRight",
-    "Home",
-    "End",
-  ]);
-  /** The last input moved by keyboard: a pill focused now shows its ring. */
-  let byKeys = false;
   /** Each pill and what it stands on, in the well, px; its mark null while it is out of view. */
   let at = $state<Record<string, { box: Box; mark: Box | null }>>({});
   const inWell = (rect: DOMRect, frame: DOMRect): Box => ({
@@ -155,15 +143,11 @@
 
 <svelte:window
   onkeydown={(event) => {
-    if (NAVIGATION.has(event.key)) {
-      byKeys = true;
-    }
     if (event.key === "Escape" && open) {
       open = null;
     }
   }}
   onpointerdown={() => {
-    byKeys = false;
     keyed = null;
   }}
 />
@@ -191,11 +175,11 @@
     }}
     onclick={() => press(pin.id)}
     onfocus={() => {
-      keyed = byKeys ? pin.id : null;
+      keyed = lastInput.current === "key" ? pin.id : null;
     }}
     onkeydown={(event) => {
-      // A navigation key on a pill focused by a press makes its focus visible; a modifier alone never does.
-      if (NAVIGATION.has(event.key)) {
+      // A key on a pill focused by a press makes its focus visible; a modifier alone never does.
+      if (keyboardUse(event)) {
         keyed = pin.id;
       }
     }}

@@ -373,7 +373,6 @@
     {#if !marked}
       <span class="mark-cell" data-slot="head-pill">
         <PinMark
-          focused
           gone={!!pin.movedAt}
           number={pin.number}
           state={markState(pin)}
