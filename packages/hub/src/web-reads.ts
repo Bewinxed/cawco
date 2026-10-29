@@ -22,10 +22,8 @@
  *   tools' names and URL arguments, as above.
  */
 
-/** The harnesses' own fetch tools: their `url` decides. */
-const FETCH_TOOLS: ReadonlySet<string> = new Set(["WebFetch", "webfetch"]);
-/** The harnesses' own search tools: always the web. */
-const SEARCH_TOOLS: ReadonlySet<string> = new Set(["WebSearch", "websearch"]);
+import { SHELL_TOOLS, WEB_FETCH_TOOLS, WEB_SEARCH_TOOLS } from "@cawco/core";
+
 /** An MCP tool, by its server or its name, that reaches pages. */
 const WEB_NAME =
   /fetch|scrape|crawl|search|browser|chrome|playwright|puppeteer|navigate|firecrawl|exa|web/iu;
@@ -36,8 +34,6 @@ export const CAWCO_TOOL = /^(?:mcp__cawco__|cawco_)/u;
 const CONNECTOR = /^mcp__claude_ai_/u;
 /** Claude's name for an MCP tool: `mcp__<server>__<tool>`. */
 const CLAUDE_MCP = /^mcp__(.+?)__/u;
-/** The harnesses' shell tools: Claude Code's `Bash`, OpenCode 2.0's `shell`. */
-const SHELLS: ReadonlySet<string> = new Set(["Bash", "shell"]);
 
 /** A URL anywhere in a command, of a scheme that fetches. */
 const URL_IN_TEXT = /\b(?:https?|ftps?|wss?|git):\/\/[^\s'"`<>|;()]+/giu;
@@ -407,10 +403,10 @@ export const readsWeb = (
   context: WebContext
 ): boolean => {
   const { fleet } = context;
-  if (SEARCH_TOOLS.has(name)) {
+  if (WEB_SEARCH_TOOLS.has(name)) {
     return true;
   }
-  if (FETCH_TOOLS.has(name)) {
+  if (WEB_FETCH_TOOLS.has(name)) {
     const urls = urlsOf(input);
     return urls.length === 0 || urls.some((url) => !localTarget(url, fleet));
   }
@@ -420,7 +416,7 @@ export const readsWeb = (
   if (CAWCO_TOOL.test(name)) {
     return false;
   }
-  if (SHELLS.has(name)) {
+  if (SHELL_TOOLS.has(name)) {
     return (
       typeof input.command === "string" && commandReadsWeb(input.command, fleet)
     );

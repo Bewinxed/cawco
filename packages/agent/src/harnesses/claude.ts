@@ -96,6 +96,7 @@ import {
   conversationGone,
   EFFORT_READ,
   GATEWAY_RELAUNCH,
+  HARNESS_TOOLS,
   harnessWords,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
@@ -1054,12 +1055,12 @@ const SEND_NOW = { priority: "now", origin: { kind: "human" } } as const;
 
 /** The tools whose running call Claude Code moves aside for a send-now ({@link SEND_NOW}). */
 const MOVES_ASIDE: ReadonlySet<string> = new Set([
-  "Bash",
-  "PowerShell",
+  ...HARNESS_TOOLS.claude.shell,
+  ...HARNESS_TOOLS.claude.powershell,
   "Agent",
   "Task",
-  "WebFetch",
-  "WebSearch",
+  ...HARNESS_TOOLS.claude.fetch,
+  ...HARNESS_TOOLS.claude.search,
 ]);
 
 /** Whether a running call of `tool` moves aside for a send-now: {@link MOVES_ASIDE}, or any MCP tool's. */
@@ -1067,7 +1068,10 @@ const movesAside = (tool: string): boolean =>
   MOVES_ASIDE.has(tool) || tool.startsWith("mcp__");
 
 /** The CLI's shell tools: a command one runs is cut with its process. */
-const SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "PowerShell"]);
+const SHELL_TOOLS: ReadonlySet<string> = new Set([
+  ...HARNESS_TOOLS.claude.shell,
+  ...HARNESS_TOOLS.claude.powershell,
+]);
 
 /** Where the CLI keeps its temp files: its `CLAUDE_CODE_TMPDIR`, else its temp dir. */
 const tempRootOf = (env: Record<string, string | undefined>): string =>

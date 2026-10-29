@@ -70,6 +70,7 @@ import {
   type NeutralOrigin,
   type PermissionRequestFrame,
   type PermissionResult,
+  POWERSHELL_TOOLS,
   SHELL_TOOLS,
   type ThreadNote,
 } from "@cawco/core";
@@ -111,11 +112,12 @@ const GATED: ReadonlySet<string> = new Set([
 
 /**
  * Shells whose lines {@link readShell} (a POSIX shell's reader) cannot read:
- * Claude Code's Windows `PowerShell`. A line of one never runs without your
- * card, however it reads: PowerShell runs a command from `( … )` and `{ … }`
- * where a POSIX shell reads words. Its shared-checkout refusals still apply.
+ * every harness's PowerShell (core `POWERSHELL_TOOLS`). A line of one never
+ * runs without your card, however it reads: PowerShell runs a command from
+ * `( … )` and `{ … }` where a POSIX shell reads words. Its shared-checkout
+ * refusals still apply.
  */
-const UNREAD_SHELLS: ReadonlySet<string> = new Set(["PowerShell"]);
+const UNREAD_SHELLS = POWERSHELL_TOOLS;
 
 /**
  * What a lead's call is, by its tool: a shell line, a file edit, or any

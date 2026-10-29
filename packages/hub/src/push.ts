@@ -97,6 +97,7 @@ import {
   pairingWords,
   presenceLogWords,
   questionsOf,
+  SHELL_TOOLS,
   type TurnWakes,
   threadTarget,
   threadTargetOf,
@@ -208,9 +209,9 @@ const DESIGN_PROPOSAL_NAME = "Design system change";
 /** A project setting Caw asked about (project-settings.ts): what it is, its project under it. */
 const PROJECT_SETTING_NAME = "Project setting";
 
-/** Tools whose approval must be read in full: a push never offers Approve for them. */
-const OPEN_ONLY_TOOLS = new Set([
-  "Bash",
+/** Tools whose approval must be read in full: a push never offers Approve for them. Every harness's shell (core `SHELL_TOOLS`), and Claude Code's own. */
+const OPEN_ONLY_TOOLS: ReadonlySet<string> = new Set([
+  ...SHELL_TOOLS,
   "BashOutput",
   "ExitPlanMode",
   "KillShell",

@@ -9,6 +9,7 @@
 import {
   EFFORT_LEVELS,
   type EffortLevel,
+  HARNESSES,
   type HarnessKind,
   harnessNamed,
 } from "./harness";
@@ -184,6 +185,45 @@ export const SESSION_ROLES = [
 export type SessionRole = (typeof SESSION_ROLES)[number];
 
 /**
+ * Each harness's own tools of the kinds CawCo's permissions read, by the
+ * name the harness calls and asks under: one table, so a rule written for a
+ * kind (the lead gate's shells, web-reads.ts's taint, a push's open-only
+ * asks) holds the same on every harness, and a new harness fails the types
+ * until its names are given here.
+ *
+ * - `shell`: a POSIX shell. Claude Code's `Bash`, OpenCode 2.0's `shell`
+ *   (its permission action, opencode.ai/v2/docs/permissions), pi 1.3.0's
+ *   `bash`.
+ * - `powershell`: Claude Code's Windows `PowerShell` (agent SDK 0.3.302's
+ *   `BUILTIN_TOOL_NAMES`), pi 1.3.0's built-in `powershell`
+ *   (dist/core/tools/index.js); OpenCode 2.0 has none.
+ * - `fetch` and `search`: the built-in web tools. Claude Code's `WebFetch`
+ *   and `WebSearch`, OpenCode 2.0's `webfetch` and `websearch`; pi has no
+ *   web tool of its own ({@link PI_EQUIVALENTS}).
+ */
+export const HARNESS_TOOLS = {
+  claude: {
+    shell: ["Bash"],
+    powershell: ["PowerShell"],
+    fetch: ["WebFetch"],
+    search: ["WebSearch"],
+  },
+  opencode: {
+    shell: ["shell"],
+    powershell: [],
+    fetch: ["webfetch"],
+    search: ["websearch"],
+  },
+  pi: { shell: ["bash"], powershell: ["powershell"], fetch: [], search: [] },
+} as const satisfies Record<
+  HarnessKind,
+  Record<"fetch" | "powershell" | "search" | "shell", readonly string[]>
+>;
+
+/** A kind of tool {@link HARNESS_TOOLS} names on each harness. */
+export type HarnessToolKind = keyof (typeof HARNESS_TOOLS)[HarnessKind];
+
+/**
  * What a project's Caw may never call, in Claude's names, per harness: no
  * subagent, no shell the hub cannot see a command of, and no git worktree.
  * Claude's `Monitor` runs a script outside the per-call gate and
@@ -206,7 +246,7 @@ export const CAW_DENIED_TOOLS = {
     "Workflow",
   ],
   opencode: ["Agent"],
-  pi: ["powershell"],
+  pi: HARNESS_TOOLS.pi.powershell,
 } as const satisfies Record<HarnessKind, readonly string[]>;
 
 /**
@@ -225,18 +265,36 @@ export const CAW_DENIED_TOOLS = {
  * tool executes. Can block.", pi 1.3.0 extensions/types.d.ts `ToolCallEvent`).
  */
 export const LEAD_GATED_TOOLS = {
-  claude: ["Bash", "PowerShell", "Edit", "Write", "MultiEdit", "NotebookEdit"],
-  opencode: ["shell", "edit"],
-  pi: ["bash", "edit", "write"],
+  claude: [
+    ...HARNESS_TOOLS.claude.shell,
+    ...HARNESS_TOOLS.claude.powershell,
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit",
+  ],
+  opencode: [...HARNESS_TOOLS.opencode.shell, "edit"],
+  pi: [...HARNESS_TOOLS.pi.shell, "edit", "write"],
 } as const satisfies Record<HarnessKind, readonly string[]>;
 
-/** The shell tools, by every harness's name: what a lead's gate holds as shell (the rest edit files), and what a session's turn runs commands with. */
-export const SHELL_TOOLS: ReadonlySet<string> = new Set([
-  "Bash",
-  "PowerShell",
-  "shell",
-  "bash",
-]);
+/** Every harness's tools of `kinds`, by their own names ({@link HARNESS_TOOLS}). */
+const harnessToolsOf = (
+  ...kinds: readonly HarnessToolKind[]
+): ReadonlySet<string> =>
+  new Set(
+    HARNESSES.flatMap((harness) =>
+      kinds.flatMap((kind) => HARNESS_TOOLS[harness][kind])
+    )
+  );
+
+/** The shell tools, by every harness's name: what a lead's gate holds as shell (the rest edit files), what a session's turn runs commands with, and what web-reads.ts reads a command of. */
+export const SHELL_TOOLS = harnessToolsOf("shell", "powershell");
+/** The PowerShell tools, by every harness's name: shells whose lines a POSIX reader cannot read. */
+export const POWERSHELL_TOOLS = harnessToolsOf("powershell");
+/** The harnesses' own web fetch tools, by every harness's name: a URL argument decides whether one read the web. */
+export const WEB_FETCH_TOOLS = harnessToolsOf("fetch");
+/** The harnesses' own web search tools, by every harness's name: always a read of the web. */
+export const WEB_SEARCH_TOOLS = harnessToolsOf("search");
 
 /**
  * The CawCo tools a leaf delegate (`canDelegate === false`) never gets:
@@ -270,6 +328,12 @@ export const BOARD_ONLY_DENIED_TOOLS = {
   pi: [...CAW_DENIED_TOOLS.pi, ...LEAD_GATED_TOOLS.pi],
 } as const satisfies Record<HarnessKind, readonly string[]>;
 
+/** Claude Code's web tools, the names a denied-tool list is written in (the OpenCode adapter maps each to its own). */
+const CLAUDE_WEB_TOOLS = [
+  ...HARNESS_TOOLS.claude.fetch,
+  ...HARNESS_TOOLS.claude.search,
+] as const;
+
 /**
  * What a project's memory curator may never call (Projects spec §5.4): the
  * board-only list, and the web. It reads agents' inbox notes, which are
@@ -278,8 +342,8 @@ export const BOARD_ONLY_DENIED_TOOLS = {
  * Caw it gets CawCo's MCP server and no other (`SpawnPayload.lead`).
  */
 export const CURATOR_DENIED_TOOLS = {
-  claude: [...BOARD_ONLY_DENIED_TOOLS.claude, "WebFetch", "WebSearch"],
-  opencode: [...BOARD_ONLY_DENIED_TOOLS.opencode, "WebFetch", "WebSearch"],
+  claude: [...BOARD_ONLY_DENIED_TOOLS.claude, ...CLAUDE_WEB_TOOLS],
+  opencode: [...BOARD_ONLY_DENIED_TOOLS.opencode, ...CLAUDE_WEB_TOOLS],
   // pi has no web tool of its own ({@link PI_EQUIVALENTS}), and a fenced pi
   // session has none from anywhere else (agent pi-runtime.ts `cawcosExtensionsAlone`).
   pi: BOARD_ONLY_DENIED_TOOLS.pi,

@@ -11,6 +11,11 @@
  * makes, not only the text it ends with), and which named settings already
  * exist (so a put says whether it adds or replaces).
  */
+import {
+  SHELL_TOOLS,
+  WEB_FETCH_TOOLS,
+  WEB_SEARCH_TOOLS,
+} from "./delegate-types";
 import { type MemoryScope, scopeWords } from "./fleet";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./frames";
 import type { LandsMode } from "./injected";
@@ -1433,11 +1438,26 @@ const replaced = (changes: PermissionChange[]): string => {
   return statWords({ added, removed, sections: [] });
 };
 
-/** The harnesses' own tools, by their lower-cased name. */
+/** The harnesses' own tools: shells and web tools by every harness's name (core `HARNESS_TOOLS`), the rest by their lower-cased name. */
 function builtIn(
   toolName: string,
   input: Record<string, unknown>
 ): Presented | undefined {
+  if (SHELL_TOOLS.has(toolName)) {
+    return shellCall(input);
+  }
+  if (WEB_FETCH_TOOLS.has(toolName)) {
+    return only(
+      `Fetch ${text(input.url) ?? "a web page"}`,
+      fieldsOf(input, ["url"])
+    );
+  }
+  if (WEB_SEARCH_TOOLS.has(toolName)) {
+    return only(
+      `Search the web for “${text(input.query) ?? ""}”`,
+      fieldsOf(input, ["query"])
+    );
+  }
   const name = toolName.toLowerCase();
   const path = filePathOf(input);
   switch (name) {
@@ -1469,20 +1489,6 @@ function builtIn(
       return only(
         `Edit notebook ${text(input.notebook_path) ?? path ?? "(no path)"}`,
         fieldsOf(input, ["notebook_path", ...FILE_KEYS])
-      );
-    // Claude Code's and pi's `bash`; OpenCode 2.0's `shell`.
-    case "bash":
-    case "shell":
-      return shellCall(input);
-    case "webfetch":
-      return only(
-        `Fetch ${text(input.url) ?? "a web page"}`,
-        fieldsOf(input, ["url"])
-      );
-    case "websearch":
-      return only(
-        `Search the web for “${text(input.query) ?? ""}”`,
-        fieldsOf(input, ["query"])
       );
     case "glob":
       return only(

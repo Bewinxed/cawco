@@ -57,6 +57,7 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
   contactWords,
+  HARNESS_TOOLS,
   machineLabel,
   mcpFleetState,
   offeredMode,
@@ -257,11 +258,14 @@ const OPENCODE_MEMORY = join(OPENCODE_DIR, "AGENTS.md");
  */
 const STATIC_POLICY = {
   permissions: [
-    { action: "shell", resource: "*", effect: "ask" },
+    ...HARNESS_TOOLS.opencode.shell.map(
+      (action) => ({ action, resource: "*", effect: "ask" }) as const
+    ),
     { action: "edit", resource: "*", effect: "ask" },
     { action: "skill", resource: "wf-*", effect: "deny" },
-    { action: "webfetch", resource: "*", effect: "deny" },
-    { action: "websearch", resource: "*", effect: "deny" },
+    ...[...HARNESS_TOOLS.opencode.fetch, ...HARNESS_TOOLS.opencode.search].map(
+      (action) => ({ action, resource: "*", effect: "deny" }) as const
+    ),
   ],
 } as const;
 
