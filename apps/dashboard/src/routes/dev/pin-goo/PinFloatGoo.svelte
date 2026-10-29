@@ -21,7 +21,7 @@
      fill-box`): open, from the pin to its rest over `--dur-goo` on
      `--ease-goo`; closed, back over `--dur-goo-exit` on `--ease-goo-exit`.
      The demo's item is the trigger's size, so it only translates; the card
-     also scales from the pin's box. The neck between them is the filter's
+     also scales from the pin's box. Apart, the neck between them is the filter's
      alone: it forms while the blobs are near and lets go as they part. What
      stands on the shapes comes and goes as the demo's icons do: the thread
      fades in over `--dur-goo-content` after `--dur-goo-content-delay`, and
@@ -31,11 +31,15 @@
      and back over `--dur-goo-settle` (the demo's anticipation), and the card
      stays until that dip is done, the pin's own face back by then.
      Joined (the owner: "a toggle that keeps the small gooey part that makes
-     the card still connected to the chip"), it stands one goo blur from its
-     pin, where the filter holds a neck about as wide as the pin, and the pin
-     wears the card's surface while it is joined, its figure in the action
-     ink: one shape, one edge, one shadow. The page scrolling the pin away
-     breaks the neck as the shapes part, and the pin takes its own face back.
+     the card still connected to the chip"; "it should merge smoothly with
+     the comment div … don't narrow it like a dumbbell"), it stands one goo
+     blur from its pin, and a third shape in the same layer, a bridge as wide
+     as the pin from its centre into the card, holds the join straight: the
+     filter only rounds the inside corners where it meets the card. The
+     bridge grows and drains with the card on its transition, slides with
+     the pin as the page scrolls, and drains when the pin leaves the card's
+     edge; the pin wears the card's surface while it is joined, its figure
+     in the action ink: one shape, one edge, one shadow.
      Without motion it opens and closes at once, as the demo does.
   2. It holds still while the page scrolls (the owner: "only letting it move
      when it reaches the spot where it will move from one spot to the next,
@@ -110,7 +114,7 @@
     float?: HTMLElement;
     /** The pill as the page draws it, stood crisp over the goo (the demo's trigger). */
     pill?: Snippet;
-    /** It stands within the goo's reach of its pin, so the filter holds a neck between them, the pin wearing the card's surface: one shape. */
+    /** It stands one blur from its pin, joined to it by a bridge as wide as the pin, the pin wearing the card's surface: one shape. */
     joined?: boolean;
     /** How far apart the card and its pin still pull a neck between them, px: the goo's blur (`--goo-blur`). */
     stickiness?: number;
@@ -136,9 +140,9 @@
       box,
       room,
       besidePill: joined,
-      // Joined, it stands one blur from its pin: there the goo pulls a neck
-      // about as wide as the pin (a 20px pin, blur 6: 23px at 6px apart,
-      // 11px at 8px, none past 9px).
+      // Joined, it stands one blur from its pin, within the goo's reach
+      // (a 20px pin, blur 6: the filter pulls no neck past 9px), the
+      // bridge between them.
       clear: joined ? stickiness : undefined,
     }),
     {
@@ -316,26 +320,94 @@
       : "none"
   );
 
+  /** The joined bridge: its box in the card's coordinates, the end it grows from (the pin's centre), and its drained transform. */
+  interface Bridge {
+    h: number;
+    hide: string;
+    origin: string;
+    w: number;
+    x: number;
+    y: number;
+  }
   /**
-   * The filter holds a neck between the pin and the card: joined, and the
-   * pin within one and a half blurs of the card's edge (past that it pulls
-   * none). The pin then wears the card's surface.
+   * Joined, a bridge as wide as the pin runs from the pin's centre into the
+   * card's edge, past its round corner, in the blobs' fill: goo holds a
+   * straight join with a shape of its own, so the filter only fills the two
+   * inside corners where it meets the card with outward fillets, and the
+   * join is never narrower than the pin (a blur-and-threshold neck alone
+   * always pinches into a waist). Only while the pin stands beside one of
+   * the card's edges, along it, within one and a half blurs of it (past
+   * that the filter would pull no neck). The pin then wears the card's
+   * surface.
    */
-  const bridged = $derived.by(() => {
-    if (!(joined && pinHere)) {
-      return false;
+  const bridge = $derived.by((): Bridge | null => {
+    if (!(joined && pinHere && cardW > 0 && cardH > 0)) {
+      return null;
     }
-    const across = Math.max(
-      0,
-      1 - (pinHere.x + pinHere.w),
-      pinHere.x - (1 + cardW)
-    );
-    const along = Math.max(
-      0,
-      1 - (pinHere.y + pinHere.h),
-      pinHere.y - (1 + cardH)
-    );
-    return Math.hypot(across, along) <= stickiness * 1.5;
+    const p = pinHere;
+    const reach = stickiness * 1.5;
+    const cx = p.x + p.w / 2;
+    const cy = p.y + p.h / 2;
+    const left = 1;
+    const top = 1;
+    const right = 1 + cardW;
+    const foot = 1 + cardH;
+    const alongY = p.y + p.h > top && p.y < foot;
+    const alongX = p.x + p.w > left && p.x < right;
+    if (alongY && p.x + p.w <= left && left - (p.x + p.w) <= reach) {
+      const end = left + cardR;
+      return {
+        x: cx,
+        y: p.y,
+        w: end - cx,
+        h: p.h,
+        origin: "0% 50%",
+        hide: "scaleX(0)",
+      };
+    }
+    if (alongY && p.x >= right && p.x - right <= reach) {
+      const end = right - cardR;
+      return {
+        x: end,
+        y: p.y,
+        w: cx - end,
+        h: p.h,
+        origin: "100% 50%",
+        hide: "scaleX(0)",
+      };
+    }
+    if (alongX && p.y + p.h <= top && top - (p.y + p.h) <= reach) {
+      const end = top + cardR;
+      return {
+        x: p.x,
+        y: cy,
+        w: p.w,
+        h: end - cy,
+        origin: "50% 0%",
+        hide: "scaleY(0)",
+      };
+    }
+    if (alongX && p.y >= foot && p.y - foot <= reach) {
+      const end = foot - cardR;
+      return {
+        x: p.x,
+        y: end,
+        w: p.w,
+        h: cy - end,
+        origin: "50% 100%",
+        hide: "scaleY(0)",
+      };
+    }
+    return null;
+  });
+  const bridged = $derived(bridge !== null);
+  /** The bridge as drawn: where it stands, or, once the pin has left it, where it last stood, while it drains back into the pin. */
+  let keptBridge: Bridge | null = null;
+  const drawnBridge = $derived.by(() => {
+    if (bridge) {
+      keptBridge = bridge;
+    }
+    return keptBridge;
   });
 
   // The goo draws the pin while it is on screen; gone (after its close), it
@@ -554,6 +626,22 @@
         width={cardW}
         x="1"
         y="1"
+      />
+      <!-- The joined bridge, as wide as the pin, from its centre into the
+           card: drained into the pin (scaled to nothing toward it) unless
+           the pin wears the card's surface, on the card's own timing. -->
+      <rect
+        class={[
+          "fill-surface-raised origin-(--bridge-origin) transform-(--bridge-hidden) transform-fill transition-transform duration-(--dur-goo-exit) ease-goo-exit group-data-[face=joined]/goo:transform-none group-data-[face=joined]/goo:duration-(--dur-goo) group-data-[face=joined]/goo:ease-goo motion-reduce:transition-none",
+          !drawnBridge && "hidden",
+        ]}
+        data-slot="goo-bridge"
+        height={drawnBridge?.h ?? 0}
+        style:--bridge-hidden={drawnBridge?.hide}
+        style:--bridge-origin={drawnBridge?.origin}
+        width={drawnBridge?.w ?? 0}
+        x={drawnBridge?.x ?? 0}
+        y={drawnBridge?.y ?? 0}
       />
       <!-- The pin's blob (the demo's trigger), where the pin stands. -->
       <rect
