@@ -27,7 +27,8 @@ const SOURCE_FACTS = z.object({
   skill: z
     .object({
       description: z.string(),
-      files: z.array(z.string()),
+      files: z.array(z.object({ hash: z.string(), path: z.string() })),
+      hash: z.string(),
       name: z.string(),
     })
     .optional(),

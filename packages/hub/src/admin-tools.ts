@@ -635,8 +635,14 @@ export function adminTools() {
           .describe(
             "Install for one project only: it lands in every checkout and workspace of it. null: every machine."
           ),
+        contentHash: z
+          .string()
+          .optional()
+          .describe(
+            "Leave out: the hub sets it for a folder install, pinning the files the person approves."
+          ),
       },
-      async ({ action, name, source, projectId }) => {
+      async ({ action, name, source, projectId, contentHash }) => {
         if (action === "list") {
           const fleet = (await api("GET", "/api/fleet")) as {
             skills?: unknown[];
@@ -671,6 +677,7 @@ export function adminTools() {
           async () =>
             (await api("PUT", `/api/fleet/skills/${encodeURIComponent(name)}`, {
               source,
+              ...(contentHash === undefined ? {} : { contentHash }),
               enabled: true,
               ...(projectId === undefined
                 ? {}

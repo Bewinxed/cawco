@@ -919,6 +919,11 @@ import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import {
   bindSkillSource,
+  type CheckedFolder,
+  FOLDER_CHANGED,
+  folderOf,
+  parseSkillSource,
+  readCheckedFolder,
   resolveSkill,
   type SkillFolderReader,
 } from "./skills";
@@ -3599,6 +3604,29 @@ export const createServer = (
         pending.resolve(id, "cancelled", { cut: outcome.cut });
       } else {
         pending.resolve(id, "answered", { answer: outcome.answer });
+      }
+    },
+    bind: (actor, name, input) => bindFolderInstall(actor, name, input),
+    stale: async ({ asked }) => {
+      const { source } = asked.input;
+      const folder =
+        asked.tool === "admin_skills_write" &&
+        asked.input.action === "install" &&
+        typeof source === "string"
+          ? folderOf(source)
+          : undefined;
+      if (!folder) {
+        return;
+      }
+      try {
+        const { hash } = await readCheckedFolder(
+          folder.machine,
+          folder.path,
+          readSkillFolder
+        );
+        return hash === asked.input.contentHash ? undefined : FOLDER_CHANGED;
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
       }
     },
     sourceFacts: (name, input) =>
@@ -10948,6 +10976,106 @@ export const createServer = (
     )
       ? machineId
       : name;
+  };
+
+  /**
+   * A skill stored from a folder on a machine (`file://<machine>/<path>`),
+   * read and checked through its agent before anything is stored: refused
+   * in its words when it can't be, and when it no longer holds the files the
+   * person approved (`contentHash`, skills.ts `FOLDER_CHANGED`). The PUT
+   * route's way in for such a source, its refusals as `refuse` answers
+   * them; undefined for any other source.
+   */
+  const installFromFolder = async <Refused>(
+    name: string,
+    body: {
+      contentHash?: string;
+      enabled?: boolean;
+      projectId?: string | null;
+      source: string;
+    },
+    refuse: (code: 400 | 409, said: string) => Refused
+  ): Promise<FleetSkillMeta | Refused | undefined> => {
+    if (parseSkillSource(body.source)?.kind !== "file") {
+      return;
+    }
+    const folder = folderOf(body.source);
+    if (!folder) {
+      return refuse(
+        400,
+        `${body.source} names no machine: write it as file://<machine>/<path>`
+      );
+    }
+    let read: CheckedFolder;
+    try {
+      read = await readCheckedFolder(
+        folder.machine,
+        folder.path,
+        readSkillFolder
+      );
+    } catch (error) {
+      return refuse(
+        400,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    if (body.contentHash !== undefined && body.contentHash !== read.hash) {
+      return refuse(409, FOLDER_CHANGED);
+    }
+    const skill = db.putSkill({
+      name,
+      source: body.source,
+      enabled: body.enabled,
+      projectId: body.projectId,
+      hash: read.hash,
+      bytes: read.files.reduce(
+        (total, file) =>
+          total + Buffer.byteLength(file.contentBase64, "base64"),
+        0
+      ),
+      files: read.files,
+    });
+    skillChoices.delete(name);
+    fleetChanged();
+    return skill;
+  };
+
+  /**
+   * A skill install from a folder, bound before it is asked or run, in Full
+   * Send too: the caller's machine named in its source (skills.ts
+   * `bindSkillSource`), the folder read and checked through that machine's
+   * agent, and the hash of the files read pinned as `contentHash`, so the
+   * install stores only what was shown. A folder that can't be read or
+   * checked throws its sentence: the call is refused before anyone is asked
+   * and before anything is stored. Every other call comes back as given.
+   */
+  const bindFolderInstall = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ): Promise<Record<string, unknown>> => {
+    if (
+      name !== "admin_skills_write" ||
+      input.action !== "install" ||
+      typeof input.source !== "string"
+    ) {
+      return input;
+    }
+    const source = bindSkillSource(input.source, {
+      hostname: skillFolderHost(actor.machineId),
+      home: db.listAgents().find((agent) => agent.machineId === actor.machineId)
+        ?.home,
+    });
+    const folder = folderOf(source);
+    if (!folder) {
+      return { ...input, source };
+    }
+    const { hash } = await readCheckedFolder(
+      folder.machine,
+      folder.path,
+      readSkillFolder
+    );
+    return { ...input, source, contentHash: hash };
   };
 
   /**
@@ -26847,21 +26975,8 @@ export const createServer = (
     triageTools: (actor) => watch?.tools(actor) ?? [],
     askPerson: (actor, name, input, toolUseId) =>
       adminAsks.ask(actor, name, input, toolUseId),
-    // A skill installed from a folder is read off the caller's own machine.
     bindAdminInput: (actor, name, input) =>
-      name === "admin_skills_write" &&
-      input.action === "install" &&
-      typeof input.source === "string"
-        ? {
-            ...input,
-            source: bindSkillSource(input.source, {
-              hostname: skillFolderHost(actor.machineId),
-              home: db
-                .listAgents()
-                .find((agent) => agent.machineId === actor.machineId)?.home,
-            }),
-          }
-        : input,
+      bindFolderInstall(actor, name, input),
     sendToUser: (actor, message) => push.userMessage(actor.id, message),
     shownRefusal: (actor, tool, paths) =>
       shownRefusal(shownDeps, {
@@ -32245,11 +32360,17 @@ export const createServer = (
       //
       // `fromMachine` is the other way in: a skill somebody wrote on one machine,
       // read off it and stored like any fetched one, so it reaches the rest.
+      // So is a skill folder on a machine (`file://<machine>/<path>`): read
+      // and checked here before anything is stored, refused in its words
+      // when it can't be, and refused when it no longer holds the files the
+      // person approved (`contentHash`, skills.ts `FOLDER_CHANGED`).
       .put(
         "/api/fleet/skills/:name",
         {
           body: t.Object({
             source: t.Optional(t.String()),
+            /** A folder install's approved files, by their hash (skills.ts `readCheckedFolder`). */
+            contentHash: t.Optional(t.String()),
             enabled: t.Optional(t.Boolean()),
             fromMachine: t.Optional(t.String()),
             /** The checkout a project-scoped skill was discovered in. */
@@ -32318,6 +32439,15 @@ export const createServer = (
               400,
               "name a source, or the machine to adopt it from"
             );
+          }
+
+          const fromFolder = await installFromFolder(
+            params.name,
+            { ...body, source: body.source },
+            (code, refused) => status(code, refused)
+          );
+          if (fromFolder) {
+            return fromFolder;
           }
 
           db.stageSkill({

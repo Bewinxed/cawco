@@ -74,6 +74,16 @@ const askRefusal = (
 
 export interface AdminAsksDeps {
   readonly asks: DbShape["asks"];
+  /**
+   * A call's input with the caller's place bound in, as it is asked
+   * (delegation-mcp.ts `bindAdminInput`): asking again after what was shown
+   * changed binds the input afresh. Throws, in a sentence, when it can't.
+   */
+  readonly bind: (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ) => Promise<Record<string, unknown>>;
   /** A declined ask's own note, where its tool keeps one (project-settings.ts `runDeclined`). */
   readonly declined: (
     name: string,
@@ -109,6 +119,13 @@ export interface AdminAsksDeps {
     name: string,
     input: Record<string, unknown>
   ) => Promise<SourceFacts> | undefined;
+  /**
+   * Why what an approved ask showed the person no longer holds (a skill
+   * folder whose files changed since the card read them), read just before
+   * it runs; undefined when it still holds. A stale ask is not run: it fails
+   * with this sentence and is asked again.
+   */
+  readonly stale: (ask: AskRecord) => Promise<string | undefined>;
   /** Says something to a session, as the hub, under `origin`. */
   readonly tell: (instanceId: string, text: string, origin: string) => void;
   /** The thread a project's Caw asks in (caw.ts `askThread`); undefined for any other session. */
@@ -137,6 +154,16 @@ export const createAdminAsks = (deps: AdminAsksDeps) => {
     console.log(
       `[admin-asks] ${tool} (${ask.id}) approved; the hub runs it for ${ask.instanceId}`
     );
+    const stale = asker ? await deps.stale(ask) : undefined;
+    if (asker && stale !== undefined) {
+      const ended = deps.asks.carried(ask.id, {
+        at: Date.now(),
+        failed: stale,
+      });
+      tellAnswered(ended ?? ask);
+      await askAgain(ask, asker);
+      return;
+    }
     let end: { said: string } | { failed: string };
     try {
       if (!asker) {
@@ -148,6 +175,64 @@ export const createAdminAsks = (deps: AdminAsksDeps) => {
     }
     const ended = deps.asks.carried(ask.id, { at: Date.now(), ...end });
     tellAnswered(ended ?? ask);
+  };
+
+  /**
+   * Records `name(input)` from `actor` as the person's ask, with its
+   * source's facts, and answers the words its session reads.
+   */
+  const record = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>,
+    toolUseId?: string
+  ): Promise<string> => {
+    const source = await deps.sourceFacts(name, input);
+    const threadId = deps.threadOf(actor);
+    const ask: AskRecord = {
+      id: newAskId(),
+      instanceId: actor.id,
+      state: "open",
+      raisedAt: Date.now(),
+      asked: {
+        kind: "approve",
+        tool: name,
+        input,
+        carry: { by: "hub", tool: name },
+        ...(source ? { source } : {}),
+      },
+      ...(threadId ? { threadId } : {}),
+      ...(toolUseId ? { toolUseId } : {}),
+    };
+    deps.asks.add(ask);
+    deps.park(askEnvelope(ask, actor));
+    console.log(
+      `[admin-asks] ${actor.id} asks the person to approve ${name} (${ask.id})`
+    );
+    return askRecordedWords({
+      id: ask.id,
+      link: sessionLink(threadId ?? actor.id, `approval of ${name}`),
+    });
+  };
+
+  /**
+   * A stale ask ({@link AdminAsksDeps.stale}) put to the person again, with
+   * what its source holds now, and its session told; or told why it can't be.
+   */
+  const askAgain = async (ask: AskRecord, asker: InstanceRow) => {
+    const { tool, input } = ask.asked;
+    let said: string;
+    try {
+      const recorded = await record(
+        asker,
+        tool,
+        await deps.bind(asker, tool, input)
+      );
+      said = `CawCo has asked the person again for what it holds now, so don't call ${tool} again for it. ${recorded}`;
+    } catch (error) {
+      said = `It can't be asked again: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    deps.tell(ask.instanceId, said, ASK_ORIGIN);
   };
 
   /** An open ask withdrawn by the hub, and taken off every screen; the session is not told. */
@@ -189,32 +274,7 @@ export const createAdminAsks = (deps: AdminAsksDeps) => {
         );
         return;
       }
-      const source = await deps.sourceFacts(name, input);
-      const threadId = deps.threadOf(actor);
-      const ask: AskRecord = {
-        id: newAskId(),
-        instanceId: actor.id,
-        state: "open",
-        raisedAt: Date.now(),
-        asked: {
-          kind: "approve",
-          tool: name,
-          input,
-          carry: { by: "hub", tool: name },
-          ...(source ? { source } : {}),
-        },
-        ...(threadId ? { threadId } : {}),
-        ...(toolUseId ? { toolUseId } : {}),
-      };
-      deps.asks.add(ask);
-      deps.park(askEnvelope(ask, actor));
-      console.log(
-        `[admin-asks] ${actor.id} asks the person to approve ${name} (${ask.id})`
-      );
-      return askRecordedWords({
-        id: ask.id,
-        link: sessionLink(threadId ?? actor.id, `approval of ${name}`),
-      });
+      return await record(actor, name, input, toolUseId);
     },
 
     /**

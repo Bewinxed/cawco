@@ -9,11 +9,14 @@
  */
 import type { FleetMarketplace, SourceFacts } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { hashFiles } from "@cawco/core/file-hash";
 import { unhandled } from "@cawco/core/unhandled";
 import { Octokit } from "@octokit/rest";
 import {
-  declaredSkill,
+  FOLDER_CHANGED,
+  folderOf,
   parseSkillSource,
+  readCheckedFolder,
   type SkillFolderReader,
 } from "./skills";
 import { GITHUB_API } from "./upstreams";
@@ -192,23 +195,34 @@ const factsOf = (origin: Origin): Promise<SourceFacts> => {
 /**
  * A skill folder on a machine, read through its agent before anyone is
  * asked: the card shows the skill's declared name and description and every
- * file the install would carry. A folder that cannot be read, or whose
- * SKILL.md names no name or description, throws its sentence, so the call is
- * refused and nobody is asked.
+ * file the install would carry, each with its hash, and the hash of them all
+ * that the approval pins (`contentHash`, bound into the call as it was
+ * asked). A folder that cannot be read, whose SKILL.md names no name or
+ * description, or that changed since the call was bound, throws its
+ * sentence, so the call is refused and nobody is asked.
  */
 const folderFacts = async (
   machine: string,
   path: string,
+  pinned: unknown,
   readFolder: SkillFolderReader
 ): Promise<SourceFacts> => {
-  const files = await readFolder(machine, path);
-  const { name, description } = declaredSkill(files, path);
+  const { declared, files, hash } = await readCheckedFolder(
+    machine,
+    path,
+    readFolder
+  );
+  if (pinned !== hash) {
+    throw new Error(FOLDER_CHANGED);
+  }
   return {
     at: `${path} on ${machine}`,
     skill: {
-      name,
-      description,
-      files: files.map((file) => file.path).sort(),
+      ...declared,
+      hash,
+      files: files
+        .map((file) => ({ path: file.path, hash: hashFiles([file]) }))
+        .sort((a, b) => a.path.localeCompare(b.path)),
     },
   };
 };
@@ -227,9 +241,14 @@ export const sourceFacts = (
 ): Promise<SourceFacts> | undefined => {
   const source = typeof input.source === "string" ? input.source : undefined;
   if (name === "admin_skills_write" && input.action === "install") {
-    const local = source ? parseSkillSource(source) : undefined;
-    if (local?.kind === "file" && local.machine) {
-      return folderFacts(local.machine, local.path, readFolder);
+    const folder = source ? folderOf(source) : undefined;
+    if (folder) {
+      return folderFacts(
+        folder.machine,
+        folder.path,
+        input.contentHash,
+        readFolder
+      );
     }
     return source ? factsOf(skillOrigin(source)) : undefined;
   }

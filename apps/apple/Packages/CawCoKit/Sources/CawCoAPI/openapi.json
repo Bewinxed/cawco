@@ -22621,6 +22621,9 @@
                   "source": {
                     "type": "string"
                   },
+                  "contentHash": {
+                    "type": "string"
+                  },
                   "enabled": {
                     "type": "boolean"
                   },
@@ -22665,6 +22668,16 @@
           },
           "404": {
             "description": "putApiFleetSkillsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiFleetSkillsByName 409",
             "content": {
               "text/plain": {
                 "schema": {

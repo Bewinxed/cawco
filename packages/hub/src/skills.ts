@@ -197,7 +197,7 @@ export interface DeclaredSkill {
  * `where`, when the folder has no SKILL.md or its front matter leaves either
  * out.
  */
-export const declaredSkill = (
+const declaredSkill = (
   files: readonly SkillFile[],
   where: string
 ): DeclaredSkill => {
@@ -751,6 +751,48 @@ const fetchSkill = async (
   return "error" in picked ? picked : await readSkill(picked.dir);
 };
 
+/** The folder and machine a bound local source names; undefined for any other source. */
+export const folderOf = (
+  source: string
+): { machine: string; path: string } | undefined => {
+  const parsed = parseSkillSource(source);
+  return parsed?.kind === "file" && parsed.machine
+    ? { machine: parsed.machine, path: parsed.path }
+    : undefined;
+};
+
+/**
+ * Why an approved install from a folder is not run: what the folder holds is
+ * not what the person was shown.
+ */
+export const FOLDER_CHANGED =
+  "the folder changed after you were asked; ask again";
+
+/** A skill folder read off its machine and checked: its files, what it declares, and their hash. */
+export interface CheckedFolder {
+  declared: DeclaredSkill;
+  files: SkillFile[];
+  /** {@link hashFiles} of every file: what an approval pins. */
+  hash: string;
+}
+
+/**
+ * The skill folder `path` on `machine`, read through its agent and checked
+ * as {@link declaredSkill} checks it. Throws its sentence when it can't be.
+ */
+export const readCheckedFolder = async (
+  machine: string,
+  path: string,
+  readFolder: SkillFolderReader
+): Promise<CheckedFolder> => {
+  const files = await readFolder(machine, path);
+  return {
+    declared: declaredSkill(files, path),
+    files,
+    hash: hashFiles(files),
+  };
+};
+
 /**
  * A local source's skill, read off its machine through its agent and checked
  * as {@link declaredSkill} checks it. Never throws: a failure is its sentence.
@@ -768,11 +810,14 @@ const readLocalSkill = async (
     return { error: "this hub reads no folders off its machines" };
   }
   try {
-    const files = await readFolder(source.machine, source.path);
-    declaredSkill(files, source.path);
+    const { files, hash } = await readCheckedFolder(
+      source.machine,
+      source.path,
+      readFolder
+    );
     return {
       name: basename(source.path),
-      hash: hashFiles(files),
+      hash,
       bytes: files.reduce(
         (total, file) =>
           total + Buffer.byteLength(file.contentBase64, "base64"),

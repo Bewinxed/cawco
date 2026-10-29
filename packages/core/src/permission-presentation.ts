@@ -124,7 +124,14 @@ export interface SourceFacts {
    * A skill read from a folder on a machine before the person is asked: what
    * its SKILL.md declares and every file the install carries, by path.
    */
-  skill?: { description: string; files: string[]; name: string };
+  skill?: {
+    description: string;
+    /** Every file, by path, with the hash of its content. */
+    files: { hash: string; path: string }[];
+    /** The hash of every file together: what the approval pins. */
+    hash: string;
+    name: string;
+  };
   /** The repository's GitHub stars. */
   stars?: number;
   /** Why there are no facts: a source that carries none, or the registry's answer. */
@@ -551,8 +558,9 @@ function sourceFields(
       { key: "description", value: source.skill.description },
       {
         key: "files",
-        value: `${plural(source.skill.files.length, "file")}: ${source.skill.files.join(", ")}`,
-      }
+        value: `${plural(source.skill.files.length, "file")}: ${source.skill.files.map((file) => file.path).join(", ")}`,
+      },
+      { key: "content", value: source.skill.hash.slice(0, 12) }
     );
   }
   return fields;
