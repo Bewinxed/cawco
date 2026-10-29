@@ -23,13 +23,13 @@ import type { Component } from "svelte";
 import ArtifactReference from "./ArtifactReference.svelte";
 import { artifactMarksKnown, artifactNamed } from "./artifact-names.svelte";
 import ChangeReference from "./ChangeReference.svelte";
+import CommentChip from "./CommentChip.svelte";
 import DecisionReference from "./DecisionReference.svelte";
 import {
   type Drawn,
   type ElementProps,
   plainReferenceOf,
 } from "./markdown-fleet";
-import PinReference from "./PinReference.svelte";
 import { type ThingKind, thingNamed } from "./reference-things.svelte";
 import SessionReference from "./SessionReference.svelte";
 import { sessionNamed } from "./session-names.svelte";
@@ -80,7 +80,9 @@ const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
    * `artifactMarksKnown`). Its chip shows what the pin stands on (DESIGN.md,
    * "its label what it stands on"), so it is drawn once that is known, never
    * before with the written label and again with the pin's name: a chip
-   * keeps its words and its width from its first paint.
+   * keeps its words and its width from its first paint. It is the comment
+   * chip (CommentChip): pressed, it opens the pin's thread there, as the
+   * chip under a call that answered it does.
    */
   pin: {
     find: (id) => {
@@ -92,7 +94,7 @@ const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
         : null;
     },
     get element() {
-      return PinReference;
+      return CommentChip;
     },
   },
   /** A spot an update changed, by its artifact and anchor (`<artifact>/<anchor>`). */

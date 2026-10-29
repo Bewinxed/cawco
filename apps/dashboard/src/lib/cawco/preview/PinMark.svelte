@@ -47,7 +47,7 @@
    * an answer is unread (the needs-you dot, in `status-attn-glyph`, its
    * echo three loops and then still: DESIGN.md, Status dot); gone from the
    * page, a dashed `--border-control` ring. `inline`, it stands in a line
-   * of text as a chip's mark (a pin's chip, PinReference): the inline
+   * of text as a chip's mark (a pin's chip, CommentChip): the inline
    * chip's line tall.
    */
   let {

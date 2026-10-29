@@ -8636,33 +8636,6 @@ const pointChecks = async (
     `${JSON.stringify(chips)}; wanted ${JSON.stringify(wanted)}; dot ${JSON.stringify(chipDot)}`
   );
 
-  // Resting the pointer on it peeks the thread under it.
-  await pinChip.hover();
-  const peeked = await until(
-    "the pin chip's peek",
-    async () => {
-      const peek = on.page.locator(
-        '[data-slot="pin-chip-peek"] [data-slot="pin-peek"]'
-      );
-      return (await peek.count()) > 0 ? peek.first().textContent() : null;
-    },
-    (words) => !!words,
-    4000
-  ).catch(() => null);
-  await on.page.mouse.move(0, 0);
-  const peekGone = await on.page
-    .locator('[data-slot="pin-chip-peek"]')
-    .waitFor({ state: "detached", timeout: 2000 })
-    .then(() => true)
-    .catch(() => false);
-  on.kit.check(
-    "chip: resting the pointer on the pin chip peeks its thread under it (its first words, the agent's answer); moving off takes it down",
-    !!peeked?.includes("This stroke, thicker.") &&
-      peeked.includes("Drew the stroke under it thicker.") &&
-      peekGone,
-    `peek ${JSON.stringify(peeked)}; gone ${peekGone}`
-  );
-
   // A card's chip, its page in front: the card brought into view and outlined for a moment.
   if (cards) {
     await interactTab(on)

@@ -1,13 +1,21 @@
 <script lang="ts">
-  import type { Pin } from "@cawco/core/comments";
+  import { newAnswer, type Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
   /**
-   * The comment a `comment_reply` or `comment_resolve` call answered, drawn
-   * under the call's line in a conversation (ToolGroup) as one chip, like
-   * any tool call's (the owner, 10-26: "just like any tool call I can click
-   * the chip to view the comment thread and reply"): the inline chip (ui/chip
-   * `inline`) with the pin's pill as its mark, "Your comment on <page>" and
-   * its state ("· answered", "· resolved").
+   * A comment pin's chip, wherever the dashboard draws one, and the one way
+   * its thread opens: an agent's `[label](cawco:pin/<artifact>/<number>)` in
+   * written words (core references.ts, the registry's `pin` element), and
+   * the comment a `comment_reply` or `comment_resolve` call answered, under
+   * the call's line (ToolGroup, `answer`). Both are the inline chip (ui/chip
+   * `inline`) with the pin's pill as its mark, in its state. In written
+   * words its label is what the pin stands on (core pin-name.ts), read as
+   * the chip is first drawn, else the written label, and kept from then on;
+   * its name says its state ("Pin 12 on When", "· resolved", "· its element
+   * is gone", ", New answer"), and the pill wears the needs-you dot while an
+   * answer there is unread (core `newAnswer`). Under a call it reads "Your
+   * comment on <page>" and its state ("· answered", "· resolved"), like any
+   * tool call's chip (the owner, 10-26: "just like any tool call I can click
+   * the chip to view the comment thread and reply").
    *
    * Pressing it, or resting a mouse on it for `--dur-peek`, opens the
    * thread: on a desk and a tablet the house hover panel (HoverPanel) under
@@ -25,6 +33,7 @@
    * page navigating puts it away (ChipPanel's rules, HoverPanel's own).
    */
   import { pinReference } from "@cawco/core/references";
+  import { commentWords } from "@cawco/core/words/comments";
   import { Portal } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -54,7 +63,16 @@
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import { floor } from "./visible-viewport.svelte";
 
-  let { id, label = "" }: { id: string; label?: string } = $props();
+  let {
+    id,
+    label = "",
+    answer = false,
+  }: {
+    id: string;
+    label?: string;
+    /** The comment a call answered, under its line: "Your comment on <page>" and its state. */
+    answer?: boolean;
+  } = $props();
   const here = sessionHere();
   const panelId = $props.id();
 
@@ -71,9 +89,37 @@
     view?.pins.find((one) => one.number === named?.number) ?? pinNamed(id)
   );
   const stateWord = $derived(pin?.resolvedAt ? "resolved" : "answered");
-  const words = $derived(
-    page ? `Your comment on ${page.name}` : label || "Your comment"
-  );
+  /*
+   * In written words, what the pin stands on as its first paint draws it,
+   * kept (DESIGN.md, a pin's chip: "its label what it stands on"): opening
+   * its thread and the doc loading never rewrite it, so the chip keeps its
+   * words and its width. Its state stays live; none of it moves its width.
+   */
+  const standsOn = untrack(() => {
+    const first = pinNamed(id);
+    return first ? pinName(first) : label;
+  });
+  const words = $derived.by(() => {
+    if (!answer) {
+      return standsOn;
+    }
+    return page ? `Your comment on ${page.name}` : label || "Your comment";
+  });
+  const unread = $derived(!answer && !!pin && newAnswer(pin));
+  /** Its name, its state in words. */
+  const title = $derived.by(() => {
+    if (answer) {
+      return `${words}, ${stateWord}`;
+    }
+    const number = named?.number ?? 0;
+    let said = `Pin ${number} on ${words}`;
+    if (pin?.resolvedAt) {
+      said = `Pin ${number} · resolved`;
+    } else if (pin?.movedAt) {
+      said = `Pin ${number} · its element is gone`;
+    }
+    return unread ? `${said}, ${commentWords.newAnswer}` : said;
+  });
   const Glyph = $derived(ARTIFACT_GLYPH[page?.kind ?? "page"]);
 
   /** A phone: under 640px, the product's phone line; its thread is the bottom sheet. */
@@ -381,10 +427,12 @@
   aria-controls={panelId}
   aria-expanded={open}
   aria-haspopup="dialog"
-  aria-label={`${words}, ${stateWord}`}
+  aria-label={title}
   class={chipVariants({ variant: "inline" })}
   data-comment-chip={id}
+  data-pin-chip={answer ? undefined : id}
   data-state={pin ? markState(pin) : undefined}
+  data-unread={unread || undefined}
   onclick={press}
   onpointerenter={rest}
   onpointerleave={() => clearTimeout(restTimer)}
@@ -393,6 +441,7 @@
 >
   <span data-slot="mark" class="inline-flex flex-none" data-box>
     <PinMark
+      dot={unread ? "unread" : null}
       gone={!!pin?.movedAt}
       number={named?.number ?? null}
       size="inline"
@@ -400,7 +449,10 @@
     />
   </span>
   <span data-slot="label">{words}</span>
-  <span class="flex-none text-ink-muted" data-slot="state">· {stateWord}</span>
+  {#if answer}
+    <span class="flex-none text-ink-muted" data-slot="state">· {stateWord}</span
+    >
+  {/if}
 </button><RowFault
   again={openWhere}
   class="inline-block max-w-full align-baseline"

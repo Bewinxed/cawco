@@ -571,8 +571,8 @@
           {#each pointedBy(m) as pointed (pointed.href)}
             {@const drawn = referenceOf(pointed.href)}
             {#if drawn.draw === "element" && drawn.kind === "pin" && exchange}
-              <!-- The comment it answered: its chip opens the thread and its reply. -->
-              <CommentChip id={drawn.id} label={pointed.label} />
+              <!-- The comment it answered: "Your comment on <page>", its chip opening the thread and its reply. -->
+              <CommentChip answer id={drawn.id} label={pointed.label} />
             {:else if drawn.draw === "element"}
               <drawn.element
                 id={drawn.id}
