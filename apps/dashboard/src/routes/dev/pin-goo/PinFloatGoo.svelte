@@ -107,7 +107,7 @@
   let body = $state<HTMLElement>();
   let cardBlob = $state<SVGRectElement>();
   let pillBlob = $state<SVGRectElement>();
-  let neckBlob = $state<SVGRectElement>();
+  let neckBlob = $state<SVGPathElement>();
   let pinLayer = $state<HTMLElement>();
   let pinShift = $state<HTMLElement>();
   let markFace = $state<HTMLElement>();
@@ -252,6 +252,12 @@
   }
 
   type Shape = Box & { r: number };
+  /** The joined neck: its outline, the pin's centre it grows from, and its bead (squeezed into the pin) as a transform. */
+  interface Neck {
+    bead: string;
+    d: string;
+    origin: string;
+  }
 
   /** The pill's box in the card's own coordinates, as it stands now or was last seen. */
   const pillIn = (): Box | null => {
@@ -296,73 +302,163 @@
 
   /**
    * The neck that keeps the pin and the card one shape while it stands
-   * joined: a bar from the pill's centre into the card's near edge, three
-   * fifths of the pill's height thick, which the goo rounds into a liquid
-   * bridge. Only where the pill stands beside the card's straight edge
-   * (past its corners) and within `--space-2` and a little of it; else the
-   * neck has let go.
+   * joined, drawn as a path: the pin's whole cross-section from its centre
+   * to the card's near edge, never narrower than the pin. Each of its two
+   * edges either turns into the card's straight edge with a concave fillet
+   * (`radius-lg` along the card, the gap across), or, near the card's
+   * corner, runs on in an S into the card's own top or foot, the corner
+   * squared. So the outline goes pin, neck, card with no waist. Only where
+   * the pill stands beside the card's edge within `clear` and a little of
+   * it; else the neck has let go. `bead` is the transform that squeezes it
+   * into the pill's own box, about the pill's centre: where it grows from.
    */
-  function neckOf(p: Box): Shape | null {
+  function neckOf(p: Box): Neck | null {
     const card = rest();
-    const thick = p.h * 0.6;
     const reach = placed.clear + 6;
-    // The neck meets the card on its straight edge, past its corners: the
-    // pill's centre line, held there.
-    const cx = Math.max(
-      card.x + card.r + thick / 2,
-      Math.min(p.x + p.w / 2, card.x + card.w - card.r - thick / 2)
-    );
-    const cy = Math.max(
-      card.y + card.r + thick / 2,
-      Math.min(p.y + p.h / 2, card.y + card.h - card.r - thick / 2)
-    );
     const alongY = p.y + p.h > card.y && p.y < card.y + card.h;
     const alongX = p.x + p.w > card.x && p.x < card.x + card.w;
-    const bar = (x0: number, y0: number, x1: number, y1: number): Shape => ({
-      x: Math.min(x0, x1),
-      y: Math.min(y0, y1),
-      w: Math.abs(x1 - x0),
-      h: Math.abs(y1 - y0),
-      r: thick / 2,
-    });
-    const midX = p.x + p.w / 2;
-    const midY = p.y + p.h / 2;
+    const cx = p.x + p.w / 2;
+    const cy = p.y + p.h / 2;
+    // The four sides in one frame: `out` from the card's edge toward the
+    // pin, `along` the edge; `at` maps a point back to the card's own.
+    interface Frame {
+      /** The edge runs across the page (the pin above or under the card). */
+      across: boolean;
+      at: (out: number, along: number) => string;
+      /** The card's edge, along. */
+      c0: number;
+      c1: number;
+      /** The gap from the card's edge to the pin's near side, and to its centre. */
+      g: number;
+      m: number;
+      /** The pin's span, along. */
+      p0: number;
+      p1: number;
+    }
+    const besideY = {
+      c0: card.y,
+      c1: card.y + card.h,
+      p0: p.y,
+      p1: p.y + p.h,
+      across: false,
+    };
+    const besideX = {
+      c0: card.x,
+      c1: card.x + card.w,
+      p0: p.x,
+      p1: p.x + p.w,
+      across: true,
+    };
+    const right = card.x + card.w;
+    const foot = card.y + card.h;
+    let frame: Frame;
     if (alongY && p.x + p.w <= card.x && card.x - (p.x + p.w) <= reach) {
-      return bar(midX, cy - thick / 2, card.x + card.r, cy + thick / 2);
+      frame = {
+        ...besideY,
+        at: (o, a) => `${card.x - o} ${a}`,
+        g: card.x - (p.x + p.w),
+        m: card.x - cx,
+      };
+    } else if (alongY && p.x >= right && p.x - right <= reach) {
+      frame = {
+        ...besideY,
+        at: (o, a) => `${right + o} ${a}`,
+        g: p.x - right,
+        m: cx - right,
+      };
+    } else if (alongX && p.y + p.h <= card.y && card.y - (p.y + p.h) <= reach) {
+      frame = {
+        ...besideX,
+        at: (o, a) => `${a} ${card.y - o}`,
+        g: card.y - (p.y + p.h),
+        m: card.y - cy,
+      };
+    } else if (alongX && p.y >= foot && p.y - foot <= reach) {
+      frame = {
+        ...besideX,
+        at: (o, a) => `${a} ${foot + o}`,
+        g: p.y - foot,
+        m: cy - foot,
+      };
+    } else {
+      return null;
     }
-    if (alongY && p.x >= card.x + card.w && p.x - (card.x + card.w) <= reach) {
-      return bar(
-        card.x + card.w - card.r,
-        cy - thick / 2,
-        midX,
-        cy + thick / 2
-      );
-    }
-    if (alongX && p.y + p.h <= card.y && card.y - (p.y + p.h) <= reach) {
-      return bar(cx - thick / 2, midY, cx + thick / 2, card.y + card.r);
-    }
-    if (alongX && p.y >= card.y + card.h && p.y - (card.y + card.h) <= reach) {
-      return bar(
-        cx - thick / 2,
-        card.y + card.h - card.r,
-        cx + thick / 2,
-        midY
-      );
-    }
-    return null;
+    const { at, c0, c1, g, m, p0, p1 } = frame;
+    const { r } = card;
+    /** Inside the card, past its round corners: where the neck closes, hidden under it. */
+    const deep = r + 1;
+    /** A quarter ellipse as one cubic. */
+    const k = 0.5523;
+    /** The S's handles: half its run. */
+    const s = (g + r) / 2;
+    /**
+     * One edge of the neck, from the pin's side `pe` into the card, `dir`
+     * -1 toward `c0`, +1 toward `c1`: a fillet into the card's straight
+     * edge (`r` along it, the gap across) where that clears the card's
+     * round corner; else an S on into the card's own end at `ce`, the
+     * corner squared, its ends level with the pin and the card.
+     */
+    const edgeOf = (pe: number, ce: number, dir: number) => {
+      const meet = pe + dir * r;
+      if (dir * (ce - meet) >= r) {
+        return {
+          meet,
+          card: at(0, meet),
+          toCard: `C ${at(g - g * k, pe)} ${at(0, meet - dir * r * k)} ${at(0, meet)}`,
+          toPin: `C ${at(0, meet - dir * r * k)} ${at(g - g * k, pe)} ${at(g, pe)}`,
+        };
+      }
+      return {
+        meet: ce,
+        card: at(-r, ce),
+        toCard: `C ${at(g - s, pe)} ${at(-r + s, ce)} ${at(-r, ce)}`,
+        toPin: `C ${at(-r + s, ce)} ${at(g - s, pe)} ${at(g, pe)}`,
+      };
+    };
+    const near = edgeOf(p0, c0, -1);
+    const far = edgeOf(p1, c1, 1);
+    const d = [
+      `M ${at(m, p0)}`,
+      `L ${at(g, p0)}`,
+      near.toCard,
+      `L ${at(-deep, near.meet)}`,
+      `L ${at(-deep, far.meet)}`,
+      `L ${far.card}`,
+      far.toPin,
+      `L ${at(m, p1)}`,
+      "Z",
+    ].join(" ");
+    // Its bead: squeezed about the pin's centre into the pin's own box,
+    // across the edge to the pill's round end, along it to the pin's span.
+    const half = (p1 - p0) / 2;
+    const mid = (p0 + p1) / 2;
+    const spread = Math.max(
+      mid - Math.min(p0, near.meet),
+      Math.max(p1, far.meet) - mid
+    );
+    const out = Math.min(1, Math.min(p.w, p.h) / 2 / (m + deep));
+    const along = Math.min(1, half / Math.max(1, spread));
+    const bead = frame.across
+      ? `scale(${along}, ${out})`
+      : `scale(${out}, ${along})`;
+    return { d, origin: `${cx}px ${cy}px`, bead };
   }
 
-  /** The neck's first shape: a bead at the pill's centre, the bar's thickness round. */
-  const beadOf = (p: Box, neck: Shape): Shape => {
-    const size = Math.min(neck.w, neck.h);
-    return {
-      x: p.x + p.w / 2 - size / 2,
-      y: p.y + p.h / 2 - size / 2,
-      w: size,
-      h: size,
-      r: size / 2,
-    };
-  };
+  /** The neck grows out of its bead (`open`) or back into it, drawn where `neck` says, on `timing`. */
+  function grow(
+    neck: Neck,
+    open: boolean,
+    timing: { duration: number; easing: string; fill?: FillMode }
+  ) {
+    if (!neckBlob) {
+      return;
+    }
+    neckBlob.setAttribute("d", neck.d);
+    neckBlob.style.setProperty("--neck-origin", neck.origin);
+    neckBlob.classList.remove("hidden");
+    const at = [{ transform: neck.bead }, { transform: "none" }];
+    neckBlob.animate(open ? at : at.reverse(), timing);
+  }
 
   $effect(() => {
     if (stickiness > 0 && blurEl && matrixEl) {
@@ -407,10 +503,10 @@
       return;
     }
     if (now && !neckWas && motionOk.current && untrack(() => opened)) {
-      neckBlob?.animate(
-        [shapeOf(beadOf(now.pin, now.neck)), shapeOf(now.neck)],
-        { duration: dur("--dur-morph"), easing: ease("--ease-out") }
-      );
+      grow(now.neck, true, {
+        duration: dur("--dur-morph"),
+        easing: ease("--ease-out"),
+      });
     }
     neckWas = !!now;
   });
@@ -455,20 +551,14 @@
    * pill's own mark handing over to its joined face in step.
    */
   function run(
-    p: Box,
     from: Shape,
     to: Shape,
-    neck: Shape | null,
+    neck: Neck | null,
     timing: { duration: number; easing: string; fill?: FillMode },
     open: boolean
   ): Animation | undefined {
-    const bead = neck ? beadOf(p, neck) : null;
-    if (neckBlob && neck && bead) {
-      neckBlob.classList.remove("hidden");
-      neckBlob.animate(
-        open ? [shapeOf(bead), shapeOf(neck)] : [shapeOf(neck), shapeOf(bead)],
-        timing
-      );
+    if (neck) {
+      grow(neck, open, timing);
     }
     const faces = open ? [1, 0] : [0, 1];
     if (neck) {
@@ -513,7 +603,6 @@
     flushSync();
     region(from, blur);
     const done = run(
-      from,
       pillShape(from),
       rest(),
       neck,
@@ -556,7 +645,6 @@
     standPill(to);
     region(to, blur);
     run(
-      to,
       from,
       pillShape(to),
       neck,
@@ -654,14 +742,14 @@
         x={pillAt?.x ?? 0}
         y={pillAt?.y ?? 0}
       />
-      <rect
+      <path
         bind:this={neckBlob}
-        class={["fill-surface-raised", !joint && "hidden"]}
-        height={joint?.neck.h ?? 0}
-        rx={joint?.neck.r ?? 0}
-        width={joint?.neck.w ?? 0}
-        x={joint?.neck.x ?? 0}
-        y={joint?.neck.y ?? 0}
+        class={[
+          "fill-surface-raised origin-(--neck-origin)",
+          !joint && "hidden",
+        ]}
+        d={joint?.neck.d ?? ""}
+        style:--neck-origin={joint?.neck.origin}
       />
       <rect
         bind:this={cardBlob}
