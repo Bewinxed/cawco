@@ -75,8 +75,9 @@
   const held = $state<Record<string, boolean>>({});
   /**
    * The pill with keyboard focus, by its pin: the one source of its focus
-   * ring, by the house rule (`lastInput`, `keyboardUse`): a key that acts
-   * sets it, a modifier held alone never does, a press clears it.
+   * ring, by the house rule (`lastInput`, `keyboardUse`): a key that moves
+   * or acts sets it, a modifier held alone or Escape never does, a press
+   * clears it.
    */
   let keyed = $state<string | null>(null);
   /** Each pill and what it stands on, in the well, px; its mark null while it is out of view. */

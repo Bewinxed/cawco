@@ -30,13 +30,15 @@ const MODIFIERS = new Set([
 
 /**
  * Whether `event` is keyboard use, the kind that makes focus visible: a key
- * that acts (Tab, the arrows, Enter, a letter, Shift+Tab, a shortcut's
- * chord), never a modifier held alone. Chromium turns `:focus-visible` on
- * for any key, Shift alone included, so a pin pressed and then Shift held
- * drew its ring.
+ * that moves or acts (Tab, the arrows, Enter, Space, a letter, Shift+Tab, a
+ * shortcut's chord), never a modifier held alone, and never Escape, which
+ * dismisses and leaves the last input as it was. Chromium turns
+ * `:focus-visible` on for any key, Shift alone included, so a pin pressed
+ * and then Shift held drew its ring; a card opened by a press and closed by
+ * Escape lit its pin's.
  */
 export const keyboardUse = (event: KeyboardEvent): boolean =>
-  !MODIFIERS.has(event.key);
+  event.key !== "Escape" && !MODIFIERS.has(event.key);
 
 if (typeof window !== "undefined") {
   const options = { capture: true, passive: true } as const;
