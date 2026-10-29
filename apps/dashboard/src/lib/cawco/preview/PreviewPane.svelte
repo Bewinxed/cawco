@@ -855,6 +855,23 @@
   /** The frame that last finished loading, and whether it then said nothing. */
   let loadedKey = $state<string | null>(null);
   let silentKey = $state<string | null>(null);
+  /** The frame whose page last said anything at all to the pane (its overlay, the proxy's down page, the lock's turn-away). */
+  let heardKey = $state<string | null>(null);
+  /**
+   * The frame finished loading and its page never said a word: no overlay
+   * answered in PAGE_SILENT_MS and no proxy's page named a hop, though the
+   * proxy puts one or the other in every page it serves. So the browser
+   * drew its own error page (a connection closed with no answer, a refused
+   * one) or the answer was no page at all: said where the page would be,
+   * with Try again, never Chromium's grey page left standing.
+   */
+  const notLoaded = $derived(
+    !unloaded &&
+      silentKey === frameKey &&
+      heardKey !== frameKey &&
+      !connected &&
+      !down
+  );
   let inView = $state(true);
   let saidFor: string | null = null;
   $effect(() => {
@@ -871,6 +888,8 @@
     setTimeout(() => {
       if (key === frameKey && loadedKey === key && !connected && !down) {
         silentKey = key;
+        // A Try again that loaded nothing again is over: its state says so.
+        retrying = false;
       }
     }, PAGE_SILENT_MS);
   }
@@ -2928,6 +2947,7 @@
     ) {
       return;
     }
+    heardKey = frameKey;
     if (event.data?.type === "cawco:down") {
       heardDown(event.data);
       return;
@@ -3562,6 +3582,33 @@
   }}
   onmessage={receive}
 />
+
+<!-- A frame that loaded no page, or the proxy's page naming the hop that
+     failed: Try again (a reload of the frame), and the session that serves
+     it, as the kit draws a link (Button `link`, as Caw's panel offers its
+     settings). -->
+{#snippet frameRetry()}
+  <div class="flex flex-wrap items-center gap-space-2">
+    <Button
+      icon={IconRefresh}
+      label={commonWords.tryAgain}
+      onclick={retry}
+      pending={retrying}
+      pendingLabel={previewWords.reloading}
+      size="sm"
+      variant="outline"
+    />
+    {#if offerSession && owner}
+      <Button
+        href={fleet.sessionHref(owner.id)}
+        pad="none"
+        label={`Open ${ownerName}`}
+        size="sm"
+        variant="link"
+      />
+    {/if}
+  </div>
+{/snippet}
 
 <!-- A stage that went down or never drew: Try again, and its own words
      folded under Show details, as RowFault folds a machine's. -->
@@ -4418,28 +4465,26 @@
           {/if}
         {/snippet}
         {#snippet action()}
-          <div class="flex flex-wrap items-center gap-space-2">
-            <Button
-              icon={IconRefresh}
-              label={commonWords.tryAgain}
-              onclick={retry}
-              pending={retrying}
-              pendingLabel="Reloading…"
-              size="sm"
-              variant="outline"
-            />
-            {#if offerSession && owner}
-              <!-- The session that serves the page, as the kit draws a link
-                   (Button `link`, as Caw's panel offers its settings). -->
-              <Button
-                href={fleet.sessionHref(owner.id)}
-                pad="none"
-                label={`Open ${ownerName}`}
-                size="sm"
-                variant="link"
-              />
-            {/if}
-          </div>
+          {@render frameRetry()}
+        {/snippet}
+      </EmptyState>
+    </div>
+  {/if}
+  {#if notLoaded && !shownDown && staged?.status !== "error" && !neverDrawn}
+    <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
+    <div
+      data-slot="down"
+      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      data-not-loaded
+      role="alert"
+      transition:appear
+    >
+      <EmptyState icon={IconAlert} title={previewWords.notLoadedTitle}>
+        {#snippet line()}
+          {previewWords.notLoadedLine(ownerMachine)}
+        {/snippet}
+        {#snippet action()}
+          {@render frameRetry()}
         {/snippet}
       </EmptyState>
     </div>

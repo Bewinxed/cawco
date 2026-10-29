@@ -669,7 +669,7 @@ export interface StageWarm {
  * A workspace preview's server: `command`, run by the workspace's stage
  * inside its boundary in `cwd` (from the clone's root), with `PORT` set to
  * `port`, which it serves on the boundary's loopback. Supervised as a sheet's
- * Vite is: up once the port answers, asked every {@link STAGE_HEALTH_MS},
+ * Vite is: up once the port listens, looked at every {@link STAGE_HEALTH_MS},
  * started again {@link STAGE_RESTARTS} times, asleep after
  * {@link STAGE_IDLE_MS} with no viewer, stopped with its artifact and its
  * workspace. It never depends on the shell or session that asked for it.

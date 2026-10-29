@@ -38,7 +38,7 @@
  * A workspace preview's server (core `ServeSpec`, `artifact_create(kind:
  * "preview", port, serve)`) is a stage too, keyed by its port: its command
  * run through the same executor, on the same rules, `live` once its port
- * answers any HTTP request ({@link ensureServed}), started by its
+ * listens ({@link ensureServed}, {@link listens}), started by its
  * `artifact_create`, a request its preview relays, or the hub as a decision
  * page with a Preview of it goes out. It is the daemon's child,
  * so it outlives the shell, the command and the session that asked for it;
@@ -96,7 +96,13 @@ import { StageErrorSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
-import { agentServerStarted, ensureBoundary, shellQuote } from "./boundary";
+import {
+  agentServerStarted,
+  ensureBoundary,
+  listeners,
+  shellQuote,
+  workspaceNetworks,
+} from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
 import {
@@ -703,8 +709,7 @@ async function askStage<T>(
   path: string,
   waitMs: number,
   take: (response: Response) => Promise<T>,
-  body?: object,
-  init: RequestInit = {}
+  body?: object
 ): Promise<Bounded<T>> {
   const reached = await reachWorkspace(
     bridgeName(stage),
@@ -718,7 +723,6 @@ async function askStage<T>(
           ? `http://127.0.0.1:${stage.port}${path}`
           : `http://localhost:${stage.port}${path}`,
         {
-          ...init,
           signal,
           ...(body
             ? {
@@ -842,23 +846,58 @@ function crashed(stage: Stage, why: string): void {
   stage.ready.catch(() => undefined);
 }
 
+/** Whether something on the host's loopback accepts a connection on `port`: opened and closed, nothing sent. */
+const accepts = (port: number): Promise<boolean> =>
+  Bun.connect({
+    hostname: "127.0.0.1",
+    port,
+    socket: {
+      open: (socket) => {
+        socket.end();
+      },
+      data: () => undefined,
+    },
+  }).then(
+    () => true,
+    () => false
+  );
+
+/**
+ * Whether a preview's server is up: a socket listens on its port in its
+ * boundary's network (the network's own TCP tables, boundary.ts
+ * `listeners`), or, where boundaries share the host's network (macOS), the
+ * port accepts a connection. No request reaches the app: asking it for `/`
+ * had the dashboard's dev server render its home page at every look, and a
+ * look that waited past {@link HEALTH_WAIT_MS} on a busy server killed a
+ * working one as a crash. False when no boundary of its workspace runs.
+ */
+async function listens(stage: Stage): Promise<boolean> {
+  const networks = await workspaceNetworks(stage.boundary.id);
+  const each = await Promise.all(
+    networks.map(async (network) =>
+      network === "host"
+        ? accepts(stage.port)
+        : (await listeners(network.inner)).some(
+            (socket) => socket.port === stage.port
+          )
+    )
+  );
+  return each.includes(true);
+}
+
 /**
  * Whether the stage serves: a sheet's host answers {@link HEALTH_PATH} with
- * 200; a preview's server answers `/` with anything at all, its status its
- * own app's. Answered false when it refused (nothing listens) or answered
- * otherwise; unanswered when nothing answered within `waitMs`.
+ * 200; a preview's server listens on its port ({@link listens}), however
+ * long its pages take. Answered false when nothing listens or the host
+ * answered otherwise; unanswered when nothing answered within `waitMs`.
  */
 const healthy = (stage: Stage, waitMs: number): Promise<Bounded<boolean>> =>
-  askStage(
-    stage,
-    stage.runs.kind === "sheet" ? HEALTH_PATH : "/",
-    waitMs,
-    async (response) => {
-      await response.body?.cancel();
-      return stage.runs.kind === "serve" || response.ok;
-    },
-    undefined,
-    stage.runs.kind === "serve" ? { redirect: "manual" } : {}
+  (stage.runs.kind === "serve"
+    ? readWithin(waitMs, () => listens(stage))
+    : askStage(stage, HEALTH_PATH, waitMs, async (response) => {
+        await response.body?.cancel();
+        return response.ok;
+      })
   ).catch(() => ({ kind: "answered", value: false }) as const);
 
 /**
@@ -882,24 +921,31 @@ function watch(stage: Stage): void {
       sleep(stage);
       return;
     }
-    const where =
-      stage.runs.kind === "sheet" ? HEALTH_PATH : `on port ${stage.port}`;
     const look = await healthy(stage, HEALTH_WAIT_MS);
     switch (look.kind) {
       case "answered":
         if (!look.value) {
-          crashed(stage, `it stopped answering ${where}`);
+          crashed(
+            stage,
+            stage.runs.kind === "sheet"
+              ? `it stopped answering ${HEALTH_PATH}`
+              : `nothing listens on port ${stage.port} any more`
+          );
         } else if (stage.restarts > 0) {
           // A whole look's time live: its next crash starts its restarts afresh.
           stage.restarts = 0;
         }
         break;
       case "unanswered":
-        // A health watch: a stage silent for a whole look is the crash it watches for, said as silence.
-        crashed(
-          stage,
-          `it did not answer ${where} within ${HEALTH_WAIT_MS / 1000} s`
-        );
+        // A sheet's host silent for a whole look is the crash it watches for,
+        // said as silence. A server's look asks no request of it, so a look
+        // that ran out is this machine's slowness: the next look asks again.
+        if (stage.runs.kind === "sheet") {
+          crashed(
+            stage,
+            `it did not answer ${HEALTH_PATH} within ${HEALTH_WAIT_MS / 1000} s`
+          );
+        }
         break;
       default:
         unhandled("read", look);
@@ -1002,7 +1048,7 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
       ]
     : [serveScript(stage.runs.command), { PORT: String(stage.port) }];
 
-/** Whether the stage's port stops answering within `waitMs`: a server an earlier daemon left lets go of it at its next beat. */
+/** Whether the stage's port is free within `waitMs`: a server an earlier daemon left lets go of it at its next beat. */
 const letGo = async (stage: Stage, waitMs: number): Promise<boolean> => {
   const deadline = Date.now() + waitMs;
   for (;;) {
@@ -1056,7 +1102,7 @@ function refusedStart(stage: Stage, why: string): never {
 }
 
 /**
- * Whether a server's port answered, asked one try at a time while `waiting`
+ * Whether a server's port listens, asked one try at a time while `waiting`
  * holds and `child` is still the stage's; false once either ends first.
  */
 const servesBy = async (
@@ -1076,8 +1122,8 @@ const servesBy = async (
 
 /**
  * Starts the stage in its boundary; settles once it serves (the host says
- * so, or a server's port answers), rejects with why it did not. A server
- * whose port already answers is never started: something else serves it.
+ * so, or a server's port listens), rejects with why it did not. A server
+ * whose port already listens is never started: something else serves it.
  */
 async function start(stage: Stage): Promise<void> {
   stage.stopping = false;
@@ -1104,7 +1150,7 @@ async function start(stage: Stage): Promise<void> {
   } else if (!(await letGo(stage, SERVE_LET_GO_MS))) {
     refusedStart(
       stage,
-      `port ${stage.port} in this workspace already answers, so something else serves it and \`${stage.runs.command}\` wasn't started. Stop that server, or serve on another port.`
+      `port ${stage.port} in this workspace is already in use, so something else serves it and \`${stage.runs.command}\` wasn't started. Stop that server, or serve on another port.`
     );
   }
   const boundary = await ensureBoundary(stage.boundary);
@@ -1164,7 +1210,7 @@ async function start(stage: Stage): Promise<void> {
         );
         if (stage.runs.kind === "serve") {
           // A server says nothing CawCo reads: its words are kept to say why it
-          // ended, and it serves once its port answers.
+          // ended, and it serves once its port listens.
           child.stdout?.on("data", keep);
           servesBy(stage, child, () => !settled).then(
             (serves) => {
@@ -1636,7 +1682,7 @@ async function wake(stage: Stage, by: string, restart = true): Promise<void> {
 
 /**
  * A workspace preview's server (core `ServeSpec`), started or woken and
- * waited on until its port answers: its state. The same port named with
+ * waited on until its port listens: its state. The same port named with
  * another command or folder stops the one running and starts this one. A
  * server that never came up is not kept: the refusal says why, and nothing
  * runs on.

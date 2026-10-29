@@ -30,6 +30,14 @@ export const previewWords = {
   stoppedTitle: "This page stopped",
   stoppedLine:
     "It closed while it ran, most likely because it needed more memory than this device gives a page.",
+  /**
+   * The frame loaded and its page never spoke (dashboard PreviewPane
+   * `notLoaded`): the browser drew its own error page, as for a connection
+   * closed with no answer, or what came back was no page.
+   */
+  notLoadedTitle: "The page didn't load",
+  notLoadedLine: (machine: string) =>
+    `The browser got no page from ${machine}: the connection closed before an answer, or the answer wasn't a page.`,
   /** The state's way back: the page loaded afresh. */
   tryAgain: commonWords.tryAgain,
   /** Try again while the page loads. */
