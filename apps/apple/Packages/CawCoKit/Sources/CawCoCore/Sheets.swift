@@ -289,14 +289,13 @@ public final class SheetInspection {
         if !(chosen.map(names.contains) ?? false) { chosen = names.first }
         for name in edits.keys where !names.contains(name) { forget(name) }
         for name in drops.keys where !names.contains(name) { forget(name) }
-        post(["type": "cawco:story-select", "story": chosen.map { $0 as Any } ?? NSNull()])
         for name in names where dirty(name) { live(name) }
     }
 
+    /// The inspector's story: the page stands what the design graph keeps, so a choice here is the inspector's alone.
     public func choose(_ name: String) {
         chosen = name
         problem = nil
-        post(["type": "cawco:story-select", "story": name])
     }
 
     public var story: SheetStory? {

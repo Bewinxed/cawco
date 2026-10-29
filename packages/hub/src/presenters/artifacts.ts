@@ -686,6 +686,7 @@ const pinLines = (
           `- Ink: ${Math.round(pin.inkBox.w)} × ${Math.round(pin.inkBox.h)} px at ${Math.round(pin.inkBox.x)}, ${Math.round(pin.inkBox.y)} in the page`,
         ]
       : []),
+    ...(pin.state ? [`- Left while the design graph kept ${pin.state}`] : []),
     `- ${pin.link}: ${pinState(pin, now)}, left ${ago(pin.at, now)}; its handle ${handle(pin.id)}`,
     ...threadLines(pin.thread, now),
   ];
