@@ -89,6 +89,7 @@
     "./turn-cuts": "./src/turn-cuts.ts",
     "./words/cuts": "./src/words/cuts.ts",
     "./words/relaunch": "./src/words/relaunch.ts",
+    "./words/region-fault": "./src/words/region-fault.ts",
     "./words/notices": "./src/words/notices.ts",
     "./words/containers": "./src/words/containers.ts",
     "./words/spawn": "./src/words/spawn.ts",
