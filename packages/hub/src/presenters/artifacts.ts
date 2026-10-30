@@ -11,6 +11,7 @@
 import { artifactLink, artifactToolWords, decidedByLine } from "@cawco/core";
 import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
 import type { CanvasSpec, DesignMap, PageError } from "@cawco/core/stage";
+import { designGraphWords } from "@cawco/core/words/design-graph";
 import type { movesSaid, renderSaid } from "../artifacts/component";
 import type {
   ArtifactRead,
@@ -665,11 +666,22 @@ const pinState = (pin: Pin, now: number): string => {
     : "open";
 };
 
+/** The state a pin was placed on, in words: on the stage, on the graph's node, or gone from the file. */
+const stateLine = (on: { node: boolean; path: string | null }): string => {
+  if (on.path === null) {
+    return `${designGraphWords.stateGone}: pin it somewhere else`;
+  }
+  return on.node
+    ? designGraphWords.onNode(on.path)
+    : designGraphWords.onState(on.path);
+};
+
 /** One pin: what it stands on, its state, its thread. */
 const pinLines = (
   pin: Pin & {
     inkBox?: { h: number; w: number; x: number; y: number };
     link: string;
+    onState?: { node: boolean; path: string | null };
   },
   now: number
 ): string[] => {
@@ -686,7 +698,7 @@ const pinLines = (
           `- Ink: ${Math.round(pin.inkBox.w)} × ${Math.round(pin.inkBox.h)} px at ${Math.round(pin.inkBox.x)}, ${Math.round(pin.inkBox.y)} in the page`,
         ]
       : []),
-    ...(pin.state ? [`- Left while the design graph kept ${pin.state}`] : []),
+    ...(pin.onState ? [`- ${stateLine(pin.onState)}`] : []),
     `- ${pin.link}: ${pinState(pin, now)}, left ${ago(pin.at, now)}; its handle ${handle(pin.id)}`,
     ...threadLines(pin.thread, now),
   ];

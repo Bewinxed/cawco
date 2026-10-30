@@ -149,8 +149,11 @@ const storyRef = t.String({ minLength: 1, maxLength: 1100 });
 const doesField = t.Union(ARTIFACT_DOES.map((one) => t.Literal(one)));
 const askField = t.String({ minLength: 1, maxLength: ASK_LIMIT });
 
-/** A component canvas's edges, groups and dials (core `CanvasSpec`), as create and update take them. */
+/** A component canvas's steps, edges, groups and dials (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
+  steps: t.Optional(
+    t.Array(storyRef, { minItems: 1, maxItems: CANVAS_SPEC_LIMITS.steps })
+  ),
   edges: t.Optional(
     t.Array(
       t.Object({
@@ -176,7 +179,10 @@ const canvasFields = {
           t.Literal("color"),
           t.Literal("select"),
           t.Literal("toggle"),
+          t.Literal("count"),
+          t.Literal("longest"),
         ]),
+        by: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
         min: t.Optional(t.Number()),
         max: t.Optional(t.Number()),
         step: t.Optional(t.Number({ exclusiveMinimum: 0 })),
@@ -200,7 +206,7 @@ const canvasFields = {
 const SHAPES: Record<string, string> = {
   create: CREATE_SHAPE,
   update:
-    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
+    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or steps, edges, group, dials (the canvas itself); or ask (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
   read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
@@ -529,16 +535,19 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       },
       async ({ params, body }) => {
         try {
-          const { edges, group, dials, args, story } = body;
-          const canvas = [edges, group, dials].some((one) => one !== undefined);
+          const { steps, edges, group, dials, args, story } = body;
+          const canvas = [steps, edges, group, dials].some(
+            (one) => one !== undefined
+          );
           if (canvas && (args !== undefined || story !== undefined)) {
             throw new ArtifactRefusal(
               400,
-              "edges, group and dials change the canvas itself: send them apart from a states file's args or story."
+              "steps, edges, group and dials change the canvas itself: send them apart from a states file's args or story."
             );
           }
           return canvas
             ? await artifacts.canvasUpdate(params.id, params.artifact, {
+                steps,
                 edges,
                 group,
                 dials,

@@ -113,6 +113,11 @@ import {
   pickOf,
   picksMade,
 } from "@cawco/core/decisions";
+import {
+  type GraphModel,
+  graphModelOf,
+  pinPathOf,
+} from "@cawco/core/design-graph";
 import { detach } from "@cawco/core/detach";
 import {
   excerptOf,
@@ -198,6 +203,7 @@ import {
   type StateAsk,
   specOf,
   stateSaid,
+  stepsProblem,
   storiesSaid,
   unseen,
   weightSaid,
@@ -324,6 +330,8 @@ export interface ArtifactInput {
    * root. A preview of a port in a workspace names it.
    */
   serve?: { command: string; cwd?: string | undefined } | undefined;
+  /** A component canvas's sequence for the step slider, by story. */
+  steps?: string[] | undefined;
   /**
    * `parent`: a delegate hands it to its parent, readied and not opened.
    * The parent owns it (its panel, its list, the person's picks and pins on
@@ -843,10 +851,25 @@ export interface CommentRead {
     link: string;
     name: string;
     /** Each with its link, `[label](cawco:pin/<artifact>/<number>)`. */
-    pins: (Pin & { inkBox?: InkGroup["page"]; link: string })[];
+    pins: (Pin & {
+      inkBox?: InkGroup["page"];
+      link: string;
+      /** The state it was placed on, in words (core design-graph.ts `pinPathOf`); `path` null when its story is gone from the file. */
+      onState?: { node: boolean; path: string | null };
+    })[];
   }[];
   at: string;
 }
+
+/** The state a pin was placed on, in words, from the graph its canvas last drew (`meta.graph`); nothing for a pin on no state or a canvas not drawn. */
+const stateOfPin = (
+  graph: GraphModel | undefined,
+  pin: Pin
+): { onState?: { node: boolean; path: string | null } } => {
+  const sheet = "sheet" in pin.anchor ? pin.anchor.sheet : undefined;
+  const path = graph && sheet ? pinPathOf(graph, sheet) : undefined;
+  return path === undefined ? {} : { onState: { path, node: !!sheet?.node } };
+};
 
 /** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
 export interface CanvasExport {
@@ -5007,6 +5030,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const drawnWritten = (row: ArtifactRow, report: RenderReport) => {
     const doc = docs.doc(row.id);
+    // The graph the draw says, for a pin's state in words where no page is open (comment_read).
+    const graph = graphModelOf(report, sheetOf(row)?.spec ?? {});
+    if (
+      JSON.stringify(graph) !== JSON.stringify(doc.getMap("meta").get("graph"))
+    ) {
+      docs.transact(row.id, "hub", (written) => {
+        written.getMap("meta").set("graph", graph);
+      });
+    }
     const had = (doc.getMap("meta").get("drawnShapes") ??
       {}) as CanvasShapes["drawn"];
     const now: CanvasShapes["drawn"] = { ...had };
@@ -5308,6 +5340,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       asked,
       true
     );
+    const misstep = stepsProblem(
+      input.steps,
+      new Map(
+        opened.sheet
+          ? [[opened.file, opened.sheet.stories.map((one) => one.name)]]
+          : []
+      ),
+      opened.file
+    );
+    if (misstep) {
+      throw new ArtifactRefusal(400, misstep);
+    }
     const spec = specOf(input.name, input);
     const files = opened.report.sections.map((one) => one.file);
     const source: PreviewSource = {
@@ -7169,7 +7213,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * `artifact_update` of a component canvas's edges, groups or dials: its
+     * `artifact_update` of a component canvas's steps, edges, groups or dials: its
      * page's address changes, so the panel draws it again at the next
      * revision. Answers what changed and the canvas's new spec.
      */
@@ -7184,14 +7228,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!(sheet && "port" in row.source)) {
         throw new ArtifactRefusal(
           409,
-          `${row.name} is a ${row.kind}: edges, group and dials are a component canvas's.`
+          `${row.name} is a ${row.kind}: steps, edges, group and dials are a component canvas's.`
         );
       }
-      const problem = canvasProblem(input);
+      const stored = docs.doc(row.id).getMap("meta").get("sheet") as
+        SheetRead | undefined;
+      const problem =
+        canvasProblem(input) ??
+        stepsProblem(
+          input.steps,
+          new Map(
+            stored
+              ? [
+                  [
+                    row.source.stage?.file ?? "",
+                    stored.stories.map((one) => one.name),
+                  ],
+                ]
+              : []
+          ),
+          row.source.stage?.file ?? ""
+        );
       if (problem) {
         throw new ArtifactRefusal(400, problem);
       }
       const spec = specOf(row.name, {
+        steps: input.steps ?? sheet.spec.steps,
         edges: input.edges ?? sheet.spec.edges,
         group: input.group ?? sheet.spec.group,
         dials: input.dials ?? sheet.spec.dials,
@@ -7887,10 +7949,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         if (query.bySession && takes(instance, row)) {
           readHeard(row.id, pins, readAt);
         }
+        const graph = doc.getMap("meta").get("graph") as GraphModel | undefined;
         const answered = pins.map((pin) => {
           const inkBox = pin.ink ? groups[pin.ink]?.page : undefined;
           const link = linkOfPin(row.id, pin);
-          return inkBox ? { ...pin, inkBox, link } : { ...pin, link };
+          const onState = stateOfPin(graph, pin);
+          return inkBox
+            ? { ...pin, inkBox, link, ...onState }
+            : { ...pin, link, ...onState };
         });
         const address =
           (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??

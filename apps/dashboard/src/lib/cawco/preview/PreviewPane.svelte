@@ -4637,6 +4637,7 @@
             link={pinLink(pin.number)}
             live={live.has(pin.id)}
             name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
+            onState={designGraph?.stateWords(pin.anchor) ?? null}
             onclose={() => closeCard()}
             ondelete={deleteOpenPin}
             ondraft={() => drafts?.changed(pin.id)}

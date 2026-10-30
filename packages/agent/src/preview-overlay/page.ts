@@ -32,7 +32,7 @@ import {
   type ClipRun,
   MOVE_LIMITS,
   type MoveAsk,
-  STAGE_PATH_MAX,
+  type StagePoint,
   type TunedClip,
 } from "@cawco/core/design-graph";
 import type { DocMap } from "@cawco/core/doc-maps";
@@ -80,7 +80,6 @@ import { cropPicture } from "./picture";
 import { type DraftTarget, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
-import { keepStagePath, stagePath } from "./stage-path";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/u;
 /** A page hash: sha256, hex. */
@@ -2476,7 +2475,6 @@ async function writeDraft(message: HostMessage) {
     {
       ...target,
       title: pinName(target as unknown as Pin),
-      ...(stagePath() ? { state: stagePath() } : {}),
     },
     said
   );
@@ -2931,10 +2929,14 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         })
       );
     },
-    // The design graph's ask (core design-graph.ts `StageAsk`): the state kept, its path for a pin, the one a hover previews, the room the graph leaves.
+    // The design graph's ask (core design-graph.ts `StageAsk`): the state kept, the one a hover previews, the room the index and dock leave; the pins stand by them.
     "cawco:stage": (message) => {
       const keptPoint = stagePoint(message.kept);
-      const room = message.room as { bottom?: unknown; end?: unknown } | null;
+      const room = message.room as {
+        bottom?: unknown;
+        end?: unknown;
+        top?: unknown;
+      } | null;
       const roomOf = (value: unknown) =>
         typeof value === "number" && Number.isFinite(value) && value >= 0
           ? Math.min(value, STAGE_ROOM_MAX)
@@ -2942,18 +2944,18 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       if (!keptPoint) {
         return;
       }
-      const path =
-        typeof message.path === "string"
-          ? message.path.slice(0, STAGE_PATH_MAX)
-          : "";
-      keepStagePath(path);
+      const peekPoint = stagePoint(message.peek);
+      pins.stage(keptPoint, peekPoint);
       dispatchEvent(
         new CustomEvent("cawco:stage", {
           detail: {
             kept: keptPoint,
-            path,
-            peek: stagePoint(message.peek),
-            room: { end: roomOf(room?.end), bottom: roomOf(room?.bottom) },
+            peek: peekPoint,
+            room: {
+              end: roomOf(room?.end),
+              bottom: roomOf(room?.bottom),
+              top: roomOf(room?.top),
+            },
           },
         })
       );
@@ -3346,9 +3348,7 @@ const STAGE_ROOM_MAX = 10_000;
 /** The interactions a stage point may force (core stage.ts `Interaction`). */
 const STAGE_INTERACTIONS: ReadonlySet<unknown> = new Set(INTERACTIONS);
 /** A stage point the pane said, bounded (core design-graph.ts `StagePoint`); null when it is not one. */
-function stagePoint(
-  said: unknown
-): { file: string; interaction: string; story: string } | null {
+function stagePoint(said: unknown): StagePoint | null {
   const point = said as
     | { file?: unknown; interaction?: unknown; story?: unknown }
     | null
@@ -3366,7 +3366,7 @@ function stagePoint(
   return {
     file: point.file,
     story: point.story,
-    interaction: point.interaction,
+    interaction: point.interaction as StagePoint["interaction"],
   };
 }
 

@@ -98,6 +98,27 @@ export const designGraphWords = {
   noClips: "The move ran and animated nothing.",
   /** The agent's dials under the graph, to a reader. */
   dials: "Dials",
-  /** A pin placed while a state was kept, under the person's words (the owner's pick "pins"). */
-  pinKept: (path: string) => `Left on ${path}`,
+  /** The two indexes over the stage, the switch's segments and its name to a reader. */
+  views: "View",
+  steps: "Steps",
+  graphView: "Graph",
+  /** The step slider, to a reader; its thumb's value is the kept state's name. */
+  slider: "Steps",
+  /** A step naming a story the states file lacks: its dashed stop's title. */
+  stepMissing: (story: string) => `${story} isn't in the file`,
+  /** A section with no stories, in the well and on the page (the empty-state formula). */
+  noStates: (name: string) => `${name} has no states yet.`,
+  /** A count dial's figure: how many records stand of the kept story's list (The Readable Labels rule). */
+  countOf: (count: number, of: number) => `${count} of ${of}`,
+  /** A longest dial's switch. */
+  longestFirst: "Longest names first",
+  /** A record dial whose arg is no list on the kept story: its title. */
+  notAList: (arg: string, story: string) => `${arg} isn't a list on ${story}`,
+  /** The comments rail's group of pins placed on states not kept now. */
+  onOtherStates: "On other states",
+  /** A pin's state, under the person's words and in the rail: placed on the stage, or on the graph's node. */
+  onState: (path: string) => `On ${path}`,
+  onNode: (path: string) => `On the state ${path}`,
+  /** A pin whose story is gone from the states file. */
+  stateGone: "Its state is gone from the file",
 };

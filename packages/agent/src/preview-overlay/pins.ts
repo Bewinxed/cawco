@@ -69,6 +69,7 @@ import {
   wholePage,
   writePin,
 } from "@cawco/core/comments";
+import { onState, type StagePoint, samePoint } from "@cawco/core/design-graph";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import { absences } from "./absent";
@@ -90,7 +91,6 @@ import {
   scrollMoves,
   unpadFoot,
 } from "./scrollers";
-import { stagePath } from "./stage-path";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -219,6 +219,8 @@ export interface Pins {
   pointOn: (el: Element, x: number, y: number) => { x: number; y: number };
   /** Every pin shown on the page, or hidden (⇧C). */
   show: (shown: boolean) => void;
+  /** The design graph's kept and previewed states (`cawco:stage`): a pin placed on another state stands hidden. */
+  stage: (kept: StagePoint | null, peek: StagePoint | null) => void;
   /** The pin whose thread the host shows, whose place it hears as the page scrolls; or none. */
   track: (id: string | null) => void;
 }
@@ -462,6 +464,9 @@ export function startPins(deps: PinsDeps): Pins {
   /** The focused pin was reached by the keyboard: its pill wears the focus ring, until a press. */
   let keyed = false;
   let tracked: string | null = null;
+  /** The design graph's kept state and the one a hover previews; none on a page with no graph. */
+  let stageKept: StagePoint | null = null;
+  let stagePeek: StagePoint | null = null;
   let live = new Set<string>();
   let unread = new Set<string>();
   /** When each unread answer's dot began its echo (`performance.now()`): its three loops run from there. */
@@ -987,8 +992,12 @@ export function startPins(deps: PinsDeps): Pins {
    */
   const placeAll = (all: Pin[], paint: Paint): Pin[] => {
     const missing: Pin[] = [];
-    // A resolved pin stands on the page only while its thread is open.
-    const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
+    // A resolved pin stands on the page only while its thread is open; one
+    // placed on a state stands only while that state is kept or previewed
+    // (hidden, never moved: its element comes back with its state).
+    const onIt = (pin: Pin) =>
+      (!pin.resolvedAt || pin.id === tracked) &&
+      onState(pin.anchor, stageKept, stagePeek);
     const drawn: DrawnPill[] = [];
     const drawnFixed: DrawnPill[] = [];
     for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
@@ -1325,13 +1334,8 @@ export function startPins(deps: PinsDeps): Pins {
     }
   };
 
-  /** A new pin written whole (its head, place and thread its own keys). */
-  /** A new pin written: placed while the design graph keeps a state, it records that state's path (stage-path.ts). */
-  const write = (pin: Pin) =>
-    writePin(
-      artifact.doc(),
-      stagePath() ? { ...pin, state: stagePath() } : pin
-    );
+  /** A new pin written whole (its head, place and thread its own keys); its anchor read off its frame names the state it stands on. */
+  const write = (pin: Pin) => writePin(artifact.doc(), pin);
   /** The number a new pin takes: one past the highest; a deleted pin's is never reused while a higher one stands. */
   const nextNumber = () =>
     Math.max(0, ...[...pinsMap().values()].map((pin) => pin.number)) + 1;
@@ -1534,6 +1538,14 @@ export function startPins(deps: PinsDeps): Pins {
       // tap that may be landing, so the page waits a frame: iOS WebKit, seeing
       // new content as a tap lands, takes it for a hover and sends no click.
       requestAnimationFrame(draw);
+    },
+    stage: (kept, peek) => {
+      if (samePoint(kept, stageKept) && samePoint(peek, stagePeek)) {
+        return;
+      }
+      stageKept = kept;
+      stagePeek = peek;
+      draw();
     },
     show: (shown) => {
       layer.style.display = shown ? "" : "none";
