@@ -30,6 +30,13 @@
      blob all the while, since it cannot ride it as the icons ride theirs. As it closes, the pin and the goo dip `--goo-dip`
      and back over `--dur-goo-settle` (the demo's anticipation), and the card
      stays until that dip is done, the pin's own face back by then.
+     Like the demo's menu, it stays on the page through its close: `open`
+     moves it, and only once a close has landed does it say so (`onclosed`)
+     for the page to take it away. A press that opens it again before then
+     turns the same transitions back from where they stand. (Closed in an
+     outro, a card opened again mid-close was resumed shut, and its block's
+     teardown ran the page's callback against a pin already gone: a throw,
+     the page's 500.)
      Joined (the owner: "a toggle that keeps the small gooey part that makes
      the card still connected to the chip"; "it should merge smoothly with
      the comment div … don't narrow it like a dumbbell"), it stands one goo
@@ -56,7 +63,6 @@
 -->
 <script lang="ts">
   import { flushSync, type Snippet, untrack } from "svelte";
-  import type { TransitionConfig } from "svelte/transition";
   import {
     dur,
     ease,
@@ -70,7 +76,6 @@
     drawnShift,
     FLOAT_W,
     FloatPlace,
-    fadeOut,
     type Plan,
     travelTo,
     union,
@@ -83,24 +88,24 @@
     room,
     label,
     pin,
-    exit = { at: "fade" },
+    open,
+    onclosed,
     float = $bindable(),
     pill,
     joined = true,
     stickiness = numberOf("--goo-blur"),
     focused = false,
     dot = null,
-    onhold,
     children,
   }: {
     /** The pin's status dot, which its joined face keeps by its figure as its mark does. */
     dot?: "live" | "unread" | null;
     /** The pin has keyboard focus: its joined face wears the ring its own face (`pill`) does, as the demo's trigger keeps its own. */
     focused?: boolean;
-    /** Whether the goo draws the pin itself: the page's own pill, its edge and its ring step back while it does. */
-    onhold?: (holding: boolean) => void;
-    /** How it goes: `fade`, or `cut` where another pin's card takes its place in the same press. */
-    exit?: { at: "fade" | "cut" };
+    /** Poured out of its pin (true), or going back into it (false): the demo's `data-open`. */
+    open: boolean;
+    /** Its close has landed, the pin's dip done: the page takes it away. Never called once it has opened again. */
+    onclosed: () => void;
     /** The pill's box in the well, px; null while it is not on screen. */
     mark: Box | null;
     /** The box of what the pill stands on, in the well, px: the card never stands over it. */
@@ -132,8 +137,10 @@
   let blurEl = $state<SVGFEGaussianBlurElement>();
   let matrixEl = $state<SVGFEColorMatrixElement>();
 
-  /** Poured out: the travel to a new spot only runs once it stands. */
+  /** Poured out, and not closing: the travel to a new spot only runs while it stands, and the pin wears the card's surface. */
   let opened = $state(false);
+  /** Placed once: from then on `open` moves it (before, its first pour waits for its size). */
+  let ready = false;
   const placed = new FloatPlace(
     () => ({
       mark,
@@ -149,8 +156,14 @@
       body: () => body,
       float: () => float,
       placed: () => {
-        pour();
-        opened = true;
+        ready = true;
+        if (open) {
+          pour();
+          opened = true;
+        } else {
+          // Closed again before it was ever drawn open: nothing to drain.
+          onclosed();
+        }
       },
     }
   );
@@ -410,14 +423,9 @@
     return keptBridge;
   });
 
-  // The goo draws the pin while it is on screen; gone (after its close), it
-  // holds the pin no more.
-  $effect(() => {
-    onhold?.(pinHere !== null);
-  });
   $effect(() => () => {
     window.clearTimeout(runEnd);
-    untrack(() => onhold)?.(false);
+    window.clearTimeout(closing);
   });
 
   /** The filter's region: the card and the pin, with room for the blur and the shadow. */
@@ -442,27 +450,14 @@
     }
   });
 
-  /**
-   * The pill and the thread's closed clip as last drawn: what a close reads.
-   * Its outro runs once the card's block has let it go, every derived here
-   * frozen by then (scripts/outro-reads-check.ts).
-   */
-  let drawn = {
-    pin: untrack(() => pinHere),
-    clip: untrack(() => hiddenClip),
-  };
-  $effect(() => {
-    drawn = { pin: pinHere, clip: hiddenClip };
-  });
-
   /** The run in flight: while it lasts (`data-run`), the card's blob moves on a transition; between runs its box only follows the pin and the card's size. */
   let runEnd = 0;
   /**
    * The demo's setOpen: the goo's knobs, then `data-open`, which the CSS
-   * transitions follow. Closed, the pin takes its own face back. Set by hand,
-   * since the template stands still through an outro.
+   * transitions follow (from where they stand, as a press turns a run back).
+   * Set by hand: `data-run` must be set and laid out first.
    */
-  function setOpen(open: boolean) {
+  function setOpen(to: boolean) {
     const el = float;
     if (!el) {
       return;
@@ -472,26 +467,23 @@
     const wrap = clipWrap;
     // A close starts with the thread clipped to the card's box (open, it
     // stands unclipped), so the clip transitions from there.
-    if (wrap && !open) {
+    if (wrap && !to) {
       wrap.style.clipPath = cardClip();
     }
     el.dataset.run = "";
     el.getBoundingClientRect();
-    el.dataset.open = String(open);
+    el.dataset.open = String(to);
     if (wrap) {
-      wrap.style.clipPath = open ? cardClip() : drawn.clip;
-    }
-    if (!open) {
-      el.dataset.face = "own";
+      wrap.style.clipPath = to ? cardClip() : hiddenClip;
     }
     runEnd = window.setTimeout(
       () => {
         delete el.dataset.run;
-        if (wrap && open) {
+        if (wrap && to) {
           wrap.style.clipPath = "none";
         }
       },
-      knob(open ? "--dur-goo" : "--dur-goo-exit") + 50
+      knob(to ? "--dur-goo" : "--dur-goo-exit") + 50
     );
   }
 
@@ -531,26 +523,55 @@
     }
   }
 
-  /** The card goes back into its pin, and stays drawn until the pin's dip is done. */
-  function drain(node: HTMLElement): TransitionConfig {
-    if (!(drawn.pin && motionOk.current)) {
-      setOpen(false);
-      return fadeOut(node);
+  /** The close in flight: `onclosed` once it lands. */
+  let closing = 0;
+  /** The fade a close without a pin to drain into (or without motion) plays. */
+  let fade: Animation | null = null;
+
+  /** The card goes back into its pin, and stays drawn until the pin's dip is done; with no pin on screen, or without motion, it fades where it stands. */
+  function close() {
+    const el = float;
+    opened = false;
+    window.clearTimeout(closing);
+    fade?.cancel();
+    if (!el) {
+      onclosed();
+      return;
     }
     setOpen(false);
-    dip();
-    return {
-      duration: Math.max(knob("--dur-goo-exit"), knob("--dur-goo-settle")),
-    };
+    let length: number;
+    if (pinHere && motionOk.current) {
+      dip();
+      length = Math.max(knob("--dur-goo-exit"), knob("--dur-goo-settle"));
+    } else {
+      length = dur("--dur-control");
+      fade = el.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: length,
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+    }
+    closing = window.setTimeout(onclosed, length);
   }
 
-  function leave(node: HTMLElement): TransitionConfig {
-    if (exit.at === "cut") {
-      node.style.display = "none";
-      return { duration: 0 };
-    }
-    return drain(node);
+  /** Opened again before its close landed: the same runs turn back toward open. */
+  function reopen() {
+    window.clearTimeout(closing);
+    fade?.cancel();
+    fade = null;
+    setOpen(true);
+    opened = true;
   }
+
+  // Each press after its first pour: `open` turns the card's runs.
+  $effect(() => {
+    const want = open;
+    untrack(() => {
+      if (ready) {
+        (want ? reopen : close)();
+      }
+    });
+  });
 </script>
 
 <div
@@ -570,7 +591,6 @@
   style:--goo-hidden={hidden}
   style:--pin-x="{pinHere?.x ?? 0}px"
   style:--pin-y="{pinHere?.y ?? 0}px"
-  out:leave|global
 >
   <!-- The one goo layer: the pin and the card as SVG shapes under the demo's filter. -->
   <svg

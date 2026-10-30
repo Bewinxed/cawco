@@ -15,7 +15,6 @@
    */
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
-  import { tick } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
@@ -71,8 +70,6 @@
   let roomH = $state(0);
   const pills = $state<Record<string, HTMLElement>>({});
   const targets = $state<Record<string, HTMLElement>>({});
-  /** The pills the goo draws as part of its shape: each steps back, its edge and its ring with it. */
-  const held = $state<Record<string, boolean>>({});
   /**
    * The pill with keyboard focus, by its pin: the one source of its focus
    * ring, by the house rule (`lastInput`, `keyboardUse`): a key that moves
@@ -118,26 +115,28 @@
   /** The page's column changing size (its faces loading, a wrap) moves the pills: measured again. */
   const measureColumn = frameSize<HTMLElement>(() => measure());
 
+  /** The pin whose card is open. */
   let open = $state<string | null>(null);
-  const openPin = $derived(pins.find((one) => one.id === open) ?? null);
-  /** How the open card goes: at once when another pin's card takes its place. */
-  const exit: { at: "fade" | "cut" } = { at: "fade" };
+  /** The pin whose card is on the page: the open one, or the one still going back into its pin. */
+  let shown = $state<string | null>(null);
+  const shownPin = $derived(pins.find((one) => one.id === shown) ?? null);
+  /** A pill the goo draws as part of its shape while its card is on the page and it is on screen: it steps back, its edge and its ring with it. */
+  const held = (id: string) => shown === id && !!at[id]?.mark;
   const drafts = new Map<string, ComposerDraft>();
   const draftOf = (id: string) => {
     const kept = drafts.get(id) ?? new ComposerDraft();
     drafts.set(id, kept);
     return kept;
   };
-  async function press(id: string) {
+  /** A pill's press: its card opens, or closes if open; another pin's card, open or closing, goes at once. */
+  function press(id: string) {
     if (open === id) {
       open = null;
       return;
     }
     measure();
-    exit.at = open ? "cut" : "fade";
     open = id;
-    await tick();
-    exit.at = "fade";
+    shown = id;
   }
 </script>
 
@@ -190,7 +189,7 @@
     type="button"
   >
     <!-- Held, the card's goo draws the pin as part of itself: the page's own pill steps back. -->
-    <span class={["flex", held[pin.id] && "opacity-0"]}>
+    <span class={["flex", held(pin.id) && "opacity-0"]}>
       {@render pillOf(pin, keyed === pin.id)}
     </span>
   </button>
@@ -347,8 +346,8 @@
       class="@container pointer-events-none absolute inset-0"
       data-slot="pin-room"
     >
-      {#if openPin}
-        {@const pin = openPin}
+      {#if shownPin}
+        {@const pin = shownPin}
         {@const where = at[pin.id]}
         {#key pin.id}
           {#snippet copy()}
@@ -357,12 +356,14 @@
           <PinFloatGoo
             box={where?.box ?? null}
             dot={dotOf}
-            {exit}
             focused={keyed === pin.id}
             {joined}
-            onhold={(holding) => {
-              held[pin.id] = holding;
+            onclosed={() => {
+              if (open !== shown) {
+                shown = null;
+              }
             }}
+            open={open === pin.id}
             {stickiness}
             label="Comment {pin.number}"
             mark={where?.mark ?? null}
