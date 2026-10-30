@@ -76,6 +76,7 @@
         "@tanstack/svelte-table": "9.2.6",
         "@xyflow/svelte": "^1.7.0",
         "bits-ui": "^2.19.5",
+        "clipper2-ts": "2.0.1-18",
         "clsx": "^2.1.1",
         "cuelume": "0.2.4",
         "minisearch": "7.2.0",
@@ -1766,6 +1767,8 @@
     "cli-cursor": ["cli-cursor@5.0.0", "", { "dependencies": { "restore-cursor": "^5.0.0" } }, "sha512-aCj4O5wKyszjMmDT4tZj93kxyydN/K5zPWSCe6/0AV/AA1pqe5ZBIw0a2ZfPQV7lL5/yb5HsUreJ6UFAF1tEQw=="],
 
     "cli-truncate": ["cli-truncate@6.1.1", "", { "dependencies": { "slice-ansi": "^9.0.0", "string-width": "^8.2.0" } }, "sha512-06p9vyLahLa4zkGcgsGxU6iEkSOiuI4fhCH6Emhe2lPAcoUv73n72DnODsnHA+5wwXGnV0n9M9/qOQJSjYhFhw=="],
+
+    "clipper2-ts": ["clipper2-ts@2.0.1-18", "", {}, "sha512-WuRO1ZHzyYTVHY78r4wVWVydvQ+1lx9qZ+DeZa/8zhvrxIgCVzElJ6lwSMGtUUKFPefhvfJsHZ5C9RNkgisCOQ=="],
 
     "cliui": ["cliui@9.0.1", "", { "dependencies": { "string-width": "^7.2.0", "strip-ansi": "^7.1.0", "wrap-ansi": "^9.0.0" } }, "sha512-k7ndgKhwoQveBL+/1tqGJYNz097I7WOvwbmmU2AR5+magtbjPWQTS1C5vzGkBC8Ym8UWRzfKUzUUqFLypY4Q+w=="],
 

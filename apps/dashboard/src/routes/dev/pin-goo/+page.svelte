@@ -4,18 +4,20 @@
    * through the gooey plus-menu's filter (PinFloatGoo), on the page the
    * owner's two comments stood on (the comment-sizing preview's Away mode
    * decision page), each opening his own thread in the real PinCard. A
-   * press on a pill opens its card; Close, Esc or the pill again closes it.
-   * The page scrolls under an open card. The head's controls, in the words
-   * of what they change: Stickiness, how far apart the card and its pin
-   * still pull a bridge between them (the goo's blur, `--goo-blur`, a prop); Open
-   * and Close, in ms (`--dur-goo`, `--dur-goo-exit`), read as each open or
-   * close starts; Stay joined, the card standing within the goo's reach of
-   * its pin, so the filter holds a neck between them, the pin wearing the
-   * card's surface.
+   * press on a pill opens its card; Close, Esc, a press anywhere outside
+   * it (the house's pressOutside) or the pill again closes it. The page
+   * scrolls under an open card. The head's controls, in the words of what
+   * they change: Open and Close, in ms (`--dur-goo`, `--dur-goo-exit`), read
+   * as each open or close starts; Stay joined, the card standing beside its
+   * pin, a bridge as tall as the pin between them, the pin wearing the
+   * card's surface; Status, the pins' status dot, which pours out into the
+   * card's rim; Count, the pins' numbers, so the bubble is seen at one, two
+   * and three figures.
    */
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
   import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { pressOutside } from "#lib/cawco/press-outside.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
@@ -24,7 +26,7 @@
     lastInput,
   } from "#lib/components/ui/fluid-tabs/last-input.js";
   import PinFloatGoo from "./PinFloatGoo.svelte";
-  import { AGENT, PINS } from "./pins";
+  import { AGENT, COUNTS, numbered, PINS } from "./pins";
 
   interface Box {
     h: number;
@@ -35,26 +37,30 @@
 
   /** Each thread as it was first sent, his words alone: a card shorter than the well, which moves once as its pill leaves it. */
   let firstSent = $state(false);
+  /** The first pin's number (Count): the second takes the next. */
+  let count = $state<number>(COUNTS[0]);
   const pins: Pin[] = $derived(
-    firstSent
-      ? PINS.map((one) => ({ ...one, thread: one.thread.slice(0, 1) }))
-      : PINS
+    numbered(
+      firstSent
+        ? PINS.map((one) => ({ ...one, thread: one.thread.slice(0, 1) }))
+        : PINS,
+      count
+    )
   );
-  /** The page's words each pin stands on, by pin: comment 1 the button, comment 2 the recommended answer. */
-  const parents: Record<number, string | null> = {
-    1: null,
-    2: "Where should the away notes sit?",
+  /** The page's words each pin stands on, by pin: the first the button, the second the recommended answer. */
+  const parents: Record<string, string | null> = {
+    [PINS[0].id]: null,
+    [PINS[1].id]: "Where should the away notes sit?",
   };
 
-  /** The controls, at their tokens' values (the goo's blur, its open and its close), joined. */
+  /** The controls, at their tokens' values (the goo's open and its close), joined. */
   const DEFAULTS = {
-    stickiness: 6,
     openMs: 350,
     closeMs: 250,
     joined: true,
     dot: "live" as "live" | "unread" | "none",
+    count: COUNTS[0] as number,
   };
-  let stickiness = $state(DEFAULTS.stickiness);
   let openMs = $state(DEFAULTS.openMs);
   let closeMs = $state(DEFAULTS.closeMs);
   let joined = $state(DEFAULTS.joined);
@@ -62,7 +68,7 @@
   let dot = $state(DEFAULTS.dot);
   const dotOf = $derived(dot === "none" ? null : dot);
   const reset = () => {
-    ({ stickiness, openMs, closeMs, joined, dot } = DEFAULTS);
+    ({ openMs, closeMs, joined, dot, count } = DEFAULTS);
   };
 
   let well = $state<HTMLElement>();
@@ -117,6 +123,24 @@
 
   /** The pin whose card is open. */
   let open = $state<string | null>(null);
+  /** The open card's box. */
+  let card = $state<HTMLElement>();
+  // A press anywhere outside the open card puts it away (the house's
+  // outside-press rule, heard as the press starts, so a drag begun inside
+  // it, a selection, never closes it); its own pin's press is its own
+  // toggle.
+  $effect(() => {
+    const id = open;
+    if (!(id && card)) {
+      return;
+    }
+    return pressOutside(card, (event) => {
+      if (event.target instanceof Node && pills[id]?.contains(event.target)) {
+        return;
+      }
+      open = null;
+    });
+  });
   /** The pin whose card is on the page: the open one, or the one still going back into its pin. */
   let shown = $state<string | null>(null);
   const shownPin = $derived(pins.find((one) => one.id === shown) ?? null);
@@ -184,8 +208,8 @@
         keyed = pin.id;
       }
     }}
-    style:--at-x={pin.number === 1 ? "70%" : "var(--space-5)"}
-    style:--at-y={pin.number === 1 ? "50%" : "var(--space-4)"}
+    style:--at-x={pin.id === PINS[0].id ? "70%" : "var(--space-5)"}
+    style:--at-y={pin.id === PINS[0].id ? "50%" : "var(--space-4)"}
     type="button"
   >
     <!-- Held, the card's goo draws the pin as part of itself: the page's own pill steps back. -->
@@ -205,18 +229,6 @@
     class="flex flex-none flex-wrap items-center gap-x-space-5 gap-y-space-2 border-b border-border-hairline bg-surface-raised px-space-4 py-space-2 type-meta"
     data-slot="dials"
   >
-    <label class="flex items-center gap-space-2">
-      <span>Stickiness</span>
-      <input
-        bind:value={stickiness}
-        class="accent-action-solid"
-        max="12"
-        min="3"
-        step="0.5"
-        type="range"
-      />
-      <span class="num w-c-bench-readout-w">{stickiness}</span>
-    </label>
     <label class="flex items-center gap-space-2">
       <span>Open, ms</span>
       <input
@@ -250,11 +262,19 @@
       <span>Stay joined</span>
     </label>
     <label class="flex items-center gap-space-2">
-      <span>Dot</span>
+      <span>Status</span>
       <select bind:value={dot} class="type-meta">
+        <option value="none">None</option>
         <option value="live">Working</option>
         <option value="unread">Unread</option>
-        <option value="none">None</option>
+      </select>
+    </label>
+    <label class="flex items-center gap-space-2">
+      <span>Count</span>
+      <select bind:value={count} class="type-meta num">
+        {#each COUNTS as one (one)}
+          <option value={one}>{one}</option>
+        {/each}
       </select>
     </label>
     <label class="flex items-center gap-space-2">
@@ -354,6 +374,7 @@
             {@render pillOf(pin, keyed === pin.id)}
           {/snippet}
           <PinFloatGoo
+            bind:float={card}
             box={where?.box ?? null}
             dot={dotOf}
             focused={keyed === pin.id}
@@ -364,7 +385,6 @@
               }
             }}
             open={open === pin.id}
-            {stickiness}
             label="Comment {pin.number}"
             mark={where?.mark ?? null}
             pill={copy}
@@ -386,7 +406,7 @@
               onreply={() => undefined}
               onresolve={() => undefined}
               onretry={() => undefined}
-              parent={parents[pin.number] ?? null}
+              parent={parents[pin.id] ?? null}
               {pin}
               problem={null}
             />

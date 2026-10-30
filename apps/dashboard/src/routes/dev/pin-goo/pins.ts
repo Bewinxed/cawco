@@ -173,3 +173,14 @@ export const PINS = [
     ],
   },
 ] satisfies Pin[];
+
+/**
+ * The counts the page's pins can stand at (its Count control), so a pin's
+ * bubble and its join are seen at one, two and three figures: the first
+ * pin takes the count, the second the one after it (9 and 10, 99 and 100).
+ */
+export const COUNTS = [1, 9, 12, 99, 128] as const;
+
+/** The two threads numbered from `count`. */
+export const numbered = (pins: Pin[], count: number): Pin[] =>
+  pins.map((one, i) => ({ ...one, number: count + i }));

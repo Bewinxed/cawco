@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  import { breathPhase } from "@cawco/core/breath";
+  import type { Attachment } from "svelte/attachments";
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
@@ -36,13 +38,6 @@
   });
 
   type LiveDotLooks = VariantProps<typeof liveDotVariants>;
-</script>
-
-<script lang="ts">
-  import { breathPhase } from "@cawco/core/breath";
-  import type { Attachment } from "svelte/attachments";
-  import type { HTMLAttributes } from "svelte/elements";
-  import { cn } from "#lib/utils.js";
 
   /**
    * Its breath on the one clock (core breath.ts): every live dot, here and
@@ -52,9 +47,10 @@
    * `play()`, `pause()`, `reverse()` and setting `startTime` take it over),
    * so the rest rule still holds a dot nobody sees still: first from the
    * timeline's time, then exactly from the start time it was given. Under
-   * reduced motion there is no breath to set.
+   * reduced motion there is no breath to set. Any mark that takes the
+   * breath (`breathe`) takes it in step by this attachment.
    */
-  const inStep: Attachment<HTMLElement> = (dot) => {
+  export const inStep: Attachment<Element> = (dot) => {
     const breath = dot
       .getAnimations()
       .find(
@@ -79,6 +75,11 @@
       })
       .catch(() => undefined);
   };
+</script>
+
+<script lang="ts">
+  import type { HTMLAttributes } from "svelte/elements";
+  import { cn } from "#lib/utils.js";
 
   let {
     class: className,

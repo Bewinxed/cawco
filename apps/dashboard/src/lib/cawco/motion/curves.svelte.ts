@@ -163,6 +163,29 @@ export const popScale = (): number =>
 export const numberOf = (name: `--${string}`): number =>
   Number.parseFloat(rootToken(name));
 
+const curves = new Map<string, (t: number) => number>();
+const CUBIC_BEZIER = /cubic-bezier\(([^)]*)\)/u;
+/**
+ * A `--ease-*` token as a function of progress, for motion drawn frame by
+ * frame (a computed outline): the stylesheet's own `cubic-bezier()`, its
+ * overshoot kept (`--ease-goo` runs past 1 and settles).
+ */
+export const curveOf = (name: `--ease-${string}`): ((t: number) => number) => {
+  const css = rootToken(name);
+  const held = curves.get(css);
+  if (held) {
+    return held;
+  }
+  const [x1 = 0, y1 = 0, x2 = 1, y2 = 1] = (
+    CUBIC_BEZIER.exec(css)?.[1] ?? "0, 0, 1, 1"
+  )
+    .split(",")
+    .map(Number.parseFloat);
+  const made = bezier(x1, y1, x2, y2);
+  curves.set(css, made);
+  return made;
+};
+
 /** The CSS strings of the same curves, for `element.animate()`. */
 export const CURVE = {
   out: "cubic-bezier(0.23, 1, 0.32, 1)",

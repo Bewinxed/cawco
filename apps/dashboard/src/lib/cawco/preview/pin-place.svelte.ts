@@ -42,7 +42,7 @@ export const FLOAT_W =
   "min(var(--c-pin-card-reading-w), calc(100% - 2 * var(--space-2)))";
 
 /** Two boxes as one. */
-export const union = (parts: Box[]): Box => {
+const union = (parts: Box[]): Box => {
   const left = Math.min(...parts.map((one) => one.x));
   const top = Math.min(...parts.map((one) => one.y));
   return {

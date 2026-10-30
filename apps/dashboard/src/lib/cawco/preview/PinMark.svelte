@@ -33,9 +33,10 @@
 
   /**
    * A comment's pill as the pane draws it (a rail's row, a thread's head, a
-   * peek), the same as the page's (overlay pins.ts): `--c-pin` tall, as wide
-   * as one figure, or the figures and `--c-pin-pad` each side for two or
-   * three; its figure in the caps role in tabular figures; a 2px raised
+   * peek), the same as the page's (overlay pins.ts): `--c-pin` tall and at
+   * least as wide, a square at one figure, its figures with `--c-pin-pad`
+   * each side once they need more (a pill at 128), on one line whatever the
+   * count; its figure in the caps role in tabular figures; a 2px raised
    * ring, then the xs shadow. Its face by state: provisional hollow and
    * bare, unsent hollow with its figure in the action ink, sent solid,
    * resolved recessed. `tail` names the corner that stands on the pressed
@@ -72,14 +73,13 @@
 <!-- mark-line: the dot stands on the pill's top-end corner, absolutely, not beside its figure -->
 <span
   aria-hidden="true"
-  class="relative inline-flex flex-none items-center justify-center h-c-pin min-w-c-pin data-inline:h-c-inline-chip-line data-inline:min-w-c-inline-chip-line rounded-pill ring-2 ring-surface-raised shadow-xs type-caps num leading-none data-wide:px-c-pin-pad data-tail:rounded-es-hair data-[state=provisional]:border-2 data-[state=provisional]:border-action-solid data-[state=provisional]:bg-surface-raised data-[state=unsent]:border-2 data-[state=unsent]:border-action-solid data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-action-solid data-[state=sent]:bg-action-solid data-[state=sent]:text-on-action data-[state=resolved]:bg-surface-fill-strong data-[state=resolved]:text-ink-muted data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-(length:--c-pin-gone-ring) not-data-focused:data-gone:outline-border-control"
+  class="relative inline-flex flex-none items-center justify-center h-c-pin min-w-c-pin data-inline:h-c-inline-chip-line data-inline:min-w-c-inline-chip-line rounded-pill px-c-pin-pad whitespace-nowrap ring-2 ring-surface-raised shadow-xs type-caps num leading-none data-tail:rounded-es-hair data-[state=provisional]:border-2 data-[state=provisional]:border-action-solid data-[state=provisional]:bg-surface-raised data-[state=unsent]:border-2 data-[state=unsent]:border-action-solid data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-action-solid data-[state=sent]:bg-action-solid data-[state=sent]:text-on-action data-[state=resolved]:bg-surface-fill-strong data-[state=resolved]:text-ink-muted data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-(length:--c-pin-gone-ring) not-data-focused:data-gone:outline-border-control"
   data-focused={focused || undefined}
   data-gone={gone || undefined}
   data-inline={size === "inline" || undefined}
   data-mark
   data-state={state}
   data-tail={tail === "none" ? undefined : tail}
-  data-wide={number !== null && number >= 10 ? "" : undefined}
 >
   {#if number !== null}<span data-figure>{number}</span>{/if}
   {#if dot}<PinDot {dot} />{/if}

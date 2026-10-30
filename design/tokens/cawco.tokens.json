@@ -4186,11 +4186,8 @@
     },
     "c-pin": {
       "$type": "dimension",
-      "$value": {
-        "value": 20,
-        "unit": "px"
-      },
-      "$description": "A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its width at one figure (DESIGN.md, A pin's pill)."
+      "$value": "{size.c-pointer-floor}",
+      "$description": "A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: the 24 Pointer Rule's floor, so the bubble holds its number and is a whole target under a mouse (DESIGN.md, A pin's pill)."
     },
     "c-pin-pad": {
       "$type": "dimension",
@@ -4198,7 +4195,7 @@
         "value": 6,
         "unit": "px"
       },
-      "$description": "A comment's pill holding two or three figures: the room each side of them, so 7 is 20px wide, 42 about 26px and 108 about 32px (DESIGN.md, A pin's pill)."
+      "$description": "A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 and 42 are 24px wide, 128 about 32px (DESIGN.md, A pin's pill)."
     },
     "c-pin-gone-ring": {
       "$type": "dimension",
@@ -7680,7 +7677,7 @@
     "ease-goo": {
       "$type": "cubicBezier",
       "$value": [0.34, 1.56, 0.64, 1],
-      "$description": "A shape pouring out of another through the goo filter (goo-blur, goo-threshold): a comment's card out of its pill. It overshoots a little and settles, the liquid's give. transitions.dev Gooey plus menu, its open curve (--pv3i).",
+      "$description": "A shape pouring out of another as one drawn silhouette (goo-join): a comment's card out of its pill. It overshoots a little and settles, the liquid's give. transitions.dev Gooey plus menu, its open curve (--pv3i).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -7690,7 +7687,7 @@
     "ease-goo-exit": {
       "$type": "cubicBezier",
       "$value": [0.22, 1, 0.36, 1],
-      "$description": "A comment's card drawn back into its pill through the goo filter, over --dur-goo-exit, and the dip its pin takes as it closes, over --dur-goo-settle. transitions.dev Gooey plus menu, its close curve and its anticipation's (--pv34, --pv2n).",
+      "$description": "A comment's card drawn back into its pill as one silhouette, over --dur-goo-exit, and the dip its pin takes as it closes, over --dur-goo-settle. transitions.dev Gooey plus menu, its close curve and its anticipation's (--pv34, --pv2n).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -7867,7 +7864,7 @@
         "value": 350,
         "unit": "ms"
       },
-      "$description": "A comment's card pouring out of its pill through the goo filter, on --ease-goo. transitions.dev Gooey plus menu, its open (--pv3x).",
+      "$description": "A comment's card pouring out of its pill as one silhouette, on --ease-goo. transitions.dev Gooey plus menu, its open (--pv3x).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -7880,7 +7877,7 @@
         "value": 250,
         "unit": "ms"
       },
-      "$description": "A comment's card drawn back into its pill through the goo filter, on --ease-goo-exit, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g).",
+      "$description": "A comment's card drawn back into its pill as one silhouette, on --ease-goo-exit, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -8114,20 +8111,10 @@
         }
       }
     },
-    "goo-blur": {
-      "$type": "number",
-      "$value": 6,
-      "$description": "The goo filter's blur, its feGaussianBlur stdDeviation in px: how far apart two shapes still pull a neck between them. transitions.dev Gooey plus menu (--pv3v: 6).",
-      "$extensions": {
-        "dev.cawco": {
-          "platforms": ["web"]
-        }
-      }
-    },
-    "goo-threshold": {
-      "$type": "number",
-      "$value": 18,
-      "$description": "The goo filter's alpha slope, its feColorMatrix alpha row `slope (0.5 - slope × 5/12)`: how hard the blurred edge is cut back to a shape. transitions.dev Gooey plus menu (--pv2o: 18).",
+    "goo-join": {
+      "$type": "dimension",
+      "$value": "{radius.radius-lg}",
+      "$description": "Where a goo shape meets what poured out of it (a comment's pin and its card): the radius every inward corner of the one silhouette is rounded to, so the join flares out along the card's edge and the two read as one shape. A card's own corner, so the flare and the corners are one curve family.",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]

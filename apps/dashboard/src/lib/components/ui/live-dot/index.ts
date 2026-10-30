@@ -1,1 +1,1 @@
-export { default as LiveDot } from "./live-dot.svelte";
+export { default as LiveDot, inStep } from "./live-dot.svelte";

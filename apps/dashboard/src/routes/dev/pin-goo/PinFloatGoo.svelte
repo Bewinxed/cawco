@@ -1,53 +1,60 @@
 <!--
-  PinFloat's card (preview/PinFloat.svelte) with the owner's two asks for it,
+  PinFloat's card (preview/PinFloat.svelte) with the owner's asks for it,
   for the /dev/pin-goo preview only; the live PinFloat is untouched. Placing
   it is PinFloat's own (`decide`, the plan), less the composer and the foot
   sheet, which stay PinFloat's.
 
   1. It pours out of its pin (the owner: "with the same goo-out animation
      https://transitions.dev/detail.html?t=gooey-plus-menu"), on that demo's
-     own code as the page serves it, its shapes made the pin and the card
-     (the demo's markup, filter, CSS and script are in the project's
-     assets/6bff32c7/gooey-demo/). ONE goo layer: an SVG group under one
-     filter, `feGaussianBlur` (stdDeviation `--goo-blur`, 6) then an
-     `feColorMatrix` alpha row `slope (0.5 - slope × 5/12)` (slope
-     `--goo-threshold`, 18: `18 -7`), `feComposite atop` the source, the
-     merged silhouette's edge and shadow drawn after it (here `border-control`
-     as a 1px ring round the alpha binarized at 0.5, and `shadow-hairline`).
-     The shapes are the demo's trigger and item: the pin's blob, which stays
-     at the pin, and the card's, which rests at its box and hides under the
-     pin while closed. A `data-open` attribute on the card moves the card's
-     blob, by a CSS transition of its transform alone (`transform-box:
-     fill-box`): open, from the pin to its rest over `--dur-goo` on
-     `--ease-goo`; closed, back over `--dur-goo-exit` on `--ease-goo-exit`.
-     The demo's item is the trigger's size, so it only translates; the card
-     also scales from the pin's box. Apart, the neck between them is the filter's
-     alone: it forms while the blobs are near and lets go as they part. What
-     stands on the shapes comes and goes as the demo's icons do: the thread
-     fades in over `--dur-goo-content` after `--dur-goo-content-delay`, and
-     out over `--dur-goo-content-exit`, on `--ease-goo-content` (without
-     their 2px blur: a transitioned filter can hang WebKit), clipped to its
-     blob all the while, since it cannot ride it as the icons ride theirs. As it closes, the pin and the goo dip `--goo-dip`
-     and back over `--dur-goo-settle` (the demo's anticipation), and the card
-     stays until that dip is done, the pin's own face back by then.
+     clock and curves: open over `--dur-goo` on `--ease-goo` (its
+     overshoot), close over `--dur-goo-exit` on `--ease-goo-exit` with the
+     pin's dip. The pin, the card and the bridge between them are ONE vector
+     silhouette (./silhouette.ts), one `<path>` with a real 1px
+     `border-control` stroke, redrawn each frame from the shapes' boxes
+     (the owner, of the blur-and-threshold filter it replaces: "looks like a
+     lazy way to draw these things honestly"): the card's box grows out of
+     the pin's (its corners from the pin's to `radius-lg`) as the clock
+     runs, and the union's inward corners are rounded to `--goo-join`, so
+     the card pulls a neck out of its pin that thins as they part. Each
+     frame only writes: every size is read before the run (the pin's box,
+     the card's), and the frame computes and sets the path, the thread's
+     clip and the rim. Its drop (`drop-shadow-drop-near`) is a copy of the
+     outline drawn once it stands still, faded out over a run (grown.ts's
+     rule), so no frame redraws a shadow. What stands on it fades as the
+     demo's icons do: the thread in over `--dur-goo-content` after
+     `--dur-goo-content-delay`, out over `--dur-goo-content-exit`, on
+     `--ease-goo-content`, without their blur; clipped to the card's box as
+     drawn all the while. As it closes, the pin and the shape dip
+     `--goo-dip` and back over `--dur-goo-settle`, and the card stays until
+     that dip is done, the pin's own face back by then.
      Like the demo's menu, it stays on the page through its close: `open`
-     moves it, and only once a close has landed does it say so (`onclosed`)
-     for the page to take it away. A press that opens it again before then
-     turns the same transitions back from where they stand. (Closed in an
-     outro, a card opened again mid-close was resumed shut, and its block's
-     teardown ran the page's callback against a pin already gone: a throw,
-     the page's 500.)
+     turns its clock, and only once a close has landed does it say so
+     (`onclosed`) for the page to take it away. A press that opens it again
+     before then turns the run back from where it is drawn.
      Joined (the owner: "a toggle that keeps the small gooey part that makes
      the card still connected to the chip"; "it should merge smoothly with
-     the comment div … don't narrow it like a dumbbell"), it stands one goo
-     blur from its pin, and a third shape in the same layer, a bridge as wide
-     as the pin from its centre into the card, holds the join straight: the
-     filter only rounds the inside corners where it meets the card. The
-     bridge grows and drains with the card on its transition, slides with
-     the pin as the page scrolls, and drains when the pin leaves the card's
-     edge; the pin wears the card's surface while it is joined, its figure
-     in the action ink: one shape, one edge, one shadow.
-     Without motion it opens and closes at once, as the demo does.
+     the comment div … don't narrow it like a dumbbell"; "a wider join"), it
+     stands `--space-2` from its pin, and a bridge as tall as the pin runs
+     from the pin's centre into the card past its corner: the join is never
+     narrower than the pin, and the closing flares it out along the card's
+     edge, `--goo-join` each side. The bridge grows and drains on its own
+     run of the same clock, follows the pin as the page scrolls, and drains
+     when the pin leaves the card's edge; the pin wears the card's surface
+     while it is joined, its figure in the action ink: one shape, one edge,
+     one shadow. Apart, the closing alone joins them, at most to a neck
+     narrower than their resting gap, so it lets go as the card comes to
+     rest.
+     The pin's status dot (the owner: "shouldn't the status dot morph into a
+     glowing rim on the left side of the comment smoothly when open? and
+     vice versa?") travels and stretches into a rim along the card's side
+     that faces its pin, round that side's corners, in the dot's hue and on
+     the open's clock; it gathers back into the dot on the close's, landing
+     on its last frame. The rim is the session tab's (DESIGN.md, Session tab
+     status rim): a `tab-rim-width` line on the edge, its `tab-rim-glow`
+     glow at `tab-rim-mix-subtle`, drawn as strokes stacked wider and
+     fainter (no filter), breathing on the shared breath while the agent
+     works. Without motion it opens and closes at once, the dot and the rim
+     cross-fading.
   2. It holds still while the page scrolls (the owner: "only letting it move
      when it reaches the spot where it will move from one spot to the next,
      it should animate THEN, not animate WHILE i'm scrolling"), and moves
@@ -64,8 +71,10 @@
 <script lang="ts">
   import { flushSync, type Snippet, untrack } from "svelte";
   import {
+    curveOf,
     dur,
     ease,
+    easeDrawer,
     motionOk,
     numberOf,
   } from "#lib/cawco/motion/curves.svelte.js";
@@ -78,9 +87,18 @@
     FloatPlace,
     type Plan,
     travelTo,
-    union,
   } from "#lib/cawco/preview/pin-place.svelte.js";
+  import { inStep } from "#lib/components/ui/live-dot/index.js";
   import { besideTop, stackedSpot } from "./hold";
+  import {
+    plainBox,
+    type Radii,
+    type Rect,
+    rimLine,
+    roundedBox,
+    type Side,
+    silhouette,
+  } from "./silhouette";
 
   let {
     mark,
@@ -93,12 +111,11 @@
     float = $bindable(),
     pill,
     joined = true,
-    stickiness = numberOf("--goo-blur"),
     focused = false,
     dot = null,
     children,
   }: {
-    /** The pin's status dot, which its joined face keeps by its figure as its mark does. */
+    /** The pin's status dot, which its joined face keeps by its figure as its mark does, and which pours out into the card's rim. */
     dot?: "live" | "unread" | null;
     /** The pin has keyboard focus: its joined face wears the ring its own face (`pill`) does, as the demo's trigger keeps its own. */
     focused?: boolean;
@@ -117,29 +134,46 @@
     /** The thread's pin, by its number (`data-pin-card`). */
     pin?: number;
     float?: HTMLElement;
-    /** The pill as the page draws it, stood crisp over the goo (the demo's trigger). */
+    /** The pill as the page draws it, stood crisp over the shape (the demo's trigger). */
     pill?: Snippet;
-    /** It stands one blur from its pin, joined to it by a bridge as wide as the pin, the pin wearing the card's surface: one shape. */
+    /** It stands `--space-2` from its pin, joined to it by a bridge as tall as the pin, the pin wearing the card's surface: one shape. */
     joined?: boolean;
-    /** How far apart the card and its pin still pull a neck between them, px: the goo's blur (`--goo-blur`). */
-    stickiness?: number;
     children: Snippet;
   } = $props();
 
-  const uid = $props.id();
+  /** The tokens a frame draws with, read once. */
+  const JOIN = numberOf("--goo-join");
+  const CARD_R = numberOf("--radius-lg");
+  const HAIR = numberOf("--radius-hair");
+  const DOT = numberOf("--status-dot-size");
+  const DOT_OUT = numberOf("--space-row");
+  const RIM = numberOf("--tab-rim-width") * 2;
+  const GLOW = numberOf("--tab-rim-glow");
+  const GLOW_MIX = numberOf("--tab-rim-mix-subtle");
+  /**
+   * The most one drawn frame moves the clock, ms: three frames at 60 Hz. A
+   * longer wait is the browser holding frames, not the run's time
+   * (transcript/grown.ts's FRAME_STEP_MS).
+   */
+  const FRAME_STEP_MS = 50;
+
   let body = $state<HTMLElement>();
   let clipWrap = $state<HTMLElement>();
   let goo = $state<SVGSVGElement>();
-  let pillBlob = $state<SVGRectElement>();
+  let rimLayer = $state<SVGSVGElement>();
+  let shapePath = $state<SVGPathElement>();
+  let dropPath = $state<SVGPathElement>();
+  let rimGroup = $state<SVGGElement>();
+  let rimGlow = $state<SVGPathElement>();
+  let rimCore = $state<SVGPathElement>();
+  let rimFade = $state<SVGLinearGradientElement>();
+  const uid = $props.id();
   let pinLayer = $state<HTMLElement>();
   let pinShift = $state<HTMLElement>();
-  let filterEl = $state<SVGFilterElement>();
-  let blurEl = $state<SVGFEGaussianBlurElement>();
-  let matrixEl = $state<SVGFEColorMatrixElement>();
 
   /** Poured out, and not closing: the travel to a new spot only runs while it stands, and the pin wears the card's surface. */
   let opened = $state(false);
-  /** Placed once: from then on `open` moves it (before, its first pour waits for its size). */
+  /** Placed once: from then on `open` turns its clock (before, its first pour waits for its size). */
   let ready = false;
   const placed = new FloatPlace(
     () => ({
@@ -147,10 +181,8 @@
       box,
       room,
       besidePill: joined,
-      // Joined, it stands one blur from its pin, within the goo's reach
-      // (a 20px pin, blur 6: the filter pulls no neck past 9px), the
-      // bridge between them.
-      clear: joined ? stickiness : undefined,
+      // Joined, it stands one step from its pin, the bridge between them.
+      clear: joined ? numberOf("--space-2") : undefined,
     }),
     {
       body: () => body,
@@ -217,13 +249,350 @@
     return { left: inX(left), top, side, max: plan.max, jump };
   });
 
+  /** The card's box at rest, the float's own. */
+  const cardW = $derived(Math.max(0, placed.width));
+  const cardH = $derived(Math.max(0, placed.height));
+
+  /** The pill where it stands now, in the card's own coordinates; null while it is out of view. */
+  const pinHere = $derived(
+    mark
+      ? {
+          x: mark.x - place.left,
+          y: mark.y - place.top,
+          w: mark.w,
+          h: mark.h,
+        }
+      : null
+  );
+
+  /**
+   * The card's edge the pin stands beside, along it, within reach of it
+   * (its gap and a join), or null: joined, the bridge runs into that edge.
+   */
+  const besideEdge = $derived.by((): PopSide | null => {
+    if (!(joined && pinHere && cardW > 0 && cardH > 0)) {
+      return null;
+    }
+    const p = pinHere;
+    const reach = placed.clear + JOIN;
+    const alongY = p.y + p.h > 0 && p.y < cardH;
+    const alongX = p.x + p.w > 0 && p.x < cardW;
+    if (alongY && p.x + p.w <= 0 && -(p.x + p.w) <= reach) {
+      return "left";
+    }
+    if (alongY && p.x >= cardW && p.x - cardW <= reach) {
+      return "right";
+    }
+    if (alongX && p.y + p.h <= 0 && -(p.y + p.h) <= reach) {
+      return "top";
+    }
+    if (alongX && p.y >= cardH && p.y - cardH <= reach) {
+      return "bottom";
+    }
+    return null;
+  });
+  /** The edge the bridge last ran into, kept while it drains once the pin has left it. */
+  let bridgeEdge: PopSide | null = null;
+  /** The side the rim runs along: the one facing the pin. */
+  const rimSide = $derived<Side>(
+    pinHere && pinHere.x + pinHere.w / 2 > cardW / 2 ? "right" : "left"
+  );
+
+  // ---- The clock -------------------------------------------------------
+
+  /** A run of one of the shape's two clocks: from where it was drawn to `to`, on a token's curve. */
+  interface Run {
+    curve: (t: number) => number;
+    elapsed: number;
+    from: number;
+    length: number;
+    to: number;
+  }
+  /** How far the card has poured out of its pin: 0 hidden in it, 1 at rest (past 1 on the open's overshoot). */
+  let poured = 0;
+  /** How far the joined bridge has grown from the pin into the card, 0 to 1. */
+  let grown = 0;
+  let pourRun: Run | null = null;
+  let growRun: Run | null = null;
+  let frame = 0;
+  let lastAt = 0;
+  /** The card's travel in flight and the pin's way back against it, so the pin's part of the shape stays on the page while the card moves. */
+  let travel: Animation | null = null;
+  let travelBack = { x: 0, y: 0 };
+
+  /** A knob as the page has it now (the dev page's dials set them on its root), else its token. */
+  const knob = (name: `--dur-${string}`): number => {
+    const value = float
+      ? Number.parseFloat(getComputedStyle(float).getPropertyValue(name))
+      : Number.NaN;
+    return Number.isFinite(value) ? value : dur(name);
+  };
+
+  const runTo = (from: number, to: boolean): Run => ({
+    from,
+    to: to ? 1 : 0,
+    elapsed: 0,
+    length: knob(to ? "--dur-goo" : "--dur-goo-exit"),
+    curve: curveOf(to ? "--ease-goo" : "--ease-goo-exit"),
+  });
+  const runAt = (run: Run) =>
+    run.from +
+    (run.to - run.from) * run.curve(Math.min(1, run.elapsed / run.length));
+
+  function tick(now: number) {
+    const step = Math.max(0, Math.min(now - lastAt, FRAME_STEP_MS));
+    lastAt = now;
+    for (const run of [pourRun, growRun]) {
+      if (run) {
+        run.elapsed += step;
+      }
+    }
+    if (pourRun) {
+      poured = runAt(pourRun);
+      if (pourRun.elapsed >= pourRun.length) {
+        pourRun = null;
+      }
+    }
+    if (growRun) {
+      grown = runAt(growRun);
+      if (growRun.elapsed >= growRun.length) {
+        growRun = null;
+      }
+    }
+    draw();
+    if (pourRun || growRun || travel?.playState === "running") {
+      frame = requestAnimationFrame(tick);
+    } else {
+      frame = 0;
+      still();
+    }
+  }
+  /** Starts the frames, if they are not running. */
+  function kick() {
+    if (float) {
+      float.dataset.run = "";
+    }
+    if (!frame) {
+      lastAt = performance.now();
+      frame = requestAnimationFrame(tick);
+    }
+  }
+  /** It stands still: its drop drawn once, under the outline as it stands, and the thread unclipped once it is open. */
+  function still() {
+    if (float) {
+      delete float.dataset.run;
+    }
+    dropPath?.setAttribute("d", shapePath?.getAttribute("d") ?? "");
+    if (clipWrap && poured >= 1) {
+      clipWrap.style.clipPath = "none";
+    }
+  }
+
+  /** The card pours out (true) or drains back (false) from where it is drawn; without motion, at once. */
+  function pourTo(to: boolean) {
+    if (!motionOk.current) {
+      pourRun = null;
+      poured = to ? 1 : 0;
+      draw();
+      still();
+      return;
+    }
+    pourRun = runTo(poured, to);
+    kick();
+  }
+
+  // The bridge grows while the card stands open beside its pin, and drains
+  // as it closes or once the pin leaves its edge.
+  const bridgeWanted = $derived(opened && besideEdge !== null);
+  $effect(() => {
+    const to = bridgeWanted;
+    untrack(() => {
+      if ((to ? 1 : 0) === (growRun?.to ?? grown)) {
+        return;
+      }
+      if (!motionOk.current) {
+        growRun = null;
+        grown = to ? 1 : 0;
+        draw();
+        return;
+      }
+      growRun = runTo(grown, to);
+      kick();
+    });
+  });
+
+  // ---- A frame -----------------------------------------------------------
+
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const unit = (t: number) => Math.max(0, Math.min(1, t));
+  /** Whether the rim was shown at once (without motion), for its fade. */
+  let rimFaded = false;
+
+  /**
+   * Draws the shape as the clocks stand: writes only. The card's box from
+   * the pin's toward its own, the bridge into the edge it last ran into,
+   * the union closed by the join, the thread's clip on the card's box, and
+   * the rim.
+   */
+  function draw() {
+    const path = shapePath;
+    if (!(path && cardW > 0 && cardH > 0)) {
+      return;
+    }
+    const k = unit(poured);
+    // The pin's part stays on the page while the card travels.
+    let back = { x: 0, y: 0 };
+    if (travel?.playState === "running") {
+      const t = Number(travel.currentTime ?? 0) / dur("--dur-morph");
+      const left = 1 - easeDrawer(unit(t));
+      back = { x: travelBack.x * left, y: travelBack.y * left };
+    }
+    const p = pinHere
+      ? { ...pinHere, x: pinHere.x + back.x, y: pinHere.y + back.y }
+      : null;
+    const pinRadii: Radii = p
+      ? [p.h / 2, p.h / 2, p.h / 2, HAIR]
+      : [CARD_R, CARD_R, CARD_R, CARD_R];
+    const from: Rect = p ?? { x: 0, y: 0, w: cardW, h: cardH };
+    const card: Rect = {
+      x: lerp(from.x, 0, poured),
+      y: lerp(from.y, 0, poured),
+      w: lerp(from.w, cardW, poured),
+      h: lerp(from.h, cardH, poured),
+    };
+    const radii = pinRadii.map((r) => lerp(r, CARD_R, k)) as Radii;
+    const shapes = [roundedBox(card, radii)];
+    if (p) {
+      shapes.push(roundedBox(p, pinRadii));
+      if (besideEdge) {
+        bridgeEdge = besideEdge;
+      }
+      const span = bridgeEdge ? bridgeOf(p, card, radii, bridgeEdge) : null;
+      if (span) {
+        shapes.push(plainBox(span));
+      }
+    }
+    // Apart, the closing joins them only to a neck narrower than their
+    // resting gap, so it lets go as the card comes to rest.
+    const join = joined ? JOIN : Math.min(JOIN, placed.clear / 2 - 1);
+    path.setAttribute("d", silhouette(shapes, Math.max(0, join)));
+    if (clipWrap && (pourRun || poured < 1)) {
+      const [tl, tr, br, bl] = radii;
+      const edge = (n: number) => `${Math.max(0, n).toFixed(2)}px`;
+      clipWrap.style.clipPath = `inset(${edge(card.y)} ${edge(cardW - card.x - card.w)} ${edge(cardH - card.y - card.h)} ${edge(card.x)} round ${edge(tl)} ${edge(tr)} ${edge(br)} ${edge(bl)})`;
+    }
+    drawRim(p, card, radii, k);
+  }
+
+  /** The bridge at this frame: from the pin's centre into the card's edge, past its corner, as far as it has grown; null with nothing to draw. */
+  function bridgeOf(
+    p: Rect,
+    card: Rect,
+    radii: Radii,
+    edge: PopSide
+  ): Rect | null {
+    const [tl, tr, br, bl] = radii;
+    const cx = p.x + p.w / 2;
+    const cy = p.y + p.h / 2;
+    let span: Rect | null = null;
+    if (edge === "left") {
+      const run = (card.x + Math.max(tl, bl) - cx) * grown;
+      span = { x: cx, y: p.y, w: run, h: p.h };
+    } else if (edge === "right") {
+      const run = (cx - (card.x + card.w - Math.max(tr, br))) * grown;
+      span = { x: cx - run, y: p.y, w: run, h: p.h };
+    } else if (edge === "top") {
+      const run = (card.y + Math.max(tl, tr) - cy) * grown;
+      span = { x: p.x, y: cy, w: p.w, h: run };
+    } else {
+      const run = (cy - (card.y + card.h - Math.max(bl, br))) * grown;
+      span = { x: p.x, y: cy - run, w: p.w, h: run };
+    }
+    return span.w > 0.01 && span.h > 0.01 ? span : null;
+  }
+
+  /**
+   * The rim as the card stands: the status dot (where PinDot stands, on the
+   * pin's top-end corner) carried to the side facing the pin and stretched
+   * along it as the card pours out; gathered back into the dot as it
+   * drains. The pins' own dots stand hidden while it is drawn.
+   */
+  function drawRim(p: Rect | null, card: Rect, radii: Radii, k: number) {
+    const group = rimGroup;
+    const showing = !!(group && dot && p && k > 0);
+    for (const one of pinLayer?.querySelectorAll<HTMLElement>("[data-dot]") ??
+      []) {
+      one.style.visibility = showing ? "hidden" : "";
+    }
+    if (!(group && rimLayer)) {
+      return;
+    }
+    rimLayer.style.visibility = showing ? "visible" : "hidden";
+    if (!(showing && p)) {
+      rimFaded = false;
+      return;
+    }
+    const at = {
+      x: p.x + p.w + DOT_OUT - DOT / 2,
+      y: p.y - DOT_OUT + DOT / 2,
+    };
+    // Joined, the rim flows out of the join's flare, never through it.
+    const mouth =
+      grown > 0 && (bridgeEdge === "left" || bridgeEdge === "right")
+        ? { from: p.y - JOIN, to: p.y + p.h + JOIN }
+        : null;
+    const line = rimLine(card, radii, rimSide, RIM / 2, at, mouth);
+    const length = line.length * k;
+    const start = line.s * (1 - k);
+    group.setAttribute(
+      "transform",
+      `translate(${((at.x - line.at.x) * (1 - k)).toFixed(2)} ${((at.y - line.at.y) * (1 - k)).toFixed(2)})`
+    );
+    const core = lerp(DOT, RIM, k);
+    const glow = core + 2 * GLOW * k;
+    for (const [stroke, width] of [
+      [rimGlow, glow],
+      [rimCore, core],
+    ] as const) {
+      stroke?.setAttribute("d", line.d);
+      stroke?.setAttribute(
+        "stroke-dasharray",
+        `${length} ${line.length + DOT}`
+      );
+      stroke?.setAttribute("stroke-dashoffset", String(-start));
+      stroke?.setAttribute("stroke-width", String(width));
+    }
+    // The glow's fade runs across the side's line, so where the rim turns
+    // round a corner it runs out of its glow: the tab rim's taper.
+    rimFade?.setAttribute("x1", String(line.at.x - glow / 2));
+    rimFade?.setAttribute("x2", String(line.at.x + glow / 2));
+    rimGlow?.setAttribute("stroke-opacity", String(GLOW_MIX * k));
+    if (!(motionOk.current || rimFaded)) {
+      // Without motion, the dot and the rim cross-fade.
+      rimFaded = true;
+      rimLayer.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--dur-control"),
+        easing: ease("--ease-out"),
+      });
+    }
+  }
+
+  // Drawn again whenever what it is drawn from changes (the page scrolls,
+  // the card's size or its status changes), between runs as within them.
+  $effect(() => {
+    draw();
+  });
+  $effect(() => () => {
+    cancelAnimationFrame(frame);
+    window.clearTimeout(closing);
+  });
+
   // A new plan, or a new spot once the pill has left the card's height: it
   // travels there once, over --dur-morph on --ease-drawer, from where it is
   // drawn (a travel in flight counted).
   let stood: { left: number; plan: Plan | null; top: number } | null = null;
-  let travel: Animation | null = null;
   /** The pin's own counter-travel, while the card travels. */
-  let stay: Animation[] = [];
+  let stay: Animation | null = null;
   $effect(() => {
     const at = place;
     const now = plan;
@@ -239,252 +608,34 @@
       return;
     }
     const [dx, dy] = drawnShift(el);
-    for (const one of stay) {
-      one.cancel();
-    }
+    stay?.cancel();
     travel = travelTo(el, before, at, travel);
-    // The pin stays on the page while the card travels: its blob and faces
-    // go the other way, on the travel's own timing, so only the goo between
-    // them stretches.
-    const back = `translate(${at.left - before.left - dx}px, ${at.top - before.top - dy}px)`;
-    const timing = {
-      duration: dur("--dur-morph"),
-      easing: ease("--ease-drawer"),
+    // The pin stays on the page while the card travels: its part of the
+    // shape and its faces go the other way, on the travel's own timing, so
+    // only the shape between them stretches.
+    travelBack = {
+      x: at.left - before.left - dx,
+      y: at.top - before.top - dy,
     };
-    stay = [pillBlob, pinShift].flatMap((one) =>
-      one
-        ? [
-            one.animate(
-              [{ transform: back }, { transform: "translate(0px, 0px)" }],
-              timing
-            ),
-          ]
-        : []
-    );
+    stay =
+      pinShift?.animate(
+        [
+          { transform: `translate(${travelBack.x}px, ${travelBack.y}px)` },
+          { transform: "translate(0px, 0px)" },
+        ],
+        { duration: dur("--dur-morph"), easing: ease("--ease-drawer") }
+      ) ?? null;
+    untrack(kick);
   });
 
-  /** An `feFlood`'s colour, a token: a filter primitive's flood is no Tailwind colour. */
-  const flood = (token: `--${string}`) => (node: SVGFEFloodElement) => {
-    node.style.setProperty("flood-color", `var(${token})`);
-  };
-
-  /** A goo knob as the page has it now (the dev page's dials set them on its root), else its token. */
-  const knob = (name: `--${string}`): number => {
-    const value = float
-      ? Number.parseFloat(getComputedStyle(float).getPropertyValue(name))
-      : Number.NaN;
-    return Number.isFinite(value) ? value : numberOf(name);
-  };
-
-  /** The demo's applyGooKnobs: the blur and the alpha row, set as each run starts and as the stickiness changes. */
-  function applyGoo() {
-    const blur = stickiness;
-    const slope = knob("--goo-threshold");
-    const intercept = Math.round((0.5 - slope * (5 / 12)) * 100) / 100;
-    blurEl?.setAttribute("stdDeviation", String(blur));
-    matrixEl?.setAttribute(
-      "values",
-      `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${slope} ${intercept}`
-    );
-  }
-  $effect(() => {
-    if (stickiness > 0 && blurEl && matrixEl) {
-      untrack(applyGoo);
-    }
-  });
-
-  /** The card's blob at rest: its box less the 1px edge the filter rings it with, `radius-lg` corners. */
-  const cardW = $derived(Math.max(0, placed.width - 2));
-  const cardH = $derived(Math.max(0, placed.height - 2));
-  const cardR = Math.max(0, numberOf("--radius-lg") - 1);
-
-  /** The pill where it stands now, in the card's own coordinates; null while it is out of view. */
-  const pinHere = $derived(
-    mark
-      ? {
-          x: mark.x - place.left,
-          y: mark.y - place.top,
-          w: mark.w,
-          h: mark.h,
-        }
-      : null
-  );
-
-  /**
-   * Where the card's blob hides while closed: the pin's box, as a transform
-   * of its rest box about its own top-left corner (the demo's items rest
-   * under its trigger at `translate(0, 0)`).
-   */
-  const hidden = $derived(
-    pinHere && cardW > 0 && cardH > 0
-      ? `translate(${pinHere.x - 1}px, ${pinHere.y - 1}px) scale(${pinHere.w / cardW}, ${pinHere.h / cardH})`
-      : "none"
-  );
-  /**
-   * The thread's clip while closed: the same box, the pin's, round-ended.
-   * The demo's icons ride their blobs; a thread cannot scale, so it is
-   * clipped to its blob instead, the clip on the blob's own transition (a
-   * box's edges move alike under either), and nothing of it stands past
-   * the shape as it pours or drains.
-   */
-  const hiddenClip = $derived(
-    pinHere
-      ? `inset(${pinHere.y}px ${placed.width - pinHere.x - pinHere.w}px ${placed.height - pinHere.y - pinHere.h}px ${pinHere.x}px round ${pinHere.h / 2}px)`
-      : "none"
-  );
-
-  /** The joined bridge: its box in the card's coordinates, the end it grows from (the pin's centre), and its drained transform. */
-  interface Bridge {
-    h: number;
-    hide: string;
-    origin: string;
-    w: number;
-    x: number;
-    y: number;
-  }
-  /**
-   * Joined, a bridge as wide as the pin runs from the pin's centre into the
-   * card's edge, past its round corner, in the blobs' fill: goo holds a
-   * straight join with a shape of its own, so the filter only fills the two
-   * inside corners where it meets the card with outward fillets, and the
-   * join is never narrower than the pin (a blur-and-threshold neck alone
-   * always pinches into a waist). Only while the pin stands beside one of
-   * the card's edges, along it, within one and a half blurs of it (past
-   * that the filter would pull no neck). The pin then wears the card's
-   * surface.
-   */
-  const bridge = $derived.by((): Bridge | null => {
-    if (!(joined && pinHere && cardW > 0 && cardH > 0)) {
-      return null;
-    }
-    const p = pinHere;
-    const reach = stickiness * 1.5;
-    const cx = p.x + p.w / 2;
-    const cy = p.y + p.h / 2;
-    const left = 1;
-    const top = 1;
-    const right = 1 + cardW;
-    const foot = 1 + cardH;
-    const alongY = p.y + p.h > top && p.y < foot;
-    const alongX = p.x + p.w > left && p.x < right;
-    if (alongY && p.x + p.w <= left && left - (p.x + p.w) <= reach) {
-      const end = left + cardR;
-      return {
-        x: cx,
-        y: p.y,
-        w: end - cx,
-        h: p.h,
-        origin: "0% 50%",
-        hide: "scaleX(0)",
-      };
-    }
-    if (alongY && p.x >= right && p.x - right <= reach) {
-      const end = right - cardR;
-      return {
-        x: end,
-        y: p.y,
-        w: cx - end,
-        h: p.h,
-        origin: "100% 50%",
-        hide: "scaleX(0)",
-      };
-    }
-    if (alongX && p.y + p.h <= top && top - (p.y + p.h) <= reach) {
-      const end = top + cardR;
-      return {
-        x: p.x,
-        y: cy,
-        w: p.w,
-        h: end - cy,
-        origin: "50% 0%",
-        hide: "scaleY(0)",
-      };
-    }
-    if (alongX && p.y >= foot && p.y - foot <= reach) {
-      const end = foot - cardR;
-      return {
-        x: p.x,
-        y: end,
-        w: p.w,
-        h: cy - end,
-        origin: "50% 100%",
-        hide: "scaleY(0)",
-      };
-    }
-    return null;
-  });
-  const bridged = $derived(bridge !== null);
-  /** The bridge as drawn: where it stands, or, once the pin has left it, where it last stood, while it drains back into the pin. */
-  let keptBridge: Bridge | null = null;
-  const drawnBridge = $derived.by(() => {
-    if (bridge) {
-      keptBridge = bridge;
-    }
-    return keptBridge;
-  });
-
-  $effect(() => () => {
-    window.clearTimeout(runEnd);
-    window.clearTimeout(closing);
-  });
-
-  /** The filter's region: the card and the pin, with room for the blur and the shadow. */
-  $effect(() => {
-    const shape = { x: 1, y: 1, w: cardW, h: cardH };
-    const reach = union(pinHere ? [shape, pinHere] : [shape]);
-    const pad = 3 * stickiness + 16;
-    filterEl?.setAttribute("x", String(reach.x - pad));
-    filterEl?.setAttribute("y", String(reach.y - pad));
-    filterEl?.setAttribute("width", String(reach.w + 2 * pad));
-    filterEl?.setAttribute("height", String(reach.h + 2 * pad));
-  });
-
-  /** The thread's clip at the card's own box and corners: where a run starts or ends open. */
-  const cardClip = () => `inset(0px round ${cardR + 1}px)`;
-  // While closed, the thread's clip stands on the pin's box (set by hand:
-  // the runs set it too, and the template stands still through an outro).
-  $effect(() => {
-    const at = hiddenClip;
-    if (clipWrap && untrack(() => float?.dataset.open) !== "true") {
-      clipWrap.style.clipPath = at;
-    }
-  });
-
-  /** The run in flight: while it lasts (`data-run`), the card's blob moves on a transition; between runs its box only follows the pin and the card's size. */
-  let runEnd = 0;
-  /**
-   * The demo's setOpen: the goo's knobs, then `data-open`, which the CSS
-   * transitions follow (from where they stand, as a press turns a run back).
-   * Set by hand: `data-run` must be set and laid out first.
-   */
+  /** The demo's setOpen: `data-open` (what the thread's fade follows), then the card's clock. */
   function setOpen(to: boolean) {
     const el = float;
     if (!el) {
       return;
     }
-    applyGoo();
-    window.clearTimeout(runEnd);
-    const wrap = clipWrap;
-    // A close starts with the thread clipped to the card's box (open, it
-    // stands unclipped), so the clip transitions from there.
-    if (wrap && !to) {
-      wrap.style.clipPath = cardClip();
-    }
-    el.dataset.run = "";
-    el.getBoundingClientRect();
     el.dataset.open = String(to);
-    if (wrap) {
-      wrap.style.clipPath = to ? cardClip() : hiddenClip;
-    }
-    runEnd = window.setTimeout(
-      () => {
-        delete el.dataset.run;
-        if (wrap && to) {
-          wrap.style.clipPath = "none";
-        }
-      },
-      knob(to ? "--dur-goo" : "--dur-goo-exit") + 50
-    );
+    pourTo(to);
   }
 
   /** The card pours out of its pin. */
@@ -493,25 +644,28 @@
     if (!el) {
       return;
     }
-    if (!pinHere && motionOk.current) {
+    if (!pinHere) {
       // No pin on the page to pour from: a cross-fade where it stands.
-      el.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-control"),
-        easing: ease("--ease-out"),
-      });
+      poured = 1;
+      if (motionOk.current) {
+        el.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: dur("--dur-control"),
+          easing: ease("--ease-out"),
+        });
+      }
     }
-    // Its closed state drawn first (the blob hidden under the pin at the
-    // size it was just measured at), so the transitions run from it.
+    // Its closed state drawn first (the card hidden in its pin, at the size
+    // it was just measured at), so the run starts from it.
     flushSync();
-    el.getBoundingClientRect();
+    draw();
     setOpen(true);
   }
 
-  /** The demo's anticipation: the goo and the pin dip and come home as it closes. */
+  /** The demo's anticipation: the shape and the pin dip and come home as it closes. */
   function dip() {
     const dy = `translateY(${numberOf("--goo-dip")}px)`;
     const easing = ease("--ease-goo-exit");
-    for (const one of [goo, pinLayer]) {
+    for (const one of [goo, rimLayer, pinLayer]) {
       one?.animate(
         [
           { transform: "translateY(0px)", easing },
@@ -538,12 +692,13 @@
       onclosed();
       return;
     }
-    setOpen(false);
     let length: number;
     if (pinHere && motionOk.current) {
+      setOpen(false);
       dip();
       length = Math.max(knob("--dur-goo-exit"), knob("--dur-goo-settle"));
     } else {
+      el.dataset.open = "false";
       length = dur("--dur-control");
       fade = el.animate([{ opacity: 1 }, { opacity: 0 }], {
         duration: length,
@@ -554,7 +709,7 @@
     closing = window.setTimeout(onclosed, length);
   }
 
-  /** Opened again before its close landed: the same runs turn back toward open. */
+  /** Opened again before its close landed: the same run turns back toward open. */
   function reopen() {
     window.clearTimeout(closing);
     fade?.cancel();
@@ -563,7 +718,7 @@
     opened = true;
   }
 
-  // Each press after its first pour: `open` turns the card's runs.
+  // Each press after its first pour: `open` turns the card's clock.
   $effect(() => {
     const want = open;
     untrack(() => {
@@ -577,7 +732,7 @@
 <div
   aria-label={label}
   class="group/goo pointer-events-auto absolute z-2 flex flex-col max-h-(--float-max) start-(--float-x) top-(--float-y) w-(--float-w)"
-  data-face={opened && bridged ? "joined" : "own"}
+  data-face={opened && besideEdge !== null ? "joined" : "own"}
   data-open="false"
   data-side={place.side}
   data-slot="pin-card"
@@ -588,108 +743,30 @@
   style:--float-y="{place.top}px"
   style:--float-w={FLOAT_W}
   style:--float-max="{place.max}px"
-  style:--goo-hidden={hidden}
   style:--pin-x="{pinHere?.x ?? 0}px"
   style:--pin-y="{pinHere?.y ?? 0}px"
 >
-  <!-- The one goo layer: the pin and the card as SVG shapes under the demo's filter. -->
+  <!-- The one silhouette: the pin, the bridge and the card as one path,
+       its drop under it drawn once it stands still. -->
   <svg
     aria-hidden="true"
     bind:this={goo}
     class="pointer-events-none absolute start-0 top-0 -z-1 size-full overflow-visible"
     data-slot="pin-goo"
   >
-    <defs>
-      <filter
-        bind:this={filterEl}
-        color-interpolation-filters="sRGB"
-        filterUnits="userSpaceOnUse"
-        id="goo-{uid}"
-      >
-        <feGaussianBlur
-          bind:this={blurEl}
-          in="SourceGraphic"
-          result="blur"
-          stdDeviation="6"
-        />
-        <feColorMatrix
-          bind:this={matrixEl}
-          in="blur"
-          result="goo"
-          type="matrix"
-          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7"
-        />
-        <feComposite
-          in="SourceGraphic"
-          in2="goo"
-          operator="atop"
-          result="shape"
-        />
-        <!-- The edge, `border-control`: the silhouette made hard at 0.5, then 1px out (the demo's ring). -->
-        <feColorMatrix
-          in="shape"
-          result="solid"
-          type="matrix"
-          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 60 -29.5"
-        />
-        <feMorphology in="solid" operator="dilate" radius="1" result="edge-a" />
-        <feFlood {@attach flood("--border-control")} result="edge-c" />
-        <feComposite in="edge-c" in2="edge-a" operator="in" result="edge" />
-        <!-- `shadow-hairline`, 0 3px 7px -2px: the silhouette 2px in, blurred by half of 7, 3px down. -->
-        <feMorphology in="solid" operator="erode" radius="2" result="lift-a" />
-        <feGaussianBlur in="lift-a" result="lift-b" stdDeviation="3.5" />
-        <feOffset dy="3" in="lift-b" result="lift-o" />
-        <feFlood {@attach flood("--shadow-tint-2")} result="lift-c" />
-        <feComposite in="lift-c" in2="lift-o" operator="in" result="lift" />
-        <feMerge>
-          <feMergeNode in="lift" />
-          <feMergeNode in="edge" />
-          <feMergeNode in="shape" />
-        </feMerge>
-      </filter>
-    </defs>
-    <g filter="url(#goo-{uid})">
-      <!-- The card's blob (the demo's item): hidden under the pin while
-           closed, at its rest box while open; only its transform moves. -->
-      <rect
-        class="fill-surface-raised origin-top-left transform-(--goo-hidden) transform-fill transition-transform duration-0 ease-goo-exit group-data-[open=false]/goo:group-data-run/goo:duration-(--dur-goo-exit) group-data-[open=true]/goo:transform-none group-data-[open=true]/goo:group-data-run/goo:duration-(--dur-goo) group-data-[open=true]/goo:ease-goo motion-reduce:transition-none"
-        data-slot="goo-card"
-        height={cardH}
-        rx={cardR}
-        width={cardW}
-        x="1"
-        y="1"
-      />
-      <!-- The joined bridge, as wide as the pin, from its centre into the
-           card: drained into the pin (scaled to nothing toward it) unless
-           the pin wears the card's surface, on the card's own timing. -->
-      <rect
-        class={[
-          "fill-surface-raised origin-(--bridge-origin) transform-(--bridge-hidden) transform-fill transition-transform duration-(--dur-goo-exit) ease-goo-exit group-data-[face=joined]/goo:transform-none group-data-[face=joined]/goo:duration-(--dur-goo) group-data-[face=joined]/goo:ease-goo motion-reduce:transition-none",
-          !drawnBridge && "hidden",
-        ]}
-        data-slot="goo-bridge"
-        height={drawnBridge?.h ?? 0}
-        style:--bridge-hidden={drawnBridge?.hide}
-        style:--bridge-origin={drawnBridge?.origin}
-        width={drawnBridge?.w ?? 0}
-        x={drawnBridge?.x ?? 0}
-        y={drawnBridge?.y ?? 0}
-      />
-      <!-- The pin's blob (the demo's trigger), where the pin stands. -->
-      <rect
-        bind:this={pillBlob}
-        class={["fill-surface-raised", !pinHere && "hidden"]}
-        data-slot="goo-pin"
-        height={pinHere?.h ?? 0}
-        rx={(pinHere?.h ?? 0) / 2}
-        width={pinHere?.w ?? 0}
-        x={pinHere?.x ?? 0}
-        y={pinHere?.y ?? 0}
-      />
-    </g>
+    <path
+      bind:this={dropPath}
+      class="fill-surface-raised drop-shadow-drop-near transition-opacity duration-(--dur-goo-content) ease-goo-content group-data-run/goo:opacity-0 group-data-run/goo:duration-(--dur-goo-content-exit) motion-reduce:transition-none"
+      data-slot="goo-drop"
+    />
+    <path
+      bind:this={shapePath}
+      class="fill-surface-raised stroke-border-control"
+      data-slot="goo-shape"
+      stroke-width="1"
+    />
   </svg>
-  <!-- The pin over the goo (the demo's crisp trigger): its own face, or,
+  <!-- The pin over the shape (the demo's crisp trigger): its own face, or,
        joined, its figure on the card's surface. The two trade places at once,
        the one going over the demo's icons' out and the other coming over
        their in, so its figure, which stands in one place on both, never
@@ -712,7 +789,7 @@
       </div>
       <!-- mark-line: the dot stands on the pin's top-end corner, absolutely, not beside its figure -->
       <span
-        class="absolute inset-0 flex items-center justify-center rounded-pill data-tail:rounded-es-hair type-caps num leading-none text-action-solid data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-goo-content group-data-[face=joined]/goo:opacity-100 group-data-[face=joined]/goo:duration-(--dur-goo-content) motion-reduce:transition-none"
+        class="absolute inset-0 flex items-center justify-center whitespace-nowrap rounded-pill data-tail:rounded-es-hair type-caps num leading-none text-action-solid data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-goo-content group-data-[face=joined]/goo:opacity-100 group-data-[face=joined]/goo:duration-(--dur-goo-content) motion-reduce:transition-none"
         data-focused={focused || undefined}
         data-slot="pin-joined-face"
         data-tail
@@ -720,8 +797,52 @@
       >
     </div>
   </div>
+  <!-- The status dot poured out into a rim on the card's side that faces
+       its pin: over the pin, so the dot it starts as stands where the pin's
+       own stood. -->
+  <svg
+    aria-hidden="true"
+    bind:this={rimLayer}
+    class="pointer-events-none invisible absolute start-0 top-0 size-full overflow-visible"
+    data-slot="pin-goo-rim"
+  >
+    <defs>
+      <!-- The glow across the rim's line: its hue at the line, none at its
+           reach, falling off as a blur does. -->
+      <linearGradient
+        bind:this={rimFade}
+        gradientUnits="userSpaceOnUse"
+        id="{uid}-rim-fade"
+        x1="0"
+        x2="1"
+        y1="0"
+        y2="0"
+      >
+        <stop class="stop-rim-ink" offset="0" stop-opacity="0" />
+        <stop class="stop-rim-ink" offset="0.3" stop-opacity="0.25" />
+        <stop class="stop-rim-ink" offset="0.5" stop-opacity="1" />
+        <stop class="stop-rim-ink" offset="0.7" stop-opacity="0.25" />
+        <stop class="stop-rim-ink" offset="1" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+    <g
+      bind:this={rimGroup}
+      class="fill-none"
+      stroke-linecap="round"
+      style:--rim-ink={dot === "unread"
+        ? "var(--status-attn-glyph)"
+        : "var(--status-live-glyph)"}
+    >
+      {#key dot}
+        <g class={[dot === "live" && "breathe"]} {@attach inStep}>
+          <path bind:this={rimGlow} stroke="url(#{uid}-rim-fade)" />
+          <path bind:this={rimCore} class="stroke-(--rim-ink)" />
+        </g>
+      {/key}
+    </g>
+  </svg>
   <div
-    class="flex min-h-0 min-w-0 flex-col transition-[clip-path] duration-0 ease-goo-exit group-data-[open=false]/goo:group-data-run/goo:duration-(--dur-goo-exit) group-data-[open=true]/goo:group-data-run/goo:duration-(--dur-goo) group-data-[open=true]/goo:ease-goo motion-reduce:transition-none"
+    class="flex min-h-0 min-w-0 flex-col"
     bind:this={clipWrap}
     data-slot="pin-goo-clip"
   >

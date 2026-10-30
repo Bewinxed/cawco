@@ -555,9 +555,9 @@ public enum Size {
     public static let cRailRowHCompact: Double = 44
     /// A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink).
     public static let cArtifactRowH: Double = 44
-    /// A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its width at one figure (DESIGN.md, A pin's pill).
-    public static let cPin: Double = 20
-    /// A comment's pill holding two or three figures: the room each side of them, so 7 is 20px wide, 42 about 26px and 108 about 32px (DESIGN.md, A pin's pill).
+    /// A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: the 24 Pointer Rule's floor, so the bubble holds its number and is a whole target under a mouse (DESIGN.md, A pin's pill).
+    public static let cPin: Double = 24
+    /// A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 and 42 are 24px wide, 128 about 32px (DESIGN.md, A pin's pill).
     public static let cPinPad: Double = 6
     /// A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (DESIGN.md, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form).
     public static let cPinGoneRing: Double = 1
