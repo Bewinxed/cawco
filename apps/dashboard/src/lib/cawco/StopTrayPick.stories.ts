@@ -72,7 +72,7 @@ const EIGHT: PickRow[] = [
   }),
   row("dbun", {
     kind: "delegate",
-    title: "Read Bun 1.4's release notes for breaking changes",
+    title: "Read https://bun.sh/blog/bun-v1.4 for breaking changes",
     activity: "idle",
     ran: "",
   }),
@@ -85,7 +85,7 @@ const EIGHT: PickRow[] = [
     kind: "delegate",
     parentId: "dlog",
     title: "Collect merged pull request titles since Oct 23",
-    ran: "now",
+    ran: "1m",
   }),
 ];
 
