@@ -92,6 +92,11 @@
     type Plan,
     travelTo,
   } from "#lib/cawco/preview/pin-place.svelte.js";
+  import {
+    RIM_INK,
+    RIM_STRENGTH,
+    type StatusTone,
+  } from "#lib/cawco/workspace/session-status.js";
   import { inStep } from "#lib/components/ui/live-dot/index.js";
   import { besideTop, stackedSpot } from "./hold";
   import {
@@ -99,7 +104,8 @@
     plainBox,
     type Radii,
     type Rect,
-    rimShape,
+    RIM_POINTS,
+    rimTrace as rimTraceOf,
     roundedBox,
     silhouette,
   } from "./silhouette";
@@ -150,13 +156,14 @@
   const CARD_R = numberOf("--radius-lg");
   const DOT = numberOf("--status-dot-size");
   const DOT_OUT = numberOf("--space-row");
-  /** The rim: the edge's own width (and a half at its middle), its tint at the chosen tab rim's strength. */
-  const RIM = numberOf("--tab-rim-width");
-  const RIM_MIX = numberOf("--tab-rim-mix-chosen");
-  /** Half a css px: the edge's line stands this far in from the shape's. */
-  const HALF_PX = 0.5;
-  const GLOW = numberOf("--tab-rim-glow");
-  const GLOW_MIX = numberOf("--tab-rim-mix-subtle");
+  /** The rim's gradient stops, one for each point its trace is sampled at. */
+  const RIM_STOPS = Array.from({ length: RIM_POINTS }, (_, i) => i);
+  /** The rim, a folder tab's: its width and its taper from each tip, read once (TabItem reads the same). */
+  const RIM = {
+    width: numberOf("--tab-rim-width") || 1,
+    taper: numberOf("--tab-rim-taper"),
+    ease: numberOf("--tab-rim-taper-ease") || 1,
+  };
   /**
    * The most one drawn frame moves the clock, ms: three frames at 60 Hz. A
    * longer wait is the browser holding frames, not the run's time
@@ -171,13 +178,10 @@
   let shapePath = $state<SVGPathElement>();
   let dropPath = $state<SVGPathElement>();
   let rimGroup = $state<SVGGElement>();
-  let rimGlow = $state<SVGPathElement>();
-  let rimCore = $state<SVGPathElement>();
-  let rimFade = $state<SVGRadialGradientElement>();
+  let rimTrace = $state<SVGPathElement>();
+  let rimInside = $state<SVGRectElement>();
+  let rimTaper = $state<SVGLinearGradientElement>();
   let rimHead = $state<SVGCircleElement>();
-  let rimAlong = $state<SVGLinearGradientElement>();
-  let rimMask = $state<SVGMaskElement>();
-  let rimMaskBox = $state<SVGRectElement>();
   const uid = $props.id();
   let pinLayer = $state<HTMLElement>();
   let pinShift = $state<HTMLElement>();
@@ -304,6 +308,8 @@
   });
   /** The edge the bridge last ran into, kept while it drains once the pin has left it. */
   let bridgeEdge: PopSide | null = null;
+  /** The pin's status on the rail's scale: the agent working, or an answer that needs him. */
+  const tone = $derived<StatusTone>(dot === "unread" ? "attention" : "working");
   /** The pin's end away from its card, where its rim wraps: the edge it is joined beside, else the way it stands from the card's middle. */
   const farEnd = $derived.by((): FarEnd => {
     if (besideEdge) {
@@ -571,18 +577,14 @@
   }
 
   /**
-   * The rim as the card stands: a tint of the status hue on the shape's own
-   * edge round the pin's far end (the end away from its card), strongest at
-   * the end's middle and fading to nothing at its two tips, its width
-   * tapering with it (`tab-rim-width` and a half at the middle, none at the
-   * tips), and a faint glow out from it that tapers and fades the same way.
-   * The taper is the crescent's own shape (silhouette `rimShape`); the fade
-   * is a mask whose gradient runs along the end. As the card pours out,
-   * the status dot (where PinDot stands, on the pin's top-end corner)
-   * slides into the end's middle and spreads toward both tips, the taper
-   * and the fade carried with them, so a tip is never hard; as it drains,
-   * it gathers back into the dot, on the same clock. The pins' own dots
-   * stand hidden while it is drawn.
+   * The rim as the card stands: a folder tab's rim round the pin's far end
+   * (the end away from its card), tapering from its two tips by the tab's
+   * own taper (`tab-rim-taper`, `tab-rim-taper-ease`). As the card pours
+   * out, the status dot (where PinDot stands, on the pin's top-end corner)
+   * slides into the end's middle and the rim spreads from there toward both
+   * tips, each tip tapered from wherever it stands; as it drains, it
+   * gathers back into the dot, on the same clock. The pins' own dots stand
+   * hidden while it is drawn.
    */
   function drawRim(p: Rect | null, k: number) {
     const group = rimGroup;
@@ -603,18 +605,30 @@
       x: p.x + p.w + DOT_OUT - DOT / 2,
       y: p.y - DOT_OUT + DOT / 2,
     };
-    const rim = rimShape(p, farEnd, k, RIM + HALF_PX, GLOW);
+    const rim = rimTraceOf(p, farEnd, k, RIM);
     group.setAttribute(
       "transform",
       `translate(${((at.x - rim.mid.x) * (1 - k)).toFixed(2)} ${((at.y - rim.mid.y) * (1 - k)).toFixed(2)})`
     );
-    rimCore?.setAttribute("d", rim.core);
-    rimGlow?.setAttribute("d", rim.glow);
+    rimTrace?.setAttribute("d", rim.d);
+    rimInside?.setAttribute("x", String(p.x));
+    rimInside?.setAttribute("y", String(p.y));
+    rimInside?.setAttribute("width", String(p.w));
+    rimInside?.setAttribute("height", String(p.h));
+    rimInside?.setAttribute("rx", String(Math.min(p.w, p.h) / 2));
+    if (rimTaper) {
+      rimTaper.setAttribute("x1", String(rim.x1));
+      rimTaper.setAttribute("x2", String(rim.x2));
+      const stops = rimTaper.querySelectorAll("stop");
+      rim.stops.forEach((one, i) => {
+        stops[i]?.setAttribute("offset", one.offset.toFixed(4));
+        stops[i]?.setAttribute("stop-opacity", one.ink.toFixed(3));
+      });
+    }
     // The dot it pours from, shrinking into the rim over its first half.
     rimHead?.setAttribute("cx", String(rim.mid.x));
     rimHead?.setAttribute("cy", String(rim.mid.y));
     rimHead?.setAttribute("r", String((DOT / 2) * (1 - unit(k * 2))));
-    paintRim(rim, p);
     if (!(motionOk.current || rimFaded)) {
       // Without motion, the dot and the rim cross-fade.
       rimFaded = true;
@@ -622,44 +636,6 @@
         duration: dur("--dur-control"),
         easing: ease("--ease-out"),
       });
-    }
-  }
-
-  /** The rim's fade along its end, the mask's box round the pin, and the glow's falloff round a round end. */
-  function paintRim(rim: ReturnType<typeof rimShape>, p: Rect) {
-    // The fade along the end, whole at its middle, nothing at its tips.
-    if (rimAlong) {
-      const { from, to, mirror } = rim.fade;
-      const span =
-        Math.abs(to - from) < 0.01
-          ? 0.01 * Math.sign(to - from || 1)
-          : to - from;
-      rimAlong.setAttribute("x1", String(from));
-      rimAlong.setAttribute("x2", String(from + span));
-      rimAlong.setAttribute("spreadMethod", mirror ? "reflect" : "pad");
-    }
-    const margin = GLOW + DOT;
-    for (const one of [rimMask, rimMaskBox]) {
-      one?.setAttribute("x", String(p.x - margin));
-      one?.setAttribute("y", String(p.y - margin));
-      one?.setAttribute("width", String(p.w + 2 * margin));
-      one?.setAttribute("height", String(p.h + 2 * margin));
-    }
-    // The glow falls off outward from the edge round a round end; a long
-    // side keeps the tint alone.
-    const { end } = rim;
-    rimGlow?.setAttribute("visibility", end ? "visible" : "hidden");
-    if (end && rimFade) {
-      const reach = end.r + GLOW;
-      rimFade.setAttribute("cx", String(end.x));
-      rimFade.setAttribute("cy", String(end.y));
-      rimFade.setAttribute("r", String(reach));
-      // Falling off as a blur does: most of it in the first third.
-      const [inside, edge, near] = rimFade.querySelectorAll("stop");
-      inside?.setAttribute("offset", String((end.r - 2 * HALF_PX) / reach));
-      edge?.setAttribute("offset", String((end.r - HALF_PX) / reach));
-      near?.setAttribute("offset", String((end.r + GLOW / 3) / reach));
-      rimGlow?.setAttribute("fill-opacity", String(GLOW_MIX));
     }
   }
 
@@ -882,74 +858,64 @@
       >
     </div>
   </div>
-  <!-- The status dot poured out into a rim on the card's side that faces
-       its pin: over the pin, so the dot it starts as stands where the pin's
-       own stood. -->
+  <!-- The status dot poured out into a rim round the pin's far end: a
+       folder tab's rim (TabItem), over the pin, so the dot it starts as
+       stands where the pin's own stood. `pane-tab-rims` and `tab-rim-w` are
+       its strength and width, solid and whole under Increase Contrast and
+       reduced transparency; its ink and strength by status are a pane tab's
+       (session-status `RIM_INK`, `RIM_STRENGTH`). -->
   <svg
     aria-hidden="true"
     bind:this={rimLayer}
-    class="pointer-events-none invisible absolute start-0 top-0 size-full overflow-visible"
+    class="pane-tab-rims tab-rim-w pointer-events-none invisible absolute start-0 top-0 size-full overflow-visible"
     data-slot="pin-goo-rim"
-    style:--rim-ink={dot === "unread"
-      ? "var(--status-attn-glyph)"
-      : "var(--status-live-glyph)"}
+    style:--rim-ink={RIM_INK[tone]}
   >
     <defs>
-      <!-- The glow round the pin's far end: none inside its edge, its hue
-           at the edge, nothing at `tab-rim-glow` out, as a blur falls off. -->
-      <radialGradient
-        bind:this={rimFade}
-        gradientUnits="userSpaceOnUse"
-        id="{uid}-rim-glow"
-      >
-        <stop class="stop-rim-ink" offset="0" stop-opacity="0" />
-        <stop class="stop-rim-ink" offset="0.5" stop-opacity="1" />
-        <stop class="stop-rim-ink" offset="0.6" stop-opacity="0.25" />
-        <stop class="stop-rim-ink" offset="1" stop-opacity="0" />
-      </radialGradient>
-      <!-- The fade along the far end: whole at its middle, easing out to
-           nothing at its tips. An alpha mask, so only the stops' opacity
-           counts. -->
+      <clipPath id="{uid}-rim-inside">
+        <rect bind:this={rimInside} />
+      </clipPath>
       <linearGradient
-        bind:this={rimAlong}
+        bind:this={rimTaper}
         gradientUnits="userSpaceOnUse"
-        id="{uid}-rim-along"
+        id="{uid}-rim-taper"
         x1="0"
         x2="1"
         y1="0"
         y2="0"
       >
-        <stop class="stop-rim-ink" offset="0" stop-opacity="1" />
-        <stop class="stop-rim-ink" offset="0.5" stop-opacity="0.6" />
-        <stop class="stop-rim-ink" offset="1" stop-opacity="0" />
+        {#each RIM_STOPS as i (i)}
+          <stop class="stop-rim-ink" offset="0" stop-opacity="0" />
+        {/each}
       </linearGradient>
-      <mask
-        bind:this={rimMask}
-        class="mask-type-alpha"
-        id="{uid}-rim-mask"
-        maskUnits="userSpaceOnUse"
-      >
-        <rect bind:this={rimMaskBox} fill="url(#{uid}-rim-along)" />
-      </mask>
     </defs>
     <g bind:this={rimGroup}>
+      <!-- The rim, as a tab's: a stroke twice its width clipped inside the
+           pin, its ink tapering from each tip (the gradient), at the chosen
+           tab's strength, with the tab rim's glow. -->
+      <g
+        class="rim-strength rim-glow contrast-more:filter-none reduced-transparency:filter-none"
+        style:--pick="1"
+        style:--rim-full={RIM_STRENGTH[tone].full}
+        style:--rim-rest={RIM_STRENGTH[tone].full}
+      >
+        <path
+          bind:this={rimTrace}
+          class="fill-none rim-stroke-w"
+          clip-path="url(#{uid}-rim-inside)"
+          stroke="url(#{uid}-rim-taper)"
+          stroke-linejoin="round"
+        />
+      </g>
       {#key dot}
-        <g
-          class={[dot === "live" && "breathe"]}
-          mask="url(#{uid}-rim-mask)"
-          {@attach inStep}
-        >
-          <path bind:this={rimGlow} fill="url(#{uid}-rim-glow)" />
-          <path
-            bind:this={rimCore}
-            class="fill-(--rim-ink)"
-            fill-opacity={RIM_MIX}
-          />
-        </g>
-        <!-- The dot it pours from, whole: the fade is the rim's alone. -->
+        <!-- The dot it pours from, shrinking into the rim. -->
         <circle
           bind:this={rimHead}
-          class={["fill-(--rim-ink)", dot === "live" && "breathe"]}
+          class={[
+            dot === "unread"
+              ? "fill-status-attn-glyph"
+              : "fill-status-live-glyph breathe",
+          ]}
           {@attach inStep}
         />
       {/key}

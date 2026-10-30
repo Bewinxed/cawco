@@ -60,9 +60,9 @@
       },
       strip: {
         session:
-          "[--item:var(--strip-item)] [--px:var(--strip-px)] [--rim-w:var(--tab-rim-width)] [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)] reduced-transparency:[--rim-w:1] contrast-more:[--rim-w:1]",
+          "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)]",
         hosted:
-          "[--item:var(--strip-item)] [--px:var(--strip-px)] [--rim-w:var(--tab-rim-width)] [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)] reduced-transparency:[--rim-w:1] contrast-more:[--rim-w:1]",
+          "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)]",
         work: "min-w-0 flex-[0_1_auto] [--item:var(--space-8)] [--px:calc(var(--space-2)_-_var(--tight)_*_0.15)] [--sheet:light-dark(var(--surface-raised),var(--surface-hover))] [--tab-fill:var(--surface-recess)] [--tab-hover:light-dark(var(--surface-hover),color-mix(in_oklch,var(--surface-fill)_50%,transparent))] coarse:[--item:var(--space-8)] [&_[data-slot=ff-tab]]:[--gap:max(0px,var(--space-row)_-_var(--tight)_*_0.06)] [&_[data-slot=ff-tab]~[data-slot=ff-tab]]:[--px-start:calc(var(--overlap)_+_var(--px))] [&_[data-slot=ff-tab]:has(~[data-slot=ff-tab])]:[--px-end:max(var(--px),var(--overlap))]",
       },
     },

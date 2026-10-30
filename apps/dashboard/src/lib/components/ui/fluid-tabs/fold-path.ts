@@ -115,6 +115,15 @@ export function foldPath(
   ].join(" ");
 }
 
+/**
+ * A rim's ink `along` px from its tip: `1 - (1 - s/taper)^ease`
+ * (`tab-rim-taper`, `tab-rim-taper-ease`), whole past the taper. Every rim
+ * tapers from its tips by it: a folder tab's from each foot (taperStops), a
+ * comment pin's from the two ends of its far curve.
+ */
+export const taperInk = (along: number, taper: number, ease: number): number =>
+  taper <= 0 ? 1 : 1 - (1 - Math.min(1, Math.max(0, along) / taper)) ** ease;
+
 export interface TaperStop {
   /** The stroke's ink there, 0 to 1. */
   ink: number;
@@ -143,10 +152,7 @@ export function taperStops(
   const along = (y: number) =>
     y <= f ? mid * Math.acos(Math.max(-1, 1 - y / f)) : turn + (y - f);
   const whole = Math.max(0, h - r);
-  const ink = (y: number) =>
-    y >= whole || taper <= 0
-      ? 1
-      : 1 - (1 - Math.min(1, along(y) / taper)) ** ease;
+  const ink = (y: number) => (y >= whole ? 1 : taperInk(along(y), taper, ease));
   const heights = new Set<number>([0, whole, h]);
   for (let y = 0.25; y < whole; y += y < f ? 0.75 : 2) {
     heights.add(r2(y));

@@ -1082,6 +1082,15 @@
       color-mix(in oklab, var(--rim-ink, transparent) 50%, transparent)
   );
 }
+/* A rim's width (`tab-rim-width`), whole under Increase Contrast and reduced
+   transparency: a folder tab's (TabsList) and a comment pin's alike. */
+@utility tab-rim-w {
+  --rim-w: var(--tab-rim-width);
+
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    --rim-w: 1;
+  }
+}
 @utility rim-stroke-w {
   stroke-width: calc(var(--rim-w, 1) * 2px);
 }

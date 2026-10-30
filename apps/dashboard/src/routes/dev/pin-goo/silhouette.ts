@@ -28,6 +28,7 @@ import {
   type PathsD,
   unionD,
 } from "clipper2-ts";
+import { taperInk } from "#lib/components/ui/fluid-tabs/fold-path.js";
 
 /** A box, css px. */
 export interface Rect {
@@ -129,19 +130,20 @@ interface Along {
 }
 
 /**
- * The pin's own outline on its stroke's line (`HALF` in) round its far end,
- * as a function of the distance along it, and its length. A round end
+ * The pin's own outline `inset` px in from its edge round its far end, as
+ * a function of the distance along it, and its length. A round end
  * (`left`, `right`) is its half-circle from its top to its foot; a long
  * side (`top`, `bottom`) runs round both its corners from one end's middle
  * to the other's.
  */
 function farLine(
   pin: Rect,
-  far: FarEnd
+  far: FarEnd,
+  inset: number
 ): { at: (s: number) => Along; length: number } {
   const { x, y, w, h } = pin;
   const r = Math.min(w, h) / 2;
-  const a = r - HALF;
+  const a = r - inset;
   const turn = (ox: number, oy: number, angle: number): Along => ({
     x: ox + a * Math.cos(angle),
     y: oy + a * Math.sin(angle),
@@ -160,7 +162,7 @@ function farLine(
   const run = Math.max(0, w - 2 * r);
   const way = far === "top" ? -1 : 1;
   const cy = far === "top" ? y + r : y + h - r;
-  const edge = far === "top" ? y + HALF : y + h - HALF;
+  const edge = far === "top" ? y + inset : y + h - inset;
   return {
     length: 2 * quarter + run,
     at: (s) => {
@@ -175,71 +177,64 @@ function farLine(
   };
 }
 
-/** A rim as drawn: its crescent, its glow's, where its fade runs from and to, and the round end's centre and radius (for the glow's falloff). */
+/** Points a rim's trace is sampled at along its span; also its taper gradient's stops. */
+export const RIM_POINTS = 49;
+
+/** A pin's rim as drawn: its trace on the pin's edge, and its taper as a gradient on x. */
 export interface Rim {
-  core: string;
-  end: { r: number; x: number; y: number } | null;
-  /** The fade: whole at `from`, nothing at `to`, along x; mirrored about `from` on a long side. */
-  fade: { from: number; mirror: boolean; to: number };
-  glow: string;
+  d: string;
   /** The middle of the far end, where the status dot slides in. */
   mid: { x: number; y: number };
+  /** The taper's stops, as `taperStops` gives a folder tab's: the ink at each offset of the gradient from `x1` to `x2`. */
+  stops: { ink: number; offset: number }[];
+  x1: number;
+  x2: number;
 }
 
-/** Samples along a rim's span: enough that its taper reads as a curve at 3x. */
-const RIM_STEPS = 32;
-
 /**
- * A pin's rim round its far end, `spread` of the way out from the end's
- * middle toward both its tips (0 to 1): a crescent on the edge's line,
- * `width` wide at its middle and narrowing to nothing at its two tips (a
- * half sine), and its glow, a crescent out from the line `glow` wide at its
- * middle, narrowing the same way. Both are filled shapes, so the taper is
- * in the geometry, and the fade along the end (`fade`) is a gradient on x:
- * every point of a round end lies further from its tips' x the further it
- * is from them along the curve.
+ * A pin's rim round its far end, a folder tab's rim on a pin (TabItem,
+ * fold-path): the pin's own edge traced `spread` of the way out from the
+ * end's middle toward both tips (0 to 1), for a stroke twice the rim's
+ * width clipped inside the pin, and its taper as a gradient: at each point,
+ * the ink `taperInk` gives for its distance along the stroke's middle (half
+ * the rim's width in) from the nearer tip. Round a round end both halves
+ * stand at the same x for the same distance, and along a long side x runs
+ * one way, so one gradient on x carries the taper, as a tab's gradient on
+ * its height does.
  */
-export function rimShape(
+export function rimTrace(
   pin: Rect,
   far: FarEnd,
   spread: number,
-  width: number,
-  glow: number
+  rim: { ease: number; taper: number; width: number }
 ): Rim {
-  const line = farLine(pin, far);
-  const middle = line.length / 2;
-  const reach = (line.length / 2) * Math.max(0, Math.min(1, spread));
+  const edge = farLine(pin, far, 0);
+  const middle = farLine(pin, far, rim.width / 2).length / edge.length;
+  const half = edge.length / 2;
+  const reach = half * Math.max(0, Math.min(1, spread));
   const n = (v: number) => v.toFixed(PRECISION);
-  const outer: string[] = [];
-  const inner: string[] = [];
-  const onLine: string[] = [];
-  const halo: string[] = [];
-  for (let i = 0; i <= RIM_STEPS; i += 1) {
-    const u = i / RIM_STEPS;
-    const p = line.at(middle - reach + 2 * reach * u);
-    const taper = Math.sin(Math.PI * u);
-    const half = (width * taper) / 2;
-    outer.push(`${n(p.x + p.nx * half)} ${n(p.y + p.ny * half)}`);
-    inner.push(`${n(p.x - p.nx * half)} ${n(p.y - p.ny * half)}`);
-    onLine.push(`${n(p.x)} ${n(p.y)}`);
-    halo.push(
-      `${n(p.x + p.nx * glow * taper)} ${n(p.y + p.ny * glow * taper)}`
-    );
+  const points: { ink: number; x: number }[] = [];
+  const trace: string[] = [];
+  for (let i = 0; i < RIM_POINTS; i += 1) {
+    const u = i / (RIM_POINTS - 1);
+    const along = 2 * reach * u;
+    const p = edge.at(half - reach + along);
+    trace.push(`${n(p.x)} ${n(p.y)}`);
+    const fromTip = Math.min(along, 2 * reach - along) * middle;
+    points.push({ x: p.x, ink: taperInk(fromTip, rim.taper, rim.ease) });
   }
-  const shape = (out: string[], back: string[]) =>
-    `M${out.join(" ")} ${[...back].reverse().join(" ")}Z`;
-  const mid = line.at(middle);
-  const tip = line.at(middle - reach);
-  const { x, w, h } = pin;
-  const r = Math.min(w, h) / 2;
-  const round = far === "left" || far === "right";
+  points.sort((a, b) => a.x - b.x);
+  const x1 = points[0]?.x ?? 0;
+  const x2 = Math.max(x1 + 0.01, points.at(-1)?.x ?? 0);
+  const mid = edge.at(half);
   return {
-    core: shape(outer, inner),
-    glow: shape(halo, onLine),
-    fade: { from: mid.x, to: tip.x, mirror: !round },
+    d: `M${trace.join(" ")}`,
+    stops: points.map((one) => ({
+      offset: (one.x - x1) / (x2 - x1),
+      ink: one.ink,
+    })),
     mid: { x: mid.x, y: mid.y },
-    end: round
-      ? { x: far === "left" ? x + r : x + w - r, y: pin.y + h / 2, r }
-      : null,
+    x1,
+    x2,
   };
 }

@@ -22,6 +22,27 @@ import { STALLED_LABEL } from "../session-status";
 
 export type StatusTone = "working" | "attention" | "failed" | "quiet";
 
+/** Each status's rim ink, on the rail's scale: a pane tab's rim (PaneTabs) and a comment pin's. */
+export const RIM_INK: Record<StatusTone, string> = {
+  working: "var(--status-live-glyph)",
+  // The attention glyph's tone, darker by day, so its rim holds 3:1.
+  attention: "var(--tab-rim-attn)",
+  failed: "var(--status-fail-glyph)",
+  quiet: "var(--ink-muted)",
+};
+/**
+ * Each status's rim strength unchosen (`rest`) and chosen (`full`), read
+ * under `pane-tab-rims`: an idle tab wears none unchosen, every other
+ * status the subtle strength; chosen, idle wears the muted ink's own.
+ */
+export const RIM_STRENGTH: Record<StatusTone, { full: string; rest: string }> =
+  {
+    working: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
+    attention: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
+    failed: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
+    quiet: { rest: "0", full: "var(--rim-idle)" },
+  };
+
 export interface SessionStatusOf {
   /** None while it is on its way (stopping): the glyph is StopTray's spinner. */
   icon: Component | null;

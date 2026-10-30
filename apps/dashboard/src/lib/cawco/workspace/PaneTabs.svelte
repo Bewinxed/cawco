@@ -94,7 +94,12 @@
   import SessionDetails from "./SessionDetails.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
-  import { type StatusTone, sessionStatusOf } from "./session-status";
+  import {
+    RIM_INK,
+    RIM_STRENGTH,
+    type StatusTone,
+    sessionStatusOf,
+  } from "./session-status";
   import { noNativeDrag, pressTab, swallowClick } from "./tab-drag.svelte";
   import { warm } from "./warm.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
@@ -218,25 +223,6 @@
 
   /** Where the chosen tab stands, -1 with the board showing. */
   const chosenAt = $derived(tabs.findIndex((tab) => tab.id === leaf.active));
-  /** Each status's rim ink, on the rail's scale. */
-  const TONE_INK: Record<StatusTone, string> = {
-    working: "var(--status-live-glyph)",
-    // The attention glyph's tone, darker by day, so its rim holds 3:1.
-    attention: "var(--tab-rim-attn)",
-    failed: "var(--status-fail-glyph)",
-    quiet: "var(--ink-muted)",
-  };
-  /**
-   * Each status's rim strength unchosen (`rest`) and chosen (`full`): an
-   * idle tab wears none unchosen, every other status the subtle strength;
-   * chosen, idle wears the muted ink's own (`.tab`'s `--rim-*`).
-   */
-  const RIM: Record<StatusTone, { full: string; rest: string }> = {
-    working: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
-    attention: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
-    failed: { rest: "var(--rim-subtle)", full: "var(--rim-chosen)" },
-    quiet: { rest: "0", full: "var(--rim-idle)" },
-  };
   /**
    * A tab's place in the track's stack at rest, until the track ranks it
    * (TabItem's own): read as the tab mounts, the server's render included.
@@ -1401,9 +1387,9 @@
         }}
         style:--lone-end={Number(i === tabs.length - 1)}
         style:--lone-start={Number(i === 0)}
-        style:--rim-full={RIM[tab.tone].full}
+        style:--rim-full={RIM_STRENGTH[tab.tone].full}
         style:--rim-ink="var(--tone)"
-        style:--rim-rest={RIM[tab.tone].rest}
+        style:--rim-rest={RIM_STRENGTH[tab.tone].rest}
         style:--sheet={cardHere || menuHere
           ? "var(--surface-recess)"
           : undefined}
@@ -1413,7 +1399,7 @@
         style:--tab-hover={cardHere || menuHere
           ? "var(--surface-recess)"
           : undefined}
-        style:--tone={TONE_INK[tab.tone]}
+        style:--tone={RIM_INK[tab.tone]}
         style:--z-rest={restZ}
         use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
         out:leavingTab={tab.id}
