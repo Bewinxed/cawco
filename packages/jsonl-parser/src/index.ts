@@ -9,6 +9,7 @@
  * - `@cawco/jsonl-parser/opencode`  OpenCode sqlite adapter (bun:sqlite)
  */
 
+export type { FileHarness, TranscriptFile } from "./docs.ts";
 export {
   type Checkpoint,
   fileStamp,

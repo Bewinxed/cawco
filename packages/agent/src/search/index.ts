@@ -1,6 +1,6 @@
 /**
  * Transcript search service: keeps the transcript index (held by the
- * agent's search process, search/host.ts) in sync with Claude Code
+ * agent's search process, search/host.ts) in sync with Claude Code and pi
  * transcripts and OpenCode sessions, in the background and before a search,
  * and asks it each search. Nothing of the index's SQLite runs in the agent:
  * a question that runs past its limit, or that its asker lets go, ends with
@@ -95,7 +95,7 @@ export class TranscriptSearchService {
   });
 
   /**
-   * Run one sync cycle, or join the one in flight: claude transcripts +
+   * Run one sync cycle, or join the one in flight: claude and pi transcripts +
    * opencode, committed as one transaction, the opencode watermark written
    * only when it moved.
    */

@@ -27,10 +27,11 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   listClaudeFiles,
+  listPiFiles,
   opencodeDatabases,
   transcriptIndexPath,
 } from "@cawco/core/paths";
-import type { TranscriptDoc } from "@cawco/jsonl-parser";
+import type { TranscriptDoc, TranscriptFile } from "@cawco/jsonl-parser";
 import {
   type ListOptions,
   type SearchOptions,
@@ -61,9 +62,9 @@ const searchOps = (
 ) => ({
   /**
    * One sync: every OpenCode database's messages since its watermark and
-   * every Claude transcript's new lines, committed as fts5.ts `sync` commits
-   * them, the watermarks written only when they moved. `tell` hears how far
-   * a long catch-up has come.
+   * every Claude and pi transcript's new lines, committed as fts5.ts `sync`
+   * commits them, the watermarks written only when they moved. `tell` hears
+   * how far a long catch-up has come.
    */
   sync: async (startedAt: number, tell: Tell): Promise<void> => {
     const docs: TranscriptDoc[] = [];
@@ -80,16 +81,22 @@ const searchOps = (
       meta[key] = String(read.watermark);
       moved.set(key, read.watermark);
     }
-    const claudeFiles = await listClaudeFiles();
-    await index.sync(
-      claudeFiles.map((f) => f.path),
-      {
-        docs,
-        meta,
-        ended: { [INDEXED_THROUGH]: String(startedAt) },
-        progress: tell,
-      }
-    );
+    const files: TranscriptFile[] = [
+      ...(await listClaudeFiles()).map(({ path }) => ({
+        harness: "claude-code" as const,
+        path,
+      })),
+      ...(await listPiFiles()).map((path) => ({
+        harness: "pi" as const,
+        path,
+      })),
+    ];
+    await index.sync(files, {
+      docs,
+      meta,
+      ended: { [INDEXED_THROUGH]: String(startedAt) },
+      progress: tell,
+    });
     for (const [key, watermark] of moved) {
       watermarks.set(key, watermark);
     }

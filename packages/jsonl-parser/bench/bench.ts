@@ -57,8 +57,9 @@ rmSync(`${indexPath}-wal`, { force: true });
 rmSync(`${indexPath}-shm`, { force: true });
 {
   const index = new TranscriptIndex(indexPath);
+  const transcripts = files.map((path) => ({ harness: "claude-code" as const, path }));
   const t0 = performance.now();
-  const result = await index.sync(files);
+  const result = await index.sync(transcripts);
   const ms = performance.now() - t0;
   console.log(
     `index build   : ${result.docsAdded} docs from ${result.filesFull} files in ${ms.toFixed(0)}ms (${result.errors.length} errors)`,
@@ -66,7 +67,7 @@ rmSync(`${indexPath}-shm`, { force: true });
 
   // 4. Warm re-sync (everything checkpointed, nothing to parse)
   const t1 = performance.now();
-  const resync = await index.sync(files);
+  const resync = await index.sync(transcripts);
   const ms1 = performance.now() - t1;
   console.log(
     `warm re-sync  : ${resync.filesUnchanged} unchanged, ${resync.docsAdded} new docs in ${ms1.toFixed(0)}ms`,

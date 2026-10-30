@@ -26,10 +26,10 @@ export type DocAuthor = "owner" | "agent" | "report" | "injected";
 
 /** A normalized, harness-agnostic searchable document. */
 export interface TranscriptDoc {
-  /** Which harness produced it (claude-code, opencode, ...). */
+  /** Which harness produced it (claude-code, opencode, pi). */
   harness: string;
   sessionId: string;
-  /** Record uuid (claude-code) or message id (opencode). */
+  /** Record uuid (claude-code), message id (opencode) or entry id (pi). */
   id: string;
   role: "user" | "assistant";
   author: DocAuthor;
@@ -230,6 +230,35 @@ function blocksToText(
 }
 
 /**
+ * A record's content as a document's words: who said them, what was said and
+ * thought, the tools called and what they answered; null when it holds none
+ * (a turn that was only reminders, one whose words are {@link COPIED}). The
+ * one rule for a harness whose records carry content blocks.
+ */
+export function contentWords(
+  role: "user" | "assistant",
+  content: string | ContentBlock[] | undefined,
+  options: ExtractOptions,
+): Pick<TranscriptDoc, "author" | "output" | "text" | "thinking" | "tools"> | null {
+  const words = blocksToText(content, options);
+  // A user record of tool results alone is the agent's tools answering, never the person.
+  const said =
+    role === "user" && (words.text.trim() || !words.output)
+      ? userAuthor(words.text)
+      : { author: "agent" as const, text: words.text.trim() };
+  if (!said || (!said.text && !words.thinking && words.tools.length === 0 && !words.output)) {
+    return null;
+  }
+  return {
+    author: said.author,
+    text: said.text,
+    ...(words.thinking ? { thinking: words.thinking } : {}),
+    tools: words.tools.length > 0 ? words.tools.join(" ") : undefined,
+    ...(words.output ? { output: words.output } : {}),
+  };
+}
+
+/**
  * The record types a document is made from, as the byte prefilter matches
  * them (scan.ts `typeFilter`): a `queued_command` is matched by its
  * attachment's own `type`, so no other attachment is parsed.
@@ -287,13 +316,8 @@ export function extractDoc(
   if (!message) {
     return null;
   }
-  const words = blocksToText(message.content, options);
-  // A user record of tool results alone is the agent's tools answering, never the person.
-  const said =
-    record.type === "user" && (words.text.trim() || !words.output)
-      ? userAuthor(words.text)
-      : { author: "agent" as const, text: words.text.trim() };
-  if (!said || (!said.text && !words.thinking && words.tools.length === 0 && !words.output)) {
+  const words = contentWords(record.type, message.content, options);
+  if (!words) {
     return null;
   }
   return {
@@ -301,12 +325,8 @@ export function extractDoc(
     sessionId: r.sessionId ?? "",
     id: r.uuid ?? "",
     role: record.type,
-    author: said.author,
     timestamp: r.timestamp,
-    text: said.text,
-    ...(words.thinking ? { thinking: words.thinking } : {}),
-    tools: words.tools.length > 0 ? words.tools.join(" ") : undefined,
-    ...(words.output ? { output: words.output } : {}),
+    ...words,
     cwd: r.cwd,
     model: record.type === "assistant" ? (message as { model?: string }).model : undefined,
     sidechain: r.isSidechain === true ? true : undefined,

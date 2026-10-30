@@ -1,7 +1,7 @@
 {
   "name": "@cawco/jsonl-parser",
   "version": "0.1.0",
-  "description": "Fast, incremental parser and BM25 indexer for agent-session transcripts (Claude Code JSONL, OpenCode sqlite).",
+  "description": "Fast, incremental parser and BM25 indexer for agent-session transcripts (Claude Code and pi JSONL, OpenCode sqlite).",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",
   "exports": {

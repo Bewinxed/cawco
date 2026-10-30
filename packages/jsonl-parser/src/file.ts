@@ -21,7 +21,7 @@
  */
 
 import { open, stat } from "node:fs/promises";
-import { newStats, parseObject, parseRecords, type ScanOptions } from "./scan.ts";
+import { completeLines, newStats, parseObject, parseRecords, type ScanOptions } from "./scan.ts";
 import type { LocatedRecord, ParseStats, TranscriptRecord } from "./types.ts";
 
 const NEWLINE = 10;
@@ -152,6 +152,22 @@ export async function scanFile<T>(
       checkpoint: { size, offset, lines },
       reset: !valid && from !== undefined,
     };
+  } finally {
+    await handle.close();
+  }
+}
+
+/** How far into a file {@link firstRecord} looks. Ours: past any header of a few paths. */
+const HEAD_BYTES = 64 * 1024;
+
+/** The first whole record of `path`, or undefined when its head holds none. */
+export async function firstRecord(path: string): Promise<TranscriptRecord | undefined> {
+  const handle = await open(path, "r");
+  try {
+    const buf = new Uint8Array(HEAD_BYTES);
+    const { bytesRead } = await handle.read(buf, 0, HEAD_BYTES, 0);
+    const [first] = parseRecords(completeLines(buf.subarray(0, bytesRead)));
+    return first?.record;
   } finally {
     await handle.close();
   }

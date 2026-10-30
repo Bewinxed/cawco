@@ -1229,7 +1229,7 @@ const midTurn = async (kit: Kit, scratch: string): Promise<void> => {
   );
   const index = new TranscriptIndex(join(scratch, "search.db"));
   try {
-    await index.sync([transcript]);
+    await index.sync([{ harness: "claude-code", path: transcript }]);
     const hits = index.search("Zugriffsrechte Lagerverzeichnis", {
       author: "owner",
     });

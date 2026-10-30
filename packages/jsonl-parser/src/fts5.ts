@@ -7,21 +7,19 @@
  * Layout: a `docs` content table plus an external-content FTS5 table
  * (`tokenize='porter unicode61'`) kept in sync by triggers, so text is
  * stored once and BM25/snippets come for free. A `files` table holds
- * per-file `(size, offset, lines)` checkpoints: transcripts are
- * append-only, so `sync()` re-parses only appended bytes.
+ * per-file `(size, offset, lines)` checkpoints: Claude Code's and pi's
+ * transcripts are append-only, so `sync()` re-parses only appended bytes.
  */
 
 import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
-import { scanFile, type Checkpoint } from "./file.ts";
+import { FILE_HARNESSES, scanDocs, type TranscriptFile } from "./docs.ts";
+import type { Checkpoint } from "./file.ts";
 import { parseMany } from "./pool.ts";
 import { section } from "./section.ts";
-import { typeFilter } from "./scan.ts";
 import {
   AUTHOR_RULES,
-  DOC_TYPES,
   type DocAuthor,
-  extractDoc,
   type ExtractOptions,
   type TranscriptDoc,
   userAuthor,
@@ -677,18 +675,18 @@ interface FileWrite {
  * `files` in order, as consecutive batches of at most `limit` bytes each; a
  * file larger than `limit` is a batch of its own.
  */
-function byteBatches(files: { path: string; size: number }[], limit: number): string[][] {
-  const batches: string[][] = [];
-  let batch: string[] = [];
+function byteBatches<F extends { size: number }>(files: F[], limit: number): F[][] {
+  const batches: F[][] = [];
+  let batch: F[] = [];
   let bytes = 0;
-  for (const { path, size } of files) {
-    if (batch.length > 0 && bytes + size > limit) {
+  for (const file of files) {
+    if (batch.length > 0 && bytes + file.size > limit) {
       batches.push(batch);
       batch = [];
       bytes = 0;
     }
-    batch.push(path);
-    bytes += size;
+    batch.push(file);
+    bytes += file.size;
   }
   if (batch.length > 0) {
     batches.push(batch);
@@ -1035,7 +1033,7 @@ export class TranscriptIndex {
    * sync found, `options.docs` and `options.meta` included, is committed
    * together ({@link WRITE_BATCH_BYTES}).
    */
-  async sync(files: string[], options: SyncOptions = {}): Promise<SyncResult> {
+  async sync(files: TranscriptFile[], options: SyncOptions = {}): Promise<SyncResult> {
     const getCheckpoint = this.db.query("SELECT size, offset, lines FROM files WHERE path = ?");
     const result: SyncResult = {
       filesScanned: files.length,
@@ -1046,11 +1044,12 @@ export class TranscriptIndex {
       errors: [],
     };
 
-    const fullFiles: { mtime: number; path: string; size: number }[] = [];
-    const tailFiles: { path: string; checkpoint: Checkpoint }[] = [];
+    const fullFiles: (TranscriptFile & { mtime: number; size: number })[] = [];
+    const tailFiles: { file: TranscriptFile; checkpoint: Checkpoint }[] = [];
     const { stat } = await import("node:fs/promises");
     await Promise.all(
-      files.map(async (path) => {
+      files.map(async (file) => {
+        const { path } = file;
         const checkpoint = getCheckpoint.get(path) as Checkpoint | null;
         let size: number;
         let mtime: number;
@@ -1064,9 +1063,9 @@ export class TranscriptIndex {
           return;
         }
         if (!checkpoint || checkpoint.offset > size) {
-          fullFiles.push({ mtime, path, size });
+          fullFiles.push({ ...file, mtime, size });
         } else if (checkpoint.offset < size) {
-          tailFiles.push({ path, checkpoint });
+          tailFiles.push({ file, checkpoint });
         } else {
           result.filesUnchanged++;
         }
@@ -1101,25 +1100,23 @@ export class TranscriptIndex {
     // Grown files first: tail reads are small, run in-process, and they are
     // the live sessions, whose newest words a catch-up would otherwise keep
     // out of every search until it ends.
-    const prefilter = typeFilter(...DOC_TYPES);
-    for (const { path, checkpoint } of tailFiles) {
+    for (const { file, checkpoint } of tailFiles) {
       let write: FileWrite;
       try {
-        const tail = await scanFile(path, {
-          from: checkpoint,
-          prefilter,
-          pick: (located) => extractDoc(located.record, options.extract) ?? undefined,
-        });
+        const tail = await scanDocs(file, { from: checkpoint, extract: options.extract });
         const docs = tail.items;
         result.filesTailed++;
         write = {
-          path,
+          path: file.path,
           docs,
           checkpoint: tail.checkpoint,
           bytes: tail.checkpoint.offset - checkpoint.offset,
         };
       } catch (error) {
-        result.errors.push({ path, error: error instanceof Error ? error.message : String(error) });
+        result.errors.push({
+          path: file.path,
+          error: error instanceof Error ? error.message : String(error),
+        });
         continue;
       }
       await gather(write);
@@ -1128,14 +1125,17 @@ export class TranscriptIndex {
     // The new files: parallel full parse in workers, a batch at a time, each
     // batch gathered before the next is parsed (FULL_PARSE_BATCH_BYTES).
     for (const batch of byteBatches(fullFiles, FULL_PARSE_BATCH_BYTES)) {
-      const parsed = await parseMany(batch, {
-        mode: "docs",
-        types: [...DOC_TYPES],
-        extract: options.extract,
-        workers: options.workers,
-      });
+      const parses = await Promise.all(
+        FILE_HARNESSES.map((harness) =>
+          parseMany(
+            batch.filter((file) => file.harness === harness).map((file) => file.path),
+            { mode: "docs", harness, extract: options.extract, workers: options.workers },
+          ),
+        ),
+      );
+      const parsed = parses.flat();
       // Back in the batch's order: the workers answer shard by shard.
-      const order = new Map(batch.map((path, i) => [path, i]));
+      const order = new Map(batch.map((file, i) => [file.path, i]));
       const inOrder = parsed.toSorted(
         (a, b) => (order.get(a.path) ?? 0) - (order.get(b.path) ?? 0),
       );
@@ -1751,8 +1751,9 @@ export class TranscriptIndex {
 
   /**
    * Forget a conversation whose transcript was deleted (a purge): every
-   * document of `sessionId`, and the checkpoint of its transcript file, so
-   * no search finds its words and no hit points at a file that is gone.
+   * document of `sessionId`, and the checkpoint of its transcript file (named
+   * `<id>.jsonl` by Claude Code, `<timestamp>_<id>.jsonl` by pi), so no search
+   * finds its words and no hit points at a file that is gone.
    * Synchronous, one transaction: run it between syncs, never inside one.
    * Answers how many documents went.
    */
@@ -1765,7 +1766,7 @@ export class TranscriptIndex {
           : this.db.prepare("DELETE FROM docs WHERE session = ?").run(id).changes;
       this.db
         .prepare("DELETE FROM files WHERE path LIKE ? ESCAPE '\\'")
-        .run(`%/${sessionId.replace(/[\\%_]/g, (c) => `\\${c}`)}.jsonl`);
+        .run(`%${sessionId.replace(/[\\%_]/g, (c) => `\\${c}`)}.jsonl`);
       return gone;
     });
     return forget();

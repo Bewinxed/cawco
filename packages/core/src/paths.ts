@@ -472,6 +472,17 @@ export const listClaudeFiles = async (): Promise<ClaudeFile[]> => {
   return files;
 };
 
+/**
+ * Every pi session file on the machine: pi keeps one dir of sessions, whichever
+ * account a session ran on (agent pi-accounts.ts `accountRuntime`), a folder per
+ * cwd under its agent dir's `sessions/` (agent pi-services.ts `piSessionPath`).
+ */
+export const listPiFiles = async (): Promise<string[]> => {
+  const files: ClaudeFile[] = [];
+  await walk(join(piAgentDir(), "sessions"), null, files);
+  return files.map((file) => file.path);
+};
+
 /** The agent's transcript search index. */
 export const transcriptIndexPath = (): string =>
   join(

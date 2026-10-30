@@ -79,7 +79,12 @@ export async function parseMany(
     return [];
   }
   const workerCount = options.workers ?? defaultWorkerCount(files.length);
-  const task = { mode: options.mode, types: options.types, extract: options.extract };
+  const task = {
+    mode: options.mode,
+    harness: options.harness,
+    types: options.types,
+    extract: options.extract,
+  };
 
   if (workerCount <= 1 || typeof Worker === "undefined") {
     return runTask({ ...task, files });

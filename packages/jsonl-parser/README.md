@@ -4,8 +4,9 @@ Fast, incremental parser and BM25 search index for agent-session transcripts.
 
 - **Claude Code** — session JSONL under `~/.claude/projects/**` (including `subagents/agent-*.jsonl`)
 - **OpenCode** — `~/.local/share/opencode/opencode.db` (`message`/`part` tables)
+- **pi** — session JSONL under `~/.pi/agent/sessions/**`
 
-Both harnesses normalize into one document shape and feed one search index.
+All three harnesses normalize into one document shape and feed one search index.
 
 ## Measured performance
 
@@ -48,14 +49,15 @@ await reader.more(200);
 reader.records; // oldest first
 
 // Parallel parse across files, extracting searchable docs in the workers
-const results = await parseMany(files, { mode: "docs", types: ["user", "assistant"] });
+const results = await parseMany(files, { mode: "docs" }); // { harness: "pi" } for pi's files
 ```
 
 ```ts
 import { TranscriptIndex } from "@cawco/jsonl-parser/fts5"; // Bun only
 
 const index = new TranscriptIndex("./transcripts.db");
-await index.sync(files); // incremental: full-parses new files, tails grown ones
+// incremental: full-parses new files, tails grown ones
+await index.sync(files.map((path) => ({ harness: "claude-code", path })));
 const hits = index.search("websocket reconnect", { limit: 10 });
 // hits: [{ sessionId, role, timestamp, score, snippet, ... }]
 ```
