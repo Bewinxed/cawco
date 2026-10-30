@@ -9,6 +9,7 @@
    * waits while it is on); Verify last, a design system round whose verdict
    * goes to the session.
    */
+  import { designGraphWords } from "@cawco/core/words/design-graph";
   import { previewWords } from "@cawco/core/words/preview";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconLayers } from "#lib/icons.js";
@@ -18,10 +19,14 @@
     type CanvasViewState,
     type CanvasWidth,
   } from "./canvas-view.svelte";
+  import type { DesignGraph } from "./graph/design-graph.svelte";
+  import { graphOptions } from "./graph/options.svelte";
 
   interface Props {
     /** `sub`: More's submenu; the head's own button otherwise. */
     as?: "button" | "sub";
+    /** The design graph over the page: call 2's other side puts its Steps | Graph switch here. */
+    graph?: DesignGraph | null;
     /** Verify: asks the hub for a design system round on the canvas. */
     onverify: () => void;
     /** A Verify on its way to the hub. */
@@ -29,7 +34,13 @@
     view: CanvasViewState;
   }
 
-  let { as = "button", onverify, verifying = false, view }: Props = $props();
+  let {
+    as = "button",
+    graph = null,
+    onverify,
+    verifying = false,
+    view,
+  }: Props = $props();
 </script>
 
 <!-- One of the view's settings: its heading, and its values to pick one of. -->
@@ -50,6 +61,18 @@
 {/snippet}
 
 {#snippet entries()}
+  {#if graph && graphOptions.sides.switchAt === "menu"}
+    {@render choice(
+      designGraphWords.views,
+      [
+        ["steps", designGraphWords.steps],
+        ["graph", designGraphWords.graphView],
+      ],
+      graph.index,
+      (value) => graph?.setIndex(value === "steps" ? "steps" : "graph")
+    )}
+    <DropdownMenu.Separator />
+  {/if}
   <DropdownMenu.CheckboxItem
     checked={view.map}
     onCheckedChange={(on) => view.showMap(on)}>Map</DropdownMenu.CheckboxItem

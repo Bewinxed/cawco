@@ -38,6 +38,7 @@
    * same fault line stands over the rows, which keep their last read.
    */
   import { commentWords as said } from "@cawco/core/words/comments";
+  import { designGraphWords as graphWords } from "@cawco/core/words/design-graph";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -79,6 +80,7 @@
     searched,
     sortedPins,
   } from "./comment-rows";
+  import { graphOptions } from "./graph/options.svelte";
   import PinMark, { markState } from "./PinMark.svelte";
 
   let {
@@ -104,7 +106,18 @@
     filter = $bindable("open"),
     sort = $bindable("newest"),
     scroll = $bindable(0),
+    stateOf,
+    onother,
   }: {
+    /**
+     * On a component canvas, the state each pin was placed on: whether it is
+     * the one kept now (or previewed), and its path in words. Pins on other
+     * states stand in their own group, "On other states" (the primitives
+     * spec §4.2); none off a canvas.
+     */
+    stateOf?: (pin: Pin) => { here: boolean; words: string | null };
+    /** A row on another state pressed: that state is kept, then its thread opens. */
+    onother?: (pin: Pin) => void;
     pins: Pin[];
     /** Whether the pins are read yet (artifact-doc.ts `ListHold`). */
     hold: ListHold;
@@ -186,6 +199,16 @@
           sortedPins(filter === "open" ? openPins : resolvedPins, sort),
           asked
         )
+  );
+  /** The rows on the state kept now, and those on other states, which fold into their own group (call 6). */
+  const grouped = $derived(
+    !!stateOf && filter !== "check" && graphOptions.sides.otherPins === "hidden"
+  );
+  const here = $derived(
+    grouped ? shown.filter((pin) => stateOf?.(pin).here !== false) : shown
+  );
+  const elsewhere = $derived(
+    grouped ? shown.filter((pin) => stateOf?.(pin).here === false) : []
   );
   const failed = $derived(typeof hold === "object" ? hold.failed : null);
   /** A tab's label: its count once the pins are read, and only above 0 (The Earned Count Rule). */
@@ -314,8 +337,9 @@
   };
 </script>
 
-{#snippet row(pin: Pin)}
+{#snippet row(pin: Pin, other = false)}
   {@const attached = attachedTo(pin)}
+  {@const statePath = other ? (stateOf?.(pin).words ?? null) : null}
   {@const back = backOf(pin)}
   {@const gone = !!pin.movedAt}
   {@const washed = pin.id === current}
@@ -335,7 +359,9 @@
       data-pin-row={pin.number}
       onblur={() => onhover(null)}
       onclick={(event) =>
-        onopen(pin.id, event.detail === 0 ? "key" : "pointer")}
+        other && onother
+          ? onother(pin)
+          : onopen(pin.id, event.detail === 0 ? "key" : "pointer")}
       onfocus={() => onhover(pin.id)}
       onpointerenter={() => onhover(pin.id)}
       onpointerleave={() => onhover(null)}
@@ -361,7 +387,11 @@
             class={[
               "min-w-0 truncate type-label font-medium",
               ink(washed, gone ? "text-ink-subtle" : "text-ink-row"),
-            ]}>{gone ? said.elementGone : pinName(pin)}</span
+            ]}
+            title={statePath ?? undefined}
+            >{#if statePath}{statePath}{:else}{gone
+                ? said.elementGone
+                : pinName(pin)}{/if}</span
           >
           <span
             data-slot="age"
@@ -683,11 +713,34 @@
             </p>
           {/if}
         {:else if shown.length > 0}
-          <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
-            {#each shown as pin (pin.id)}
-              {@render row(pin)}
-            {/each}
-          </ol>
+          {#if here.length > 0}
+            <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
+              {#each here as pin (pin.id)}
+                {@render row(pin)}
+              {/each}
+            </ol>
+          {/if}
+          {#if elsewhere.length > 0}
+            <!-- Pins placed on states not kept now: each row names its state, a press keeps it and opens the thread there. -->
+            <section
+              aria-labelledby="pins-other-states"
+              class={here.length > 0 ? "mt-space-3" : ""}
+              data-slot="on-other-states"
+            >
+              <h3
+                class="m-0 flex items-baseline gap-space-2 px-space-2 pb-space-1 type-caps text-ink-muted"
+                id="pins-other-states"
+              >
+                {graphWords.onOtherStates}
+                <span class="num">{elsewhere.length}</span>
+              </h3>
+              <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
+                {#each elsewhere as pin (pin.id)}
+                  {@render row(pin, true)}
+                {/each}
+              </ol>
+            </section>
+          {/if}
         {:else if asked.trim()}
           <p
             data-slot="pin-list-empty"

@@ -354,6 +354,11 @@
   --spacing-c-graph-panel-w: var(--c-graph-panel-w);
   --spacing-c-graph-node-w: var(--c-graph-node-w);
   --spacing-c-graph-node-min-w: var(--c-graph-node-min-w);
+  --spacing-c-steps-bar-h: var(--c-steps-bar-h);
+  --spacing-c-steps-stop-min-w: var(--c-steps-stop-min-w);
+  --spacing-c-graph-label-max-w: var(--c-graph-label-max-w);
+  --spacing-c-count-figure-w: var(--c-count-figure-w);
+  --spacing-c-pair-min-w: var(--c-pair-min-w);
   --spacing-c-graph-drawer-stop: var(--c-graph-drawer-stop);
   --spacing-c-pin-list-min: var(--c-pin-list-min);
   --spacing-c-pin-list-max: var(--c-pin-list-max);
