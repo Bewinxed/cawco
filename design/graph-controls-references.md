@@ -26,7 +26,8 @@ lands on the sidebar the moment you make it").
 
 The hint taken: the slider should be the thing it controls, compact enough
 to need no copy around it: the state's name and its place (3/6) inside one
-draggable field, a notch per stop, and the page changing under the drag.
+draggable field, the fill's edge marking where the drag began, and the page
+changing under the drag.
 That is call 1's first side, and call 3's first side for the dials.
 
 ## Stage and step progression
@@ -49,6 +50,8 @@ That is call 1's first side, and call 3's first side for the dials.
 
 | Product | Screen | What it solves here | URL |
 |---|---|---|---|
+| Apple HIG | Sheets: detents a sheet rests at, a grabber whose tap cycles them | The phone's timeline on Steps resting at its head detent and opening to the medium one. | https://developer.apple.com/design/human-interface-guidelines/sheets |
+| Apple Music | The MiniPlayer as the tab bar's accessory: the playing item's name and Play on one row, a press opens the player (HIG Tab bars) | The timeline folded to the move's name and Play under the page on a phone. | https://developer.apple.com/design/human-interface-guidelines/tab-bars |
 | Apple HIG | Tab bars, iOS: the bar minimises into a small control as you scroll and comes back on a tap; visionOS: symbols alone until looked at, then labels | Fold to a pill, peek on rest, back on a press. Every side's Hide. | https://developer.apple.com/design/human-interface-guidelines/tab-bars |
 | Apple Books | The folded "150 of 483" pill | What the folded bar says: the place, nothing else. | https://mobbin.com/screens/a483f043-eb34-423c-ab19-bbf50655cef6 |
 | Tana | Canvas: a bottom-centred floating toolbar with a chevron that collapses it | Bottom-centre glass bar with its own collapse. | https://mobbin.com/screens/c7c9ca53-53f0-414b-ae58-80818ea27f38 |
@@ -94,7 +97,7 @@ Each line: the sides, the reference each comes from, and the recommendation.
 
 - **Many steps on a phone (scroll or dots).** Not a question once the bar
   is designed: each side of call 1 holds many steps itself (the field's
-  notches, then none past 24; the scrubber's dots, then one line past what
+  one fill and figure; the scrubber's dots, then one line past what
   dots can count, per HIG Page controls; the player's segments), with no
   per-stop label that has to scroll.
 - **Pins on other states.** Hidden, grouped in the rail. Air

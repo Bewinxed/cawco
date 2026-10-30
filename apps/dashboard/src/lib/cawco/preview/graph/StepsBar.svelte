@@ -6,8 +6,9 @@
    * references in design/graph-controls-references.md):
    *
    * - `field` (Dessn's controls, nim's tweet): one field, the kept state's
-   *   name at its start and 3/6 at its end, its fill up to the kept stop and
-   *   a notch per stop; the whole field scrubs. Top of the page, the
+   *   name at its start and 3/6 at its end, its fill up to the kept stop;
+   *   the whole field scrubs, and a resting pointer draws the band to the
+   *   stop under it. Top of the page, the
    *   switch leading.
    * - `scrubber` (Apple Books' page scrubber, HIG Page controls): a dot per
    *   stop beside the kept name, the stop under the pointer or finger named
@@ -397,12 +398,17 @@
       data-dragging={graph.scrubAt !== null || undefined}
       data-track
     >
-      <!-- The fill, up to the kept stop (where the finger is, held); the ghost, up to the stop a pointer rests on. -->
-      {#if aimed !== null && graph.scrubAt === null}
+      <!--
+        The fill, up to the kept stop (where the finger is, held). A pointer resting on another stop draws the band between
+        the two in the lighter fill, so the fill's edge always marks where it started (Dessn's mark of where a value began);
+        the place itself is the figure's, so no mark crosses the name, the figure or the rim.
+      -->
+      {#if aimed !== null && graph.scrubAt === null && aimed !== Math.round(place)}
         <span
           aria-hidden="true"
           class="pointer-events-none absolute inset-y-0 start-0 w-(--to) rounded-pill bg-surface-fill-strong/50"
-          style:--to={`calc(var(--c-btn-h) + (100% - var(--c-btn-h)) * ${fraction(aimed)})`}
+          style:--to={`calc(var(--c-btn-h) + (100% - var(--c-btn-h)) * ${fraction(Math.max(aimed, place))})`}
+          data-band
         ></span>
       {/if}
       <span
@@ -412,32 +418,12 @@
           graph.scrubAt === null &&
             "transition-[width] duration-(--dur-control) ease-out motion-reduce:transition-none",
         ]}
-        style:--to={`calc(var(--c-btn-h) + (100% - var(--c-btn-h)) * ${fraction(place)})`}
+        style:--to={`calc(var(--c-btn-h) + (100% - var(--c-btn-h)) * ${fraction(
+          aimed !== null && graph.scrubAt === null
+            ? Math.min(aimed, place)
+            : place
+        )})`}
       ></span>
-      <!-- A notch per stop along the field's top, the kept one inked, a missing one hollow; gone where they'd crowd. -->
-      {#if count > 1 && count <= 24}
-        <span
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-x-(--half) top-space-1 h-space-1"
-          style:--half="calc(var(--c-btn-h) / 2)"
-        >
-          {#each steps as step, at (step.point.story)}
-            <i
-              class={[
-                "absolute top-0 start-(--x) size-1 -translate-x-1/2 rtl:translate-x-1/2 rounded-pill",
-                markOf(
-                  at,
-                  step,
-                  "bg-ink-strong",
-                  "border border-ink-muted",
-                  "bg-ink-muted"
-                ),
-              ]}
-              style:--x={share(at)}
-            ></i>
-          {/each}
-        </span>
-      {/if}
       <span
         class={[
           "relative min-w-0 flex-1 truncate ps-space-4 type-label",
