@@ -14,7 +14,11 @@
  * replaced by one snapshot.
  */
 import type { CanvasAuthor } from "@cawco/core/canvas";
-import { honourDeletions, splitWholePins } from "@cawco/core/comments";
+import {
+  dropRepeatedFiles,
+  honourDeletions,
+  splitWholePins,
+} from "@cawco/core/comments";
 import { RESYNC_MS } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS, mapsOf } from "@cawco/core/doc-maps";
 import {
@@ -263,11 +267,19 @@ export const createArtifactDocs = (deps: {
     // A doc written while each pin was one whole value is split into its
     // parts once, here, as the hub's own update: kept in the log like any
     // other, so every client joining reads the parts, and the next load
-    // finds nothing to split.
+    // finds nothing to split. An entry stored with one file twice is written
+    // again the same way, so no person's write meets a doc the gate refuses.
     let whole = 0;
+    let repeated = 0;
     doc.transact(() => {
       whole = splitWholePins(doc);
+      repeated = dropRepeatedFiles(doc);
     }, "hub");
+    if (repeated > 0) {
+      console.log(
+        `[artifacts] ${id}: ${repeated} thread entries that held one file twice hold it once now`
+      );
+    }
     if (whole > 0) {
       console.log(
         `[artifacts] ${id}: ${whole} pin(s) written whole are kept in their parts now`

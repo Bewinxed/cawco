@@ -270,6 +270,24 @@ export interface CommentAttachment {
 /** A hub file reference: `/api/files/` and the bytes' sha256. */
 const FILE_REF = /^\/api\/files\/[0-9a-f]{64}$/u;
 
+/**
+ * `attachments` with each file once, the first of each as attached. A
+ * reference is the hash of the bytes, so one picture pasted twice is the same
+ * reference twice, and every list of what a person attached is keyed by it.
+ */
+export const eachFileOnce = (
+  attachments: CommentAttachment[]
+): CommentAttachment[] => {
+  const seen = new Set<string>();
+  return attachments.filter((one) => {
+    if (seen.has(one.ref)) {
+      return false;
+    }
+    seen.add(one.ref);
+    return true;
+  });
+};
+
 export interface ThreadEntry {
   /**
    * An agent's reply that needs the person's answer or pick
@@ -587,6 +605,42 @@ export function splitWholePins(doc: MapDoc): number {
     });
   }
   return whole.length;
+}
+
+/**
+ * Writes again every entry stored with one file twice, once, as the hub
+ * loads the doc: a person's attachments from before {@link personEntry} kept
+ * each file once, an agent's named files from before the hub did. Nothing
+ * else of the entry changes, so the session is not told it again
+ * ({@link pinSaid}). Answers how many entries it wrote.
+ */
+export function dropRepeatedFiles(doc: MapDoc): number {
+  const entries = entriesOf(doc);
+  const repeated = [...entries.entries()].flatMap(([key, entry]) => {
+    const attachments = eachFileOnce(entry.attachments ?? []);
+    const files = [...new Set(entry.files)];
+    return attachments.length < (entry.attachments?.length ?? 0) ||
+      files.length < (entry.files?.length ?? 0)
+      ? [
+          {
+            key,
+            entry: {
+              ...entry,
+              ...(entry.attachments ? { attachments } : {}),
+              ...(entry.files ? { files } : {}),
+            },
+          },
+        ]
+      : [];
+  });
+  if (repeated.length > 0) {
+    doc.transact(() => {
+      for (const { key, entry } of repeated) {
+        entries.set(key, entry);
+      }
+    });
+  }
+  return repeated.length;
 }
 
 /**
@@ -958,9 +1012,12 @@ const attachmentsProblem = (attachments: unknown): string | null => {
     typeof one.mediaType === "string" &&
     (one.width === undefined || typeof one.width === "number") &&
     (one.height === undefined || typeof one.height === "number");
-  return attachments.every(whole)
-    ? null
-    : "An attachment names its kind, name, size, media type and the hub's /api/files reference.";
+  if (!attachments.every(whole)) {
+    return "An attachment names its kind, name, size, media type and the hub's /api/files reference.";
+  }
+  return eachFileOnce(attachments).length < attachments.length
+    ? "A comment carries each file once."
+    : null;
 };
 
 /** Why a thread entry may not be kept; null when it may. */
@@ -1332,7 +1389,7 @@ function personEntry(
   what: "comment" | "reply"
 ): ThreadEntry | string {
   const text = said.text.trim();
-  const attachments = said.attachments ?? [];
+  const attachments = eachFileOnce(said.attachments ?? []);
   const again = what === "comment" ? "comment again" : "reply again";
   if (!(text || attachments.length > 0)) {
     return `This ${what} has no words and nothing attached, so it wasn't kept. Write something or attach a file, then ${again}.`;

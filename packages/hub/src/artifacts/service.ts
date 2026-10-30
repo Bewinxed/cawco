@@ -4284,6 +4284,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         })
       );
       for (const { one, bytes } of stored) {
+        // One file in two entries rides once: `carried` names one picture for both.
+        if (carried.has(one.ref)) {
+          continue;
+        }
         const how = carryOne(one, bytes, images);
         carried.set(one.ref, how.carried);
         if (how.attachment) {
@@ -7935,7 +7939,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         by: "agent",
         text,
         at: new Date().toISOString(),
-        ...(files && files.length > 0 ? { files } : {}),
+        ...(files && files.length > 0 ? { files: [...new Set(files)] } : {}),
         ...(asks ? { asks: true as const } : {}),
       };
       // An answer means everything before it was heard (core `pinHeard`).

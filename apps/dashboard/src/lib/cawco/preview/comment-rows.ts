@@ -2,7 +2,11 @@
  * The Comments rail's rows (DESIGN.md, The Comments rail): how they are
  * found, ordered and what each carries, shared by the rail and the peek.
  */
-import type { CommentAttachment, Pin } from "@cawco/core/comments";
+import {
+  type CommentAttachment,
+  eachFileOnce,
+  type Pin,
+} from "@cawco/core/comments";
 import { field, type MatchEntry, matchOf, parse } from "@cawco/core/find-match";
 import { pinName } from "@cawco/core/pin-name";
 import type { PendingFile } from "../transcript/composer-draft.svelte";
@@ -65,11 +69,16 @@ export const sortedPins = (pins: Pin[], sort: RailSort): Pin[] =>
     );
   });
 
-/** A row's strip: its first pictures and files, at most four, then how many more. */
+/**
+ * A row's strip: its first pictures and files, at most four, then how many
+ * more. A comment and its reply may each carry the same file: it is one thumb.
+ */
 export const STRIP = 4;
 export const attachedTo = (pin: Pin): CommentAttachment[] =>
-  pin.thread.flatMap((entry) =>
-    entry.by === "person" ? (entry.attachments ?? []) : []
+  eachFileOnce(
+    pin.thread.flatMap((entry) =>
+      entry.by === "person" ? (entry.attachments ?? []) : []
+    )
   );
 
 /** The next comment's draft, beside the replies' (by pin id): comment-drafts.svelte.ts. */
