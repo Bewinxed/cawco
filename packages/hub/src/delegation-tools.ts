@@ -20,6 +20,7 @@ import type {
   Browsed,
   CommentRead,
   Created,
+  FixtureWritten,
   Promoted,
   Removed,
   Revised,
@@ -40,6 +41,7 @@ import {
   commentReply,
   commentResolve,
   designMap,
+  recordsFixture,
   settle,
 } from "./artifacts/tools";
 import {
@@ -68,6 +70,7 @@ import {
   commentRepliedWords,
   commentResolvedWords,
   designMapWords,
+  recordsFixtureWords,
   settledWords,
   type Updated,
 } from "./presenters/artifacts";
@@ -990,6 +993,18 @@ export function handoffTools(deps: HandoffDeps) {
       },
       designMapWords,
       { annotations: READ_ONLY }
+    ),
+    tool(
+      recordsFixture.name,
+      recordsFixture.description,
+      recordsFixture.input,
+      (ask) =>
+        actions.artifactCall(
+          "POST",
+          "/records-fixture",
+          ask
+        ) as Promise<FixtureWritten>,
+      recordsFixtureWords
     ),
     tool(
       artifactShow.name,

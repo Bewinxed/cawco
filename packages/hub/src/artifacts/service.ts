@@ -13,6 +13,7 @@
  * as one message ({@link ArtifactServiceDeps.deliverMarks}); a sheet's
  * saves and compile errors go the same way once quiet {@link MARKS_QUIET_MS}.
  */
+
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
@@ -185,6 +186,13 @@ import {
   folderFileNames,
   folderPath,
 } from "../project-folder";
+import {
+  FIXTURE_LIMITS,
+  type Fixture,
+  type FixtureKind,
+  fixtureOf,
+} from "../records-fixture";
+import { redactSecrets } from "../secret-filter";
 import {
   canvasEntries,
   convertOnScreen,
@@ -870,6 +878,13 @@ const stateOfPin = (
   const path = graph && sheet ? pinPathOf(graph, sheet) : undefined;
   return path === undefined ? {} : { onState: { path, node: !!sheet?.node } };
 };
+
+/** What `records_fixture` wrote: the file (none when the kind has no records), how many of how many, the fields each record carries, and what was redacted. */
+export interface FixtureWritten extends Omit<Fixture, "text"> {
+  file: string | null;
+  formatted: string | null;
+  kind?: FixtureKind;
+}
 
 /** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
 export interface CanvasExport {
@@ -1596,6 +1611,11 @@ export interface ArtifactServiceDeps {
    * gone, or nothing can give it a turn again. A machine away is not.
    */
   finished: (instance: InstanceRow) => boolean;
+  /** A project's records of a kind, as the hub's own readers hand them, for `records_fixture` (records-fixture.ts projects and redacts them). */
+  fixtureRecords: (
+    projectId: string,
+    kind: FixtureKind
+  ) => Promise<Record<string, unknown>[]>;
   /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
   folderWeight: (
     machineId: string,
@@ -5226,7 +5246,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
-      meta.set("sheet", edit.sheet);
+      if (edit.sheet) {
+        meta.set("sheet", edit.sheet);
+      }
       if (by === "person") {
         const owed = (meta.get("saves") as string[] | undefined) ?? [];
         meta.set("saves", [...owed, saveSection(change, edit)]);
@@ -7311,6 +7333,47 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     verifyFor: (instanceId: string, id: string): Promise<string> => {
       const { owner, row } = panelHeld(instanceId, id);
       return askVerify(owner, row);
+    },
+
+    /**
+     * `records_fixture`: a fixture module of the session's project's real
+     * records of `ask.kind`, trimmed to its count and redacted
+     * (records-fixture.ts), written whole into the session's workspace by
+     * its stage at `ask.as`, in the project's own format. A kind with no
+     * records writes nothing.
+     */
+    recordsFixture: async (
+      instanceId: string,
+      ask: { as: string; count?: number; export?: string; kind: FixtureKind }
+    ): Promise<FixtureWritten> => {
+      const instance = sessionOf(instanceId);
+      if (!instance.projectId) {
+        throw new ArtifactRefusal(
+          409,
+          "records_fixture reads a project's records, and this session is in no project."
+        );
+      }
+      const fixture = await fixtureOf(
+        { records: deps.fixtureRecords, secrets: redactSecrets },
+        instance.projectId,
+        ask.kind,
+        ask.count ?? FIXTURE_LIMITS.count,
+        ask.export ?? ask.kind.toUpperCase()
+      );
+      const { text, ...said } = fixture;
+      if (fixture.written === 0) {
+        return { ...said, kind: ask.kind, file: null, formatted: null };
+      }
+      const made = await deps.stageWrite(
+        { session: instance },
+        { file: ask.as, text }
+      );
+      return {
+        ...said,
+        kind: ask.kind,
+        file: made.file,
+        formatted: made.formatted,
+      };
     },
 
     /** `design_map`: the session's workspace's components, paged, or one component's card (agent stage.ts `stageComponents`). */
