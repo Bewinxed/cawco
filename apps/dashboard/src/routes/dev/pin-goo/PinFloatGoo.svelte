@@ -18,10 +18,10 @@
      the card pulls a neck out of its pin that thins as they part. Each
      frame only writes: every size is read before the run (the pin's box,
      the card's), and the frame computes and sets the path, the thread's
-     clip and the rim. Its drop (`drop-shadow-drop-near`) is a copy of the
-     outline drawn once it stands still, faded out over a run (grown.ts's
-     rule), so no frame redraws a shadow. What stands on it fades as the
-     demo's icons do: the thread in over `--dur-goo-content` after
+     clip and the rim. Its drop (`drop-shadow-drop-near`) is a `<use>` of that
+     one path, with no geometry of its own, faded out over a run (grown.ts's
+     rule) since no transition may carry `filter`. What stands on it fades as
+     the demo's icons do: the thread in over `--dur-goo-content` after
      `--dur-goo-content-delay`, out over `--dur-goo-content-exit`, on
      `--ease-goo-content`, without their blur; clipped to the card's box as
      drawn all the while. As it closes, the pin and the shape dip
@@ -179,7 +179,6 @@
   let goo = $state<SVGSVGElement>();
   let rimLayer = $state<SVGSVGElement>();
   let shapePath = $state<SVGPathElement>();
-  let dropPath = $state<SVGPathElement>();
   let rimGroup = $state<SVGGElement>();
   let rimTrace = $state<SVGPathElement>();
   let rimInside = $state<SVGRectElement>();
@@ -411,12 +410,11 @@
       frame = requestAnimationFrame(tick);
     }
   }
-  /** It stands still: its drop drawn once, under the outline as it stands, and the thread unclipped once it is open. */
+  /** It stands still: its drop back, and the thread unclipped once it is open. */
   function still() {
     if (float) {
       delete float.dataset.run;
     }
-    dropPath?.setAttribute("d", shapePath?.getAttribute("d") ?? "");
     if (clipWrap && poured >= 1) {
       clipWrap.style.clipPath = "none";
     }
@@ -814,25 +812,28 @@
   style:--pin-x="{pinHere?.x ?? 0}px"
   style:--pin-y="{pinHere?.y ?? 0}px"
 >
-  <!-- The one silhouette: the pin, the bridge and the card as one path,
-       its drop under it drawn once it stands still. -->
+  <!-- The one silhouette: the pin, the bridge and the card as one path, its
+       drop that same path by reference. The stroke stands on the path's
+       group, so the drop, outside it, draws the fill alone. -->
   <svg
     aria-hidden="true"
     bind:this={goo}
     class="pointer-events-none absolute start-0 top-0 -z-1 size-full overflow-visible"
     data-slot="pin-goo"
   >
-    <path
-      bind:this={dropPath}
-      class="fill-surface-raised drop-shadow-drop-near transition-opacity duration-(--dur-goo-content) ease-goo-content group-data-run/goo:opacity-0 group-data-run/goo:duration-(--dur-goo-content-exit) motion-reduce:transition-none"
+    <use
+      class="drop-shadow-drop-near transition-opacity duration-(--dur-goo-content) ease-goo-content group-data-run/goo:opacity-0 group-data-run/goo:duration-(--dur-goo-content-exit) motion-reduce:transition-none"
       data-slot="goo-drop"
+      href="#{uid}-goo-shape"
     />
-    <path
-      bind:this={shapePath}
-      class="fill-surface-raised stroke-border-control"
-      data-slot="goo-shape"
-      stroke-width="1"
-    />
+    <g class="stroke-border-control" stroke-width="1">
+      <path
+        bind:this={shapePath}
+        class="fill-surface-raised"
+        data-slot="goo-shape"
+        id="{uid}-goo-shape"
+      />
+    </g>
   </svg>
   <!-- The pin over the shape (the demo's crisp trigger): its own face, or,
        joined, its figure on the card's surface. The two trade places at once,
