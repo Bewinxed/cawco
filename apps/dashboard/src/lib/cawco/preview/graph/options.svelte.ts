@@ -89,12 +89,13 @@ class GraphOptions {
   /** The recommendation, else the sides the address names (`?graph-options=bar:player,wide:pair`), so a side opens cold. */
   sides = $state<Sides>({ ...RECOMMENDED, ...namedSides() });
 
-  /** The Options panel is drawn: the page was opened with `?graph-options`. */
+  /** The Options panel is drawn: the page was opened with `?graph-options`, and not `?bare` (one side shown as a decision page's option). */
   get shown(): boolean {
-    return (
-      typeof location !== "undefined" &&
-      new URLSearchParams(location.search).has("graph-options")
-    );
+    if (typeof location === "undefined") {
+      return false;
+    }
+    const params = new URLSearchParams(location.search);
+    return params.has("graph-options") && !params.has("bare");
   }
 
   set<C extends GraphCall>(call: C, side: SideOf<C>): void {
