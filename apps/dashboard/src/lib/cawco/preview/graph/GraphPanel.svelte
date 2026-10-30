@@ -52,6 +52,7 @@
   import GraphOptions from "./GraphOptions.svelte";
   import MoveDock from "./MoveDock.svelte";
   import { graphOptions } from "./options.svelte";
+  import PlayButton from "./PlayButton.svelte";
   import ResizeHandle, { type HandleState } from "./ResizeHandle.svelte";
   import StateGraph from "./StateGraph.svelte";
   import type { NodePin } from "./StateNode.svelte";
@@ -159,6 +160,13 @@
 
   type Stop = "head" | "peek" | "full";
   let stop = $state<Stop>("peek");
+  /**
+   * On Steps the timeline is the drawer's one face, resting at its head (the
+   * move's name and Play, as Music's mini player rests on its tab bar) so the
+   * page keeps the screen; the grabber, a drag or the name opens it to its
+   * detents (HIG Sheets: a grabber's tap cycles them).
+   */
+  let stepsStop = $state<Stop>("head");
   let dragged = $state<number | null>(null);
   /** A length token in px whatever its unit (`45dvh`, `85vh`), measured on a probe as the pane resolves it. */
   let probe = $state<HTMLElement>();
@@ -183,8 +191,15 @@
   };
   /** On Steps with no move the bar holds the switch, so the drawer stands nowhere. */
   const drawerShown = $derived(!(onSteps && !hasMove));
+  /** The detent the drawer rests at: on Steps the timeline's own, else the graph's while it is open. */
+  const restsAt = $derived.by((): Stop => {
+    if (onSteps) {
+      return stepsStop;
+    }
+    return graph.open ? stop : "head";
+  });
   const drawerHeight = $derived(
-    drawerShown ? (dragged ?? stopHeight(graph.open ? stop : "head")) : 0
+    drawerShown ? (dragged ?? stopHeight(restsAt)) : 0
   );
 
   /** What stands at the pane's foot under the page: the drawer on a narrow pane, the dock beside the panel on a desk. */
@@ -589,7 +604,9 @@
             Math.abs(stopHeight(a) - at) <= Math.abs(stopHeight(b) - at) ? a : b
         );
         dragged = null;
-        if (nearestStop === "head") {
+        if (onSteps) {
+          stepsStop = nearestStop;
+        } else if (nearestStop === "head") {
           setOpen(false);
         } else {
           stop = nearestStop;
@@ -602,6 +619,12 @@
     addEventListener("pointercancel", done);
   }
   function grabberPress(): void {
+    if (onSteps) {
+      stepsStop = ({ head: "peek", peek: "full", full: "head" } as const)[
+        stepsStop
+      ];
+      return;
+    }
     if (!graph.open) {
       setOpen(true);
       return;
@@ -1123,7 +1146,10 @@
           {@attach frameSize((node: HTMLElement) => {
             headHeight = node.offsetHeight;
           })}
-          class="relative flex flex-none touch-none items-center justify-center gap-space-2 px-space-2 pt-space-3 pb-space-2"
+          class={[
+            "relative flex flex-none touch-none items-center justify-center gap-space-2 pt-space-3 pb-space-2",
+            onSteps ? "px-c-btn-h-lg" : "px-space-2",
+          ]}
           onpointerdown={headDown}
         >
           <button
@@ -1134,6 +1160,22 @@
             type="button"
           ></button>
           {#if !onSteps}{@render indexSwitch()}{/if}
+          {#if onSteps && graph.move && stepsStop === "head"}
+            <!-- The timeline at rest: Play, and the move's name, which opens it. -->
+            <!-- Placed by a box of its own: the group's own class sets it relative, which a passed position loses to. -->
+            <div class="absolute start-space-2">
+              <GlassGroup><PlayButton {graph} /></GlassGroup>
+            </div>
+            <button
+              class="h-c-btn-h max-w-full min-w-0 truncate rounded-sm px-space-2 type-label text-ink-strong touch-hit {RING}"
+              data-timeline-name
+              onclick={() => {
+                stepsStop = "peek";
+              }}
+              title={words.timelineShow}
+              type="button">{words.move(graph.move.from, graph.move.to)}</button
+            >
+          {/if}
           {#if !onSteps && hasMove}
             <GlassGroup>
               <Tabs
@@ -1153,20 +1195,44 @@
               </Tabs>
             </GlassGroup>
           {/if}
-          <GlassGroup class="absolute end-space-2">
-            <button
-              bind:this={hide}
-              aria-expanded={graph.open}
-              aria-label={graph.open ? words.hide : words.show}
-              class={SYMBOL}
-              data-hide-graph
-              onclick={() => setOpen(!graph.open)}
-              title={graph.open ? words.hide : words.show}
-              type="button"
-            >
-              {#if graph.open}<IconChevronDown />{:else}<IconChevronUp />{/if}
-            </button>
-          </GlassGroup>
+          <div class="absolute end-space-2">
+            <GlassGroup>
+              {#if onSteps}
+                <button
+                  aria-expanded={stepsStop !== "head"}
+                  aria-label={stepsStop === "head"
+                    ? words.timelineShow
+                    : words.timelineHide}
+                  class={SYMBOL}
+                  data-timeline-toggle
+                  onclick={() => {
+                    stepsStop = stepsStop === "head" ? "peek" : "head";
+                  }}
+                  title={stepsStop === "head"
+                    ? words.timelineShow
+                    : words.timelineHide}
+                  type="button"
+                >
+                  {#if stepsStop === "head"}<IconChevronUp
+                    />{:else}<IconChevronDown />{/if}
+                </button>
+              {:else}
+                <button
+                  bind:this={hide}
+                  aria-expanded={graph.open}
+                  aria-label={graph.open ? words.hide : words.show}
+                  class={SYMBOL}
+                  data-hide-graph
+                  onclick={() => setOpen(!graph.open)}
+                  title={graph.open ? words.hide : words.show}
+                  type="button"
+                >
+                  {#if graph.open}<IconChevronDown />{:else}<IconChevronUp
+                    />{/if}
+                </button>
+              {/if}
+            </GlassGroup>
+          </div>
         </header>
         <!-- Clipped to the drawer: folded to its head, what it holds stands inside it, never under the pane's foot. -->
         <div
@@ -1175,7 +1241,7 @@
             // The timeline lays its own inline room, so its head's hairline runs the drawer's whole width.
             !((onSteps || graph.face === "move") && hasMove) && "px-space-2",
           ]}
-          inert={!graph.open}
+          inert={onSteps ? stepsStop === "head" : !graph.open}
         >
           {#if (onSteps || graph.face === "move") && hasMove}
             <MoveDock {graph} />

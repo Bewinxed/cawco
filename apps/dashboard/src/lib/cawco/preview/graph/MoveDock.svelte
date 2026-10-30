@@ -31,7 +31,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { IconPause, IconPlay, IconRepeat } from "#lib/icons.js";
+  import { IconRepeat } from "#lib/icons.js";
   import ClipControls from "./ClipControls.svelte";
   import CurveGlyph from "./CurveGlyph.svelte";
   import {
@@ -44,6 +44,7 @@
   import type { DesignGraph } from "./design-graph.svelte";
   import GlassGroup from "./GlassGroup.svelte";
   import KindGlyph from "./KindGlyph.svelte";
+  import PlayButton from "./PlayButton.svelte";
   import { GHOST, RING, SYMBOL } from "./symbol";
 
   let { graph }: { graph: DesignGraph } = $props();
@@ -399,16 +400,7 @@
         </Tabs>
       {/if}
       <GlassGroup class="ms-auto flex-none">
-        <button
-          aria-label={graph.playing ? words.pause : words.play}
-          class={SYMBOL}
-          data-play
-          onclick={() => (graph.playing ? graph.stop() : graph.play())}
-          title={graph.playing ? words.pause : words.play}
-          type="button"
-        >
-          {#if graph.playing}<IconPause />{:else}<IconPlay />{/if}
-        </button>
+        <PlayButton {graph} />
         <button
           aria-label={words.loop}
           aria-pressed={graph.looping}
