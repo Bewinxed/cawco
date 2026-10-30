@@ -1,7 +1,7 @@
 /**
  * A component canvas as the agent's tools speak of it (component canvas
  * §4): what `artifact_create` and `artifact_update` take beyond its states
- * files (`edges`, `group`, `dials`), the canvas page's address on
+ * files (`steps`, `edges`, `group`, `dials`), the canvas page's address on
  * the stage that carries them, and the bounded answers `artifact_create`,
  * `artifact_read` and `artifact_update` give, every one read from the render
  * report the canvas page posts (core `RenderReport`), never from the files
@@ -26,6 +26,8 @@ export interface CanvasInput {
   dials?: CanvasDial[] | undefined;
   edges?: CanvasEdge[] | undefined;
   group?: Record<string, string> | undefined;
+  /** The sequence the step slider scrubs: stories by export, or `file:Story` across files. */
+  steps?: string[] | undefined;
 }
 
 /** An example call, quoted by every refusal of a component canvas's shape. */
@@ -33,34 +35,76 @@ export const COMPONENT_EXAMPLE =
   'artifact_create({ kind: "component", name: "pairing", does: "judge", ask: "Judge the six pairing states: pin anything that reads wrong", file: "src/lib/Pairing.stories.ts" })';
 
 /** What `artifact_create` takes, said whole when a body is malformed or names no `does` or `ask`. */
-export const CREATE_SHAPE = `artifact_create takes kind, name, does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A component canvas: { kind: "component", name, does: "judge", ask, file, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle", min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
+export const CREATE_SHAPE = `artifact_create takes kind, name, does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A component canvas: { kind: "component", name, does: "judge", ask, file, steps?, edges?, group?, dials? }; steps ["Empty", "Filled", "Saving"] (the sequence the step slider scrubs; without it the canvas opens on the graph); edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "count" | "longest", by? (longest: the record field whose length orders them), min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }], a count or longest on an array arg: { name: "rows", kind: "count", target: { arg: "rows" } }. Example: ${COMPONENT_EXAMPLE}.`;
 
 /** Why a canvas's edges, groups or dials can't be taken, one sentence with the shape; null when they can. */
 export function canvasProblem(input: CanvasInput): string | null {
   if ((input.edges?.length ?? 0) > CANVAS_SPEC_LIMITS.edges) {
     return `A canvas takes at most ${CANVAS_SPEC_LIMITS.edges} edges: { from: "<Story>", to: "<Story>", label? }, a story named by its export, or "file:Story" across states files.`;
   }
+  if ((input.steps?.length ?? 0) > CANVAS_SPEC_LIMITS.steps) {
+    return `A canvas takes at most ${CANVAS_SPEC_LIMITS.steps} steps: stories by export in the order the person meets them, like ["Empty", "Filled", "Saving"].`;
+  }
   if ((input.dials?.length ?? 0) > CANVAS_SPEC_LIMITS.dials) {
     return `A canvas takes at most ${CANVAS_SPEC_LIMITS.dials} dials.`;
   }
   for (const dial of input.dials ?? []) {
-    const target = dial.target as { arg?: unknown; cssVar?: unknown };
-    const css =
-      typeof target.cssVar === "string" && target.cssVar.startsWith("--");
-    const arg = typeof target.arg === "string" && target.arg.length > 0;
-    if (css === arg) {
-      return `Dial ${dial.name}'s target is one of { cssVar: "--radius" } (a CSS variable set on every frame) or { arg: "size" } (a story arg, re-rendered in place). Example: { name: "radius", kind: "number", min: 0, max: 24, unit: "px", target: { cssVar: "--radius" } }.`;
-    }
-    if (dial.kind === "select" && !dial.options?.length) {
-      return `Dial ${dial.name} is a select: it takes options, like ["sm", "md", "lg"].`;
+    const problem = dialProblem(dial);
+    if (problem) {
+      return problem;
     }
   }
   return null;
 }
 
-/** The canvas's spec its page is given: its name, edges, groups and dials. */
+/** Why one dial can't be taken: its target, a select's options, a record dial's arg and `by`. */
+function dialProblem(dial: CanvasDial): string | null {
+  const target = dial.target as { arg?: unknown; cssVar?: unknown };
+  const css =
+    typeof target.cssVar === "string" && target.cssVar.startsWith("--");
+  const arg = typeof target.arg === "string" && target.arg.length > 0;
+  if (css === arg) {
+    return `Dial ${dial.name}'s target is one of { cssVar: "--radius" } (a CSS variable set on every frame) or { arg: "size" } (a story arg, re-rendered in place). Example: { name: "radius", kind: "number", min: 0, max: 24, unit: "px", target: { cssVar: "--radius" } }.`;
+  }
+  if (dial.kind === "select" && !dial.options?.length) {
+    return `Dial ${dial.name} is a select: it takes options, like ["sm", "md", "lg"].`;
+  }
+  if ((dial.kind === "count" || dial.kind === "longest") && !arg) {
+    return `Dial ${dial.name} is a ${dial.kind}: it ranges over a story's array arg, { arg: "rows" }. Example: { name: "rows", kind: "count", target: { arg: "rows" } }.`;
+  }
+  if (dial.kind === "longest" && !dial.by?.trim()) {
+    return `Dial ${dial.name} is a longest: it takes by, the record field whose length orders them. Example: { name: "longest", kind: "longest", by: "name", target: { arg: "rows" } }.`;
+  }
+  return null;
+}
+
+/**
+ * Why a canvas's steps can't be taken: a step naming no story of its states
+ * file (`stories`, by file, as the stage read them; a file not read yet is
+ * not checked). Null when they can.
+ */
+export function stepsProblem(
+  steps: string[] | undefined,
+  stories: Map<string, string[]>,
+  first: string
+): string | null {
+  for (const step of steps ?? []) {
+    const at = step.lastIndexOf(":");
+    const file = at === -1 ? first : step.slice(0, at);
+    const story = at === -1 ? step : step.slice(at + 1);
+    const known = stories.get(file);
+    if (known && !known.includes(story)) {
+      const name = file.slice(file.lastIndexOf("/") + 1);
+      return `Step ${story} isn't a story of ${name}; its stories are ${known.join(", ")}.`;
+    }
+  }
+  return null;
+}
+
+/** The canvas's spec its page is given: its name, steps, edges, groups and dials. */
 export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({
   name,
+  ...(input.steps?.length ? { steps: input.steps } : {}),
   ...(input.edges?.length ? { edges: input.edges } : {}),
   ...(input.group && Object.keys(input.group).length > 0
     ? { group: input.group }

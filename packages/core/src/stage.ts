@@ -411,9 +411,17 @@ export interface CanvasEdge {
   to: string;
 }
 
-/** A property dial an agent declares on a canvas: a CSS variable on every frame, or an arg re-rendered through `update`. */
+/**
+ * A property dial an agent declares on a canvas: a CSS variable on every
+ * frame, or an arg re-rendered through `update`. Two kinds range over a
+ * record set the kept story already mounts, its array arg: `count` (the
+ * first n records, 1 to the array's length) and `longest` (the records with
+ * the longest `by` first, then the count).
+ */
 export interface CanvasDial {
-  kind: "number" | "color" | "select" | "toggle";
+  /** For `longest`: the record field whose length orders the records. */
+  by?: string;
+  kind: "number" | "color" | "select" | "toggle" | "count" | "longest";
   label?: string;
   max?: number;
   min?: number;
@@ -451,6 +459,8 @@ export interface CanvasSpec {
   /** Story → the parent story or section heading it groups under. */
   group?: Record<string, string>;
   name?: string;
+  /** The sequence the step slider scrubs, by story (`file:Story` across files); it opens the canvas on the slider. */
+  steps?: string[];
 }
 
 /*
@@ -479,6 +489,8 @@ const DIAL_KINDS: readonly CanvasDial["kind"][] = [
   "color",
   "select",
   "toggle",
+  "count",
+  "longest",
 ];
 
 const dialOf = (value: unknown): CanvasDial | undefined => {
@@ -498,6 +510,7 @@ const dialOf = (value: unknown): CanvasDial | undefined => {
     name,
     target: cssVar ? { cssVar } : { arg: arg ?? "" },
     ...present({
+      by: textOf(value.by),
       label: textOf(value.label),
       max: numberOf(value.max),
       min: numberOf(value.min),
@@ -540,6 +553,7 @@ export const canvasSpecOf = (value: unknown): CanvasSpec => {
       : undefined,
     group,
     name: textOf(value.name),
+    steps: textsOf(value.steps),
   });
 };
 
@@ -575,6 +589,7 @@ export const CANVAS_SPEC_LIMITS = {
   edges: 100,
   files: 24,
   label: 80,
+  steps: 64,
 } as const;
 
 /** Where the daemon reads a sheet's stories next to the stage; never through the hub. */
