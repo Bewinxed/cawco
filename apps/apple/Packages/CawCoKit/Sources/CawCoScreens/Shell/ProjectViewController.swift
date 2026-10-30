@@ -781,7 +781,7 @@ final class ProjectViewController: ObservedViewController {
             }
         } else if store.empty && !adding {
             what = "empty"
-            // An empty board with the lead off holds the form itself.
+            // An empty board with events off holds the form itself.
             let first = NewTaskForm(primary: true, picksStage: true) { [weak self] title, stage in try await self?.store.create(title: title, stage: stage) }
             first.stage = store.newIn ?? ""
             first.stages = stages

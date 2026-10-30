@@ -73,7 +73,7 @@
     place?: { at: number; of: number } | null;
     /** Whether what stands in the shape is up: the shape has grown to hold it. */
     shown?: boolean;
-    /** Who asks, as the conversation names its agent ("Caw" in a thread). */
+    /** Who asks, as the conversation names its agent ("Caw" in a project's conversation). */
     asker?: string;
     /**
      * Submits this card's answer and hands back the id of the command it went

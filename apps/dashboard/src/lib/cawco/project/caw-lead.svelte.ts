@@ -35,6 +35,7 @@ import {
   type ProjectConversationView,
 } from "@cawco/core/project-conversation";
 import type { StarterPlace } from "@cawco/core/starters";
+import { conversationWords } from "@cawco/core/words/project-conversation";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
 import { epochOf } from "../board.svelte";
@@ -53,6 +54,9 @@ import { store, stored } from "../storage";
 import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
+
+/** Caw's sentence, by what the conversation is doing. */
+const said = conversationWords.status;
 
 /** Where a project's panel being open or put away is kept, in this browser. */
 const openKey = (projectId: string): string => `cawco.caw.open.${projectId}`;
@@ -447,27 +451,24 @@ export class CawLead {
       case "sleeping": {
         // What the conversation started and you let finish, still running.
         const finishing = this.view?.running.length ?? 0;
-        return finishing > 0
-          ? `Off · ${finishing} of his still finishing`
-          : "Off · answers when you write";
+        return finishing > 0 ? said.offFinishing(finishing) : said.off;
       }
       case "working":
-        return `Awake · ${this.#said ?? "working"}`;
-      case "needs-you":
-        return "Awake · waiting on you";
       case "trying":
-        return `Awake · ${this.#said}`;
+        return this.#said ?? "Working…";
+      case "needs-you":
+        return said.waiting;
       case "done":
-        return `Awake · ${this.landed} landed`;
+        return said.landed(this.landed ?? "");
       case "loading":
-        return "Reading the board…";
+        return said.reading;
       case "reconnecting":
-        return "Reconnecting to the hub";
+        return said.reconnecting;
       case "idle":
-        return "Awake · nothing due";
+        return said.idle;
       case "ready":
       case "compacted":
-        return "Awake · resting";
+        return said.ready;
     }
   });
 

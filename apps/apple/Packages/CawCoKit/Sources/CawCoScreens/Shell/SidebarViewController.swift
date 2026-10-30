@@ -1271,7 +1271,7 @@ final class SoundButton: TapControl {
 }
 
 /// The Caw loop switch, after the sound switch (CawLoopSwitcher.svelte):
-/// whether Caw plays his working loop while a project's lead works, or
+/// whether Caw plays his working loop while a project's conversation works, or
 /// holds its still. Play and pause swap in place as the theme's glyphs do.
 final class CawLoopButton: TapControl {
     private let playing = GlyphView(.loopOn, tint: Palette.sidebarForeground)
@@ -1290,7 +1290,7 @@ final class CawLoopButton: TapControl {
         NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 30), heightAnchor.constraint(equalToConstant: 30)])
         isAccessibilityElement = true
         // The web's name, whichever way it stands; on or off is its pressed state.
-        accessibilityLabel = "Caw moves while the lead works"
+        accessibilityLabel = "Caw moves while the project works"
         addAction(UIAction { _ in CawLoopPreference.on.toggle() }, for: .primaryActionTriggered)
         addInteraction(UIPointerInteraction(delegate: nil))
         // Another window's switch turned it.
@@ -1311,7 +1311,7 @@ final class CawLoopButton: TapControl {
     private func show(animated: Bool) {
         let on = CawLoopPreference.on
         accessibilityTraits = on ? [.button, .selected] : .button
-        KitTip.attach(to: self, label: on ? "Caw moves while the lead works" : "Caw holds still while the lead works")
+        KitTip.attach(to: self, label: on ? "Caw moves while the project works" : "Caw holds still while the project works")
         let shown = on ? playing : held
         let hidden = on ? held : playing
         let still = !animated || UIAccessibility.isReduceMotionEnabled

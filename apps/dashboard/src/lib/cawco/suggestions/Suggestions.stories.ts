@@ -1,8 +1,8 @@
 /**
  * Suggestions, every look in every state it meets (Component Story Format
  * 3, live components), through its seam (SuggestionsFrame): on the recess
- * Caw's thread stands on, with a club's website's starters. Each look is a
- * group; in each, three (Caw's first thread), one, seven, the longest the
+ * a project's conversation stands on, with a club's website's starters. Each look is a
+ * group; in each, three (a project's first conversation), one, seven, the longest the
  * hub writes, the skeletons while they are read, the first one reached by
  * the keyboard, the first one held down, the phone's width, and the empty
  * Decisions tab's own. The canvas draws hover, focus and pressed columns
@@ -14,10 +14,10 @@ import SuggestionsFrame from "./SuggestionsFrame.svelte";
 export default {
   title: "Suggestions/Suggestions",
   component: SuggestionsFrame,
-  args: { look: "list", placement: "thread", set: "three" },
+  args: { look: "list", placement: "conversation", set: "three" },
 };
 
-/** List: Lightfield's and Plane AI's ruled list. Three, in Caw's first thread. */
+/** List: Lightfield's and Plane AI's ruled list. Three, in a project's first conversation. */
 export const List = { args: { look: "list" } };
 
 /** List: one. */
@@ -49,7 +49,7 @@ export const ListPanel = {
   args: { look: "list", placement: "panel", set: "decisions" },
 };
 
-/** Rows: Cofounder's raised rows, each sentence over its reason. Three, in Caw's first thread. */
+/** Rows: Cofounder's raised rows, each sentence over its reason. Three, in a project's first conversation. */
 export const Rows = { args: { look: "rows" } };
 
 /** Rows: one. */
@@ -81,7 +81,7 @@ export const RowsPanel = {
   args: { look: "rows", placement: "panel", set: "decisions" },
 };
 
-/** Chips: the kit's option chips, as Langdock, AirOps and Relevance AI set them under the field. Three, in Caw's first thread. */
+/** Chips: the kit's option chips, as Langdock, AirOps and Relevance AI set them under the field. Three, in a project's first conversation. */
 export const Chips = { args: { look: "chips" } };
 
 /** Chips: one. */

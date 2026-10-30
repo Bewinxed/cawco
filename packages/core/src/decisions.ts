@@ -157,7 +157,7 @@ export interface RecordCard {
 
 /** `decisions/<name>/record.json`. */
 export interface DecisionRecord {
-  /** The session asked to make its tasks; null when none was (Caw's thread, or Make tasks not pressed). */
+  /** The session asked to make its tasks; null when none was (Make tasks not pressed). */
   askedOf: string | null;
   cards: RecordCard[];
   /** When its picks were recorded: the Send that decided it, or the pick since that moved them, ISO. */

@@ -11,7 +11,7 @@ const looksLikeQuestion = (value: unknown): value is UserQuestion =>
  * What a parked tool call is really asking the reader, when it is asking rather
  * than requesting permission: null for every other tool, and for an
  * {@link ASK_USER_QUESTION} whose input does not carry questions to render.
- * The one reading the dashboard, the app and a lead's thread share.
+ * The one reading the dashboard and the app share.
  */
 export function questionsOf(
   toolName: string,

@@ -51,7 +51,7 @@ export interface PermissionField {
 }
 
 export interface PermissionPresentation {
-  /** The session that asked, by the name the board gives it ("Caw" for a project's lead). */
+  /** The session that asked, by the name the board gives it ("Caw" for a project's conversation). */
   asker: string;
   /** The changes the call makes, each drawn as a diff. Empty when it changes no text. */
   changes: PermissionChange[];
@@ -1279,12 +1279,12 @@ export const PROJECT_SETTING_KINDS = [
   "set_max_attempts",
   "set_review_limit",
   "set_budget",
-  "set_caw",
+  "set_events",
 ] as const;
 
 /**
  * One change `project_settings` makes, as the hub stores it on the ask and
- * the thread note: a connection carries the account it signs in as.
+ * the project note: a connection carries the account it signs in as.
  */
 export type ProjectSettingChange =
   | {
@@ -1307,8 +1307,8 @@ export type ProjectSettingChange =
   | { kind: "set_review_limit"; reviewLimit: number }
   /** What one attempt may spend where its task says nothing; null: no limit. */
   | { budget: SettingsBudget | null; kind: "set_budget" }
-  /** The project's Caw on or off, as his switch flips it (hub caw.ts `configure`). */
-  | { caw: boolean; kind: "set_caw" }
+  /** Whether the project's events reach its conversation, as its switch flips it (hub caw.ts `configure`). */
+  | { events: boolean; kind: "set_events" }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -1329,7 +1329,7 @@ const LANDS_WORDS: Record<ProjectLands, string> = {
   pr: "Land this project's work as pull requests",
 };
 
-/** What one project setting change does, in the card's and the thread's words. */
+/** What one project setting change does, in the card's and the project note's words. */
 export const projectSettingWords = (change: ProjectSettingChange): string => {
   switch (change.kind) {
     case "grant_connection":
@@ -1351,7 +1351,7 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
     case "set_review":
       return change.review
         ? "Review every task before done: only you close one"
-        : "Stop reviewing before done: the lead and sessions close finished tasks";
+        : "Stop reviewing before done: the project's conversation and sessions close finished tasks";
     case "set_dispatch":
       return projectSettingsWords.dispatchOn(change.dispatch);
     case "set_max_attempts":
@@ -1360,8 +1360,8 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return projectSettingsWords.reviewLimit(change.reviewLimit);
     case "set_budget":
       return projectSettingsWords.budget(change.budget);
-    case "set_caw":
-      return projectSettingsWords.cawOn(change.caw);
+    case "set_events":
+      return projectSettingsWords.eventsOn(change.events);
     case "set_lands":
       break;
   }

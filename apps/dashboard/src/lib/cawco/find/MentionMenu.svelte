@@ -101,7 +101,7 @@
   <div
     {id}
     class="isolate flex flex-col p-space-2"
-    aria-label="Name a session, thread or machine"
+    aria-label="Name a session or machine"
     role="listbox"
     {@attach reflow()}
     {@attach highlight({ rows: "[data-find-row]", hovered: "[data-active]" })}

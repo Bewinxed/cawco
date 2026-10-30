@@ -372,7 +372,7 @@ const ANY_GROUP_OR_OTHER_BIT = process.platform === "darwin" ? "+077" : "/077";
  * 0600 file), as a tool keeps its own data (x-use's accounts and cookies).
  * Not walked into, and nothing under a link; git's own dirs (`.git`) are not
  * looked in. Every other dir is, ignored or not: a tool's data dir is one a
- * project ignores, and what it keeps there is its own. A lead's place
+ * project ignores, and what it keeps there is its own. A conversation's place
  * hides each from his shell and file tools; an MCP server the owner runs
  * reaches its own data on its own.
  */

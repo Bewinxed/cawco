@@ -6,8 +6,8 @@ import type { PermissionPresentation } from "@cawco/core/permission-presentation
 
 /**
  * An ask's title and second line: a held post by its own title over where it
- * goes (owner/repo#n); any other ask by `titled` (its thread, its session or
- * who asked) over what it asks.
+ * goes (owner/repo#n); any other ask by `titled` (its session or who
+ * asked) over what it asks.
  */
 export const askNaming = (
   presentation: PermissionPresentation,

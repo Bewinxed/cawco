@@ -22,7 +22,7 @@
    * Nothing holds the page; a refusal stays under what it refused.
    *
    * A stage of kind `you` is a review, drawn by TaskReview: the task's view
-   * opens on it, and a Caw thread's card carries it compact.
+   * opens on it.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -38,7 +38,6 @@
   import { failureWords as message } from "../hub-read";
   import { rowHref } from "../links";
   import {
-    decisionWait,
     moveTask,
     readTask,
     retryTask,
@@ -57,10 +56,7 @@
     onopen,
     ended = true,
     reopenTo = null,
-    decisionsNamed = false,
   }: {
-    /** Its review above names the decisions it waits on you to answer (a thread's task box): they are left out of its waits here. */
-    decisionsNamed?: boolean;
     projectId: string;
     /** The stage a task built on a moved card reopens in, when you may move it there; null: no Reopen here. */
     reopenTo?: string | null;
@@ -88,11 +84,7 @@
       !task.liveAttempt
   );
   const lastAttempt = $derived(task.attempts[0]);
-  const blockers = $derived(
-    task.waits.filter(
-      (wait) => !(wait.settled || (decisionsNamed && decisionWait(wait)))
-    )
-  );
+  const blockers = $derived(task.waits.filter((wait) => !wait.settled));
   const builtOn = $derived(task.builtOn);
 
   // --- a done task built on a card that moved ------------------------------------

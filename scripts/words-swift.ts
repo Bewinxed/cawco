@@ -171,6 +171,17 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/caw-head.ts", export: "cawHeadWords", as: "" }],
   },
   {
+    // A project's conversation: its panel's actions and Caw's sentence.
+    swift: "ProjectConversation",
+    members: [
+      {
+        file: "words/project-conversation.ts",
+        export: "conversationWords",
+        as: "",
+      },
+    ],
+  },
+  {
     // A project's own views: asking Caw for one.
     swift: "Views",
     members: [{ file: "words/views.ts", export: "viewsWords", as: "" }],

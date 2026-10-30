@@ -605,7 +605,7 @@ export const createIngress = ({
 
   /**
    * The routine an event goes to among the matching routes' (Event routing,
-   * §5.9), or `lead`; undefined when Jev did not answer: the event stays
+   * §5.9), or the project's conversation; undefined when Jev did not answer: the event stays
    * stored and unrouted.
    */
   const chosen = async (

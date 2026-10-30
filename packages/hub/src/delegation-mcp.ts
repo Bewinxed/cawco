@@ -230,7 +230,7 @@ export function createDelegationMcp(options: {
   fleet: Fleet;
   /** Every former id, by the id its session has now (db `formerIds`). */
   formerIds: () => Record<string, string>;
-  /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
+  /** Whether `leadId` is the conversation of the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
   ledBy?: (instanceId: string, leadId: string) => boolean;
   /** The sessions `instanceId` was forked from, nearest first (server.ts `forkLineage`). */
   forkOrigins?: (instanceId: string) => ForkOrigin[];

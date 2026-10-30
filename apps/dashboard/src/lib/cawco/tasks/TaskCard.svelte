@@ -20,7 +20,7 @@
    * The card is a link to the task (`?task=tsk-12`), so it opens in a new
    * tab and is shared like one; a plain click opens it beside what it was
    * pressed in (`onopen`), or follows the link where nothing stands beside
-   * it (a thread on a phone: the task's own page). It
+   * it (the task's own page). It
    * is also what a drag carries, and the one object a move flies (`land`):
    * a card that changes column travels there from where it was drawn.
    */
@@ -43,20 +43,7 @@
     onopen,
     date = null,
     movable = true,
-    titleFirst = false,
-    inset = false,
   }: {
-    /**
-     * It heads a box that holds more of the task (a thread's card with its
-     * review under it): the box draws the surface, so the card has no tile
-     * of its own.
-     */
-    inset?: boolean;
-    /**
-     * Its title over its id: where the card stands outside its column (a
-     * thread), the title says what it is and the id is its handle.
-     */
-    titleFirst?: boolean;
     task: TaskSummary;
     href: string;
     /** The date the task's file sets it for, said short ("Thu 09:30"). */
@@ -103,9 +90,8 @@
 
 <a
   data-task-card
-  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out data-inset:rounded-none data-inset:shadow-none data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
+  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
   data-flip-enter={flying ? "own" : undefined}
-  data-inset={inset || undefined}
   data-share={key}
   data-task={task.id}
   {href}
@@ -115,13 +101,6 @@
     : undefined}
   {@attach land(() => key, { uniform: true })}
 >
-  {#if titleFirst}
-    <span
-      data-slot="title"
-      class="line-clamp-2 type-label wrap-anywhere text-ink-row"
-      >{task.title}</span
-    >
-  {/if}
   <span
     data-task-head
     class="flex min-h-c-badge-h items-center gap-space-1 group-data-pickable/task:pe-space-6"
@@ -159,13 +138,11 @@
       </Badge>
     {/if}
   </span>
-  {#if !titleFirst}
-    <span
-      data-slot="title"
-      class="line-clamp-2 type-label wrap-anywhere text-ink-row"
-      >{task.title}</span
-    >
-  {/if}
+  <span
+    data-slot="title"
+    class="line-clamp-2 type-label wrap-anywhere text-ink-row"
+    >{task.title}</span
+  >
   {#if flags.live || task.kind === "you" || asks || approves || date}
     <span
       class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-selected-ink"

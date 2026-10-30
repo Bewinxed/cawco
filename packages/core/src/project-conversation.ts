@@ -9,14 +9,14 @@ import type { HarnessKind, OfferedMode, PlaceLfsRow } from "./harness";
 import type { ItemEnd } from "./work-items";
 
 /**
- * Why Caw can't start when no machine is online, and how to fix it, in the
- * error formula's order (DESIGN.md, Voice): the hub's refusal and his view's
- * `problem`, his panel's alert, and an empty Routines or Event sources
- * page's reason. Its next step names no place and no writing, as it stands
- * where his composer may or may not.
+ * Why the project's conversation can't start when no machine is online, and
+ * how to fix it, in the error formula's order (DESIGN.md, Voice): the hub's
+ * refusal and the view's `problem`, the panel's alert, and an empty
+ * Routines or Event sources page's reason. Its next step names no place and
+ * no writing, as it stands where the composer may or may not.
  */
 export const CAW_NO_MACHINE =
-  "No machine is online, so Caw can't start. Bring one online and he can.";
+  "No machine is online, so the project's conversation can't start. Bring one online and it can.";
 
 /** A project's conversation, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
 export interface ProjectConversationView {
@@ -111,7 +111,7 @@ export type ProjectNoteEvent =
       kind: "routine";
       name: string;
       /**
-       * `started`: a lead run woke Caw; `delivered`: a run's output;
+       * `started`: a conversation run woke Caw; `delivered`: a run's output;
        * `failed`: its second failure, which needs you.
        */
       phase: "started" | "delivered" | "failed";

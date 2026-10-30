@@ -58,9 +58,9 @@
  *   project's place, Caw among them): the owner's word, "caw should be able
  *   to do whatever it wants". The files' whole new text, checked as a
  *   proposal is (the files, the notes it cites, their taint), commits at once
- *   as that session, its notes archived as applied, and is noted in the
- *   thread its turn answers. With `ask: true` it is a
- *   proposal instead, parked in that thread.
+ *   as that session, its notes archived as applied, and is noted in its
+ *   project's conversation. With `ask: true` it is a proposal instead,
+ *   parked in the session that asked.
  * - **Proposals** (`memory_propose` from the curator, or Caw's `ask`; Jev's
  *   sort; the hub's archive and a withdrawal; and Caw's `folder_write` of a
  *   `delegates/` type file, §5.1's "a file diff you approve", which cites no
@@ -68,11 +68,11 @@
  *   person's ask through the hub's one needs-you path (pending.ts), drawn as
  *   a diff per file on every surface (core permission-presentation.ts), kept
  *   as `memory/proposals/<id>.json` and parked again when the hub starts. It
- *   carries where it was made: Caw's thread, or the curator run's session,
+ *   carries where it was made: the session that asked, or the curator run's,
  *   and the tool call; it is drawn and answered there as well as in Needs
  *   you. Approve commits it as the person; a file changed since is merged
  *   three ways, and refused when it no longer applies. Reject archives its
- *   notes. Caw's thread hears either. A change to fact lines keeps every
+ *   notes. The session that asked hears either. A change to fact lines keeps every
  *   source they rested on, and the lines it writes must read.
  * - **Withdrawing a note** (the person's, a hub route): the note leaves for
  *   the archive and, in the same card, every fact resting on it alone moves
@@ -82,7 +82,7 @@
  *   Purging a session (deleting its transcript) withdraws every note it
  *   wrote the same way.
  * - **Make a note** (the person's): straight to AGENTS.md as a diff commit,
- *   from a hub route or a Caw thread message that opens with "Make a note:".
+ *   from a hub route.
  * - **Brief context** (dispatch.ts): AGENTS.md, then the fact lines a task
  *   needs, whole, with their dates and sources, within the brief's budget.
  *   Code greps the task's words over the lines (and takes every line of the
@@ -316,7 +316,7 @@ export const personsTier = (rel: string): string | undefined => {
 /** How long what the web test reads of the fleet (its hostnames, its MCP servers' URLs) is kept before it is read again. */
 const FLEET_READ_MS = 60_000;
 
-/** The origin a lead's wake carries when a routine woke it (caw.ts). */
+/** The origin a conversation's wake carries when a routine woke it (caw.ts). */
 export const ROUTINE_ORIGIN = "routine:";
 /** A keep-alive's send (keep-alive.ts): the hub's heartbeat, not a delivery. */
 const KEEPALIVE = "keepalive";
@@ -365,7 +365,7 @@ const blank = (instanceId: string): SessionTaintRow => ({
  * - **Subagents**, by their own start and end: Claude's `task_started` and
  *   `task_notification`, OpenCode's `task_started` and its call's result.
  *   A turn's end closes none of them.
- * - **Routine**: the wake a lead's turn read, until its result; and a
+ * - **Routine**: the wake a conversation's turn read, until its result; and a
  *   session a routine-run turn started, for its life.
  */
 export const createTurnWatch = (store: TaintStore) => {
@@ -527,7 +527,7 @@ export const createTurnWatch = (store: TaintStore) => {
       }
     },
 
-    /** A send the hub delivered, read by the session's harness: its turn is delivered; a routine's wake of a lead makes it the run's. */
+    /** A send the hub delivered, read by the session's harness: its turn is delivered; a routine's wake of a conversation makes it the run's. */
     read(instanceId: string, origin: NeutralOrigin | undefined): void {
       if (origin?.kind === "system" && origin.name === KEEPALIVE) {
         return;
@@ -1400,7 +1400,7 @@ const relatedLines = (note: Note, lines: FactLine[]): FactLine[] => {
 /** The task a brief is for, as `contextFor` reads it. */
 interface BriefTask {
   acceptance: string;
-  /** Project folder files the task names (its `context:`): the lead's pick. */
+  /** Project folder files the task names (its `context:`): the conversation's pick. */
   context: string[];
   description: string;
   id: string;
@@ -2709,7 +2709,8 @@ export const createMemory = ({
   /**
    * A change to AGENTS.md or knowledge files, each file's whole new text.
    * Its fact lines are checked (`checkFacts`) and stamped with their uses.
-   * Caw's commits at once as Caw and is noted in his thread; Caw's with
+   * A session's commits at once as that session and is noted in its
+   * project's conversation; a session's with
    * `ask`, and the curator's, are kept as a file, then parked for the person
    * where they were made.
    */
@@ -2795,7 +2796,7 @@ export const createMemory = ({
   /**
    * Caw's delegate type (§5.1, "Caw can propose a new type as a file diff
    * you approve"): his `folder_write` of a `delegates/` file, checked to make
-   * a type whole, kept and parked in his thread as a proposal. Nothing is
+   * a type whole, kept and parked in the session that wrote it as a proposal. Nothing is
    * written to `delegates/` until the person approves it.
    */
   const proposeType = async (

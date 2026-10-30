@@ -1346,7 +1346,7 @@ export type AccountMove =
 
 /**
  * Who ended a session's process ({@link AccountMove} `ended`): a person (the
- * dashboard's Stop), a session (its parent's `stop_delegate`, a lead), the
+ * dashboard's Stop), a session (its parent's `stop_delegate`, or its project's conversation's), the
  * hub's own work (`why`: a work item over, a project
  * forgotten), or a signal no part of CawCo sent (`outside`), after which the
  * turn it cut is handed back when there was one (`resumes`).

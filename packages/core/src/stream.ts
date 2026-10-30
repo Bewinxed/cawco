@@ -37,8 +37,8 @@ import type { TailnetServing } from "./tailnet-https";
  *    alone, never a delta. Pages built for 3 and 4 name nothing, took the
  *    first change-only delta as `state.machines = undefined`, and from then
  *    on threw on every board frame before reaching the reload at its end.
- * 6: `thread.upsert` and `thread.message` frames carry a project's threads
- *    and name no session. A page built for 5 reads any frame it does not
+ * 6: `thread.upsert` and `thread.message` frames (gone since 40) carry
+ *    conversations that name no session. A page built for 5 reads any frame it does not
  *    know as a session's and files a blank session under no id, so it
  *    reloads first. The app logs a frame it cannot decode and goes on.
  * 7: a workspace's held work (`GET /api/workspaces/:id/held`) names no files
@@ -137,8 +137,7 @@ import type { TailnetServing } from "./tailnet-https";
  *    26 reloads first.
  * 28: the multi-step run engine is gone: a session row names no run nor
  *    step, a transcript block's metadata no run event, and no run frame is
- *    sent. A thread's note carries a made routine or a design offer in its
- *    `event`. A page built for 27 reloads first.
+ *    sent. A note carries a made routine or a design offer in its `event`. A page built for 27 reloads first.
  * 29: the stream relay's router step is the forwards to make: two states,
  *    `needs` and `done`, and no `how`; the act that asked the router
  *    (`open-ports`) is gone; a journey view carries the hub's `revision`,
@@ -150,7 +149,8 @@ import type { TailnetServing } from "./tailnet-https";
  *    `waitsOn` is a wait as a task keeps it (a string), and the hub's own
  *    wait on a page whole is `waitsOnPage`. A page built for 29 would read
  *    links the hub no longer sends, so it reloads first.
- * 31: a Caw thread is addressed as a session: its page is the
+ * 31: a project conversation of the old kind (gone since 40) is addressed
+ *    as a session: its page is the
  *    transcript of its session id (the thread's id after a `thread` prefix),
  *    its stream is followed under that id, and a send to it is a `send`
  *    command to that id.
@@ -186,7 +186,7 @@ import type { TailnetServing } from "./tailnet-https";
  *    CawCo puts none to the person on a rule of its own. A page built for
  *    36 reads an `askedBecause` the hub no longer sends, so it reloads
  *    first.
- * 38: a session's role is never `lead` and its origin is `project` where it
+ * 38: no session has a role of its own for the project, and its origin is `project` where it
  *    was `caw`: the session a project's events reach is a worker like any
  *    other, scoped to its project. A page built for 37 finds that session
  *    by a role the hub no longer sends, so it reloads first.
@@ -196,8 +196,8 @@ import type { TailnetServing } from "./tailnet-https";
  *    reads an `answering` and a run's thread the hub no longer sends, so
  *    it reloads first.
  * 40: conversations are sessions: no thread is sent or served. The
- *    `thread.upsert` frame, the thread routes and a project's `threads` are
- *    gone; a project names its conversation as `conversationInstanceId`,
+ *    `thread.upsert` frame, the thread routes and the `threads` a project
+ *    listed are gone; a project names its conversation as `conversationInstanceId`,
  *    its Caw view is the `ProjectConversationView` of that session, and the
  *    hub's notes for a project are lines in its conversation's transcript.
  *    A page built for 39 draws threads the hub no longer sends, so it

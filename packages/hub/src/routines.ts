@@ -1,7 +1,7 @@
 /**
  * Routines (Projects spec §5.5, P3): a prompt the hub runs on a cron schedule
  * in a time zone, as a fresh delegate of the routine's type or as a message
- * to the project's lead.
+ * to the project's conversation.
  *
  * - **Once per slot.** A routine's schedule is one column, `next_slot`. A
  *   tick, for each routine whose `next_slot` is due, runs ONE transaction
@@ -15,7 +15,7 @@
  *   settled from their work items.
  * - **Gates**, decided inside the insert: a run still going makes the new one
  *   `skipped` ("the 09:00 run is still going"); so do the routine's daily
- *   cap, the project's spend cap, and, for a lead routine, the lead being
+ *   cap, the project's spend cap, and, for a conversation routine, the project's conversation being
  *   off (§7 P2: with Caw off nothing wakes a model).
  * - **Delegate runs** are work items (work-items.ts `startForHub`) in a
  *   new workspace cut from a checkout of the project on a machine that is
@@ -30,11 +30,11 @@
  *   turn's result frame is in;
  *   a failed item's its error's first line),
  *   retried once at once (same slot, attempt 2), and a
- *   second failure needs you (a push, and a note in the routine's thread);
- *   anything else is delivered, as a note in the routine's own thread of
- *   its project (a push for a routine in no project).
- * - **Lead runs** note the slot in the routine's thread and wake Caw there
- *   (caw.ts `wake`), as any event does, and run on. Caw answers with
+ *   second failure needs you (a push, and a note in its project's
+ *   conversation); anything else is delivered, as a note in its project's
+ *   conversation (a push for a routine in no project).
+ * - **Conversation runs** are a send to the project's conversation (caw.ts
+ *   `tell`), as any event is, and run on. Caw answers with
  *   `routine_result` under the same output contract, settled the same way.
  *   The turn that read the wake (server.ts `changeSend`) ending without that
  *   answer fails the run; so does a wake his session never reads.
@@ -142,9 +142,9 @@ const PLACE_WAIT_MS = 60_000;
 const PLACE_POLL_MS = 1000;
 /** Runs a routine's view lists. */
 const RUNS_SHOWN = 20;
-/** The longest delivered output a thread note carries. */
+/** The longest delivered output a project note carries. */
 const NOTE_MAX = 4000;
-/** A lead run's skip while Caw is off: a routine is Caw acting on his own (Caw on / Caw off). */
+/** A conversation run's skip while Caw is off: a routine is Caw acting on his own (Caw on / Caw off). */
 const CAW_OFF = "Caw is off, so only your words wake him";
 
 /** A run the inbox's mark started (memory.ts): slot `inbox:<time>`. */
@@ -302,7 +302,7 @@ export type RoutineActor = "owner" | InstanceRow;
 export interface RoutineDeps {
   /** Whether any machine is connected now. */
   readonly anyOnline: () => boolean;
-  /** Caw's routine notes and wakes, and the thread his turn is in (caw.ts). */
+  /** A routine's notes and sends to the project's conversation (caw.ts). */
   readonly caw: Pick<Caw, "notice" | "tell">;
   /**
    * A curator run's inbox, made ready (memory.ts): `none` when no note is
@@ -534,7 +534,7 @@ const CONTRACT = `## Your answer\n\nWhen you are done, call finish_item. Its hea
 const leadContract = (runId: string): string =>
   `## Your answer\n\nWhen you are done, call routine_result with run "${runId}". Its result is this run's output, read by the hub: ${ANSWERS} Call it before your turn ends: a turn that ends without it fails the run.`;
 
-/** A lead run's end when Caw's turn that took its wake ends with no `routine_result`. */
+/** A conversation run's end when Caw's turn that took its wake ends with no `routine_result`. */
 const NO_RESULT = "Caw ended its turn without saying how the run went";
 
 /** How a run ended, as its answer or its work item says. */
@@ -590,18 +590,18 @@ export const createRoutines = ({
   };
   const store = db.routines;
   /**
-   * Sessions whose turn read a lead run's wake that has no result yet: the
+   * Sessions whose turn read a conversation run's wake that has no result yet: the
    * idle pulses worth a look ({@link turnEnded}), read back from the
    * runs as the hub starts.
    */
   const armed = new Set<string>();
   /**
    * Delegate sessions doing a run: their words are kept ({@link said}), as
-   * an armed lead's are.
+   * an armed conversation's are.
    */
   const running = new Set<string>();
   /**
-   * The last text each run's session said (a lead armed for a run, a run's
+   * The last text each run's session said (a conversation armed for a run, a run's
    * delegate): a failure that gives no reason records it. In memory: a hub
    * that restarts mid-run has not heard it.
    */
@@ -736,7 +736,7 @@ export const createRoutines = ({
   /**
    * What a run is filed as, decided inside its insert: skipped while the
    * routine's last run still goes, past its daily cap, past the project's
-   * spend cap, or (a lead routine) with Caw off; else started.
+   * spend cap, or (a conversation routine) with Caw off; else started.
    */
   /** Why the routine's project holds a run back: gone, Caw off, its spend cap; or nothing. */
   const projectGate = (routine: RoutineRow): string | undefined => {
@@ -754,7 +754,7 @@ export const createRoutines = ({
       return CAW_OFF;
     }
     return quiets(project.id)
-      ? "the project is past its spend cap, so its lead is not woken"
+      ? "the project is past its spend cap, so its conversation is not woken"
       : undefined;
   };
 
@@ -1368,7 +1368,7 @@ export const createRoutines = ({
   const said = (
     instanceId: string,
     neutral: NeutralMessage,
-    /** The session is a project's lead: his words count from before his wake's read receipt arms him. */
+    /** The session is a project's conversation: his words count from before his wake's read receipt arms him. */
     lead = false
   ): void => {
     heard(instanceId, neutral);
@@ -1519,7 +1519,7 @@ export const createRoutines = ({
   };
 
   /**
-   * A send left `pending` (server.ts `changeSend`). A lead run's wake (its
+   * A send left `pending` (server.ts `changeSend`). A conversation run's wake (its
    * origin `routine:<id>`; a routine has one run going at a time, so the
    * routine names it) read by Caw's harness makes the run that session's
    * turn's, and the end of the turn ends it; one never to be read fails the
@@ -1576,9 +1576,9 @@ export const createRoutines = ({
   /**
    * Caw's turn in `instanceId` ended (caw.ts: its idle pulse, his session
    * ending, his machine going, his turn cut as he was turned off): every
-   * lead run whose wake that turn read and that has no `routine_result`
+   * conversation run whose wake that turn read and that has no `routine_result`
    * fails, `why`, each through {@link settle} (retried once, then you).
-   * `gone`, the project whose lead session it was when the session itself
+   * `gone`, the project whose conversation session it was when the session itself
    * is over: its runs whose wake was not read yet fail too, as no session
    * will read it.
    */
@@ -1620,9 +1620,9 @@ export const createRoutines = ({
   };
 
   /**
-   * Caw's answer for a lead run (`routine_result`): settled as a delegate's
-   * headline is. Refused for a run that is not his project's, not a lead
-   * run, or not going.
+   * Caw's answer for a conversation run (`routine_result`): settled as a delegate's
+   * headline is. Refused for a run that is not its project's, not a
+   * conversation run, or not going.
    */
   const leadResult = (
     actor: InstanceRow,
@@ -2033,7 +2033,7 @@ export const createRoutines = ({
   };
 
   /**
-   * A run a stopped hub left live: a lead run Caw has stays, for his
+   * A run a stopped hub left live: a conversation run Caw has stays, for his
    * session's next idle or its end to settle; a delegate run settles from its
    * work item; one left starting cannot say whether its work began, so it
    * ends failed without a retry.
@@ -2098,7 +2098,7 @@ export const createRoutines = ({
 
   /**
    * A new routine. A session's (`by` an instance) keeps where it was made:
-   * the session, the Caw thread its turn is in, and, once its call's frame
+   * the session, and, once its call's frame
    * is read, what the turn said before it (`callId`: the call's tool_use id,
    * when its harness names it); then it is announced to you. Yours (the
    * dashboard) is made by you, with no why and no notice.
@@ -2462,7 +2462,7 @@ export const createRoutines = ({
       ),
       tool(
         "routine_result",
-        `Say how the routine's run that woke you went, once, before your turn ends: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in its thread.`,
+        `Say how the routine's run that woke you went, once, before your turn ends: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in the project's conversation.`,
         {
           run: z
             .string()

@@ -48,7 +48,7 @@ export interface Delivery {
 /** The rows ingress.ts keeps. */
 export interface IngressDb {
   /**
-   * The lead's inbox, taken: every event routed to the lead and not yet
+   * The conversation's inbox, taken: every event routed to the project's conversation and not yet
    * handled, oldest first, marked handled in the same statement, so two
    * wakes never carry one line.
    */

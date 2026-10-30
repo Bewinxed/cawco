@@ -38,7 +38,7 @@
 
   /**
    * Where the suggestions stand:
-   * - `thread`: under Caw in a thread nothing has been said in, on the
+   * - `conversation`: under Caw in a conversation nothing has been said in, on the
    *   composer's column;
    * - `panel`: an empty panel's one action (The Empty Starts Work Rule), as
    *   wide as the starters' measure, its items words alone: the empty
@@ -46,7 +46,7 @@
    * - `composer`: standing on the composer, where only the sentences are
    *   shown and every reason is left out.
    */
-  const SUGGESTION_PLACEMENTS = ["thread", "panel", "composer"] as const;
+  const SUGGESTION_PLACEMENTS = ["conversation", "panel", "composer"] as const;
   export type SuggestionPlacement = (typeof SUGGESTION_PLACEMENTS)[number];
 </script>
 
@@ -79,7 +79,7 @@
     onpick,
     label,
     look = "list",
-    placement = "thread",
+    placement = "conversation",
     loading = 0,
   }: {
     suggestions: readonly Suggestion[];

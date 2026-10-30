@@ -96,17 +96,17 @@ final class ProjectCawLead {
         switch status {
         case .sleeping:
             let finishing = view?.running.count ?? 0
-            return finishing > 0 ? "Off · \(finishing) of his still finishing" : "Off · answers when you write"
+            return finishing > 0 ? Words.ProjectConversation.Status.offFinishing(count: finishing) : Words.ProjectConversation.Status.off
         case .working:
-            return "Awake · \(words?.text ?? "working")"
+            return words?.text ?? "Working…"
         case .needsYou:
-            return "Awake · waiting on you"
+            return Words.ProjectConversation.Status.waiting
         case .loading:
-            return "Reading the board…"
+            return Words.ProjectConversation.Status.reading
         case .reconnecting:
-            return "Reconnecting to the hub"
+            return Words.ProjectConversation.Status.reconnecting
         default:
-            return "Awake · resting"
+            return Words.ProjectConversation.Status.ready
         }
     }
 }
@@ -268,7 +268,7 @@ final class ProjectCawPanel: KitPopoverController {
         stack.addArrangedSubview(row([runsOn, harness, model]))
 
         // The project's conversation: a new one in the New Session form, and the one it shows.
-        newOne = KitButton.make("New conversation", variant: .outline, height: .sm) { [weak self] in
+        newOne = KitButton.make(Words.ProjectConversation.newConversation, variant: .outline, height: .sm) { [weak self] in
             guard let self else { return }
             dismiss(animated: true)
             newConversation(nil)
@@ -297,7 +297,7 @@ final class ProjectCawPanel: KitPopoverController {
         return line
     }
 
-    /// Draws what the lead says now, and again whenever it changes.
+    /// Draws what Caw says now, and again whenever it changes.
     private func render() {
         withObservationTracking {
             draw()

@@ -87,7 +87,7 @@
     dir: 1 | -1;
     /**
      * The harness and model are a setting kept off the session, as a
-     * project's Caw keeps his lead's (CawView): the model chip opens whether
+     * project's conversation keeps its project's (ProjectConversationView): the model chip opens whether
      * or not the session runs, and its picker's harness rail offers each of
      * `harnesses` this machine has. A harness on the rail is browsed, as New
      * session browses one; picking a model there chooses the two together

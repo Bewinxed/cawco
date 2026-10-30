@@ -38,7 +38,7 @@
     asker = "the agent",
   }: {
     message: Message;
-    /** Who asked, as the conversation names its agent ("Caw" in a thread). */
+    /** Who asked, as the conversation names its agent ("Caw" in a project's conversation). */
     asker?: string;
   } = $props();
 

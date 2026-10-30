@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * The states file's seam (Suggestions.stories.ts): Suggestions on the
-   * recess it stands on in Caw's thread and in an empty panel, with the
+   * recess it stands on in a project's conversation and in an empty panel, with the
    * preview's words, and its first item held in one state: at rest, reached
    * by the keyboard (`focus`: focused with no pointer, so the house ring
    * shows), or held down (`pressed`: the `data-pressed` the press tint and
@@ -27,7 +27,7 @@
 
   let {
     look = "list",
-    placement = "thread",
+    placement = "conversation",
     set = "three",
     loading = 0,
     state = "rest",

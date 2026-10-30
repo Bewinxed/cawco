@@ -120,7 +120,7 @@ export interface TaskFields {
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
   checks: string[];
-  /** Project folder files its attempt's brief carries (memory.ts `contextFor`): the lead's pick, `knowledge/…`. */
+  /** Project folder files its attempt's brief carries (memory.ts `contextFor`): the conversation's pick, `knowledge/…`. */
   context: string[];
   /** The task this one repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;

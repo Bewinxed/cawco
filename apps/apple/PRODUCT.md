@@ -23,7 +23,7 @@ The same board as the dashboard, on the operator's own devices, and the only cha
 - From the lock screen: Approve, Deny or "Other…" on a permission for a tool that is not a shell, a plan, a subagent or an MCP tool; those open in the app to be read first. A question with one to three options answers by its option; a turn, a task or an attempt answers with Reply; a pairing answers with Approve or Deny.
 - A push about a session that arrives with the app in front shows as a banner; the badge stays 0, since the needs-you count belongs to the app's own queue.
 - The app's coming to a chat is input for presence; what needs the person goes to the phone once they are away from every desk.
-- Caw's threads, decision pages, custom views and browser take-over are in the app; a decision page and a custom view run in a web view on the dashboard's renderer.
+- Project conversations, decision pages, custom views and browser take-over are in the app; a decision page and a custom view run in a web view on the dashboard's renderer.
 - On an iPad, a pencil's swipe up from the composer opens a canvas; a finger's swipe stays the recall wheel.
 
 ## Capabilities and Constraints

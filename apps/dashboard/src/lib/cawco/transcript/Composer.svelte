@@ -210,7 +210,7 @@
     commands?: AvailableCommand[];
     /**
      * The conversation this composer writes to: `@` names what else the
-     * hub finds by name (threads, conversations, machines), ranked there as
+     * hub finds by name (conversations, machines), ranked there as
      * the Jump palette is. Null: `@` names nothing here.
      */
     mentionsFrom?: string | null;

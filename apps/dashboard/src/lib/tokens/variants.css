@@ -615,9 +615,6 @@
 @custom-variant slot-thinking-steps-content (&[data-slot="thinking-steps-content"]);
 @custom-variant slot-thinking-steps-header (&[data-slot="thinking-steps-header"]);
 @custom-variant slot-thread (&[data-slot="thread"]);
-@custom-variant slot-thread-pane-slide (&[data-slot="thread-pane-slide"]);
-@custom-variant slot-thread-pane-state (&[data-slot="thread-pane-state"]);
-@custom-variant slot-thread-pane-task (&[data-slot="thread-pane-task"]);
 @custom-variant slot-tile (&[data-slot="tile"]);
 @custom-variant slot-tip (&[data-slot="tip"]);
 @custom-variant slot-tip-text (&[data-slot="tip-text"]);

@@ -1,5 +1,5 @@
 /**
- * Naming a session, a thread or a machine while writing (T2), on the
+ * Naming a session or a machine while writing (T2), on the
  * finder's own rows and ranking (find-rows.ts): the words after an "@"
  * keep narrowing through spaces; ↵ inserts a chip that reads as the title
  * and is sent as `@<title> <handle>` — `@<title> · <machine> <handle>` when
@@ -120,7 +120,7 @@ export const SERIALISED = /@([^\n<>@]+?) <([^\s<>]+)>/gu;
 export const readAs = (text: string): string =>
   text.replace(SERIALISED, (_, label: string) => `@${label}`);
 
-/** A session's or a thread's handle: `<dir>#<id8>`, `thread#<id8>` (hub labels.ts). */
+/** A session's handle: `<dir>#<id8>` (hub labels.ts). */
 const SESSION_HANDLE = /#[0-9a-f]{6,}$/iu;
 
 /**

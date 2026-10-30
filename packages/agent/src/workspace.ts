@@ -248,7 +248,7 @@ const marksLfs = (git: Git, repo: string, treeish: string): Promise<boolean> =>
  * (host-lfs.ts `hostSigns`). An ssh origin's endpoint is not pinned: git-lfs
  * derives it, and authenticates over ssh. Outside the hub, a `.lfsconfig`
  * at `start` that names any other endpoint leaves every large file a
- * pointer (`GIT_LFS_SKIP_SMUDGE=1`), and the project's thread is told. A
+ * pointer (`GIT_LFS_SKIP_SMUDGE=1`), and the project's conversation is told. A
  * hub origin's checkout is never so refused: its `lfs.url` and
  * `lfs.pushurl` are pinned in git's own environment config (move.ts
  * `hubGitEnv`), and "Settings from Git configuration files override the

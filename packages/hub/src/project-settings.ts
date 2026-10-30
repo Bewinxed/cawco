@@ -3,9 +3,9 @@
  * changes that project's settings (`project_settings`). The owner's word:
  * "caw should be able to do whatever it wants", so the change applies at
  * once, through the same code the person's own change runs, and is noted in
- * the thread its turn answers with what changed. When the change is one the
+ * the project's conversation with what changed. When the change is one the
  * session judges the person should decide, it asks with `ask: true`: the
- * change is recorded as the person's ask in that thread (asks.ts) and
+ * change is recorded as the person's ask in that session (asks.ts) and
  * the call answers at once; Approve has the hub apply it
  * ({@link ProjectSettings.runApproved}) and Deny notes it declined, and the
  * session is told either way.
@@ -39,9 +39,9 @@
  *   the rest of the project's dispatch settings, each checked by the rule
  *   the dashboard's own change is (dispatch.ts `dispatchProblem`) and
  *   written by the same `configure` (`PATCH /api/projects/:id/dispatch`).
- * - `set_caw`: Caw on or off, through the switch the person flips (caw.ts
- *   `configure`, `PATCH /api/projects/:id/caw`). Off lets what he started
- *   finish: his own turn is one of them.
+ * - `set_events`: whether the project's events reach its conversation,
+ *   through the switch the person flips (caw.ts `configure`,
+ *   `PATCH /api/projects/:id/caw`). Off lets what it started finish.
  * Called with no changes, it answers the project's settings as they stand,
  * each named by the change that sets it, and what dispatch would do now.
  * Only the session's own project, named by its id or its name in any case:
@@ -125,7 +125,7 @@ const ASKED_CHANGE = z.object({
   max_attempts: z.number().int().optional(),
   review_limit: z.number().int().optional(),
   budget: budgetParameter("Per attempt; null: no limit.").nullable().optional(),
-  caw: z.boolean().optional(),
+  events: z.boolean().optional(),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -137,7 +137,7 @@ const definition = z.object({
 });
 
 const DESCRIPTION =
-  "Read your project's settings (no changes) or change them, noted in the thread; ask: true asks the person first (create_repo and set_review always do).";
+  "Read your project's settings (no changes) or change them, noted in the project's conversation; ask: true asks the person first (create_repo and set_review always do).";
 
 /** What a malformed call is told, after what it got wrong. */
 const INPUT_HELP = `changes is a list of ${PROJECT_SETTING_KINDS.join(", ")}, and reason one sentence; leave changes out to read the settings.`;
@@ -167,8 +167,8 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       return { kind: change.kind, review_limit: change.reviewLimit };
     case "set_budget":
       return { kind: change.kind, budget: change.budget };
-    case "set_caw":
-      return { kind: change.kind, caw: change.caw };
+    case "set_events":
+      return { kind: change.kind, events: change.events };
     default:
       return unhandled("project setting", change);
   }
@@ -263,7 +263,7 @@ const alreadyWords = (change: DispatchSetting): string => {
 
 export interface ProjectSettingsDeps {
   /**
-   * Records the change as the person's ask in Caw's thread (asks.ts):
+   * Records the change as the person's ask in the session that asked (asks.ts):
    * what the call answers; undefined in Full Send, when it applies now.
    */
   readonly ask: (
@@ -292,7 +292,7 @@ export interface ProjectSettingsDeps {
    * landing, through the person's own edit (project-edit.ts).
    */
   readonly edit: (projectId: string, change: ProjectEdit) => Promise<unknown>;
-  /** Notes what happened in the thread Caw's turn answers (caw.ts `askThread`, `notice`). */
+  /** Notes what happened in the project's conversation (caw.ts `notice`). */
   readonly note: (actor: InstanceRow, note: ProjectNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;
@@ -394,15 +394,15 @@ export const createProjectSettings = ({
   };
 
   /** Caw on or off, refused when he is that already. */
-  const cawSet = (
+  const eventsSet = (
     project: ProjectRow,
     asked: AskedChange
   ): ProjectSettingChange => {
-    const on = asked.caw ?? refuse(projectSettingsWords.needs.caw);
+    const on = asked.events ?? refuse(projectSettingsWords.needs.events);
     if (on === project.eventsOn) {
-      refuse(projectSettingsWords.already.caw(on));
+      refuse(projectSettingsWords.already.events(on));
     }
-    return { kind: "set_caw", caw: on };
+    return { kind: "set_events", events: on };
   };
 
   /** One asked change, checked against the project as it stands, as the hub stores it. */
@@ -454,8 +454,8 @@ export const createProjectSettings = ({
       case "set_review_limit":
       case "set_budget":
         return dispatchSet(project, { ...asked, kind: asked.kind });
-      case "set_caw":
-        return cawSet(project, asked);
+      case "set_events":
+        return eventsSet(project, asked);
       case "set_lands":
         break;
       default:
@@ -486,7 +486,7 @@ export const createProjectSettings = ({
     return out;
   };
 
-  /** Applies one checked change through its setting's own code path; answers what the thread says of it. */
+  /** Applies one checked change through its setting's own code path; answers what the note says of it. */
   const applyOne = async (
     project: ProjectRow,
     change: ProjectSettingChange
@@ -525,8 +525,8 @@ export const createProjectSettings = ({
       case "set_budget":
         await dispatch.configure(project.id, dispatchColumns(change));
         break;
-      case "set_caw":
-        caw(project.id, change.caw);
+      case "set_events":
+        caw(project.id, change.events);
         break;
       case "set_lands":
         await edit(project.id, { lands: change.lands });
@@ -558,7 +558,7 @@ export const createProjectSettings = ({
     return reason;
   };
 
-  /** What the thread says of it: each change, what a publish took and left out, then why. */
+  /** What the note says of it: each change, what a publish took and left out, then why. */
   const noteBody = (
     lines: string[],
     changes: ProjectSettingChange[],
@@ -605,7 +605,7 @@ export const createProjectSettings = ({
     const now = await dispatch.view(project.id);
     return projectSettingsWords.read({
       name: project.name,
-      caw: project.eventsOn,
+      events: project.eventsOn,
       dispatch: now.dispatch,
       maxAttempts: now.maxAttempts,
       reviewLimit: now.reviewLimit,
@@ -655,7 +655,7 @@ export const createProjectSettings = ({
           name: project.name,
         },
       });
-      return `Applied: ${said.join("; ")}. It is noted in the thread.`;
+      return `Applied: ${said.join("; ")}. It is noted in the project's conversation.`;
     }
     const recorded = await ask(
       actor,
@@ -715,7 +715,7 @@ export const createProjectSettings = ({
     return `Applied: ${said.join("; ")}.`;
   };
 
-  /** A declined ask (asks.ts `carryOut`): noted in the thread, nothing applied. */
+  /** A declined ask (asks.ts `carryOut`): noted in the project's conversation, nothing applied. */
   const runDeclined = (
     actor: InstanceRow,
     input: Record<string, unknown>

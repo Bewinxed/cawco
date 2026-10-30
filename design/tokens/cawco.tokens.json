@@ -4503,7 +4503,7 @@
         "value": 640,
         "unit": "px"
       },
-      "$description": "Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters and earlier threads; shorter where the room under his seat is less."
+      "$description": "Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters; shorter where the room under his seat is less."
     },
     "c-top-bar-h": {
       "$type": "dimension",
@@ -4784,7 +4784,7 @@
         "value": 720,
         "unit": "px"
       },
-      "$description": "The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line).",
+      "$description": "The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (the panel's no-machine line).",
       "$extensions": {
         "dev.cawco": {
           "css": "min(720px, calc(100% - 50px))"
@@ -7515,7 +7515,7 @@
     "layer-dock": {
       "$type": "number",
       "$value": 50,
-      "$description": "A docked composer, or what stands in its place (Composer's dock, the decision page's and the view bar's docks, the thread pane's no-composer note): over the transcript and its fades."
+      "$description": "A docked composer, or what stands in its place (Composer's dock, the decision page's and the view bar's docks, the project panel's no-composer note): over the transcript and its fades."
     },
     "layer-bar": {
       "$type": "number",

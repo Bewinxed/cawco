@@ -705,7 +705,7 @@ export const createJevTasks = ({
   /**
    * A sentence from the phone about the project (Phone requests, choice +
    * fill). Jev on: Jev picks the action and fills it, and the hub does it as
-   * you. Off: the lead reads the sentence, as your words.
+   * you. Off: the project's conversation reads the sentence, as your words.
    */
   const phoneRequest = async (
     projectId: string,

@@ -354,7 +354,7 @@ export class TranscriptBuilder {
   /**
    * The `/` menu the session's newest `init` listed, as the hub keeps it,
    * before anything is read: a stored transcript that holds no `init` (a
-   * Claude session's file) still offers it ({@link seed} keeps it unless the
+   * Claude session's file) still offers it (a read keeps it unless the
    * read lists one), as does every `init` the live frames bring after.
    */
   carryCommands(commands: { names: string[]; skills: string[] }): void {
@@ -1168,49 +1168,6 @@ export class TranscriptBuilder {
   endTurn(): TranscriptEvent[] {
     this.setTail({ busy: false, currentTool: null });
     this.clearTurnPhase();
-    return this.flush();
-  }
-
-  /* ------------------------------------------------ a kept transcript — */
-
-  /**
-   * A transcript the hub keeps itself rather than reads off a machine (a Caw
-   * thread's, hub thread-transcript.ts): its rows ready-made, oldest first,
-   * with a placeholder ({@link sendRef}) wherever a send was read, and the
-   * records of its sends. The first build: it says nothing.
-   */
-  seed(rows: TranscriptBlock[], records: Record<string, SendRecord>): void {
-    this.rows = [...rows];
-    this.rowIds = new Set(rows.map((row) => row.id));
-    this.records = { ...records };
-    this.reads = 1;
-    this.#complete = true;
-    ({ blocks: this.placed, queued: this.queued } = placeSends(
-      this.rows,
-      this.records
-    ));
-    this.facts = { ...this.facts, initialized: true };
-  }
-
-  /**
-   * One ready-made row of a kept transcript ({@link seed}): at the end, or
-   * said again in its place when it is held.
-   */
-  applyBlock(block: TranscriptBlock): TranscriptEvent[] {
-    const at = this.rows.findIndex((row) => row.id === block.id);
-    if (at === -1) {
-      this.rows.push(block);
-      this.rowIds.add(block.id);
-    } else {
-      this.rows = this.rows.with(at, block);
-    }
-    this.replace();
-    return this.flush();
-  }
-
-  /** The live tail of a kept transcript ({@link seed}): the fields this change moves. */
-  applyTail(patch: Partial<TranscriptTail>): TranscriptEvent[] {
-    this.setTail(patch);
     return this.flush();
   }
 

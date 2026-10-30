@@ -1182,7 +1182,6 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
     what: "what you open in the person's panel for them to pick, judge, try or draw on (show skill first), their pins on it; design_map the component library; settle a card Who decides gives you",
   },
   { prefixes: ["memory_"], what: "project memory" },
-  { prefixes: ["thread_"], what: "your threads with the person" },
   { prefixes: ["view_"], what: "the project's views" },
   { prefixes: ["folder_"], what: "the project's folder on the hub" },
   { prefixes: ["conn__"], what: "connections granted to this session" },

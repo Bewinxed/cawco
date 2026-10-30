@@ -9,9 +9,7 @@
    * as a sheet (SideSheet): on a phone over the composer, which it covers
    * while it is up; in the desk's narrow pane standing on it, so the mouse
    * can write while it is up. A task there is its own page (the project page's
-   * `?task=`), never a sheet: the thread's cards link to it, as a thread's
-   * file chips link to the page's `?file=`. A session and a thread draw it
-   * alike. The plan is not here: its ring is the composer's, so it opens
+   * `?task=`), never a sheet. The plan is not here: its ring is the composer's, so it opens
    * as a layer of the composer over the transcript (plan/PlanPane), never
    * beside it.
    *
@@ -40,7 +38,6 @@
 
   let {
     viewId,
-    previewOf,
     visible,
     active,
     phone,
@@ -51,11 +48,6 @@
   }: {
     /** The conversation: its preview, and the key its width is kept under. */
     viewId: string;
-    /**
-     * The session whose preview shows here, when it is not the conversation
-     * itself: a thread shows its project's lead's (his setup page).
-     */
-    previewOf?: string | null;
     /**
      * The conversation is its group's active tab. A phone's sheet is laid
      * over the whole screen, outside the pane, so only the active tab's
@@ -86,8 +78,7 @@
 
   // --- what the surface holds --------------------------------------------------
 
-  const previewId = $derived(previewOf ?? viewId);
-  const previewOpen = $derived(cawco.previews[previewId]?.state === "open");
+  const previewOpen = $derived(cawco.previews[viewId]?.state === "open");
   const taskShown = $derived(taskOpen && !!task && phone === false);
   const open = $derived(previewOpen || taskShown);
   /** What is open, in the switch's order. */
@@ -172,8 +163,7 @@
     {@render task(switched)}
   {:else if previewOpen}
     <PreviewPane
-      instanceId={previewId}
-      linkSession={previewId !== viewId}
+      instanceId={viewId}
       onScreen={visible}
       switcher={switched}
       bind:this={previewPane}
@@ -193,14 +183,13 @@
          with its page held. -->
     <SideSheet
       content={root}
-      instanceId={previewId}
+      instanceId={viewId}
       onkeyescape={(event) => previewPane?.parentEscape(event)}
       open={sheetOpen}
     >
       <RegionBoundary region="preview">
         <PreviewPane
-          instanceId={previewId}
-          linkSession={previewId !== viewId}
+          instanceId={viewId}
           onScreen={visible && active}
           sheet
           bind:this={previewPane}

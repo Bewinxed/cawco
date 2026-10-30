@@ -347,7 +347,7 @@ export class FinderState {
     return entries;
   });
 
-  /** "Where it was said": sessions and threads the machines found it in, not already above. */
+  /** "Where it was said": sessions the machines found it in, not already above. */
   saidRows = $derived.by(() => {
     const answer = this.everywhereShown;
     if (!(answer && this.typed)) {

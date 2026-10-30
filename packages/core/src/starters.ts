@@ -56,7 +56,8 @@ export const STARTER_SOURCE_KINDS = [
 export type StarterSourceKind = (typeof STARTER_SOURCE_KINDS)[number];
 
 /**
- * One thing a starter comes from: a task id, a thread id, a folder path, a
+ * One thing a starter comes from: a task id, a thread id (from before
+ * conversations were sessions, kept for starters stored then), a folder path, a
  * commit sha, a routine id, or an event source and kind (`github:acme/site
  * issue.opened`).
  */

@@ -1,7 +1,7 @@
 /**
  * Forgetting a project never leaves its sessions running, and an unreachable
  * machine never makes a project unforgettable. Before a project is forgotten
- * its running sessions are listed as a tree (each lead with its delegates),
+ * its running sessions are listed as a tree (each top session with its delegates),
  * stopped in one request, and each one's end is reported back as its machine
  * confirms it, or as it fails, with the hub's reason. The delete itself is
  * refused while any of them still runs, so no client can orphan a session by
@@ -47,7 +47,7 @@ export interface RunningSession {
    * its machine is back.
    */
   offline: boolean;
-  /** The nearest running session it is a delegate of; null for a lead. */
+  /** The nearest running session it is a delegate of; null for a top session. */
   parentId: string | null;
   /** Its name as the rails give it (null: nobody named it; the client names it by its folder). */
   title: string | null;
@@ -118,7 +118,7 @@ export const createProjectStops = (ports: {
 
   const spawned = (row: Row) => row.spawnedAt?.getTime() ?? 0;
 
-  /** The project's running sessions, each lead followed by its delegates. */
+  /** The project's running sessions, each top session followed by its delegates. */
   const running = (projectId: string): RunningSession[] => {
     const all = members(projectId);
     const live = new Map(

@@ -6,9 +6,6 @@
     "Discarded workspace": 1,
     "its workspace": 1
   },
-  "scripts/probe-kit/specs/artifact-resize-loop-thread.ts": {
-    "Event setup:": 2
-  },
   "scripts/probe-kit/specs/artifact-responses.ts": {
     "Responses on": 1,
     "waiting for the agent": 1

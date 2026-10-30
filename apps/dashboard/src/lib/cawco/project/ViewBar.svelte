@@ -20,7 +20,7 @@
    * - Ask Caw (the head's own, which a phone's head has no room for), a
    *   bare "+" in a capsule of its own at the trailing end, off the coral (no
    *   view of a project is for asking him: DESIGN.md, One prominent action,
-   *   trailing): it opens Caw's panel on a new thread, the caret in his
+   *   trailing): it opens Caw's panel on a new conversation, the caret in his
    *   composer (work in a project starts by telling Caw).
    *
    * The pill and "+" press to --press-scale over --dur-toggle.
@@ -63,7 +63,7 @@
     /** The Needs you filter is on. */
     needsOn: boolean;
     ontoggleneeds: () => void;
-    /** Ask Caw: his panel on a new thread. */
+    /** Ask Caw: his panel on a new conversation. */
     onnewsession: () => void;
   } = $props();
 

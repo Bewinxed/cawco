@@ -122,7 +122,7 @@ export {
 } from "~icons/solar/cursor-bold-duotone";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
 export { default as IconDatabase } from "~icons/solar/database-bold-duotone";
-// A new thread: a conversation of two. Its full-weight marks are as large as
+// A new conversation: two speech bubbles. Its full-weight marks are as large as
 // a menu's other glyphs' (an add mark inside a tile read smaller beside them).
 export { default as IconChatAdd } from "~icons/solar/dialog-2-bold-duotone";
 export { default as IconDocumentAlt } from "~icons/solar/document-bold-duotone";

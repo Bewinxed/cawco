@@ -5,7 +5,8 @@
  *
  * - **Read**, before the card: the project's primary checkout is made a git
  *   repository when it is a plain folder (place-repo.ts `ensure`: what is
- *   private, secret, large or generated stays out, and the thread is told),
+ *   private, secret, large or generated stays out, and the project's
+ *   conversation is told),
  *   then its branch, commit, files and bytes, and every path the rules keep
  *   out, are read on its machine (CONTROL_PLACE_PUSH, a dry run), which
  *   refuses a place whose commits hold what the rules or the credential

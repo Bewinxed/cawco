@@ -141,7 +141,9 @@ const event = z.object({
   routedTo: z
     .string()
     .nullable()
-    .describe('The routine a route sent it to, by name; "Caw" for the lead.'),
+    .describe(
+      'The routine a route sent it to, by name; "Caw" for the project\'s conversation.'
+    ),
   handledAt: z.number().nullable(),
 });
 

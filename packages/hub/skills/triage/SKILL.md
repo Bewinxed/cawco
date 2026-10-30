@@ -1,6 +1,6 @@
 ---
 name: triage
-description: Triage a project's tasks into needs-info, ready-for-agent, ready-for-human or won't do, one batch per wake. Use when tasks arrive without acceptance criteria, when the person asks what is ready, what needs them or to triage, or when a lead wakes with untriaged tasks.
+description: Triage a project's tasks into needs-info, ready-for-agent, ready-for-human or won't do, one batch per wake. Use when tasks arrive without acceptance criteria, when the person asks what is ready, what needs them or to triage, or when the project's conversation wakes with untriaged tasks.
 ---
 
 # Triage

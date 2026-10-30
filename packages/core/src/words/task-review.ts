@@ -1,6 +1,6 @@
 /**
- * What a task's review says (the dashboard's TaskReview, in a thread's task
- * card and on the task's sheet): what is under review, the note you leave,
+ * What a task's review says (the dashboard's TaskReview, on the task's
+ * sheet): what is under review, the note you leave,
  * and where Approve and Send back take the task, with who takes it up.
  */
 export const taskReviewWords = {

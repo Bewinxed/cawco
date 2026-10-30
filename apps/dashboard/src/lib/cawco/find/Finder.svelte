@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Find (docs/tom/find-and-mention-chosen.md, Option 1 with its must-fixes):
-   * one field and one list whose unit is a session or a thread, the reason
+   * one field and one list whose unit is a session, the reason
    * it matched under it. Its contents only; the host hangs it (the glass's
    * card on the desk, a sheet from the glass on a phone).
    *
@@ -73,7 +73,7 @@
     phone?: boolean;
     /** Where it stands in its host (FinderCard: it fills Jump's sheet on a phone). */
     class?: string;
-    /** ↵ on a session, a thread or a thing: open it (at a moment, when there is one). */
+    /** ↵ on a session or a thing: open it (at a moment, when there is one). */
     onopen: (opening: Opening) => void;
     onopenwaiting: (item: WaitingItem) => void;
     onmachine: (result: FindResult, act: MachineAct) => void;

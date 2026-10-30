@@ -261,7 +261,7 @@
 
   /**
    * The name's box at its lead's own width, up to {@link NAME_KEEPS}: its
-   * inset and ring room around it. The lead is the title, or the part of a
+   * inset and ring room around it. Its lead is the title, or the part of a
    * title control marked `data-slot="name-lead"` (its words, before a trailing ring
    * or figure that may be cut), else the control whole.
    */

@@ -187,7 +187,7 @@
       return;
     }
     if (item.kind !== "ask") {
-      // An artifact's is its session's (or Caw's thread's) address; the
+      // An artifact's is its session's address; the
       // press opens the artifact there itself (`chosen`), so a press on the
       // address already in front opens it too.
       return item.kind === "artifact" ? item.href.split("?")[0] : item.href;

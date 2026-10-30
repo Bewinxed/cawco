@@ -520,7 +520,7 @@ export const SESSION_STOPPED = "session_stopped";
 /**
  * The hub's line in a session's transcript for what fleet watch did about it
  * (core fleet-watch.ts): a triage's decision, or a notice it raised for you,
- * in the watched session and in its lead's. `content`'s first line is the
+ * in the watched session and in its steward's. `content`'s first line is the
  * line ("Same Bash call 3 times in a row · nudged Caw"); the rest, the
  * triage's reason, under it. Drawn as a note; never sent to the session.
  */
@@ -528,7 +528,7 @@ export const FLEET_WATCH = "fleet_watch";
 
 /**
  * The hub's line in a project conversation's transcript for one of its
- * notes to the person (hub caw.ts `notice`, core threads.ts `ProjectNote`):
+ * notes to the person (hub caw.ts `notice`, core project-conversation.ts `ProjectNote`):
  * `content` is the note as JSON, drawn as a note titled by its title, its
  * body under it, with what its event offers (a made routine's Keep, a design
  * or LFS offer) under that. Never sent to the session.
@@ -1112,7 +1112,7 @@ export const SEND_STATES = everyOf<SendState>()([
  *   machine. Signing one in there lets it run.
  * - `machine-away`: the session's machine is not connected.
  * - `item-closed`: finished delegated work, which only its reader, parent or
- *   project lead may continue.
+ *   project's conversation may continue.
  * - `item-superseded`: finished delegated work whose workspace has moved on
  *   to a newer item, the one to message instead.
  * - `workspace-archived`: finished delegated work whose clone is gone.

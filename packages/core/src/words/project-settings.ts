@@ -1,7 +1,7 @@
 /**
- * What `project_settings` answers a project's Caw (hub project-settings.ts):
- * his project's settings as they stand, each change in the card's and the
- * thread's words, and its refusals. Agent-facing: each line names the
+ * What `project_settings` answers a session in a project (hub
+ * project-settings.ts): its project's settings as they stand, each change in
+ * the card's and the project note's words, and its refusals. Agent-facing: each line names the
  * setting by the field that changes it.
  */
 
@@ -27,10 +27,11 @@ const onOff = (on: boolean): string => (on ? "on" : "off");
 /** What the read shows: the project as the hub keeps it, and what dispatch does now. */
 export interface SettingsRead {
   budget: SettingsBudget | null;
-  caw: boolean;
   /** Connections granted to the project. */
   connections: string[];
   dispatch: boolean;
+  /** Whether the project's events reach its conversation. */
+  events: boolean;
   /** The tasks dispatch would start next, in order. */
   frontier: string[];
   lands: string;
@@ -53,7 +54,7 @@ export const projectSettingsWords = {
   read: (now: SettingsRead): string =>
     [
       `${now.name}'s settings, each with the change that sets it:`,
-      `- Caw: ${onOff(now.caw)} (set_caw)`,
+      `- Events reach the project's conversation: ${onOff(now.events)} (set_events)`,
       `- Start attempts at ready tasks on their own: ${onOff(now.dispatch)} (set_dispatch)`,
       `- Attempts at once: at most ${now.maxAttempts} (set_max_attempts)`,
       `- Dispatch pauses at ${now.reviewLimit} tasks waiting for review (set_review_limit)`,
@@ -71,7 +72,7 @@ export const projectSettingsWords = {
       }`,
     ].join("\n"),
 
-  /** Each dispatch change, in the card's and the thread's words. */
+  /** Each dispatch change, in the card's and the project note's words. */
   dispatchOn: (on: boolean): string =>
     on
       ? "Start attempts at ready tasks on their own"
@@ -84,10 +85,10 @@ export const projectSettingsWords = {
     budgetText(budget) === "no limit"
       ? "Let each attempt spend with no project limit"
       : `Let each attempt spend at most ${budgetText(budget)}`,
-  cawOn: (on: boolean): string =>
+  eventsOn: (on: boolean): string =>
     on
-      ? "Turn Caw on: routines and events wake him"
-      : "Turn Caw off: what he started finishes, and only the person's words wake him",
+      ? "Turn events on: routines and events reach the project's conversation"
+      : "Turn events off: what the conversation started finishes, and only the person's words reach it",
 
   /** Refusals, each naming the field and how to fix it. */
   already: {
@@ -98,7 +99,8 @@ export const projectSettingsWords = {
     reviewLimit: (count: number) =>
       `Dispatch pauses at ${count} tasks waiting for review already.`,
     budget: "Each attempt may spend that already.",
-    caw: (on: boolean) => `Caw is ${onOff(on)} for this project already.`,
+    events: (on: boolean) =>
+      `Events are ${onOff(on)} for this project already.`,
     runsOn: (to: string | null) =>
       `This project's attempts run on ${to ?? "any machine"} already.`,
   },
@@ -108,7 +110,7 @@ export const projectSettingsWords = {
     reviewLimit: "set_review_limit names review_limit, a whole number.",
     budget:
       "set_budget names budget: usd, turns or minutes, or null for no limit.",
-    caw: "set_caw says on (caw: true) or off (false).",
+    events: "set_events says on (events: true) or off (false).",
   },
   /** A grant of a connection the hub has none of: what it can grant instead. */
   noConnection: (name: string, grantable: string[]): string =>

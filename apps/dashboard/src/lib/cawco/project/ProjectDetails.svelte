@@ -30,7 +30,7 @@
    *   Bound, it names the target, the connection, how many tasks are linked
    *   and how its sync stands, the tracker's refusal in its words with Try
    *   again, and the GitHub Project, or GitHub's words for why there is none.
-   * - Caw: his lead switch (CawLeadSwitch), its ways off with it.
+   * - Caw: whether events reach a conversation (CawLeadSwitch), its ways off with it.
    * - Review before done.
    *
    * A change shows what was asked while the hub answers (the segment's thumb

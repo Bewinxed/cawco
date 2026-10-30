@@ -8,8 +8,8 @@
   import { detach } from "@cawco/core/detach";
   import { todoProgress } from "@cawco/core/plan";
   /**
-   * The project's views (design §2, PRD §5.2): the head with Caw as the
-   * lead's face, then the view; the view strip stands in the shell's bar on
+   * The project's views (design §2, PRD §5.2): the head with Caw's face,
+   * then the view; the view strip stands in the shell's bar on
    * a wide screen and under the head on a narrow one. On a phone (under
    * 640px) the page is the one scroller: the head scrolls away with the
    * view, and the views, Needs you and Ask Caw stand in one bar docked

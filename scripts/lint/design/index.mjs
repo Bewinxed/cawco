@@ -141,7 +141,6 @@ const INLINE_STYLES = {
     "transform",
   ],
   "src/lib/cawco/spawn/ProjectChip.svelte": ["color"],
-  "src/lib/cawco/ThreadPane.svelte": ["animation-delay", "padding-block-end"],
   "src/lib/cawco/spawn/Segmented.svelte": ["transform"],
   "src/lib/cawco/spawn/ToolChips.svelte": ["color"],
   "src/lib/cawco/spawn/TriggerMenu.svelte": ["color", "opacity", "transform"],

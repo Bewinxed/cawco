@@ -10,7 +10,7 @@ import UIKit
 ///
 /// With nothing running it is the plain question: Forget, the delete, gone.
 /// With sessions running it names each one where the decision is made,
-/// nested as the rail nests them (a lead, then its delegates), and asks twice
+/// nested as the rail nests them (a session, then its delegates), and asks twice
 /// on one button: "Stop 3 and forget", then "Stop 3 mid-turn and forget".
 /// A row turns Stopped only when the hub says its machine confirmed the end
 /// (`project.stop`), never at the ask, and folds away; a session whose
@@ -241,7 +241,7 @@ final class ForgetProjectDialog: KitDialogController {
             phase = .fail
         }
         morph { render() }
-        // A stopped row's word turns first; then it folds away, a lead after its delegates.
+        // A stopped row's word turns first; then it folds away, a parent after its delegates.
         if outcome == .stopped {
             DispatchQueue.main.asyncAfter(deadline: .now() + Motion.durFade) { [weak self] in self?.foldStopped() }
         }

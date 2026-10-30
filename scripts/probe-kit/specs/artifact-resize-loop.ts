@@ -8,8 +8,7 @@
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model), a page artifact with an ask made by a session, in light and
- * in dark (a thread showing its Caw's, ThreadPane, is
- * artifact-resize-loop-thread, which runs on the host):
+ * in dark:
  *
  * - Opened on its own tab (`/artifact/<id>`) and beside its session
  *   (`/session/<id>`) at desk 1440, and on its own tab at phone 390. Each
@@ -1297,8 +1296,8 @@ const NARROW_DESK = { width: 860, height: 900 };
  * In a fine pointer's desk window 860 wide, where the preview is the sheet on
  * the composer: the conversation opened as a person there opens it. The
  * board (`/`), then the navigation the bar's burger opens under the rail's
- * 900px line (Shell), where each project lists its conversations, a thread
- * with its Caw or a session, running or at rest (Sidebar): its row (`path`'s
+ * 900px line (Shell), where each project lists its conversations, running
+ * or at rest (Sidebar): its row (`path`'s
  * link) stands there once the fleet's frame that lists it has come, and that
  * frame carries every session's preview, so the dashboard holds its preview
  * open. The row pressed, SvelteKit routes it in the page and the sheet goes

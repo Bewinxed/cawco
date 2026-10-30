@@ -32315,7 +32315,7 @@
             ]
           },
           "role": {
-            "description": "The toolset the session runs in, written on its row at this first spawn\nand kept there: a project's Caw is `lead`, a delegate type's `role` its\nwork item's. Absent: the hub derives it (`delegate` or `worker`).",
+            "description": "The toolset the session runs in, written on its row at this first spawn\nand kept there: a delegate type's `role` is its work item's. Absent: the hub derives it (`delegate` or `worker`).",
             "enum": [
               "curator",
               "delegate",
@@ -34833,7 +34833,7 @@
             ]
           },
           "lastAttemptFailed": {
-            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nlead for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
+            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nproject's conversation for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
             "type": "boolean"
           },
           "lastAttemptStopped": {
@@ -35350,7 +35350,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "The session's instance id (a session, the lead), or the approved action's id; null when the commit names none.",
+            "description": "The session's instance id (a session, the project's conversation), or the approved action's id; null when the commit names none.",
             "type": [
               "null",
               "string"
@@ -35411,7 +35411,7 @@
             }
           },
           "context": {
-            "description": "Project folder files its attempt's brief carries (`context:`), the lead's pick.",
+            "description": "Project folder files its attempt's brief carries (`context:`), the conversation's pick.",
             "type": "array",
             "items": {
               "type": "string"
@@ -35605,7 +35605,7 @@
             ]
           },
           "lastAttemptFailed": {
-            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nlead for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
+            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nproject's conversation for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
             "type": "boolean"
           },
           "lastAttemptStopped": {
@@ -36346,7 +36346,7 @@
         ]
       },
       "StarterSource": {
-        "description": "One thing a starter comes from: a task id, a thread id, a folder path, a\ncommit sha, a routine id, or an event source and kind (`github:acme/site\nissue.opened`).",
+        "description": "One thing a starter comes from: a task id, a thread id (from before\nconversations were sessions, kept for starters stored then), a folder path, a\ncommit sha, a routine id, or an event source and kind (`github:acme/site\nissue.opened`).",
         "type": "object",
         "properties": {
           "kind": {
@@ -37725,7 +37725,7 @@
             "type": "boolean"
           },
           "session": {
-            "description": "The session that made it, when it is not the caller's own (a lead reading its project's).",
+            "description": "The session that made it, when it is not the caller's own (a conversation reading its project's).",
             "type": "string"
           },
           "sessionLink": {
@@ -40033,7 +40033,7 @@
         "type": "object",
         "properties": {
           "askedOf": {
-            "description": "The session asked to make its tasks; null when none was (Caw's thread, or Make tasks not pressed).",
+            "description": "The session asked to make its tasks; null when none was (Make tasks not pressed).",
             "type": [
               "null",
               "string"
@@ -42580,7 +42580,7 @@
         ]
       },
       "RelayCreated": {
-        "description": "What creating a relay answers: the relay, and the routes a lead may propose for it.",
+        "description": "What creating a relay answers: the relay, and the routes a conversation may propose for it.",
         "type": "object",
         "properties": {
           "relay": {
@@ -47787,7 +47787,7 @@
         ]
       },
       "EndedBy": {
-        "description": "Who ended a session's process ({@link AccountMove} `ended`): a person (the\ndashboard's Stop), a session (its parent's `stop_delegate`, a lead), the\nhub's own work (`why`: a work item over, a project\nforgotten), or a signal no part of CawCo sent (`outside`), after which the\nturn it cut is handed back when there was one (`resumes`).",
+        "description": "Who ended a session's process ({@link AccountMove} `ended`): a person (the\ndashboard's Stop), a session (its parent's `stop_delegate`, or its project's conversation's), the\nhub's own work (`why`: a work item over, a project\nforgotten), or a signal no part of CawCo sent (`outside`), after which the\nturn it cut is handed back when there was one (`resumes`).",
         "anyOf": [
           {
             "type": "object",
@@ -51961,7 +51961,7 @@
             "type": "boolean"
           },
           "parentId": {
-            "description": "The nearest running session it is a delegate of; null for a lead.",
+            "description": "The nearest running session it is a delegate of; null for a top session.",
             "type": [
               "null",
               "string"
@@ -55942,7 +55942,7 @@
         ]
       },
       "PlanFollow": {
-        "description": "Client → hub: the sessions whose plan this socket follows beside the ones\nit streams (a thread showing its lead's plan), the whole set each time.\nOne newly in the set is answered with its snapshot; deltas follow.",
+        "description": "Client → hub: the sessions whose plan this socket follows beside the ones\nit streams (the app's project page), the whole set each time.\nOne newly in the set is answered with its snapshot; deltas follow.",
         "type": "object",
         "properties": {
           "instanceIds": {
@@ -56974,7 +56974,7 @@
           },
           "role": {
             "$ref": "#/components/schemas/DelegateTypeRole",
-            "description": "The toolset it runs in, when its spawn named one (a project's Caw is\n`lead`); null: derived from how it started."
+            "description": "The toolset it runs in, when its spawn named one; null: derived from\nhow it started."
           },
           "runningDelegates": {
             "description": "Hub-derived count of live delegated work items, including descendants and checks.",
@@ -57415,7 +57415,7 @@
         "type": "object",
         "properties": {
           "asker": {
-            "description": "The session that asked, by the name the board gives it (\"Caw\" for a project's lead).",
+            "description": "The session that asked, by the name the board gives it (\"Caw\" for a project's conversation).",
             "type": "string"
           },
           "changes": {
@@ -57695,7 +57695,7 @@
             "description": "Approve or deny; absent when the harness settled the ask itself and did not say."
           },
           "name": {
-            "description": "The paired device that answered (a page or the app), or the session that\ndid (a delegate's parent, its project's lead), by name; absent when the\nhub knows no name (a page or app it trusts by its network).",
+            "description": "The paired device that answered (a page or the app), or the session that\ndid (a delegate's parent, its project's conversation), by name; absent when the\nhub knows no name (a page or app it trusts by its network).",
             "type": "string"
           },
           "via": {

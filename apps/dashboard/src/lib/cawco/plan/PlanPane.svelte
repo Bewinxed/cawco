@@ -74,7 +74,7 @@
     instanceId,
     onclose,
   }: {
-    /** The session whose plan this is (a thread's: its project's lead). */
+    /** The session whose plan this is. */
     instanceId: string;
     onclose: () => void;
   } = $props();

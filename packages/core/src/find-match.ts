@@ -297,8 +297,8 @@ const covers = (term: string, word: string): boolean =>
 
 /**
  * `marked` with every whole word of its text that is one of `words` marked
- * too, where no mark stands already: what no index marked (a thread's
- * message, kept at the hub), or what the index was not asked for (a kind
+ * too, where no mark stands already: what no index marked (a note kept at
+ * the hub), or what the index was not asked for (a kind
  * word such as "canvas" or "page", which narrows the kinds rather than the
  * words; a short last word, left out while it is typed). A word matches
  * whole, or by its start from {@link STEM_MIN} letters on; never a letter

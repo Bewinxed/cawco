@@ -427,7 +427,7 @@ const ONBOARDING: SeedPage = {
       section: "The first ten minutes",
       after: ["first-project"],
       question: "How does Caw say hello?",
-      why: "He is the project's lead.",
+      why: "He is the project's conversation.",
       options: [
         option("intro-line", "One line", "Over the empty board.", true),
         option("intro-card", "A card", "What he does, in three lines."),

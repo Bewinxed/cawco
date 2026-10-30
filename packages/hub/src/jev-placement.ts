@@ -333,12 +333,12 @@ export async function jevDispatch(
   );
 }
 
-/** The field the lead scores readiness in when Jev is off: `ready: yes`. */
+/** The field the project's conversation scores readiness in when Jev is off: `ready: yes`. */
 const READY_FIELD = "ready";
 
 /**
- * Ready to dispatch with Jev off: the lead's score from when it planned
- * (`ready: yes` on the task); with the lead off, a check must exist.
+ * Ready to dispatch with Jev off: the conversation's score from when it planned
+ * (`ready: yes` on the task); with events off, a check must exist.
  */
 export const readyByRule = (
   task: { checks: number; fields: Record<string, string | undefined> },
@@ -482,7 +482,7 @@ export const TO_CONVERSATION = "conversation";
 /**
  * Event routing with Jev on: among the routines whose routes' conditions
  * hold for the event (the matcher filters first), the one it is for, or
- * none, which sends it to the lead's next wake.
+ * none, which sends it to the conversation's next wake.
  */
 export async function jevRoute(
   access: JevAccess,
@@ -617,7 +617,7 @@ const PHONE_ACTIONS = {
   move: "Move the task to another stage (done, review, dropped, back to do).",
   comment:
     "A note on the task for whoever works on it: guidance, a correction, an answer.",
-  caw: "Anything else: a question, or a request for the project's lead.",
+  caw: "Anything else: a question, or a request for the project's conversation.",
 } as const;
 export type PhoneAction = keyof typeof PHONE_ACTIONS;
 

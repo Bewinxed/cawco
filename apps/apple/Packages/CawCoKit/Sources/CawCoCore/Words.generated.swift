@@ -2531,6 +2531,49 @@ public enum Words {
         }
     }
 
+    public enum ProjectConversation {
+        // packages/core/src/words/project-conversation.ts `conversationWords`
+        /// The panel head's action: a new session in the project, its words the first prompt.
+        public static let newConversation = "New conversation"
+
+        /// The panel head's action: the conversation on show, as a tab.
+        public static let openAsTab = "Open as a tab"
+
+        /// A new conversation with nowhere to run: the project has no checkout on a machine yet.
+        public static let noCheckout = "This project has no checkout on a machine yet, so a conversation can't start. Add one in Project details, then try again."
+
+        /// Caw's sentence on the project head and in his panel: what the project's conversation is doing.
+        public enum Status {
+            /// Events off, with what the conversation started still finishing.
+            public static func offFinishing(count: Int) -> String {
+                "Events off · \(count) still finishing"
+            }
+
+            /// Events off, nothing running: only the person's words reach it.
+            public static let off = "Events off · answers when you write"
+
+            /// It waits on an answer of yours.
+            public static let waiting = "Waiting on you"
+
+            /// A task just landed.
+            public static func landed(taskId: String) -> String {
+                "\(taskId) landed"
+            }
+
+            /// Nothing to do, under way or waiting.
+            public static let idle = "Nothing due"
+
+            /// At rest, ready for words.
+            public static let ready = "Ready"
+
+            /// The board is still on its way.
+            public static let reading = "Reading the board…"
+
+            /// The hub is away.
+            public static let reconnecting = "Reconnecting to the hub"
+        }
+    }
+
     public enum Views {
         // packages/core/src/words/views.ts `viewsWords`
         /// The strip's ghost action, and the head's ⋯ on a phone, while Caw can start.
@@ -3731,7 +3774,7 @@ public enum Words {
         /// What reaching a budget can do, in the order the field lists them.
         public static let onCaps: [OnCap] = [
             OnCap(value: "pause", label: "Pause dispatch", means: "No new attempt at the project's tasks starts. Caw still answers you."),
-            OnCap(value: "quiet", label: "Stop waking Caw", means: "What would wake the project's Caw is noted in its thread, without a turn. Attempts still start."),
+            OnCap(value: "quiet", label: "Stop waking Caw", means: "Nothing reaches the project's conversation until the cap resets. Attempts still start."),
             OnCap(value: "both", label: "Pause both", means: "No new attempt starts, and Caw is not woken."),
         ]
     }

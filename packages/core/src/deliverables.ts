@@ -124,7 +124,7 @@ export function withFirstParagraph(text: string, first: string): string {
 /**
  * What a writer is told about a post's output, in an attempt's brief (where
  * the writer reads its outputs). The task tools say nothing of it: the role
- * tool budgets (hub role-budgets.ts) leave the lead no room for the shape.
+ * tool budgets (hub role-budgets.ts) leave no room for the shape.
  */
 export const POST_OUTPUT_RULE =
   'A social post is `<task>.post.json`: {"kind":"x-post","account":"@handle","text":"…","alternates":["first paragraph"],"media":{"plan":"…","files":[]},"community":"…","thread":["reply"]}; kind, account, text required. Plan notes beside it as .md; list both.';

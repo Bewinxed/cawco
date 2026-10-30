@@ -22,7 +22,7 @@ public enum SoundPreference {
     public static let changed = Notification.Name("dev.cawco.sound")
 }
 
-/// Caw's motion while a project's lead works (feel.svelte.ts `cawLoop`):
+/// Caw's motion while a project's conversation works (feel.svelte.ts `cawLoop`):
 /// his working loop plays, the default, or he holds its still.
 @MainActor
 public enum CawLoopPreference {

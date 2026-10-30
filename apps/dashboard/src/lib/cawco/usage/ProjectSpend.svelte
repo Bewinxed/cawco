@@ -260,7 +260,7 @@
         <StatTile label="This month" value={usd(spend.monthUsd)} />
         <StatTile
           label="Caw, this month"
-          unit={leadOn === false ? "lead off" : undefined}
+          unit={leadOn === false ? "events off" : undefined}
           value={usd(spend.caw.monthUsd)}
         />
         <StatTile

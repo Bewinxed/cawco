@@ -805,7 +805,7 @@ private final class NoticeRow: UIView {
 
     /// Caw's mark in the notice's status, or a group's glyph: the accounts'
     /// own (`IconAccounts`, Solar users-group-rounded), 16pt in muted ink,
-    /// centred in the lead as a section head's is (MovedLogins.svelte `.glyph`).
+    /// centred in the lead column as a section head's is (MovedLogins.svelte `.glyph`).
     static func leadView(_ lead: Notice.Lead) -> UIView {
         switch lead {
         case let .caw(status):

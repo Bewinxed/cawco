@@ -23,15 +23,10 @@
    * The result band is never empty. No session handed in a result (its
    * work landed from another session, or it waits on a decision), it says
    * what is under review instead: the commits its words say landed and its
-   * description. In review, it names the cards it waits on you to answer
-   * (beside it, TaskNeeds leaves them out: `decisionsNamed`).
+   * description. In review, it names the cards it waits on you to answer.
    *
    * Two columns once the review is wide enough (the pane expanded, the
    * task's own page): the words beside the stage, unclamped.
-   *
-   * `compact` (a Caw thread's card, inside the task's own box): the result
-   * band and the decision; what it attached, and what it presented, open
-   * the task beside the conversation.
    */
   import {
     artifactName,
@@ -85,22 +80,16 @@
     projectId,
     task,
     stages,
-    compact = false,
     onmove,
     onchanged,
-    onopen,
   }: {
     projectId: string;
     task: TaskView;
     stages: StagesView;
-    /** A thread's card: no stage; what it attached opens the task. */
-    compact?: boolean;
     /** Moves the task; throws the hub's refusal. */
     onmove: (stage: string) => Promise<TaskView>;
     /** The hub wrote the task. */
     onchanged: (task: TaskView) => void;
-    /** Opens the task in full (`compact`). */
-    onopen?: (id: string) => void;
   } = $props();
 
   // --- the session and what it handed in ----------------------------------------
@@ -140,12 +129,9 @@
   );
   const check = $derived(result?.check ?? []);
   /**
-   * Nothing presented: a session's words are the stage (a thread's card has
-   * none). A task's own words stay in the result band, as a summary does.
+   * Nothing presented: a session's words are the stage. A task's own words stay in the result band, as a summary does.
    */
-  const wordsStage = $derived(
-    !(compact || presented || unreported) && whole.length > 0
-  );
+  const wordsStage = $derived(!(presented || unreported) && whole.length > 0);
 
   const row = $derived(
     from ? cawco.instanceIndex.byId.get(from.instanceId) : undefined
@@ -322,17 +308,13 @@
     file: IconDocument,
     post: IconDocument,
   } as const;
-  /** In a thread's card, what it presented is named among what it attached. */
-  const listed = $derived(
-    compact && presented ? [presented, ...attached] : attached
-  );
   /** The words line: its summary, unless the stage carries its words. */
   const wordsLine = $derived(summary.length > 0 && !wordsStage);
   /** The result band has something to say. */
   const banded = $derived(
     !!from ||
       wordsLine ||
-      listed.length > 0 ||
+      attached.length > 0 ||
       landed.length > 0 ||
       asked.length > 0
   );
@@ -340,41 +322,22 @@
 
 {#snippet attachment(one: ResultArtifact)}
   {@const Icon = GLYPH[one.kind]}
-  {#if compact}
-    <button
-      data-slot="attachment"
-      aria-label="Open {task.id}: {nameOf(one)}"
-      class="select-none inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
-      onclick={() => onopen?.(task.id)}
-      style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
-      style:--attach-my-coarse="calc((1lh - var(--c-btn-h-lg)) / 2)"
-      style:--attach-max-w="calc(100% + var(--space-1) * 2)"
-      title={titleOf(one)}
-      type="button"
+  <a
+    data-slot="attachment"
+    class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
+    href={hrefOf(one)}
+    rel="noopener"
+    style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
+    style:--attach-my-coarse="calc((1lh - var(--c-btn-h-lg)) / 2)"
+    style:--attach-max-w="calc(100% + var(--space-1) * 2)"
+    target="_blank"
+    title={titleOf(one)}
+  >
+    <Icon class="flex-none size-icon-sm" />
+    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{nameOf(one)}</span
     >
-      <Icon class="flex-none size-icon-sm" />
-      <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-        >{nameOf(one)}</span
-      >
-    </button>
-  {:else}
-    <a
-      data-slot="attachment"
-      class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
-      href={hrefOf(one)}
-      rel="noopener"
-      style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
-      style:--attach-my-coarse="calc((1lh - var(--c-btn-h-lg)) / 2)"
-      style:--attach-max-w="calc(100% + var(--space-1) * 2)"
-      target="_blank"
-      title={titleOf(one)}
-    >
-      <Icon class="flex-none size-icon-sm" />
-      <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-        >{nameOf(one)}</span
-      >
-    </a>
-  {/if}
+  </a>
 {/snippet}
 
 {#snippet checkList()}
@@ -393,8 +356,7 @@
 
 <section
   aria-label="Review {task.id}"
-  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:not-data-compact:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
-  data-compact={compact || undefined}
+  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline @task-frame/task-frame:grid-cols-(--review-cols) @task-frame/task-frame:grid-rows-(--review-rows-wide)"
   data-words-staged={wordsStage || undefined}
   style:--review-areas={'"result" "stage" "decide"'}
   style:--review-areas-wide={'"result stage" "decide decide"'}
@@ -407,9 +369,8 @@
   <div
     data-slot="result"
     style:--area="result"
-    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) group-data-compact:px-space-3 @task-frame/task-frame:not-data-compact:min-h-0 @task-frame/task-frame:not-data-compact:overflow-y-auto @task-frame/task-frame:not-data-compact:overscroll-contain @task-frame/task-frame:not-data-compact:border-e @task-frame/task-frame:not-data-compact:border-e-border-hairline"
+    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) @task-frame/task-frame:min-h-0 @task-frame/task-frame:overflow-y-auto @task-frame/task-frame:overscroll-contain @task-frame/task-frame:border-e @task-frame/task-frame:border-e-border-hairline"
     data-band="result"
-    data-compact={compact || undefined}
   >
     {#if from}
       <div
@@ -497,8 +458,7 @@
     {#if wordsLine}
       <div
         data-slot="words"
-        class="group/words flex flex-col @task-frame/task-frame:not-data-compact:hidden"
-        data-compact={compact || undefined}
+        class="group/words flex flex-col @task-frame/task-frame:hidden"
         data-more={more || undefined}
         bind:this={wordsBox}
       >
@@ -535,17 +495,14 @@
         </div>
       </div>
       <!-- Two columns: the words whole, what to check as the list. -->
-      <div
-        class="hidden flex-col gap-space-2 @task-frame/task-frame:not-data-compact:flex"
-        data-compact={compact || undefined}
-      >
+      <div class="hidden flex-col gap-space-2 @task-frame/task-frame:flex">
         <MessageBody source={whole} />
         {@render checkList()}
       </div>
     {/if}
-    {#if listed.length > 0}
+    {#if attached.length > 0}
       <div class="flex flex-wrap gap-space-3" data-band-part="attachments">
-        {#each listed as one, index (index)}
+        {#each attached as one, index (index)}
           {@render attachment(one)}
         {/each}
       </div>
@@ -558,41 +515,39 @@
   </div>
 
   <!-- Band 2: the stage, the only part that scrolls -->
-  {#if !compact}
-    <div
-      data-slot="stage"
-      style:--area="stage"
-      class="row-(--area) col-(--area) flex flex-col min-h-0 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-none"
-      data-band="stage"
-      data-framed={!!presented || undefined}
-      id="stage-{task.id}"
-    >
-      {#if presented}
-        <Presented {presented} />
-      {:else if wordsStage}
-        <div class="flex flex-col gap-space-2">
-          <MessageBody source={whole} />
-          {@render checkList()}
-        </div>
-      {:else}
-        <p class="m-0 type-body text-ink-muted">
-          {#if attached.length > 0}
-            Nothing presented, only its files.
-          {:else if from}
-            Nothing handed in.
-          {:else}
-            No session has worked on it.
-          {/if}
-        </p>
-      {/if}
-    </div>
-  {/if}
+  <div
+    data-slot="stage"
+    style:--area="stage"
+    class="row-(--area) col-(--area) flex flex-col min-h-0 py-space-3 px-(--pane-inline) border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-none"
+    data-band="stage"
+    data-framed={!!presented || undefined}
+    id="stage-{task.id}"
+  >
+    {#if presented}
+      <Presented {presented} />
+    {:else if wordsStage}
+      <div class="flex flex-col gap-space-2">
+        <MessageBody source={whole} />
+        {@render checkList()}
+      </div>
+    {:else}
+      <p class="m-0 type-body text-ink-muted">
+        {#if attached.length > 0}
+          Nothing presented, only its files.
+        {:else if from}
+          Nothing handed in.
+        {:else}
+          No session has worked on it.
+        {/if}
+      </p>
+    {/if}
+  </div>
 
   <!-- Band 3: the decision, pinned: the note, always there, then the
        buttons; under them, who takes it up once it is sent back. -->
   {#if ended || deciding}
     <form
-      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) group-data-compact:px-space-3 group-data-compact:border-t group-data-compact:border-t-border-hairline row-(--area) col-(--area) @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
+      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) row-(--area) col-(--area) @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
       data-band="decide"
       onsubmit={(event) => {
         event.preventDefault();

@@ -210,7 +210,6 @@
     instanceId,
     switcher,
     sheet = false,
-    linkSession = false,
     ownTab = false,
     inset = false,
     onScreen = true,
@@ -233,12 +232,6 @@
      * width, with no Open in new tab, and Close back to the session.
      */
     ownTab?: boolean;
-    /**
-     * The preview is another session's than the conversation beside it (a
-     * thread shows its project's lead's): its states name that session, as
-     * a link to it.
-     */
-    linkSession?: boolean;
     /**
      * Drawn in the phone's sheet over the conversation (SideSheet): a sent
      * setup page puts the sheet away, so Caw's reply under it is read.
@@ -626,7 +619,7 @@
    * Its conversation's tab reached for (warm.svelte.ts `reached`: the
    * pointer onto it or pressing it, the focus on it), whichever tab of its
    * group's slot holds it: read off the slot it is docked in (PaneLeaf's
-   * `data-pane`), as a thread's tab shows its lead's preview.
+   * `data-pane`).
    */
   const tabReached = $derived.by(() => {
     const docked = section
@@ -815,7 +808,7 @@
     return previewWords.machineNotAnswering(ownerMachine);
   });
   /** Open its session, beside Try again, wherever this pane is not that session's own. */
-  const offerSession = $derived(!!owner && (linkSession || ownTab));
+  const offerSession = $derived(!!owner && ownTab);
 
   $effect(() => {
     if (frameKey) {
@@ -3327,8 +3320,8 @@
   const holder = Symbol("panel");
   let canvasSlot = $state<HTMLElement>();
   let stage = $state<Stage>();
-  /** This session's composer can take the canvas back: not a lead's shown beside a thread, not its own tab. */
-  const canUndock = $derived(isCanvas && !(ownTab || linkSession));
+  /** This session's composer can take the canvas back: not a conversation's shown beside a thread, not its own tab. */
+  const canUndock = $derived(isCanvas && !ownTab);
   $effect(() => {
     const canvas = isCanvas ? artifact : undefined;
     const slot = canvasSlot;
@@ -3503,7 +3496,7 @@
         words: true,
       });
     }
-    if (!(ownTab || linkSession)) {
+    if (!ownTab) {
       all.push({
         key: "create",
         priority: HEAD_PRIORITY.create,

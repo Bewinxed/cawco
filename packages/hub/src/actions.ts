@@ -323,7 +323,7 @@ export const createActions = ({
 
   /**
    * The routine run a proposing session works for: a delegate run's own
-   * session (its work item is the run's), a lead run's Caw while that run
+   * session (its work item is the run's), a conversation run's Caw while that run
    * goes, or a session one of them started, found up its parents. Null
    * outside any routine.
    */

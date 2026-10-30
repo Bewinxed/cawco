@@ -5,7 +5,7 @@
  * place-repo.ts, hub lfs-offers.ts). Real git and git-lfs in scratch
  * repositories, against an LFS server in this process that records every
  * request (path and credential) and keeps each repository's objects apart,
- * and a stand-in hub for the thread's note. No fleet: it runs inside a
+ * and a stand-in hub for the project's note. No fleet: it runs inside a
  * workspace's boundary as well as on the host.
  *
  * - A, a committed `.lfsconfig` cannot move a host push: its `lfs.pushurl`
@@ -16,7 +16,7 @@
  * - B, an undeclared third-party endpoint: the branch's `.lfsconfig` names
  *   one; a workspace's creation checkout (workspace.ts `lfsCheckout`) leaves
  *   the large file a pointer, the third party is asked nothing, and the hub
- *   is told the endpoint, for the project's thread.
+ *   is told the endpoint, for the project's conversation.
  * - C, a declared endpoint: the project's large files live there (its
  *   objects nowhere else); the creation checkout fetches them from it with
  *   the connection's credential, and asks the origin's LFS nothing.
@@ -29,7 +29,7 @@
  *   project's Large files (plain http refused); a machine with a place of
  *   the project, by its proof, is answered the endpoint and the
  *   connection's key; a machine with none, and a session, are refused; a
- *   machine's word of a refused `.lfsconfig` lands in the project's thread.
+ *   machine's word of a refused `.lfsconfig` is kept for the project's conversation.
  *
  * On a tree from before them, A, D and E run that tree's own code for
  * those steps (A's `hostGitEnv()`, D's first commit, E's routes), so each
@@ -333,7 +333,7 @@ const undeclaredLeg = async (kit: Kit, root: string): Promise<void> => {
       (each) => each.path === "/api/lfs/projects/probe-project/refused"
     );
     kit.check(
-      "B: the hub is told the endpoint the .lfsconfig asked for, for the project's thread",
+      "B: the hub is told the endpoint the .lfsconfig asked for, for the project's conversation",
       (told?.body as { endpoint?: string } | undefined)?.endpoint === third,
       JSON.stringify(lfs.refused)
     );
@@ -554,7 +554,7 @@ const asked = (
  * project's Large files with a connection that holds a key; a machine with
  * a place of the project, by its proof, is answered the endpoint and that
  * key as Basic; a machine with no place, and a session, are refused; the
- * machine's word of a refused `.lfsconfig` lands in the project's thread.
+ * machine's word of a refused `.lfsconfig` is kept for the project's conversation.
  */
 const hubLeg = async (kit: Kit, root: string): Promise<void> => {
   const home = join(root, "e");

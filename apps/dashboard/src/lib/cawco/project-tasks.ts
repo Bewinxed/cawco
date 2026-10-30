@@ -461,7 +461,7 @@ export const changeTodo = (
 /**
  * A fresh attempt at a task whose last one failed, in that attempt's
  * workspace while its clone is there. It reports to the session named, or
- * the project's lead; the hub refuses, in a sentence, when there is neither.
+ * the project's conversation; the hub refuses, in a sentence, when there is neither.
  */
 export const retryTask = (
   projectId: string,

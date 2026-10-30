@@ -17,7 +17,7 @@ export interface LfsOffersDb {
     offer: Omit<LfsOfferRow, "answer" | "answeredAt" | "commit">
   ) => void;
   /**
-   * Records that project `projectId`'s thread is told git-lfs refused
+   * Records that project `projectId`'s conversation is told git-lfs refused
    * `endpoint` (schema `lfsRefusals`); false when it was told already.
    */
   readonly refused: (projectId: string, endpoint: string) => boolean;

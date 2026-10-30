@@ -23,7 +23,7 @@ export interface ShownDeps {
   readonly home: (machineId: string) => string | undefined;
   /** The work items a workspace has run. */
   readonly itemsIn: (workspaceId: string) => readonly ShownItem[];
-  /** Whether `leadId` leads the project of the item `instanceId` runs (work-items.ts `ledBy`). */
+  /** Whether `leadId` is the conversation of the project of the item `instanceId` runs (work-items.ts `ledBy`). */
   readonly ledBy: (instanceId: string, leadId: string) => boolean;
   /** The session that delegated the item `instanceId` runs; none for a session no item runs, or one nobody delegated. */
   readonly parentOf: (instanceId: string) => string | undefined;
@@ -51,7 +51,7 @@ const descends = (
   return false;
 };
 
-/** Whether `instanceId` delegated work in `workspaceId`, directly or nested, or leads its project. */
+/** Whether `instanceId` delegated work in `workspaceId`, directly or nested, or is its project's conversation. */
 const delegatedIn = (
   deps: ShownDeps,
   instanceId: string,

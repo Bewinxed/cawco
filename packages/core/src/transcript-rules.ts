@@ -1677,7 +1677,7 @@ export function turnStart(
 
 /**
  * A note the hub wrote into the session, drawn as one: fleet watch's nudge
- * to this session, its lead (the same note the watched session's transcript
+ * to this session, its steward (the same note the watched session's transcript
  * draws), or the hub's word to a fork about the delegates in the history it
  * copied. Null for any other text.
  */

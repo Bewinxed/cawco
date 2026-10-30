@@ -219,7 +219,7 @@
   {@const open = unfolded[link.url] ?? false}
   {@const shown = open ? all : all.slice(0, COMMENTS_SHOWN)}
   {@const sentence = thrown[link.url] ?? link.problem}
-  {@const threadId = `${uid}-${link.number ?? link.ref}-comments`}
+  {@const commentsId = `${uid}-${link.number ?? link.ref}-comments`}
   <li
     data-slot="link"
     class="col-span-full grid grid-cols-subgrid"
@@ -345,7 +345,7 @@
       >
         <ul
           class="m-0 flex w-full min-w-0 list-none flex-col gap-space-2 p-0"
-          id={threadId}
+          id={commentsId}
         >
           {#each shown as each (each.via?.externalId ?? each.at)}
             {@render comment(each, link)}
@@ -353,7 +353,7 @@
         </ul>
         {#if all.length > COMMENTS_SHOWN}
           <Button
-            aria-controls={threadId}
+            aria-controls={commentsId}
             aria-expanded={open}
             label={open
               ? words.fewerComments

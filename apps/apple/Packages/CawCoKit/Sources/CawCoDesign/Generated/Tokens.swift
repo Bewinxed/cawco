@@ -621,7 +621,7 @@ public enum Size {
     public static let cPanelW: Double = 380
     /// The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next.
     public static let cSigninPopW: Double = 340
-    /// Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters and earlier threads; shorter where the room under his seat is less.
+    /// Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters; shorter where the room under his seat is less.
     public static let cCawPanelH: Double = 640
     /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.
     public static let cTopBarH: Double = 44
@@ -687,7 +687,7 @@ public enum Size {
     public static let cComposerPanel: Double = 50
     /// New project's field at its widest: the session Composer under "What are we working on?", and the starter chips under it, which stand on that composer's column (the Composer's own --c-composer-w inside it).
     public static let cNewProjectFieldW: Double = 570
-    /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line).
+    /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (the panel's no-machine line).
     /// At most this, in points: on the web the least of it and a share of its container (min).
     public static let cComposerW: Double = 720
     /// A suggestion chip: its Tab key cap, padding and border.
@@ -1312,7 +1312,7 @@ public enum Layer {
     public static let layerPull: Double = 30
     /// A canvas stage (CanvasStages: the artifact's frame portalled to the body over its slot): over the page and the edge pull, under a docked composer and the bar.
     public static let layerStage: Double = 40
-    /// A docked composer, or what stands in its place (Composer's dock, the decision page's and the view bar's docks, the thread pane's no-composer note): over the transcript and its fades.
+    /// A docked composer, or what stands in its place (Composer's dock, the decision page's and the view bar's docks, the project panel's no-composer note): over the transcript and its fades.
     public static let layerDock: Double = 50
     /// The top bar floating over a phone's tab row: over the dock and everything in the page under it.
     public static let layerBar: Double = 60

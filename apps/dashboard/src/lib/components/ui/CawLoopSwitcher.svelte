@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Caw's motion while a project's lead works, beside the theme and sound:
+   * Caw's motion while a project's conversation works, beside the theme and sound:
    * his `working` loop plays (the default), or he holds its still
    * (feel.svelte.ts `cawLoop`).
    */
@@ -11,8 +11,8 @@
 
   const label = $derived(
     cawLoop.on
-      ? "Caw moves while the lead works"
-      : "Caw holds still while the lead works"
+      ? "Caw moves while the project works"
+      : "Caw holds still while the project works"
   );
 </script>
 
@@ -20,7 +20,7 @@
   {#snippet children(tip)}
     <Button
       {...tip}
-      aria-label="Caw moves while the lead works"
+      aria-label="Caw moves while the project works"
       aria-pressed={cawLoop.on}
       onclick={() => setCawLoop(!cawLoop.on)}
       size="icon-sm"

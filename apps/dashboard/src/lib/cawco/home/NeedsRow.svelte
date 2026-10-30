@@ -2,7 +2,7 @@
   /**
    * A Needs you row's face (NeedsCard draws it for every kind but the
    * relay's journey): the row's box on the panel's one grid, the cover that
-   * opens it, the lead (the session's mark, a run's or a budget's glyph),
+   * opens it, the lead mark (the session's mark, a run's or a budget's glyph),
    * the title and its wait, and what it wants in the words it is asked;
    * what stands under that (where it is from, its peers, its call) is the
    * owner's, as `below`. Everything it says arrives as props, so the row
@@ -61,7 +61,7 @@
      permission's peers under them. Its machine is offline: it stands,
      dimmed as every stale row is. -->
 <!-- mark-line: a grid whose first row is the mark line; its words take
-     .mark-text, centred on the lead (the rows under it hold other things) -->
+     .mark-text, centred on the lead mark (the rows under it hold other things) -->
 <div
   data-slot="row"
   class="group/row relative grid min-h-c-row-h grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2 data-stale:opacity-55"

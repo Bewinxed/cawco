@@ -961,7 +961,7 @@ export const createFind = (deps: FindDeps) => {
   /**
    * Folds the machines' moments into conversations: a session the hub holds
    * gains them; one it never started (a stored CLI session) is a
-   * conversation of its own, named by its folder; Caw's lead session and a
+   * conversation of its own, named by its folder; Caw's conversation session and a
    * session find leaves out (a discarded one) and the hub's own (a
    * summariser's, {@link Names.hubMade}) are left out. Every machine's
    * relevance is read against the best of all of them, weighed by whose

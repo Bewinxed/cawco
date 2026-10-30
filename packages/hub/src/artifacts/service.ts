@@ -693,7 +693,7 @@ export interface ArtifactStatus {
   pins: number;
   /** The person pressed Send since your last change (a revision, or a new ask). */
   sent: boolean;
-  /** The session that made it, when it is not the caller's own (a lead reading its project's). */
+  /** The session that made it, when it is not the caller's own (a conversation reading its project's). */
   session?: string;
   /** That session's link, what the agent names it by. */
   sessionLink?: string;
@@ -1530,7 +1530,7 @@ export interface ArtifactServiceDeps {
   };
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it
-   * delegated, or one of a project it leads (as `stop_delegate` decides).
+   * delegated, or one of a project it is the conversation of (as `stop_delegate` decides).
    */
   delegatesIn: (instance: InstanceRow, workspaceId: string) => boolean;
   /**
@@ -1617,7 +1617,7 @@ export interface ArtifactServiceDeps {
     png: string
   ) => Promise<string>;
   /**
-   * The projects session `instance` leads (their Caw): an ended writer's
+   * The projects session `instance` is the conversation of (their Caw): an ended writer's
    * marks are routed to him, and he answers them in their pins' threads.
    * He also reads every page of his project, so a page whose session ended
    * or is gone is his to act on (Projects spec §5.8, decisions.ts).
@@ -2067,7 +2067,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The artifacts the session can name and read ({@link readable}), each
    * once, those it answers first: its own, its project's it answers, its
    * delegation tree's, its project's pages and those of the projects it
-   * leads. What its project's cold writers left ({@link leftInProject})
+   * is the conversation of. What its project's cold writers left ({@link leftInProject})
    * comes after these, only for what none of them names ({@link whole},
    * {@link pinOf}).
    */
@@ -2408,7 +2408,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Whether the session's read of `row` counts as its owner's: the owner's
-   * own, and a lead's of his project's pages, always have. Its maker's, and
+   * own, and a conversation's of his project's pages, always have. Its maker's, and
    * another session's of the project, leave the owner's unread.
    */
   const readsForOwner = (instance: InstanceRow, row: ArtifactRow): boolean =>
@@ -2661,7 +2661,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * The artifacts whose pins a session answers: its own, and, for a
-   * project's lead (Caw), those of every session of the project he leads,
+   * project's conversation (Caw), those of every session of its project,
    * whose ended writer's marks come to him. No other session's.
    */
   const answerable = (
@@ -2687,7 +2687,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ),
   ];
 
-  /** Page `id`, when it belongs to a project `instance` leads. */
+  /** Page `id`, when it belongs to a project `instance` is the conversation of. */
   const ledPage = (
     instance: InstanceRow,
     id: string
@@ -2702,7 +2702,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Artifact `id`, when the session answers its pins ({@link answerable}),
-   * or when it is a page of a project the session leads or works in
+   * or when it is a page of a project the session is the conversation of or works in
    * ({@link projectPage}), whatever became of its writer, or when another
    * session of its delegation tree holds it ({@link inTree}), or when its
    * writers left it in the session's project ({@link leftFor}); refused
@@ -2732,7 +2732,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * Whether the session is the one the artifact's marks go to: its writer,
    * or, once the writer has ended, the writer's parent or its project's
-   * lead. What it reads of them counts as heard.
+   * conversation. What it reads of them counts as heard.
    */
   const takes = (instance: InstanceRow, row: ArtifactRow): boolean => {
     if (row.instanceId === instance.id) {
@@ -6673,7 +6673,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * `artifact_list`: the session's artifacts (a project's lead also gets
+     * `artifact_list`: the session's artifacts (a project's conversation also gets
      * every session's of its project), and its delegation tree's
      * ({@link ofTree}), each of another session's with its `session`,
      * newest first, each with whose move it is; `waiting` keeps those where

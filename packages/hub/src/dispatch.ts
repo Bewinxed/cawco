@@ -35,7 +35,7 @@
  *   (`work_items.waited_on`): a card answered differently since tells its
  *   live session once, and a done task shows it was built on it. A failed or
  *   stopped attempt is its starter's business: its report goes to the
- *   session that started it, the lead for the dispatcher's own (work-items
+ *   session that started it, the project's conversation for the dispatcher's own (work-items
  *   `reportees`), who retries it or moves on. It never waits for the person,
  *   and only a person's own start's failure reaches his phone (push.ts).
  * - **Dispatch** starts the frontier on its own, only for a project with
@@ -47,8 +47,8 @@
  *   back the issues of openers the tracker does not vouch for), or filed
  *   straight into one, starts an
  *   attempt (of the task's own type when it names one, else that type),
- *   reporting to the session that moved it or else the lead. A start that
- *   cannot go, the lead's own start among them, is remembered on the task
+ *   reporting to the session that moved it or else the project's conversation. A start that
+ *   cannot go, the conversation's own start among them, is remembered on the task
  *   and shown on its card. A hook obeys `max_attempts`: at the cap its start is queued
  *   (`queued_task_starts`) and runs, oldest first and before the frontier,
  *   as a slot frees. A start you or a session ask for is not capped.
@@ -89,15 +89,15 @@
  *
  * - **Judgments** (§5.9, jev-placement.ts), each by Jev while it is on and
  *   by the table's Jev-off rule otherwise. Ready to dispatch: a frontier
- *   task starts only when Jev scores it ready, else when the lead marked it
+ *   task starts only when Jev scores it ready, else when the project's conversation marked it
  *   `ready: yes`; a task triaged as anything but `ready-for-agent` never.
- *   Dispatch order: Jev's three scores, else the lead's ranks, else board
+ *   Dispatch order: Jev's three scores, else the conversation's ranks, else board
  *   order. Delegate type: a task whose stage runs none and that names none
  *   runs Jev's choice from the project's catalog, else "medium". Judged
  *   checks: an attempt that lands at a task with acceptance criteria moves
  *   it to done only when Jev shows every criterion met (else to the first
- *   `you` stage, with a comment naming what is not); Jev off, the lead
- *   judges them (the task stays until he moves it), and with the lead off
+ *   `you` stage, with a comment naming what is not); Jev off, the project's conversation
+ *   judges them (the task stays until it moves it), and with events off
  *   it goes to you.
  *
  * It wakes on events only: a work item ending, a task changing, a setting
@@ -219,7 +219,7 @@ export interface DispatchDeps {
   /** What the dispatcher's judgments (§5.9) need of the hub. */
   readonly placement: {
     /**
-     * Jev off and the lead on: his wake to judge a landed attempt's
+     * Jev off and events on: his wake to judge a landed attempt's
      * acceptance criteria (he did not do the work).
      */
     readonly judgeByLead: (
@@ -302,7 +302,7 @@ const HOOK_ORIGIN: Record<TaskMover, Origin | undefined> = {
 };
 
 const NO_LEAD =
-  "Turn Caw on for the project so its lead takes the report, name a session you started in the project, or start it with task_start from one.";
+  "Turn the project's events on so its conversation takes the report, name a session you started in the project, or start it with task_start from one.";
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
@@ -351,7 +351,7 @@ const named = (row: InstanceRow): string =>
   `“${row.title?.trim() || row.derivedTitle?.trim() || `session ${short(row.id)}`}”`;
 
 /**
- * Why `row` cannot take an attempt's reports for `projectId` (as its lead,
+ * Why `row` cannot take an attempt's reports for `projectId` (as its conversation,
  * or as the session starting it), or undefined when it can: it must be a
  * session you started, in that project.
  */
@@ -638,7 +638,7 @@ const pauseOf = (
     return "Dispatch is off: attempts start only when a session or you start them.";
   }
   if (!project.eventsOn) {
-    return "Caw is off, so the project has no lead to take the reports of the attempts the hub starts; they start only when a session or you start them.";
+    return "The project's events are off, so no conversation takes the reports of the attempts the hub starts; they start only when a session or you start them.";
   }
   if (now.stagesProblems.length > 0) {
     return `stages.md does not read. ${now.stagesProblems.join(" ")}`;
@@ -735,7 +735,7 @@ export const createDispatcher = ({
     db.getInstancesByIds([id])[0] as InstanceRow | undefined;
 
   /** The project's conversation, started now when it has none; undefined while its switch is off. */
-  const leadOf = async (
+  const conversationOf = async (
     project: ProjectRow,
     by: Origin = "event"
   ): Promise<InstanceRow | undefined> => {
@@ -977,9 +977,9 @@ export const createDispatcher = ({
    * dispatch and Dispatch order). A task triaged as anything but
    * `ready-for-agent` is not an agent's. Jev on: the ones Jev scores ready,
    * by its three order scores (ties keep board order); a Jev that does not
-   * answer starts nothing this look. Jev off: the ones the lead scored
-   * `ready: yes` (with the lead off, the ones with a check), in board order,
-   * which is the lead's ranks, then the rest by number.
+   * answer starts nothing this look. Jev off: the ones the project's conversation scored
+   * `ready: yes` (with events off, the ones with a check), in board order,
+   * which is the conversation's ranks, then the rest by number.
    */
   const readyInOrder = async (
     project: ProjectRow,
@@ -1002,7 +1002,7 @@ export const createDispatcher = ({
       : readyByLead(project, views, byId);
   };
 
-  /** Ready to dispatch and Dispatch order with Jev off: the lead's scores (else a check), in board order. */
+  /** Ready to dispatch and Dispatch order with Jev off: the conversation's scores (else a check), in board order. */
   const readyByLead = (
     project: ProjectRow,
     views: TaskView[],
@@ -1025,13 +1025,13 @@ export const createDispatcher = ({
     offLine(
       "ready",
       project.id,
-      `${project.eventsOn ? "the lead's scores" : "with the lead off, a check must exist"}: ready ${ready.join(", ") || "none"}${waiting.length > 0 ? `; not ready ${waiting.join(", ")}` : ""}`
+      `${project.eventsOn ? "the conversation's scores" : "with events off, a check must exist"}: ready ${ready.join(", ") || "none"}${waiting.length > 0 ? `; not ready ${waiting.join(", ")}` : ""}`
     );
     if (ready.length > 0) {
       offLine(
         "order",
         project.id,
-        `the lead's ranks, else board order: ${ready.join(", ")}`
+        `the conversation's ranks, else board order: ${ready.join(", ")}`
       );
     }
     return ready;
@@ -1391,7 +1391,7 @@ export const createDispatcher = ({
   /**
    * What one look would start: the project, how many attempts are live, and
    * its ready frontier in order; undefined for a project that does not
-   * dispatch now, or has nothing ready. Judged before the lead is started:
+   * dispatch now, or has nothing ready. Judged before the project's conversation is started:
    * nothing ready wakes nobody.
    */
   const lookAt = async (
@@ -1420,7 +1420,7 @@ export const createDispatcher = ({
     let slots = project.maxAttempts - look.live;
     let reportsTo: InstanceRow | undefined;
     try {
-      reportsTo = await leadOf(project);
+      reportsTo = await conversationOf(project);
     } catch (error) {
       // The tasks this look would have started say why they did not.
       const why = failure(error).message;
@@ -1470,7 +1470,7 @@ export const createDispatcher = ({
 
   /**
    * The session a hook's attempt reports to: the one that moved the task in
-   * when it can take reports, else the lead. With neither, or a lead whose
+   * when it can take reports, else the project's conversation. With neither, or a conversation whose
    * session did not start (no account signed in, say), the reason is
    * remembered on the task, so its card says why it did not start; `how`
    * opens that sentence ("tsk-3 entered extract, which runs brand").
@@ -1487,7 +1487,7 @@ export const createDispatcher = ({
     }
     let caw: InstanceRow | undefined;
     try {
-      caw = await leadOf(project);
+      caw = await conversationOf(project);
     } catch (error) {
       note(
         project.id,
@@ -1639,7 +1639,7 @@ export const createDispatcher = ({
 
   /**
    * A hook's start, once it is asked for: reporting to the mover or the
-   * lead; a `runs:` start, while the project runs `max_attempts` already,
+   * project's conversation; a `runs:` start, while the project runs `max_attempts` already,
    * queued for a slot. Answers why it did not start; nothing when it
    * started or was queued.
    */
@@ -1892,7 +1892,7 @@ export const createDispatcher = ({
 
   /**
    * The stage kind an ended attempt sends its task to, once a landed one's
-   * acceptance criteria are judged ({@link judgeCriteria}); `lead` while he
+   * acceptance criteria are judged ({@link judgeCriteria}); `conversation` while it
    * judges them.
    */
   const kindAfterJudged = async (
@@ -1950,8 +1950,8 @@ export const createDispatcher = ({
    * acceptance criteria: never by the session that did the work. Jev on:
    * done when Jev shows every criterion met, else `you`, with a comment
    * naming the ones it does not (a Jev that does not answer says so in the
-   * comment, and they go to you). Jev off: the lead judges them (`lead`: he
-   * is woken, the task stays); with the lead off, shell checks passed and
+   * comment, and they go to you). Jev off: the project's conversation judges them (`conversation`: it
+   * is woken, the task stays); with events off, shell checks passed and
    * the rest is yours.
    */
   const judgeCriteria = async (
@@ -2002,7 +2002,7 @@ export const createDispatcher = ({
       offLine(
         "judged",
         projectId,
-        `${task.id}'s attempt ${short(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the lead, who did not do the work`
+        `${task.id}'s attempt ${short(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the project's conversation, which did not do the work`
       );
       placement.judgeByLead(
         projectId,
@@ -2015,7 +2015,7 @@ export const createDispatcher = ({
     offLine(
       "judged",
       projectId,
-      `${task.id}'s attempt ${short(item.id)} passed its shell checks; with the lead off its ${criteria.length} acceptance criteria go to you`
+      `${task.id}'s attempt ${short(item.id)} passed its shell checks; with events off its ${criteria.length} acceptance criteria go to you`
     );
     return "you";
   };
@@ -2032,7 +2032,7 @@ export const createDispatcher = ({
     const project = projectOf(projectId);
     if (!parentInstanceId) {
       return (
-        (await leadOf(project, "you")) ??
+        (await conversationOf(project, "you")) ??
         refuse(409, `Nobody can take this attempt's report. ${NO_LEAD}`)
       );
     }

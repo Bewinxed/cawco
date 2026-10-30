@@ -180,7 +180,7 @@ export interface TaskFlags {
   /**
    * Its newest attempt failed, and it is not done or dropped since. The
    * failure is its starter's business (the session that started it, or the
-   * lead for the dispatcher's), who hears the report: never the person's
+   * project's conversation for the dispatcher's), who hears the report: never the person's
    * Needs you. It keeps the task off the dispatcher's frontier until someone
    * starts or retries it.
    */
@@ -213,7 +213,7 @@ export interface TaskFlags {
 
 /** Who made a change. */
 export interface TaskHistoryActor {
-  /** The session's instance id (a session, the lead), or the approved action's id; null when the commit names none. */
+  /** The session's instance id (a session, the project's conversation), or the approved action's id; null when the commit names none. */
   id: string | null;
   /** The mover the change was checked as; null, unknown, for a commit with no `CawCo-Mover` trailer (a hand edit, folder_write, the folder editor, one made before the hub wrote trailers). */
   mover: TaskMover | null;

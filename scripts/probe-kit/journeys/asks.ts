@@ -45,8 +45,6 @@ export interface Parked {
   input: Record<string, unknown>;
   instanceId: string;
   requestId: string;
-  /** The Caw thread an ask of his stands in. */
-  threadId?: string;
   toolName: string;
 }
 

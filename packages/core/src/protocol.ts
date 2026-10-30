@@ -241,8 +241,7 @@ export interface SpawnPayload {
   resume?: { sessionKey: string; fork?: boolean; atMessage?: string };
   /**
    * The toolset the session runs in, written on its row at this first spawn
-   * and kept there: a project's Caw is `lead`, a delegate type's `role` its
-   * work item's. Absent: the hub derives it (`delegate` or `worker`).
+   * and kept there: a delegate type's `role` is its work item's. Absent: the hub derives it (`delegate` or `worker`).
    */
   role?: import("./delegate-types").SessionRole;
   /**
@@ -1142,8 +1141,8 @@ export interface InstanceRow {
    */
   projectId?: string | null;
   /**
-   * The toolset it runs in, when its spawn named one (a project's Caw is
-   * `lead`); null: derived from how it started.
+   * The toolset it runs in, when its spawn named one; null: derived from
+   * how it started.
    */
   role?: import("./delegate-types").SessionRole | null;
   /** Hub-derived count of live delegated work items, including descendants and checks. */

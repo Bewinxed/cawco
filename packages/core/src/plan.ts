@@ -296,7 +296,7 @@ export interface PlanDelta {
 
 /**
  * Client → hub: the sessions whose plan this socket follows beside the ones
- * it streams (a thread showing its lead's plan), the whole set each time.
+ * it streams (the app's project page), the whole set each time.
  * One newly in the set is answered with its snapshot; deltas follow.
  */
 export interface PlanFollow {

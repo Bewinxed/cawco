@@ -309,7 +309,7 @@ export const artifactRead = {
 export const artifactList = {
   name: "artifact_list",
   description:
-    "Your artifacts and your delegation tree's (a lead's: its project's too), newest first, with whose move each is. `waiting: true` keeps those waiting on someone.",
+    "Your artifacts and your delegation tree's (a conversation's: its project's too), newest first, with whose move each is. `waiting: true` keeps those waiting on someone.",
   input: { waiting: z.boolean().optional() },
 };
 

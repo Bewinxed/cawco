@@ -54,7 +54,7 @@
     onask?: () => void;
     /** Each line a press that brings its spot out. */
     step?: (anchor: string) => void;
-    /** In a thread card, or under a rail row, on its words' column. */
+    /** In a pin's card, or under a rail row, on its words' column. */
     inset?: "card" | "rail";
   } = $props();
 

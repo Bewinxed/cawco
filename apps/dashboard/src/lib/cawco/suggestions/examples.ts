@@ -2,11 +2,11 @@
  * Suggestions as a project's hub writes them, for the states file
  * (Suggestions.stories.ts) and the suggestions preview's capture
  * (design-previews/suggestions): a club's website two tasks from going live,
- * the project the project page's preview opens Caw's first thread on.
+ * the project the project page's preview opens a project's first conversation on.
  */
 import type { Suggestion } from "./Suggestions.svelte";
 
-/** Caw's first thread on the club's site: the project page preview's three, with the hub's reasons. */
+/** a project's first conversation on the club's site: the project page preview's three, with the hub's reasons. */
 export const THREE: readonly Suggestion[] = [
   {
     glyph: "rocket",

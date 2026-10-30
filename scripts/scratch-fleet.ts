@@ -112,8 +112,7 @@ const SIGNIN_LINE =
  * next user message, beside a tool's result (the scratch fleet's Claude
  * Code, 2026-10-14), or as a `role: "system"`
  * message of their own (its `api_system` message, `{type:"api_system",
- * message:{role:"system",content:e}}` in Claude Code 2.1.299; Caw's
- * session, probe-kit spec `caw-threads`).
+ * message:{role:"system",content:e}}` in Claude Code 2.1.299).
  */
 const MID_TURN = "The user sent a new message while you were working:";
 
@@ -3084,9 +3083,7 @@ async function standUp(
     instanceId: string,
     text: string,
     /** The session's machine: one {@link launchMachine} added, say. */
-    machineId = MACHINE,
-    /** A Caw thread not made yet (`thread:<id>`): the project it is made in. */
-    projectId?: string
+    machineId = MACHINE
   ): Promise<string> => {
     const uuid = crypto.randomUUID();
     await post({
@@ -3097,7 +3094,6 @@ async function standUp(
       sessionId: instanceId,
       payload: {
         instanceId,
-        ...(projectId ? { projectId } : {}),
         message: {
           type: "user",
           uuid,

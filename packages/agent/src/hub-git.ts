@@ -492,7 +492,7 @@ const movedRefs = (
 /**
  * Where a workspace's git-lfs may reach for its clone's origin (host-lfs.ts):
  * the project's declared endpoint, when it declared one, else the origin's
- * own; and the project, whose thread is told of any other a `.lfsconfig`
+ * own; and the project, whose conversation is told of any other a `.lfsconfig`
  * names.
  */
 interface DoorLfs {
@@ -524,7 +524,7 @@ const doorLfsOf = async (
  * fetched commit's `.lfsconfig` names an endpoint that is none of `lfs`'s
  * `allowed` (the origin's, the project's declared one), nothing is fetched
  * from anywhere: its files live on a server CawCo was never told of, they
- * stay pointers, and the project's thread is told (host-lfs.ts).
+ * stay pointers, and the project's conversation is told (host-lfs.ts).
  */
 const fetchLfs = async (
   ref: WorkspaceRef,

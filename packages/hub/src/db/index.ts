@@ -1094,7 +1094,6 @@ export interface DbShape {
   readonly launchDirOf: (
     id: string
   ) => { cwd: MachinePath } | { unknown: true } | undefined;
-  /** Adds what a Caw turn the thread woke cost to the thread's spend. */
   /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
   readonly lfsOffers: LfsOffersDb;
   /**
@@ -1607,17 +1606,6 @@ export interface DbShape {
     cwd: string
   ) => string | undefined;
   /**
-   * A project's spend since `todayStart` and `monthStart`, all of it and its
-   * Caw's; each attempt at a task with its session's spend (oldest first);
-   * each thread with how many messages in it woke Caw (newest first).
-   */
-  /**
-   * The project's spend over today and this month, each part from its one
-   * source: Caw's booked turns (by thread, and those no thread woke), every
-   * attempt's session and every other session from the usage it reported.
-   * The parts add up to the totals.
-   */
-  /**
    * The hub's notes to the person about a project (caw.ts `notice`): `add`
    * keeps one, its conversation's line, or the next one's while it has none
    * (`instanceId` null); `adopt` makes the waiting ones the conversation's
@@ -1639,6 +1627,11 @@ export interface DbShape {
     projectId: string,
     machineId: string
   ) => MachinePath | undefined;
+  /**
+   * The project's spend over today and this month, each part from the usage
+   * its sessions reported: its conversations', every attempt's session's and
+   * every other session's. The parts add up to the totals.
+   */
   readonly projectSpend: (
     projectId: string,
     since: { monthStart: number; todayStart: number }
@@ -2139,7 +2132,7 @@ export interface DbShape {
     id: string,
     change: Pick<ProjectRow, "capUsd" | "capPeriod" | "onCap">
   ) => void;
-  /** The project's Caw: on or off, its harness, and its lead session (caw.ts). */
+  /** The project's Caw: on or off, its harness, and its conversation session (caw.ts). */
   readonly setProjectCaw: (
     id: string,
     change: Partial<
@@ -2325,7 +2318,7 @@ export interface DbShape {
   /**
    * What a session's delegate tray can still show, oldest first: of the
    * items it delegated and the items of the projects in `ledProjectIds` (it
-   * leads them), the live and undismissed failed ones, and any other that
+   * is their conversation), the live and undismissed failed ones, and any other that
    * ended at or after `endedSince`.
    */
   readonly trayItemsOf: (
@@ -9399,7 +9392,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(workspaces.id, id))
         .returning()
         .get(),
-    // A thread's send no lead was handed is in no session's transcript.
     sendsFor: (ids) => {
       const rows: SentMessageRow[] = [];
       // A long transcript names more ids than SQLite binds in one statement.

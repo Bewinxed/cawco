@@ -31,14 +31,14 @@ export const sound = $state({ on: readJson(KEY, z.boolean(), false) });
 const CAW_LOOP_KEY = "cawco-caw-loop";
 
 /**
- * Whether Caw moves while a project's lead works: his `working` loop plays
+ * Whether Caw moves while a project's conversation works: his `working` loop plays
  * (on, as the owner chose), or he holds its still. Kept in this browser.
  */
 export const cawLoop = $state({
   on: readJson(CAW_LOOP_KEY, z.boolean(), true),
 });
 
-/** Lets Caw move, or hold still, while the lead works; here and later. */
+/** Lets Caw move, or hold still, while the project works; here and later. */
 export function setCawLoop(on: boolean): void {
   cawLoop.on = on;
   writeJson(CAW_LOOP_KEY, on);

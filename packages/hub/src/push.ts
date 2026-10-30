@@ -1937,7 +1937,7 @@ export const createPush = ({
      * business of whoever started the work, who hears its report: only an
      * attempt you started yourself (`byPerson`: from the dashboard, or by
      * your own move into a `runs:` stage) pushes its failure to you. One a
-     * session or the dispatcher started goes to that session or the lead,
+     * session or the dispatcher started goes to that session or the project's conversation,
      * and nothing reaches the phone. Named by its task's title, which the
      * owner wrote; an item's own title is the delegating agent's words.
      */

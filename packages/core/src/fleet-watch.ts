@@ -2,7 +2,7 @@
  * Fleet watch (Projects spec §5.3, D5): the hub reads every session's stream
  * for a loop or a stall with code alone, and only a yes from Jev, or a second
  * signal, starts one triage run that decides once. Its word goes to the
- * session's lead; a session is never told about itself. The hub's side is
+ * session's steward; a session is never told about itself. The hub's side is
  * packages/hub `fleet-watch.ts`; these are the words and shapes every screen
  * shares.
  */

@@ -2,9 +2,9 @@
  * `delegate_list` (Projects spec §5.2, "Visibility for agents"): a session's
  * own delegation tree, read once per call from what the hub already keeps —
  * the work items, their sessions' rows, the sends still unread, the plan, and
- * the same prompt-cache test `handoff`'s cold check makes. A project's lead
+ * the same prompt-cache test `handoff`'s cold check makes. A project's conversation
  * sees every attempt in its project beside its own delegates, as co-parent
- * (§5.3 lead authority).
+ * (§5.3 conversation authority).
  */
 import type { InstanceRow, WorkItemState } from "@cawco/core";
 import { HOUR_MS } from "@cawco/core/time";
@@ -377,7 +377,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     const delegates = await build(db.workItemsOfParents([caller.id]));
     const project = ledProject(caller);
     if (project) {
-      // The lead's co-parented attempts: each one not already in its own
+      // The conversation's co-parented attempts: each one not already in its own
       // tree, at the root unless another attempt started it (it nests there).
       const attempts = db.projectAttempts(project);
       const attemptIds = new Set(attempts.map((item) => item.instanceId));

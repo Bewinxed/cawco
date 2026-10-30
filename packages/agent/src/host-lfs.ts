@@ -12,8 +12,8 @@
  * A `.lfsconfig` that names an endpoint that is neither the origin's nor the
  * declared one names a server CawCo was never told of: the files it holds
  * stay pointers (`GIT_LFS_SKIP_SMUDGE=1`, git-lfs's documented pointer-only
- * mode) and nothing is fetched from it, and the project's thread is told
- * the endpoint and how to declare it ({@link noteRefused}). It is a refusal
+ * mode) and nothing is fetched from it, and the project's conversation is
+ * told the endpoint and how to declare it ({@link noteRefused}). It is a refusal
  * to fetch from an undeclared server, not a way round one.
  */
 import { spawn } from "node:child_process";
@@ -220,9 +220,9 @@ export const hostSigns = async (endpoint: string): Promise<boolean> => {
 const PASSWORD = /^password=./mu;
 
 /**
- * The project's thread told that the `.lfsconfig` in `root` named
+ * The project's conversation told that the `.lfsconfig` in `root` named
  * `endpoint`, which it was never told of, so its large files stayed
- * pointers there (hub `POST /api/lfs/projects/:id/refused`). A thread the
+ * pointers there (hub `POST /api/lfs/projects/:id/refused`). A note the
  * hub cannot be reached for is said in this agent's log alone.
  */
 export const noteRefused = async (
@@ -244,10 +244,10 @@ export const noteRefused = async (
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ root, endpoint, machineId: await machineId() }),
     },
-    "it told the project's thread"
+    "it told the project's conversation"
   ).catch((error: unknown) =>
     console.warn(
-      `[host-lfs] ${root}: the project's thread was not told: ${error instanceof Error ? error.message : String(error)}`
+      `[host-lfs] ${root}: the project's conversation was not told: ${error instanceof Error ? error.message : String(error)}`
     )
   );
 };

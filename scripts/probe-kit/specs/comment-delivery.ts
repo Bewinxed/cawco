@@ -38,8 +38,8 @@
  *    writer is checked to be sent nothing, the pin to stay unstamped (owed
  *    for the next delivery), and the writer's transcript to show the
  *    comments line "not sent" with why. Live, the pin is stamped heard. 7b,
- *    the rule through the tool: a session that is not the project's lead is
- *    refused the pin; once the hub's record names it the lead, its
+ *    the rule through the tool: a session that is not the project's conversation is
+ *    refused the pin; once the hub's record names it the project's conversation, its
  *    comment_reply lands in the thread.
  * 9. A comment on the whole page (a press in its padding, no content within
  *    reach) stands on the page's body, its pill at the viewport's top-right,
@@ -221,8 +221,8 @@ const ROUTED =
 const HUB_LINE = /caw|artifacts|marks|lead/iu;
 /** The host's refusal of a sandbox inside another (core boundary-nesting.ts). */
 const NESTED = /inside another (bwrap|macOS) sandbox|unpriv_bwrap/u;
-/** The project's lead's reply in 7b. */
-const LEAD_WORDS = "The project's lead: I'll take this one.";
+/** The project's conversation's reply in 7b. */
+const LEAD_WORDS = "The project's conversation: I'll take this one.";
 const CAW_WORDS = "Caw here: its writer has ended, so I'll take this one.";
 /** Caw's part (7): the pin the delivery named, his reply issued, and its answer. */
 const caw: { answer?: string; heard?: string; issued: boolean; pin?: string } =
@@ -1479,10 +1479,10 @@ const endedWriterChecks = async (
     pin: numbered((await docOf(frame)).pins, 1),
     nested: undefined,
   }));
-  const lead = fleet.query<{ lead_instance_id: string | null }>(
-    "SELECT lead_instance_id FROM projects WHERE id = ?",
+  const conversation = fleet.query<{ conversation_instance_id: string | null }>(
+    "SELECT conversation_instance_id FROM projects WHERE id = ?",
     project.id
-  )[0]?.lead_instance_id;
+  )[0]?.conversation_instance_id;
   // The writer's comment events: none taken, and a refused one kept as not sent.
   const writerRows = fleet.query<{ reason: string | null; state: string }>(
     "SELECT state, reason FROM sent_messages WHERE instance_id = ? AND body LIKE '%commented on the page%'",
@@ -1583,9 +1583,9 @@ const endedWriterChecks = async (
         writerEvents === 0 &&
         caw.pin === pin.id &&
         !!caw.heard?.includes(`- Pin: ${pin.id}`) &&
-        !!lead &&
-        lead !== writer,
-      `pin ${pin?.id}; Caw heard pin ${caw.pin}; lead ${lead}; writer's comment events ${writerEvents}; heard ${caw.heard?.slice(0, 500)}; hub ${(await hubLines()).slice(-8).join(" | ")}`
+        !!conversation &&
+        conversation !== writer,
+      `pin ${pin?.id}; Caw heard pin ${caw.pin}; conversation ${conversation}; writer's comment events ${writerEvents}; heard ${caw.heard?.slice(0, 500)}; hub ${(await hubLines()).slice(-8).join(" | ")}`
     );
     const inCard = await readCard(CAW_WORDS);
     kit.check(
@@ -1600,7 +1600,7 @@ const endedWriterChecks = async (
 
   // 7b. The rule itself (artifacts/service.ts `readable`), through the
   // tool: a session of no part in the project is refused the pin; once the
-  // hub's record names it the project's lead, its reply lands in the thread.
+  // hub's record names it the project's conversation, its reply lands in the thread.
   if (!pin) {
     return;
   }
@@ -1612,7 +1612,7 @@ const endedWriterChecks = async (
   try {
     write.exec("PRAGMA busy_timeout = 15000");
     write
-      .query("UPDATE projects SET lead_instance_id = ? WHERE id = ?")
+      .query("UPDATE projects SET conversation_instance_id = ? WHERE id = ?")
       .run(desk.session, project.id);
   } finally {
     write.close();
@@ -1622,7 +1622,7 @@ const endedWriterChecks = async (
     text: LEAD_WORDS,
   });
   const landed = await until(
-    "the lead's reply in the pin's thread",
+    "the conversation's reply in the pin's thread",
     async () => numbered((await docOf(frame)).pins, 1),
     (now) => (now?.thread ?? []).some((entry) => entry.text === LEAD_WORDS),
     10_000
@@ -1630,7 +1630,7 @@ const endedWriterChecks = async (
   await settle(tab, 600);
   const card = await readCard(LEAD_WORDS);
   kit.check(
-    "7b: a session that is not the project's lead is refused the writer's pin, and no word of it lands",
+    "7b: a session that is not the project's conversation is refused the writer's pin, and no word of it lands",
     refused.includes(artifactToolWords.noPin(pin.id)) &&
       !(landed?.thread ?? []).some(
         (entry) => entry.text === "A sibling's word."
@@ -1638,7 +1638,7 @@ const endedWriterChecks = async (
     refused.slice(0, 300)
   );
   kit.check(
-    "7b: the project's lead's comment_reply on the ended writer's pin lands in its thread, by the agent, and the person reads it in the pin's card",
+    "7b: the project's conversation's comment_reply on the ended writer's pin lands in its thread, by the agent, and the person reads it in the pin's card",
     (landed?.thread ?? []).some(
       (entry) => entry.by === "agent" && entry.text === LEAD_WORDS
     ) && card.includes(LEAD_WORDS),

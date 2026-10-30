@@ -48,7 +48,7 @@
  *   task or pin the filer's work came from. A write that would close a
  *   cycle of waits or parts, a wait on itself, or a target that does not
  *   exist is refused, naming the path. That is its starter's business (the session
- *   that started it, or the lead for the dispatcher's), never the person's
+ *   that started it, or the project's conversation for the dispatcher's), never the person's
  *   Needs you: a task waits for you only in a stage of kind `you`. The hub
  *   moves a task as `hub`: code, which the file's moves do not bind; its
  *   commits say so.
@@ -460,7 +460,7 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
   checks: string[];
   /** Its `## Comments`, oldest first: each written by the hub with who and when. */
   comments: TaskComment[];
-  /** Project folder files its attempt's brief carries (`context:`), the lead's pick. */
+  /** Project folder files its attempt's brief carries (`context:`), the conversation's pick. */
   context: string[];
   description: string;
   /** The task it repeats (`duplicate_of`); null when none. */

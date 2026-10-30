@@ -1620,7 +1620,7 @@ const WAKES_AT_REST: ReadonlySet<string> = new Set([
   "restore",
   // A project's conversation, sent its project's events (caw.ts `tell`).
   PROJECT_ORIGIN,
-  // Its looping delegate, for it as that delegate's lead (fleet-watch.ts).
+  // Its looping delegate, for it as that delegate's steward (fleet-watch.ts).
   "fleet-watch",
 ]);
 /** The words a continuation stopped by its Cancel ends with. */
@@ -5578,7 +5578,7 @@ export const createServer = (
       transcripts.processGone(instanceId);
       workItems.turnOver(instanceId);
     }
-    // A lead's turn ends with its process: its thread is no longer working.
+    // A conversation's turn ends with its process.
     lead?.sessionEnded(instanceId);
     // And whatever its turn had read or started with it (memory.ts).
     memoryWatch.ended(instanceId);
@@ -5720,7 +5720,7 @@ export const createServer = (
   };
 
   /**
-   * A session just died — a parent, or a project's lead — while an ask routed
+   * A session just died — a parent, or a project's conversation — while an ask routed
    * to it was still parked. The user is the fallback: re-broadcast the ask
    * untagged so it returns to the attention queue, and let push hear it like
    * any other. A routed ask must never sit unanswerable and
@@ -6173,7 +6173,7 @@ export const createServer = (
   /**
    * The session's turn was cut into by an interrupt, so the error that closes
    * it is the cut, not a failure of what it had read. `hold`: the
-   * interrupt holds its delegated work until its parent, its lead or the
+   * interrupt holds its delegated work until its parent, its conversation or the
    * reader writes to it (work-items.ts `interrupted`); a pause's own cut
    * does not ({@link pauseBegan}).
    */
@@ -6967,7 +6967,7 @@ export const createServer = (
       if (!isKeepAlive(row.body)) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: null });
       }
-      // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
+      // A routine's wake of a conversation: the turn it joins is that run's (memory.ts).
       memoryWatch.read(instanceId, row.body?.origin);
       readSend(row, true);
     }
@@ -9555,7 +9555,7 @@ export const createServer = (
       throw new WorkItemRefusal(409, refused.reason);
     }
     const [target] = db.getInstancesByIds([instanceId]);
-    // The parent's, the lead's or the reader's word ends an interrupt's hold
+    // The parent's, the conversation's or the reader's word ends an interrupt's hold
     // on the session's item, before anything below asks about it: what the
     // hold kept goes right behind this send.
     if (!(refused || keepAlive)) {
@@ -9916,7 +9916,7 @@ export const createServer = (
       ...envelope,
       machineId: envelope.machineId || requester.machineId,
     });
-    // A person's words to Caw went into his thread, whose wake reaches him.
+    // No record: the send went nowhere a session holds.
     if (!record) {
       return { busy: pulses.get(instanceId)?.busy === true };
     }
@@ -12456,9 +12456,9 @@ export const createServer = (
     );
     streams.sequence(instanceId, frame);
     artifactSessions.refresh(instanceId);
-    // A project's decision page is read in that project's threads, which
-    // follow no session's stream (its Caw's setup page): the board carries
-    // every open preview, so every dashboard hears it there too.
+    // A project's decision page is read by the project's sessions, some of
+    // which follow no session's stream: the board carries every open
+    // preview, so every dashboard hears it there too.
     if ("page" in target.source) {
       publishInstances("");
     }
@@ -14233,7 +14233,7 @@ export const createServer = (
     root: ARTIFACTS_ROOT,
     // Your picks on a session's own page reach that session as the page's
     // word for its tools to read (artifact_read), never as your message:
-    // Caw's decision page is his to read, never a thread line.
+    // A session's decision page is its own to read, never a transcript line.
     signal: (instance, artifact, responses) =>
       signalResponses(instance, artifact, responses),
     // Your pins, replies, resolves and ink go on your Send, with your note.
@@ -14424,7 +14424,7 @@ export const createServer = (
     },
     previewAddress: (instanceId) =>
       onPreviewPort(() => previewListeners.address(instanceId)),
-    // Its parent's, or its project's lead's, as stop_delegate decides.
+    // Its parent's, or its project's conversation's, as stop_delegate decides.
     delegatesIn: (instance, workspaceId) =>
       db
         .workItemsIn(workspaceId)
@@ -21915,7 +21915,7 @@ export const createServer = (
     }
     const record = deliverSend(message);
     console.log(
-      `[hub] send -> ${message.payload.instanceId} (${record?.state ?? "to Caw's thread"})${
+      `[hub] send -> ${message.payload.instanceId} (${record?.state ?? "not taken"})${
         provenance
           ? ` client ${provenance.clientId ?? "?"} presence ${provenance.presenceId?.slice(0, 8) ?? "?"}`
           : ""
@@ -23951,8 +23951,8 @@ export const createServer = (
    * the hub and the checkout it was made from, its primary. With no checkout
    * (New project: its place is picked once it is set up) its one place is
    * its folder on the hub. A new project's `template` is written as its
-   * stages.md; given `setup` (your prompt), it opens its Setup thread and
-   * Caw is woken to set it up, on or off (caw.ts `setup`). The dashboard's "New
+   * stages.md; given `setup` (your prompt), its conversation starts with it
+   * and sets it up, on or off (caw.ts `setup`). The dashboard's "New
    * project" and "Create project" and an accepted project offer all come here.
    */
   /** A paused machine's folder is read nothing: the person is told now, not kept waiting for the pause's end. */
@@ -23971,7 +23971,7 @@ export const createServer = (
     caw?: boolean;
     checkout?: { machineId: string; cwd: string };
     name: string;
-    /** What the Setup thread opens with: your prompt, or a note of where the project came from. */
+    /** What its setup conversation opens with: your prompt, or a note of where the project came from. */
     setup?: {
       note?: ProjectNote;
       prompt?: string;
@@ -24383,8 +24383,7 @@ export const createServer = (
         fallbackMode,
         placed
       ),
-    // A person's words to Caw that went to his thread were taken: its wake
-    // carries them to him (caw.ts `personSent`).
+    // A send's record: what became of the words.
     send: (envelope) =>
       deliverSend(envelope) ?? { reason: null, state: "pending" },
     // What a pull request an attempt opens links back to and is titled by.
@@ -25051,7 +25050,7 @@ export const createServer = (
   });
   findHears = (ids) => find.instancesChanged(ids);
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
-  // triage run per episode whose word goes to the session's lead.
+  // triage run per episode whose word goes to the session's steward.
   watch = createFleetWatch({
     asking: (instanceId) =>
       pending.list().some((ask) => ask.instanceId === instanceId),
@@ -26043,7 +26042,7 @@ export const createServer = (
     tasks,
   });
   // Ingress (ingress.ts): events from GitHub and polled connections, each
-  // stored once and routed to a routine or the lead's next wake.
+  // stored once and routed to a routine or the conversation's next wake.
   const ingress = createIngress({
     connections,
     db,
@@ -26592,7 +26591,7 @@ export const createServer = (
       const row = instanceId
         ? db.getInstancesByIds([db.instanceIdOf(instanceId)])[0]
         : undefined;
-      // Its parent, or its project's lead: a co-parent of every work item of
+      // Its parent, or its project's conversation: a co-parent of every work item of
       // the project, which may answer, steer and stop it.
       if (!(
         row &&
@@ -26601,7 +26600,7 @@ export const createServer = (
       )) {
         throw new WorkItemRefusal(
           403,
-          "you can only control your own delegates, or the work items of a project you lead"
+          "you can only control your own delegates, or the work items of the project whose conversation you are"
         );
       }
       const retired = workItems.refusal(row, {
@@ -28064,7 +28063,7 @@ export const createServer = (
    * its item, so the leak is someone's to end: on 2026-10-23 the notices of
    * a failed delegate's leftover and leaking process in its workspace were
    * refused ("Leak in a workspace (85634c62) is failed. Only the reader, the
-   * session that delegated it, or its project's lead can continue it.") and
+   * session that delegated it, or its project's conversation can continue it.") and
    * reached no one.
    *
    * Only a climb in memory is told so ({@link leakWords.leaking}): what an
@@ -28237,7 +28236,7 @@ export const createServer = (
   };
 
   /**
-   * What fleet watch did about a session, or told it as a lead (core
+   * What fleet watch did about a session, or told it as its steward (core
    * `FLEET_WATCH`): kept on its row and folded into what its screens show
    * now. Never sent to its process.
    */
@@ -29605,7 +29604,7 @@ export const createServer = (
       )
       // A repository's `.lfsconfig` named an LFS endpoint that is neither its
       // origin's nor the project's declared one (agent host-lfs.ts): its
-      // large files stayed pointers. The project's thread is told once per
+      // large files stayed pointers. The project's conversation is told once per
       // endpoint, ever (`lfs_refusals`), with how to declare it.
       .post(
         "/api/lfs/projects/:id/refused",
@@ -33031,7 +33030,7 @@ export const createServer = (
           };
         }
       )
-      // The project's running sessions, each lead followed by its delegates:
+      // The project's running sessions, each top session followed by its delegates:
       // what a forget stops first (project-stops.ts).
       .get("/api/projects/:id/running", ({ params, status }) => {
         if (!db.project(params.id)) {
@@ -33404,7 +33403,7 @@ export const createServer = (
         }
       )
       // A `handoff`'s inputs: copied into its target item's `$TMPDIR/inputs/`
-      // before the handoff goes, by the item's parent or its project's lead.
+      // before the handoff goes, by the item's parent or its project's conversation.
       .post(
         "/api/work-items/inputs",
         {
@@ -33447,7 +33446,7 @@ export const createServer = (
         }
       )
       // `stop_delegate`: a delegate and its tree stopped by its parent or its
-      // project's lead (tree-stops.ts), answering how many sessions under it
+      // project's conversation (tree-stops.ts), answering how many sessions under it
       // end first. Its report comes once every end is confirmed.
       .post(
         "/api/work-items/stop",
@@ -33485,7 +33484,7 @@ export const createServer = (
           )) {
             return status(
               403,
-              "you can only stop your own delegates, or the work items of a project you lead"
+              "you can only stop your own delegates, or the work items of the project whose conversation you are"
             );
           }
           return treeStops.stop(row.id, {
@@ -33495,7 +33494,7 @@ export const createServer = (
         }
       )
       // `stop_delegate` on a queued delegate: withdrawn by its parent or its
-      // project's lead; 404 when the target names no queued delegate.
+      // project's conversation; 404 when the target names no queued delegate.
       .post(
         "/api/work-items/queued/withdraw",
         {
@@ -33610,7 +33609,7 @@ export const createServer = (
       )
       // `discard_workspace`: a workspace a session's delegates worked in,
       // archived with its unlanded work saved to a carry, by that session
-      // (or its project's lead) alone.
+      // (or its project's conversation) alone.
       .post(
         "/api/workspaces/:id/discard",
         {
@@ -37058,7 +37057,7 @@ export const createServer = (
           lifecycle.disconnect(machineId);
           // A forget waiting on its stops: they are owed to its next register.
           projectStops.machineGone(machineId);
-          // Its leads' turns are over: their threads stop reading `working`.
+          // The project conversations it ran are gone with it.
           caw.machineGone(machineId);
           db.reconcileInstances(machineId, []);
           publishInstances(machineId);

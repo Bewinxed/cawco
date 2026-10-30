@@ -7,7 +7,7 @@
 export const projectWords = {
   /** The head's New session from the project's checkout. */
   spinOff: "Spin off",
-  /** The head's Ask Caw: his panel on a new thread. */
+  /** The head's Ask Caw: his panel on a new conversation. */
   askCaw: "Ask Caw",
   /** The head's place: its name, which opens the project's details. */
   details: "Project details",

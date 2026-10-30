@@ -806,8 +806,8 @@ export function parseArtifactNotice(text: string): ArtifactNotice | null {
 const fleetWatchLine = (line: string): string => `[Fleet watch] ${line}\n\n`;
 
 /**
- * Fleet watch's nudge to a session's lead (packages/hub `fleet-watch.ts`):
- * the line, then what the lead reads. A transcript draws it as the same
+ * Fleet watch's nudge to a session's steward (packages/hub `fleet-watch.ts`):
+ * the line, then what the steward reads. A transcript draws it as the same
  * fleet-watch note the watched session's transcript has.
  */
 export const fleetWatchNudge = (line: string, body: string): string =>

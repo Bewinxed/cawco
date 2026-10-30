@@ -372,8 +372,8 @@
          so the hover ghost and the pill frame the picture; its corner the
          picture's plus that inset (The Concentric Rule). Its one column is
          `minmax(0, 1fr)`, its slot's width: nothing it holds widens it.
-         The row: the attachments' row (FilesList), its glyph in the lead
-         column. One button either way, which a switch slides (data-flip). -->
+         The row: the attachments' row (FilesList), its glyph in the row's
+         lead column. One button either way, which a switch slides (data-flip). -->
     <button
       aria-selected={artifact.id === chosen}
       class={view === "list"

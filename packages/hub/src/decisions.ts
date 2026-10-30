@@ -15,8 +15,8 @@
  *   revives a session at rest; a note from the tab's composer as the
  *   person's words about the page, never a Send of its picks (a note is
  *   talk, as a comment is: a Send is pressed, never typed). When that
- *   session was ended, Caw is woken with it in a thread of the project, and
- *   reads the picks himself (a project's lead reads every page of his
+ *   session was ended, the project's conversation is told, and reads the
+ *   picks itself (a project's conversation reads every page of its
  *   project); only I'm done picking stamps the page sent.
  * - **A Send decides the page**: whichever control sends its picks (the
  *   page's own Send, the panel's, Needs you's, the tab's I'm done picking;
@@ -928,8 +928,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
   };
 
   /**
-   * The Make tasks ask, said to its session as the record's send, or to Caw
-   * in a thread of its own, which the record is written again to name;
+   * The Make tasks ask, said to its session as the record's send, or to the
+   * project's conversation, which the record is written again to name;
    * what refused it, if anything.
    */
   const askTasks = async (

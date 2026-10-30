@@ -19,7 +19,7 @@
  *    origin answered) and one next step, its own "Trying again on its own."
  *    (the hub's words carry the cause alone, core `machineFaultWords`
  *    `next: false`). The page's console holds no error the while (owner's
- *    Caw thread, 2026-10-24: a 502 of every probe logged there), and its
+ *    project conversation, 2026-10-24: a 502 of every probe logged there), and its
  *    probes back off (PreviewPane `PROBE_FIRST_MS` doubling). The agent
  *    back, the pane shows the page by itself, within `AGENT_BACK_MS`.
  * 3. The agent frozen (SIGSTOP), so the hub still knows its listener and

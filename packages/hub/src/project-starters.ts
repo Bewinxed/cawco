@@ -5,7 +5,7 @@
  * empty Decisions tab offers to lay out as a decision page. Each is written
  * for that project from what it holds now. No list of starters exists; each
  * is one of the asks that fit a thing in the project (starter-asks.ts: a
- * task, a thread, a failure, a landed commit, a task kind filed often, an
+ * task, a failure, a landed commit, a task kind filed often, an
  * event source no routine takes, a draft view, the project itself), chosen
  * by Jev (jev-placement.ts `jevStarters`, every place in one call), with the
  * reason it is offered and what it comes from.
@@ -199,7 +199,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
 
   /**
    * Event sources whose events in the last {@link STARTER_RECENT_DAYS}
-   * reached no routine (stored only, or handed to the lead), by source and
+   * reached no routine (stored only, or handed to the project's conversation), by source and
    * kind, most first.
    */
   const unroutedEvents = (

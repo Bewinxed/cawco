@@ -139,7 +139,7 @@ export interface RelayInput {
   timestampHeader?: string | null;
 }
 
-/** What creating a relay answers: the relay, and the routes a lead may propose for it. */
+/** What creating a relay answers: the relay, and the routes a conversation may propose for it. */
 export interface RelayCreated {
   relay: RelayView;
   /** Event routes for the project's routines, to propose to the owner (event_route_create), never made here. */
@@ -1008,7 +1008,7 @@ export const createRelay = ({
     return Boolean(store.get(id)?.testedAt);
   };
 
-  /** The routes a lead may propose for the relay: its source, and the project's routines. */
+  /** The routes a conversation may propose for the relay: its source, and the project's routines. */
   const suggested = (row: RelayRow): RelayCreated["suggestedRoutes"] => {
     const repo = repoOf(row);
     const source =
@@ -1024,7 +1024,7 @@ export const createRelay = ({
       note:
         routines.length > 0
           ? `Propose to the owner which of these routines the relay's events should run, as event_route_create with source ${source} and the kinds each takes; nothing is routed until a route is made.`
-          : `The project has no routines yet; its events go to the lead's inbox until a route (event_route_create, source ${source}) sends them to one.`,
+          : `The project has no routines yet; its events go to the conversation's inbox until a route (event_route_create, source ${source}) sends them to one.`,
     };
   };
 

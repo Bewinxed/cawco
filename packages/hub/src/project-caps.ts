@@ -7,8 +7,7 @@
  *
  * - `pause`: no new attempt at its tasks starts (work-items.ts refuses one,
  *   dispatch.ts treats the project as paused);
- * - `quiet`: what would wake its Caw is booked in its thread without a turn
- *   (caw.ts `wake`);
+ * - `quiet`: nothing reaches its conversation (caw.ts `tell`);
  * - `both`.
  *
  * Nothing runs on a timer: the cap is read at each decision, and holds

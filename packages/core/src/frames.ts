@@ -645,7 +645,7 @@ export interface AskAnswer {
   behavior?: "allow" | "deny";
   /**
    * The paired device that answered (a page or the app), or the session that
-   * did (a delegate's parent, its project's lead), by name; absent when the
+   * did (a delegate's parent, its project's conversation), by name; absent when the
    * hub knows no name (a page or app it trusts by its network).
    */
   name?: string;

@@ -137,10 +137,10 @@ export const rebuildScheduler = {
    * dependency: each change re-ran the effect, which joined again with the
    * changed fingerprint as `last`, so no tick ever saw a change and no
    * unfocused transcript was rebuilt after it joined (Caw's dock froze on
-   * the first words of a thread, 2026-10-16).
+   * a conversation's first words, 2026-10-16).
    *
    * The turn given back is this registrant's alone: a pane joining under
-   * the same id (a new thread's pane mounted as the last one goes) keeps
+   * the same id (a new pane mounted as the last one goes) keeps
    * its own.
    */
   join(

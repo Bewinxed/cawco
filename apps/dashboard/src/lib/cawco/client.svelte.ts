@@ -7089,7 +7089,7 @@ export interface RunningSession {
   machineId: string;
   /** Its machine is not connected: it stops when its machine is back. */
   offline: boolean;
-  /** The nearest running session it is a delegate of; null for a lead. */
+  /** The nearest running session it is a delegate of; null for a top session. */
   parentId: string | null;
   title: string | null;
 }
@@ -9315,7 +9315,7 @@ export const cawco = {
     state.delegateEvents[instanceId] ?? [],
   /**
    * What a session's tray lists, oldest first: the work items it delegated
-   * (and as its project's lead the ones it co-parents), and the sessions it
+   * (and as its project's conversation the ones it co-parents), and the sessions it
    * started that run none ({@link startedBy}).
    */
   trayOf: (instanceId: string): TrayChild[] =>
@@ -9419,7 +9419,7 @@ export const cawco = {
   /**
    * Whether the session's own main loop is in a turn, its delegates and
    * subagents aside: what a project's Caw is doing himself, where
-   * `activityOf` counts a lead as working while any attempt it parents runs.
+   * `activityOf` counts a conversation as working while any attempt it parents runs.
    * The same sources as `activityOf`: an open session's frames, else the
    * daemon's pulse.
    */

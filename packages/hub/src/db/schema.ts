@@ -451,7 +451,7 @@ export const projects = sqliteTable("projects", {
   cawMode: text("caw_mode").$type<OfferedMode>(),
   /**
    * Whether the hub starts attempts at ready tasks on its own (dispatch.ts).
-   * Off until you turn it on, and inert without a lead.
+   * Off until you turn it on, and inert without a conversation.
    */
   dispatch: integer("dispatch", { mode: "boolean" }).notNull().default(false),
   /** Live attempts at once, past which the dispatcher starts no more. */
@@ -511,7 +511,7 @@ export const projects = sqliteTable("projects", {
   /**
    * Review before done: only you move a task into a done stage, and an
    * attempt that lands sends its task to review (stages.ts `ruledStages`).
-   * Off: the lead and sessions close tasks as the project's stages allow.
+   * Off: the project's conversation and sessions close tasks as the project's stages allow.
    */
   review: integer("review", { mode: "boolean" }).notNull().default(false),
   /**
@@ -561,7 +561,7 @@ export const queuedTaskStarts = sqliteTable(
     taskId: text("task_id").notNull(),
     /** The stage whose hook asked for it. */
     stage: text("stage").notNull(),
-    /** The session that moved the task in, which takes the report; null: the lead. */
+    /** The session that moved the task in, which takes the report; null: the project's conversation. */
     parentInstanceId: text("parent_instance_id"),
     /**
      * Why it waits: `cap`, the project runs `max_attempts` already; `owns`,
@@ -1278,8 +1278,8 @@ export type Origin = "you" | "event";
 /**
  * A work item's origin: an {@link Origin}, or `kept`, Caw's own work (an
  * event's) you chose to let finish when you turned him off. Kept work runs
- * to its end, past an account's limit, and its report is noted in his thread
- * without waking him while he is off.
+ * to its end, past an account's limit, and its report is noted in the
+ * project's conversation without a turn while events are off.
  */
 export type WorkOrigin = Origin | "kept";
 
@@ -1420,7 +1420,7 @@ export const workItems = sqliteTable(
       .default(false),
     /**
      * Who stopped it, for an item that ended `cancelled` (core `EndedBy`): a
-     * person, a session (its parent's or a lead's `stop_delegate`), the hub
+     * person, a session (its parent's or a conversation's `stop_delegate`), the hub
      * (`why`), or a signal from outside. Null for any other end, and for a
      * cancel whose stopper the hub did not hear.
      */
@@ -1507,7 +1507,7 @@ export const workItems = sqliteTable(
      * asleep past its limit, while that holds it: nothing the hub sends on
      * its own (a quiet turn's reminder, a wait's end, a landing gate's
      * outcome, a rule's reply, another session's report) wakes it until its
-     * parent, its project's lead or the reader sends it something.
+     * parent, its project's conversation or the reader sends it something.
      */
     heldAt: timestamp("held_at"),
     /**
@@ -1557,7 +1557,7 @@ export const workItems = sqliteTable(
     /**
      * That `finish_item`'s `headline`: its outcome in one or two sentences,
      * what a glance at its report shows (the delegate tree, a routine's
-     * thread note). A routine's run reads its output contract here. Null
+     * project note). A routine's run reads its output contract here. Null
      * until then.
      */
     headline: text("headline"),
@@ -1772,7 +1772,7 @@ export const sentMessages = sqliteTable(
     /** The session it went to. */
     instanceId: text("instance_id").notNull(),
     acceptedAt: timestamp("accepted_at").notNull(),
-    /** When its reader read it (`readSend`): where a thread's page places it. Null until then. */
+    /** When its reader read it (`readSend`). Null until then. */
     readAt: timestamp("read_at"),
     /**
      * The id the harness stores the message under, where that is not the uuid
@@ -3309,7 +3309,7 @@ export type ContinuationAsker =
  *   its machine said;
  * - `outdated`: its process runs a Claude Code other than its machine's
  *   (core `CLI_OUTDATED`), the line its machine said;
- * - `watch`: what fleet watch did about it, or for it as the lead (core
+ * - `watch`: what fleet watch did about it, or for it as the project's conversation (core
  *   `FLEET_WATCH`), the line with the triage's reason under it;
  * - `moved`: it started on a machine its project was moved to for it (core
  *   `MOVED_HERE`), the move's ready line: what moved and what stayed. Its
@@ -3763,9 +3763,9 @@ export const lfsOffers = sqliteTable("lfs_offers", {
 
 /**
  * The LFS endpoints a repository's `.lfsconfig` named that a project's
- * thread was told git-lfs refused (server.ts `/api/lfs/projects/:id/refused`,
- * agent host-lfs.ts): one row per project and endpoint, so the thread is
- * told once, whatever restarts and however many fetches meet it.
+ * conversation was told git-lfs refused (server.ts `/api/lfs/projects/:id/refused`,
+ * agent host-lfs.ts): one row per project and endpoint, so it is told
+ * once, whatever restarts and however many fetches meet it.
  */
 export const lfsRefusals = sqliteTable(
   "lfs_refusals",
@@ -4427,7 +4427,7 @@ export const sessionTaints = sqliteTable("session_taints", {
   fromRoutine: text("from_routine"),
   /** Since its last turn's result it read a send the hub delivered: its turn is not self-started. */
   delivered: integer("delivered", { mode: "boolean" }).notNull().default(false),
-  /** The routine whose wake its turn read (a lead's). */
+  /** The routine whose wake its turn read (a conversation's). */
   routine: text("routine"),
   updatedAt: timestamp("updated_at").notNull(),
 });
@@ -4524,7 +4524,7 @@ export const projectNotes = sqliteTable(
   ]
 );
 
-/** Who a routine's run goes to: a fresh delegate of its type, or the project's lead. */
+/** Who a routine's run goes to: a fresh delegate of its type, or the project's conversation. */
 /**
  * What a run starts: a fresh delegate, a fresh orchestrator (a session that
  * may delegate, in the project's checkout: routines.ts `fireOrchestrator`),
@@ -4794,7 +4794,7 @@ export const inboundEvents = sqliteTable(
     routeId: text("route_id").references(() => eventRoutes.id, {
       onDelete: "set null",
     }),
-    /** When it was handed on: its routine's run filed, or the lead's wake that carried it. */
+    /** When it was handed on: its routine's run filed, or the conversation's wake that carried it. */
     handledAt: timestamp("handled_at"),
   },
   (table) => [

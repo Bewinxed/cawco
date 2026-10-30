@@ -8,8 +8,8 @@
    * is said twice and no row is named by an id.
    *
    * `?project=` filters it to one project (fable-lead-switch.md §2): its
-   * spend today and this month, its Caw's share, the budget an attempt runs
-   * under, and the ledger of its threads and attempts.
+   * spend today and this month, its conversations' share, the budget an
+   * attempt runs under, and the ledger of its attempts and sessions.
    */
   import { cawco, cawOf, readSpend } from "#lib/cawco/client.svelte.js";
   import History from "#lib/cawco/usage/History.svelte";

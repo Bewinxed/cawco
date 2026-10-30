@@ -15,7 +15,7 @@ export const turnCutWords = {
   line: (cause: string) => `Interrupted by ${cause}`,
   /** The owner's own Stop, from a dashboard or the app. */
   stop: "your Stop",
-  /** A session's interrupt_delegate, or its lead's. */
+  /** A session's interrupt_delegate, or its conversation's. */
   interruptFrom: (name: string) => `an interrupt from ${name}`,
   /** A machine's pause, until its end. */
   pause: (machine: string, until: string) =>

@@ -8,9 +8,9 @@ An HTML card carries no kind, so it is always the person's to pick; a choice wit
 
 ```html
 <article class="dp-card" id="lead">
-  <header><h2>Who leads the project?</h2><span class="dp-state" data-dp-state="lead">Not picked</span></header>
+  <header><h2>Who owns the project?</h2><span class="dp-state" data-dp-state="lead">Not picked</span></header>
   <p class="dp-why">Recommended: Caw, woken by events. Caw keeps the board moving while you are away.</p>
-  <div class="dp-opts" data-cawco-choice="lead" role="group" aria-label="Who leads the project">
+  <div class="dp-opts" data-cawco-choice="lead" role="group" aria-label="Who owns the project">
     <button class="dp-opt" type="button" data-option="you"><b>You</b><span>Every brief is in your words.</span><span class="dp-cost">Nothing moves while you are away.</span><span class="dp-builds">Nothing new to build.</span></button>
     <button class="dp-opt" type="button" data-option="caw"><span class="dp-tag">Recommended</span><b>Caw, woken by events</b><span>The board moves while you are away.</span><span class="dp-cost">You review its briefs after the fact.</span><span class="dp-builds">Event wake-ups for Caw, with board tools only.</span></button>
   </div>

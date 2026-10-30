@@ -36,7 +36,7 @@
  *   asks, through `ctx.permission.assert` (2.0.29, anomalyco/opencode#54930:
  *   "the same permission engine as built-in tools: configured rules, saved
  *   'always allow' decisions, and the native approval prompt"), action
- *   `shell` and the command in its metadata: a lead's call is the hub's
+ *   `shell` and the command in its metadata: a conversation's call is the hub's
  *   gate's to decide. The server pins the built-in's description
  *   for the model, so a clone's session context gives it the boundary's. A
  *   location serves every session in its folder, so in a place (core
@@ -401,7 +401,7 @@ const runShell = async (file, args, input, context, directory) => {
 
 // The \`shell\` of a location a workspace holds. A session \`bounded\` there is
 // asked as the built-in asks (\`shell\`, the command its resource and in its
-// metadata, for CawCo's ask and a lead's gate), then runs the command inside
+// metadata, for CawCo's ask and a conversation's gate), then runs the command inside
 // the workspace's boundary; any other (a person's session in a place)
 // runs it through \`host\`, the built-in this replaces, which asks and runs as
 // it always does on the host. No call runs without its ask.

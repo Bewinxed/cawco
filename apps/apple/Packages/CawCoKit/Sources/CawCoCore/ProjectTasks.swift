@@ -248,14 +248,14 @@ public struct ProjectTasks: Sendable {
     }
 
     /// A fresh attempt at a task whose last one failed or was stopped, in that
-    /// attempt's workspace (`retryTask`); it reports to the project's lead.
+    /// attempt's workspace (`retryTask`); it reports to the project's conversation.
     public func retry(_ taskId: String) async throws {
         let output = try await client.postApiProjectsByIdTasksByTaskIdRetry(path: .init(id: projectId, taskId: taskId), body: .json(.init()))
         if case .ok = output { return }
         throw await TaskRefusal.reading(output)
     }
 
-    /// A fresh attempt at a task whose last one finished (`startAttempt`); it reports to the project's lead.
+    /// A fresh attempt at a task whose last one finished (`startAttempt`); it reports to the project's conversation.
     public func startAttempt(_ taskId: String) async throws {
         let output = try await client.postApiProjectsByIdTasksByTaskIdAttempts(path: .init(id: projectId, taskId: taskId), body: .json(.init()))
         if case .ok = output { return }

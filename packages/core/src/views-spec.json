@@ -1490,7 +1490,7 @@
                   "type": "number"
                 },
                 "routedTo": {
-                  "description": "The routine a route sent it to, by name; \"Caw\" for the lead.",
+                  "description": "The routine a route sent it to, by name; \"Caw\" for the project's conversation.",
                   "type": [
                     "string",
                     "null"

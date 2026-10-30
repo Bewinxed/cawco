@@ -93,7 +93,7 @@
   }: {
     /**
      * The session whose delegates the tray shows: its own, and as its
-     * project's lead the ones it co-parents.
+     * project's conversation the ones it co-parents.
      */
     parentId: string;
     /** A swipe is carrying the conversation: the chips wait. */

@@ -27,7 +27,7 @@
    * when the hub says its machine confirmed the end (`project.stop`), never
    * at the ask; then its tile leaves the row and flies into the button's
    * icon slot, where a ring fills a share per landing while the row folds
-   * shut behind it (delegates before their lead). The last landing makes
+   * shut behind it (delegates before the session that started them). The last landing makes
    * the ring whole, the kind's end runs ("Forgetting…"), and the ring
    * becomes the check ("Forgotten"), held where it was asked before the
    * page goes on. A failure keeps the state: the row says why, and Try
@@ -37,7 +37,7 @@
    * "Stops when <machine> is back" from the start. The second press has the
    * hub record its stop, which the machine's next register carries out; once
    * it is recorded (`deferred`) the ring counts it, and it neither flies nor
-   * folds. A lead that keeps such a delegate stays with it.
+   * folds. A session that keeps such a delegate stays with it.
    *
    * Caw off has a second way out beside the stop, "Let them finish": its
    * own request, and the tray closes.
@@ -283,7 +283,7 @@
 
   /**
    * The row's tile leaves for the button and the row folds shut behind it.
-   * A lead waits for its delegates' tiles to leave first; a tile leaving
+   * A session waits for its delegates' tiles to leave first; a tile leaving
    * within a flight of the one before goes --dur-stagger after it.
    */
   function leaveRow(row: StopRow): void {
@@ -295,7 +295,7 @@
       return;
     }
     if (kids.some((kid) => !kid.departed)) {
-      // A delegate stays (its machine is away): its lead stays with it,
+      // A delegate stays (its machine is away): its parent stays with it,
       // counted, so the tree under it is never folded away.
       stopWork.arrive(job, row);
       return;

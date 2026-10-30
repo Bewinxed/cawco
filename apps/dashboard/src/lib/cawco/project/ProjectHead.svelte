@@ -33,7 +33,7 @@
    * Trailing, Caw at 48px, at the head's end so the name's start edge stays
    * where it is when he stands over the empty board instead; then one glass
    * capsule (the kit's BarGlass, `form="group"`) of bare symbols, each named
-   * in its tooltip: Ask Caw (his panel on a new thread, the caret in his
+   * in its tooltip: Ask Caw (his panel on a new conversation, the caret in his
    * composer: work in a project starts by telling Caw, PRD §5.6), Spin off,
    * and More holding Pick stages (while the code stages stand in), Project
    * details…, Caw's settings (CawPanel, off More: a popover on a desk, the
@@ -50,7 +50,7 @@
    * important items for inclusion in the main toolbar area … Create a More
    * menu to include additional items").
    *
-   * With the board empty and the lead on, Caw stands over the empty board
+   * With the board empty and events on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
    */
   import { commonWords } from "@cawco/core/words/common";
@@ -435,7 +435,7 @@
          tooltip. Under 640px it holds More alone. -->
     <BarGlass form="group">
       <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
-           thread, the caret in his composer. -->
+           conversation, the caret in his composer. -->
       <Tip label={projectWords.askCaw}>
         {#snippet children(tip)}
           <button

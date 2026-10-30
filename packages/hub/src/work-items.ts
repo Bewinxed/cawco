@@ -27,8 +27,8 @@
  * end. A **budget** (dollars, turns, minutes; the call's, else the task's,
  * else the project's) is checked in one place ({@link overBudget}); at its
  * limit the item fails, its parent is told, and its session is ended. The
- * project's **lead** may answer, steer and stop the project's items; their
- * reports and asks reach only the session that started each, the lead only
+ * project's **conversation** may answer, steer and stop the project's items; their
+ * reports and asks reach only the session that started each, the project's conversation only
  * for the work he started ({@link reportees}). And the **plan ↔ to-do link**: a task attempt's plan,
  * CawCo's own steps on every harness, is read on its turn's end, a
  * completed step whose id is a to-do's (`td-3`) ticks that to-do, `finish_item` asks once about the
@@ -1399,7 +1399,7 @@ const messageOf = (
  * Who may give finished work another turn: the reader (dashboard or app,
  * their words, their Send on its artifact, or their answer to its held
  * upstream post: core `byPerson`), the
- * session that delegated it, or its project's lead (a co-parent of every
+ * session that delegated it, or its project's conversation (a co-parent of every
  * item of its project).
  */
 const reopens = (
@@ -1418,7 +1418,7 @@ const FOLLOW_UP_STOPPED = "Its follow-up was stopped before it landed.";
 
 /** What anyone else's message to finished work is answered with. */
 const finishedText = (item: WorkItemRow): string =>
-  `${item.title} (${handle(item.id)}) is ${item.state}. Only the reader, the session that delegated it, or its project's lead can continue it.`;
+  `${item.title} (${handle(item.id)}) is ${item.state}. Only the reader, the session that delegated it, or its project's conversation can continue it.`;
 
 /** What a message to finished work is answered with once a newer item holds its workspace. */
 const supersededText = (item: WorkItemRow, latest: WorkItemRow): string =>
@@ -2720,9 +2720,9 @@ export const createWorkItems = ({
     return waiting;
   };
 
-  // --- the project's lead: co-parent of its project's items -----------------
+  // --- the project's conversation: co-parent of its project's items -----------------
 
-  /** A project's lead, when it has one that is none of `not`. */
+  /** A project's conversation, when it has one that is none of `not`. */
   const projectLead = (
     projectId: string | null,
     ...not: string[]
@@ -2734,7 +2734,7 @@ export const createWorkItems = ({
     return lead && !not.includes(lead.id) ? lead : undefined;
   };
 
-  /** The item's project's lead, when it has one that is not the item's own session. */
+  /** The item's project's conversation, when it has one that is not the item's own session. */
   const leadFor = (item: WorkItemRow): InstanceRow | undefined =>
     isHubParent(item.parentInstanceId)
       ? undefined
@@ -2757,7 +2757,7 @@ export const createWorkItems = ({
   };
 
   /**
-   * An item as its parent's delegate tray reads it, and its lead's: the lead
+   * An item as its parent's delegate tray reads it, and its conversation's: the project's conversation
    * named when it co-parents the item from another session.
    */
   const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
@@ -2856,14 +2856,14 @@ export const createWorkItems = ({
     };
   };
 
-  /** Whether a message from `origin` may reopen `item`: {@link reopens}, its lead counting. */
+  /** Whether a message from `origin` may reopen `item`: {@link reopens}, its conversation counting. */
   const mayReopen = (item: WorkItemRow, origin: NeutralOrigin): boolean =>
     reopens(item.parentInstanceId, origin, leadFor(item)?.id);
 
   /**
    * The Caw an item's report must not wake: its project's, while he is off
    * and the item is not yours (its origin `event`, or `kept`, whose end is
-   * noted in his thread instead, caw.ts `itemEnded`); null otherwise.
+   * noted in the project's conversation instead, caw.ts `notice`); null otherwise.
    */
   const cawOff = (item: WorkItemRow): string | null => {
     const led = item.projectId ? db.project(item.projectId) : undefined;
@@ -2877,7 +2877,7 @@ export const createWorkItems = ({
    * delegated work's do (a work item). A session another session started with `start_session`
    * nests under it and reports to no one, its asks the person's; a
    * routine's run reports to nobody either, as its routine reads how it
-   * ended, and a run that answers NO_REPLY must wake no model, the lead's
+   * ended, and a run that answers NO_REPLY must wake no model, the conversation's
    * included.
    */
   const reportsBack = (row: InstanceRow): boolean =>
@@ -2886,7 +2886,7 @@ export const createWorkItems = ({
   /**
    * Who hears a delegated session's reports and asks: the session that
    * started its work, by the id its row records, and no one else. A
-   * project's lead hears only the work he started himself, never another
+   * project's conversation hears only the work he started himself, never another
    * session's work in his project because it is in his project. While a
    * project's Caw is off, an item he started whose work is not yours
    * reaches him not at all: off, only your words wake him (caw.ts). Your
@@ -3003,7 +3003,7 @@ export const createWorkItems = ({
 
   /**
    * Stops a live item that has reached its budget ({@link overBudget}): it
-   * fails with the sentence that names the budget, its parent (and lead) are
+   * fails with the sentence that names the budget, its parent (and its project's conversation) are
    * told, and its session is ended. An item whose landing is running is left
    * to it.
    */
@@ -3223,7 +3223,7 @@ export const createWorkItems = ({
    * An item whose session has slept past {@link asleepLimit} is held, not
    * failed: the sweep no longer wakes it, nothing the hub sends on its own
    * does ({@link heldFor}), and you are told in Needs you. Its parent's, its
-   * lead's or your word to it carries the work on ({@link unhold}).
+   * project conversation's or your word to it carries the work on ({@link unhold}).
    * 2026-10-23, obelisk: items from September asleep for weeks were woken
    * at every sweep after each turn.
    */
@@ -3374,7 +3374,7 @@ export const createWorkItems = ({
   /**
    * Whether someone will hear how an item ends, so waking its work is worth
    * it: its routine (which reads its run's end, routines.ts), its project's
-   * Caw while he is off (his thread notes the end, caw.ts `itemEnded`), or a
+   * conversation while events are off (a project note says the end), or a
    * reportee that can still take a turn: running, starting, or asleep on a
    * conversation of its own.
    */
@@ -3729,7 +3729,7 @@ export const createWorkItems = ({
 
   /**
    * The queued delegates `caller` may withdraw: those it queued, and, as its
-   * project's lead, those of its project. One that has filed its item is that
+   * project's conversation, those of its project. One that has filed its item is that
    * item now, and is left out.
    */
   const queuedFor = (caller: string): QueuedWorkItemRow[] =>
@@ -6717,7 +6717,7 @@ export const createWorkItems = ({
    * does until it sleeps.
    *
    * An item whose work landed (its `landed`) and that runs again (a word
-   * from the reader, its parent or its project's lead, {@link reopen}; a
+   * from the reader, its parent or its project's conversation, {@link reopen}; a
    * continuation of its session, `continuedIn`; work found since its landing,
    * {@link finishable}) stays done however its follow-up ends without
    * landing: blocked, a failed or third quiet turn, its session failing or
@@ -8948,7 +8948,7 @@ export const createWorkItems = ({
      * The hub's own work: a routine's run (routines.ts, {@link routineParent})
      * or a design check's verifier (design-verify.ts, {@link verifierParent}).
      * A fresh session in a new workspace cut from `parent.cwd` on
-     * `parent.machineId`. It reports to no session, the project's lead
+     * `parent.machineId`. It reports to no session, the project's conversation
      * included: its owner reads how it ended from {@link WorkItemDeps.itemEnded}.
      */
     startForHub: (
@@ -9083,7 +9083,7 @@ export const createWorkItems = ({
      * `stop_delegate` on a queued delegate: the one `target` names (by id as
      * every tool reads one, handles.ts `byId`) leaves the queue through
      * {@link unqueue}, its chip with it. Only its parent or its project's
-     * lead may withdraw it; anyone else is refused as `stop_delegate`
+     * conversation may withdraw it; anyone else is refused as `stop_delegate`
      * refuses a session that is not theirs. Undefined when `target` names no
      * queued delegate, so the caller looks among sessions.
      */
@@ -9159,7 +9159,7 @@ export const createWorkItems = ({
 
     reportees,
 
-    /** Whether `leadId` leads the project of the work item `instanceId` runs: it may answer, steer and stop it. */
+    /** Whether `leadId` is the conversation of the project of the work item `instanceId` runs: it may answer, steer and stop it. */
     ledBy(instanceId: string, leadId: string): boolean {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
@@ -9271,7 +9271,7 @@ export const createWorkItems = ({
      * An interrupt cut the session's turn: its declared wait is cancelled,
      * and, when `hold`, its live item is held ({@link heldFor}): the turn's
      * end hands nothing back and starts nothing, and nothing the hub sends
-     * on its own wakes it until its parent, its lead or the reader writes to
+     * on its own wakes it until its parent, its conversation or the reader writes to
      * it ({@link unhold}). A pause's interrupt does not hold: the pause sends
      * the session its own word to carry on when it ends.
      */
@@ -9291,7 +9291,7 @@ export const createWorkItems = ({
     /**
      * Whether a send from `origin` waits at the hub because an interrupt
      * holds the session's item ({@link interrupted}): anything but its
-     * parent's, its lead's or the reader's words. Such a send is kept owed
+     * parent's, its conversation's or the reader's words. Such a send is kept owed
      * and goes, in order, once one of them wakes it.
      */
     heldFor(instanceId: string, origin: NeutralOrigin): boolean {
@@ -9307,7 +9307,7 @@ export const createWorkItems = ({
      * Whether a send from `origin` waits at the hub because the session's
      * finished item's workspace retired and is cut again first
      * ({@link recut}): the handoff that reopens it, from its parent, its
-     * lead or the reader ({@link retiredFor}). Its hold's words say so.
+     * project's conversation or the reader ({@link retiredFor}). Its hold's words say so.
      */
     recutHold: (instanceId: string, origin: NeutralOrigin): boolean =>
       retiredFor(instanceId, origin),
@@ -9390,7 +9390,7 @@ export const createWorkItems = ({
     },
 
     /**
-     * A send from `origin` reached the session: its parent's, its lead's or
+     * A send from `origin` reached the session: its parent's, its conversation's or
      * the reader's ends the interrupt's hold on its item. Answers whether it
      * did, so what the hold kept goes right behind it.
      */
@@ -9754,7 +9754,7 @@ export const createWorkItems = ({
      * Whether a send from `origin` waits at the hub because the session's
      * item is finishing: its landing runs, or its session is in the turn
      * that called `finish_item` (`lastTurnAt`). Only the words of one
-     * who may reopen the item wait (its parent, its lead, the reader): such
+     * who may reopen the item wait (its parent, its conversation, the reader): such
      * a send handed to the harness now would join a turn that ends as
      * `finish_item` answers, and read after the item ended it would reopen
      * nothing ({@link reopen}: it was accepted while the item was live). Kept,
@@ -9821,7 +9821,7 @@ export const createWorkItems = ({
      * A handoff's inputs (core handed-input.ts): written into the
      * `$TMPDIR/inputs/` of the workspace `instanceId`'s item runs in, before
      * the handoff that names them goes. Only the session that delegated the
-     * item, or its project's lead, hands it inputs; refused, too, for a
+     * item, or its project's conversation, hands it inputs; refused, too, for a
      * workspace whose work was discarded and an input that may not go
      * ({@link readInputs}). A retired workspace is cut again first
      * ({@link recut}). Answers each input's name and where it came from.
@@ -9842,7 +9842,7 @@ export const createWorkItems = ({
       if (!(item.parentInstanceId === from || leadFor(item)?.id === from)) {
         throw new WorkItemRefusal(
           403,
-          "Only the session that delegated an item, or its project's lead, hands it inputs."
+          "Only the session that delegated an item, or its project's conversation, hands it inputs."
         );
       }
       const [named] = db.workspacesNamed(item.workspaceId);
@@ -10160,7 +10160,7 @@ export const createWorkItems = ({
 
     /**
      * What a session's delegate tray shows when it opens: the items it
-     * delegated and, as its projects' lead, the ones it co-parents from
+     * delegated and, as its projects' conversation, the ones it co-parents from
      * another session — live work, failures nobody has dismissed yet, what
      * finished within the tray's hold — and the delegations of either kind
      * still queued for owned files.

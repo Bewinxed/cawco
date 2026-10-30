@@ -3285,8 +3285,8 @@ export class SessionSupervisor {
       // A work item's session runs every shell command inside its workspace's
       // boundary, and does not start without one: the refusal is the spawn's.
       // A spawn that names no workspace but runs anywhere inside a
-      // workspace's clone runs inside that clone's; one in a project lead's
-      // place (a person's own folder) runs on the host, as only the lead's
+      // workspace's clone runs inside that clone's; one in a project conversation's
+      // place (a person's own folder) runs on the host, as only the conversation's
       // own spawns name that place. A Claude session's account goes with
       // it: the boundary reads that account's user layer by the paths the
       // session is given.
@@ -3497,7 +3497,7 @@ export class SessionSupervisor {
 
   /**
    * Where a session runs, read from its spawn, and the context it runs with:
-   * its workspace's boundary (a work item's, a project lead's place, or the
+   * its workspace's boundary (a work item's, a project conversation's place, or the
    * workspace clone its folder is in) and its browser's door. One reading
    * for a launch and for a child taken back after an agent restart
    * ({@link #adoptClaimed}), so a session taken back is bounded as it was

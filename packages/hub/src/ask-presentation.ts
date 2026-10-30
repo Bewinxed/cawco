@@ -77,7 +77,7 @@ export const createAskPresenter = (
   delegateTypes: DelegateTypesShape
 ) => {
   /**
-   * The session that asked, as the board names it (a project's lead is Caw;
+   * The session that asked, as the board names it (a project's conversation is Caw;
    * any other its given title, else the title its first message gave it,
    * else its folder), and its project by name.
    */

@@ -158,7 +158,7 @@ final class ModelsSectionController: ConfigSectionController, ASWebAuthenticatio
         facts.accessibilityIdentifier = "models.watch.facts"
         return group([
             header,
-            note("Reads every session's stream for a loop or a stall. A yes from Jev, or a second signal while Jev is off, starts one triage that tells the session's lead. In a project whose Caw is off, it tells you instead."),
+            note("Reads every session's stream for a loop or a stall. A yes from Jev, or a second signal while Jev is off, starts one triage that tells the session's steward. In a project whose Caw is off, it tells you instead."),
             watch,
             facts,
             watchProblem,

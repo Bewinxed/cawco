@@ -868,8 +868,8 @@
                 {...props}
                 class="{props.class} mark-line no-underline"
               >
-                <!-- The app's own icon (the crow on spark), in the lead
-                     column every row's mark stands in: the column's 18px
+                <!-- The app's own icon (the crow on spark), in the row's
+                     lead column every row's mark stands in: the column's 18px
                      tile, on the tile's radius. Its edge is drawn inside it
                      (a negative offset), so the box stays 18px and the icon
                      keeps its shape on the rail in either theme. -->

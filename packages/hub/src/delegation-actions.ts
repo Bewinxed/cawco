@@ -608,7 +608,7 @@ function resolve(peers: Peer[], target: string): Peer {
  * work item is finishing (`finishing`: its landing gate runs, or the turn
  * that called `finish_item` is still ending, work-items.ts `finishingFor`),
  * so the send goes as its next turn and reopens the item if it landed; or an
- * interrupt holds its work item and only its parent, its lead or the person
+ * interrupt holds its work item and only its parent, its conversation or the person
  * wakes it (`held`); or its workspace retired once its work was over and the
  * hub is cutting its clone again at the same path (`recut`, work-items.ts
  * `recut`); or its start waits its turn among the hub's own launches on its
@@ -656,7 +656,7 @@ const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
     "Its work item is blocked: its delegate type, its machine or its account is missing, and its session isn't started again without it. The message is kept at the hub and goes to it once that is back; Needs you says what is missing.",
   finishing:
     "It called finish_item, and its turn ends with that call, so the message is kept at the hub until the call answers: if the merge checks send the work back, the message joins the turn that goes on; if the work lands, it goes as the session's next turn once that turn is over, and reopens the item.",
-  held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
+  held: "An interrupt stopped it, and only its parent, its project's conversation or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   recut:
     "Its workspace retired once its work was over, so the hub is cutting its clone again at the same path, at the commit its clone was on when it retired, its own commits with it; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
   starting:
@@ -756,7 +756,7 @@ export interface HandoffDeps {
   readonly instancesByShortId?: (prefix: string) => InstanceRow[];
   /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
   readonly lands?: ItemEnd;
-  /** Whether this session leads the project of the work item a session runs: it may steer, answer and stop it. */
+  /** Whether this session is the conversation of the project of the work item a session runs: it may steer, answer and stop it. */
   readonly ledBy?: (instanceId: string) => boolean;
   /** The session's project: its delegate types shadow the fleet's. */
   readonly projectId?: string;
@@ -914,7 +914,7 @@ export interface HandoffActions {
   /**
    * Sends `message` to another session; `inputs` (core handed-input.ts)
    * are written first into the `$TMPDIR/inputs/` of the target's work item,
-   * one this session delegated or leads.
+   * one this session delegated or whose project it is the conversation of.
    */
   handoff: (
     target: string,

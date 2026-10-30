@@ -201,7 +201,7 @@ export type SessionRole = (typeof SESSION_ROLES)[number];
 /**
  * Each harness's own tools of the kinds CawCo's permissions read, by the
  * name the harness calls and asks under: one table, so a rule written for a
- * kind (the lead gate's shells, web-reads.ts's taint, a push's open-only
+ * kind (web-reads.ts's taint, a push's open-only
  * asks) holds the same on every harness, and a new harness fails the types
  * until its names are given here.
  *
@@ -515,7 +515,9 @@ export const denyToolsProblem = (
 /**
  * The fleet's seed set (inserted once, only when the table is empty): one type
  * per effort level, each description saying which tasks that level fits, so a
- * caller routes by how much verification and judgement the work needs.
+ * caller routes by how much verification and judgement the work needs; and
+ * the two Who decides names by default (decides.ts `DEFAULT_ADVISOR`,
+ * `PRACTICE_TYPE`): the advisor and research.
  */
 export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
@@ -561,6 +563,24 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
     harness: "claude",
     model: "claude-opus-5-5",
     effort: "max",
+    denyTools: ["mcp__claude-in-chrome__*"],
+  },
+  {
+    name: "advisor",
+    description:
+      "Advisor on Fable 5.1: a second, stronger opinion at a decision point, returned as guidance you apply yourself. Consult it before committing to an approach, when the same error keeps recurring, and before declaring a task done. It sees only the brief, so the brief carries the goal, the constraints, what you tried, the exact error text and the file paths involved. The report gives a recommendation, the reasoning behind it, and what would change it, and names each check the answer still depends on for you to dispatch. Carrying out a spec goes to `medium`; fixing a bug with an unknown cause goes to `high`.",
+    harness: "claude",
+    model: "claude-fable-5-1",
+    effort: "high",
+    denyTools: ["mcp__claude-in-chrome__*"],
+  },
+  {
+    name: "research",
+    description:
+      "Web research on Sonnet 5.5: one question answered from many current sources, searched with Exa and read with CRW (`crw_scrape`, `crw_map`, `crw_crawl`), returned as a cited report where every finding carries its claim, URL and a one-line quote. Use it for a wide sweep where the owner pasted no source: comparing libraries or services, current settings for a model, what a platform supports or charges. The orchestrator reads the owner's own links itself. The report is input for the orchestrator's spec; code changes go to the effort types.",
+    harness: "claude",
+    model: "claude-sonnet-5-5",
+    effort: "medium",
     denyTools: ["mcp__claude-in-chrome__*"],
   },
 ];

@@ -25,7 +25,7 @@
     /** Where it runs (its cwd, or its machine), for its hue. */
     place: string;
     status: MarkStatus;
-    /** A thread's: Caw at what it is doing, its face instead of a sprite (session-status.ts `cawOf`). */
+    /** A project conversation's: Caw at what it is doing, his face instead of a sprite (session-status.ts `cawOf`). */
     caw?: CawStatus | null;
     /** The delegates under it, at every depth. */
     count?: number;

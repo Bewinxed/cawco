@@ -25,17 +25,19 @@
  *   transcript and hands the question to no session (§2). Jev off: triage
  *   starts when a second, different kind is open.
  * - **Triage** is a fresh session in the `overseer` role (roles.ts), briefed
- *   with the signals, the slice, the session's work and its lead. It decides
- *   once with `triage_decide` (nudge the lead, interrupt, stop, tell you, or
- *   leave it), then the hub ends it. It never reaches the watched session's
- *   model: a session never judges itself, its lead does. Its lead is its
- *   parent session, or the project's Caw when its parent is Caw or it has
- *   none in the project; outside any project with no parent, you.
- * - **Caw off.** With the project's lead off nothing wakes a model: the
+ *   with the signals, the slice, the session's work and its steward. It
+ *   decides once with `triage_decide` (nudge the steward, interrupt, stop,
+ *   tell you, or leave it), then the hub ends it. It never reaches the
+ *   watched session's model: a session never judges itself, its steward
+ *   does. Its steward is its parent session, or the project's conversation
+ *   when its parent is that conversation or it has none in the project;
+ *   for the conversation itself, and outside any project with no parent,
+ *   you.
+ * - **Events off.** With the project's events off nothing wakes a model: the
  *   detectors run, Jev and triage do not, and a second open kind becomes a
  *   needs-you notice.
  * - **Visible.** Each decision is a line in the watched session's transcript
- *   and in its lead's (core `FLEET_WATCH`); a nudge is the lead's line itself.
+ *   and in its steward's (core `FLEET_WATCH`); a nudge is the steward's line itself.
  *
  * Carried from the supervisor (2fd0db71, ebf65cdb): frames are never
  * blocked (detectors are synchronous and cheap, no db read on a stream
@@ -160,10 +162,15 @@ const resultText = (content: unknown): string => {
 const clip = (text: string, limit: number): string =>
   text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 
-/** Who a watched session's lead is. */
-type Lead =
+/** Who a watched session's steward is. */
+type Steward =
   | { kind: "session"; id: string; name: string }
-  | { kind: "caw"; projectId: string; leadId: string | null; name: "Caw" }
+  | {
+      kind: "caw";
+      projectId: string;
+      conversationId: string | null;
+      name: "Caw";
+    }
   | { kind: "you"; name: "you" };
 
 interface Episode {
@@ -206,8 +213,8 @@ interface Triage {
   /** Its session is gone (forgotten, or never started): it will not answer. */
   gone: () => void;
   id: string;
-  lead: Lead;
   lines: string[];
+  steward: Steward;
   watched: string;
 }
 
@@ -387,20 +394,20 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     }
   }
 
-  // --- leads -------------------------------------------------------------------
+  // --- stewards ----------------------------------------------------------------
 
-  /** Its parent, else the project's Caw when the parent is Caw or it has none in the project, else you. */
-  const leadOf = (row: InstanceRow): Lead => {
-    // The project's conversation: a session never judges itself, so its lead is you.
+  /** Its parent, else the project's conversation when the parent is it or it has none in the project, else you. */
+  const stewardOf = (row: InstanceRow): Steward => {
+    // The project's conversation: a session never judges itself, so its steward is you.
     if (isProjectConversation(row, db.project)) {
       return { kind: "you", name: "you" };
     }
     const project = row.projectId ? db.project(row.projectId) : undefined;
-    const caw: Lead | undefined = project
+    const caw: Steward | undefined = project
       ? {
           kind: "caw",
           projectId: project.id,
-          leadId: project.conversationInstanceId,
+          conversationId: project.conversationInstanceId,
           name: "Caw",
         }
       : undefined;
@@ -416,12 +423,12 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     return caw ?? { kind: "you", name: "you" };
   };
 
-  /** The lead's session, for its line: its parent, or Caw's session. */
-  const leadSession = (lead: Lead): string | null => {
-    if (lead.kind === "session") {
-      return lead.id;
+  /** The steward's session, for its line: its parent, or the project's conversation. */
+  const stewardSession = (steward: Steward): string | null => {
+    if (steward.kind === "session") {
+      return steward.id;
     }
-    return lead.kind === "caw" ? lead.leadId : null;
+    return steward.kind === "caw" ? steward.conversationId : null;
   };
 
   // --- signals and episodes ----------------------------------------------------
@@ -621,7 +628,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
 
   const launch = (row: InstanceRow, watch: Watch, queued: Queued) => {
     const id = crypto.randomUUID();
-    const lead = leadOf(row);
+    const steward = stewardOf(row);
     const seen = [queued.seen, takeSlice(watch)]
       .filter(Boolean)
       .join("\n")
@@ -630,7 +637,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       id,
       watched: row.id,
       episode: queued.episode,
-      lead,
+      steward,
       lines: lines(watch),
       ended: () => undefined,
       gone: () => undefined,
@@ -725,21 +732,21 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
   };
 
   const briefOf = (row: InstanceRow, triage: Triage, seen: string): string => {
-    const { lead } = triage;
-    let leadWords = "the person (it has no lead session)";
-    if (lead.kind === "caw") {
-      leadWords = "Caw, the project's lead";
-    } else if (lead.kind === "session") {
-      leadWords = `${lead.name}, the session that started it`;
+    const { steward } = triage;
+    let stewardWords = "the person (no session steers it)";
+    if (steward.kind === "caw") {
+      stewardWords = "Caw, the project's conversation";
+    } else if (steward.kind === "session") {
+      stewardWords = `${steward.name}, the session that started it`;
     }
     return [
-      "You are fleet watch's triage in CawCo. Code noticed signals on one session. Decide once what happens with triage_decide, then end your turn. You never message the session you are looking at; its lead steers it.",
+      "You are fleet watch's triage in CawCo. Code noticed signals on one session. Decide once what happens with triage_decide, then end your turn. You never message the session you are looking at; its steward steers it.",
       `Session: ${deps.name(row)} (${row.id}), ${row.harness ?? "unknown harness"}${row.model ? ` ${row.model}` : ""}, in ${row.cwd}.`,
       `Its work:\n${workOf(row)}`,
-      `Its lead: ${leadWords}.`,
+      `Its steward: ${stewardWords}.`,
       `Signals:\n${triage.lines.map((line) => `- ${line}`).join("\n")}`,
       `What it did since fleet watch last looked, oldest first:\n${seen || "(nothing recorded)"}`,
-      "Decisions: nudge (its lead reads your `words` and steers it), interrupt (cut its turn now), stop (stop its process), tell (the person reads your `words` and decides), leave (it is making progress; nothing is sent). Give a one-line `reason` with each.",
+      "Decisions: nudge (its steward reads your `words` and steers it), interrupt (cut its turn now), stop (stop its process), tell (the person reads your `words` and decides), leave (it is making progress; nothing is sent). Give a one-line `reason` with each.",
     ].join("\n\n");
   };
 
@@ -760,12 +767,17 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     release(triage);
   };
 
-  /** The nudge, to the lead: a session's message, or Caw's wake. */
-  const nudge = (row: InstanceRow, lead: Lead, line: string, words: string) => {
+  /** The nudge, to the steward: a session's message, or a send to the project's conversation. */
+  const nudge = (
+    row: InstanceRow,
+    steward: Steward,
+    line: string,
+    words: string
+  ) => {
     const name = deps.name(row);
     const body = `${words}\n\n(Session ${row.id}. Fleet watch never tells a session about itself: steer it yourself, with handoff, interrupt_delegate or stop_delegate.)`;
     const content = fleetWatchNudge(`${name}: ${line}`, body);
-    const target = lead.kind === "session" ? rowOf(lead.id) : undefined;
+    const target = steward.kind === "session" ? rowOf(steward.id) : undefined;
     if (target) {
       deps.send({
         verb: "send",
@@ -784,12 +796,12 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       });
       return;
     }
-    if (lead.kind !== "caw") {
+    if (steward.kind !== "caw") {
       raiseNotice(row, line, words);
       return;
     }
     deps
-      .tell(lead.projectId, {
+      .tell(steward.projectId, {
         by: "event",
         kind: "fleet-watch",
         trigger: `fleet watch judged ${sessionLink(row.id, name)}: ${line}`,
@@ -829,14 +841,14 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       );
       return "The session moved on before you decided, so nothing was done. End your turn.";
     }
-    const { lead } = triage;
-    // With no lead session, a nudge is the person's to read.
+    const { steward } = triage;
+    // With no steward session, a nudge is the person's to read.
     const done =
-      decision === "nudge" && lead.kind === "you" ? "tell" : decision;
-    const line = `${signals} · ${decisionWords(done, lead.name)}`;
+      decision === "nudge" && steward.kind === "you" ? "tell" : decision;
+    const line = `${signals} · ${decisionWords(done, steward.name)}`;
     deps.line(row.id, `${line}\n${reason}`);
     if (done === "nudge") {
-      nudge(row, lead, line, words);
+      nudge(row, steward, line, words);
     } else if (done === "interrupt") {
       deps.interrupt(row.id);
     } else if (done === "stop") {
@@ -844,12 +856,12 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     } else if (done === "tell") {
       raiseNotice(row, signals, words || reason);
     }
-    // The lead's own line, where the nudge itself is not it.
-    const leadId = leadSession(lead);
-    if (done !== "nudge" && leadId && leadId !== row.id) {
-      deps.line(leadId, `${deps.name(row)}: ${line}\n${reason}`);
+    // The steward's own line, where the nudge itself is not it.
+    const stewardId = stewardSession(steward);
+    if (done !== "nudge" && stewardId && stewardId !== row.id) {
+      deps.line(stewardId, `${deps.name(row)}: ${line}\n${reason}`);
     }
-    return `Done: ${decisionWords(done, lead.name)}. End your turn now.`;
+    return `Done: ${decisionWords(done, steward.name)}. End your turn now.`;
   };
 
   // --- the stream ----------------------------------------------------------------
@@ -984,7 +996,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     watch.changedThisTurn = false;
     watch.errorThisTurn = false;
     closeSignals(id, watch, ["stall"]);
-    // An interrupted turn is a person's or a lead's hand, not the session's work.
+    // An interrupted turn is a person's or a steward's hand, not the session's work.
     if (result.subtype === "aborted") {
       return;
     }
@@ -1124,14 +1136,14 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       return [
         tool(
           "triage_decide",
-          "Decide once what happens to the session you were briefed on. nudge: its lead reads `words`. interrupt: cut its turn. stop: stop its process. tell: the person reads `words`. leave: nothing. Then end your turn.",
+          "Decide once what happens to the session you were briefed on. nudge: its steward reads `words`. interrupt: cut its turn. stop: stop its process. tell: the person reads `words`. leave: nothing. Then end your turn.",
           {
             decision: z.enum(TRIAGE_DECISIONS),
             words: z
               .string()
               .optional()
               .describe(
-                "For nudge and tell: what the lead or the person reads."
+                "For nudge and tell: what the steward or the person reads."
               ),
             reason: z.string().trim().min(1).describe("One line: why."),
           },

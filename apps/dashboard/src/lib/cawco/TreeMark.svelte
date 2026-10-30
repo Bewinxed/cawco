@@ -39,8 +39,8 @@
    *   on the same beat, three loops, then stands still. Idle, finished or
    *   no status: nothing.
    *
-   * - `faceAlways`: the tile keeps its face whatever it holds (a thread's
-   *   mark is Caw): no count and no chevron on it; the deck behind it and
+   * - `faceAlways`: the tile keeps its face whatever it holds (a project
+   *   conversation's mark is Caw): no count and no chevron on it; the deck behind it and
    *   the nesting lines say there are rows, and the mark still opens them.
    *
    * The dot is decoration: the row says the status in its name. Nothing

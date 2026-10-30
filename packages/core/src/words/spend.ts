@@ -27,7 +27,7 @@ export const SPEND_ON_CAP = [
     value: "quiet",
     label: "Stop waking Caw",
     means:
-      "What would wake the project's Caw is noted in its thread, without a turn. Attempts still start.",
+      "Nothing reaches the project's conversation until the cap resets. Attempts still start.",
   },
   {
     value: "both",

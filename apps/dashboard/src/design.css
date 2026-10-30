@@ -1276,8 +1276,7 @@
    past the cell. Avatars and prose stand at 0. An inner transcript (a
    delegate's, a subagent's) starts at its parent's text column and repeats
    them, so every level of nesting steps in by exactly one text column. A
-   phone's rows, and a thread's (it has no tool rail), stand the rail on
-   their own edge. */
+   phone's rows stand the rail on their own edge. */
 @utility tx-columns {
   --x-rail: var(--tx-x-rail);
   --x-glyph: calc(var(--x-rail) + var(--space-3));
@@ -1288,9 +1287,6 @@
   --x-hang: calc(var(--x-text) - var(--x-glyph));
 
   @media (width < --theme(--breakpoint-desk)) {
-    --x-rail: var(--tx-x-rail-narrow);
-  }
-  [data-slot="thread-pane-state"] & {
     --x-rail: var(--tx-x-rail-narrow);
   }
 }
