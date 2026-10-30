@@ -257,13 +257,13 @@
           <!-- The track runs from the first stop's centre to the last's; the fill up to the knob. -->
           <span
             aria-hidden="true"
-            class="pointer-events-none absolute start-(--from) end-(--from) top-space-4 h-px rounded-pill bg-border-control-strong"
+            class="pointer-events-none absolute start-(--from) end-(--from) top-space-4 h-space-1 -translate-y-1/2 rounded-pill bg-surface-fill-strong"
             style:--from={`${50 / Math.max(1, count)}%`}
           ></span>
           {#if place >= 0}
             <span
               aria-hidden="true"
-              class="pointer-events-none absolute start-(--from) top-space-4 h-px w-(--fill) rounded-pill bg-ink-strong"
+              class="pointer-events-none absolute start-(--from) top-space-4 h-space-1 w-(--fill) -translate-y-1/2 rounded-pill bg-ink-strong"
               style:--fill={`${(place / Math.max(1, count)) * 100}%`}
               style:--from={`${50 / Math.max(1, count)}%`}
             ></span>
@@ -310,7 +310,7 @@
               <i
                 aria-hidden="true"
                 class={[
-                  "relative z-1 size-space-2 rounded-pill border transition-[background-color,border-color,scale] duration-(--dur-control) ease-out",
+                  "relative z-1 size-space-2 rounded-pill border transition-[background-color,border-color,scale] duration-(--dur-control) ease-out motion-reduce:transition-[background-color,border-color]",
                   dotOf(kept, step.missing),
                 ]}
               ></i>
@@ -335,7 +335,7 @@
               class={[
                 "absolute top-space-4 start-(--at) z-2 size-icon-md -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none rounded-pill border border-border-control bg-surface-lift shadow-knob",
                 graph.scrubAt === null &&
-                  "transition-[left] duration-(--dur-control) ease-out motion-reduce:transition-none",
+                  "transition-[inset-inline-start] duration-(--dur-control) ease-out motion-reduce:transition-none",
                 RING,
               ]}
               data-knob

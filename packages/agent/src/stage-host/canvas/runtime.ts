@@ -3239,7 +3239,10 @@ export function boot(options: BootOptions): void {
         const of = keptRecords(dial.target.arg);
         const set = dialValues[dial.name];
         values[dial.name] = {
-          count: typeof set === "number" ? Math.max(1, Math.min(of, set)) : of,
+          count:
+            typeof set === "number" && of > 0
+              ? Math.max(1, Math.min(of, set))
+              : of,
           of,
         };
       } else if (dial.kind === "longest" && !(dial.name in values)) {
