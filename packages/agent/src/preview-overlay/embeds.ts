@@ -339,17 +339,24 @@ function leastWords(own: (node: Node) => boolean): number | null {
   return Number.isFinite(least) ? least : null;
 }
 
+/** How long the page stands still (its content, its size, its faces) before its words are read again. Our call: past one mount's burst of changes, short of a wait. */
+const WORDS_QUIET_MS = 200;
+
 /**
  * Tells the page holding this one the least font size its shown words are
  * set at (core `EMBED_WORDS`), to any parent: a number, and nothing else.
- * Said once the page has loaded and its faces with it, and again, once per
- * frame at most, whenever its layout's size changes it.
+ * Said once the page has loaded, and again whenever its content, its
+ * layout's size or its faces changed and stood still {@link WORDS_QUIET_MS}.
+ * An app whose root keeps the window's size (a dashboard) shows no words at
+ * its load and mounts them later, so its size alone never told them; and a
+ * read waits on a timer, never an animation frame, which Chromium gives no
+ * cross-origin frame off screen or unseen (its Preview holds it under its
+ * skeleton until these words come).
  */
 function tellWords(own: (node: Node) => boolean): void {
   let told: number | null = null;
-  let pending = 0;
+  let quiet: ReturnType<typeof setTimeout> | undefined;
   const tell = () => {
-    pending = 0;
     if (!document.body) {
       return;
     }
@@ -360,14 +367,22 @@ function tellWords(own: (node: Node) => boolean): void {
     }
   };
   const soon = () => {
-    if (!pending) {
-      pending = requestAnimationFrame(tell);
-    }
+    clearTimeout(quiet);
+    quiet = setTimeout(tell, WORDS_QUIET_MS);
   };
   const start = () => {
     tell();
     document.fonts?.ready.then(soon);
     new ResizeObserver(soon).observe(document.documentElement);
+    new MutationObserver((records) => {
+      if (records.some((record) => !own(record.target))) {
+        soon();
+      }
+    }).observe(document.documentElement, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
   };
   if (document.readyState === "complete") {
     start();
