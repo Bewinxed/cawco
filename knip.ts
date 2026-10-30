@@ -298,6 +298,8 @@ export default {
         "!src/lib/tokens/{tokens.css,tokens.ts,theme.css,selection.css,variants.css}",
         // Written by scripts/house-faces.ts:40.
         "!src/house-faces/**",
+        // The planted mistakes scripts/outro-reads-check.ts reads, not code run.
+        "!scripts/fixtures/**",
       ],
       // The types TypeScript reads for the sibling .js modules that
       // src/lib/cawco/own-origin.ts:2, vite.config.ts:26 and

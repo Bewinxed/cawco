@@ -1757,8 +1757,12 @@
    * never the last pin's place nor the well's corner.
    */
   let pinHeard = $state<string | null>(null);
-  /** How the open card goes: at once when another pin's card takes its place (PinFloat `exit`). */
-  const cardExit: { at: "fade" | "cut" } = { at: "fade" };
+  /**
+   * The pin whose card is going back into its pill, closed: it stays drawn
+   * until it has (PinFloat `onclosed`), so its pin opened again before then
+   * turns the same card back (PinFloat `open`).
+   */
+  let closingPin = $state<string | null>(null);
   /** The pin J and K stand on. */
   let focusedPin = $state<string | null>(null);
   /** The moved pin a tap places again, and the mode the pane goes back to once it is placed. */
@@ -1784,11 +1788,12 @@
    * or with no page to answer). While another pin's place is still on its
    * way, the last card stays where it stood, so the swap is one frame: no
    * frame without a card, none with the new card anywhere but its place.
+   * Closed, it is the one going back into its pill (`closingPin`), if any.
    */
   let lastDrawn: string | null = null;
   const drawnPin = $derived.by(() => {
     if (!openPin) {
-      lastDrawn = null;
+      lastDrawn = closingPin;
     } else if (floatSheet || !connected || pinHeard === openPin) {
       lastDrawn = openPin;
     }
@@ -2382,6 +2387,13 @@
   function openCard(id: string, via: "key" | "pointer" = "pointer") {
     loadKit();
     dropPeek();
+    if (closingPin) {
+      // Another pin's card going back into its pill goes at once; its own turns back.
+      if (closingPin !== id) {
+        lastDrawn = null;
+      }
+      closingPin = null;
+    }
     if (composing) {
       cancelComposer();
     }
@@ -2405,13 +2417,16 @@
   }
   /**
    * The thread closes: its Close, Esc, another row or pin opened (`swap`:
-   * its card goes at once, so no frame shows it beside the next). Its
-   * reply's words stay with its pin.
+   * its card stays as it stands until the next one's place is heard, then
+   * goes at once, so no frame shows it beside the next). Closed, its card
+   * beside the pill goes back into it, drawn until it has (`closingPin`).
+   * Its reply's words stay with its pin.
    */
   function closeCard(swap = false) {
-    // Said before anything else here, so whatever draws the close reads it.
-    cardExit.at = swap ? "cut" : "fade";
     const id = openPin;
+    if (!swap && id && drawnPin === id && !floatSheet) {
+      closingPin = id;
+    }
     openPin = null;
     if (!swap) {
       pinAt = null;
@@ -4597,11 +4612,16 @@
           </ThreadSheet>
         {:else}
           <PinFloat
-            exit={cardExit}
             box={pinAt?.box ?? null}
             face={markFace(markState(cardPin))}
             label={`Comment ${cardPin.number}`}
             mark={pinAt?.mark ?? null}
+            onclosed={() => {
+              if (!openPin) {
+                closingPin = null;
+              }
+            }}
+            open={openPin !== null}
             pin={cardPin.number}
             room={{ w: roomW, h: roomH }}
             slot="pin-card"

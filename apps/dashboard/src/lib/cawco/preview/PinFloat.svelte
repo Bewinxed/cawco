@@ -46,8 +46,14 @@
   bar's card's own open (motion/hang); the thread fades in once the shape
   has room, waiting two fifths of the open. Closing is the same in reverse
   over `--dur-exit`, the thread gone in its first half, back into the pill; a close
-  caught mid-open turns back from where it is drawn. At once where another
-  pin's card takes its place. Without motion it fades. The composer, whose
+  caught mid-open turns back from where it is drawn. The card stays on the
+  page through its close: `open` moves it both ways, and only once a close
+  has landed does it say so (`onclosed`) for its holder to take it away, so
+  an open caught mid-close grows back from where it is drawn too. (Closed in
+  an outro, a card opened again mid-close was resumed by Svelte with the
+  outro's fills still on it: a pill-sized surface, its thread unseen.) Taken
+  away, it goes at once: where another pin's card takes its place, or once
+  its close has landed. Without motion it fades. The composer, whose
   own pill is its surface, opens as every kit popover does (`popMotion`),
   out of the pill; the foot sheet fades in over `--dur-menu` and out over
   `--dur-control`.
@@ -57,12 +63,11 @@
   import type { TransitionConfig } from "svelte/transition";
   import { popMotion } from "#lib/components/ui/popover/index.js";
   import { dur, ease, easeOut, motionOk } from "../motion/curves.svelte";
-  import { popOut } from "../motion/pop.svelte";
+  import { type PopSide, popOut } from "../motion/pop.svelte";
   import {
     type Box,
     FLOAT_W,
     FloatPlace,
-    fadeOut,
     type Plan,
     threadIn,
     threadOut,
@@ -85,16 +90,20 @@
     label,
     slot,
     pin,
-    exit = { at: "fade" },
+    open = true,
+    onclosed,
     float = $bindable(),
     children,
   }: {
     /**
-     * How it goes, read as it starts to: `fade`, or `cut` where another
-     * pin's card takes its place in the same press, so no frame shows it
-     * where the last pin stood. A holder the pane writes as it swaps.
+     * Open (true), or going (false). The thread's card grows back into its
+     * pill and says so once it has (`onclosed`); the composer and the foot
+     * sheet say so at once, their holder taking them away, which plays
+     * their outro.
      */
-    exit?: { at: "fade" | "cut" };
+    open?: boolean;
+    /** It has closed: its holder takes it away. Never said once it has opened again. */
+    onclosed?: () => void;
     /** The pill's box in the well, px; null while it is not on screen. */
     mark: Box | null;
     /** The box of what the pill stands on, in the well, px: the card never stands over it. */
@@ -121,8 +130,10 @@
   let surface = $state<HTMLElement>();
   let body = $state<HTMLElement>();
 
-  /** Placed: the composer's `data-state` goes from `closed` to `open`, and the card's surface grows. */
+  /** Placed and not closing: the composer's `data-state` goes from `closed` to `open`, and the card's surface grows. */
   let opened = $state(false);
+  /** Placed once: from then on `open` moves it (before, its first open waits for its size). */
+  let ready = false;
   /**
    * Its size, what it is about as last seen, and its plan (pin-place
    * `FloatPlace`). Opened once the flush that places it has landed: the
@@ -134,6 +145,12 @@
     body: () => body,
     float: () => float,
     placed: (el) => {
+      ready = true;
+      if (!open) {
+        // Closed again before it was ever drawn open: nothing to close.
+        onclosed?.();
+        return;
+      }
       if (untrack(() => card)) {
         grow();
       } else {
@@ -212,26 +229,19 @@
   });
 
   /**
-   * What its exit reads, as last drawn: whether it is the card, where it
-   * stood, what it stood beside and the pill's face. An outro's function
-   * runs once the block holding the card has let it go, so every derived
-   * here or in that block is frozen by then and reading one is Svelte's
-   * `derived_inert` (svelte.dev/e/derived_inert); the composer closing by
-   * Esc changed its `mark` in that very flush. Written while it stands.
+   * What its outro reads, as last drawn: whether it is the card, and the
+   * side it stood on. An outro's function runs once the block holding it
+   * has let it go, so every derived here or in that block is frozen by then
+   * and reading one is Svelte's `derived_inert` (svelte.dev/e/derived_inert);
+   * the composer closing by Esc changed its `mark` in that very flush.
+   * Written while it stands.
    */
-  let drawn: {
-    card: boolean;
-    face: PinFace;
-    place: typeof place;
-    seen: typeof seen;
-  } = {
+  let drawn: { card: boolean; side: PopSide | undefined } = {
     card: untrack(() => card),
-    face: untrack(() => face),
-    place: null,
-    seen: null,
+    side: undefined,
   };
   $effect(() => {
-    drawn = { card, face, place, seen };
+    drawn = { card, side: place?.side };
   });
 
   /** A colour token as the page computes it now (its scheme's). */
@@ -305,6 +315,103 @@
     threadIn(inner, length);
   }
 
+  /** The close in flight: `onclosed` once it lands. */
+  let closing = 0;
+  $effect(() => () => window.clearTimeout(closing));
+
+  /** Every run on the card and its parts, cancelled: read where each has it drawn first. */
+  const stopRuns = () => {
+    for (const el of [float, surface, body]) {
+      for (const run of el?.getAnimations() ?? []) {
+        run.cancel();
+      }
+    }
+  };
+
+  /**
+   * The thread's card goes back into its pill: the surface from where it is
+   * drawn to the pill's shape, the thread gone by half way; with no pill to
+   * go into, or without motion, it fades where it stands. Its holder takes
+   * it away once that has landed (`onclosed`).
+   */
+  function shrink() {
+    const node = float;
+    const shape = surface;
+    const inner = body;
+    opened = false;
+    window.clearTimeout(closing);
+    if (!node) {
+      onclosed?.();
+      return;
+    }
+    const to = pillShape(place, seen, face);
+    let length = dur("--dur-exit");
+    if (shape && inner && to && motionOk.current) {
+      // From where it is drawn: a close caught mid-open turns back there.
+      const from = surfaceShape(shape);
+      const shown = getComputedStyle(inner).opacity;
+      stopRuns();
+      shape.animate([from, to], {
+        duration: length,
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+      threadOut(inner, shown, length);
+    } else {
+      length = dur("--dur-control");
+      const shown = getComputedStyle(node).opacity;
+      stopRuns();
+      node.animate([{ opacity: shown }, { opacity: 0 }], {
+        duration: length,
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+    }
+    closing = window.setTimeout(() => onclosed?.(), length);
+  }
+
+  /** Opened again before its close landed: it grows back from where the close has it drawn, over `--dur-pop`. */
+  function regrow() {
+    const node = float;
+    const shape = surface;
+    const inner = body;
+    window.clearTimeout(closing);
+    opened = true;
+    if (!(node && shape && inner)) {
+      return;
+    }
+    const from = surfaceShape(shape);
+    const thread = getComputedStyle(inner).opacity;
+    const whole = getComputedStyle(node).opacity;
+    stopRuns();
+    if (!motionOk.current) {
+      return;
+    }
+    const length = dur("--dur-pop");
+    const timing = { duration: length, easing: ease("--ease-out") };
+    shape.animate([from, surfaceShape(shape)], timing);
+    inner.animate([{ opacity: thread }, { opacity: 1 }], timing);
+    node.animate([{ opacity: whole }, { opacity: 1 }], timing);
+  }
+
+  // Each change of `open` once placed: the card closes or opens again where
+  // it stands; the composer and the foot sheet go by their holder.
+  $effect(() => {
+    const want = open;
+    untrack(() => {
+      if (!ready) {
+        return;
+      }
+      if (!card) {
+        if (!want) {
+          onclosed?.();
+        }
+        return;
+      }
+      (want ? regrow : shrink)();
+    });
+  });
+
   /** The kit's state for the composer's pop: none on the foot sheet nor the card. */
   const popState = $derived.by(() => {
     if (sheet || card) {
@@ -324,15 +431,13 @@
       : { duration: 0 };
   }
   /**
-   * Out: the card back into its pill, the composer by the kit's `popOut`,
-   * the foot sheet by its opacity; where another card takes its place, gone
-   * from the screen in this very frame (an outro of no length still holds
-   * its element for frames before the block lets it go). It reads what was
-   * last drawn (`drawn`), never a derived.
+   * Out: the composer by the kit's `popOut`, the foot sheet by its opacity,
+   * both CSS a resume turns back. The card has closed while it stood
+   * (`shrink`), or another pin's card takes its place: it goes at once. It
+   * reads what was last drawn (`drawn`), never a derived.
    */
   function leave(node: HTMLElement): TransitionConfig {
-    if (exit.at === "cut") {
-      node.style.display = "none";
+    if (drawn.card) {
       return { duration: 0 };
     }
     if (sheet) {
@@ -342,34 +447,7 @@
         css: (t: number) => `opacity: ${t}`,
       };
     }
-    if (!drawn.card) {
-      return popOut(node, { side: drawn.place?.side ?? "bottom" });
-    }
-    return shrink(node);
-  }
-
-  /** The card goes back into its pill: the surface from where it is drawn to the pill's shape, the thread gone by half way. */
-  function shrink(node: HTMLElement): TransitionConfig {
-    const shape = surface;
-    const inner = body;
-    const to = pillShape(drawn.place, drawn.seen, drawn.face);
-    const length = dur("--dur-exit");
-    if (!(shape && inner && to && motionOk.current)) {
-      return fadeOut(node);
-    }
-    // From where it is drawn: a close caught mid-open turns back there.
-    const from = surfaceShape(shape);
-    const shown = getComputedStyle(inner).opacity;
-    for (const run of [...shape.getAnimations(), ...inner.getAnimations()]) {
-      run.cancel();
-    }
-    shape.animate([from, to], {
-      duration: length,
-      easing: ease("--ease-out"),
-      fill: "forwards",
-    });
-    threadOut(inner, shown, length);
-    return { duration: length };
+    return popOut(node, { side: drawn.side ?? "bottom" });
   }
 </script>
 

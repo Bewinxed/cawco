@@ -66,14 +66,17 @@
   } satisfies Pin);
 
   /** The card stands open. */
+  let open = $state(true);
+  /** The card is on the page: open, or going back into its pill. */
   let shown = $state(true);
   const bench = {
     /** The card closed, as its Close leaves it. */
     hide() {
-      shown = false;
+      open = false;
     },
     /** The card opened again from its pill. */
     show() {
+      open = true;
       shown = true;
     },
     /** The agent at work on the pin, the thread as it was sent. */
@@ -167,6 +170,10 @@
         face={markFace(markState(pin))}
         label="Comment {pin.number}"
         mark={MARK}
+        onclosed={() => {
+          shown = false;
+        }}
+        {open}
         pin={pin.number}
         room={{ w: roomW, h: roomH }}
         sheet={phone.current || coarse.current}

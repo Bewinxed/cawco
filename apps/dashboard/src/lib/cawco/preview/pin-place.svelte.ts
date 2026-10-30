@@ -7,7 +7,6 @@
  * header says why each is so.
  */
 import { tick, untrack } from "svelte";
-import type { TransitionConfig } from "svelte/transition";
 import { frameObserver } from "../frame-observer";
 import { dur, ease, numberOf } from "../motion/curves.svelte";
 import type { PopSide } from "../motion/pop.svelte";
@@ -392,14 +391,4 @@ export const threadOut = (
     easing: ease("--ease-out"),
     fill: "forwards",
   });
-};
-
-/** The card fades where it stands, over `--dur-control`: without motion, or with no pill to go back into. */
-export const fadeOut = (node: HTMLElement): TransitionConfig => {
-  node.animate([{ opacity: 1 }, { opacity: 0 }], {
-    duration: dur("--dur-control"),
-    easing: ease("--ease-out"),
-    fill: "forwards",
-  });
-  return { duration: dur("--dur-control") };
 };
