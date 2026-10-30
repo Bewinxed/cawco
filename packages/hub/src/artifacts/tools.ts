@@ -96,8 +96,14 @@ const ask = z
     'The act and its object in their words, like "Pick the head for the phone project page".'
   );
 
-/** A component canvas's edges, groups and dials, as create and update take them. */
+/** A component canvas's steps, edges, groups and dials, as create and update take them. */
 const canvasFields = {
+  steps: z
+    .array(storyRef)
+    .min(1)
+    .max(CANVAS_SPEC_LIMITS.steps)
+    .optional()
+    .describe("Stories in the order the step slider scrubs; it opens on it."),
   edges: z
     .array(
       z.object({
@@ -118,7 +124,15 @@ const canvasFields = {
       z.object({
         name: z.string().min(1).max(60),
         label: z.string().max(CANVAS_SPEC_LIMITS.label).optional(),
-        kind: z.enum(["number", "color", "select", "toggle"]),
+        kind: z.enum([
+          "number",
+          "color",
+          "select",
+          "toggle",
+          "count",
+          "longest",
+        ]),
+        by: z.string().min(1).max(100).optional(),
         min: z.number().optional(),
         max: z.number().optional(),
         step: z.number().positive().optional(),
@@ -133,7 +147,7 @@ const canvasFields = {
     .max(CANVAS_SPEC_LIMITS.dials)
     .optional()
     .describe(
-      'The person\'s controls, like [{"name":"radius","kind":"number","max":24,"unit":"px","target":{"cssVar":"--radius"}}].'
+      'The person\'s controls, like [{"name":"radius","kind":"number","max":24,"unit":"px","target":{"cssVar":"--radius"}}];; count and longest over a story\'s list arg.'
     ),
 };
 

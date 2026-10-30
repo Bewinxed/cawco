@@ -36,6 +36,7 @@ import {
   CANVAS_EMBED_SIZE,
   CANVAS_GRAPH_FETCHED,
   CANVAS_PLAN_ID,
+  type CanvasDial,
   type CanvasGraph,
   type CanvasSpec,
   canvasSpecOf,
@@ -513,6 +514,8 @@ export function boot(options: BootOptions): void {
   const params = new URLSearchParams(location.search);
   const files = params.getAll("file");
   const spec = specOf(params);
+  /** Each dial's value as the person set it, else as the first frame draws it (a CSS variable); an arg's has none until set. A count's is how many records, a longest's on or off. */
+  const dialValues: Record<string, boolean | number | string> = {};
   const by = params.get("by") === "stage" ? "stage" : "panel";
   /**
    * The panel map's live card (`by=map`): a second page of a canvas that
@@ -1640,6 +1643,7 @@ export function boot(options: BootOptions): void {
   }
 
   function mountFrame(frame: Frame): void {
+    const dialArgs = dialArgsFor(frame.section, frame.story.name, dialValues);
     frame.mounted?.unmount();
     frame.mounted = undefined;
     frame.body.replaceChildren();
@@ -1651,6 +1655,7 @@ export function boot(options: BootOptions): void {
       { ...argsOf(frame.section, frame.story.name), ...dialArgs },
       frame
     );
+    dialArgsBy.set(frame, JSON.stringify(dialArgs));
   }
 
   /** The interactions a story's rest frame reaches: each whose CSS rules match an element in it. */
@@ -2448,7 +2453,7 @@ export function boot(options: BootOptions): void {
   /**
    * What the page holds, said to the pane's design graph (`cawco:graph`)
    * once per change: each section's stories, the interactions each reaches,
-   * its moves, and the agent's groups and edges. A map's card, an embed and
+   * its moves, and the agent's steps, groups and edges. A map's card, an embed and
    * the stage's own render have no graph.
    */
   function sayGraph(): void {
@@ -2459,6 +2464,7 @@ export function boot(options: BootOptions): void {
       edges: spec.edges ?? [],
       group: spec.group ?? {},
       sections: sections.map(graphSection),
+      ...(spec.steps ? { steps: spec.steps } : {}),
     };
     const text = JSON.stringify(model);
     if (text === graphSaid) {
@@ -3084,11 +3090,13 @@ export function boot(options: BootOptions): void {
       return;
     }
     const first = staged === null;
+    const keptWas = staged?.kept ?? null;
     staged = ask;
     const html = document.documentElement;
     html.toggleAttribute("data-cawco-staged", true);
     html.style.setProperty("--cawco-stage-end", `${ask.room.end}px`);
     html.style.setProperty("--cawco-stage-bottom", `${ask.room.bottom}px`);
+    html.style.setProperty("--cawco-stage-top", `${ask.room.top ?? 0}px`);
     if (first) {
       // The columns take the stage's order: the state's frames side by side.
       for (const section of sections) {
@@ -3098,6 +3106,10 @@ export function boot(options: BootOptions): void {
       }
     }
     stage();
+    // A count's figure is the kept story's list: said again for a new kept story.
+    if (keptWas?.story !== ask.kept.story || keptWas?.file !== ask.kept.file) {
+      sayDials();
+    }
   });
   window.addEventListener("cawco:move-ask", (event) => {
     const ask = (event as CustomEvent<MoveAsk | undefined>).detail;
@@ -3109,29 +3121,101 @@ export function boot(options: BootOptions): void {
   /* --- Dials: CSS variables on every frame, or args through update -------- */
 
   const dialVars = new Map<string, string>();
-  let dialArgs: Record<string, unknown> = {};
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a dial is a CSS variable on every frame or an arg through every frame's update, said in one pass
-  const applyDials = (values: Record<string, unknown>) => {
+  /** The args each frame was last given by the dials: a frame updates only when its own change. */
+  const dialArgsBy = new WeakMap<Frame, string>();
+  const isRecordDial = (dial: CanvasDial) =>
+    dial.kind === "count" || dial.kind === "longest";
+  /** The record set a story mounts under `arg`, its own array arg (a fixture import), or null when it holds no list. */
+  const recordsOf = (
+    section: Section,
+    story: string,
+    arg: string
+  ): unknown[] | null => {
+    const value = argsOf(section, story)[arg];
+    return Array.isArray(value) ? value : null;
+  };
+  /** A record's `by` field, its length the longest dial orders by. */
+  const lengthOf = (record: unknown, field: string): number =>
+    String(
+      typeof record === "object" && record !== null
+        ? ((record as Record<string, unknown>)[field] ?? "")
+        : record
+    ).length;
+  /**
+   * The args the dials give story `name` of `section`: each arg dial's
+   * value, and each record arg the story holds as a list: its records with
+   * the longest `by` first when a longest dial is on, then the first `count`
+   * (1 to the list's length) when a count dial is set. The records are the
+   * story's own; none is invented. A record arg with no dial set gives the
+   * story's own list back, so turning a dial off restores it.
+   */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: arg dials, then each record arg's order and count, in one pass over the agent's dials
+  function dialArgsFor(
+    section: Section,
+    name: string,
+    values: Record<string, unknown>
+  ): Record<string, unknown> {
     const args: Record<string, unknown> = {};
+    const lists = new Map<string, unknown[]>();
     for (const dial of spec.dials ?? []) {
-      const value = values[dial.name];
-      if (value === undefined) {
+      if ("cssVar" in dial.target) {
         continue;
       }
-      if ("cssVar" in dial.target) {
-        dialVars.set(dial.target.cssVar, `${String(value)}${dial.unit ?? ""}`);
-      } else {
-        args[dial.target.arg] = value;
+      const { arg } = dial.target;
+      if (isRecordDial(dial)) {
+        const own = lists.get(arg) ?? recordsOf(section, name, arg);
+        if (own) {
+          lists.set(arg, own);
+        }
+      } else if (values[dial.name] !== undefined) {
+        args[arg] = values[dial.name];
       }
     }
-    const argsChanged = JSON.stringify(args) !== JSON.stringify(dialArgs);
-    dialArgs = args;
+    for (const [arg, own] of lists) {
+      let list = own;
+      for (const dial of spec.dials ?? []) {
+        if (!("arg" in dial.target) || dial.target.arg !== arg) {
+          continue;
+        }
+        const field = dial.by;
+        if (dial.kind === "longest" && field && values[dial.name] === true) {
+          list = [...list].sort(
+            (a, b) => lengthOf(b, field) - lengthOf(a, field)
+          );
+        }
+      }
+      for (const dial of spec.dials ?? []) {
+        const count = values[dial.name];
+        if (
+          dial.kind === "count" &&
+          "arg" in dial.target &&
+          dial.target.arg === arg &&
+          typeof count === "number"
+        ) {
+          list = list.slice(0, Math.max(1, Math.min(list.length, count)));
+        }
+      }
+      args[arg] = list;
+    }
+    return args;
+  }
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a dial is a CSS variable on every frame or an arg through every frame's update, said in one pass
+  const applyDials = (values: Record<string, unknown>) => {
+    for (const dial of spec.dials ?? []) {
+      const value = values[dial.name];
+      if (value !== undefined && "cssVar" in dial.target) {
+        dialVars.set(dial.target.cssVar, `${String(value)}${dial.unit ?? ""}`);
+      }
+    }
     for (const section of sections) {
       for (const frame of section.frames.values()) {
         for (const [name, value] of dialVars) {
           frame.body.style.setProperty(name, value);
         }
-        if (argsChanged && Object.keys(args).length > 0) {
+        const args = dialArgsFor(section, frame.story.name, values);
+        const text = JSON.stringify(args);
+        if (Object.keys(args).length > 0 && dialArgsBy.get(frame) !== text) {
+          dialArgsBy.set(frame, text);
           frame.mounted?.update(args);
         }
       }
@@ -3139,8 +3223,31 @@ export function boot(options: BootOptions): void {
     later();
   };
 
-  /** Each dial's value now: as the person set it, else as the first frame draws it (a CSS variable); an arg's has none until set. */
-  const dialValues: Record<string, boolean | number | string> = {};
+  /** Each dial's value as the pane is told it: a count as `{ count, of }` over the kept story's list (`of: 0` where it holds none), a longest on or off. */
+  /** How many records the kept story's `arg` holds; 0 where it holds no list or its section isn't loaded. */
+  function keptRecords(arg: string): number {
+    const kept = staged?.kept;
+    const section = kept ? sectionOf(kept.file) : undefined;
+    return kept && section?.mod
+      ? (recordsOf(section, kept.story, arg)?.length ?? 0)
+      : 0;
+  }
+  function recordValues(dials: CanvasDial[]): DialsModel["values"] {
+    const values: DialsModel["values"] = { ...dialValues };
+    for (const dial of dials) {
+      if (dial.kind === "count" && "arg" in dial.target) {
+        const of = keptRecords(dial.target.arg);
+        const set = dialValues[dial.name];
+        values[dial.name] = {
+          count: typeof set === "number" ? Math.max(1, Math.min(of, set)) : of,
+          of,
+        };
+      } else if (dial.kind === "longest" && !(dial.name in values)) {
+        values[dial.name] = false;
+      }
+    }
+    return values;
+  }
   /** The agent's dials and their values, said to the pane's design graph (`cawco:dials`) once the frames draw them. */
   let dialsSaid = "";
   function sayDials(): void {
@@ -3161,7 +3268,7 @@ export function boot(options: BootOptions): void {
           dial.kind === "number" ? Number.parseFloat(raw) : raw;
       }
     }
-    const model: DialsModel = { dials, values: { ...dialValues } };
+    const model: DialsModel = { dials, values: recordValues(dials) };
     const text = JSON.stringify(model);
     if (text === dialsSaid) {
       return;
@@ -3190,8 +3297,9 @@ export function boot(options: BootOptions): void {
     sayDials();
     clearTimeout(dialsKept);
     dialsKept = setTimeout(() => {
+      // As the pane reads them: a count as { count, of }, for the agent to keep its fixture at that length.
       bridge()
-        ?.set("dials", { ...dialValues })
+        ?.set("dials", { ...(window.__cawcoDials?.values ?? dialValues) })
         .catch(() => undefined);
     }, 400);
   });
@@ -3210,6 +3318,12 @@ export function boot(options: BootOptions): void {
         typeof value === "boolean"
       ) {
         dialValues[name] = value;
+      } else if (
+        typeof value === "object" &&
+        value !== null &&
+        typeof (value as { count?: unknown }).count === "number"
+      ) {
+        dialValues[name] = (value as { count: number }).count;
       }
     }
     applyDials(dialValues);

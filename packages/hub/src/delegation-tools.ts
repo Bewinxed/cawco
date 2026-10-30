@@ -900,7 +900,7 @@ export function handoffTools(deps: HandoffDeps) {
         }
         // A component canvas's states file and its own spec have their own route.
         const component = (
-          ["args", "story", "edges", "group", "dials"] as const
+          ["args", "story", "steps", "edges", "group", "dials"] as const
         ).some((key) => change[key] !== undefined);
         return component
           ? {

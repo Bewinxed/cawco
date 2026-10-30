@@ -7222,6 +7222,16 @@
                     "maxLength": 160,
                     "type": "string"
                   },
+                  "steps": {
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 1100,
+                      "type": "string"
+                    }
+                  },
                   "edges": {
                     "maxItems": 100,
                     "type": "array",
@@ -7282,8 +7292,15 @@
                             "number",
                             "color",
                             "select",
-                            "toggle"
+                            "toggle",
+                            "count",
+                            "longest"
                           ]
+                        },
+                        "by": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
                         },
                         "min": {
                           "type": "number"
@@ -40939,6 +40956,25 @@
                           },
                           "link": {
                             "type": "string"
+                          },
+                          "onState": {
+                            "description": "The state it was placed on, in words (core design-graph.ts `pinPathOf`); `path` null when its story is gone from the file.",
+                            "type": "object",
+                            "properties": {
+                              "node": {
+                                "type": "boolean"
+                              },
+                              "path": {
+                                "type": [
+                                  "null",
+                                  "string"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "node",
+                              "path"
+                            ]
                           }
                         },
                         "required": [
@@ -41069,10 +41105,6 @@
             "description": "When it was first delivered to the session.",
             "type": "string"
           },
-          "state": {
-            "description": "The design graph's kept state when it was placed (Projects spec §5.10,\nthe owner's pick \"pins\"): its machine, state and variation in words,\nshown under the person's words; none on a page with no graph.",
-            "type": "string"
-          },
           "thread": {
             "description": "Oldest first.",
             "type": "array",
@@ -41164,11 +41196,15 @@
             "type": "string"
           },
           "sheet": {
-            "description": "On a component canvas: its states file (from the toolchain root), the\nstory whose frame holds the element, and the frame's state: the\ninteraction it is forced into, its scheme and its width (px; null when it\nfits its content).",
+            "description": "On a component canvas: the state the stage stood when the pin was\nplaced: its states file (from the toolchain root), its story, and the\ninteraction forced on it, its scheme and its width (px; null when it fits\nits content). The stage always fills `state`; a sheet's own page may not.\nFor a pin placed on the design graph's node, `node`: the pin stands on the\nstate as a whole, with no element of its frame. The state's path in words\nis derived where it is said (core design-graph.ts `pathOf`), never kept.",
             "type": "object",
             "properties": {
               "file": {
                 "type": "string"
+              },
+              "node": {
+                "const": true,
+                "type": "boolean"
               },
               "state": {
                 "type": "object",

@@ -14,6 +14,7 @@
  * marked a token or ad hoc.
  */
 
+import type { Pin } from "@cawco/core/comments";
 import {
   type ClipTiming,
   curveOf,
@@ -24,7 +25,8 @@ import {
   type GraphSection,
   graphOf,
   type MoveModel,
-  pathOf,
+  onState,
+  pinPathOf,
   runEnd,
   runOf,
   type SectionGraph,
@@ -333,10 +335,6 @@ export class DesignGraph {
     const message = {
       type: "cawco:stage",
       kept,
-      path:
-        this.section && this.graph
-          ? pathOf(this.section, this.graph, kept)
-          : "",
       peek: this.peek,
       room: this.#room,
     };
@@ -545,6 +543,48 @@ export class DesignGraph {
       });
       this.#post({ type: "cawco:move-ask", ask: { op: "tune", tuned } });
     }, 300);
+  }
+
+  /* --- Pins on states ------------------------------------------------------- */
+
+  /**
+   * The state a pin was placed on, in words (core design-graph.ts
+   * `pinPathOf`): "On Saving it › Save failed", "On the state …" for one
+   * placed on a node, or that its state is gone from the file; null for a pin
+   * placed on no state, or before the page said its graph.
+   */
+  stateWords(anchor: Pin["anchor"]): string | null {
+    const sheet = "sheet" in anchor ? anchor.sheet : undefined;
+    if (!(sheet && this.model)) {
+      return null;
+    }
+    const path = pinPathOf(this.model, sheet);
+    if (path === undefined) {
+      return null;
+    }
+    if (path === null) {
+      return designGraphWords.stateGone;
+    }
+    return sheet.node
+      ? designGraphWords.onNode(path)
+      : designGraphWords.onState(path);
+  }
+
+  /** Whether a pin stands on the state kept now (or one a hover previews): those on other states fold into the rail's own group. */
+  onKept(anchor: Pin["anchor"]): boolean {
+    return onState(anchor, this.keptHere, this.peek);
+  }
+
+  /** The state a pin was placed on, to keep it from the rail: its file, story and interaction; null for a pin on no state. */
+  pointOfPin(anchor: Pin["anchor"]): StagePoint | null {
+    const sheet = "sheet" in anchor ? anchor.sheet : undefined;
+    return sheet?.state
+      ? {
+          file: sheet.file,
+          story: sheet.story,
+          interaction: sheet.state.interaction,
+        }
+      : null;
   }
 
   /* --- Dials ----------------------------------------------------------------- */
