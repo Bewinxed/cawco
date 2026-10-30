@@ -51,4 +51,8 @@
   });
 </script>
 
-<OpenUiRenderer library={DECISION_LIBRARY} response={program} />
+<OpenUiRenderer
+  library={DECISION_LIBRARY}
+  label={`decision page "${document.title}" (${location.pathname})`}
+  response={program}
+/>

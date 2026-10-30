@@ -80,6 +80,7 @@
     <OpenUiRenderer
       class="min-w-0"
       library={VIEW_LIBRARY}
+      label={`view "${view.name}"`}
       onError={reported}
       response={view.source}
       toolProvider={tools}

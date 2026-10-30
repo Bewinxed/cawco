@@ -86,6 +86,7 @@
   let {
     response,
     library,
+    label,
     isStreaming = false,
     toolProvider = null,
     class: className,
@@ -96,6 +97,8 @@
     /** The program: openui-lang text. */
     response: string | null;
     library: OpenUILibrary;
+    /** What it draws, as its console names it when something throws: `decision page "…" (/__cawco/page/<id>/)`, `view "…"`. */
+    label: string;
     /** The text is still arriving: queries wait for it to end. */
     isStreaming?: boolean;
     toolProvider?: OpenUIToolProvider | null;
@@ -142,6 +145,44 @@
     toolProvider !== null && toolProvider !== undefined
   );
 
+  // ─── What throws: logged whole, once, naming where ───
+  /** What a throw says in one line. */
+  const said = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
+  /** The errors made from a throw: each was logged whole, so the reporter's one-line warning leaves it out. */
+  const thrownErrors = new WeakSet<OpenUIError>();
+  /** Each throw logged so far, by where and its message: a throw a re-run repeats is logged once. */
+  const loggedThrows = new Set<string>();
+  /**
+   * A throw at `where` ("Decision bar", "the parser"), logged with its own
+   * stack, the throw site, and the program's name. Under SvelteKit a
+   * boundary is handed the error its `handleError` made of the throw
+   * (hooks.client.ts), which has logged the throw whole just before: that
+   * line is pointed to instead of logging the stand-in.
+   */
+  function logThrown(where: string, error: unknown) {
+    const key = `${where}\n${said(error)}`;
+    if (loggedThrows.has(key)) {
+      return;
+    }
+    loggedThrows.add(key);
+    if (error instanceof Error) {
+      console.error(`[openui] ${where} in ${label} threw:`, error);
+    } else {
+      console.error(`[openui] ${where} in ${label} threw the error above`);
+    }
+  }
+  /** An error the renderer made from a throw at `where`: the throw logged whole, the error kept out of the one-line warnings. */
+  function fromThrow(
+    where: string,
+    thrown: unknown,
+    error: OpenUIError
+  ): OpenUIError {
+    logThrown(where, thrown);
+    thrownErrors.add(error);
+    return error;
+  }
+
   // ─── Parser ───
   const schema = $derived(library.toJSONSchema());
   const parser = $derived(createStreamingParser(schema, library.root));
@@ -163,12 +204,12 @@
     try {
       return parser.set(response, !isStreaming);
     } catch (error) {
-      parseException = {
+      parseException = fromThrow("the parser", error, {
         source: "parser",
         code: "parse-exception",
-        message: `Parser crashed: ${error instanceof Error ? error.message : String(error)}`,
+        message: `Parser crashed: ${said(error)}`,
         hint: "The response may contain syntax the parser cannot handle",
-      };
+      });
       return null;
     }
   });
@@ -299,11 +340,11 @@
     } catch (error) {
       runtimeErrors = [
         ...errors,
-        {
+        fromThrow("the props' evaluation", error, {
           source: "runtime",
           code: "runtime-error",
-          message: `Prop evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
-        },
+          message: `Prop evaluation failed: ${said(error)}`,
+        }),
       ];
       return result.root;
     }
@@ -313,17 +354,27 @@
   let renderErrors: OpenUIError[] = [];
   let renderFailures = $state(0);
   let retries: (() => void)[] = [];
-  function renderFailed(component: string, error: unknown, reset: () => void) {
+  function renderFailed(node: ElementNode, error: unknown, reset: () => void) {
     retries.push(reset);
     if (isStreaming) {
       return;
     }
-    renderErrors.push({
-      source: "runtime",
-      code: "render-error",
-      component,
-      message: `Component ${component} render failed: ${error instanceof Error ? error.message : String(error)}`,
-    });
+    const component = node.typeName;
+    renderErrors.push(
+      fromThrow(
+        node.statementId
+          ? `${component} ${node.statementId}`
+          : `an inline ${component}`,
+        error,
+        {
+          source: "runtime",
+          code: "render-error",
+          component,
+          statementId: node.statementId,
+          message: `Component ${component} render failed: ${said(error)}`,
+        }
+      )
+    );
     renderFailures += 1;
   }
   $effect(() => {
@@ -376,7 +427,7 @@
       if (onError) {
         onError(errors);
       } else {
-        for (const error of errors) {
+        for (const error of errors.filter((one) => !thrownErrors.has(one))) {
           console.warn(
             `[openui] ${error.source}/${error.code}: ${error.message}`
           );
@@ -423,13 +474,13 @@
   {@const Comp = library.components[node.typeName]?.component}
   {#if Comp}
     <svelte:boundary
-      onerror={(error, reset) => renderFailed(node.typeName, error, reset)}
+      onerror={(error, reset) => renderFailed(node, error, reset)}
     >
       <!-- Its error is the component's, never the route's (region-held.ts). -->
       <RegionHeld />
       <Comp props={node.props} {renderNode} statementId={node.statementId} />
       {#snippet failed()}
-        <!-- A component that throws draws nothing; its error is reported. -->
+        <!-- A component that throws draws nothing; its throw is logged whole (`logThrown`) and reported. -->
       {/snippet}
     </svelte:boundary>
   {/if}
