@@ -69,6 +69,7 @@ import {
   type DesignMap,
   type DesignQuery,
   type DesignThumb,
+  FIXTURE_FILE,
   type Found,
   type FrameRender,
   HEALTH_PATH,
@@ -1916,7 +1917,9 @@ function misfit(
  * name when a value doesn't fit its prop's type or the file can't take it.
  * The project's watcher sees the file change and the sheet redraws.
  */
-async function written(write: SheetWrite): Promise<SheetWritten> {
+async function written(
+  write: Exclude<SheetWrite, { text: string }>
+): Promise<SheetWritten> {
   const file = storyFile(write.file);
   if (!file) {
     throw new StoryRefusal(`${write.file} is no story file in ${root}.`);
@@ -1972,8 +1975,34 @@ async function written(write: SheetWrite): Promise<SheetWritten> {
   };
 }
 
+/**
+ * A fixture module written whole (records_fixture, core `FIXTURE_FILE`):
+ * only a `.fixtures.ts` file inside the toolchain root, shaped by the
+ * project's own formatter as a story's write is ({@link formatted}).
+ */
+async function fixtureWritten(write: {
+  file: string;
+  text: string;
+}): Promise<SheetWritten> {
+  const abs = resolve(root, write.file);
+  if (!(FIXTURE_FILE.test(abs) && abs.startsWith(`${root}${sep}`))) {
+    throw new StoryRefusal(
+      `${write.file} is no fixture module in ${root}: records_fixture writes a .fixtures.ts file inside it, like src/lib/tasks/tasks.fixtures.ts. Nothing was written.`
+    );
+  }
+  const shaped = await formatted(abs, write.text);
+  writeFileSync(abs, shaped.code);
+  return {
+    file: relative(root, abs),
+    formatted: shaped.by,
+    lines: { from: 1, to: shaped.code.split("\n").length },
+  };
+}
+
 /** The story whose statement a write printed values into: an args write's, an added or duplicated one's; none for a removal or a move, which only move text. */
-const printedStory = (write: SheetWrite): string | null => {
+const printedStory = (
+  write: Exclude<SheetWrite, { text: string }>
+): string | null => {
   if ("args" in write) {
     return write.args.story;
   }
@@ -2695,7 +2724,11 @@ async function serveStage(
   }
   if (path === WRITE_PATH && req.method === "POST") {
     await bodyOf(req)
-      .then((body) => written(body as SheetWrite))
+      .then((body) => {
+        const write = body as SheetWrite;
+        // A fixture module is written whole (records_fixture); a story file by its statement.
+        return "text" in write ? fixtureWritten(write) : written(write);
+      })
       .then(
         (done) => json(res, 200, done),
         (error) => refusedWith(res, error)

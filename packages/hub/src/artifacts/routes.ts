@@ -30,6 +30,7 @@ import type { Operation } from "rfc6902";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
+import { FIXTURE_KINDS, FIXTURE_LIMITS } from "../records-fixture";
 import type { StateAsk } from "./component";
 import { COMPONENT_EXAMPLE, CREATE_SHAPE } from "./component";
 import {
@@ -209,6 +210,7 @@ const SHAPES: Record<string, string> = {
     'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or steps, edges, group, dials (the canvas itself); or ask (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
   read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
+  fixture: `records_fixture takes kind (${FIXTURE_KINDS.join(" | ")}), as (a path ending in .fixtures.ts, from your workspace's root), count? (1 to ${FIXTURE_LIMITS.most}, default ${FIXTURE_LIMITS.count}), export? (like TASKS). Example: { kind: "tasks", as: "src/lib/tasks/tasks.fixtures.ts" }.`,
 };
 
 /** A sheet's change (core `SheetWrite` less its file): one story's args, or one story op. */
@@ -296,6 +298,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       let shape = SHAPES.read;
       if (path.endsWith("/design-map")) {
         shape = SHAPES.map;
+      } else if (path.endsWith("/records-fixture")) {
+        shape = SHAPES.fixture;
       } else if (request.method === "GET") {
         // A read's query (its png's width, its frame): artifact_read's shape.
         shape = SHAPES.read;
@@ -648,6 +652,30 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           return {
             verify: await artifacts.verifyFor(params.id, params.artifact),
           };
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A fixture module of the project's real records, trimmed and redacted, written into the session's workspace (records_fixture).
+    .post(
+      "/api/instances/:id/artifacts/records-fixture",
+      {
+        body: t.Object({
+          kind: t.Union(FIXTURE_KINDS.map((one) => t.Literal(one))),
+          as: t.String({ minLength: 1, maxLength: 1000 }),
+          count: t.Optional(
+            t.Integer({ minimum: 1, maximum: FIXTURE_LIMITS.most })
+          ),
+          export: t.Optional(
+            t.String({ pattern: "^[A-Z][A-Z0-9_]*$", maxLength: 60 })
+          ),
+        }),
+        detail: { hide: true },
+      },
+      async ({ params, body }) => {
+        try {
+          return await artifacts.recordsFixture(params.id, body);
         } catch (error) {
           return refused(error);
         }

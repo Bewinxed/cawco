@@ -19,6 +19,7 @@ import { PICTURE_LIMITS } from "@cawco/core/frames";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
+  FIXTURE_FILE,
   INTERACTIONS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
@@ -26,6 +27,7 @@ import {
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
+import { FIXTURE_KINDS, FIXTURE_LIMITS } from "../records-fixture";
 
 /** The longest name, handle or id an artifact tool takes. */
 const ARTIFACT_REF_MAX = 100;
@@ -49,6 +51,7 @@ export const ARTIFACT_TOOLS = [
   "comment_reply",
   "comment_resolve",
   "design_map",
+  "records_fixture",
   "settle",
 ] as const;
 export type ArtifactTool = (typeof ARTIFACT_TOOLS)[number];
@@ -374,6 +377,37 @@ export const designMap = {
     component: z.string().min(1).max(1000).optional(),
     limit: z.number().int().min(1).max(DESIGN_MAP_LIMITS.max).optional(),
     cursor: z.string().max(20).optional(),
+  },
+};
+
+export const recordsFixture = {
+  name: "records_fixture",
+  description:
+    "Write a fixture module of your project's real records, trimmed and redacted, for a list story to import as an arg. " +
+    "Never type records by hand.",
+  input: {
+    kind: z.enum(FIXTURE_KINDS),
+    as: z
+      .string()
+      .min(1)
+      .max(1000)
+      .regex(FIXTURE_FILE)
+      .describe(
+        "From your workspace's root, like src/lib/tasks/tasks.fixtures.ts."
+      ),
+    count: z
+      .number()
+      .int()
+      .min(1)
+      .max(FIXTURE_LIMITS.most)
+      .optional()
+      .describe(`Default ${FIXTURE_LIMITS.count}.`),
+    export: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]*$/u)
+      .max(60)
+      .optional()
+      .describe("Default the kind upper-cased."),
   },
 };
 

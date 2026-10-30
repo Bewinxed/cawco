@@ -14316,6 +14316,53 @@ export const createServer = (
     heard: (decided) => push.decided(decided),
   });
   const artifacts: Artifacts = createArtifacts({
+    // records_fixture's records, read through the hub's own readers (records-fixture.ts projects and redacts them).
+    fixtureRecords: async (projectId, kind) => {
+      const named = new Map(
+        db.namedMachines().map((one) => [one.machineId, one.hostname])
+      );
+      const project = db.project(projectId)?.name ?? null;
+      if (kind === "tasks") {
+        return (await tasks.list(projectId)).tasks as unknown as Record<
+          string,
+          unknown
+        >[];
+      }
+      if (kind === "sessions") {
+        return db
+          .listInstances()
+          .filter((one) => one.projectId === projectId)
+          .map((one) => ({
+            id: one.id,
+            title: one.title ?? one.derivedTitle ?? null,
+            harness: one.harness,
+            status: one.status,
+            startedAt: one.createdAt ?? null,
+            endedAt: one.turnEndedAt ?? null,
+            machine: named.get(one.machineId) ?? null,
+            project,
+          }));
+      }
+      if (kind === "routines") {
+        return db.routines.list(projectId).map((one) => ({
+          id: one.id,
+          name: one.name,
+          schedule: one.cron,
+        }));
+      }
+      if (kind === "machines") {
+        return db.namedMachines().map((one) => ({
+          id: one.machineId,
+          name: one.hostname,
+          online: registry.agent(one.machineId) !== undefined,
+          harnesses: [],
+        }));
+      }
+      throw new ArtifactRefusal(
+        409,
+        "records_fixture reads tasks, sessions, routines and machines; a project's decisions aren't one list the hub keeps yet."
+      );
+    },
     decides: {
       routed: (asker, row, cards, all, state) =>
         settling.routed(asker, row, cards, all, state),

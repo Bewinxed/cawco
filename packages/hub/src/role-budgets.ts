@@ -39,10 +39,15 @@ import type { Tasks } from "./tasks";
  * routine_result, memory_propose) are a worker's wherever its folder is in a
  * project, and the conversation tools of a separate role are gone (worker
  * 27,907 measured). The worker's budget is lowered to it.
+ * 2026-10-30: the design graph's primitives. artifact_create and
+ * artifact_update take `steps` (the step slider's sequence) and the record
+ * dials `count` and `longest` with `by`, and `records_fixture` writes a
+ * preview's fixture of the project's real records, trimmed and redacted
+ * (worker 28,332, delegate 10,454 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 27_950,
-  delegate: 10_224,
+  worker: 28_380,
+  delegate: 10_500,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
