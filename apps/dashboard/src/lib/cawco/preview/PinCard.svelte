@@ -35,7 +35,6 @@
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { commentWords as said } from "@cawco/core/words/comments";
-  import { designGraphWords } from "@cawco/core/words/design-graph";
   import { type Snippet, tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -92,7 +91,10 @@
     ondraft,
     changes,
     fromChip = false,
+    onState = null,
   }: {
+    /** The state it was placed on, in words, derived from the design graph (core design-graph.ts `pinPathOf`): "On Saving it › Save failed"; none off a component canvas. */
+    onState?: string | null;
     /**
      * Opened from its chip in a conversation (the transcript's popover): its
      * head keeps Resolve or Reopen and Close, without Delete comment and ⋯,
@@ -577,13 +579,13 @@
       </li>
     {/each}
   </ol>
-  {#if pin.state}
-    <!-- The design graph's kept state when it was placed, under the person's words (the owner's pick "pins"). -->
+  {#if onState}
+    <!-- The state it was placed on, under the person's words (the owner's pick "pins"): derived, never kept. -->
     <p
       class="mt-space-1 mx-0 mb-0 min-w-0 text-ink-muted type-meta text-pretty wrap-anywhere"
       data-slot="pin-state"
     >
-      {designGraphWords.pinKept(pin.state)}
+      {onState}
     </p>
   {/if}
   {#if changes}

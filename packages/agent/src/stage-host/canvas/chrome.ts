@@ -11,13 +11,13 @@
 /** The page's sheet: frames, sections, the stage and its washes, on classes no project writes. */
 const PAGE_CSS = `
 /* On the stage, the room the design graph's panel and dock leave the canvas (the pane's ask): none until a pane asks. */
-html.cawco-canvas-page { color-scheme: light dark; --cawco-stage-end: 0px; --cawco-stage-bottom: 0px; }
+html.cawco-canvas-page { color-scheme: light dark; --cawco-stage-end: 0px; --cawco-stage-bottom: 0px; --cawco-stage-top: 0px; }
 html.cawco-canvas-page[data-theme="light"] { color-scheme: light; }
 html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 /* The page is the well the frames stand in (surface-well): the frame recesses, each frame's own page reads raised on it. */
 html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100%; overflow: hidden; background: var(--surface-well); }
 /* The canvas ends where the design graph's panel and dock begin: no frame is ever drawn under them. */
-.cawco-canvas { position: fixed; inset-block: 0 var(--cawco-stage-bottom); inset-inline: 0 var(--cawco-stage-end); overflow: hidden;
+.cawco-canvas { position: fixed; inset-block: var(--cawco-stage-top) var(--cawco-stage-bottom); inset-inline: 0 var(--cawco-stage-end); overflow: hidden;
   touch-action: none; background: var(--surface-well); }
 /* The width a frame without one answers its story's width conditions at (canvas width.ts): the canvas's own, as the window
    was. A frame with a width answers its own body's. */

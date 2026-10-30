@@ -26,6 +26,7 @@ import {
 } from "@cawco/core/shell-shortcuts";
 import {
   CANVAS_SPEC_LIMITS,
+  type CanvasDial,
   type ComponentDoc,
   FORMS,
   type Form,
@@ -461,6 +462,13 @@ export function previewGraph(value: unknown): GraphModel | null {
       const label = text(edge?.label, CANVAS_SPEC_LIMITS.label);
       return from && to ? [{ from, to, ...(label ? { label } : {}) }] : [];
     }),
+    ...(Array.isArray(raw.steps)
+      ? {
+          steps: list(raw.steps, CANVAS_SPEC_LIMITS.steps).flatMap(
+            (one) => text(one, SHEET_BOUNDS.text) ?? []
+          ),
+        }
+      : {}),
   };
 }
 
@@ -547,7 +555,16 @@ export function previewMove(value: unknown): MoveModel | null {
   };
 }
 
-const DIAL_KINDS = new Set(["number", "color", "select", "toggle"]);
+const DIAL_KINDS = new Set([
+  "number",
+  "color",
+  "select",
+  "toggle",
+  "count",
+  "longest",
+]);
+/** The most records a count ranges over, as the pane bounds it. Ours: past any fixture (records_fixture writes at most 200). */
+const COUNT_MOST = 100_000;
 
 /** A component canvas's dials as its page says them (`cawco:dials`, core design-graph.ts `DialsModel`). */
 export function previewDials(value: unknown): DialsModel {
@@ -564,6 +581,15 @@ export function previewDials(value: unknown): DialsModel {
     ) {
       values[name.slice(0, SHEET_BOUNDS.name)] =
         typeof one === "string" ? one.slice(0, SHEET_BOUNDS.text) : one;
+    }
+    const count = record(one);
+    const n = finite(count?.count);
+    const of = finite(count?.of);
+    if (n !== null && of !== null) {
+      values[name.slice(0, SHEET_BOUNDS.name)] = {
+        count: Math.max(0, Math.min(COUNT_MOST, Math.round(n))),
+        of: Math.max(0, Math.min(COUNT_MOST, Math.round(of))),
+      };
     }
   }
   return {
@@ -586,8 +612,9 @@ export function previewDials(value: unknown): DialsModel {
       return [
         {
           name,
-          kind: dial.kind as "number" | "color" | "select" | "toggle",
+          kind: dial.kind as CanvasDial["kind"],
           target: cssVar ? { cssVar } : { arg: arg as string },
+          by: text(dial.by, SHEET_BOUNDS.name) ?? undefined,
           label: text(dial.label, SHEET_BOUNDS.text) ?? undefined,
           min: number("min"),
           max: number("max"),
