@@ -1071,8 +1071,11 @@ export interface WorkItemDeps {
    * has woken holds nothing.
    */
   readonly sendWakes: (instanceId: string) => boolean;
-  /** Where a reader opens a session in the dashboard: the link a pull request carries back. */
-  readonly sessionUrl?: (instanceId: string) => string;
+  /**
+   * Where a reader opens a session in the dashboard: the link a pull request
+   * carries back, and each landed commit's `Agent-Logs-Url` trailer.
+   */
+  readonly sessionUrl: (instanceId: string) => string;
   /**
    * Sends a spawn and records its row under the work item. `fallbackMode` is
    * the mode it runs in when its harness has modes; the hub's one rule
@@ -7842,6 +7845,7 @@ export const createWorkItems = ({
     const before = await headOf(workspace, item);
     const outcome = await land<GateRun>(base, {
       run: runIn(workspace, item),
+      logsUrl: sessionUrl(item.instanceId),
       turn: turnOf(item),
       check: onBaseGate,
       onStepOut: (words) => {
@@ -7952,7 +7956,6 @@ export const createWorkItems = ({
     summary: string,
     gate: GateRun
   ): string => {
-    const link = sessionUrl?.(item.instanceId);
     const what = item.taskId
       ? `an attempt at the task “${item.title}”`
       : `work item ${handle(item.id)}`;
@@ -7960,9 +7963,7 @@ export const createWorkItems = ({
     return [
       summary.trim(),
       ...(lines ? [`Merge checks, run by the CawCo hub:\n${lines}`] : []),
-      link
-        ? `This is ${what}; its report and transcript: ${link}`
-        : `This is ${what} (work item ${handle(item.id)}).`,
+      `This is ${what}; its report and transcript: ${sessionUrl(item.instanceId)}`,
     ].join("\n\n");
   };
 
@@ -8010,6 +8011,7 @@ export const createWorkItems = ({
     const branch = landingBranch(item);
     const pushed = await pushBranch(base, branch, {
       last: lastBranchPush(item),
+      logsUrl: sessionUrl(item.instanceId),
       run: runIn(workspace, item),
       turn: turnOf(item),
       queue: landings,

@@ -452,6 +452,7 @@ const germanRace = async (kit: Kit, scratch: string): Promise<void> => {
   let raced = false;
   const outcome = await land("main", {
     check: () => Promise.resolve(undefined),
+    logsUrl: "https://hub.probe.test/session/typed-causes",
     queue: landingQueue(),
     run: async (cmd) => {
       // Someone pushes between the turn's fetch and its push, once.

@@ -329,10 +329,17 @@ const spec: Spec = {
     const branchLegs = async (): Promise<void> => {
       const { branchPushCheck, landingQueue, pushBranch } =
         await import("../../../packages/hub/src/landing");
+      // The landing's stamp amends each commit's message (landing.ts
+      // `stampCommand`): its committer is the probe's.
       const run = async (cmd: string) => {
         const ran = await Bun.$`sh -c ${cmd}`
           .cwd(clone)
-          .env(doorEnv())
+          .env(
+            doorEnv({
+              GIT_COMMITTER_NAME: "Probe",
+              GIT_COMMITTER_EMAIL: "probe@probe.test",
+            })
+          )
           .quiet()
           .nothrow();
         return {
@@ -343,15 +350,24 @@ const spec: Spec = {
       };
       const queue = landingQueue();
       const BRANCH = "cawco/probe-round";
-      /** One round: HEAD a new commit on origin's main as it is now, checked, then pushed. */
+      /**
+       * One round: HEAD a new commit on origin's main as it is now, checked,
+       * then pushed; `sha`, HEAD once pushed, stamped with its session's link.
+       */
       const round = async (name: string, last: string | undefined) => {
         await inside(clone, ["fetch", "origin"]);
-        const sha = (
+        const made = (
           await Bun.$`git -C ${clone} ${IDENTITY} commit-tree -p refs/remotes/origin/main -m ${name} HEAD^{tree}`.text()
         ).trim();
-        await Bun.$`git -C ${clone} checkout -q --detach ${sha}`.quiet();
+        await Bun.$`git -C ${clone} checkout -q --detach ${made}`.quiet();
         const checked = await branchPushCheck(run, BRANCH, last);
-        const pushed = await pushBranch("main", BRANCH, { last, queue, run });
+        const pushed = await pushBranch("main", BRANCH, {
+          last,
+          logsUrl: "https://hub.probe.test/session/probe-round",
+          queue,
+          run,
+        });
+        const sha = (await Bun.$`git -C ${clone} rev-parse HEAD`.text()).trim();
         return { sha, checked, pushed };
       };
       const moveMain = async (name: string) =>

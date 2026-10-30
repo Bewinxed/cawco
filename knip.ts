@@ -148,6 +148,8 @@ export default {
         "scripts/resolution-check.ts",
         // scripts/check.ts:634
         "scripts/call-cuts-check.ts",
+        // scripts/check.ts:635
+        "scripts/logs-trailer-check.ts",
         // scripts/ship.sh:86
         "scripts/release.ts",
         // scripts/ship.sh:36

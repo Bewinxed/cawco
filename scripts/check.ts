@@ -632,6 +632,10 @@ const gated: Gated[] = [
   ),
   bun("scripts/protocol-sweep.ts", ["packages/core/src/"]),
   bun("scripts/call-cuts-check.ts", ["packages/hub/src/call-cuts.ts"]),
+  bun("scripts/logs-trailer-check.ts", [
+    "packages/hub/src/landing.ts",
+    "packages/core/src/safe-git.ts",
+  ]),
   {
     ...bun("scripts/typecheck-coverage.ts", []),
     // Which files there are, and the projects that hold them.

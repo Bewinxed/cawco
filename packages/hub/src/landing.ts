@@ -44,10 +44,20 @@
  * runs every other.
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
- * instead ({@link pushBranch}): HEAD as it is, replacing only the commit
+ * instead ({@link pushBranch}): HEAD where it is, replacing only the commit
  * the hub itself last pushed there; for `pr` the hub then has the workspace's
  * machine open the pull or merge request through its origin's forge adapter
  * (work-items.ts `pullRequestFor`, agent forges/).
+ *
+ * Every commit either landing puts on origin carries one `Agent-Logs-Url`
+ * trailer, the link to the session that made it ({@link LandingDeps.logsUrl},
+ * {@link stampCommand}): the key GitHub's Copilot coding agent writes ("the
+ * agent's commits link back to the agent session logs by including an
+ * `Agent-Logs-Url` trailer in the commit message",
+ * github.blog/changelog/2026-03-20-trace-any-copilot-coding-agent-commit-to-its-session-logs).
+ * The hub stamps it in the rebase it runs anyway, so it holds for every
+ * harness alike and for commits no hook sees (`--no-verify`, a cherry-pick,
+ * a rebase the session ran, a repository whose `core.hooksPath` is its own).
  */
 import type { CommandResult, RunsOnCapability } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -128,6 +138,11 @@ export interface LandingDeps<F> {
    * another machine, throws {@link WouldWait} instead of running.
    */
   check: (inTurn: boolean) => Promise<Failed<F> | undefined>;
+  /**
+   * The link to the session whose commits these are (its dashboard page),
+   * stamped on each as its `Agent-Logs-Url` trailer ({@link stampCommand}).
+   */
+  logsUrl: string;
   /**
    * The landing stepped out of its turn to gate again: the words of what a
    * command due there would have waited for.
@@ -318,6 +333,37 @@ export const statusCommand = (skip: string[] = []): string =>
     ? "git status --porcelain"
     : `git status --porcelain -- . ${skip.map((path) => quote(`:(exclude,literal)${path}`)).join(" ")}`;
 
+/** The trailer that links a landed commit to the session that made it. */
+export const LOGS_TRAILER = "Agent-Logs-Url";
+
+/**
+ * The shell `git rebase --exec` runs after each commit it makes: HEAD's
+ * message through `git interpret-trailers --if-exists replace` with
+ * `Agent-Logs-Url: <url>`, and HEAD amended only when that changed it. So a
+ * commit without the trailer gains one; one carrying another link has it
+ * replaced; one already carrying `url` as its last is left as it is, the
+ * same commit, so stamping again (a later gate's rebase, a second landing)
+ * adds nothing and moves nothing. Every other trailer stays where it was.
+ * The amend is the commit's message alone: author, tree and parents kept.
+ */
+const stampCommand = (url: string): string =>
+  `m=$(git log -1 --format=%B) && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${quote(`${LOGS_TRAILER}: ${url}`)}) && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
+
+/**
+ * HEAD's own commits rebased onto `upstream`, each stamped with `url`
+ * ({@link stampCommand}); `keepBase`, on the commit they already start from
+ * and with their merges kept (`--keep-base --rebase-merges`), for a branch
+ * pushed as it is. A rebase that stops (a conflict, a stamp that failed) is
+ * undone, and its output ends with {@link CONFLICT_MARK} and the conflicted
+ * files when there are any.
+ */
+export const stampedRebase = (
+  upstream: string,
+  url: string,
+  keepBase = false
+): string =>
+  `git rebase${keepBase ? " --keep-base --rebase-merges" : ""} --exec ${quote(stampCommand(url))} ${quote(upstream)} || { files=$(git diff --name-only --diff-filter=U); git rebase --abort; if [ -n "$files" ]; then printf '${CONFLICT_MARK}\\n%s\\n' "$files"; fi; exit 1; }`;
+
 /**
  * One step of the landing gate as it runs: a step the project declares
  * (gate-file.ts), a shell command run in the item's workspace (or, with
@@ -422,7 +468,8 @@ const steppedOut = (error: unknown): Busy => {
 };
 
 /**
- * The workspace's commits rebased onto origin's `base` as it is now, and
+ * The workspace's commits rebased onto origin's `base` as it is now, each
+ * stamped with its session's link ({@link stampedRebase}), and
  * {@link LandingDeps.check} on that tree: `on-base` once they pass, with
  * whether the rebase moved HEAD and where HEAD is. In the turn (`inTurn`)
  * every command it runs throws {@link WouldWait} rather than wait. Before
@@ -455,7 +502,7 @@ async function onBase<F>(
   }
   const before = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
   const rebase = await deps.run(
-    `git rebase ${target} || { files=$(git diff --name-only --diff-filter=U); git rebase --abort; printf '${CONFLICT_MARK}\\n%s\\n' "$files"; exit 1; }`,
+    stampedRebase(`origin/${base}`, deps.logsUrl),
     LOCAL_MS,
     inTurn,
     false,
@@ -748,10 +795,12 @@ async function ready(
 }
 
 /**
- * Pushes the workspace's HEAD to `branch` on origin: its commits as they
- * are, not rebased. Nothing ahead of `base` is nothing to push. The push
- * replaces the branch only while it is missing or at `last`, the commit the
- * hub last pushed there (an earlier round of the item, rebased since, or an
+ * Pushes the workspace's HEAD to `branch` on origin: its commits on the
+ * commit they start from, not rebased onto `base`, each stamped with its
+ * session's link ({@link stampedRebase} `keepBase`). Nothing ahead of
+ * `base` is nothing to push. The push replaces the branch only while it is
+ * missing or at `last`, the commit the hub last pushed there (an earlier
+ * round of the item, rebased since, or an
  * earlier attempt at its task), leased on that commit; a branch someone else
  * moved is refused naming both commits ({@link taken}), and their work is
  * never lost.
@@ -761,7 +810,7 @@ export function pushBranch(
   branch: string,
   deps: Pick<
     LandingDeps<unknown>,
-    "queue" | "repo" | "run" | "skip" | "stopped" | "turn"
+    "logsUrl" | "queue" | "repo" | "run" | "skip" | "stopped" | "turn"
   > & { last: string | undefined }
 ): Promise<BranchOutcome> {
   return untilStopped(pushOwnBranch(base, branch, deps));
@@ -796,6 +845,23 @@ async function pushOwnBranch(
       }
       if (Number(ahead.stdout.trim()) === 0) {
         return { kind: "nothing" };
+      }
+      const from = await run(
+        `git merge-base ${quote(`origin/${base}`)} HEAD`,
+        LOCAL_MS
+      );
+      if (from.exitCode !== 0) {
+        return refusal("read", from);
+      }
+      const stamped = await run(
+        stampedRebase(`origin/${base}`, deps.logsUrl, true),
+        LOCAL_MS,
+        false,
+        false,
+        from.stdout.trim()
+      );
+      if (stamped.exitCode !== 0) {
+        return refusal("rebase", stamped);
       }
       const sha = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
       if (deps.stopped?.()) {
