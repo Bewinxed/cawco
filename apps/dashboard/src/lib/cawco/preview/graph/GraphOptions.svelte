@@ -20,7 +20,8 @@
 
   let { bottom = 0 }: { bottom?: number } = $props();
 
-  let open = $state(true);
+  /** Folded to its labelled pill until pressed, so it stands over none of what it changes. */
+  let open = $state(false);
   let toggle = $state<HTMLButtonElement>();
   const calls = Object.entries(GRAPH_CALLS) as [
     GraphCall,
@@ -87,12 +88,15 @@
       <button
         bind:this={toggle}
         aria-expanded={open}
-        aria-label={words.options}
-        class="{SYMBOL} {RING}"
+        class="mark-line relative flex h-c-bar-item items-center gap-space-1 rounded-pill ps-space-2 pe-space-3 type-label text-ink-strong touch-hit transition-colors duration-(--dur-control) ease-out hover:bg-surface-hover {RING}"
         data-options-toggle
         onclick={() => setOpen(true)}
-        title={words.options}
-        type="button"><IconTuning /></button
+        type="button"
+        ><IconTuning
+          aria-hidden="true"
+          class="size-c-bar-symbol text-ink-muted"
+          data-box
+        /><span>{words.options}</span></button
       >
     </GlassGroup>
   {/if}
