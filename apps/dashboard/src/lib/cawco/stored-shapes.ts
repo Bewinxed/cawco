@@ -198,6 +198,7 @@ const MediaArtifactShape = z
     kind: z.string(),
     name: z.string(),
     shapes: CanvasShapesShape.optional(),
+    words: z.number().optional(),
   })
   .nullable();
 export const MediaArtifactSchema: z.ZodType<MediaArtifactType> =

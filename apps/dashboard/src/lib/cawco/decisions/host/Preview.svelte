@@ -9,6 +9,9 @@
   to the well's width (`embed-scale`), never so far that its own least
   words (as its overlay tells them, core `EMBED_WORDS`) stand under
   `--c-media-words-floor`, past which it scrolls sideways at that scale.
+  Its words as the last Preview of it heard them, in any browser, are in
+  the page's media (hub `keepSaidWords`), so it stands at that scale from
+  its first paint; one no Preview has heard yet stands at the well's room.
   Naming a phone's or a tablet's width it stands upright at that device's
   whole shape (core `uprightHeight`), the media cap aside, and is never
   scaled: wider than its well it scrolls sideways, as a story does.
@@ -22,7 +25,11 @@
   stands on an origin of its own the hub opened for it (hub server.ts
   `embedAt`), open in the panel or not, named
   in the page's media, at the shape of a screen as wide as its `width`
-  says. A component canvas draws the stories its `stories` names (every one
+  says, loaded on its turn among the page's embeds and alone in it (one
+  dashboard's load at a time, the one in view first, embed-turns.ts), once
+  its card is close to the view (`DRAW_MARGIN`), and shown only once it
+  stands at its final scale: its words told where it is scaled. A
+  component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
   `sayShape`), so its frame is that wide and that tall; a page's canvases
@@ -35,7 +42,7 @@
   canvases runs only the ones near what the person sees, and once drawn a
   frame stays, so what was done in it survives a scroll. Each stands in its well, which hugs it
   and scrolls it sideways where it is wider (Well.svelte). While a screen's
-  origin is asked, the well holds its 16:10, a skeleton until the wait
+  origin is asked and its turn waited for, the well holds its shape, a skeleton until the wait
   outlasts its grace; a canvas waiting its turn or loading holds its
   skeleton at its picture's own shape as the page's media knows it (what an
   embed of its stories said, in any browser, else its stories as the stage
@@ -183,6 +190,8 @@
   let wordsFloor = 0;
   /** The least font size the design's shown words are set at, px, as its overlay tells it (core `EMBED_WORDS`); null until it has. */
   let words = $state<number | null>(null);
+  /** Its least words as this Preview heard them, else as the page's media kept them from the last Preview of it, in any browser (hub `keepSaidWords`); null where neither knows. */
+  const least = $derived(words ?? held?.words ?? null);
   $effect(() => {
     const well = stage;
     if (!well) {
@@ -203,10 +212,11 @@
   /**
    * A page-sized design's scale: 1 where its well holds its own layout
    * width (`width`), else down to the well's room, never so far that its
-   * own least words (`words`) stand under `--c-media-words-floor`, past
+   * own least words (`least`) stand under `--c-media-words-floor`, past
    * which it scrolls sideways in its well at that scale; a design whose
-   * words are already at the floor is never scaled. Until its words are
-   * told it stands at 1. With no width of its own it takes the card's whole
+   * words are already at the floor is never scaled. Where no Preview has
+   * heard its words yet it is drawn at the well's room, the floor unknown
+   * until it tells them. With no width of its own it takes the card's whole
    * width and lays itself out to it, at 1. A phone or a tablet ({@link upright})
    * stands at 1 always, scrolling sideways where its well is narrower.
    */
@@ -214,10 +224,12 @@
     pageSized &&
       upright === null &&
       picture !== undefined &&
-      words !== null &&
       room > 0 &&
       picture > room + 0.5
-      ? Math.min(1, Math.max(wordsFloor / words, room / picture))
+      ? Math.min(
+          1,
+          Math.max(least === null ? 0 : wordsFloor / least, room / picture)
+        )
       : 1
   );
   const scaled = $derived(scale < 1 && picture !== undefined);
@@ -274,6 +286,23 @@
     }).catch(() => undefined);
   };
 
+  /**
+   * The least words a whole screen told, beside the page's own address as a
+   * canvas's shape is (hub preview.ts `PAGE_SHAPE_PATH`), where the media
+   * kept others: the next Preview of it stands at the scale they allow from
+   * its first paint.
+   */
+  const tellWords = (heard: number) => {
+    if (held?.words === heard) {
+      return;
+    }
+    fetch("shape", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ artifact: id, words: heard }),
+    }).catch(() => undefined);
+  };
+
   /** A component canvas's own height and widest story, as it says them (agent canvas runtime `by=embed`): its frame is as tall and as wide. */
   $effect(() => {
     const heard = (event: MessageEvent) => {
@@ -301,6 +330,7 @@
         said.least > 0
       ) {
         words = said.least;
+        tellWords(said.least);
         return;
       }
       // Its graph, told before it fetches any of it: it fetches on its turn.
@@ -390,12 +420,22 @@
   /** The frame stood unseen under its wait (its skeleton), so its showing is the skeleton's reveal. */
   let underWait = false;
   /**
-   * It stands at its own shape: a screen once its frame has loaded, a
-   * component canvas once it has said its height (every Preview of a
+   * A scaled screen's words went untold for {@link DRAW_MS} after its frame
+   * loaded (a page with none, or none shown): it stands at the scale it
+   * knows.
+   */
+  let wordsUntold = $state(false);
+  /**
+   * It stands at its own shape: a screen once its frame has loaded and, where
+   * it is scaled, its words are told, so its first paint is at its final
+   * scale, never a frame at 1 scrolling sideways while its words are on their
+   * way; a component canvas once it has said its height (every Preview of a
    * canvas by that one rule, the first as the rest), never at a screen's
    * 16:10 while it hasn't. Until then its wait stands.
    */
-  const shaped = $derived(screen ? drawn : tall !== null);
+  const shaped = $derived(
+    screen ? drawn && (!scaled || words !== null || wordsUntold) : tall !== null
+  );
   /** What its frame's shape is now, for a reader: a screen's 16:10, drawn at the height its canvas said, or waiting for that. */
   const shape = $derived.by(() => {
     if (!shaped) {
@@ -510,7 +550,7 @@
   };
   $effect(() => {
     const place = box;
-    if (!place || near || held?.kind !== "component") {
+    if (!place || near || !held?.embed) {
       return;
     }
     return watchNear(place, FETCH_MARGIN, () => {
@@ -519,7 +559,7 @@
   });
   $effect(() => {
     const place = box;
-    if (!place || close || held?.kind !== "component") {
+    if (!place || close || !held?.embed) {
       return;
     }
     return watchNear(place, DRAW_MARGIN, () => {
@@ -552,6 +592,24 @@
    */
   const DRAW_MS = 30_000;
   $effect(() => {
+    track(attempt);
+    wordsUntold = false;
+    if (!(screen && drawn) || shaped) {
+      return;
+    }
+    const late = setTimeout(() => {
+      wordsUntold = true;
+    }, DRAW_MS);
+    return () => clearTimeout(late);
+  });
+  // A whole screen's turn (embed-turns.ts, alone) ends once it stands at its shape.
+  $effect(() => {
+    if (screen && shaped) {
+      turnState = "fetched";
+      turn?.done();
+    }
+  });
+  $effect(() => {
     if (!told || shaped || failed) {
       return;
     }
@@ -572,8 +630,10 @@
       return;
     }
     const canvas = held?.kind === "component";
-    // A canvas far from the view waits as its skeleton, asking nothing.
-    if (canvas && !near) {
+    // Far from the view it waits as its skeleton, asking nothing: a canvas
+    // until it is near (its graph fetched ahead), a whole screen until it is
+    // close (its load is its draw).
+    if (canvas ? !near : !close) {
       return;
     }
     const address = canvas ? canvasEmbedUrl(embed, stories) : embed;
@@ -604,7 +664,18 @@
       }
     };
     asking = true;
-    // A canvas fetches its graph on its turn among the page's canvases, the one in view first (embed-turns.ts); it takes its place now, as it mounts, so every Preview of the page is in the queue before the first turn, and its frame loads meanwhile, its skeleton standing.
+    // Every embed of the page takes its place in its turns now, as it mounts, so every Preview of the page is in the queue before the first turn, the one in view first (embed-turns.ts). A canvas fetches its graph on its turn, its frame loading meanwhile, its skeleton standing; a whole screen loads on its turn, alone, once its origin answers, which it tells as an empty graph: seven dashboards asked at once held every frame of the page white for most of a minute.
+    if (!canvas) {
+      turnState = "waiting";
+      const mine = embedTurn(() => box, true);
+      turn = mine;
+      mine.granted.then(() => {
+        if (!gone) {
+          turnState = "fetching";
+          ready = address;
+        }
+      });
+    }
     if (canvas) {
       turnState = "waiting";
       const mine = embedTurn(() => box);
@@ -647,8 +718,10 @@
           cause: previewUnreachedWords(at.host, why, previewsNeed(at)),
         };
         turn?.done();
-      } else {
+      } else if (canvas) {
         ready = address;
+      } else {
+        turn?.graph([]);
       }
     })();
     return () => {
@@ -660,13 +733,12 @@
   });
 
   /**
-   * Its draw has begun, so a wait is a wait: a screen's as its origin is
-   * asked; a canvas's once its card is {@link close}. A canvas held back
-   * farther from the view (fetching its graph, or asking nothing yet) is
-   * not loading, so it rests as its skeleton, no Caw and no line, and its
-   * grace counts from when it comes close.
+   * Its draw has begun, so a wait is a wait: once its card is {@link close}.
+   * One held back farther from the view (a canvas fetching its graph, or
+   * either asking nothing yet) is not loading, so it rests as its skeleton,
+   * no Caw and no line, and its grace counts from when it comes close.
    */
-  const drawing = $derived(!!held?.embed && (screen || close));
+  const drawing = $derived(!!held?.embed && close);
   $effect(() => {
     track(attempt);
     slow = false;
@@ -870,7 +942,7 @@
               data-drawn={drawn || undefined}
               data-shape={shape}
               data-slot="embed"
-              data-turn={screen ? undefined : turnState}
+              data-turn={turnState}
               data-words={words ?? undefined}
               onload={() => {
                 drawn = true;

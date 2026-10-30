@@ -41,6 +41,15 @@
  * are given once the page's Previews have all asked (a task after the first
  * ask), so they go by place too, not to whichever asked first.
  *
+ * A whole screen (a dev server's or a folder's preview) has no graph to
+ * tell: its page loads its own, of a size nobody here knows, a whole app's,
+ * so it takes its turn alone (`alone`), no other embed fetching beside it
+ * and none starting while it loads, and holds it until it stands at its
+ * shape. It tells an empty graph once its origin answers: until then it
+ * holds those after it, as an untold graph does. Seven
+ * dashboards on one page, loaded at once, each held the page's frames white
+ * for most of a minute.
+ *
  * An embed's share is held until it says its share arrived (core
  * `CANVAS_EMBED_FETCHED`), else until it says its shape, its Preview goes,
  * or {@link TURN_MS} passes; a share let go that way no longer holds the
@@ -54,6 +63,8 @@ const BUDGET = 2000;
 const TURN_MS = 20_000;
 
 interface Asked {
+  /** A whole screen's: its turn is the page's alone. */
+  alone: boolean;
   /** Its graph, each module's address, once its page told it. */
   graph: readonly string[] | null;
   /** Where its picture stands on the page, when it stands anywhere. */
@@ -165,7 +176,8 @@ const readyNow = () => {
 
 /**
  * Turns to the nearest waiting embeds while the budget holds what they ask
- * between them; one whose graph is not told yet holds the rest. Those given
+ * between them; one whose graph is not told yet holds the rest, and a whole
+ * screen's turn is taken alone. Those given
  * their turn together take their shares smallest graph first, so a small
  * graph is its own embed's to fetch, arrives first and draws while the
  * larger ones still fetch, the page's one main thread busy meanwhile.
@@ -173,7 +185,15 @@ const readyNow = () => {
 const next = () => {
   const asking = new Set(flying);
   const batch: Asked[] = [];
-  for (let one = nearest(); one?.graph; one = nearest()) {
+  const screenLoading = [...fetching.keys()].some((one) => one.alone);
+  for (let one = nearest(); !screenLoading && one?.graph; one = nearest()) {
+    if (one.alone) {
+      if (fetching.size + batch.length === 0) {
+        waiting.splice(waiting.indexOf(one), 1);
+        batch.push(one);
+      }
+      break;
+    }
     const fresh = one.graph.filter(
       (url) => !(kept.has(url) || asking.has(url))
     );
@@ -230,8 +250,11 @@ export interface EmbedTurn {
   ready: Promise<string[]>;
 }
 
-/** A place in the page's queue of canvas embeds, for the picture standing at `place`. */
-export function embedTurn(place: () => Element | null | undefined): EmbedTurn {
+/** A place in the page's queue of embeds, for the picture standing at `place`; `alone` for a whole screen, which tells no graph and takes its turn alone. */
+export function embedTurn(
+  place: () => Element | null | undefined,
+  alone = false
+): EmbedTurn {
   let state: "waiting" | "fetching" | "done" = "waiting";
   let timer: ReturnType<typeof setTimeout> | undefined;
   let tellReady: (rest: string[]) => void = () => undefined;
@@ -239,6 +262,7 @@ export function embedTurn(place: () => Element | null | undefined): EmbedTurn {
     tellReady = resolve;
   });
   const asked: Asked = {
+    alone,
     graph: null,
     place,
     share: new Set(),

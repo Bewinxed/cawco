@@ -100,6 +100,13 @@ export const CANVAS_EMBED_FAILED = "cawco:embed-failed";
  */
 export const EMBED_WORDS = "cawco:embed-words";
 
+/** Whether `value` is a least font size a page's overlay could tell ({@link EMBED_WORDS}): CSS px past 0, within reason. Ours: 200. */
+export const isEmbedWords = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  value > 0 &&
+  value <= 200;
+
 /**
  * A canvas embed's module graph, before it fetches any of it: the message
  * it posts to the page holding it as its page is read, `{ type, urls }`,

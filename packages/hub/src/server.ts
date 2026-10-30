@@ -467,6 +467,7 @@ import { protocolRange } from "@cawco/core/runtime";
 import {
   type DesignMap,
   isEmbedShape,
+  isEmbedWords,
   type RenderReport,
   type SheetWritten,
   STAGE_CLONE_MS,
@@ -15196,6 +15197,28 @@ export const createServer = (
     return { embed: `${at.origin}${path}` };
   };
 
+  /** A whole screen's least words a decision page's Preview heard (core `EMBED_WORDS`), kept for the next Preview of it. */
+  const keepWords = (
+    pageId: string,
+    screen: string,
+    words: unknown
+  ): Response => {
+    if (!isEmbedWords(words)) {
+      return new Response(
+        "A screen's words are { artifact: id, words: px past 0 }.",
+        { status: 400 }
+      );
+    }
+    if (!artifacts.pageShows(pageId, screen)) {
+      return new Response("This page shows no such screen.", { status: 404 });
+    }
+    return artifacts.keepSaidWords(screen, words)
+      ? new Response(null, { status: 204 })
+      : new Response("A component canvas says its shape, not its words.", {
+          status: 404,
+        });
+  };
+
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
     originOf: originKeyOf,
@@ -15316,7 +15339,7 @@ export const createServer = (
         throw error;
       }
     },
-    // A decision page's Preview heard a canvas of its media say its shape: kept for the next Preview of it.
+    // A decision page's Preview heard a canvas of its media say its shape, or a whole screen tell its least words: kept for the next Preview of it.
     keepShape: async (request, pageId) => {
       if (request.method !== "POST") {
         return new Response("Tell a shape with a POST.", {
@@ -15329,9 +15352,13 @@ export const createServer = (
         h?: unknown;
         stories?: unknown;
         w?: unknown;
+        words?: unknown;
       } | null;
       const shape = { h: told?.h, w: told?.w ?? null };
       const canvas = typeof told?.artifact === "string" ? told.artifact : "";
+      if (canvas && told?.words !== undefined) {
+        return keepWords(pageId, canvas, told.words);
+      }
       if (!(
         canvas &&
         Array.isArray(told?.stories) &&
