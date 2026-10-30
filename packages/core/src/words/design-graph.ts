@@ -104,12 +104,20 @@ export const designGraphWords = {
   graphView: "Graph",
   /** The step slider, to a reader; its thumb's value is the kept state's name. */
   slider: "Steps",
+  /** The preview's switches for the owner's open taste calls (graph options.svelte.ts), until he picks. */
+  options: "Options",
+  foldOptions: "Fold the options",
+  recommendedFirst: "the recommendation first",
+  /** The ultrawide pair's second page, to a reader: the hovered state beside the kept one. */
+  pairTitle: "The state the pointer rests on",
   /** A step naming a story the states file lacks: its dashed stop's title. */
   stepMissing: (story: string) => `${story} isn't in the file`,
   /** A section with no stories, in the well and on the page (the empty-state formula). */
   noStates: (name: string) => `${name} has no states yet.`,
   /** A count dial's figure: how many records stand of the kept story's list (The Readable Labels rule). */
   countOf: (count: number, of: number) => `${count} of ${of}`,
+  /** The list's length alone, at the count's track end (call 5's other side). */
+  ofCount: (of: number) => `of ${of}`,
   /** A longest dial's switch. */
   longestFirst: "Longest names first",
   /** A record dial whose arg is no list on the kept story: its title. */

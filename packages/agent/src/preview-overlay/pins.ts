@@ -179,6 +179,8 @@ export interface Pins {
    * round when it stands on one; null when it is not on the page.
    */
   cropOf: (id: string) => { box: Box; el: Element | null; look: string } | null;
+  /** Pins on states not standing: dimmed where they stand, or hidden (call 6, while the owner picks). */
+  dimOthers: (dimmed: boolean) => void;
   /** The comment being written stands here (its hollow pill, no number yet), or none. */
   draft: (target: DraftTarget | null) => void;
   /** Pins drawn again where their elements stand now. */
@@ -467,6 +469,8 @@ export function startPins(deps: PinsDeps): Pins {
   /** The design graph's kept state and the one a hover previews; none on a page with no graph. */
   let stageKept: StagePoint | null = null;
   let stagePeek: StagePoint | null = null;
+  /** Pins on states not standing are dimmed on the page, not hidden (the owner's open call 6, while he picks). */
+  let dimOthers = false;
   let live = new Set<string>();
   let unread = new Set<string>();
   /** When each unread answer's dot began its echo (`performance.now()`): its three loops run from there. */
@@ -997,7 +1001,7 @@ export function startPins(deps: PinsDeps): Pins {
     // (hidden, never moved: its element comes back with its state).
     const onIt = (pin: Pin) =>
       (!pin.resolvedAt || pin.id === tracked) &&
-      onState(pin.anchor, stageKept, stagePeek);
+      (dimOthers || onState(pin.anchor, stageKept, stagePeek));
     const drawn: DrawnPill[] = [];
     const drawnFixed: DrawnPill[] = [];
     for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
@@ -1010,8 +1014,13 @@ export function startPins(deps: PinsDeps): Pins {
       placed.set(pin.id, { ...where, pill });
       // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
       if (where.shown) {
+        const group = pinPill(pin, where, pill, paint);
+        // The design graph's other side of call 6: a pin on a state not standing, dimmed where it would stand.
+        if (!onState(pin.anchor, stageKept, stagePeek)) {
+          group.style.opacity = "0.4";
+        }
         (where.page ? drawnFixed : drawn).push({
-          group: pinPill(pin, where, pill, paint),
+          group,
           pill,
           number: pin.number,
         });
@@ -1113,7 +1122,10 @@ export function startPins(deps: PinsDeps): Pins {
       fitToPage(layer, false);
       return;
     }
-    const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
+    // A pin on a design graph's state as a whole stands on its node in the pane, never on the page.
+    const all = [...pinsMap().values()]
+      .filter((pin) => !("sheet" in pin.anchor && pin.anchor.sheet?.node))
+      .sort((a, b) => a.number - b.number);
     const drawing = all.length > 0 || !!drafted;
     fitToPage(layer, drawing);
     // The paint is read off the page's style, which forces its style and
@@ -1538,6 +1550,12 @@ export function startPins(deps: PinsDeps): Pins {
       // tap that may be landing, so the page waits a frame: iOS WebKit, seeing
       // new content as a tap lands, takes it for a hover and sends no click.
       requestAnimationFrame(draw);
+    },
+    dimOthers: (dimmed) => {
+      if (dimOthers !== dimmed) {
+        dimOthers = dimmed;
+        draw();
+      }
     },
     stage: (kept, peek) => {
       if (samePoint(kept, stageKept) && samePoint(peek, stagePeek)) {

@@ -284,6 +284,9 @@ export { default as IconShop } from "~icons/solar/shop-bold-duotone";
 export { default as IconUndock } from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
+/** A release's New section (ReleaseNotes). */
+/** The design graph's step slider, its view switch's Steps segment: a track and its thumb. */
+export { default as IconSteps } from "~icons/solar/slider-minimalistic-horizontal-bold-duotone";
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
 /*
  * Sort: Solar's bare cut of it, the bars and their arrow with no squircle
@@ -296,7 +299,6 @@ export {
   default as IconUnfold,
   default as IconClipUnfold,
 } from "~icons/solar/sort-vertical-bold-duotone";
-/** A release's New section (ReleaseNotes). */
 export { default as IconStars } from "~icons/solar/stars-bold-duotone";
 /** Stop; and an install stopped by the person, its status glyph (Add machine). */
 export {

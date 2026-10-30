@@ -31,7 +31,9 @@ import {
   runOf,
   type SectionGraph,
   type StagePoint,
+  type StepState,
   samePoint,
+  stepsOf,
   type TunedClip,
 } from "@cawco/core/design-graph";
 import { INTERACTIONS } from "@cawco/core/stage";
@@ -47,13 +49,19 @@ interface Kept {
   edits: Record<string, ClipTiming[]>;
   file: string | null;
   graphH: number | null;
+  /** The index standing over the stage, as the person last switched it; null until they have. */
+  index: Index | null;
   kept: Record<string, StagePoint>;
   open: boolean;
   panelW: number | null;
 }
 
+/** The two indexes over the stage (the primitives spec §0): the step slider, or the overview graph. */
+export type Index = "steps" | "graph";
+
 const NOTHING_KEPT: Kept = {
   file: null,
+  index: null,
   kept: {},
   open: true,
   panelW: null,
@@ -90,6 +98,8 @@ function keptOf(key: string): Kept {
     );
     return {
       file: typeof raw?.file === "string" ? raw.file : null,
+      index:
+        raw?.index === "steps" || raw?.index === "graph" ? raw.index : null,
       kept,
       open: raw?.open !== false,
       panelW: sizeOf(raw?.panelW),
@@ -172,6 +182,21 @@ export class DesignGraph {
   /** The agent's dials and the values its frames draw with. */
   dials = $state.raw<DialsModel | null>(null);
 
+  /** The index the person switched to, kept per session; null until they have, when the agent's `steps` decide. */
+  #index = $state<Index | null>(null);
+  /** The index standing over the stage: the person's switch, else the slider when the agent gave `steps`, else the graph. */
+  index = $derived<Index>(
+    this.#index ?? (this.model?.steps?.length ? "steps" : "graph")
+  );
+  /**
+   * The ultrawide pair (the owner's pick "pair"): the hovered state stands
+   * in a page of its own beside the kept one, so the kept page is never
+   * asked to preview it.
+   */
+  pairing = $state(false);
+  /** Where the slider's thumb stands while held, in stops from the first (2.4: two fifths of the way from the third to the fourth); null at rest on the kept stop. */
+  scrubAt = $state<number | null>(null);
+
   /** The section of the tab shown. */
   section = $derived(
     this.model?.sections.find((one) => one.file === this.file) ?? null
@@ -184,6 +209,14 @@ export class DesignGraph {
   );
   /** The state kept in the tab shown. */
   keptHere = $derived(this.file ? (this.kept[this.file] ?? null) : null);
+  /** The step slider's stops: the agent's `steps` in the tab shown, else its every story in file order. */
+  steps = $derived<StepState[]>(
+    this.section ? stepsOf(this.section, this.model?.steps) : []
+  );
+  /** The kept state's stop on the slider; -1 when it is none of them (a variation the steps don't name). */
+  at = $derived(
+    this.steps.findIndex((one) => one.point.story === this.keptHere?.story)
+  );
   /** The timing the dock draws and the page plays: the original's under Original. */
   timings = $derived(this.view === "original" ? this.original : this.edited);
   /** The clips the person changed, by id. */
@@ -204,7 +237,9 @@ export class DesignGraph {
 
   readonly #key: string;
   readonly #post: (message: object) => void;
-  #room = { end: 0, bottom: 0 };
+  #room = { end: 0, bottom: 0, top: 0 };
+  /** The scrub's seek waits for the next frame: one ask per frame however fast the pointer moves. */
+  #scrubFrame = 0;
   #said = "";
   #clock = 0;
   #tuning: ReturnType<typeof setTimeout> | undefined;
@@ -218,6 +253,7 @@ export class DesignGraph {
     this.file = kept.file;
     this.kept = kept.kept;
     this.open = kept.open;
+    this.#index = kept.index;
     this.panelW = kept.panelW;
     this.graphH = kept.graphH;
     this.dockH = kept.dockH;
@@ -286,6 +322,14 @@ export class DesignGraph {
     this.ask();
   }
 
+  /** The pair stands or goes: the kept page stops or starts previewing the hover. */
+  setPairing(pairing: boolean): void {
+    if (this.pairing !== pairing) {
+      this.pairing = pairing;
+      this.ask();
+    }
+  }
+
   /** The panel folded into its tab, or grown back out of it. */
   setOpen(open: boolean): void {
     this.open = open;
@@ -310,14 +354,117 @@ export class DesignGraph {
     this.#keep();
   }
 
-  /** The room the panel and dock take from the page, in CSS px: its inline end and its foot. */
-  room(end: number, bottom: number): void {
-    const next = { end: Math.round(end), bottom: Math.round(bottom) };
-    if (next.end === this.#room.end && next.bottom === this.#room.bottom) {
+  /** The room the index, the panel and the dock take from the page, in CSS px: its inline end, its foot and its top. */
+  room(end: number, bottom: number, top = 0): void {
+    const next = {
+      end: Math.round(end),
+      bottom: Math.round(bottom),
+      top: Math.round(top),
+    };
+    if (
+      next.end === this.#room.end &&
+      next.bottom === this.#room.bottom &&
+      next.top === this.#room.top
+    ) {
       return;
     }
     this.#room = next;
     this.ask();
+  }
+
+  /* --- The step slider ----------------------------------------------------- */
+
+  /** The person switched the index: kept for the session. */
+  setIndex(index: Index): void {
+    this.#index = index;
+    this.peek = null;
+    this.#keep();
+    this.ask();
+  }
+
+  /** Whether a stop's story plays a move into it (`from` with a `play`): only then does the slider hold an in-between. */
+  #moves(step: StepState | undefined): boolean {
+    return !!(
+      step &&
+      !step.missing &&
+      this.section?.stories.find((one) => one.name === step.point.story)?.from
+    );
+  }
+
+  /**
+   * The thumb held at `place` stops from the first (the primitives spec
+   * §1.2): between stop i and i+1 the next is kept, so the page plays the
+   * move into it, and held at that fraction of its length; a stop whose
+   * story plays no move has no in-between, and the thumb snaps at the
+   * midpoint. One seek per frame.
+   */
+  scrub(place: number): void {
+    const last = this.steps.length - 1;
+    if (last < 0) {
+      return;
+    }
+    const at = Math.max(0, Math.min(last, place));
+    this.scrubAt = at;
+    const from = Math.floor(at);
+    const fraction = at - from;
+    const next = this.steps[Math.min(last, from + 1)];
+    if (fraction === 0 || !this.#moves(next)) {
+      const stop = this.steps[fraction < 0.5 ? from : from + 1];
+      if (stop && !stop.missing && !samePoint(stop.point, this.keptHere)) {
+        this.keepAt(stop.point);
+      }
+      return;
+    }
+    if (next && !samePoint(next.point, this.keptHere)) {
+      this.keepAt(next.point);
+    }
+    cancelAnimationFrame(this.#scrubFrame);
+    this.#scrubFrame = requestAnimationFrame(() => {
+      if (this.move && this.move.to === next?.point.story) {
+        this.seek(fraction * this.playLength);
+      }
+    });
+  }
+
+  /** The thumb let go: it lands on the nearer stop and keeps it, the move resting as it ends. */
+  release(): void {
+    const at = this.scrubAt;
+    this.scrubAt = null;
+    cancelAnimationFrame(this.#scrubFrame);
+    if (at === null) {
+      return;
+    }
+    const near = Math.round(at);
+    const stop = this.steps[near];
+    if (stop && !stop.missing) {
+      this.keepAt(stop.point);
+    }
+    if (this.move) {
+      this.stop();
+    }
+  }
+
+  /** ← and → (J and K): the next stop the keys reach, a missing one skipped. */
+  stepBy(delta: -1 | 1): void {
+    // From before the first stop going on, after the last going back, when the kept state is none of them.
+    const outside = delta > 0 ? -1 : this.steps.length;
+    let at = this.at < 0 ? outside : this.at;
+    do {
+      at += delta;
+    } while (this.steps[at]?.missing);
+    const stop = this.steps[at];
+    if (stop) {
+      this.keepAt(stop.point);
+    }
+  }
+
+  /** Home and End: the first or the last stop the keys reach. */
+  stepTo(end: "first" | "last"): void {
+    const order = end === "first" ? this.steps : [...this.steps].reverse();
+    const stop = order.find((one) => !one.missing);
+    if (stop) {
+      this.keepAt(stop.point);
+    }
   }
 
   /** The page asked again (a new load said hello): it stands what stands now. */
@@ -335,7 +482,7 @@ export class DesignGraph {
     const message = {
       type: "cawco:stage",
       kept,
-      peek: this.peek,
+      peek: this.pairing ? null : this.peek,
       room: this.#room,
     };
     const said = JSON.stringify(message);
@@ -608,6 +755,7 @@ export class DesignGraph {
   #keep(): void {
     const kept: Kept = {
       file: this.file,
+      index: this.#index,
       kept: this.kept,
       open: this.open,
       panelW: this.panelW,

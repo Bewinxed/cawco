@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { StagePoint } from "@cawco/core/design-graph";
   /**
    * The design graph over a component canvas's page (Projects spec §5.10,
    * "The design graph"; round 29). On a pane at least twice the panel's
@@ -18,6 +19,7 @@
    * Rule). It tells the page the room it takes, so the component stands
    * clear of it and never moves as it folds.
    */
+  import { canvasEmbedUrl } from "@cawco/core/stage";
   import { designGraphWords as words } from "@cawco/core/words/design-graph";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -32,6 +34,7 @@
     IconChevronDown,
     IconChevronRight,
     IconChevronUp,
+    IconSteps,
     IconStructure,
     IconZoomIn,
     IconZoomOut,
@@ -39,15 +42,34 @@
   import type { DesignGraph } from "./design-graph.svelte";
   import GlassGroup from "./GlassGroup.svelte";
   import GraphDials from "./GraphDials.svelte";
+  import GraphOptions from "./GraphOptions.svelte";
   import MoveDock from "./MoveDock.svelte";
+  import { graphOptions } from "./options.svelte";
   import ResizeHandle, { type HandleState } from "./ResizeHandle.svelte";
   import StateGraph from "./StateGraph.svelte";
+  import type { NodePin } from "./StateNode.svelte";
+  import StepSlider from "./StepSlider.svelte";
   import { RING, SYMBOL } from "./symbol";
 
   let {
+    address = null,
+    commenting = false,
     end = false,
     graph,
+    nodePins = new Map(),
+    onopenpin,
+    onpin,
   }: {
+    /** Comment mode: a press on a state pins it as a whole (the primitives spec §4.3). */
+    commenting?: boolean;
+    /** The pins on each state's node, by story. */
+    nodePins?: Map<string, NodePin[]>;
+    /** A node pin's pill pressed: its thread opens. */
+    onopenpin?: (id: string) => void;
+    /** Comment mode, a press on a state. */
+    onpin?: (point: StagePoint) => void;
+    /** The canvas page's address, absolute: the ultrawide pair's second page stands its embed of the hovered state. Null until the pane has one. */
+    address?: string | null;
     /** The sheet's inspector stands beside the page: the graph stands clear of it, as the page does. */
     end?: boolean;
     graph: DesignGraph;
@@ -73,6 +95,12 @@
   const sections = $derived(graph.model?.sections ?? []);
   const hasMove = $derived(!!graph.move);
   const zoomLabel = $derived(`${Math.round(zoom * 100)}%`);
+  /** The step slider stands over the page's top; the graph's panel folds to its tab (the primitives spec §1.2). */
+  const onSteps = $derived(graph.index === "steps");
+  /** The panel shown: open, and the graph the index standing. */
+  const panelOpen = $derived(graph.open && !onSteps);
+  /** The slider's stack (its bar, the dials' row under it) as tall as it stands: the page starts under it. */
+  let stepsBox = $state({ w: 0, h: 0 });
 
   /* --- Sizes: the panel's width, the graph's height, the dock's height ---- */
 
@@ -142,7 +170,7 @@
     );
   };
   const drawerHeight = $derived(
-    dragged ?? stopHeight(graph.open ? stop : "head")
+    dragged ?? stopHeight(graph.open && !(onSteps && !hasMove) ? stop : "head")
   );
 
   // The room it takes, said to the page: a desk's panel its width at the inline end whether folded or not (the
@@ -158,12 +186,48 @@
     } else if (hasMove) {
       bottom = dockBox.h + 2 * inset;
     }
-    untrack(() => graph.room(endRoom, bottom));
+    // The slider's stack and a gap under it: the page starts there, so it never moves as the bar comes or goes.
+    const top = onSteps && stepsBox.h > 0 ? stepsBox.h + inset + inset : 0;
+    // The pair: the kept page in the first half of the room, the hovered state's page in the second.
+    const half = pairing ? Math.floor((hostWidth - endRoom) / 2) : 0;
+    untrack(() => graph.room(endRoom + half, bottom, top));
+  });
+
+  /* --- The ultrawide pair (the owner's pick "pair") ------------------------ */
+
+  /** Room enough beside the panel for two pages, on the index call 3 lets pair. */
+  const pairing = $derived(
+    desk &&
+      !!address &&
+      hostWidth - (panelWidth + 2 * inset) >= numberOf("--c-pair-min-w") &&
+      (!onSteps || graphOptions.sides.pairSteps === "yes")
+  );
+  $effect(() => {
+    const on = pairing;
+    untrack(() => graph.setPairing(on));
+  });
+  /** What the Options card stands clear of at the pane's foot: the dock on a desk, the drawer on a narrow pane. */
+  const optionsFoot = $derived.by(() => {
+    if (!desk) {
+      return drawerHeight;
+    }
+    return hasMove ? dockBox.h + 2 * inset : 0;
+  });
+  /** The pair's page, made on the first hover and kept for the session: its embed of the hovered state alone. */
+  let pairSeen = $state<string | null>(null);
+  $effect(() => {
+    const { peek } = graph;
+    if (pairing && address && peek) {
+      pairSeen = canvasEmbedUrl(address, [peek.story]);
+    }
   });
 
   /* --- Hide and Show: one box folding into its tab and back --------------- */
 
   async function setOpen(open: boolean): Promise<void> {
+    if (open && onSteps) {
+      graph.setIndex("graph");
+    }
     graph.setOpen(open);
     if (!(desk || open)) {
       stop = "head";
@@ -474,6 +538,11 @@
         <StateGraph
           bind:this={stateGraph}
           bind:zoom
+          {commenting}
+          drawer={!desk}
+          {onopenpin}
+          {onpin}
+          pins={nodePins}
           file={graph.section.file}
           graph={graph.graph}
           height={desk ? graphHeight : null}
@@ -503,13 +572,41 @@
         </GlassGroup>
       {/if}
     {/snippet}
+    {#snippet indexSwitch()}
+      {#if graphOptions.sides.switchAt === "bar"}
+        <!-- The two indexes over one stage (the primitives spec §0): two glyphs, the kit's segmented control. -->
+        <GlassGroup>
+          <Tabs
+            onValueChange={(index) =>
+              graph.setIndex(index === "steps" ? "steps" : "graph")}
+            size="compact"
+            value={graph.index}
+          >
+            <TabsList aria-label={words.views}>
+              <TabItem
+                glyphOnly
+                icon={IconSteps}
+                label={words.steps}
+                value="steps"
+              />
+              <TabItem
+                glyphOnly
+                icon={IconStructure}
+                label={words.graphView}
+                value="graph"
+              />
+            </TabsList>
+          </Tabs>
+        </GlassGroup>
+      {/if}
+    {/snippet}
     {#snippet zoomGroup()}
       <!-- mark-line: the zoom's figure is a control of its own between two symbols, not words beside a mark -->
       <GlassGroup label={words.zoom}>
         <button
           aria-label={words.zoomOut}
           class={SYMBOL}
-          onclick={() => stateGraph?.zoomBy(1 / 1.2)}
+          onclick={() => stateGraph?.zoomOut()}
           title={words.zoomOutTip}
           type="button"><IconZoomOut /></button
         >
@@ -524,7 +621,7 @@
         <button
           aria-label={words.zoomIn}
           class={SYMBOL}
-          onclick={() => stateGraph?.zoomBy(1.2)}
+          onclick={() => stateGraph?.zoomIn()}
           title={words.zoomInTip}
           type="button"><IconZoomIn /></button
         >
@@ -583,6 +680,48 @@
       ></div>
     {/snippet}
 
+    {#if onSteps && graph.steps.length > 0}
+      <!-- The step slider over the page's top (the primitives spec §1.2), the dials' row under it: from the page's start to its end less the panel's room, over the kept page alone in the pair. -->
+      <div
+        {@attach frameSize((node: HTMLElement) => {
+          stepsBox = { w: node.offsetWidth, h: node.offsetHeight };
+        })}
+        class="pointer-events-auto absolute top-(--inset) start-(--inset) end-(--se) flex flex-col gap-space-1"
+        data-steps
+        style:--inset={`${inset}px`}
+        style:--se={`${desk ? panelWidth + 2 * inset + (pairing ? Math.floor((hostWidth - panelWidth - 2 * inset) / 2) : 0) : inset}px`}
+      >
+        <StepSlider {graph} phone={!desk}>
+          {#snippet trailing()}
+            {#if desk}{@render indexSwitch()}{/if}
+          {/snippet}
+        </StepSlider>
+        <GraphDials {graph} layout="row" />
+      </div>
+    {/if}
+    {#if pairing && pairSeen}
+      <!-- The pair's second page: the hovered state's embed alone, beside the kept page, made on the first hover and kept; it takes no input and carries no pins. -->
+      <div
+        class={[
+          "absolute top-(--top) bottom-(--bottom) start-(--start) end-(--end) overflow-hidden rounded-panel border border-border-hairline bg-surface-page transition-opacity duration-(--dur-fade) ease-out",
+          graph.peek ? "opacity-100" : "opacity-0",
+        ]}
+        data-pair
+        style:--bottom={`${hasMove ? dockBox.h + 2 * inset : inset}px`}
+        style:--end={`${panelWidth + 2 * inset}px`}
+        style:--start={`${Math.floor((hostWidth - panelWidth - 2 * inset) / 2) + inset}px`}
+        style:--top={`${onSteps && stepsBox.h > 0 ? stepsBox.h + 2 * inset : inset}px`}
+      >
+        <iframe
+          class="size-full border-0"
+          inert
+          sandbox="allow-scripts allow-same-origin"
+          src={pairSeen}
+          tabindex="-1"
+          title={words.pairTitle}
+        ></iframe>
+      </div>
+    {/if}
     {#if desk}
       <!-- The panel: its shell is its surface, which Hide folds into the tab and Show grows back out of. -->
       <aside
@@ -593,40 +732,40 @@
         aria-label={words.graph}
         class={[
           "absolute top-(--inset) right-(--inset) flex max-h-(--most) w-(--pw) flex-col gap-space-2 p-space-2",
-          graph.open ? "pointer-events-auto" : "pointer-events-none",
+          panelOpen ? "pointer-events-auto" : "pointer-events-none",
         ]}
         data-graph-panel="desk"
-        data-open={graph.open}
+        data-open={panelOpen}
         style:--inset={`${inset}px`}
         style:--most={`${Math.max(0, hostHeight - 2 * inset)}px`}
         style:--pw={`${panelWidth}px`}
       >
         <button
           bind:this={shell}
-          aria-hidden={graph.open || undefined}
+          aria-hidden={panelOpen || undefined}
           aria-label={words.show}
           class={[
             "absolute -z-1 top-0 right-(--se) bottom-(--sb) left-(--ss) border border-border-control bg-surface-raised transition-[top,right,bottom,left,border-radius,border-width,box-shadow] duration-(--dur-panel) ease-drawer motion-reduce:transition-none",
-            graph.open ? SHELL_OPEN : SHELL_FOLDED,
+            panelOpen ? SHELL_OPEN : SHELL_FOLDED,
             RING,
           ]}
           data-show-graph
           onclick={() => setOpen(true)}
-          style:--sb={graph.open
+          style:--sb={panelOpen
             ? "0px"
             : `${Math.max(0, panelBox.h - tucked)}px`}
-          style:--se={graph.open ? "0px" : `${-inset}px`}
-          style:--ss={graph.open
+          style:--se={panelOpen ? "0px" : `${-inset}px`}
+          style:--ss={panelOpen
             ? "0px"
             : `${Math.max(0, panelBox.w + inset - tucked)}px`}
-          tabindex={graph.open ? -1 : 0}
+          tabindex={panelOpen ? -1 : 0}
           title={words.show}
           type="button"
         >
           <span
             class={[
               "absolute -top-px -left-px grid size-c-tucked-tab place-items-center text-ink-muted transition-opacity ease-out hover:text-ink-strong [&_svg]:size-c-bar-symbol",
-              graph.open
+              panelOpen
                 ? "opacity-0 duration-(--dur-exit)"
                 : "opacity-100 delay-(--dur-exit) duration-(--dur-exit)",
             ]}><IconStructure /></span
@@ -635,18 +774,20 @@
         <div
           class={[
             "flex min-w-0 flex-none items-center gap-space-2 transition-opacity ease-out",
-            graph.open
+            panelOpen
               ? "opacity-100 delay-(--dur-exit) duration-(--dur-exit)"
               : "opacity-0 duration-(--dur-exit)",
           ]}
+          inert={!panelOpen}
         >
           {@render tabs()}
           <div class="ms-auto flex flex-none items-center gap-space-2">
+            {@render indexSwitch()}
             {@render zoomGroup()}
             <GlassGroup>
               <button
                 bind:this={hide}
-                aria-expanded={graph.open}
+                aria-expanded={panelOpen}
                 aria-label={words.hide}
                 class={SYMBOL}
                 data-hide-graph
@@ -660,14 +801,15 @@
         <div
           class={[
             "flex min-h-0 flex-1 flex-col transition-opacity ease-out",
-            graph.open
+            panelOpen
               ? "opacity-100 delay-(--dur-exit) duration-(--dur-exit)"
               : "opacity-0 duration-(--dur-exit)",
           ]}
+          inert={!panelOpen}
         >
           {@render graphBody()}
         </div>
-        {#if graph.open}
+        {#if panelOpen}
           <!-- Resizing: bands on the leading edge and the foot take a pointer (44px under a finger); the corner square is the one
                separator a key reaches. -->
           {@render band("panel", "a", "width", "cursor-ew-resize", {
@@ -779,26 +921,26 @@
             onclick={grabberPress}
             type="button"
           ></button>
-          <GlassGroup>
-            <Tabs
-              onValueChange={(face) => {
-                graph.face = face === "move" ? "move" : "graph";
-                if (!graph.open) {
-                  setOpen(true);
-                }
-              }}
-              size="compact"
-              value={graph.face === "move" && hasMove ? "move" : "graph"}
-            >
-              <TabsList aria-label={words.faces}>
-                <TabItem label={words.faceGraph} value="graph" />
-                {#if hasMove}<TabItem
-                    label={words.faceTimeline}
-                    value="move"
-                  />{/if}
-              </TabsList>
-            </Tabs>
-          </GlassGroup>
+          {@render indexSwitch()}
+          {#if !onSteps && hasMove}
+            <GlassGroup>
+              <Tabs
+                onValueChange={(face) => {
+                  graph.face = face === "move" ? "move" : "graph";
+                  if (!graph.open) {
+                    setOpen(true);
+                  }
+                }}
+                size="compact"
+                value={graph.face === "move" ? "move" : "graph"}
+              >
+                <TabsList aria-label={words.faces}>
+                  <TabItem label={words.faceGraph} value="graph" />
+                  <TabItem label={words.faceTimeline} value="move" />
+                </TabsList>
+              </Tabs>
+            </GlassGroup>
+          {/if}
           <GlassGroup class="absolute end-space-2">
             <button
               bind:this={hide}
@@ -819,13 +961,13 @@
           class={[
             "flex min-h-0 flex-1 flex-col gap-space-2 overflow-hidden pb-space-2",
             // The timeline lays its own inline room, so its head's hairline runs the drawer's whole width.
-            !(graph.face === "move" && hasMove) && "px-space-2",
+            !((onSteps || graph.face === "move") && hasMove) && "px-space-2",
           ]}
           inert={!graph.open}
         >
-          {#if graph.face === "move" && hasMove}
+          {#if (onSteps || graph.face === "move") && hasMove}
             <MoveDock {graph} />
-          {:else}
+          {:else if !onSteps}
             <div class="flex min-w-0 items-center gap-space-2">
               {@render tabs()}
               <div class="ms-auto flex-none">{@render zoomGroup()}</div>
@@ -837,5 +979,8 @@
         </div>
       </aside>
     {/if}
+  {/if}
+  {#if graphOptions.shown}
+    <GraphOptions bottom={optionsFoot} />
   {/if}
 </div>
