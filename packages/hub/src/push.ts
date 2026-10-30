@@ -1719,8 +1719,15 @@ export const createPush = ({
       const project = projectName(projectId);
       // The ask's presentation, stamped as it parked (ask-presentation.ts):
       // the session as the board names it, and the needs-you card's line.
-      const { asker, summary } = (payload as PermissionRequestFrame)
+      const { asker, summary, detail } = (payload as PermissionRequestFrame)
         .presentation;
+      const category = askCategory(payload);
+      // A CawCo ask's question carries whether work waits on it (core
+      // asks.ts `askStanceLine`), the line under it on its card.
+      const body =
+        category === PUSH_CATEGORIES.question && detail
+          ? `${summary}\n${detail}`
+          : summary;
       const options = inlineOptions(payload, instanceId);
       const browser = payload.toolName === BROWSER_ASK_TOOL;
       arrive({
@@ -1737,10 +1744,10 @@ export const createPush = ({
             browser ? BROWSER_ASK_BODY : undefined
           ),
           sealed: {
-            ...alertOf(asker, project, summary),
+            ...alertOf(asker, project, body),
             ...(options ? { options } : {}),
           },
-          category: askCategory(payload),
+          category,
           collapseId: askCollapseId(requestId),
           threadId: projectId ?? instanceId,
           data: {

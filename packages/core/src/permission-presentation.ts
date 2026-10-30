@@ -11,6 +11,8 @@
  * makes, not only the text it ends with), and which named settings already
  * exist (so a put says whether it adds or replaces).
  */
+
+import { askStanceLine } from "./asks";
 import {
   SHELL_TOOLS,
   WEB_FETCH_TOOLS,
@@ -1568,6 +1570,23 @@ const whoOf = (
   ...(context.project ? { project: context.project } : {}),
 });
 
+/** A CawCo `ask`'s line under its questions: whether work waits on it (asks.ts `askStanceLine`); nothing for a harness's question. */
+const stanceOf = (
+  input: Record<string, unknown>
+): Pick<PermissionPresentation, "detail"> => {
+  const { blocks, waiting, meanwhile } = input;
+  if (typeof blocks !== "boolean") {
+    return {};
+  }
+  return {
+    detail: askStanceLine({
+      blocks,
+      ...(typeof waiting === "string" ? { waiting } : {}),
+      ...(typeof meanwhile === "string" ? { meanwhile } : {}),
+    }),
+  };
+};
+
 /**
  * What a parked tool call will do, for every surface that shows the ask. A
  * question names itself (its questions, joined); an admin write says the
@@ -1585,6 +1604,7 @@ export function presentPermission(
     return {
       ...who,
       summary: questions.map((question) => question.question).join(" · "),
+      ...stanceOf(input),
       changes: [],
       fields: [],
     };

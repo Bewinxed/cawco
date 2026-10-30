@@ -159,7 +159,7 @@ const RESTARTS =
 /**
  * Full Send's words, for the harnesses it is offered on: it approves every
  * ask that is an approval (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS
- * FULL SEND"), CawCo's own admin writes included (hub admin-asks.ts). The
+ * FULL SEND"), CawCo's own admin writes included (hub asks.ts). The
  * safety checks are the ones Claude Code still raises in its bypass mode.
  */
 const FULL_SEND: Partial<Record<HarnessKind, FullSendCopy>> = {

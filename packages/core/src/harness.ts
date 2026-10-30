@@ -115,7 +115,7 @@ export const WIRE_PERMISSION_MODES = [
  * session (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS FULL SEND"):
  * on Claude Code the host answers the checks and ask rules the CLI still
  * raises in bypass, and on every harness the hub approves CawCo's admin
- * writes (hub admin-asks.ts). A question to the person still asks; a
+ * writes (hub asks.ts). A question to the person still asks; a
  * fleet-denied tool still never runs. Each adapter maps `fullSend` onto its
  * harness; none hands it to an SDK as is.
  */

@@ -114,7 +114,7 @@ const MOVES: readonly Move[] = [
     key: "'ask_' || `request_id`",
     to: "asks",
     // Open as the migration writes it, or withdrawn by the hub's own start
-    // (admin-asks.ts `boot`: its session had ended), which says so.
+    // (asks.ts `boot`: its session had ended), which says so.
     arrived:
       "`id` = ? AND (`state` = 'open' OR (`state` = 'withdrawn' AND json_extract(`record`, '$.withdrawn.by') = 'hub'))",
     why: "an admin write parked before the ask became an open `approve` ask (core asks.ts)",

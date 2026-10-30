@@ -56008,7 +56008,7 @@
           },
           "permissionMode": {
             "$ref": "#/components/schemas/PermissionMode",
-            "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub admin-asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is."
+            "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is."
           },
           "rate_limit_info": {
             "$ref": "#/components/schemas/ObservedRateLimitInfo"
@@ -58057,7 +58057,7 @@
         ]
       },
       "PermissionMode": {
-        "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub admin-asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is.",
+        "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is.",
         "type": "string",
         "enum": [
           "acceptEdits",

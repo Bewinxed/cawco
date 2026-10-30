@@ -5,7 +5,7 @@
  * once, through the same code the person's own change runs, and is noted in
  * the thread its turn answers with what changed. When the change is one the
  * session judges the person should decide, it asks with `ask: true`: the
- * change is recorded as the person's ask in that thread (admin-asks.ts) and
+ * change is recorded as the person's ask in that thread (asks.ts) and
  * the call answers at once; Approve has the hub apply it
  * ({@link ProjectSettings.runApproved}) and Deny notes it declined, and the
  * session is told either way.
@@ -263,7 +263,7 @@ const alreadyWords = (change: DispatchSetting): string => {
 
 export interface ProjectSettingsDeps {
   /**
-   * Records the change as the person's ask in Caw's thread (admin-asks.ts):
+   * Records the change as the person's ask in Caw's thread (asks.ts):
    * what the call answers; undefined in Full Send, when it applies now.
    */
   readonly ask: (
@@ -698,7 +698,7 @@ export const createProjectSettings = ({
   const reasonIn = (input: Record<string, unknown>): string =>
     typeof input.reason === "string" ? input.reason : "";
 
-  /** An approved ask (admin-asks.ts `carryOut`): applied for its asker now. */
+  /** An approved ask (asks.ts `carryOut`): applied for its asker now. */
   const runApproved = async (
     actor: InstanceRow,
     input: Record<string, unknown>
@@ -715,7 +715,7 @@ export const createProjectSettings = ({
     return `Applied: ${said.join("; ")}.`;
   };
 
-  /** A declined ask (admin-asks.ts `carryOut`): noted in the thread, nothing applied. */
+  /** A declined ask (asks.ts `carryOut`): noted in the thread, nothing applied. */
   const runDeclined = (
     actor: InstanceRow,
     input: Record<string, unknown>

@@ -85,7 +85,7 @@ import {
   textOf,
   toBlocks,
 } from "./pi-services";
-import { piOpenTurns } from "./pi-sessiond";
+import { PI_ASKS_NOTHING, piOpenTurns } from "./pi-sessiond";
 
 type BashExec = BashOperations["exec"];
 
@@ -1320,12 +1320,12 @@ class PiSession implements HarnessSession {
         return undefined;
     }
   }
-  /** pi has no permission modes and puts no call to the hub: there is no ask to answer. */
+  /** pi has no permission modes and no question tool, and puts no call to the hub: there is no ask to answer. */
   resolvePermission(): void {
-    // Nothing waits on an answer.
+    throw new Error(PI_ASKS_NOTHING);
   }
   withdrawPermission(): void {
-    // Nothing waits on an answer.
+    throw new Error(PI_ASKS_NOTHING);
   }
   /**
    * Cuts the turn and ends the commands it moved to the background, each

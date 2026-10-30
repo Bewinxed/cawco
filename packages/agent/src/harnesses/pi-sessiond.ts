@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import type {
   FleetMcpChange,
   NeutralMessage,
-  PermissionResult,
   SentMessage,
   SpawnPayload,
 } from "@cawco/core";
@@ -21,7 +20,6 @@ import {
 } from "@cawco/core";
 import { workspaceSpillDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
-import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
 import { fleetMcpAt } from "../fleet-mcp-set";
@@ -63,22 +61,9 @@ export type PiHostCommand =
     }
   | { type: "control"; id: string; method: string; args: unknown[] }
   | { type: "snapshot"; id: string }
-  | { type: "stop"; id: string }
-  /** The hub's answer to one of the calls the host put to it. */
-  | { type: "permission"; requestId: string; result: PermissionResult }
-  /** One of them taken back, unshown: its call does not run. */
-  | { type: "withdraw"; requestId: string; message: string };
-
-/** One of the calls a pi host put to the hub, as its agent parks it. */
-export type PiGateAsk = Parameters<HarnessContext["permission"]>[0];
+  | { type: "stop"; id: string };
 
 export interface PiHostState {
-  /**
-   * The calls the host's gate put to the hub and holds unanswered: an agent
-   * that attaches raises them again, and the hub parks each as it parks
-   * any replayed ask.
-   */
-  asks?: PiGateAsk[];
   /**
    * The shell commands a send moved to the background that still run, by
    * task id (pi-runtime `PiShells`): stopping the host ends them. Absent from
@@ -122,8 +107,6 @@ const PI_HOST_COMMANDS: ReadonlySet<unknown> = new Set<PiHostCommand["type"]>([
   "control",
   "snapshot",
   "stop",
-  "permission",
-  "withdraw",
 ]);
 export const PI_HOST_COMMAND = z.custom<PiHostCommand>(
   (value) =>
@@ -140,8 +123,6 @@ const PI_HOST_EVENTS: ReadonlySet<unknown> = new Set<PiHostEvent["type"]>([
   "failed",
   "rejected",
   "reply",
-  "permission",
-  "permission_resolved",
 ]);
 const PI_HOST_EVENT = z.custom<PiHostEvent>(
   (value) =>
@@ -158,19 +139,13 @@ export type PiHostEvent =
   | { type: "session"; sessionId: string }
   | { type: "failed"; error: string }
   | { type: "rejected"; uuid: string; error: string }
-  | { type: "reply"; id: string; value?: unknown; error?: string }
-  | { type: "permission"; request: PiGateAsk }
-  | {
-      type: "permission_resolved";
-      requestId: string;
-      outcome: "answered" | "cancelled";
-    };
+  | { type: "reply"; id: string; value?: unknown; error?: string };
 
-/** What the host says that must reach the session in its order: its frames and its asks. */
-type InOrder = Extract<
-  PiHostEvent,
-  { type: "frame" | "permission" | "permission_resolved" }
->;
+/** Why a pi session takes no answer: it raises no permission prompt and has no question tool. */
+export const PI_ASKS_NOTHING = "pi puts no call to the hub.";
+
+/** What the host says that must reach the session in its order: its frames. */
+type InOrder = Extract<PiHostEvent, { type: "frame" }>;
 
 /**
  * A frame about a shell command a pi host moved to the background: its
@@ -304,8 +279,6 @@ class PiRemoteSession implements HarnessSession {
           const event = PI_HOST_EVENT.parse(JSON.parse(line.data));
           switch (event.type) {
             case "frame":
-            case "permission":
-            case "permission_resolved":
               if (this.#ready) {
                 this.#inOrder(line.seq, event);
               } else {
@@ -372,24 +345,9 @@ class PiRemoteSession implements HarnessSession {
     );
   }
 
-  /**
-   * A frame, or a gate's ask or its end, in the order the host said them: an
-   * ask after the frame of the call it gates, its end after the ask.
-   */
+  /** A frame, in the order the host said them. */
   #inOrder(seq: number, event: InOrder): void {
-    switch (event.type) {
-      case "frame":
-        this.#frame(seq, event.message);
-        return;
-      case "permission":
-        this.#ctx.permission(event.request);
-        return;
-      case "permission_resolved":
-        this.#ctx.permissionResolved?.(event.requestId, event.outcome);
-        return;
-      default:
-        unhandled("pi host event", event);
-    }
+    this.#frame(seq, event.message);
   }
 
   #frame(seq: number, message: NeutralMessage): void {
@@ -451,11 +409,6 @@ class PiRemoteSession implements HarnessSession {
     this.#setBusy(state.busy);
     if (state.sessionId) {
       this.#ctx.session(state.sessionId);
-    }
-    // Its calls waiting on the hub, raised again: an agent that restarted
-    // parks none of them, and the supervisor raises each request once.
-    for (const ask of state.asks ?? []) {
-      this.#ctx.permission(ask);
     }
   }
 
@@ -581,23 +534,12 @@ class PiRemoteSession implements HarnessSession {
   async interrupt(): Promise<void> {
     await this.control(CONTROL_INTERRUPT, []);
   }
-  /** The hub's answer to a gated call, to the host that waits on it. */
-  resolvePermission(requestId: string, result: PermissionResult): void {
-    this.#answer({ type: "permission", requestId, result });
+  /** pi raises no permission prompt and has no question tool: nothing waits on an answer. */
+  resolvePermission(): void {
+    throw new Error(PI_ASKS_NOTHING);
   }
-  withdrawPermission(requestId: string, message: string): void {
-    this.#answer({ type: "withdraw", requestId, message });
-  }
-  #answer(
-    command: Extract<PiHostCommand, { type: "permission" | "withdraw" }>
-  ): void {
-    // A refused write has been said ({@link write}); the host keeps the ask,
-    // and the next attach raises it again (`PiHostState.asks`).
-    this.write(command).catch((error: unknown) =>
-      console.warn(
-        `[pi] ${this.#ctx.instanceId}: the answer to ${command.requestId} did not reach its host: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
+  withdrawPermission(): void {
+    throw new Error(PI_ASKS_NOTHING);
   }
   async stop(): Promise<void> {
     // A host being stopped is not one to relaunch.

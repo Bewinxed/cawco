@@ -151,7 +151,7 @@ const marketplaceAction = async (
   return link.marketplace;
 };
 
-/** Every write's reason, which the person reads first on the approval (admin-asks.ts `askRefusal`). */
+/** Every write's reason, which the person reads first on the approval (asks.ts `askRefusal`). */
 const reason = z
   .string()
   .max(300)
@@ -299,7 +299,7 @@ export const answeredWithoutAsking = (
  * `admin_<group>_write`, which takes the rest with the fields they need. One
  * handler serves both, through the hub's own REST routes; a write is the
  * person's ask, run by the hub once they approve it, or at once in Full Send
- * (admin-asks.ts).
+ * (asks.ts).
  */
 function admin<T extends z.ZodRawShape>(
   group: string,

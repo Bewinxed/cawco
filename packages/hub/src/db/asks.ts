@@ -1,8 +1,8 @@
 /**
- * The asks the hub owns (core asks.ts, hub admin-asks.ts): every change is
- * one write, and an answer is taken in one transaction with the start of
- * what it carries, so a second answer is refused and an approved call runs
- * at most once.
+ * The asks the hub owns (core asks.ts, hub asks.ts): every change is one
+ * write, and an answer is taken in one transaction with the start of what
+ * it carries (an approved call's; a question carries nothing), so a second
+ * answer is refused and an approved call runs at most once.
  */
 
 import type { AskAnswer } from "@cawco/core";
@@ -20,7 +20,7 @@ export type AskAnswered =
 export interface AsksDb {
   readonly add: (ask: AskRecord) => void;
   /**
-   * The person's answer, with the start of the approved call when it allows,
+   * The person's answer, with the start of the approved call when an approve ask allows,
    * in one transaction; undefined when no ask has `id`.
    */
   readonly answer: (
@@ -101,7 +101,8 @@ export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
             ...ask,
             state: "answered",
             answer,
-            ...(answer.result.behavior === "allow"
+            ...(answer.result.behavior === "allow" &&
+            ask.asked.kind === "approve"
               ? { carried: { startedAt: answer.at } }
               : {}),
           }),

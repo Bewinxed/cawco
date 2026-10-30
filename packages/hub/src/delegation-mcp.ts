@@ -22,6 +22,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
+import { ASK_TOOLS, type Asks } from "./asks";
 import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
 import { type CallKeys, CLAUDE_CALL_META, mcpCallKey } from "./call-keys";
 import type { Caw } from "./caw";
@@ -80,6 +81,7 @@ type TriageTool = ReturnType<FleetWatch["tools"]>[number];
 type HubTool = ReturnType<ReturnType<typeof createHubTools>>[number];
 type BrowserTool = ReturnType<BrowserAsks["tools"]>[number];
 type ConnectTool = ReturnType<ConnectAsks["tools"]>[number];
+type AskTool = ReturnType<Asks["tools"]>[number];
 
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
@@ -349,6 +351,8 @@ export function createDelegationMcp(options: {
     actor: InstanceRow | undefined,
     toolUseId?: string
   ) => ConnectTool[];
+  /** `ask` (asks.ts): the session asks the person something and carries on. */
+  askTools?: (actor: InstanceRow | undefined, toolUseId?: string) => AskTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -356,7 +360,7 @@ export function createDelegationMcp(options: {
   connections?: Pick<Connections, "callAs" | "sessionTools">;
   /**
    * Records an admin write as the person's ask and answers at once with what
-   * the session reads; the hub runs it once they approve (admin-asks.ts).
+   * the session reads; the hub runs it once they approve (asks.ts).
    * Undefined for a session in Full Send: it runs now.
    */
   askPerson: (
@@ -502,6 +506,7 @@ export function createDelegationMcp(options: {
           options.hubTools,
           options.browserTools,
           options.connectTools,
+          options.askTools,
         ] as (
           | ((actor: undefined) => (ProjectTool | CawTool | TriageTool)[])
           | undefined
@@ -645,7 +650,7 @@ export function createDelegationMcp(options: {
 
   /**
    * An `admin_*` call, its role already checked. A write, from any door, is
-   * recorded as the person's ask and answered at once (admin-asks.ts); the
+   * recorded as the person's ask and answered at once (asks.ts); the
    * hub runs it once they approve, with the arguments they were shown. A
    * session in Full Send runs it now.
    */
@@ -874,29 +879,33 @@ export function createDelegationMcp(options: {
     input: Record<string, unknown>,
     toolUseId: string | undefined
   ): Promise<CallToolResult | undefined> => {
-    let group:
-      (ProjectTool | HubTool | BrowserTool | ConnectTool)[] | undefined;
-    if (BROWSER_TOOLS.has(name)) {
-      // The call's id: the ask it parks is drawn at that call.
-      group = options.browserTools?.(actor, toolUseId);
-    } else if (CONNECT_TOOLS.has(name)) {
-      // The call's id: the ask it parks is drawn at that call.
-      group = options.connectTools?.(actor, toolUseId);
-    } else if (HUB_TOOLS.has(name)) {
-      // The call's id: a design proposal it parks is drawn at that call.
-      group = options.hubTools?.(actor, toolUseId);
-    } else if (MEMORY_TOOLS.has(name)) {
-      group = options.memoryTools?.(actor, toolUseId);
-    } else if (RELAY_TOOLS.has(name)) {
-      group = options.relayTools?.(actor);
-    } else if (ROUTINE_TOOLS.has(name)) {
-      // The call's id: a routine it makes reads its why off the call's frame.
-      group = options.routineTools?.(actor, toolUseId);
-    } else if (INGRESS_TOOLS.has(name)) {
-      group = options.ingressTools?.(actor);
-    } else if (ACTION_TOOLS.has(name)) {
-      group = options.actionTools?.(actor);
-    }
+    // Each group by the names it answers; one that parks an ask, a design
+    // proposal or a routine is handed the call's id, which it is drawn at
+    // or reads its why off.
+    const groups: [
+      ReadonlySet<string>,
+      (
+        | ((
+            caller: InstanceRow,
+            callId?: string
+          ) => (ProjectTool | HubTool | BrowserTool | ConnectTool | AskTool)[])
+        | undefined
+      ),
+    ][] = [
+      [ASK_TOOLS, options.askTools],
+      [BROWSER_TOOLS, options.browserTools],
+      [CONNECT_TOOLS, options.connectTools],
+      [HUB_TOOLS, options.hubTools],
+      [MEMORY_TOOLS, options.memoryTools],
+      [RELAY_TOOLS, options.relayTools],
+      [ROUTINE_TOOLS, options.routineTools],
+      [INGRESS_TOOLS, options.ingressTools],
+      [ACTION_TOOLS, options.actionTools],
+    ];
+    const group = groups.find(([names]) => names.has(name))?.[1]?.(
+      actor,
+      toolUseId
+    );
     if (!group) {
       return undefined;
     }

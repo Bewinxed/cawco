@@ -4,7 +4,7 @@
  * (GitHub: the repository's creation date and stars; npm: the package's first
  * publish and last week's downloads). Read once at the hub as an
  * `admin_skills_write` install or an `admin_plugins_write` install or link is
- * proposed (admin-asks.ts), and kept on the ask, so the card reads the same
+ * proposed (asks.ts), and kept on the ask, so the card reads the same
  * after a restart.
  */
 import type { FleetMarketplace, SourceFacts } from "@cawco/core";

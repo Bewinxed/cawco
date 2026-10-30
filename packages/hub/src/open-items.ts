@@ -15,7 +15,8 @@
  *   section from those rows, word for word: the session's plan (its open
  *   steps and its spec), its task's open to-dos, the open tasks it filed, its
  *   decision pages not yet decided with their cards, and its notes still in
- *   the project's memory inbox. Claude Code adds it to every compacted
+ *   the project's memory inbox, and its asks still waiting on the person
+ *   (asks.ts). Claude Code adds it to every compacted
  *   context through the fleet's SessionStart hook on the `compact` source
  *   (`cawco tool open_items`); a person's Continue opens the new session on
  *   it.
@@ -31,6 +32,7 @@ import {
   taskLink,
   todoLink,
 } from "@cawco/core";
+import { askLink } from "@cawco/core/asks";
 import type { DecisionCard, DecisionPageRead } from "@cawco/core/decisions";
 import type { DbShape } from "./db";
 import type { Decisions } from "./decisions";
@@ -67,6 +69,8 @@ const OPEN_ITEMS_HEADING =
 
 /** What the reader gathered: each source's rows, as stored. */
 export interface OpenItemRows {
+  /** Its asks still waiting on the person, approvals and questions, each by its link. */
+  asks: string[];
   /** Its decision pages not decided yet, each with its cards. */
   decisions: { cards: DecisionCard[]; read: DecisionPageRead }[];
   /** Its notes still in its project's memory inbox. */
@@ -163,6 +167,12 @@ function openItemsSection(rows: OpenItemRows): string {
       ])
     );
   }
+  if (rows.asks.length > 0) {
+    parts.push(
+      "### Your asks waiting on the person (each answer arrives as a message)",
+      ...rows.asks.map((link) => `- ${link}`)
+    );
+  }
   if (rows.notes.length > 0) {
     parts.push(
       "### Your notes still in the project's memory inbox",
@@ -177,13 +187,13 @@ function openItemsSection(rows: OpenItemRows): string {
     ...(parts.length > 0
       ? parts
       : [
-          "Nothing open is filed: no open plan steps, spec, to-dos, tasks, decision pages or notes.",
+          "Nothing open is filed: no open plan steps, spec, to-dos, tasks, decision pages, notes or asks.",
         ]),
   ].join("\n");
 }
 
 export interface OpenItemsDeps {
-  db: Pick<DbShape, "getInstancesByIds" | "workItem">;
+  db: Pick<DbShape, "asks" | "getInstancesByIds" | "workItem">;
   decisions: Pick<Decisions, "undecidedBy">;
   /** A project's memory inbox, oldest first (memory.ts `inboxNotes`). */
   inbox: (projectId: string) => Promise<Note[]>;
@@ -235,10 +245,12 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     }
     const projectId = projectOf(deps, row);
     const plan = await deps.plan(instanceId);
+    const asks = deps.db.asks.openOf(instanceId).map(askLink);
     if (!projectId) {
       return {
         session: instanceId,
         projectId: null,
+        asks,
         plan,
         tasks: [],
         decisions: [],
@@ -253,6 +265,7 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     return {
       session: instanceId,
       projectId,
+      asks,
       plan,
       tasks,
       decisions,

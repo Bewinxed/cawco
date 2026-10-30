@@ -37,7 +37,7 @@
  *   operator) is picked up without anyone asking. Not live, a relay says why
  *   in `reason`, and the GitHub poller keeps bringing events in.
  * - **Opening a path asks the owner.** A session's `relay_create` is the
- *   person's ask (admin-asks.ts), naming what goes public; the hub opens it
+ *   person's ask (asks.ts), naming what goes public; the hub opens it
  *   once approved. The hub route is the owner's own door; `cawco relay on` from
  *   the owner's terminal shows the same sentence and asks before calling it.
  * - **Secrets stay in the hub.** A relay's secret is a sealed column; no
@@ -152,7 +152,7 @@ export interface RelayCreated {
 
 export interface RelayDeps {
   /**
-   * Records a session's ask for the person (admin-asks.ts): what the call
+   * Records a session's ask for the person (asks.ts): what the call
    * answers; undefined in Full Send, when it runs now.
    */
   readonly askPerson: (
@@ -1147,7 +1147,7 @@ export const createRelay = ({
     requested_by: z.string(),
   });
 
-  /** A `relay_create` the owner approved, run by the hub with the arguments shown (admin-asks.ts `carryOut`). */
+  /** A `relay_create` the owner approved, run by the hub with the arguments shown (asks.ts `carryOut`). */
   const runApproved = async (
     input: Record<string, unknown>
   ): Promise<string> => {
@@ -1158,7 +1158,7 @@ export const createRelay = ({
   };
 
   /**
-   * Asks the person to approve opening a relay (admin-asks.ts): the words
+   * Asks the person to approve opening a relay (asks.ts): the words
    * the session reads while it waits; made now in Full Send.
    */
   const askThenCreate = async (

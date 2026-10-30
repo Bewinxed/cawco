@@ -739,7 +739,7 @@ export interface DbShape {
   ) => ThreadRow | undefined;
   /** Artifacts and their documents' update logs (artifacts/). */
   readonly artifacts: ArtifactsDb;
-  /** What sessions asked the person, and what the hub carried out (admin-asks.ts). */
+  /** What sessions asked the person, and what the hub carried out (asks.ts). */
   readonly asks: AsksDb;
   /** Sessions held at their account's limit, summaries kept ahead of it, and the lines it wrote. */
   readonly atLimit: AtLimitDb;

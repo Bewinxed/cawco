@@ -11,7 +11,7 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
 
 ## One way to ask
 
-A choice reaches the person only as a decision card on a page, so every pick is in the Decisions tab, in the record, and something work can wait on. A single question is a page with one card (or a few, for one topic), never AskUserQuestion: a project's Caw is refused it, and asks in a thread with a one-card page whose card his reply names by its link, drawn there as the card's chip.
+A choice reaches the person only as a decision card on a page, so every pick is in the Decisions tab, in the record, and something work can wait on. A single choice is a page with one card (or a few, for one topic): a project's Caw asks in a thread with a one-card page whose card his reply names by its link, drawn there as the card's chip. A question that is no choice between options (a fact only the person knows, a go-ahead) goes through `ask` instead.
 
 ## The card
 

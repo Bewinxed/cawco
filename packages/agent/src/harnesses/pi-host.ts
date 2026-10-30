@@ -10,8 +10,8 @@ import type { HarnessContext, HarnessSession } from "../harness";
 import { startPiHost } from "./pi-runtime";
 import {
   backgroundShell,
+  PI_ASKS_NOTHING,
   PI_HOST_COMMAND,
-  type PiGateAsk,
   type PiHostCommand,
   type PiHostEvent,
   type PiHostState,
@@ -34,8 +34,6 @@ const state: PiHostState = {
 };
 let session: HarnessSession | undefined;
 let starting: Promise<void> | undefined;
-/** The calls put to the hub and not answered yet, by request ({@link PiHostState.asks}). */
-const asks = new Map<string, PiGateAsk>();
 
 function start(
   command: Extract<PiHostCommand, { type: "start" }>
@@ -86,17 +84,8 @@ function start(
       state.held = state.held.filter((held) => held !== uuid);
       output({ type: "rejected", uuid, error: String(error) });
     },
-    // The calls its session puts to the hub: each to its agent, which parks
-    // it with the hub, and kept until it is over.
-    permission: (request) => {
-      asks.set(request.requestId, request);
-      state.asks = [...asks.values()];
-      output({ type: "permission", request });
-    },
-    permissionResolved: (requestId, outcome = "answered") => {
-      asks.delete(requestId);
-      state.asks = [...asks.values()];
-      output({ type: "permission_resolved", requestId, outcome });
+    permission: () => {
+      throw new Error(PI_ASKS_NOTHING);
     },
     emit: () => {
       throw new Error("pi host cannot emit hub envelopes");
@@ -145,12 +134,6 @@ async function handle(command: PiHostCommand): Promise<void> {
     case "stop":
       await session.stop();
       output({ type: "reply", id: command.id });
-      return;
-    case "permission":
-      session.resolvePermission(command.requestId, command.result);
-      return;
-    case "withdraw":
-      session.withdrawPermission(command.requestId, command.message);
       return;
     default:
       return;

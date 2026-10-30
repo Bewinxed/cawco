@@ -4,6 +4,7 @@ import type {
   InstanceRow,
   PermissionResult,
 } from "@cawco/core";
+import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { AskRecord } from "@cawco/core/asks";
 import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";
@@ -83,38 +84,52 @@ type Presenter = (envelope: Envelope) => void;
 /**
  * An ask the hub owns (core asks.ts) as the `permission_request` every
  * screen, push and answer reads today: the one shim from its row to the
- * ledger, until the screens read the rows themselves.
+ * ledger, until the screens read the rows themselves. A question parks as
+ * an {@link ASK_USER_QUESTION}, which every card, push and answer path
+ * draws and answers as a question, its `blocks` with it for the card's line
+ * (core permission-presentation.ts); an approve ask as the CawCo call it
+ * approves. `askId` marks both as the hub's own.
  */
 export const askEnvelope = (
   ask: AskRecord,
   asker: Pick<InstanceRow, "harness" | "id" | "machineId">
-): Envelope =>
-  parkedToolAsk(
+): Envelope => {
+  const where = {
+    askId: ask.id,
+    raisedAt: ask.raisedAt,
+    ...(ask.threadId ? { threadId: ask.threadId } : {}),
+    ...(ask.toolUseId ? { toolUseId: ask.toolUseId } : {}),
+  };
+  const { asked } = ask;
+  if (asked.kind === "question") {
+    const { kind: _kind, ...input } = asked;
+    return parkedToolAsk(asker, ask.id, ASK_USER_QUESTION, input, {
+      ...where,
+      requestKind: "question",
+    });
+  }
+  return parkedToolAsk(
     asker,
     ask.id,
-    `mcp__cawco__${ask.asked.tool}`,
-    ask.asked.input,
+    `mcp__cawco__${asked.tool}`,
+    asked.input,
     {
-      adminWrite: ask.asked.tool,
-      raisedAt: ask.raisedAt,
-      ...(ask.asked.source ? { sourceFacts: ask.asked.source } : {}),
-      ...(ask.threadId ? { threadId: ask.threadId } : {}),
-      ...(ask.toolUseId ? { toolUseId: ask.toolUseId } : {}),
+      ...where,
+      ...(asked.source ? { sourceFacts: asked.source } : {}),
     }
   );
+};
 
 /**
  * Whether an ask stays when its session's process ends: one the hub owns
  * ({@link askEnvelope}), or a post held for the person (upstream-asks.ts),
  * which the hub makes itself. No process waits on either; an owned ask goes
- * only when its session ends for good (admin-asks.ts `withdrawEnded`).
+ * only when its session ends for good (asks.ts `withdrawEnded`).
  */
 export const outlivesSession = (envelope: Envelope): boolean => {
   const payload = envelope.payload as
-    { adminWrite?: unknown; upstreamPost?: unknown } | undefined;
-  return (
-    payload?.upstreamPost !== undefined || payload?.adminWrite !== undefined
-  );
+    { askId?: unknown; upstreamPost?: unknown } | undefined;
+  return payload?.upstreamPost !== undefined || payload?.askId !== undefined;
 };
 
 const isPermissionAsk = (envelope: Envelope): boolean =>
@@ -161,7 +176,7 @@ const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
   return typeof at === "number" ? at : undefined;
 };
 
-/** The open asks the hub owns, as envelopes; one whose session is gone is withdrawn at boot (admin-asks.ts). */
+/** The open asks the hub owns, as envelopes; one whose session is gone is withdrawn at boot (asks.ts). */
 const ownedAsks = (db: DbShape): Envelope[] => {
   const open = db.asks.open();
   const askers = new Map(

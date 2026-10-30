@@ -139,6 +139,11 @@ export const delegateTypeProblem = (
  *   on every server it launches.
  * - pi has neither (1.3.0's built-ins are `read`, `bash`, `powershell`,
  *   `edit`, `write`, `grep`, `find` and `ls`).
+ *
+ * And the harness's own question tool, which every session CawCo starts is
+ * denied: a question to the person is CawCo's `ask` (hub asks.ts), which
+ * answers at once and keeps the question. Claude Code's `AskUserQuestion`;
+ * OpenCode's `question`; pi has none.
  */
 export const NATIVE_TOOLS = {
   subagents: { claude: ["Task", "Agent"], opencode: ["subagent"], pi: [] },
@@ -155,6 +160,7 @@ export const NATIVE_TOOLS = {
     opencode: [],
     pi: [],
   },
+  questions: { claude: ["AskUserQuestion"], opencode: ["question"], pi: [] },
 } as const satisfies Record<string, Record<HarnessKind, readonly string[]>>;
 
 /**
@@ -164,6 +170,15 @@ export const NATIVE_TOOLS = {
  * machine's own `claude` settings, so no stored list carries the names.
  */
 export const OWN_LIST_DENIED: readonly string[] = NATIVE_TOOLS.todos.claude;
+
+/**
+ * The harness's own question tool, in Claude Code's name (the OpenCode
+ * adapter reads it as `question`; pi has none): denied to every session at
+ * spawn, never to the machine's own `claude`, so a question goes through
+ * CawCo's `ask` (core `NATIVE_TOOLS.questions`).
+ */
+export const QUESTION_TOOL_DENIED: readonly string[] =
+  NATIVE_TOOLS.questions.claude;
 
 /**
  * The toolsets a session runs in (Projects spec §5.3: one `cawco` server, a
@@ -347,6 +362,7 @@ const OPENCODE_EQUIVALENTS: Record<string, readonly string[]> = {
   TodoWrite: [],
   EnterPlanMode: [],
   ExitPlanMode: [],
+  AskUserQuestion: ["question"],
   Bash: ["shell"],
   Edit: ["edit"],
   Write: ["edit"],
@@ -438,6 +454,7 @@ const PI_EQUIVALENTS: Record<string, readonly string[]> = {
   TodoWrite: [],
   EnterPlanMode: [],
   ExitPlanMode: [],
+  AskUserQuestion: [],
   NotebookEdit: [],
   WebFetch: [],
   WebSearch: [],

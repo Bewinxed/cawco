@@ -531,7 +531,6 @@ import {
   withOrgIdFrom,
 } from "./accounts";
 import { actionRoutes, createActions } from "./actions";
-import { createAdminAsks } from "./admin-asks";
 import { adminTools } from "./admin-tools";
 import {
   createAdmission,
@@ -568,6 +567,7 @@ import {
   clientCopy,
   createAskPresenter,
 } from "./ask-presentation";
+import { createAsks } from "./asks";
 import {
   type AccountsRead,
   accountsRead,
@@ -3569,10 +3569,11 @@ export const createServer = (
   // The relay (relay.ts), made further down with ingress; an approved
   // `relay_create` kept across a restart reaches it through this.
   let relay: Relay | undefined;
-  // Admin writes from any door are the person's asks (admin-asks.ts): each a
-  // row, answered at once, run by the hub once approved. Made before the
-  // settlement listener below, which hears their ends with every other ask's.
-  const adminAsks = createAdminAsks({
+  // A session's questions (`ask`) and admin writes from any door are the
+  // person's asks (asks.ts): each a row, answered at once, an approved write
+  // run by the hub. Made before the settlement listener below, which hears
+  // their ends with every other ask's.
+  const hubAsks = createAsks({
     asks: db.asks,
     // Over for good: stopped, its workspace archived, stranded, or gone.
     ended: (instanceId) => {
@@ -3587,6 +3588,13 @@ export const createServer = (
     },
     // Not kept with the session asks: its row is (pending.ts `askEnvelope`).
     park: (envelope) => parkForPerson(envelope),
+    // A delegate's question reaches its parent too, which may answer it.
+    tellParent: (asker, envelope) => {
+      const parent = delegateAskParent(asker);
+      if (parent) {
+        deliverDelegateAsk(asker, parent, clientCopy(envelope));
+      }
+    },
     settle: (id, outcome) => {
       if ("cut" in outcome) {
         pending.resolve(id, "cancelled");
@@ -3596,6 +3604,9 @@ export const createServer = (
     },
     bind: (actor, name, input) => bindFolderInstall(actor, name, input),
     stale: async ({ asked }) => {
+      if (asked.kind !== "approve") {
+        return;
+      }
       const { source } = asked.input;
       const folder =
         asked.tool === "admin_skills_write" &&
@@ -5629,8 +5640,8 @@ export const createServer = (
     /** What its failed sends offer back, beside `why` (a wake's refusal, {@link wakeOf}). */
     refusal?: StoredSendRefusal
   ): void => {
-    // Its asks the hub owns stay unless it ended for good (admin-asks.ts).
-    adminAsks.withdrawEnded(instanceId);
+    // Its asks the hub owns stay unless it ended for good (asks.ts).
+    hubAsks.withdrawEnded(instanceId);
     if (!outlived) {
       // What it had asked the person is asked again if it runs again.
       if (keep === "all") {
@@ -5819,6 +5830,28 @@ export const createServer = (
       registry.broadcast(clientCopy(parked));
       push.onAsk(parked);
     }
+  };
+
+  /**
+   * The parent a delegate's ask goes to: the session that started its work,
+   * and no other (work-items.ts `reportees`), live, or asleep with a
+   * conversation to wake from, and whose own work is not finished; none
+   * leaves the ask the person's.
+   */
+  const delegateAskParent = (sender: InstanceRow): InstanceRow | undefined => {
+    const parentId = sender.parentInstanceId;
+    if (!parentId || parentId === sender.id) {
+      return undefined;
+    }
+    return workItems
+      .reportees(sender)
+      .find(
+        (row) =>
+          (row.status === "running" ||
+            row.status === "starting" ||
+            (row.status === "sleeping" && row.sessionId !== null)) &&
+          !workItems.refusal(row, { kind: "peer", fromSession: sender.id })
+      );
   };
 
   /**
@@ -22152,10 +22185,10 @@ export const createServer = (
     from: AnswerFrom
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, hub-raised answers, delivery receipts and concurrent process death before reporting success.
   ): Promise<void> => {
-    // An ask the hub owns (admin-asks.ts), named by its id alone: taken once
+    // An ask the hub owns (asks.ts), named by its id alone: taken once
     // from its row, which runs what it asked as it was shown; a second
     // answer is refused there, saying who gave the first and when.
-    if (adminAsks.answer(requestId, answer, from)) {
+    if (hubAsks.answer(requestId, answer, from)) {
       return;
     }
     const parked = pending.get(requestId);
@@ -26489,7 +26522,7 @@ export const createServer = (
   // The relay (relay.ts): a project's one public webhook path through
   // Funnel, to a receiver of its own on 127.0.0.1; deliveries go to ingest.
   const relays = createRelay({
-    askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
+    askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
     connections,
     db,
     ingest: ingress.ingest,
@@ -26527,7 +26560,7 @@ export const createServer = (
   // asked about as an admin write is (project-settings.ts).
   const settings = createProjectSettings({
     ask: (actor, input, toolUseId) =>
-      adminAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
+      hubAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
     // His switch's own path: off, what he started finishes, his turn among them.
     caw: (projectId, on) =>
       caw.configure(projectId, on ? { on } : { on, initiated: "finish" }),
@@ -26820,7 +26853,7 @@ export const createServer = (
     },
   });
   const hubTools = createHubTools({
-    askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
+    askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
     find: (actor, input, format) => findTool.call(actor, input, format),
     designVerdict: (actor, verdict) => designVerify.verdict(actor, verdict),
     designWrite: (actor, files, why, toolUseId) =>
@@ -26840,6 +26873,7 @@ export const createServer = (
     hubTools,
     browserTools: (actor, toolUseId) => browserAsks.tools(actor, toolUseId),
     connectTools: (actor, toolUseId) => connectAsks.tools(actor, toolUseId),
+    askTools: (actor, toolUseId) => hubAsks.tools(actor, toolUseId),
     workItemTask: (id) => db.workItem(id)?.taskId,
     // Where a task a session files was found: its work item's task in the
     // same project, else the pin whose thread it heard a person's words
@@ -26886,7 +26920,7 @@ export const createServer = (
     projectSettings: settings,
     triageTools: (actor) => watch?.tools(actor) ?? [],
     askPerson: (actor, name, input, toolUseId) =>
-      adminAsks.ask(actor, name, input, toolUseId),
+      hubAsks.ask(actor, name, input, toolUseId),
     bindAdminInput: (actor, name, input) =>
       bindFolderInstall(actor, name, input),
     sendToUser: (actor, message) => push.userMessage(actor.id, message),
@@ -27058,10 +27092,18 @@ export const createServer = (
         if (!answer) {
           throw new Error("A permission answer names no request.");
         }
-        if (db.asks.get(answer.requestId)) {
+        // A question the hub owns (asks.ts) is its asker's parent's to
+        // answer too; an approve ask is a change only the person answers.
+        const owned = db.asks.get(answer.requestId);
+        if (
+          owned &&
+          (owned.asked.kind !== "question" || owned.instanceId !== row.id)
+        ) {
           throw new WorkItemRefusal(
             403,
-            "That ask is a change waiting on the person; only they answer it."
+            owned.asked.kind === "question"
+              ? "That question isn't this delegate's."
+              : "That ask is a change waiting on the person; only they answer it."
           );
         }
         if (heldPostOf(pending.get(answer.requestId))) {
@@ -28176,7 +28218,7 @@ export const createServer = (
   noteWithdrawn(droppedAtStart);
   // An approved ask this hub was running when it went is told, never run
   // again; the asks of sessions that ended meanwhile are withdrawn.
-  adminAsks.boot();
+  hubAsks.boot();
 
   /** A cut turn's hand-back, with the questions its process took with it to be asked again. */
   const askAgain = (instanceId: string, words: string): string => {
@@ -36789,24 +36831,7 @@ export const createServer = (
                 const sender = message.instanceId
                   ? db.listedInstancesByIds([message.instanceId])[0]
                   : undefined;
-                const parentId = sender?.parentInstanceId;
-                // A parent whose own work is finished cannot take the ask.
-                const takes = (row: InstanceRow): boolean =>
-                  sender !== undefined &&
-                  (row.status === "running" ||
-                    row.status === "starting" ||
-                    (row.status === "sleeping" && row.sessionId !== null)) &&
-                  !workItems.refusal(row, {
-                    kind: "peer",
-                    fromSession: sender.id,
-                  });
-                // The session that started its work, and no other
-                // (work-items.ts `reportees`); one that cannot take it
-                // leaves the ask the person's.
-                const parent =
-                  sender && parentId && parentId !== message.instanceId
-                    ? workItems.reportees(sender).find(takes)
-                    : undefined;
+                const parent = sender ? delegateAskParent(sender) : undefined;
                 const routed = sender !== undefined && parent !== undefined;
                 if (routed) {
                   (message.payload as Record<string, unknown>).routedTo =

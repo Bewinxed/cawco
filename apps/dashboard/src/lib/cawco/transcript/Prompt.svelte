@@ -813,6 +813,15 @@
           style:translate="0 {rail.top}px"
         ></span>
       {/if}
+      <!-- A CawCo ask's line: whether work waits on the answer. -->
+      {#if presentation.detail}
+        <p
+          data-slot="detail"
+          class="text-size-label font-normal text-ink-muted mb-space-2 wrap-anywhere group-data-railed/body:ps-space-2"
+        >
+          {presentation.detail}
+        </p>
+      {/if}
       {#each questions as q, qi (q.question)}
         {@const own = q.options.length}
         {@const list = listed(q)}

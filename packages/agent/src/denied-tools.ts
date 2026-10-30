@@ -6,7 +6,8 @@
  * that loses its hub still has a policy.
  *
  * Every session is denied its harness's own to-do list and plan mode
- * besides (core `OWN_LIST_DENIED`): a session's plan is CawCo's list, always.
+ * besides (core `OWN_LIST_DENIED`): a session's plan is CawCo's list, always;
+ * and its own question tool (core `QUESTION_TOOL_DENIED`), at spawn alone.
  * Those names are never stored in the baseline; they are added here.
  *
  * A machine that has not heard the list, or cannot read the sidecar, spawns
@@ -30,7 +31,12 @@
  * Both read {@link resolvedFleetDenials} — the single source — so they cannot
  * drift from each other.
  */
-import { clockWords, OWN_LIST_DENIED, opencodeToolsFor } from "@cawco/core";
+import {
+  clockWords,
+  OWN_LIST_DENIED,
+  opencodeToolsFor,
+  QUESTION_TOOL_DENIED,
+} from "@cawco/core";
 import { userLayerPath } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -219,11 +225,17 @@ const machineDenyList = ({ deniedTools }: FleetDenials): string[] => [
 ];
 
 /**
- * What the fleet denies a session being spawned: the baseline, and the
- * own-list set. The spawn's own `denyTools` union on top, in each adapter.
+ * What the fleet denies a session being spawned: the baseline, the own-list
+ * set, and the harness's own question tool (core `QUESTION_TOOL_DENIED`: a
+ * session asks the person through CawCo's `ask`), which the machine's own
+ * `claude` keeps. The spawn's own `denyTools` union on top, in each adapter.
  */
-export const sessionFleetDenials = async (): Promise<string[]> =>
-  machineDenyList(await resolvedFleetDenials());
+export const sessionFleetDenials = async (): Promise<string[]> => [
+  ...new Set([
+    ...machineDenyList(await resolvedFleetDenials()),
+    ...QUESTION_TOOL_DENIED,
+  ]),
+];
 
 /**
  * The settings with every `deny` name they did not already carry, and without

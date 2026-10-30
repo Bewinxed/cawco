@@ -76,6 +76,8 @@ export const noticeWords = {
     failed: "Told you approved it; it failed",
     declined: "Told you declined it",
     cut: "Told you approved it; the hub restarted before it finished",
+    answered: "Told you their answer",
+    dismissed: "Told you they dismissed it",
   } satisfies Record<AskOutcome, string>,
 };
 

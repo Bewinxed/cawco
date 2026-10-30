@@ -6,7 +6,7 @@
  *
  * - `update_machines`, for `POST /api/binary-updates/check` and `POST
  *   /api/agents/:id/update`: the check runs at once; installing asks the
- *   person first when the hub requires paired devices (admin-asks.ts), the
+ *   person first when the hub requires paired devices (asks.ts), the
  *   hub installing it once they approve ({@link installBuild}), and runs at
  *   once while it trusts its network.
  * - `design_write`: the project's design system, written at the root of the
@@ -85,7 +85,7 @@ const lookForBuild = async () =>
 /**
  * The newest build installed on `machines`, each answering for itself: what
  * `update_machines` runs, at once or once the person approved it
- * (admin-asks.ts `carryOut`).
+ * (asks.ts `carryOut`).
  */
 export const installBuild = async (machines: readonly string[]) => {
   const found = await lookForBuild();
@@ -122,7 +122,7 @@ export const installBuild = async (machines: readonly string[]) => {
 
 export interface HubToolsDeps {
   /**
-   * Records the call as the person's ask (admin-asks.ts): what the call
+   * Records the call as the person's ask (asks.ts): what the call
    * answers; undefined in Full Send, when it runs now.
    */
   askPerson: (

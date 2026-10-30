@@ -8,7 +8,7 @@
  * (a leaf gets no spawning tools, only a work item gets `finish_item`).
  *
  * - **worker**: a session you started. Everything, fleet settings included
- *   (an `admin_*_write` is your ask, run once you approve it, admin-asks.ts;
+ *   (an `admin_*_write` is your ask, run once you approve it, asks.ts;
  *   in Full Send it runs at once).
  * - **delegate**: a delegated session or work item: the session tools, reads
  *   of its project's tasks, folder and its own task's to-dos; changes to tasks and
@@ -68,9 +68,16 @@ export const roleOf = (row: InstanceRow): SessionRole => {
 
 /**
  * What a session that only reads, reports and finishes always has: its open
- * items too, which every compaction lists after its summary (open-items.ts).
+ * items too, which every compaction lists after its summary (open-items.ts),
+ * and `ask`, its one way to ask the person a question (asks.ts).
  */
-const CORE = ["handoff", "send_to_user", "set_title", "open_items"] as const;
+const CORE = [
+  "handoff",
+  "send_to_user",
+  "ask",
+  "set_title",
+  "open_items",
+] as const;
 
 /**
  * Asking the person to take over the session's browser for a sign-in, a

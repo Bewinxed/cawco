@@ -115,7 +115,6 @@ import {
   resumeCursor,
   SESSION_DIR_READ,
   SESSION_STOPPED,
-  settledQuestionResult,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -2086,29 +2085,6 @@ class ClaudeSession implements HarnessSession {
   readonly #ctx: HarnessContext;
   readonly #permissions = new Map<string, PermissionResolver>();
   /**
-   * The open `AskUserQuestion` permissions, keyed by request id, holding the
-   * tool call they park and the questions they ask. A dismissal is a denial,
-   * and the CLI answers a denied tool call with prose and no `toolUseResult`
-   * sidecar — indistinguishable, from the block alone, from an answer that went
-   * missing. Remembering the ask is what lets {@link #pumpMessages} say which
-   * of the two it is.
-   *
-   * The tool call's own `input` is kept beside them for the opposite case: an
-   * answer that arrives from off this machine carries the reader's choices and
-   * nothing else, and the SDK validates the whole `AskUserQuestion` schema on
-   * the way back in. This is the only copy of the input there is to answer with.
-   */
-  readonly #openQuestions = new Map<
-    string,
-    {
-      toolUseID: string;
-      questions: UserQuestion[];
-      input: Record<string, unknown>;
-    }
-  >();
-  /** Denied questions, keyed by tool call, until their `tool_result` goes past. */
-  readonly #dismissedQuestions = new Map<string, UserQuestionResult>();
-  /**
    * Session-start hooks that failed, held until the first prompt of this run
    * is taken up ({@link #hookFailure}).
    */
@@ -2480,24 +2456,11 @@ class ClaudeSession implements HarnessSession {
               "abort",
               () => {
                 if (this.#permissions.delete(requestId)) {
-                  this.#openQuestions.delete(requestId);
                   ctx.permissionResolved?.(requestId, "cancelled");
                 }
               },
               { once: true }
             );
-            if (toolName === ASK_USER_QUESTION) {
-              const questions = normalizeQuestions(
-                (toolInput as { questions?: unknown }).questions
-              );
-              if (questions) {
-                this.#openQuestions.set(requestId, {
-                  toolUseID,
-                  questions,
-                  input: toolInput as Record<string, unknown>,
-                });
-              }
-            }
             ctx.permission({
               requestId,
               toolName,
@@ -2783,41 +2746,6 @@ class ClaudeSession implements HarnessSession {
             .splice(0)
             .entries()) {
             ctx.frame({ ...failure, uuid: hookFailureId(prompt, index) });
-          }
-        }
-        // The Claude SDK emits `AskUserQuestion`'s structured output as a
-        // top-level `tool_use_result` on the user message (the prose alone is
-        // what lands in the `tool_result` block's `content`). Normalise it onto
-        // the block so the dashboard reads one neutral shape and never parses
-        // prose.
-        if (neutral.type === "user") {
-          const result = normalizeQuestionResult(
-            (message as SDKUserMessage).tool_use_result
-          );
-          if (result && Array.isArray(neutral.message.content)) {
-            for (const block of neutral.message.content) {
-              if (block.type === "tool_result") {
-                block.questionResult = result;
-              }
-            }
-          }
-        }
-        // A dismissed question has no sidecar to normalise — the denial was
-        // recorded when it was made, and this is the block it belongs to.
-        if (neutral.type === "user" && this.#dismissedQuestions.size > 0) {
-          const { content } = neutral.message;
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type !== "tool_result") {
-                continue;
-              }
-              const dismissed = this.#dismissedQuestions.get(block.tool_use_id);
-              if (!dismissed) {
-                continue;
-              }
-              this.#dismissedQuestions.delete(block.tool_use_id);
-              block.questionResult = dismissed;
-            }
           }
         }
         if (message.type === "system" && message.subtype === "init") {
@@ -3325,7 +3253,6 @@ class ClaudeSession implements HarnessSession {
       claudeSeqs: this.#seqs.size,
       claudeDelivery: this.#delivery.size,
       claudePermissions: this.#permissions.size,
-      claudeQuestions: this.#openQuestions.size + this.#dismissedQuestions.size,
     };
   }
 
@@ -4222,34 +4149,12 @@ class ClaudeSession implements HarnessSession {
     ) {
       this.#mode.choose("fullSend");
     }
-    const question = this.#openQuestions.get(requestId);
-    if (!question) {
-      resolve(sdkPermissionResult(result));
-      return;
-    }
-
-    this.#openQuestions.delete(requestId);
-    // Answering runs the tool, and the CLI writes the answers itself; walking
-    // away leaves nothing behind, so the dismissal is recorded here for the
-    // `tool_result` that is about to carry the CLI's denial prose.
-    if (result.behavior === "deny") {
-      this.#dismissedQuestions.set(question.toolUseID, {
-        outcome: "dismissed",
-        questions: question.questions,
-      });
-    }
-    // A question can be answered by someone who never held the tool call: a
-    // parent session's `answer_delegate` sends the chosen labels alone, and the
-    // SDK rejects that input for the `questions` it no longer has. The parked
-    // call is put back underneath, which is what the dashboard sends when it
-    // answers one of these itself.
-    resolve(sdkPermissionResult(settledQuestionResult(question, result)));
+    resolve(sdkPermissionResult(result));
   }
 
   /**
    * An ask the hub could not show anyone: the CLI is told no, in `message`'s
-   * words, and its turn goes on. It is withdrawn as an interrupt withdraws
-   * one, so no dismissal is recorded for its `tool_result`.
+   * words, and its turn goes on, as an interrupt withdraws one.
    */
   withdrawPermission(requestId: string, message: string): void {
     const resolve = this.#permissions.get(requestId);
@@ -4257,7 +4162,6 @@ class ClaudeSession implements HarnessSession {
       throw new Error(`no permission request ${requestId}`);
     }
     this.#permissions.delete(requestId);
-    this.#openQuestions.delete(requestId);
     console.log(`[claude] permission withdrawn: ${requestId} — ${message}`);
     resolve({ behavior: "deny", message });
   }
@@ -4293,9 +4197,6 @@ class ClaudeSession implements HarnessSession {
       resolve({ behavior: "deny", message: "session stopped" });
     }
     this.#permissions.clear();
-    // Not dismissals: the session is going away, and no `tool_result` will
-    // arrive for these to be folded onto.
-    this.#openQuestions.clear();
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the child may already be gone
     await this.#handle.interrupt().catch(() => {});
     const settled = await this.#turn.settle(SETTLE_TIMEOUT_MS);
