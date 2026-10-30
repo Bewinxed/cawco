@@ -12,8 +12,8 @@ export default {
   args: { region: "side", composition: "contractbook", again: false },
 };
 
-/** The preview beside a conversation on a desk, 1440 wide. */
-export const Desk = at(1440);
+/** The preview beside a conversation on a desk, 1280 wide. */
+export const Desk = at(1280);
 /** The preview sheet on a phone, 390 wide. */
 export const Phone = at(390);
 /** Try again threw again at once: the way on is Reload page, on a phone. */
