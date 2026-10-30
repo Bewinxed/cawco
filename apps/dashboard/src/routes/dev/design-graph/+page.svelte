@@ -5,7 +5,9 @@
    * its own, as `/artifact/<id>` draws it, over a component canvas its
    * script serves on this page's own origin at `?path=`. Its fleet is a
    * stand-in holding that one canvas; the canvas page, its overlay and the
-   * artifact's document are the script's.
+   * artifact's document are the script's. `?bare`: the pane's inset (no
+   * head, the page and the graph over it), as a decision page's option
+   * shows it, with no preview tool around it.
    */
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { benchFleet } from "#lib/cawco/preview/bench-fleet.js";
@@ -15,6 +17,7 @@
 
   const INSTANCE = "design-graph-preview";
   const params = page.url.searchParams;
+  const bare = params.has("bare");
   const port = Number(
     location.port || (location.protocol === "https:" ? 443 : 80)
   );
@@ -41,9 +44,12 @@
 
 <Overlays>
   <div
-    class="flex h-dvh flex-col overflow-hidden bg-surface-page p-space-2"
+    class={[
+      "flex h-dvh flex-col overflow-hidden bg-surface-page",
+      !bare && "p-space-2",
+    ]}
     data-slot="artifact-tab"
   >
-    <PreviewPane instanceId={INSTANCE} ownTab />
+    <PreviewPane inset={bare} instanceId={INSTANCE} ownTab={!bare} />
   </div>
 </Overlays>
