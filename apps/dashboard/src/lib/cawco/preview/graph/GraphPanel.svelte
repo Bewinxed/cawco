@@ -1162,10 +1162,9 @@
           {#if !onSteps}{@render indexSwitch()}{/if}
           {#if onSteps && graph.move && stepsStop === "head"}
             <!-- The timeline at rest: Play, and the move's name, which opens it. -->
-            <!-- Placed by a box of its own: the group's own class sets it relative, which a passed position loses to. -->
-            <div class="absolute start-space-2">
-              <GlassGroup><PlayButton {graph} /></GlassGroup>
-            </div>
+            <GlassGroup class="absolute start-space-2"
+              ><PlayButton {graph} /></GlassGroup
+            >
             <button
               class="h-c-btn-h max-w-full min-w-0 truncate rounded-sm px-space-2 type-label text-ink-strong touch-hit {RING}"
               data-timeline-name
@@ -1195,44 +1194,41 @@
               </Tabs>
             </GlassGroup>
           {/if}
-          <div class="absolute end-space-2">
-            <GlassGroup>
-              {#if onSteps}
-                <button
-                  aria-expanded={stepsStop !== "head"}
-                  aria-label={stepsStop === "head"
-                    ? words.timelineShow
-                    : words.timelineHide}
-                  class={SYMBOL}
-                  data-timeline-toggle
-                  onclick={() => {
-                    stepsStop = stepsStop === "head" ? "peek" : "head";
-                  }}
-                  title={stepsStop === "head"
-                    ? words.timelineShow
-                    : words.timelineHide}
-                  type="button"
-                >
-                  {#if stepsStop === "head"}<IconChevronUp
-                    />{:else}<IconChevronDown />{/if}
-                </button>
-              {:else}
-                <button
-                  bind:this={hide}
-                  aria-expanded={graph.open}
-                  aria-label={graph.open ? words.hide : words.show}
-                  class={SYMBOL}
-                  data-hide-graph
-                  onclick={() => setOpen(!graph.open)}
-                  title={graph.open ? words.hide : words.show}
-                  type="button"
-                >
-                  {#if graph.open}<IconChevronDown />{:else}<IconChevronUp
-                    />{/if}
-                </button>
-              {/if}
-            </GlassGroup>
-          </div>
+          <GlassGroup class="absolute end-space-2">
+            {#if onSteps}
+              <button
+                aria-expanded={stepsStop !== "head"}
+                aria-label={stepsStop === "head"
+                  ? words.timelineShow
+                  : words.timelineHide}
+                class={SYMBOL}
+                data-timeline-toggle
+                onclick={() => {
+                  stepsStop = stepsStop === "head" ? "peek" : "head";
+                }}
+                title={stepsStop === "head"
+                  ? words.timelineShow
+                  : words.timelineHide}
+                type="button"
+              >
+                {#if stepsStop === "head"}<IconChevronUp
+                  />{:else}<IconChevronDown />{/if}
+              </button>
+            {:else}
+              <button
+                bind:this={hide}
+                aria-expanded={graph.open}
+                aria-label={graph.open ? words.hide : words.show}
+                class={SYMBOL}
+                data-hide-graph
+                onclick={() => setOpen(!graph.open)}
+                title={graph.open ? words.hide : words.show}
+                type="button"
+              >
+                {#if graph.open}<IconChevronDown />{:else}<IconChevronUp />{/if}
+              </button>
+            {/if}
+          </GlassGroup>
         </header>
         <!-- Clipped to the drawer: folded to its head, what it holds stands inside it, never under the pane's foot. -->
         <div
