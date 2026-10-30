@@ -3,13 +3,16 @@
     type ActivityLine,
     type ChangedItem,
     newAnswer,
+    type PageAnchor,
     type Pin,
     type PreviewMode,
+    type PreviewScheme,
     pinProblem,
     previewMode,
     replyAgain,
     type ThreadEntry,
   } from "@cawco/core/comments";
+  import type { StagePoint } from "@cawco/core/design-graph";
   import { detach } from "@cawco/core/detach";
   import {
     PREVIEW_LOCKED_MESSAGE,
@@ -38,6 +41,7 @@
     STAGE_READY_MS,
     type StageErrorKind,
   } from "@cawco/core/stage";
+  import { humanize } from "@cawco/core/tool-presentation";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { browserWords } from "@cawco/core/words/browser";
   import { commentWords } from "@cawco/core/words/comments";
@@ -129,6 +133,7 @@
     easeDrawer,
     easeOut,
     motionOk,
+    numberOf,
     revealOn,
     rise,
     sheetSlide,
@@ -176,6 +181,8 @@
   } from "./comment-rows";
   import { DesignGraph } from "./graph/design-graph.svelte";
   import GraphPanel from "./graph/GraphPanel.svelte";
+  import { graphOptions } from "./graph/options.svelte";
+  import type { NodePin } from "./graph/StateNode.svelte";
   import { loadedPanes } from "./loaded.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import PinFloat from "./PinFloat.svelte";
@@ -1783,9 +1790,111 @@
    */
   let roomW = $state(0);
   let roomH = $state(0);
+  let roomEl: HTMLElement | null = null;
   const measureRoom = frameSize<HTMLElement>((node) => {
+    roomEl = node;
     roomW = node.clientWidth;
     roomH = node.clientHeight;
+  });
+
+  /* --- Pins on a design graph's state (the primitives spec §4.3) ------------ */
+
+  /** A comment being written on a state as a whole: the state, its name; null while a page element's is (or none). */
+  let nodeComposing = $state.raw<{ name: string; point: StagePoint } | null>(
+    null
+  );
+  /** A state's node in the graph, as a pill's place: its box in the pin room, the pill's at its top-right. */
+  function nodeAt(point: StagePoint): PreviewPinAt | null {
+    const graphEl = roomEl?.parentElement?.querySelector(
+      `[data-design-graph="${CSS.escape(point.file)}"]`
+    );
+    const node =
+      graphEl?.querySelector<HTMLElement>(
+        `[data-chip="${CSS.escape(`${point.story}|${point.interaction}`)}"]`
+      ) ??
+      graphEl?.querySelector<HTMLElement>(
+        `[data-node="${CSS.escape(point.story)}"]`
+      );
+    if (!(node && roomEl)) {
+      return null;
+    }
+    const at = roomEl.getBoundingClientRect();
+    const box = node.getBoundingClientRect();
+    const pill = numberOf("--c-pin");
+    return {
+      box: {
+        x: box.left - at.left,
+        y: box.top - at.top,
+        w: box.width,
+        h: box.height,
+      },
+      mark: {
+        x: box.right - at.left - pill - numberOf("--space-1"),
+        y: box.top - at.top - pill / 2,
+        w: pill,
+        h: pill,
+      },
+    };
+  }
+  /** Comment mode, a press on a state in the graph: the composer opens beside its node, to pin the state as a whole. */
+  function pinNode(point: StagePoint) {
+    if (openPin) {
+      closeCard();
+    }
+    loadKit();
+    dropPeek();
+    const name = humanize(point.story);
+    nodeComposing = { name, point };
+    composing = {
+      at: nodeAt(point),
+      chain: [
+        {
+          anchor: { selector: "", text: name },
+          elements: [],
+        },
+      ],
+      chosen: 0,
+      error: "",
+      sending: false,
+    };
+  }
+  // Call 6's side, told to the page: pins on other states dimmed there, or hidden.
+  $effect(() => {
+    const dimmed = graphOptions.sides.otherPins === "dimmed";
+    if (designGraph && loaded) {
+      post({ type: "cawco:other-pins", dimmed });
+    }
+  });
+  /** A rail row on another state: that state is kept, and once the page stands it, the thread opens there. */
+  function goToPinState(pin: Pin) {
+    const point = designGraph?.pointOfPin(pin.anchor);
+    if (!(designGraph && point)) {
+      openCard(pin.id);
+      return;
+    }
+    designGraph.keepAt(point);
+    // The page stands the state in its next frames; the thread asks its pill's place after it.
+    requestAnimationFrame(() => requestAnimationFrame(() => openCard(pin.id)));
+  }
+  /** A pin's scheme as the canvas's view stands: light or dark where it is set, else the page's own. */
+  const schemeOfView = (
+    scheme: PreviewScheme | undefined
+  ): NonNullable<NonNullable<PageAnchor["sheet"]>["state"]>["scheme"] =>
+    scheme === "both" || scheme === undefined ? "page" : scheme;
+  /** The pins on each state's node, by story, for the graph to draw: open ones, and a resolved one while its thread is open. */
+  const nodePins = $derived.by(() => {
+    const held = new Map<string, NodePin[]>();
+    for (const pin of view?.pins ?? []) {
+      const onNode = "sheet" in pin.anchor ? pin.anchor.sheet : undefined;
+      if (!onNode?.node || (pin.resolvedAt && pin.id !== openPin)) {
+        continue;
+      }
+      held.set(onNode.story, [
+        ...(held.get(onNode.story) ?? []),
+        { id: pin.id, number: pin.number, state: markState(pin) },
+      ]);
+    }
+    return held;
   });
   /**
    * The pin whose card is drawn: the open one, beside its pill once the
@@ -2415,6 +2524,19 @@
     focusedPin = id;
     cardError = null;
     cardParent = null;
+    // A pin on a state as a whole stands on its node: its card beside it, no page to ask.
+    const opening = pins.find((one) => one.id === id);
+    const onNode =
+      opening && "sheet" in opening.anchor ? opening.anchor.sheet : undefined;
+    if (onNode?.node && onNode.state) {
+      pinAt = nodeAt({
+        file: onNode.file,
+        story: onNode.story,
+        interaction: onNode.state.interaction,
+      });
+      pinHeard = id;
+      return;
+    }
     post({ type: "cawco:track-pin", id });
     // Brought into view in one step, not a glide: its card stands where its
     // pill lands, and the page tells that place once.
@@ -2458,6 +2580,10 @@
       return;
     }
     composing = null;
+    if (nodeComposing) {
+      nodeComposing = null;
+      return;
+    }
     if (nextDraft?.hasContent) {
       post({ type: "cawco:compose-park" });
       keepDraftAt(keptDraft ? { ...keptDraft, parked: true } : null);
@@ -2532,6 +2658,42 @@
     }
     const said = saidIn(nextDraft, text);
     composing.error = "";
+    if (nodeComposing) {
+      // A state as a whole: the pane writes it on the doc it joins, no element of the page's.
+      const { name, point } = nodeComposing;
+      const written = doc?.comment(
+        {
+          anchor: {
+            selector: "",
+            source: null,
+            text: name,
+            sheet: {
+              file: point.file,
+              story: point.story,
+              node: true,
+              state: {
+                interaction: point.interaction,
+                scheme: schemeOfView(canvasView?.chosen.scheme),
+                width: null,
+              },
+            },
+          },
+          elements: [],
+          title: name,
+        },
+        said
+      );
+      if (typeof written === "string" || !written) {
+        composing.error =
+          written ?? "The page didn't keep that comment. Try again.";
+        return;
+      }
+      composing = null;
+      nodeComposing = null;
+      drafts?.discard(NEXT_COMMENT);
+      focusedPin = written.id;
+      return;
+    }
     composing.sending = true;
     post({ type: "cawco:comment", ...said });
   }
@@ -3835,12 +3997,23 @@
 {#snippet viewBar()}
   {#if canvasView}
     <!-- A component canvas's view: its frames' scheme, widths, motion and zoom. -->
-    <CanvasView onverify={verify} view={canvasView} {verifying} />
+    <CanvasView
+      graph={designGraph}
+      onverify={verify}
+      view={canvasView}
+      {verifying}
+    />
   {/if}
 {/snippet}
 {#snippet viewMenu()}
   {#if canvasView}
-    <CanvasView as="sub" onverify={verify} view={canvasView} {verifying} />
+    <CanvasView
+      as="sub"
+      graph={designGraph}
+      onverify={verify}
+      view={canvasView}
+      {verifying}
+    />
   {/if}
 {/snippet}
 
@@ -4067,6 +4240,13 @@
   <CommentRail
     bind:this={rail}
     down={linkDown}
+    onother={designGraph ? goToPinState : undefined}
+    stateOf={designGraph
+      ? (pin) => ({
+          here: designGraph.onKept(pin.anchor),
+          words: designGraph.stateWords(pin.anchor),
+        })
+      : undefined}
     focused={focusedPin}
     hold={listHold}
     {layout}
@@ -4364,8 +4544,13 @@
     {#if designGraph && !canvasView?.map}
       <!-- The design graph over the page: a state previewed on a hover, kept on a press; clear of an inspector beside it. -->
       <GraphPanel
+        address={paneOrigin && loaded ? `${paneOrigin}${startAt}` : null}
+        commenting={mode === "comment"}
         end={inspecting && inspectorLayout === "panel"}
         graph={designGraph}
+        {nodePins}
+        onopenpin={(id) => openCard(id)}
+        onpin={pinNode}
       />
     {/if}
     {#if canvasView?.map && artifact && isSheet}

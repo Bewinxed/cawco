@@ -4557,6 +4557,73 @@
       },
       "$description": "The narrowest a state on the design graph is drawn, in a phone's single column (mockup round 22's floor)."
     },
+    "c-steps-bar-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      },
+      "$description": "The design graph's step slider over a component canvas's page (the primitives spec §1.2): one bar, its track with the knob over the stops' names in the meta role, each stop's column a 44px press. The page starts this far plus space-3 under the pane's top, so the component never moves as the bar comes or goes. Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "c-steps-stop-min-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
+      "$description": "The least share of the step slider's track a stop takes, its name cut at it, its column one touch floor wide: eight across a 390 phone's bar; past what fits, the track scrolls sideways with the kept stop centred. Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "c-graph-label-max-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 192,
+        "unit": "px"
+      },
+      "$description": "The most an agent's edge label on the design graph stands across, its chip cut with an ellipsis past it and whole on its title (the primitives spec §1.3: 24ch). Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"],
+          "css": "24ch"
+        }
+      }
+    },
+    "c-count-figure-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 80,
+        "unit": "px"
+      },
+      "$description": "A count dial's Measured figure on the design graph, \"999 of 999\" in tabular figures, held at one width so the slider beside it never shifts as the count moves (the primitives spec §1.4). Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"],
+          "css": "10ch"
+        }
+      }
+    },
+    "c-pair-min-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1600,
+        "unit": "px"
+      },
+      "$description": "The least room a component canvas's page needs, beside its graph's panel, to stand the hovered state's page beside the kept one (the owner's pick \"pair\" for an ultrawide window): two desk pages of 800px. Narrower, a hover previews over the kept page. Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
     "c-graph-drawer-stop": {
       "$type": "dimension",
       "$value": {

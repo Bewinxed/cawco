@@ -1336,6 +1336,18 @@
     transparent 0
   );
 }
+/* The design graph's well (StateGraph): its top and its foot fade out
+   while the graph runs on past them, over --c-edge-fade-len each; an edge
+   with nothing past it stands sharp (its run 0, its end opaque). */
+@utility graph-edge-fade {
+  mask-image: linear-gradient(
+    to bottom,
+    var(--graph-fade-top-end, var(--mask-opaque)),
+    var(--mask-opaque) var(--graph-fade-top, 0px),
+    var(--mask-opaque) calc(100% - var(--graph-fade-foot, 0px)),
+    var(--graph-fade-foot-end, var(--mask-opaque))
+  );
+}
 /* The shelf's hairline as one background layer over the shelf (Shell). */
 @utility shelf-hairline {
   background:

@@ -3,6 +3,8 @@ import {
   type ActivityLine,
   type ArtifactChanges,
   activityOf,
+  type CommentTarget,
+  commentOn,
   deletePin,
   goneOf,
   honourDeletions,
@@ -103,6 +105,8 @@ export type DocSync =
 export type ListHold = "quiet" | "reading" | "ready" | { failed: string };
 
 export interface ArtifactDoc {
+  /** The person's comment on `target` written by the pane itself (a pin on a design graph's state, which no page element holds): the pin, or the refusal's sentence. */
+  comment: (target: CommentTarget, said: Said) => Pin | string;
   /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */
   delete: (pin: string) => string | null;
   destroy: () => void;
@@ -462,6 +466,7 @@ export function joinArtifact(
   }
 
   return {
+    comment: (target, said) => commentOn(doc, target, said),
     reply: (pin, said) => replyToPin(doc, pin, said),
     resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
     see: (pin) => seePin(doc, pin, new Date().toISOString()),
