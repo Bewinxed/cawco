@@ -46,6 +46,10 @@
     overflow-anchor: none;
   }
   :root {
+    /* The page never scrolls, its scroller does: its root keeps no gutter of
+       its own (core `GUTTER_FLOOR`, which a page's own word outranks), or a
+       window's scrollbar width of it stands empty beside the page. */
+    scrollbar-gutter: auto;
     /* What a host's docked composer covers of the page's foot (the
        project's Decisions tab says it, preview-overlay page.ts): none until
        it says. */

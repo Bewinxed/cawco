@@ -121,8 +121,9 @@
     return () => sizes.disconnect();
   });
   /**
-   * The scroller's room, px: the window's width less a scrollbar's gutter,
-   * what a well on a phone reaches across (design.css `well-bleed`). The
+   * The scroller's room, px: the window's width less a scrollbar's gutter
+   * (none under the phone's line, so a story as wide as the screen stands
+   * whole), what a well on a phone reaches across (design.css `well-bleed`). The
    * window's own width (`100vi`) counts the gutter, so a well bled to it
    * stood a scrollbar's width past the page and scrolled it sideways.
    */
@@ -251,7 +252,7 @@
 
 <svelte:window onkeydown={sendKey} />
 
-<!-- The page is the panel's height: its cards scroll in the first row and the foot stands in the second, the panel's full width, its parts on the column's edges, so the foot never stands over a card. A host's docked composer is the page's own bottom padding (its inset). The scroller and the foot keep the same gutter for a scrollbar, so the column and the foot's parts share their edges. -->
+<!-- The page is the panel's height: its cards scroll in the first row and the foot stands in the second, the panel's full width, its parts on the column's edges, so the foot never stands over a card. A host's docked composer is the page's own bottom padding (its inset). The scroller and the foot keep the same gutter for a scrollbar, so the column and the foot's parts share their edges; under the phone's line neither keeps one and its bar is drawn by nothing (`no-scrollbar`), as a phone draws none in the page's room: a window's scrollbar took 20px of it, so a 390 story stood in a 370 well and lost its last 20px. -->
 <main
   class="group/page decision-page-insets grid h-dvh min-w-0 grid-rows-page-foot pb-(--page-inset-bottom)"
   data-pictured={storyWidth > 0 ? "" : undefined}
@@ -261,7 +262,7 @@
 >
   <div
     bind:this={scroller}
-    class="min-h-0 overflow-y-auto overscroll-y-contain scrollbar-gutter-stable"
+    class="min-h-0 overflow-y-auto overscroll-y-contain scrollbar-gutter-stable max-phone:no-scrollbar"
     data-slot="page-scroll"
   >
     <div
@@ -302,7 +303,7 @@
   <!-- Its words and Send on one row at a desk; under a finger the count's bar gives way first, then Send wraps under the count. -->
   <footer
     {@attach morph()}
-    class="min-w-0 overflow-hidden border-t border-border-hairline bg-surface-raised pt-space-3 pb-safe-space-3 scrollbar-gutter-stable"
+    class="min-w-0 overflow-hidden border-t border-border-hairline bg-surface-raised pt-space-3 pb-safe-space-3 scrollbar-gutter-stable max-phone:no-scrollbar"
     data-safe-bottom
     data-slot="page-foot"
   >
