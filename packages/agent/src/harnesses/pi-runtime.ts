@@ -1,4 +1,5 @@
 /** Host-only pi turns. This module is absent from the agent process graph. */
+import { readFile } from "node:fs/promises";
 import type {
   FleetMcpChange,
   HookEvent,
@@ -58,6 +59,7 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
+  stripFrontmatter,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type Boundary, boundaryCommand } from "../boundary";
@@ -78,6 +80,7 @@ import {
   type BackgroundShellEnd,
   compactBoundaryId,
   contentOf,
+  LOADED_SKILL,
   modelCatalog,
   piModelValue,
   piSessionPath,
@@ -1394,6 +1397,36 @@ const registerExtensionProviders = (
   extensions.pendingNativeProviderRegistrations = [];
 };
 
+/**
+ * A session's skills, in its context before its first prompt and none a turn:
+ * a custom message with no `triggerTurn` is appended at rest (agent-session.js
+ * `sendCustomMessage`), and pi hands the model each as a user message
+ * (messages.js `case "custom"`). pi's own `/skill:name` expands only at the
+ * start of one prompt (`_expandSkillCommand`), so several go in its block's
+ * words, and an unknown name is refused as OpenCode's is.
+ */
+const loadSkills = async (
+  session: AgentSession,
+  names: readonly string[],
+  cwd: string
+): Promise<void> => {
+  const { skills } = session.resourceLoader.getSkills();
+  for (const name of names) {
+    const skill = skills.find((one) => one.name === name);
+    if (!skill) {
+      throw new Error(`pi has no skill “${name}” at ${cwd}.`);
+    }
+    const body = stripFrontmatter(
+      await readFile(skill.filePath, "utf8")
+    ).trim();
+    await session.sendCustomMessage({
+      customType: LOADED_SKILL,
+      content: `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`,
+      display: false,
+    });
+  }
+};
+
 /** The session's store: the one it resumes or forks, else a new one. */
 const sessionManagerFor = async (
   spec: SpawnPayload,
@@ -1533,6 +1566,7 @@ export async function startPiHost(
   // connects its servers ("The MCP extension connects its servers on
   // `session_start`, so call `session.bindExtensions()`", pi.dev/docs/latest/sdk).
   await session.bindExtensions({});
+  await loadSkills(session, spec.skills ?? [], ctx.cwd);
   return new PiSession(
     ctx,
     session,

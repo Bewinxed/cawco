@@ -2149,10 +2149,12 @@ class ClaudeSession implements HarnessSession {
    * then loses it ({@link holding}).
    */
   readonly #unread = new Set<string>();
-  /** Quiet notes handed to the CLI at rest, until it says it has stored them ({@link quietNote}). */
+  /**
+   * Quiet notes handed to the CLI ({@link quietNote}) and a launch's skills,
+   * until their empty result, which is no turn's end and names its note
+   * (`user_message_uuid`). Named, because a send can follow before it comes.
+   */
   readonly #notes = new Set<string>();
-  /** The empty results the CLI owes for notes it stored, which are no turn's end. */
-  #noteResults = 0;
   /**
    * The wake-ups the session has scheduled for itself (a cron, a loop's next
    * tick), as the CLI listed them when its last turn ended: its `Stop` hook
@@ -2475,16 +2477,27 @@ class ClaudeSession implements HarnessSession {
     this.#handle = handle;
     this.#startFleetMcp(fleetMcp);
 
-    // Load skills natively: push /skill messages into the input stream before
-    // any user prompt. The SDK handles them as slash commands — same as the
-    // user typing /skill-name in the session. A launch's alone: a child taken
-    // back loaded them when it started.
+    // Its skills, in its context before its brief does anything: each `/skill`
+    // goes as a quiet note. "When false, the message is appended to the
+    // transcript without triggering an assistant turn. It will be merged into
+    // the next user message that does query" (sdk.d.ts `shouldQuery`). The CLI
+    // expands it all the same, and no request goes to the model (measured,
+    // Claude Code 2.1.311 against a mock API: three skills and a brief make one
+    // request, holding all four). Sent as plain prompts, each was a model turn
+    // of its own, and the brief overtook the rest: a queued prompt folds into
+    // the running turn at its first tool call, and a queued command waits for
+    // that turn's end. A launch's alone: a child taken back loaded them when it
+    // started.
     if (skills?.length && !sessiond.attach) {
       for (const skill of skills) {
+        const uuid = crypto.randomUUID();
+        this.#notes.add(uuid);
         input.push({
           type: "user",
+          uuid,
           message: { role: "user", content: `/${skill}` },
           parent_tool_use_id: null,
+          shouldQuery: false,
         } as SDKUserMessage);
       }
     }
@@ -2631,9 +2644,8 @@ class ClaudeSession implements HarnessSession {
           console.info(
             `[claude] ${this.instanceId}: note ${lifecycle.command_uuid} ${lifecycle.state}`
           );
-          if (lifecycle.state !== "queued") {
+          if (lifecycle.state === "cancelled") {
             this.#notes.delete(lifecycle.command_uuid);
-            this.#noteResults += 1;
           }
           this.#delivery.get(lifecycle.command_uuid)?.resolve();
           this.#delivery.delete(lifecycle.command_uuid);
@@ -2643,8 +2655,11 @@ class ClaudeSession implements HarnessSession {
           }
           continue;
         }
-        if (message.type === "result" && !turn.busy && this.#noteResults > 0) {
-          this.#noteResults -= 1;
+        if (
+          message.type === "result" &&
+          message.user_message_uuid &&
+          this.#notes.delete(message.user_message_uuid)
+        ) {
           continue;
         }
         if (lifecycle) {

@@ -99,6 +99,9 @@ const PI_SIDECAR = join(piAgentDir(), "cawco-fleet.json");
  */
 export const BACKGROUND_SHELL = "cawco-background-shell";
 
+/** The custom type of a skill loaded before a session's first prompt (pi-runtime `loadSkills`); no transcript row. */
+export const LOADED_SKILL = "cawco-skill";
+
 /** The `details` of a {@link BACKGROUND_SHELL} notice: its `task_notification` frame's fields. */
 export interface BackgroundShellEnd {
   status: "completed" | "failed";
