@@ -16,13 +16,14 @@
  * probe kit's bench hub does.
  *
  * Behind the hub, the machine's preview proxy puts the hub's overlay on
- * every page this origin serves, and the hub answers `/__cawco/` itself. An
- * overlay whose same-origin parent carries one stands down (overlay.ts), so
- * with the hub's on the panel's page the canvas page's would never run and
- * the panel would never stand a state. So the hub's tag is left inert on
- * every page served here (its injection lands inside a comment, {@link
- * DECOY}), and the canvas page carries the overlay this origin serves
- * itself, at {@link OVERLAY_HERE}, its document's paths moved out of the
+ * every page this origin serves, and the hub answers `/__cawco/` itself.
+ * The panel's page keeps the hub's (the hub's own panel hears the preview
+ * through it). An overlay whose same-origin parent carries one stands down
+ * (overlay.ts), so the canvas page's would never run and the panel would
+ * never stand a state: there the hub's tag is left inert (its injection
+ * lands inside a comment, {@link DECOY}), and the page carries the overlay
+ * this origin serves itself, at {@link OVERLAY_HERE}, marked `data-embed`
+ * so it runs under a marked parent, its document's paths moved out of the
  * hub's `/__cawco/` ({@link DOC_HERE}).
  * Branch-only: the design graph lands after his picks, and this goes then.
  *
@@ -204,7 +205,7 @@ const DOC_SOCKET =
 const STAGE_PATH =
   /^\/(?:@cawco\/|@vite\/|@fs\/|@id\/|src\/|node_modules\/|\.cawco\/)/u;
 /**
- * A comment at the head of every page served here: a proxy that puts its
+ * A comment at the head of the canvas page: a proxy that puts its
  * overlay right after the page's `<head>` (core preview-proxy.ts
  * `overlayAt`) finds this one first, and its tag lands inside the comment,
  * where it never runs.
@@ -218,14 +219,17 @@ const DOCTYPE = /^\s*<!doctype[^>]*>/iu;
  */
 const DOC_PATHS = `(()=>{const at=(u)=>{try{const x=new URL(String(u),location.href);if(x.pathname.startsWith("/__cawco/artifact/")){x.pathname=${JSON.stringify(DOC_HERE)}+x.pathname.slice(18);return x.href}}catch{}return u};const W=window.WebSocket;window.WebSocket=class extends W{constructor(u,p){super(at(u),p)}};const F=window.fetch.bind(window);window.fetch=(i,o)=>F(typeof i==="string"||i instanceof URL?at(i):i,o);})();`;
 
-/** A page served here: the hub's overlay left inert; the canvas page with its own. */
+/** A page served here: the panel's as it is; the canvas page with the hub's overlay inert and its own. */
 const pageOf = (html: string, canvas: boolean): string => {
-  const own = canvas
-    ? injectOverlay(html).replace(
-        `src="${OVERLAY_PATH}"`,
-        `src="${OVERLAY_HERE}"`
-      )
-    : html;
+  if (!canvas) {
+    // The panel's page keeps the hub's overlay: the hub's own panel hears the preview through it.
+    return html;
+  }
+  // `data-embed`: the canvas page's overlay runs though its same-origin parent carries the hub's (overlay.ts).
+  const own = injectOverlay(html, { embed: "" }).replace(
+    `src="${OVERLAY_PATH}"`,
+    `src="${OVERLAY_HERE}"`
+  );
   const doctype = own.match(DOCTYPE)?.[0] ?? "";
   return `${doctype}${DECOY}${own.slice(doctype.length)}`;
 };
