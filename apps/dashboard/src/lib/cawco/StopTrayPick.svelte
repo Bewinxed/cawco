@@ -54,11 +54,12 @@
   import {
     IconCloudCross as Away,
     IconError as Failed,
+    IconMoonSleep as OffGlyph,
     IconPause as Pause,
+    IconStop as StopGlyph,
     IconRenew as Working,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
   import { nestFrom } from "./motion/branch.svelte";
   import { unfold } from "./motion/fold.svelte";
@@ -76,6 +77,8 @@
     refusal = null,
     oncancel,
     onconfirm,
+    cap = false,
+    keptSays = false,
   }: {
     class?: string;
     projectName: string;
@@ -89,6 +92,10 @@
     refusal?: string | null;
     oncancel?: () => void;
     onconfirm?: () => void;
+    /** A long list stands about ten rows tall and scrolls, the next row peeking. */
+    cap?: boolean;
+    /** An unchecked row's second line says it keeps running. */
+    keptSays?: boolean;
   } = $props();
 
   const uid = $props.id();
@@ -236,6 +243,9 @@
     if (stop === "failed") {
       return { word: "Couldn't stop", icon: Failed, tone: "failed" } as const;
     }
+    if (step === "pick" && keptSays && !on.has(row.id)) {
+      return { word: "Keeps running", icon: null, tone: "quiet" } as const;
+    }
     if (row.offline) {
       return {
         word: on.has(row.id)
@@ -378,21 +388,35 @@
 <section
   aria-labelledby="{uid}-title"
   class={cn(
-    "@container/stop-tray min-w-0 py-space-1 ps-(--ask-indent) pe-(--ask-end)",
+    "@container/stop-tray mt-space-1 min-w-0 border-t border-border-hairline pt-space-3 ps-(--ask-indent) pe-(--ask-end)",
     className
   )}
   data-stop-kind="caw-off"
   data-phase={step}
   transition:unfold
 >
-  <div
-    data-slot="tile"
-    class="grid grid-cols-1 gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
-  >
-    <div data-slot="head" class="flex min-w-0 gap-space-3">
-      <div aria-hidden="true" class="flex-none">
-        <CawFace size={36} status={step === "pick" ? "ready" : "sleeping"} />
-      </div>
+  <div data-slot="body" class="grid grid-cols-1 gap-space-3">
+    <div data-slot="head" class="flex min-w-0 gap-space-2">
+      <!-- mark-line: the glyph stands on the title's first line. -->
+      <span
+        aria-hidden="true"
+        data-box
+        class="grid block-lh flex-none place-items-center type-label text-ink-muted"
+      >
+        {#key step === "pick"}
+          <span
+            class="col-start-1 row-start-1 inline-grid"
+            in:glyphIn
+            out:glyphOut
+          >
+            {#if step === "pick"}
+              <StopGlyph class="size-icon-md" />
+            {:else}
+              <OffGlyph class="size-icon-md" />
+            {/if}
+          </span>
+        {/key}
+      </span>
       <div data-slot="words" class="grid min-w-0 flex-auto gap-space-1">
         <p
           data-slot="title"
@@ -411,7 +435,7 @@
     {#if step !== "off"}
       <div
         data-slot="list"
-        class="grid min-w-0 grid-cols-1 gap-space-1"
+        class="-mx-(--row-compact-gap) grid min-w-0 grid-cols-1 gap-space-1"
         transition:unfold
       >
         {#if step === "pick" && total > 1}
@@ -453,7 +477,14 @@
         <ul
           data-slot="sessions"
           aria-label="Sessions Caw started"
-          class="m-0 flex list-none flex-col gap-(--tree-gap) overflow-x-clip p-0 clip-margin-space-2"
+          class={cn(
+            "m-0 flex list-none flex-col gap-(--tree-gap) overflow-x-clip p-0 clip-margin-space-2",
+            cap &&
+              "max-h-(--list-cap) overflow-y-auto overscroll-contain scrollbar-gutter-stable"
+          )}
+          style:--list-cap={cap
+            ? "calc(10.5 * (2lh + 2 * var(--space-1) + var(--tree-gap)))"
+            : undefined}
         >
           {@render branch(null)}
         </ul>
