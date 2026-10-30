@@ -5,6 +5,7 @@ import {
   type Envelope,
   type HarnessKind,
   type InstanceRow,
+  type Kind,
   parseConnectionTool,
   type SendPayload,
 } from "@cawco/core";
@@ -228,6 +229,8 @@ export function createDelegationMcp(options: {
   instancesByShortId: (prefix: string) => InstanceRow[];
   /** The board and the machines, read in the hub's own process (delegation-actions.ts). */
   fleet: Fleet;
+  /** Who decides' kinds, listed in every session's instructions as it starts (core decides.ts `kindsLine`). */
+  decidesKinds: () => readonly Kind[];
   /** Every former id, by the id its session has now (db `formerIds`). */
   formerIds: () => Record<string, string>;
   /** Whether `leadId` is the conversation of the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
@@ -1196,7 +1199,8 @@ export function createDelegationMcp(options: {
         },
         spawn: () => Promise.reject(new Error("Instructions start nothing")),
       },
-      listableOf(bound)
+      listableOf(bound),
+      options.decidesKinds()
     );
 
   /** Every MCP call running now, or answered a moment ago, that its harness can still cut (call-cuts.ts). */
@@ -1426,5 +1430,25 @@ export function createDelegationMcp(options: {
     }
     return { tools: answered };
   };
-  return { handle, call, list, toolsMayHaveChanged };
+  /**
+   * The hub's own hand-off as session `actor` (Who decides, settling.ts):
+   * the `handoff` tool's one path, its delivery words answered; refused in
+   * the tool's words when it would be.
+   */
+  const handoffAs = async (
+    actor: InstanceRow,
+    target: string,
+    message: string
+  ): Promise<string> => {
+    const result = await sessionCall(actor, "handoff", { target, message });
+    const said = result.content
+      .flatMap((part) => (part.type === "text" ? [part.text] : []))
+      .join("\n");
+    if (result.isError) {
+      throw new Error(said);
+    }
+    return said;
+  };
+
+  return { handle, call, list, toolsMayHaveChanged, handoffAs };
 }

@@ -31,7 +31,7 @@
  * the artifact's route with the overlay, whose page hash is the program's.
  */
 
-import { DECISION_KINDS } from "@cawco/core/decides";
+import type { Kind } from "@cawco/core/decides";
 import { type ProgramRead, readProgram } from "@cawco/core/decisions";
 import {
   AFTER_REF,
@@ -251,7 +251,8 @@ const undrawnWords = (root: ElementNode | null): string[] => {
 /** A decision's own id and its options': lowercase, each its own; each option with its cost, and one recommended with its why. */
 const cardProblems = (
   card: ProgramRead["cards"][number],
-  seen: Set<string>
+  seen: Set<string>,
+  kinds: readonly Kind[]
 ): string[] => {
   const problems: string[] = [];
   if (!DECISION_ID.test(card.id)) {
@@ -302,9 +303,9 @@ const cardProblems = (
       `Decision "${card.id}" has no why: one sentence on why its recommended option.`
     );
   }
-  if (!card.kind) {
+  if (!(card.kind && kinds.some((kind) => kind.id === card.kind))) {
     problems.push(
-      `Decision "${card.id}" has no kind: give it one as its 9th argument (${DECISION_KINDS.join(", ")}).`
+      `Decision "${card.id}" ${card.kind ? `files its choice under “${card.kind}”, which is not a kind` : "has no kind"}: give it one as its 9th argument, by id. ${kinds.map((kind) => `${kind.id}: ${kind.example}`).join("; ")}.`
     );
   }
   return problems;
@@ -450,9 +451,11 @@ const wholeArtifacts = (
 };
 
 /** Its ids, `after`s and media, as picks and the graph need them. */
-const idProblems = (read: ProgramRead): string[] => {
+const idProblems = (read: ProgramRead, kinds: readonly Kind[]): string[] => {
   const seen = new Set<string>();
-  const problems = read.cards.flatMap((card) => cardProblems(card, seen));
+  const problems = read.cards.flatMap((card) =>
+    cardProblems(card, seen, kinds)
+  );
   return [
     ...problems,
     ...read.cards.flatMap((card) => afterProblems(card, seen)),
@@ -537,6 +540,7 @@ const unclosedProblem = (text: string): string | null => {
  */
 const checkProgram = (
   raw: string,
+  kinds: readonly Kind[],
   artifact?: ArtifactNamed
 ): CheckedProgram => {
   const program = `${raw.trim()}\n`;
@@ -605,7 +609,7 @@ const checkProgram = (
   const read = readProgram(result.root);
   const whole = wholeArtifacts(program, read, artifact);
   const ids = [
-    ...idProblems(read),
+    ...idProblems(read, kinds),
     ...lookProblems(result.root),
     ...whole.problems,
   ];
@@ -648,6 +652,32 @@ const statementsOf = (program: string): Map<string, string> => {
   }
   return found;
 };
+
+/**
+ * The Decision statements of `program` for cards `cards` with their kind
+ * `from` refiled as `to`, as a revision merges them (Who decides, a kind
+ * removed): its 9th argument, the last, is the kind. A kind's id is a slug
+ * (core decides.ts `DECIDES_ID`), so it goes into the pattern as written.
+ */
+export const refiledStatements = (
+  program: string,
+  cards: readonly string[],
+  from: string,
+  to: string
+): string => {
+  const last = new RegExp(`(["'])${from}\\1(\\s*\\)\\s*)$`, "u");
+  return [...statementsOf(program).values()]
+    .filter((text) => {
+      const opens = DECISION_OPENS.exec(text);
+      return !!opens?.[2] && cards.includes(opens[2]) && last.test(text);
+    })
+    .map((text) => text.replace(last, `"${to}"$2`))
+    .join("\n");
+};
+
+/** A Decision statement's opening: its name and the card's id. */
+const DECISION_OPENS =
+  /^([A-Za-z_$][\w$]*)\s*=\s*Decision\(\s*["']([^"']+)["']/u;
 
 /** What a revision changed, by statement name: new ones, rewritten ones, and those it dropped (unreachable now). */
 export interface StatementChange {
@@ -722,9 +752,10 @@ const FILE_NAME = /[^A-Za-z0-9._-]+/gu;
 export const buildProgram = async (
   raw: string,
   image: (file: string) => Promise<ImageRead>,
-  artifact: ArtifactNamed
+  artifact: ArtifactNamed,
+  kinds: readonly Kind[]
 ): Promise<BuiltProgram> => {
-  const checked = checkProgram(raw, artifact);
+  const checked = checkProgram(raw, kinds, artifact);
   const names = [...new Set(checked.read.images)];
   const reads = await Promise.all(names.map(image));
   const problems = reads.flatMap((read, index) =>

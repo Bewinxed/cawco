@@ -207,12 +207,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    whole-set `"finish"` or `"stop"` is gone, and each running row names
  *    its task's title (`taskTitle`). A page built for 40 sends a choice the
  *    hub refuses, so it reloads first.
+ * 42: Who decides is members and kinds: `GET /api/decides` answers the
+ *    fleet's members, kinds and routes by member id, and a project's table
+ *    names no advisor. A page built for 41 reads an `advisor` and the six
+ *    fixed kinds the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 41;
+export const WIRE_PROTOCOL = 42;
 
 /**
  * What a session's stream carries: the changes each frame made to its

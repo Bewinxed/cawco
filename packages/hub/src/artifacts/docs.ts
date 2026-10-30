@@ -146,8 +146,8 @@ const elementsIn = (
     });
 
 export const createArtifactDocs = (deps: {
-  /** A page's `state` changed at `keys` (a pick, a note), by anyone: its project's Decisions tab hears of it. */
-  changed?: (id: string) => void;
+  /** A page's `state` changed at `keys` (a pick, a note), by `by`: its project's Decisions tab hears of it, and Who decides of a settled card picked again. */
+  changed?: (id: string, keys: string[], by: CanvasAuthor) => void;
   db: ArtifactsDb;
   /** The hub's lifetime: each doc's idle timer runs on it. */
   lifetime: HubLifetimeShape;
@@ -210,7 +210,7 @@ export const createArtifactDocs = (deps: {
       deps.db.compact(id, encodeStateAsUpdate(entry.doc));
     }
     if (changed.keys.length > 0) {
-      deps.changed?.(id);
+      deps.changed?.(id, changed.keys, by);
     }
     deps.updated?.(id, by);
   };

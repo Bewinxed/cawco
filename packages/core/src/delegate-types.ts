@@ -516,8 +516,8 @@ export const denyToolsProblem = (
  * The fleet's seed set (inserted once, only when the table is empty): one type
  * per effort level, each description saying which tasks that level fits, so a
  * caller routes by how much verification and judgement the work needs; and
- * the two Who decides names by default (decides.ts `DEFAULT_ADVISOR`,
- * `PRACTICE_TYPE`): the advisor and research.
+ * the two Who decides members run as by default (decides.ts `BUILT_IN`:
+ * the Advisor and Common practice): advisor and research.
  */
 export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {

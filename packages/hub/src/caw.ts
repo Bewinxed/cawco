@@ -234,6 +234,7 @@ export const EVENT_SKILLS = {
   "person-request": "project-person-request",
   "fleet-watch": "project-fleet-watch",
   connection: "project-connection",
+  decision: "project-decision",
 } as const;
 
 /** What kind of event a send to the project's conversation is ({@link EVENT_SKILLS}). */

@@ -79,6 +79,7 @@
     "./decides": "./src/decides.ts",
     "./house-faces": "./src/house-faces.ts",
     "./words/decisions": "./src/words/decisions.ts",
+    "./words/decides": "./src/words/decides.ts",
     "./words/routines": "./src/words/routines.ts",
     "./words/leaks": "./src/words/leaks.ts",
     "./words/loop": "./src/words/loop.ts",

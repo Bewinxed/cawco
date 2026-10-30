@@ -438,6 +438,7 @@ import {
 } from "@cawco/core/canvas";
 import { COMMENT_LIMITS, SEND_CONTROLS } from "@cawco/core/comments";
 import { compressAnswer } from "@cawco/core/compress-answer";
+import { decidesFileProblems } from "@cawco/core/decides";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
@@ -503,6 +504,7 @@ import {
   readForgeAsk,
 } from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { containerWords } from "@cawco/core/words/containers";
 import { turnCutWords } from "@cawco/core/words/cuts";
 import { leakWords } from "@cawco/core/words/leaks";
@@ -672,7 +674,8 @@ import type {
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
-import { decidesRoutes } from "./decides-file";
+import { decidesRoutes, type HarnessOffer } from "./decides";
+import { DECIDES_FILE } from "./decides-file";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
   type ArtifactNamed,
@@ -680,6 +683,7 @@ import {
   buildProgram,
   type ImageRead,
   PROGRAM_FILE,
+  refiledStatements,
   scriptJson,
 } from "./decision-program";
 import {
@@ -859,6 +863,7 @@ import {
   YOU as FOLDER_YOU,
   FolderRefusal,
   folderFileNames,
+  guardFolderFile,
   listFolder,
   onFolderDeletes,
   projectFolderRoutes,
@@ -13269,7 +13274,8 @@ export const createServer = (
       const built = await buildProgram(
         program.text,
         (file) => programImage(row, file, program),
-        artifact
+        artifact,
+        db.decides.kinds()
       );
       return { html: built.html, program: built };
     }
@@ -14031,8 +14037,24 @@ export const createServer = (
       waitPageMoved(id);
     },
     // A pick or a note on a project's page moves its Decisions tab, and,
-    // once quiet, its record when the page is decided.
-    changed: (id) => {
+    // once quiet, its record when the page is decided. A card a member of
+    // Who decides settled that the person picked otherwise is taken back:
+    // its pick no longer carries the member's record.
+    changed: (id, keys, by) => {
+      if (by === "person") {
+        const state = artifactDocs.doc(id).getMap("state");
+        for (const key of keys) {
+          const kept = db.decides.settling(id, key);
+          if (kept?.settledAt) {
+            push.decidedSeen(id, key);
+            if (
+              !(state.get(key) as { settled?: unknown } | undefined)?.settled
+            ) {
+              db.decides.markTakenBack(id, key, new Date());
+            }
+          }
+        }
+      }
       const row = db.artifacts.get(id);
       if (row?.kind === "page" && row.projectId) {
         decisionsChanged(row.projectId);
@@ -14204,9 +14226,55 @@ export const createServer = (
     );
     return ` Its delegates left ${sessions.length === 1 ? "this artifact" : `these ${sessions.length} artifacts`} in the person's panel: ${listed}. ${now ? artifactToolWords.leftoverEnded : artifactToolWords.leftoverLive}`;
   };
-  // Who decides (settling.ts): each card's route said to its writer, and a
-  // delegate started under it, the way dispatch starts an attempt, for each
-  // card an advisor or common practice settles.
+  /** The machines online now, as the hub's registry holds them (Who decides). */
+  const machinesOnline = () =>
+    db.listAgents().filter((machine) => registry.agent(machine.machineId));
+  /** Each harness on an online machine, with the models it reports (Who decides' setup). */
+  const harnessOffers = (): HarnessOffer[] => {
+    const fleet = db.listAgents();
+    const online = machinesOnline();
+    return HARNESSES.map((harness) => {
+      const reports = online.flatMap((machine) =>
+        (machine.harnesses ?? [])
+          .filter((report) => report.harness === harness && report.installed)
+          .map((report) => ({ machine, report }))
+      );
+      const models = new Map<string, HarnessOffer["models"][number]>();
+      for (const { report } of reports) {
+        for (const model of report.models ?? []) {
+          models.set(model.value, {
+            id: model.value,
+            name: model.displayName,
+            default: model.value === "default",
+          });
+        }
+      }
+      return {
+        id: harness,
+        name: accountsWords.harnesses[harness],
+        machines: [
+          ...new Set(
+            reports.map(({ machine }) =>
+              machineCalled(machine.machineId, fleet)
+            )
+          ),
+        ],
+        models: [...models.values()],
+      };
+    });
+  };
+  /** A model's name as its harness reports it on any machine; its id when none does. */
+  const modelNamed = (harness: string, model: string): string =>
+    db
+      .listAgents()
+      .flatMap((machine) => machine.harnesses ?? [])
+      .filter((report) => report.harness === harness)
+      .flatMap((report) => report.models ?? [])
+      .find((one) => one.value === model)?.displayName ?? model;
+  // Who decides (settling.ts): each card sent to its member and said to its
+  // writer: a run started under it the way dispatch starts an attempt, or a
+  // warm session of the member handed the cards, or Caw's conversation; a
+  // card whose member can't be reached comes to the person, signed.
   const settling = createSettling({
     db: db.decides,
     instance: (id) => db.getInstancesByIds([id])[0],
@@ -14215,12 +14283,44 @@ export const createServer = (
       const state = db.workItem(id)?.state;
       return state === "starting" || state === "running";
     },
+    delegateType: (name) => db.delegateTypes.get(name),
+    harnessName: (harness) =>
+      accountsWords.harnesses[harness as HarnessKind] ?? harness,
+    harnessOnline: (harness) =>
+      machinesOnline().some((machine) =>
+        (machine.harnesses ?? []).some(
+          (report) => report.harness === harness && report.installed
+        )
+      ),
+    modelName: modelNamed,
+    handoff: (from, to, message) => delegationMcp.handoffAs(from, to, message),
+    warm: (id) => {
+      const [row] = db.getInstancesByIds([id]);
+      if (!row || row.status === "discarded") {
+        return false;
+      }
+      const state = followupState(row);
+      return cacheWarmNow(row, state.midTurn, state.lastTurnAt);
+    },
+    pageCards: (artifactId, cards) => artifacts.pageCards(artifactId, cards),
+    project: (id) => db.project(id),
+    tellCaw: async (projectId, event) => {
+      const told = await caw.tell(projectId, {
+        by: "event",
+        kind: "decision",
+        ...event,
+      });
+      return told.woke ? { instanceId: told.instanceId } : { why: told.why };
+    },
+    heard: (decided) => push.decided(decided),
   });
   const artifacts: Artifacts = createArtifacts({
     decides: {
       routed: (asker, row, cards, all, state) =>
         settling.routed(asker, row, cards, all, state),
       settler: (settler, row, card) => settling.settler(settler, row, card),
+      settled: (row, card, member, answer) =>
+        settling.settled(row, card, member, answer),
     },
     // The panel closes at once; what it showed is still served on its own
     // origin, for its tab and its decision cards.
@@ -14698,6 +14798,12 @@ export const createServer = (
       "browser pages close"
     );
   };
+  // The table can't be broken from CawCo: every write of a project's
+  // decides.md (the dashboard's, a session's folder_write, the hub's own)
+  // names only kinds and members the fleet has (core decidesFileProblems).
+  guardFolderFile(DECIDES_FILE, (text) =>
+    decidesFileProblems(text, db.decides.fleet())
+  );
   /**
    * A project's page lives as long as its source in the project's folder:
    * a commit that takes `decisions/<name>/`'s page.oui or index.html out and
@@ -26378,6 +26484,7 @@ export const createServer = (
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   const delegationMcp = createDelegationMcp({
     lifetime,
+    decidesKinds: () => db.decides.kinds(),
     // Kept with the relayed calls' keys, whose table tool-call-keys prunes.
     callKeys: createCallKeys({ db: db.toolCallKeys }),
     tasks,
@@ -29433,7 +29540,43 @@ export const createServer = (
           }
         ),
         gateRoutes((id) => db.project(id) !== undefined),
-        decidesRoutes(db.decides, (id) => db.project(id) !== undefined),
+        decidesRoutes({
+          db: db.decides,
+          types: delegateTypes,
+          trashType: (name) =>
+            db.trash.put({ kind: "delegateType", key: name }, Date.now()),
+          project: (id) => db.project(id),
+          projects: () => db.listProjects(),
+          harnesses: harnessOffers,
+          skills: () =>
+            db
+              .listSkills()
+              .filter((skill) => skill.enabled && !skill.projectId)
+              .map((skill) => ({ id: skill.name, note: skill.source })),
+          spend: (instances, since) => db.decides.spend(instances, since),
+          live: (id) => {
+            const state = db.workItem(id)?.state;
+            return state === "starting" || state === "running";
+          },
+          waitingUnder: (kind) => artifacts.waitingUnder(kind),
+          refile: async (artifactId, program, cards, from, to) => {
+            const row = db.artifacts.get(artifactId);
+            const owner = row?.madeBy ?? row?.instanceId;
+            const statements = refiledStatements(program, cards, from, to);
+            if (!(owner && statements)) {
+              return false;
+            }
+            try {
+              await artifacts.revise(owner, artifactId, statements);
+              return true;
+            } catch (error) {
+              console.warn(
+                `[decides] ${artifactId}: its cards did not move to ${to}: ${error instanceof Error ? error.message : String(error)}`
+              );
+              return false;
+            }
+          },
+        }),
         taskRoutes(tasks),
         artifactRoutes(artifacts),
         decisionRoutes(decisions),

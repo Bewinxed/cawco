@@ -3,6 +3,8 @@ import {
   HARNESSES,
   IMAGE_GENERATION_DESCRIPTION,
   IMAGE_QUALITIES,
+  type Kind,
+  kindsLine,
   LANDS_MODES,
   REFERENCE_GUIDANCE,
   SESSION_CHOSEN_MODES,
@@ -1253,12 +1255,15 @@ const ANSWERS =
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
   deps: HandoffDeps,
-  listable: Listable
+  listable: Listable,
+  kinds: readonly Kind[]
 ): string {
   const { names } = listable;
   // How a session names another in its words (core references.ts): the
   // dashboard draws the link as that session's chip.
-  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${DECIDES_RULE}\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
+  // Who decides' kinds are the fleet's rows: the live list, read as the
+  // session starts, so a kind added reaches the next session.
+  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${DECIDES_RULE} ${kindsLine(kinds)}\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")

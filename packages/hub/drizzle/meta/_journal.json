@@ -2346,6 +2346,13 @@
       "when": 1793349836268,
       "tag": "0342_conversations_are_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 343,
+      "version": "6",
+      "when": 1793380221353,
+      "tag": "0343_who_decides_members",
+      "breakpoints": true
     }
   ]
 }

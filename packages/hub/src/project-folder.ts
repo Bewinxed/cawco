@@ -96,7 +96,7 @@ const LIST_LIMIT = 2000;
 /** Commits one history answers by default, and at most. */
 const HISTORY_DEFAULT = 50;
 const HISTORY_LIMIT = 200;
-const MESSAGE_LIMIT = 2000;
+export const MESSAGE_LIMIT = 2000;
 const PATH_LIMIT = 1024;
 const GIT_TIMEOUT_MS = 30_000;
 
@@ -286,6 +286,37 @@ const tellDeleted = (projectId: string, paths: string[]): void => {
   }
   for (const listener of deleteListeners) {
     listener(projectId, paths);
+  }
+};
+
+/** The check each guarded path's content passes before any write commits it (`guardFolderFile`). */
+const guards = new Map<string, (text: string) => string[]>();
+
+/**
+ * Makes every write of `rel` in any project's folder pass `check` first,
+ * the dashboard's, a session's `folder_write` and the hub's own alike: a
+ * write it finds problems in is refused (422) with them, and nothing of it
+ * is written. Answers what lifts the guard.
+ */
+export const guardFolderFile = (
+  rel: string,
+  check: (text: string) => string[]
+): (() => void) => {
+  guards.set(rel, check);
+  return () => {
+    guards.delete(rel);
+  };
+};
+
+/** Refuses `bytes` for `rel` when its guard finds problems in them. */
+const guarded = (rel: string, bytes: Uint8Array): void => {
+  const check = guards.get(rel);
+  const problems = check ? check(new TextDecoder().decode(bytes)) : [];
+  if (problems.length > 0) {
+    throw new FolderRefusal(
+      422,
+      `${rel} was not written: ${problems.join(" ")}`
+    );
   }
 };
 
@@ -994,6 +1025,7 @@ export const writeFolderFile = async (
       `The file is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`
     );
   }
+  guarded(rel, bytes);
   const asked = askedMessage(options.message);
   const root = projectRoot(projectId);
   return await inTurn(projectId, async () => {
@@ -1060,6 +1092,7 @@ const toWrite = (
         `${rel} is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`
       );
     }
+    guarded(rel, bytes);
     return { rel, bytes };
   });
   if (writes.length === 0) {

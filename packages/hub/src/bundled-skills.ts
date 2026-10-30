@@ -48,6 +48,7 @@ export const BUNDLED_SKILLS = [
   "project-person-request",
   "project-fleet-watch",
   "project-connection",
+  "project-decision",
 ] as const;
 
 /**

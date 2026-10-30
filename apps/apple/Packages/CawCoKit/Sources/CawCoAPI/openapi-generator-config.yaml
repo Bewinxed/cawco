@@ -56,8 +56,6 @@ typeOverrides:
     ContinueStep: OpenEnums.ContinueStep
     CreatedBy: OpenEnums.CreatedBy
     DamagedRowRemedy: OpenEnums.DamagedRowRemedy
-    DecidesTableLook: OpenEnums.DecidesTableLook
-    DecidesTableLook2: OpenEnums.DecidesTableLook2
     DecisionSentTo: OpenEnums.DecisionSentTo
     DecisionState: OpenEnums.DecisionState
     DeclaredStepNeeds: OpenEnums.DeclaredStepNeeds
@@ -74,7 +72,6 @@ typeOverrides:
     ErrorSaidKind: OpenEnums.ErrorSaidKind
     EventRouteViewMode: OpenEnums.EventRouteViewMode
     Exclude: OpenEnums.Exclude
-    Exclude_1: OpenEnums.Exclude_1
     ExternalActorKind: OpenEnums.ExternalActorKind
     ExternalCommentDirection: OpenEnums.ExternalCommentDirection
     ExternalKind: OpenEnums.ExternalKind
@@ -86,6 +83,7 @@ typeOverrides:
     FindLiveState: OpenEnums.FindLiveState
     FleetChoicesUpstream: OpenEnums.FleetChoicesUpstream
     FleetConvergeState: OpenEnums.FleetConvergeState
+    FleetDecidesCaw: OpenEnums.FleetDecidesCaw
     FleetFaultCause: OpenEnums.FleetFaultCause
     FleetMcpServerMode: OpenEnums.FleetMcpServerMode
     FleetMcpServerState: OpenEnums.FleetMcpServerState
@@ -129,6 +127,10 @@ typeOverrides:
     LocalNameState: OpenEnums.LocalNameState
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
+    MemberHear: OpenEnums.MemberHear
+    MemberType: OpenEnums.MemberType
+    MemberVia: OpenEnums.MemberVia
+    MemberWait: OpenEnums.MemberWait
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage

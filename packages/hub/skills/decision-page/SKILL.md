@@ -38,16 +38,9 @@ A choice that is not yours to make is a decision card with its kind; wait on the
 
 Every Decision names its `kind`, the 9th argument, and the hub refuses one without it: `Decision("cache", "Where do builds cache?", [disk, s3], "Disk is free.", [], [], false, null, "approach")`.
 
-| kind | The choice |
-| --- | --- |
-| `look` | Look and words: layout, copy, colour, motion, a name on screen |
-| `behaviour` | Behaviour: what the product or the fleet does — a flow, a notice, a rule for agents |
-| `scope` | Scope: how much to cut or defer against the brief |
-| `approach` | Approach: how it is built when several ways meet the brief |
-| `rules` | Rules and checks: a lint rule off, a suppression, a check skipped, a design deviation accepted |
-| `tools` | Tools and conventions: a library, a version, a format, a config value, a name in code |
+The fleet's kinds of choice are listed in your instructions (`Kinds:`), each with the example that files a choice under it.
 
-`artifact_create` and `artifact_update` answer each card's route: the person's (the card waits on him), an advisor's or common practice's (a delegate the hub started settles it and reports to you), or yours. On a card that is yours, call `settle({ card: "<page>#<card>", option, why, sources })`: the pick is kept as yours, with your why, and the person can pick again. Wait on the card (`waitsOn: "<page>#<card>"` on a plan step or task) and build once it settles.
+`artifact_create` and `artifact_update` answer where each card went: to the person (the card waits on him), to a member of Who decides that settles it (Caw, the advisor, common practice, an agent he added), or to you. A member that can't be reached sends the card to him, and the line says why. On a card that is yours, call `settle({ card: "<page>#<card>", option, why, sources })`: the pick is kept as yours, with your why, and the person can pick again. Wait on the card (`waitsOn: "<page>#<card>"` on a plan step or task) and build once it settles.
 
 ## Steps
 

@@ -22,7 +22,6 @@ import {
   type PromptOptions,
 } from "@openuidev/lang-core";
 import { z } from "zod";
-import { DECISION_KIND_WORDS, DECISION_KINDS } from "./decides";
 import { VIEW_TEXT_ROLES, VIEW_TONES } from "./views";
 
 /** Every component a decision page may name, in the order the prompt lists them. */
@@ -264,10 +263,10 @@ export const decisionLibrary = <C>(
       // Optional to the parser only, so a page kept before kinds were required
       // still draws; the hub refuses a new or revised Decision without one.
       kind: z
-        .enum(DECISION_KINDS)
+        .string()
         .optional()
         .describe(
-          `Required: what sort of choice it is; the hub settles it by the project's Who decides. ${DECISION_KINDS.map((kind) => `${kind}: ${DECISION_KIND_WORDS[kind].example}`).join("; ")}. A look decision gives each option a picture (Image, Preview or Canvas), or, as a verdict on one design, itself one and its options none.`
+          "Required: what sort of choice it is, a kind's id from the Kinds your instructions list; the hub settles it by the project's Who decides. A look decision gives each option a picture (Image, Preview or Canvas), or, as a verdict on one design, itself one and its options none."
         ),
     })
   );

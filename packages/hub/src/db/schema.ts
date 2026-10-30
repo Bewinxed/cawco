@@ -55,7 +55,7 @@ import type {
   WorkspaceKind,
 } from "@cawco/core";
 import { ASK_STORED, type AskState } from "@cawco/core/asks";
-import { DECIDES_ROUTES, DECISION_KINDS } from "@cawco/core/decides";
+import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { storedJson } from "@cawco/core/stored-json";
 import {
@@ -3096,41 +3096,115 @@ export const sessionLimits = sqliteTable("session_limits", {
 
 /**
  * The fleet's Who decides (core decides.ts) — one row, keyed `'decides'`,
- * following the {@link spendSettings} precedent: the route of each kind a
- * project's decides.md leaves out (decides-file.ts), and the delegate type an
- * advisor runs as. A kind it leaves out is core `DEFAULT_ROUTES`'s; no row
- * reads as those defaults.
+ * following the {@link spendSettings} precedent: every kind's member across
+ * the fleet (a kind it leaves out goes to `you`), what the person changed of
+ * the built-in members (the Advisor's and Common practice's delegate types,
+ * how he hears of their answers, the flock's pictures), and when he last
+ * read the decision surface's catch-up. No row reads as core's seed.
  */
 export const decidesSettings = sqliteTable("decides_settings", {
   /** Always `'decides'`. */
   id: text("id").primaryKey(),
-  routes: storedJson(
-    z.partialRecord(z.enum(DECISION_KINDS), z.enum(DECIDES_ROUTES))
-  )("routes")
+  /** Kind id → member id, checked against the members and kinds at every write (decides.ts). */
+  routes: storedJson(z.record(z.string(), z.string()))("routes")
     .notNull()
     .default({}),
-  /** The advisor's delegate type; null: core `DEFAULT_ADVISOR`. */
+  /** The Advisor's delegate type; null: `advisor`. */
   advisor: text("advisor"),
+  /** Common practice's delegate type; null: `research`. */
+  practice: text("practice"),
+  /** How he hears of the Advisor's and Common practice's answers; absent: core `BUILT_IN`'s. */
+  hear: storedJson(
+    z.object({
+      advisor: z.enum(HEARS).optional(),
+      practice: z.enum(HEARS).optional(),
+    })
+  )("hear"),
+  /** Caw's chosen pose, and each flock member's; absent: core `DEFAULT_POSES`. */
+  pictures: storedJson(
+    z.object({
+      caw: z.enum(CAW_POSE_IDS).optional(),
+      advisor: z.enum(CAW_POSE_IDS).optional(),
+      practice: z.enum(CAW_POSE_IDS).optional(),
+      asker: z.enum(CAW_POSE_IDS).optional(),
+    })
+  )("pictures"),
+  /** When he last read the catch-up of answers he hears of later (the decision surface's). */
+  caughtUpAt: timestamp("caught_up_at"),
 });
 
 /**
- * A card the hub handed to a delegate to settle (settling.ts): an advisor's
- * or common practice's, started for the session that wrote the card. Only
- * that delegate's session may `settle` it. One row per card, the latest
- * run's; a row whose work item ended stands for no one on it.
+ * A member of Who decides the person added (core decides.ts `Member`): an
+ * agent, which runs as the fleet delegate type of the same name; people and
+ * channels come with their connections. The built-in members are never
+ * rows.
+ */
+export const decidesMembers = sqliteTable("decides_members", {
+  /** The name's slug, and the delegate type's name. */
+  id: text("id").primaryKey(),
+  type: text("type", { enum: ["agent", "person", "channel"] }).notNull(),
+  name: text("name").notNull(),
+  job: text("job").notNull(),
+  subject: text("subject").notNull(),
+  /** One of the eight identity marks, 1–8. */
+  hue: integer("hue").notNull(),
+  hear: text("hear", { enum: HEARS }).notNull(),
+  /** An agent's fleet delegate type; null for a person or channel. */
+  delegateType: text("delegate_type"),
+  /** A person's or channel's way to be reached; null until that slice. */
+  reach: storedJson(
+    z.object({
+      via: z.enum(["slack", "email"]),
+      address: z.string(),
+      wait: z.enum(["4h", "1d", "wait"]),
+    })
+  )("reach"),
+  createdAt: stampedNow("created_at"),
+});
+
+/**
+ * A kind of choice (core decides.ts `Kind`): the six built in, seeded as the
+ * hub opens its database (db/decides.ts), and those the person added. A
+ * built-in kind is renamed in place, never removed.
+ */
+export const decidesKinds = sqliteTable("decides_kinds", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  /** The one line agents read to file a choice under it. */
+  example: text("example").notNull(),
+  builtIn: integer("built_in", { mode: "boolean" }).notNull().default(false),
+  position: integer("position").notNull(),
+});
+
+/**
+ * Where the hub sent a decision card (settling.ts), one row per card, the
+ * ledger the decision surface's record reads: the member it went to
+ * (`route`: `advisor`, `practice`, `caw`, an added agent's id, or `you` when
+ * it came to him), the session that settles it (a run the hub started, or
+ * Caw's conversation), and when it was settled and taken back. A card that
+ * came to him started no run, and carries the line that says why
+ * (`signed`).
  */
 export const cardSettlings = sqliteTable(
   "card_settlings",
   {
     artifactId: text("artifact_id").notNull(),
     card: text("card").notNull(),
-    route: text("route").$type<"advisor" | "practice">().notNull(),
-    /** The delegate's session. */
-    instanceId: text("instance_id").notNull(),
-    workItemId: text("work_item_id").notNull(),
-    /** The session that wrote the card: the delegate's parent. */
+    /** The member's id. */
+    route: text("route").notNull(),
+    /** The member's session for it; null when it came to him. */
+    instanceId: text("instance_id"),
+    /** The run's work item; null for Caw's conversation or a card that came to him. */
+    workItemId: text("work_item_id"),
+    /** The session that wrote the card. */
     askedBy: text("asked_by").notNull(),
     createdAt: timestamp("created_at").notNull(),
+    /** The line a card that came to him carries: "Mira can't be reached until Slack or email is connected". */
+    signed: text("signed"),
+    settledAt: timestamp("settled_at"),
+    takenBackAt: timestamp("taken_back_at"),
+    /** The kind it was filed under. */
+    kind: text("kind"),
   },
   (table) => [primaryKey({ columns: [table.artifactId, table.card] })]
 );

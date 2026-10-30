@@ -1,6 +1,7 @@
 <!--
   Under a card settled for the person (core decides.ts):
-  "Decided by the advisor · why · 2 sources", then each source as a link.
+  "Decided by Advisor · Claude Code · Opus 5.5 · why · 2 sources", then each
+  source as a link.
   Picked otherwise since, the card is his, and the line says whose pick he
   took back.
 -->
@@ -14,14 +15,8 @@
     takenBack,
   }: {
     settled: SettledBy | null;
-    takenBack: { by: SettledBy["by"]; option: string } | undefined;
+    takenBack: { name: string; option: string } | undefined;
   } = $props();
-
-  const SETTLER: Record<SettledBy["by"], string> = {
-    advisor: "The advisor",
-    practice: "Common practice",
-    agent: "The agent",
-  };
 </script>
 
 {#if settled}
@@ -55,6 +50,6 @@
     class="type-meta max-w-c-measure text-pretty text-ink-muted"
     data-slot="decided-by"
   >
-    Your decision now. {SETTLER[takenBack.by]} had picked {takenBack.option}.
+    Your decision now. {takenBack.name} had picked {takenBack.option}.
   </p>
 {/if}

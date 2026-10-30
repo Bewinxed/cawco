@@ -813,7 +813,7 @@ export interface DbShape {
     /** Told once the dates, written a chunk a turn after this returns, are in. */
     written?: () => void
   ) => number;
-  /** Who decides: the fleet's table and the cards handed to a delegate to settle (decides.ts). */
+  /** Who decides: the fleet's table, its members and kinds, and where every card went (decides.ts). */
   readonly decides: DecidesDb;
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
@@ -9651,7 +9651,7 @@ const make = async (path: string): Promise<DbShape> => {
     designOffers: designOffersDb(db),
     lfsOffers: lfsOffersDb(db),
     blocks: blocksDb(db),
-    decides: decidesDb(db),
+    decides: decidesDb(db, delegateTypes),
     starters: startersDb(db),
     routines: routinesDb(db),
     connections: connectionsDb(db),

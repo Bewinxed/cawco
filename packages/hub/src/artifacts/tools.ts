@@ -407,7 +407,7 @@ export const commentResolve = {
 export const settle = {
   name: "settle",
   description:
-    "Pick an option on a decision card the project's Who decides gives you: a card of yours whose kind goes to the agent, or a card the hub started you to settle. A card the person decides is refused.",
+    "Pick an option on a decision card the project's Who decides gives you as a member of it: a card of yours whose kind goes to the agent that asked, or a card the hub sent you to settle. A card the person decides is refused.",
   input: {
     card: z
       .string()

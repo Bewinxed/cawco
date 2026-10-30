@@ -4,8 +4,6 @@
  * A module of its own so the preview overlay bundles these and nothing else
  * of core.
  */
-import type { DecidesRoute } from "./decides";
-
 /**
  * One id's entry in an artifact's `state` (Projects spec §5.10): the options
  * picked for a choice, the person's note on it, or a value the page `set`.
@@ -20,7 +18,7 @@ export interface ChoiceEntry {
   pageHash: string;
   /**
    * Who settled the pick, when it was not the person (hub settling.ts, the
-   * `settle` tool): the route, the session, why and its sources. Absent on
+   * `settle` tool): the member, the session, why and its sources. Absent on
    * the person's own pick, whose why is its note. Only the hub writes it.
    */
   settled?: SettledBy;
@@ -28,9 +26,14 @@ export interface ChoiceEntry {
   value: unknown;
 }
 
-/** A pick the hub wrote for a card from `settle`: by whom, why, and on what sources. */
+/** A pick the hub wrote for a card from `settle`: by which member of Who decides (core decides.ts), why, and on what sources. */
 export interface SettledBy {
-  by: Exclude<DecidesRoute, "you">;
+  /** The member's id. */
+  by: string;
+  /** The member's name as it was then: "Advisor". */
+  name: string;
+  /** What it ran on then: "Claude Code · Opus 5.5"; null when nothing names it. */
+  runs: string | null;
   /** The session that settled it, by id. */
   session: string;
   /** Links it rests on; common practice's name one at least. */
@@ -38,8 +41,8 @@ export interface SettledBy {
   why: string;
 }
 
-/** Who may settle a card besides the person. */
-const SETTLERS: readonly SettledBy["by"][] = ["advisor", "practice", "agent"];
+/** A member's id, as `settled.by` names it (core decides.ts `DECIDES_ID`). */
+const MEMBER_ID = /^[a-z][a-z0-9-]{0,62}$/u;
 
 /**
  * The bridge's bounds, the same at both ends: the pane checks what the page
@@ -57,6 +60,9 @@ export const CHOICE_LIMITS = {
   value: 2000,
   /** A settled pick's why. */
   why: 2000,
+  /** A settled pick's member name, and what it ran on. */
+  name: 80,
+  runs: 200,
   /** A settled pick's sources, and each one's length. */
   sources: 20,
   source: 2000,
@@ -132,12 +138,24 @@ const settledProblem = (settled: unknown): string | null => {
   if (
     given === null ||
     typeof given !== "object" ||
-    !SETTLERS.includes(given.by as SettledBy["by"]) ||
+    typeof given.by !== "string" ||
+    !MEMBER_ID.test(given.by) ||
+    typeof given.name !== "string" ||
+    !(given.runs === null || typeof given.runs === "string") ||
     typeof given.session !== "string" ||
     typeof given.why !== "string" ||
     !Array.isArray(given.sources)
   ) {
-    return `settled holds by (${SETTLERS.join(", ")}), session, why and sources.`;
+    return "settled holds by (a member's id), name, runs, session, why and sources.";
+  }
+  if (given.name.length === 0 || given.name.length > CHOICE_LIMITS.name) {
+    return `A settled pick's name is 1 to ${CHOICE_LIMITS.name} characters.`;
+  }
+  if (
+    given.runs !== null &&
+    (given.runs.length === 0 || given.runs.length > CHOICE_LIMITS.runs)
+  ) {
+    return `A settled pick's runs is null or 1 to ${CHOICE_LIMITS.runs} characters.`;
   }
   if (given.why.length === 0 || given.why.length > CHOICE_LIMITS.why) {
     return `A settled pick's why is 1 to ${CHOICE_LIMITS.why} characters.`;

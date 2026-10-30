@@ -105,6 +105,7 @@ import { detach } from "@cawco/core/detach";
 import { DAY_MS } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
+import { decidesWords } from "@cawco/core/words/decides";
 import { Elysia, t } from "elysia";
 import { isProjectConversation } from "./caw";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
@@ -114,6 +115,7 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   artifactCollapseId,
   askCollapseId,
+  decidedCollapseId,
   installCollapseId,
   machineCollapseId,
   mcpCollapseId,
@@ -124,6 +126,7 @@ import {
   taskCollapseId,
   turnCollapseId,
 } from "./notifications";
+import type { Decided } from "./settling";
 import type { TaskEvent } from "./tasks";
 
 const CAWRIER = Bun.env.CAWCO_CAWRIER_ORIGIN ?? "https://cawrier.cawco.dev";
@@ -287,6 +290,17 @@ type PushData =
       kind: "action";
       actionId: string;
       projectId: string;
+    }
+  | {
+      /**
+       * A member of Who decides answered a card (settling.ts): opens the
+       * card in Decisions. The app opens the board for a kind it does not
+       * know.
+       */
+      kind: "decided";
+      artifactId: string;
+      card: string;
+      projectId: string | null;
     }
   | {
       /** Several things need you at once (a burst): opens Needs you. */
@@ -866,6 +880,8 @@ export const createPush = ({
   const queued = new Map<string, HubTimer>();
   /** Installs whose outcome the person acted on: their item no longer needs them. */
   const settledInstalls = new Set<string>();
+  /** Answers by a member of Who decides he picked again or opened, by collapse id: over, if still held. */
+  const seenDecisions = new Set<string>();
 
   /** Records what Cawrier said for a device: taken, pairing gone (the device goes) or refused. */
   const settle = (
@@ -2287,6 +2303,51 @@ export const createPush = ({
           data: { kind: "install", installId: install.id },
         },
       });
+    },
+
+    /**
+     * A member of Who decides answered a card, and its answers are told
+     * each time (settling.ts): one push per answer, its title the member
+     * and the question, its body the pick and why, sealed. Picked again or
+     * opened before it goes, it is over ({@link decidedSeen}).
+     */
+    decided(decided: Decided): void {
+      const collapseId = decidedCollapseId(decided.artifactId, decided.card);
+      seenDecisions.delete(collapseId);
+      const project = projectName(decided.projectId);
+      const title = decidesWords.pushTitle(decided.member, decided.question);
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: new Date(),
+        still: () => !seenDecisions.has(collapseId),
+        notification: {
+          shown: alertOf(decided.member, project, decidesWords.pushShown),
+          sealed: alertOf(
+            title,
+            project,
+            decidesWords.pushBody(decided.label, decided.why)
+          ),
+          category: PUSH_CATEGORIES.taskOpenOnly,
+          collapseId,
+          group: decided.projectId ?? "decided",
+          data: {
+            kind: "decided",
+            artifactId: decided.artifactId,
+            card: decided.card,
+            projectId: decided.projectId,
+          },
+        },
+      });
+    },
+
+    /** He picked that card again, or opened it: its answer's push comes down. */
+    decidedSeen(artifactId: string, card: string): void {
+      const collapseId = decidedCollapseId(artifactId, card);
+      seenDecisions.add(collapseId);
+      open?.items.delete(collapseId);
+      settleAtDesk(collapseId);
+      notifications.clear([collapseId], "settled");
     },
 
     /** The person acted on that install's outcome, here or anywhere: it is over, and its push comes down. */

@@ -127,6 +127,9 @@ export const turnCollapseId = (instanceId: string): string =>
 /** An artifact a turn left waiting on the person: one per artifact, a revision's push replaces the older, and a look at it takes it down. */
 export const artifactCollapseId = (artifactId: string): string =>
   collapseOf("artifact", artifactId);
+/** A member of Who decides answered a card (settling.ts): one per card, cleared when he picks again or opens it. */
+export const decidedCollapseId = (artifactId: string, card: string): string =>
+  collapseOf("decided", `${artifactId}#${card}`);
 /** A session's message to the person (`send_to_user`): one per session, a newer replaces the older. */
 export const messageCollapseId = (instanceId: string): string =>
   collapseOf("message", instanceId);

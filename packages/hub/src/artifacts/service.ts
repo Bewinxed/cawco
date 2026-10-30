@@ -104,6 +104,7 @@ import {
   writeResolve,
   wroteLine,
 } from "@cawco/core/comments";
+import type { Member } from "@cawco/core/decides";
 import {
   type AfterLinks,
   type DecisionCard,
@@ -154,6 +155,7 @@ import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { decidesWords } from "@cawco/core/words/decides";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
@@ -1509,10 +1511,10 @@ export interface ArtifactServiceDeps {
   cold: (instance: InstanceRow) => boolean;
   db: ArtifactsDb;
   /**
-   * Who decides (settling.ts): each card a session just wrote, routed by
-   * its project's table and said back as a line after its link, a delegate
-   * started for each card an advisor or common practice settles; and the
-   * route a session settles a card on, refused in words when it may not.
+   * Who decides (settling.ts): each card a session just wrote, sent to its
+   * member by the project's table and said back as a line after its link;
+   * the member a session settles a card for, and how it signs, refused in
+   * words when it may not; and a settled card's ledger stamp and push.
    */
   decides: {
     routed: (
@@ -1522,11 +1524,17 @@ export interface ArtifactServiceDeps {
       all: DecisionCard[],
       state: Record<string, ChoiceEntry>
     ) => Promise<Record<string, string>>;
+    settled: (
+      row: ArtifactRow,
+      card: DecisionCard,
+      member: Member,
+      answer: { label: string; why: string }
+    ) => void;
     settler: (
       settler: InstanceRow,
       row: ArtifactRow,
       card: DecisionCard
-    ) => Promise<SettledBy["by"]>;
+    ) => Promise<Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }>;
   };
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it
@@ -3659,12 +3667,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return { row, card, option };
   };
 
-  /** The route `instance` settles `card` on (settling.ts `settler`), its refusal an artifact refusal. */
+  /** The member `instance` settles `card` for (settling.ts `settler`), its refusal an artifact refusal. */
   const settlerOf = async (
     instance: InstanceRow,
     row: ArtifactRow,
     card: DecisionCard
-  ): Promise<SettledBy["by"]> => {
+  ): Promise<Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }> => {
     try {
       return await deps.decides.settler(instance, row, card);
     } catch (error) {
@@ -6848,6 +6856,47 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
+     * Page `artifactId`'s cards among `cards` that are still open, with all
+     * its cards and its picks, as a Who decides brief reads them
+     * (settling.ts); undefined when the page or its program is gone.
+     */
+    pageCards: (artifactId: string, cards: readonly string[]) => {
+      const row = db.get(artifactId);
+      const program = row ? programOf(row) : undefined;
+      if (!(row && program !== undefined)) {
+        return;
+      }
+      const all = readKept(program).cards;
+      const state = stateOf(docs.doc(row.id));
+      return {
+        row,
+        all,
+        state,
+        cards: all.filter(
+          (card) => cards.includes(card.id) && !pickMade(card, state[card.id])
+        ),
+      };
+    },
+
+    /** The open decision pages' cards filed under kind `kind` with no pick yet, by page (Who decides' kinds). */
+    waitingUnder: (
+      kind: string
+    ): { cards: string[]; program: string; row: ArtifactRow }[] =>
+      db.asking().flatMap((row) => {
+        const program = programOf(row);
+        if (program === undefined) {
+          return [];
+        }
+        const state = stateOf(docs.doc(row.id));
+        const cards = readKept(program)
+          .cards.filter(
+            (card) => card.kind === kind && !pickMade(card, state[card.id])
+          )
+          .map((card) => card.id);
+        return cards.length > 0 ? [{ row, program, cards }] : [];
+      }),
+
+    /**
      * A card settled for the person (`settle`, Who decides): option
      * `option` of card `card` on decision page `page`, written into the
      * page's doc as one transaction, the same `state` entry the person's
@@ -6866,7 +6915,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<Settled> => {
       const instance = sessionOf(instanceId);
       const { row, card, option } = cardToSettle(instance, page, asked);
-      const by = await settlerOf(instance, row, card);
+      const { member, ...signed } = await settlerOf(instance, row, card);
       const doc = docs.doc(row.id);
       const before = stateOf(doc)[card.id];
       if (pickMade(card, before)) {
@@ -6876,16 +6925,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         );
       }
       if (
-        by === "practice" &&
+        signed.by === "practice" &&
         !asked.sources.some((one) => WEB_SOURCE.test(one))
       ) {
-        throw new ArtifactRefusal(
-          422,
-          "Common practice cites: name at least one https link in sources."
-        );
+        throw new ArtifactRefusal(422, decidesWords.practiceCites);
       }
       const settled: SettledBy = {
-        by,
+        ...signed,
         session: instance.id,
         why: asked.why.trim(),
         sources: asked.sources,
@@ -6906,8 +6952,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         live.getMap("state").set(card.id, entry)
       );
       console.log(
-        `[artifacts] ${row.name}#${card.id} settled ${option.id} by ${by} (${instance.id})`
+        `[artifacts] ${row.name}#${card.id} settled ${option.id} by ${signed.by} (${instance.id})`
       );
+      deps.decides.settled(row, card, member, {
+        label: option.label,
+        why: settled.why,
+      });
       return {
         card: decisionLink(row.id, card.id, card.question),
         option: { id: option.id, label: option.label },

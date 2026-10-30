@@ -297,7 +297,7 @@ const FENCE = /^---\s*$/u;
 const LINE_SPLIT = /\r?\n/u;
 
 /** The lines of a folder file's block, between its opening --- line and the next; undefined when it holds none. */
-export const blockLines = (content: string): string[] | undefined => {
+const blockLines = (content: string): string[] | undefined => {
   const lines = content.split(LINE_SPLIT);
   const start = lines.findIndex((line) => line.trim() !== "");
   const end =

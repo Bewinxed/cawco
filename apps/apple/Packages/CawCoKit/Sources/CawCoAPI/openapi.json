@@ -2549,13 +2549,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FleetDecides"
+                  "$ref": "#/components/schemas/getApiDecides200"
                 }
               }
             }
           }
         }
-      },
+      }
+    },
+    "/api/decides/routes": {
       "put": {
         "requestBody": {
           "required": true,
@@ -2566,83 +2568,24 @@
                 "properties": {
                   "routes": {
                     "type": "object",
-                    "properties": {
-                      "look": {
-                        "type": "string",
-                        "enum": [
-                          "you",
-                          "advisor",
-                          "practice",
-                          "agent"
-                        ]
-                      },
-                      "behaviour": {
-                        "type": "string",
-                        "enum": [
-                          "you",
-                          "advisor",
-                          "practice",
-                          "agent"
-                        ]
-                      },
-                      "scope": {
-                        "type": "string",
-                        "enum": [
-                          "you",
-                          "advisor",
-                          "practice",
-                          "agent"
-                        ]
-                      },
-                      "approach": {
-                        "type": "string",
-                        "enum": [
-                          "you",
-                          "advisor",
-                          "practice",
-                          "agent"
-                        ]
-                      },
-                      "rules": {
-                        "type": "string",
-                        "enum": [
-                          "you",
-                          "advisor",
-                          "practice",
-                          "agent"
-                        ]
-                      },
-                      "tools": {
-                        "type": "string",
-                        "enum": [
-                          "you",
-                          "advisor",
-                          "practice",
-                          "agent"
-                        ]
+                    "patternProperties": {
+                      "^.*$": {
+                        "type": "string"
                       }
                     }
-                  },
-                  "advisor": {
-                    "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
-                  "routes",
-                  "advisor"
+                  "routes"
                 ]
               }
             }
           }
         },
-        "operationId": "putApiDecides",
+        "operationId": "putApiDecidesRoutes",
         "responses": {
           "200": {
-            "description": "putApiDecides 200",
+            "description": "putApiDecidesRoutes 200",
             "content": {
               "application/json": {
                 "schema": {
@@ -2651,12 +2594,1533 @@
               }
             }
           },
-          "422": {
-            "description": "putApiDecides 422",
+          "400": {
+            "description": "putApiDecidesRoutes 400",
             "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiDecidesRoutes 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiDecidesRoutes 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiDecidesRoutes 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiDecidesRoutes 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiDecidesRoutes 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiDecidesRoutes 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiDecidesRoutes 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiDecidesRoutes 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiDecidesRoutes 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decides/members": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "job": {
+                    "type": "string"
+                  },
+                  "hue": {
+                    "minimum": 1,
+                    "maximum": 8,
+                    "type": "integer"
+                  },
+                  "hear": {
+                    "type": "string",
+                    "enum": [
+                      "each",
+                      "later"
+                    ]
+                  },
+                  "agent": {
+                    "type": "object",
+                    "properties": {
+                      "harness": {
+                        "type": "string",
+                        "enum": [
+                          "claude",
+                          "opencode",
+                          "pi"
+                        ]
+                      },
+                      "model": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max"
+                        ]
+                      },
+                      "skills": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "instructions": {
+                        "type": "string"
+                      },
+                      "delegates": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "harness",
+                      "model",
+                      "skills",
+                      "instructions",
+                      "delegates"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "job",
+                  "hue",
+                  "hear",
+                  "agent"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiDecidesMembers",
+        "responses": {
+          "200": {
+            "description": "postApiDecidesMembers 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiDecidesMembers 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiDecidesMembers 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiDecidesMembers 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiDecidesMembers 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiDecidesMembers 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiDecidesMembers 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiDecidesMembers 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiDecidesMembers 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiDecidesMembers 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiDecidesMembers 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decides/members/{id}": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "job": {
+                    "type": "string"
+                  },
+                  "hue": {
+                    "minimum": 1,
+                    "maximum": 8,
+                    "type": "integer"
+                  },
+                  "hear": {
+                    "type": "string",
+                    "enum": [
+                      "each",
+                      "later"
+                    ]
+                  },
+                  "agent": {
+                    "type": "object",
+                    "properties": {
+                      "harness": {
+                        "type": "string",
+                        "enum": [
+                          "claude",
+                          "opencode",
+                          "pi"
+                        ]
+                      },
+                      "model": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max"
+                        ]
+                      },
+                      "skills": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "instructions": {
+                        "type": "string"
+                      },
+                      "delegates": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "harness",
+                      "model",
+                      "skills",
+                      "instructions",
+                      "delegates"
+                    ]
+                  }
+                },
+                "required": [
+                  "hear",
+                  "agent"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiDecidesMembersById",
+        "responses": {
+          "200": {
+            "description": "putApiDecidesMembersById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiDecidesMembersById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiDecidesMembersById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiDecidesMembersById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiDecidesMembersById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiDecidesMembersById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiDecidesMembersById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiDecidesMembersById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiDecidesMembersById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiDecidesMembersById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiDecidesMembersById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiDecidesMembersById",
+        "responses": {
+          "200": {
+            "description": "deleteApiDecidesMembersById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiDecidesMembersById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiDecidesMembersById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiDecidesMembersById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiDecidesMembersById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiDecidesMembersById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "deleteApiDecidesMembersById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "deleteApiDecidesMembersById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiDecidesMembersById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "deleteApiDecidesMembersById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiDecidesMembersById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "deleteApiDecidesMembersById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decides/members/{id}/picture": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "pose": {
+                        "type": "string",
+                        "enum": [
+                          "ready",
+                          "idle",
+                          "asleep",
+                          "head",
+                          "smiling",
+                          "chart",
+                          "sheets",
+                          "easel",
+                          "laptop",
+                          "rocket",
+                          "heart",
+                          "working",
+                          "done",
+                          "trying"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "pose"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "hue": {
+                        "minimum": 1,
+                        "maximum": 8,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "hue"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiDecidesMembersByIdPicture",
+        "responses": {
+          "200": {
+            "description": "putApiDecidesMembersByIdPicture 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiDecidesMembersByIdPicture 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiDecidesMembersByIdPicture 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiDecidesMembersByIdPicture 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiDecidesMembersByIdPicture 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiDecidesMembersByIdPicture 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiDecidesMembersByIdPicture 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiDecidesMembersByIdPicture 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiDecidesMembersByIdPicture 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiDecidesMembersByIdPicture 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiDecidesMembersByIdPicture 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decides/kinds": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "example": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "example",
+                  "to"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiDecidesKinds",
+        "responses": {
+          "200": {
+            "description": "postApiDecidesKinds 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Kind"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiDecidesKinds 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiDecidesKinds 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiDecidesKinds 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiDecidesKinds 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiDecidesKinds 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiDecidesKinds 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiDecidesKinds 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiDecidesKinds 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiDecidesKinds 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiDecidesKinds 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decides/kinds/{id}": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "example": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "example"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiDecidesKindsById",
+        "responses": {
+          "200": {
+            "description": "putApiDecidesKindsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiDecidesKindsById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiDecidesKindsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiDecidesKindsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiDecidesKindsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiDecidesKindsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiDecidesKindsById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiDecidesKindsById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiDecidesKindsById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiDecidesKindsById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiDecidesKindsById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiDecidesKindsById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "moveTo": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "moveTo"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "deleteApiDecidesKindsById",
+        "responses": {
+          "200": {
+            "description": "deleteApiDecidesKindsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiDecidesKindsById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiDecidesKindsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiDecidesKindsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiDecidesKindsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiDecidesKindsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "deleteApiDecidesKindsById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "deleteApiDecidesKindsById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiDecidesKindsById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "deleteApiDecidesKindsById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiDecidesKindsById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "deleteApiDecidesKindsById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decides/kinds/{id}/waiting": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiDecidesKindsByIdWaiting",
+        "responses": {
+          "200": {
+            "description": "getApiDecidesKindsByIdWaiting 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiDecidesKindsByIdWaiting200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiDecidesKindsByIdWaiting 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiDecidesKindsByIdWaiting 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiDecidesKindsByIdWaiting 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiDecidesKindsByIdWaiting 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiDecidesKindsByIdWaiting 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiDecidesKindsByIdWaiting 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiDecidesKindsByIdWaiting 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiDecidesKindsByIdWaiting 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiDecidesKindsByIdWaiting 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiDecidesKindsByIdWaiting 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decides/members/{id}/record": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiDecidesMembersByIdRecord",
+        "responses": {
+          "200": {
+            "description": "getApiDecidesMembersByIdRecord 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiDecidesMembersByIdRecord200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiDecidesMembersByIdRecord 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiDecidesMembersByIdRecord 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiDecidesMembersByIdRecord 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiDecidesMembersByIdRecord 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiDecidesMembersByIdRecord 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiDecidesMembersByIdRecord 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiDecidesMembersByIdRecord 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiDecidesMembersByIdRecord 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiDecidesMembersByIdRecord 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiDecidesMembersByIdRecord 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -2780,6 +4244,168 @@
           },
           "504": {
             "description": "getApiProjectsByIdDecides 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "routes": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^.*$": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "message": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "routes",
+                  "message"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdDecides",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdDecides 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiProjectsByIdDecides200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdDecides 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiProjectsByIdDecides 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdDecides 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiProjectsByIdDecides 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiProjectsByIdDecides 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiProjectsByIdDecides 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdDecides 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiProjectsByIdDecides 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiProjectsByIdDecides 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiProjectsByIdDecides 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -26901,7 +28527,224 @@
           "gate"
         ]
       },
+      "getApiDecides200": {
+        "type": "object",
+        "properties": {
+          "connections": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "boolean"
+              },
+              "slack": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "email",
+              "slack"
+            ]
+          },
+          "harnesses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HarnessOffer"
+            }
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Kind"
+            }
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "pictures": {
+            "type": "object",
+            "properties": {
+              "advisor": {
+                "$ref": "#/components/schemas/FleetDecidesCaw"
+              },
+              "asker": {
+                "$ref": "#/components/schemas/FleetDecidesCaw"
+              },
+              "caw": {
+                "$ref": "#/components/schemas/FleetDecidesCaw"
+              },
+              "practice": {
+                "$ref": "#/components/schemas/FleetDecidesCaw"
+              }
+            },
+            "description": "Caw's chosen pose, and each flock member's; absent: the default pose."
+          },
+          "routes": {
+            "type": "object",
+            "description": "Every kind's member across the fleet, by kind id."
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "note"
+              ]
+            }
+          }
+        },
+        "required": [
+          "connections",
+          "harnesses",
+          "kinds",
+          "members",
+          "pictures",
+          "routes",
+          "skills"
+        ]
+      },
+      "deleteApiDecidesMembersById200": {
+        "type": "object",
+        "properties": {
+          "kindsReturned": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "projectsRewritten": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "kindsReturned",
+          "projectsRewritten"
+        ]
+      },
+      "putApiDecidesKindsById200": {
+        "type": "object",
+        "properties": {
+          "builtIn": {
+            "type": "boolean"
+          },
+          "example": {
+            "type": "string"
+          },
+          "id": {
+            "description": "`look`, `behaviour`, `scope`, `approach`, `rules`, `tools`, or the slug of one he added.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "builtIn",
+          "example",
+          "id",
+          "name",
+          "position"
+        ]
+      },
+      "deleteApiDecidesKindsById200": {
+        "type": "object",
+        "properties": {
+          "moved": {
+            "type": "number"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "moved",
+          "projects"
+        ]
+      },
+      "getApiDecidesKindsByIdWaiting200": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "count",
+          "projects"
+        ]
+      },
+      "getApiDecidesMembersByIdRecord200": {
+        "type": "object",
+        "properties": {
+          "decided": {
+            "type": "number"
+          },
+          "lastAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "spendUsd": {
+            "type": "number"
+          },
+          "takenBack": {
+            "type": "number"
+          },
+          "waiting": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "decided",
+          "lastAt",
+          "spendUsd",
+          "takenBack",
+          "waiting"
+        ]
+      },
       "getApiProjectsByIdDecides200": {
+        "type": "object",
+        "properties": {
+          "decides": {
+            "$ref": "#/components/schemas/DecidesTable"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decides",
+          "file"
+        ]
+      },
+      "putApiProjectsByIdDecides200": {
         "type": "object",
         "properties": {
           "decides": {
@@ -34537,122 +36380,238 @@
           "stopsRest"
         ]
       },
-      "FleetDecides": {
-        "description": "The fleet's Who decides: each kind it routes, and its advisor type; what it leaves out is {@link DEFAULT_ROUTES}'s.",
+      "HarnessOffer": {
+        "description": "A harness on the fleet, as the page draws setup from it.",
         "type": "object",
         "properties": {
-          "advisor": {
+          "id": {
+            "type": "string"
+          },
+          "machines": {
+            "description": "The online machines it runs on, by name.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "default": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "default",
+                "id",
+                "name"
+              ]
+            }
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "machines",
+          "models",
+          "name"
+        ]
+      },
+      "Kind": {
+        "description": "A kind of choice: built in, or one he added.",
+        "type": "object",
+        "properties": {
+          "builtIn": {
+            "type": "boolean"
+          },
+          "example": {
+            "description": "The one line agents read to file a choice.",
+            "type": "string"
+          },
+          "id": {
+            "description": "`look`, `behaviour`, `scope`, `approach`, `rules`, `tools`, or the slug of one he added.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "builtIn",
+          "example",
+          "id",
+          "name",
+          "position"
+        ]
+      },
+      "Member": {
+        "description": "One member of Who decides: built in, or one he added.",
+        "type": "object",
+        "properties": {
+          "builtIn": {
+            "description": "`you`, `caw`, `advisor`, `practice`, `asker`, or the slug of a member he added (a delegate type's name).",
+            "type": "boolean"
+          },
+          "delegateType": {
+            "description": "An agent (built-in Advisor and Common practice included): the fleet delegate type it runs as.",
             "type": [
               "null",
               "string"
             ]
           },
-          "routes": {
+          "hear": {
+            "$ref": "#/components/schemas/MemberHear",
+            "description": "How he hears about its answers; null for You, Caw and The agent, which have none."
+          },
+          "hue": {
+            "description": "One of the eight identity marks (1–8); null for Caw's flock and You.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "job": {
+            "description": "One line under the name: what it does with a decision.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pose": {
+            "$ref": "#/components/schemas/FleetDecidesCaw",
+            "description": "Caw's flock: the pose it wears; null for the rest."
+          },
+          "reach": {
+            "description": "A person or channel: how it is reached. Null until that slice.",
             "type": "object",
             "properties": {
-              "look": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
+              "address": {
+                "type": "string"
               },
-              "behaviour": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
+              "via": {
+                "$ref": "#/components/schemas/MemberVia"
               },
-              "scope": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              },
-              "approach": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              },
-              "rules": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              },
-              "tools": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
+              "wait": {
+                "$ref": "#/components/schemas/MemberWait"
               }
-            }
+            },
+            "required": [
+              "address",
+              "via",
+              "wait"
+            ]
+          },
+          "subject": {
+            "description": "In a sentence: \"Roost iOS sends scope to the advisor\".",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/MemberType"
           }
         },
         "required": [
+          "builtIn",
+          "delegateType",
+          "hue",
+          "id",
+          "job",
+          "name",
+          "subject",
+          "type"
+        ]
+      },
+      "MemberType": {
+        "description": "Who decides a kind. The five built in are constants; the rest are rows.",
+        "type": "string",
+        "enum": [
           "advisor",
+          "agent",
+          "asker",
+          "caw",
+          "channel",
+          "person",
+          "practice",
+          "you"
+        ]
+      },
+      "FleetDecides": {
+        "description": "The fleet's Who decides, whole: what `GET /api/decides` answers and the dashboard holds.",
+        "type": "object",
+        "properties": {
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Kind"
+            }
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "pictures": {
+            "type": "object",
+            "properties": {
+              "caw": {
+                "$ref": "#/components/schemas/FleetDecidesCaw"
+              },
+              "advisor": {
+                "$ref": "#/components/schemas/FleetDecidesCaw"
+              },
+              "practice": {
+                "$ref": "#/components/schemas/FleetDecidesCaw"
+              },
+              "asker": {
+                "$ref": "#/components/schemas/FleetDecidesCaw"
+              }
+            },
+            "description": "Caw's chosen pose, and each flock member's; absent: the default pose."
+          },
+          "routes": {
+            "type": "object",
+            "description": "Every kind's member across the fleet, by kind id."
+          }
+        },
+        "required": [
+          "kinds",
+          "members",
+          "pictures",
           "routes"
         ]
       },
       "DecidesTable": {
-        "description": "A project's Who decides as the hub reads it: every kind routed, where each came from, its advisor and its own paths.",
+        "description": "A project's table as the hub reads it.",
         "type": "object",
         "properties": {
-          "advisor": {
-            "description": "The delegate type an advisor runs as.",
-            "type": "string"
-          },
           "from": {
-            "type": "object",
-            "properties": {
-              "look": {
-                "$ref": "#/components/schemas/DecidesTableLook"
-              },
-              "behaviour": {
-                "$ref": "#/components/schemas/DecidesTableLook"
-              },
-              "scope": {
-                "$ref": "#/components/schemas/DecidesTableLook"
-              },
-              "approach": {
-                "$ref": "#/components/schemas/DecidesTableLook"
-              },
-              "rules": {
-                "$ref": "#/components/schemas/DecidesTableLook"
-              },
-              "tools": {
-                "$ref": "#/components/schemas/DecidesTableLook"
-              }
-            },
-            "required": [
-              "approach",
-              "behaviour",
-              "look",
-              "rules",
-              "scope",
-              "tools"
-            ],
-            "description": "Where each kind's route came from."
+            "type": "object"
           },
           "problems": {
-            "description": "Problems in decides.md; the table then is the fleet's.",
+            "description": "decides.md's problems; the table is then every kind → `you`.",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "routes": {
-            "type": "object",
-            "properties": {
-              "look": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              },
-              "behaviour": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              },
-              "scope": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              },
-              "approach": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              },
-              "rules": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              },
-              "tools": {
-                "$ref": "#/components/schemas/DecidesTableLook2"
-              }
-            },
-            "required": [
-              "approach",
-              "behaviour",
-              "look",
-              "rules",
-              "scope",
-              "tools"
-            ]
+            "type": "object"
           },
           "yours": {
             "description": "Paths whose change needs a card the person picked (enforced later); empty when none.",
@@ -34663,7 +36622,6 @@
           }
         },
         "required": [
-          "advisor",
           "from",
           "problems",
           "routes",
@@ -38191,11 +40149,23 @@
         ]
       },
       "SettledBy": {
-        "description": "A pick the hub wrote for a card from `settle`: by whom, why, and on what sources.",
+        "description": "A pick the hub wrote for a card from `settle`: by which member of Who decides (core decides.ts), why, and on what sources.",
         "type": "object",
         "properties": {
           "by": {
-            "$ref": "#/components/schemas/Exclude"
+            "description": "The member's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The member's name as it was then: \"Advisor\".",
+            "type": "string"
+          },
+          "runs": {
+            "description": "What it ran on then: \"Claude Code · Opus 5.5\"; null when nothing names it.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "session": {
             "description": "The session that settled it, by id.",
@@ -38214,17 +40184,11 @@
         },
         "required": [
           "by",
+          "name",
+          "runs",
           "session",
           "sources",
           "why"
-        ]
-      },
-      "Exclude": {
-        "type": "string",
-        "enum": [
-          "advisor",
-          "agent",
-          "practice"
         ]
       },
       "StageUnreached": {
@@ -51128,9 +53092,6 @@
             "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
             "type": "string"
           },
-          "scope": {
-            "$ref": "#/components/schemas/RuleScope"
-          },
           "reply": {
             "description": "What the session is sent when the rule fires.",
             "type": "string"
@@ -51153,6 +53114,9 @@
           },
           "timing": {
             "$ref": "#/components/schemas/RuleTiming"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RuleScope"
           }
         },
         "required": [
@@ -51831,16 +53795,16 @@
             "description": "A command hook's script body. CawCo writes it to a file on every machine\nand points the registration at that path, so the hook travels — a machine\nthat has never seen this hook still runs it correctly. Absent means the\nhandler carries its own `command` and the reader is on their own for\ngetting that command onto each box.",
             "type": "string"
           },
-          "scope": {
-            "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
-          },
           "event": {
             "$ref": "#/components/schemas/HookEvent"
           },
           "enabled": {
             "description": "A disabled hook is simply not written to any machine. Claude Code itself\nhas no way to disable one hook while keeping it, so this is cawco's\nto provide: the row stays, the registration goes.",
             "type": "boolean"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "matcher": {
             "type": "string"
@@ -53177,7 +55141,7 @@
             "type": "string"
           },
           "store": {
-            "$ref": "#/components/schemas/Exclude_1"
+            "$ref": "#/components/schemas/Exclude"
           },
           "storeProvider": {
             "description": "The provider's id in that store, as the store names it (`openai` in OpenCode's for ChatGPT).",
@@ -53192,7 +55156,7 @@
           "storeProvider"
         ]
       },
-      "Exclude_1": {
+      "Exclude": {
         "type": "string",
         "enum": [
           "opencode",
@@ -59313,23 +61277,6 @@
           "end"
         ]
       },
-      "DecidesTableLook": {
-        "type": "string",
-        "enum": [
-          "default",
-          "fleet",
-          "project"
-        ]
-      },
-      "DecidesTableLook2": {
-        "type": "string",
-        "enum": [
-          "advisor",
-          "agent",
-          "practice",
-          "you"
-        ]
-      },
       "DecisionSentTo": {
         "type": "string",
         "enum": [
@@ -59470,6 +61417,25 @@
           "ask",
           "off",
           "on"
+        ]
+      },
+      "FleetDecidesCaw": {
+        "type": "string",
+        "enum": [
+          "asleep",
+          "chart",
+          "done",
+          "easel",
+          "head",
+          "heart",
+          "idle",
+          "laptop",
+          "ready",
+          "rocket",
+          "sheets",
+          "smiling",
+          "trying",
+          "working"
         ]
       },
       "FleetMcpServerMode": {
@@ -59635,6 +61601,28 @@
           "none",
           "tcp",
           "udp+tcp"
+        ]
+      },
+      "MemberHear": {
+        "type": "string",
+        "enum": [
+          "each",
+          "later"
+        ]
+      },
+      "MemberVia": {
+        "type": "string",
+        "enum": [
+          "email",
+          "slack"
+        ]
+      },
+      "MemberWait": {
+        "type": "string",
+        "enum": [
+          "1d",
+          "4h",
+          "wait"
         ]
       },
       "MemoryScopeRole": {

@@ -33,7 +33,7 @@
  */
 import type { ElementNode } from "@openuidev/lang-core";
 import type { ChoiceEntry, SettledBy } from "./choices";
-import { DECISION_KINDS, type DecisionKind, decidedByLine } from "./decides";
+import { decidedByLine } from "./decides";
 import type { DecisionComponentName } from "./decisions-library";
 
 /** One option of a card, as the page labelled it. */
@@ -57,8 +57,8 @@ export interface DecisionCard {
   /** The decisions it depends on: an id on its page, or `page#id` on another. */
   after: string[];
   id: string;
-  /** What sort of choice it is (core decides.ts); null: the person's. */
-  kind: DecisionKind | null;
+  /** What sort of choice it is, a kind's id (core decides.ts); null: the person's. */
+  kind: string | null;
   /** Its own mockup's id (`{{MK:<id>}}`), when it places one. */
   mockup: string | null;
   /** Several options may be picked. */
@@ -181,7 +181,7 @@ export interface AfterLinks {
   unlinked: string[];
 }
 
-/** Who made a pick: the person, or who settled it for him (core decides.ts). */
+/** Who made a pick: the person, or the member of Who decides that settled it for him (core decides.ts). */
 type DecidedBy = "person" | SettledBy["by"];
 
 /** What a pick records of who made it: by whom (and their session, when not the person), why, and its sources. */
@@ -329,9 +329,7 @@ const cardOf = (
   question: text(props.question),
   why: text(props.why),
   multiple: props.multiple === true,
-  kind: (DECISION_KINDS as readonly unknown[]).includes(props.kind)
-    ? (props.kind as DecisionKind)
-    : null,
+  kind: typeof props.kind === "string" && props.kind ? props.kind : null,
   mockup: null,
   options: elementsOf(props.options).map((option, index) => {
     const builds = text(option.props.builds);

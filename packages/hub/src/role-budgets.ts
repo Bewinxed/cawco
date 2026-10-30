@@ -9,6 +9,7 @@
 import {
   estimateTokens,
   type InstanceRow,
+  KIND_SEED,
   SESSION_ROLES,
   type SessionRole,
 } from "@cawco/core";
@@ -125,6 +126,7 @@ export const listRoleTools = (): RoleTools[] => {
   const lifetime = makeLifetime();
   const mcp = createDelegationMcp({
     lifetime,
+    decidesKinds: () => KIND_SEED,
     instancesByIds: (ids) => rows.filter((row) => ids.includes(row.id)),
     runningOf: (harness) =>
       rows.filter((row) => row.harness === harness && row.status === "running"),
