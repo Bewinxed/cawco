@@ -90,11 +90,18 @@
     if (Array.isArray(value)) {
       return value.some(holdsImage);
     }
-    const node = value as {
-      typeName?: unknown;
-      props?: { children?: unknown };
-    } | null;
-    return node?.typeName === "Image" || holdsImage(node?.props?.children);
+    const node = value as
+      | {
+          typeName?: unknown;
+          props?: { children?: unknown };
+        }
+      | null
+      | undefined;
+    // A node with no children (a Preview, a Text) or an Option with no media ends here.
+    if (!node) {
+      return false;
+    }
+    return node.typeName === "Image" || holdsImage(node.props?.children);
   };
 
   const id = $derived(String(props.id ?? ""));
