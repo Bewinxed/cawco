@@ -4,10 +4,16 @@
    * dashboard's shell at one width, drawn from the tokens, with one part
    * stopped on a render error and everything outside that part standing
    * and working. The side card is the real SideSurface (its head, switch,
-   * Expand and Close); the rest of the shell is a stand-in at its real size
-   * with the owner's own fleet (cockpit on obelisk). Try again throws again
-   * on the same data, as a duplicate key does, so the face turns to its
-   * Reload page form, live.
+   * Expand and Close) and its Close works; the rest of the shell is a
+   * stand-in at its real size. The records are the night he saw it
+   * (2026-10-30, Cawco-Dev): the conversation "Orchestrate CawCo after
+   * handover", Caw's turn and his message as they were said, and the
+   * goo-card preview, its page as drawn with its pins and its four comments
+   * as the hub keeps them (goo-card.pins.json), comment 4 carrying the same
+   * picture twice. In the List frames the real Comments rail is given those
+   * comments, and on this branch (before 3e15600b6) it throws the real
+   * each_key_duplicate, caught by a real boundary. Try again rebuilds it and
+   * it throws again, so the face turns to its Reload page form, live.
    *
    * Regions: `side` the card beside a conversation (the split from a 900px
    * pane, the sheet under it), `sheet` the preview sheet in a pane under
@@ -16,7 +22,9 @@
    * `workspace` the sessions' surface, `list` one list inside the side card
    * (the Comments rail's rows, where the duplicate key threw).
    */
+  import type { Pin } from "@cawco/core/comments";
   import { sideWords } from "@cawco/core/words/side";
+  import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
@@ -24,10 +32,10 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import {
-    IconChat,
     IconClose,
     IconFiles,
     IconFolder,
+    IconPaperclip,
     IconPlus,
     IconSearch,
     IconServer,
@@ -40,6 +48,8 @@
   } from "#lib/icons.js";
   import SideSurface from "../../side/SideSurface.svelte";
   import RegionFault from "../RegionFault.svelte";
+  import gooPins from "./goo-card.pins.json";
+  import gooCard from "./goo-card.png";
 
   type Region =
     "side" | "sheet" | "sidebar" | "tabs" | "page" | "workspace" | "list";
@@ -71,6 +81,13 @@
   const retry = () => {
     stopped = true;
   };
+  /** The side card's Close, live: it puts the preview away. */
+  let closed = $state(false);
+  /** The real rail's boundary was tried again and threw again. */
+  let railTried = $state(false);
+  const PINS = gooPins as unknown as Pin[];
+  const messageOf = (error: unknown): string =>
+    error instanceof Error ? error.message : String(error);
 
   const desk = $derived(width >= 901);
   const phone = $derived(width < 640);
@@ -81,8 +98,13 @@
   const split = $derived(pane >= 900);
   const today = $derived(face === "today");
 
+  /**
+   * What each part says under Show details. The side card's is the error he
+   * hit, as Svelte words it in a dev build; the other parts have never
+   * failed, so theirs show the shape such an error takes there.
+   */
   const DETAILS = {
-    side: "Svelte error: each_key_duplicate\nKeyed each block has duplicate key `pin-12` at indexes 3 and 7\n    in CommentRail.svelte\n    in PreviewPane.svelte\n    in SideSplit.svelte",
+    side: "each_key_duplicate\nKeyed each block has duplicate key `/api/files/2e7a7e2fdcf6cbb62ab7ef11c442e40c1a86d93c7c45a543dbd3625db6167b05` at indexes 0 and 1\nhttps://svelte.dev/e/each_key_duplicate",
     sidebar:
       "TypeError: Cannot read properties of undefined (reading 'hue')\n    in ProjectMark.svelte\n    in ProjectTree.svelte\n    in Sidebar.svelte",
     tabs: "Svelte error: each_key_duplicate\nKeyed each block has duplicate key `obelisk:8f2c1a` at indexes 1 and 4\n    in PaneTabs.svelte",
@@ -91,17 +113,14 @@
       "RangeError: Invalid time value\n    at formatAge (age.ts:14)\n    in SessionSurface.svelte",
   };
 
+  /** Cawco-Dev's sessions that night, as the rail named them. */
   const SESSIONS = [
-    { title: "Design dashboard failure states", on: true },
-    { title: "Fix tray chip overflow", on: false },
-    { title: "Ship the stream relay journey", on: false },
-    { title: "Name the Caw-off tray's states", on: false },
+    { title: "Orchestrate CawCo after handover", on: true },
+    { title: "Fix side panel duplicate key crash", on: false },
+    { title: "Fix goo card double neck on scroll", on: false },
+    { title: "Stop skill loads failing busy delegates", on: false },
   ];
-  const TABS = [
-    "Design dashboard failure states",
-    "Fix tray chip overflow",
-    "Caw · cockpit",
-  ];
+  const TABS = SESSIONS.slice(0, 3).map((session) => session.title);
 </script>
 
 <!-- ---------- the shell's parts, standing ---------- -->
@@ -132,7 +151,7 @@
         what="the projects"
       />
     {:else}
-      {#each ["cockpit", "backlot"] as project, at (project)}
+      {#each ["Cawco-Dev"] as project, at (project)}
         <div
           class="mark-line flex h-c-rail-row-h items-center gap-space-2 rounded-sm px-space-2 text-ink-row type-label"
         >
@@ -257,26 +276,71 @@
 {/snippet}
 
 {#snippet transcript()}
+  <!-- Caw's turn and his reply, word for word (2026-10-30 21:17Z); the
+       latest stands at the composer, older turns run up under the strip. -->
   <div
-    class="flex min-h-0 flex-1 flex-col gap-space-4 overflow-hidden bg-tab-sheet px-space-6 pt-space-5 max-desk:px-space-5"
+    class="flex min-h-0 flex-1 flex-col justify-end gap-space-4 overflow-hidden bg-tab-sheet px-space-6 pb-space-4 max-desk:px-space-5"
   >
-    <div
-      class="self-end rounded-lg bg-surface-recess px-space-4 py-space-3 type-body text-ink-strong max-w-c-measure-short"
+    <p
+      class="m-0 max-w-c-measure type-body text-ink-strong text-pretty wrap-anywhere"
     >
-      The side panel went blank with a pink banner again. Can you look at why?
-    </div>
-    <p class="m-0 type-body text-ink-strong max-w-c-measure text-pretty">
-      The Comments rail threw a duplicate key: two pins came back from the hub
-      with the same id after the reconnect. I'm fixing the dedupe in the rail's
-      read.
+      Agreed, and the goo fix won't do that. The card is drawn twice: an
+      outline, and a shadowed copy underneath. Only the outline was redrawn as
+      you scrolled, so the copy kept the old neck where the pin used to be.
     </p>
     <p
-      class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-muted"
+      class="m-0 max-w-c-measure type-body text-ink-strong text-pretty wrap-anywhere"
     >
-      <IconChat class="size-icon-md" /><span class="font-mono type-code"
-        >Read apps/dashboard/src/lib/cawco/preview/CommentRail.svelte</span
-      >
+      I've told the goo fix (<span class="text-link-ink"
+        >Fix goo card double neck on scroll</span
+      >) that the fix is a single shape for both, so the copy can't drift. It
+      must not copy the copy into place from script, and nothing may keep a
+      frame loop running to hide the problem. It checks the fix by scrolling the
+      page with real wheel steps, not by setting values in code. I've answered
+      <span class="text-link-ink">Whole page</span>.
     </p>
+    <p
+      class="m-0 max-w-c-measure type-body text-ink-strong text-pretty wrap-anywhere"
+    >
+      The side panel crash: your console shows a list that got two items with
+      the same key. <span class="text-link-ink"
+        >Fix side panel duplicate key crash</span
+      > is rebuilding tonight's version, 6205, to map that stack to the exact list.
+      It will then fix whatever put the duplicate there, rather than change the key.
+      A likely lead: your goo comment is recorded with the same picture attached twice.
+    </p>
+    <p
+      class="m-0 max-w-c-measure type-body text-ink-strong text-pretty wrap-anywhere"
+    >
+      The new decision-page designer was stopped by a hub bug, not by its own
+      work. The skills I gave it arrived as separate messages after the brief.
+      It answered each with &quot;still waiting&quot;, and the hub counted three
+      of those replies as a stuck session and stopped it. I've restarted it with
+      the same brief.
+    </p>
+    <p
+      class="m-0 max-w-c-measure type-body text-ink-strong text-pretty wrap-anywhere"
+    >
+      Since you were last here, nightly 6205 is installed on all four machines.
+      Your earlier picks are still waiting on the pages listed under &quot;Since
+      21:48&quot; in my plan.
+    </p>
+    <div
+      class="flex max-w-c-measure-short flex-col gap-space-2 self-end rounded-lg bg-surface-recess px-space-4 py-space-3"
+    >
+      <p class="m-0 type-body text-ink-strong text-pretty wrap-anywhere">
+        and why is this error boundary shown like this? indismissable,
+        irrecoverable, and not on brand :/
+      </p>
+      <p
+        class="mark-line m-0 flex min-w-0 items-center gap-space-1 type-meta text-ink-muted"
+      >
+        <IconPaperclip class="size-icon-sm flex-none" data-box /><span
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          >picture-7a32193cc7e1.png</span
+        >
+      </p>
+    </div>
   </div>
   <div class="flex-none bg-tab-sheet px-space-3 pb-space-3 desk:px-space-6">
     <div
@@ -299,52 +363,76 @@
 {/snippet}
 
 {#snippet page()}
-  <!-- The previewed page, standing: a decision page's first cards. -->
-  <div class="flex flex-col gap-space-3 p-space-5">
-    <p class="m-0 type-title text-ink-strong">Failure states</p>
-    <div class="h-c-row-h-two rounded-md bg-surface-raised shadow-tile"></div>
-    <div class="h-c-row-h-two rounded-md bg-surface-raised shadow-tile"></div>
+  <!-- The previewed page as it was drawn, with its pins: goo-card, at its
+       own scale and cut by the well, as a page wider than the well is. -->
+  <img
+    alt="goo-card: How a comment opens, with pins 1, 2 and 3"
+    class="block w-auto max-w-none flex-none self-start"
+    src={gooCard}
+  />
+{/snippet}
+
+{#snippet railHead()}
+  <!-- The rail's own floating group, which outlives its rows. -->
+  <div class="flex items-center justify-end gap-space-1">
+    <Button aria-label="Sort" icon={IconSort} size="icon-sm" variant="ghost" />
+    <Button
+      aria-label="Comment on the whole page"
+      icon={IconPlus}
+      size="icon-sm"
+      variant="ghost"
+    />
+    <Button
+      aria-label="Close comments"
+      icon={IconClose}
+      size="icon-sm"
+      variant="ghost"
+    />
   </div>
 {/snippet}
 
-{#snippet rail()}
-  <aside
-    aria-label="Comments"
-    class="flex w-c-comments-w flex-none flex-col gap-space-2 rounded-sm border border-border-well bg-surface-raised p-space-2 max-phone:hidden"
-  >
-    <div class="flex items-center justify-end gap-space-1">
-      <Button
-        aria-label="Sort"
-        icon={IconSort}
-        size="icon-sm"
-        variant="ghost"
-      />
-      <Button
-        aria-label="Comment on the whole page"
-        icon={IconPlus}
-        size="icon-sm"
-        variant="ghost"
-      />
-      <Button
-        aria-label="Close comments"
-        icon={IconClose}
-        size="icon-sm"
-        variant="ghost"
-      />
-    </div>
-    <div
-      class="mark-line flex h-c-input-h items-center gap-space-2 rounded-md border border-border-control px-space-3 text-ink-subtle type-body"
-    >
-      <IconSearch class="size-icon-md" /><span>Search comments</span>
-    </div>
-    <RegionFault
-      again={stopped}
-      details={DETAILS.side}
-      face="line"
-      onretry={retry}
-      what="the comments"
+{#snippet rail(layout: "beside" | "sheet")}
+  <!-- The real rail, given goo-card's four comments as the hub keeps them.
+       Comment 4 carries one picture twice, so its strip's keyed each throws
+       (CommentRail.svelte:392) and this boundary holds it: the rail's
+       group, its search and the page beside it keep working. -->
+  <svelte:boundary>
+    <CommentRail
+      down={null}
+      focused={null}
+      hold="ready"
+      {layout}
+      live={new Set()}
+      onclose={() => undefined}
+      onhover={() => undefined}
+      onopen={() => undefined}
+      onpage={() => undefined}
+      onresolve={() => undefined}
+      onretry={() => undefined}
+      onretrypin={() => undefined}
+      open={null}
+      pins={PINS}
+      unread={new Set()}
     />
-  </aside>
+    {#snippet failed(thrown, reset)}
+      <div
+        data-beside={layout === "beside" || undefined}
+        class="flex min-w-0 flex-1 flex-col gap-space-2 p-space-2 data-beside:w-c-comments-w data-beside:flex-none"
+      >
+        {@render railHead()}
+        <RegionFault
+          again={railTried}
+          details={messageOf(thrown)}
+          face="line"
+          onretry={() => {
+            railTried = true;
+            reset();
+          }}
+          what="the comments"
+        />
+      </div>
+    {/snippet}
+  </svelte:boundary>
 {/snippet}
 
 {#snippet sideCard(sheet: boolean)}
@@ -363,25 +451,22 @@
   {:else}
     <SideSurface
       label="Preview"
-      onclose={() => undefined}
+      onclose={() => {
+        closed = true;
+      }}
       {switcher}
-      title="Failure states"
-      beside={listOnly && !sheet ? rail : undefined}
+      title="goo-card"
+      beside={listOnly && !sheet ? railBeside : undefined}
     >
       {#if listOnly}
         {@render page()}
         {#if sheet}
-          <!-- The rail is the well's foot sheet on a narrow pane. -->
+          <!-- The rail is the well's foot sheet on a narrow pane, at most
+               60% of the well, a layer over the page. -->
           <div
-            class="absolute inset-x-0 bottom-0 rounded-t-lg border-t border-border-hairline bg-surface-raised pt-space-2"
+            class="absolute inset-x-0 bottom-0 z-2 flex max-h-3/5 rounded-t-lg border-t border-border-hairline bg-surface-raised"
           >
-            <RegionFault
-              again={stopped}
-              details={DETAILS.side}
-              face="line"
-              onretry={retry}
-              what="the comments"
-            />
+            {@render rail("sheet")}
           </div>
         {/if}
       {:else}
@@ -397,6 +482,10 @@
       {/if}
     </SideSurface>
   {/if}
+{/snippet}
+
+{#snippet railBeside()}
+  {@render rail("beside")}
 {/snippet}
 
 {#snippet sideSheet()}
@@ -423,7 +512,7 @@
 
 {#snippet conversation(withSide: boolean)}
   <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-    {#if withSide && split}
+    {#if withSide && split && !closed}
       <div class="flex min-h-0 flex-1 gap-space-2 bg-tab-sheet">
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
           {@render transcript()}
@@ -436,7 +525,7 @@
       </div>
     {:else}
       {@render transcript()}
-      {#if withSide}
+      {#if withSide && !closed}
         {@render sideSheet()}
       {/if}
     {/if}

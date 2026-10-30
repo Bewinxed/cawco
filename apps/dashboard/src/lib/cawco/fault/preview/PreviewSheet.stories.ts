@@ -14,7 +14,7 @@ export default {
   args: { region: "sheet", face: "region", again: false, askCaw: false },
 };
 
-/** The preview sheet in a narrow pane on a phone, 390 wide. */
+/** The preview sheet on a phone, 390 wide: its head and its Close outlive the failure (press it). */
 export const SheetPhone = at(390);
 /** The preview sheet in a narrow pane on a small tablet or a narrow window, 680 wide. */
 export const SheetNarrow = at(680);
