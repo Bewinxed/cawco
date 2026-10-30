@@ -192,8 +192,6 @@ export interface AsksDeps {
    * session with no parent that can take it.
    */
   readonly tellParent: (asker: InstanceRow, envelope: Envelope) => void;
-  /** The thread a project's Caw asks in (caw.ts `askThread`); undefined for any other session. */
-  readonly threadOf: (actor: InstanceRow) => string | undefined;
 }
 
 /** Why a session's ask goes unanswered when it ends. */
@@ -252,7 +250,6 @@ export const createAsks = (deps: AsksDeps) => {
     toolUseId?: string
   ): Promise<string> => {
     const source = await deps.sourceFacts(name, input);
-    const threadId = deps.threadOf(actor);
     const ask: AskRecord = {
       id: newAskId(),
       instanceId: actor.id,
@@ -265,7 +262,6 @@ export const createAsks = (deps: AsksDeps) => {
         carry: { by: "hub", tool: name },
         ...(source ? { source } : {}),
       },
-      ...(threadId ? { threadId } : {}),
       ...(toolUseId ? { toolUseId } : {}),
     };
     deps.asks.add(ask);
@@ -299,14 +295,12 @@ export const createAsks = (deps: AsksDeps) => {
         `You already asked this as ${askLink(open)}; its answer comes as a message.`
       );
     }
-    const threadId = deps.threadOf(actor);
     const ask: AskRecord = {
       id: newAskId(),
       instanceId: actor.id,
       state: "open",
       raisedAt: Date.now(),
       asked,
-      ...(threadId ? { threadId } : {}),
       ...(toolUseId ? { toolUseId } : {}),
     };
     deps.asks.add(ask);
@@ -354,10 +348,9 @@ export const createAsks = (deps: AsksDeps) => {
   return {
     /**
      * Records `name(input)` from `actor` as the person's ask and answers what
-     * the call says at once: recorded, and how the answer reaches it. A
-     * project's Caw asks in his thread: the ask carries it, and the tool call
-     * it gates (`toolUseId`, Claude Code's `_meta`), so it is drawn and
-     * answered there. An admin write without a reason is refused before
+     * the call says at once: recorded, and how the answer reaches it. The
+     * ask carries the tool call it gates (`toolUseId`, Claude Code's
+     * `_meta`), so it is drawn and answered in its session. An admin write without a reason is refused before
      * anything is recorded ({@link askRefusal}); one with a reason is
      * recorded with its source's facts. Undefined for a session in Full
      * Send: approved at once, it runs now.

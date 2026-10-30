@@ -58,10 +58,8 @@ actor TranscriptPrep {
         let streams: [String: String]
         let agentName: String
         let keys: [String: String]
-        /// The transcript has a voice (TranscriptVoice), and what its replies carry.
+        /// The transcript has a voice (TranscriptVoice).
         var voiced = false
-        var extras: [String: ThreadExtras] = [:]
-        var voiceRevision = 0
         /// The width the list's rows stand at, its speaker line's height
         /// (RowMetrics) and its screen's scale (a table's rules): with all
         /// three, each assistant block's exact height is worked out here (PieceHeight).
@@ -162,8 +160,6 @@ actor TranscriptPrep {
         var builder = Builder(agentName: input.agentName, cache: cache)
         builder.keys = input.keys
         builder.voiced = input.voiced
-        builder.extras = input.extras
-        builder.voiceRevision = input.voiceRevision
         let (built, rail) = builder.items(rows)
         let items = measured(built, width: input.width, speaker: input.speaker, scale: input.scale)
         let stable = stablePrefix(items)

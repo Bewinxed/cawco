@@ -101,6 +101,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                      startSession: { [weak self] machineId, cwd, projectId, spinOff in
                          self?.startSession(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff)
                      },
+                     startConversation: { [weak self] projectId, prompt in
+                         self?.startSession(machineId: nil, cwd: nil, projectId: projectId, spinOff: false, prompt: prompt)
+                     },
                      sessionMenus: sessionMenus)
     }
 
@@ -138,7 +141,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         panes.onReturnToFleet = { [weak self] id in self?.returnToFleet(id) }
         panes.onOpen = { [weak self] id in self?.openSession(id) }
         panes.continueHandler = { [weak self] id in self?.newSession.continueSession(id) }
-        // A Caw thread's task cards, its way to the board, its machines line and its first message's new tab.
+        // A pane's task cards, its way to the board and its machines line.
         panes.onOpenTask = { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId) }
         panes.onOpenProject = { [weak self] projectId in self?.go(.project(projectId)) }
         panes.onCheckMachines = { [weak self] source in self?.openMachines(from: source) }
@@ -795,7 +798,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// `animated` false: a landing, the conversation put in front with no push.
     private func openSession(_ id: String, animated: Bool) {
         railSheet?.dismiss(animated: true)
-        workspace.open(Self.tabId(id, hub: hub))
+        workspace.open(id)
         // From another place the board and the conversations arrive as one
         // stack; `showWorkspace` then finds them in front on a compact width
         // and does the wide screen's part.
@@ -803,16 +806,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         showWorkspace(animated: animated)
         hostTabs()
         rail.requestRefresh()
-    }
-
-    /// What opens for `id`: itself, but a project's conversation, the
-    /// session its row names, is never a tab of its own (thread-tabs.ts
-    /// `inLists`): it opens its newest thread, else a new one, so what is
-    /// said there reaches the thread the web shows.
-    static func tabId(_ id: String, hub: HubConnection) -> String {
-        guard let row = hub.fleet.byId[id]?.session, let projectId = row.projectId,
-              hub.fleet.projects.contains(where: { $0.id == projectId && $0.leadInstanceId == id }) else { return id }
-        return hub.threads.of(projectId).first.map { ThreadTabs.tabId($0.id) } ?? ThreadTabs.newTabId(projectId)
     }
 
     /// Puts the workspace where the width shows it.
@@ -840,8 +833,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// A Needs you row goes to what is waiting, never to a place: its
     /// session's tab comes to the front, the composer already holding the
     /// parked ask, the transcript where it was left. A fleet-watch notice opens the session it is about. An ask opens
-    /// where it was made (NeedsCard.svelte `href`, ParkedAsk `paneId`): Caw's
-    /// thread, the session that made it (a curator run's proposal), else its own.
+    /// where it was made (NeedsCard.svelte `href`, ParkedAsk `paneId`): the
+    /// session that made it (a curator run's proposal), else its own.
     private func openWaiting(_ item: HomeModel.NeedsItem) {
         switch item.kind {
         case let .ask(ask): openSession(ask.paneId)
@@ -1053,15 +1046,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         startSession(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: false)
     }
 
-    /// The form as above; `spinOff` opens it as a spin-off (a project's Spin off).
-    func startSession(machineId: String?, cwd: String?, projectId: String?, spinOff: Bool) {
+    /// The form as above; `spinOff` opens it as a spin-off (a project's Spin off), `prompt` on its first words.
+    func startSession(machineId: String?, cwd: String?, projectId: String?, spinOff: Bool, prompt: String? = nil) {
         // The phone's rail sheet steps aside first: the form opens over the page, not over the sheet.
         if let sheet = railSheet {
             sheet.dismiss(animated: true) { [weak self] in
-                self?.newSession.start(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff)
+                self?.newSession.start(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff, prompt: prompt)
             }
         } else {
-            newSession.start(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff)
+            newSession.start(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff, prompt: prompt)
         }
     }
 

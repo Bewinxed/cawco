@@ -687,7 +687,7 @@ export const createIngress = ({
     row: InboundEventRow,
     url: string | null | undefined
   ): Promise<void> => {
-    if (!db.project(row.projectId)?.caw) {
+    if (!db.project(row.projectId)?.eventsOn) {
       return;
     }
     const told = await tell(row.projectId, {

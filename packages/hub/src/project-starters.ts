@@ -22,7 +22,7 @@
  *
  * When it is written (our own calls):
  * - asked by a project being made, a task filed or moved, a turn ending in
- *   one of its threads (Caw's answer landing), a commit landing on its
+ *   its conversation, a commit landing on its
  *   repository (an attempt landing on its base branch), an attempt or a
  *   routine failing, a session making one of its routines, an event from
  *   outside landing for it;
@@ -294,11 +294,6 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       agents,
       knowledge,
       tasks: starterTasks,
-      threads: db.projectThreads(projectId).map((thread) => ({
-        id: thread.id,
-        title: thread.title,
-        last: thread.last,
-      })),
       branch: repo?.branch ?? null,
       commits: repo?.commits ?? [],
       designDeclined: db.designOffers.of(projectId)?.answer === "dismissed",
@@ -449,12 +444,9 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       }
     },
 
-    /** Caw answered in one of the project's threads: his turn there ended. */
-    threadAnswered(threadId: string): void {
-      const thread = db.thread(threadId);
-      if (thread) {
-        touched(thread.projectId, "turn ended");
-      }
+    /** The project's conversation ended a turn. */
+    conversationAnswered(projectId: string): void {
+      touched(projectId, "turn ended");
     },
 
     /** A session made one of the project's routines. */

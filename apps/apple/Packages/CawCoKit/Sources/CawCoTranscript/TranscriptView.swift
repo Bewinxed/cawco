@@ -381,7 +381,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         case .compaction: CompactionDividerView.self
         case .livetool: LiveToolView.self
         case .notice, .retry, .empty: NoticeView.self
-        case .voice: VoiceExtrasView.self
         }
     }
 
@@ -397,7 +396,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let question = registration(QuestionCardView.self), subagent = registration(SubagentView.self)
         let delegate = registration(DelegateView.self), live = registration(LiveToolView.self)
         let notice = registration(NoticeView.self), compaction = registration(CompactionDividerView.self)
-        let voice = registration(VoiceExtrasView.self)
         dataSource = UICollectionViewDiffableDataSource(collectionView: collection) { [weak self] view, index, id in
             guard let kind = self?.items[id]?.kind else { return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id) }
             switch kind {
@@ -413,7 +411,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             case .compaction: return view.dequeueConfiguredReusableCell(using: compaction, for: index, item: id)
             case .livetool: return view.dequeueConfiguredReusableCell(using: live, for: index, item: id)
             case .notice, .retry, .empty: return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id)
-            case .voice: return view.dequeueConfiguredReusableCell(using: voice, for: index, item: id)
             }
         }
     }
@@ -699,12 +696,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     /// Who answers here when it is not a harness session's agent (a
-    /// project's Caw): his face, and what his replies carry under them. The
-    /// transcript is bare with one: nothing stands in for rows not there yet.
+    /// project's conversation): Caw, his face on his turns. The transcript is
+    /// bare with one: nothing stands in for rows not there yet.
     public var voice: TranscriptVoice? {
         didSet {
             env.voice = voice
-            if oldValue?.extras != voice?.extras || oldValue?.revision != voice?.revision || (oldValue == nil) != (voice == nil) { request() }
+            if oldValue?.name != voice?.name || (oldValue == nil) != (voice == nil) { request() }
         }
     }
 
@@ -790,8 +787,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                                          local: transcript.local, streams: streams, agentName: env.agentName, keys: keys)
         input.retries = transcript.retries
         input.voiced = voice != nil
-        input.extras = voice?.extras ?? [:]
-        input.voiceRevision = voice?.revision ?? 0
         requestedWidth = rowWidth
         input.width = rowWidth.map(Double.init)
         input.speaker = speakerHeight

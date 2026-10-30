@@ -52,7 +52,7 @@ final class SpendSectionController: ConfigSectionController {
             problem = nil
             ready = true
         } catch {
-            if onCap == nil { problem = Words.Spend.unread(clause: ThreadsStore.failureWords(error)) }
+            if onCap == nil { problem = Words.Spend.unread(clause: CawStore.failureWords(error)) }
         }
         draw()
     }
@@ -74,7 +74,7 @@ final class SpendSectionController: ConfigSectionController {
                 onCap = try ok.body.json.onCap.rawValue
             } catch {
                 onCap = was
-                refused = ThreadsStore.failureWords(error)
+                refused = CawStore.failureWords(error)
             }
             draw()
         }

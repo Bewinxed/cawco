@@ -41,8 +41,6 @@ nonisolated struct Item: Sendable {
         case retry(String)
         /// The read said the conversation is empty (EmptyState).
         case empty
-        /// What a reply of a transcript's voice carries under it (Caw's tasks and files), by its block id.
-        case voice(String, ThreadExtras)
     }
 
     /// One block of an assistant turn (MessageRow's `.turn`, LiveRow's answer).

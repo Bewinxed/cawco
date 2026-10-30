@@ -6,7 +6,7 @@ type Row = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 /** Whether `root`, the top of a delegation chain, is `project`'s conversation. */
 const isLead = (root: Row, project: ProjectRow): boolean =>
-  project.leadInstanceId === root.id;
+  project.conversationInstanceId === root.id;
 
 /**
  * Whether the delegation chain above a session whose parent is
@@ -57,7 +57,7 @@ export const stoppedByCawOff = (
   row: Row
 ): ProjectRow | undefined => {
   const project = row.projectId ? db.project(row.projectId) : undefined;
-  if (!(row.workItemId && project && !project.caw)) {
+  if (!(row.workItemId && project && !project.eventsOn)) {
     return undefined;
   }
   return db.workItem(row.workItemId)?.origin === "event" ? project : undefined;

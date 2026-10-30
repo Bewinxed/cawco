@@ -40,6 +40,7 @@ import {
   LIMIT_REACHED,
   MCP_NOT_CONNECTED,
   MOVED_HERE,
+  PROJECT_NOTE,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   ROOM_HELD,
@@ -55,8 +56,10 @@ import {
   parseUndelivered,
 } from "./injected";
 import { invariant } from "./invariant";
+import { CAW_EVENT_NOTE, type ProjectNote } from "./project-conversation";
 import { parseReference } from "./references";
 import { parseRuleMarker } from "./rules";
+import { ProjectNoteSchema } from "./stored-shapes";
 import type {
   BlockMetadata,
   BlockType,
@@ -621,6 +624,41 @@ const taskVerb = (status: string | null | undefined): string => {
   return status === "completed" ? "task done" : "task failed";
 };
 
+/** A project note as its hub line carries it (JSON); null for text that is none. */
+function projectNoteOf(content: string): ProjectNote | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  const note = ProjectNoteSchema.safeParse(parsed);
+  return note.success ? note.data : null;
+}
+
+/** What a project note's line carries: its title, and what its event offers to act on. */
+function noteMetadata(note: ProjectNote): BlockMetadata {
+  const { event } = note;
+  return {
+    noteTitle: note.title,
+    noteKind: CAW_EVENT_NOTE,
+    ...(event.kind === "routine-made"
+      ? {
+          routineMade: {
+            expiresAt: event.expiresAt,
+            routineId: event.routineId,
+          },
+        }
+      : {}),
+    ...(event.kind === "design-offer"
+      ? { designOffer: { projectId: event.projectId } }
+      : {}),
+    ...(event.kind === "repo" && event.lfsOffer
+      ? { lfsOffer: { id: event.lfsOffer } }
+      : {}),
+  };
+}
+
 function systemLine(
   base: BlockBase,
   type: BlockType,
@@ -1048,6 +1086,20 @@ export function mapFrame(
               noteTitle: title,
             })
           );
+          break;
+        }
+        // A project note (hub caw.ts `notice`): its title, its body under it,
+        // and what its event offers to act on.
+        case PROJECT_NOTE: {
+          const note = projectNoteOf(sdk.content ?? "");
+          if (note) {
+            mapping.blocks.push(
+              systemLine(base, "ui.system_note", note.body ?? "", {
+                ...noteMetadata(note),
+                subtype: PROJECT_NOTE,
+              })
+            );
+          }
           break;
         }
         // The hub's line for what fleet watch did about a session: titled by

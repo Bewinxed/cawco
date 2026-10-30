@@ -11,7 +11,7 @@
    * sequence a scenario and record what was drawn. The controls below are
    * the same primitives for driving it by hand.
    */
-  import type { CawStatus } from "@cawco/core/threads";
+  import type { CawStatus } from "@cawco/core/project-conversation";
   import Caw from "#lib/cawco/home/Caw.svelte";
 
   const STATUSES: CawStatus[] = [

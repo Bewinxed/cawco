@@ -736,13 +736,11 @@ const SendPayloadShape = z.object({
     .optional(),
   instanceId: z.string(),
   message: SentMessageShape,
-  projectId: z.string().optional(),
 });
 
 const SendExtrasShape = SendPayloadShape.pick({
   attachments: true,
   images: true,
-  projectId: true,
 });
 
 const KeptSendShape = z.object({
@@ -873,7 +871,6 @@ const StopRowShape = z.object({
   owed: z.boolean(),
   s: RunningSessionShape,
   state: z.enum(["running", "away", "stopping", "stopped", "failed"]),
-  turn: z.boolean(),
   view: z.object({ href: z.string().optional(), title: z.string().optional() }),
 });
 

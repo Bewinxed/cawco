@@ -97,7 +97,6 @@ export const askEnvelope = (
   const where = {
     askId: ask.id,
     raisedAt: ask.raisedAt,
-    ...(ask.threadId ? { threadId: ask.threadId } : {}),
     ...(ask.toolUseId ? { toolUseId: ask.toolUseId } : {}),
   };
   const { asked } = ask;

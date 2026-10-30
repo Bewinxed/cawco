@@ -486,7 +486,6 @@
     {#key generation}
       <Transcript
         agentName="Traffic"
-        bare
         focused
         onlanded={() => {
           landed = true;

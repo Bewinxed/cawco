@@ -60,6 +60,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private let hub: HubConnection
     private let prefill: (machineId: String?, cwd: String?, projectId: String?, spinOff: Bool)
+    /// The first words the caller handed the form, which it opens on.
+    private let firstWords: String?
     /// Continue in new session: the form starts a session seeded with a summary of this one.
     private var continuing: ContinueSource?
     /// A Fork whose source carries no mode: the form starts the branch, on
@@ -182,9 +184,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private var compact: Bool { traitCollection.horizontalSizeClass == .compact }
 
-    public init(hub: HubConnection, machineId: String? = nil, cwd: String? = nil, projectId: String? = nil, spinOff: Bool = false) {
+    /// `prompt`: the first words a caller already has (a project's New conversation), over any the form kept.
+    public init(hub: HubConnection, machineId: String? = nil, cwd: String? = nil, projectId: String? = nil, spinOff: Bool = false,
+                prompt: String? = nil) {
         self.hub = hub
         prefill = (machineId, cwd, projectId, spinOff)
+        firstWords = prompt
         continuing = nil
         forking = nil
         restore = nil
@@ -197,6 +202,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     public init(hub: HubConnection, continuing source: ContinueSource, restore: SessionDraft? = nil) {
         self.hub = hub
         prefill = (nil, nil, nil, false)
+        firstWords = nil
         continuing = source
         forking = nil
         self.restore = restore
@@ -264,7 +270,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         remembered = hub.spawnPrefs.rememberedMachine
         // A seeded project starts at its primary checkout; without one the form asks.
         cwd = continuing?.cwd ?? prefill.cwd ?? seeded?.primaryPlace?.path ?? ""
-        prompt = UserDefaults.standard.string(forKey: Self.keptPrompt) ?? ""
+        prompt = firstWords ?? UserDefaults.standard.string(forKey: Self.keptPrompt) ?? ""
         // A branch runs where its conversation is, on its harness, and opens
         // on the model and effort its source ran at.
         if let source = forking, let branch = try? hub.forkPayload(source) {

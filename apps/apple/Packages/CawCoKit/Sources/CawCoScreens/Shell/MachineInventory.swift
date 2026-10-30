@@ -211,7 +211,7 @@ final class MachineInventoryView: UIStackView {
                 try await FleetSkills.adopt(name, machineId: machine.machineId, hub: hub)
             } catch {
                 self?.adoptFailed.insert(key)
-                self?.adoptReason[key] = ThreadsStore.failureWords(error)
+                self?.adoptReason[key] = CawStore.failureWords(error)
             }
             self?.busy.remove(key)
             self?.render()

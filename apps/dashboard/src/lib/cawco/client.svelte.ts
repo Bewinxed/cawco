@@ -77,6 +77,16 @@ import type { MoveJob } from "@cawco/core/move";
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
 import type { SessionPlan } from "@cawco/core/plan";
 import type {
+  CawInitiated,
+  DesignOfferState,
+  LfsOfferState,
+  OnCap,
+  ProjectCap,
+  ProjectConversationView,
+  ProjectSpend,
+} from "@cawco/core/project-conversation";
+import { capHolds } from "@cawco/core/project-conversation";
+import type {
   AgentRow,
   BuildInfo,
   ContinuationJob,
@@ -117,17 +127,6 @@ import type {
   RelayTry,
 } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
-import type {
-  CawInitiated,
-  CawView,
-  DesignOfferState,
-  LfsOfferState,
-  OnCap,
-  ProjectCap,
-  ProjectSpend,
-  ThreadSummary,
-} from "@cawco/core/threads";
-import { capHolds } from "@cawco/core/threads";
 import { HOUR_MS } from "@cawco/core/time";
 import type {
   ToolGlance,
@@ -225,13 +224,6 @@ import {
   subscribeSession,
   sweepCommands,
 } from "./stream";
-import {
-  conversationsOf,
-  inLists,
-  isThreadTab,
-  threadIdOf,
-  threadRowOf,
-} from "./thread-tabs";
 import { warmCompactionMark } from "./transcript/compaction-mark";
 import {
   answeredNote,
@@ -303,22 +295,22 @@ export interface ProjectPlace {
 export interface ProjectRow {
   /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
   cap?: ProjectCap | null;
-  /** Made with Caw: its Caw is on. */
-  caw: boolean;
   /** The harness its Caw runs on. */
   cawHarness: HarnessKind;
   /** The model its Caw runs; null: its harness's default. */
   cawModel: string | null;
-  createdAt: string;
-  id: string;
-  /** Where its attempts land when their task says nothing. */
-  lands: LandsMode;
   /**
    * Its Caw's session, once the hub has started one; null before and after
    * one is retired. Read again on `projects.changed`, which the hub sends as
    * it changes (caw.ts `setLead`).
    */
-  leadInstanceId: string | null;
+  conversationInstanceId: string | null;
+  createdAt: string;
+  /** Its events reach its conversation (made with Caw: on). */
+  eventsOn: boolean;
+  id: string;
+  /** Where its attempts land when their task says nothing. */
+  lands: LandsMode;
   /** The connection that signs in to {@link lfsUrl}; null with it. */
   lfsConnection: string | null;
   /** Where its large files live, an LFS endpoint; null: each repository's origin's own LFS. */
@@ -478,8 +470,6 @@ export interface PendingPermission {
   /** Set when the hub routed the ask to its parent rather than to the user. */
   routedTo?: "parent";
   suggestions?: PermissionUpdate[];
-  /** An ask a project's Caw made: the thread it was made in, drawn and answered there. */
-  threadId?: string;
   toolName: string;
   /**
    * The call the ask gates, as its message's `toolCallId`: while the ask is
@@ -981,103 +971,13 @@ const sessionChild = (row: InstanceRow): TrayChild => {
   };
 };
 
-/** What a thread's status says it is doing, in the fleet's words. */
-const THREAD_DOING: Record<ThreadSummary["status"], Activity> = {
-  working: "working",
-  "needs-you": "blocked",
-  ready: "idle",
-};
 /**
- * Every thread with a project's Caw as a session row (thread-tabs.ts): what
- * the rail lists, nests under and orders it by, and what its tab is named
- * from. Read with the fleet, kept by `thread.upsert` frames.
- */
-const allThreadRows = $derived.by(() =>
-  state.projects.flatMap((project) =>
-    (state.threads[project.id] ?? []).map((thread) =>
-      threadRowOf(thread, project)
-    )
-  )
-);
-/**
- * The threads the lists show: every one you have not archived. An archived
- * one, and the sessions its turns started, stand in no list; its tab still
- * opens it (`instanceIndex` keeps every thread).
- */
-const threadRows = $derived(
-  allThreadRows.filter((row) => !threadOf(row.id)?.archivedAt)
-);
-/** Each thread by its id, for what a `thread:` tab or row asks of it. */
-const threadsById = $derived.by(
-  () =>
-    new Map(
-      Object.values(state.threads)
-        .flat()
-        .map((thread) => [thread.id, thread])
-    )
-);
-/** The thread a `thread:` id names, when this browser has it. */
-const threadOf = (id: string): ThreadSummary | undefined => {
-  const threadId = threadIdOf(id);
-  return threadId ? threadsById.get(threadId) : undefined;
-};
-/** Each thread's row by its `thread:` id. */
-const threadRowsById = $derived(
-  new Map(allThreadRows.map((row) => [row.id, row] as const))
-);
-/** Every row by id, threads among them, for a walk over all of them. */
-const walkedById = $derived(
-  new Map<string, BoardRow>([...rowsById, ...threadRowsById])
-);
-
-/**
- * Every row by its id, threads among them: each `get` and `has` one key's
- * read ({@link rowsById}, or the threads' own), so a lookup wakes on its
- * own row and a delta of another wakes nothing. A walk over all of them
- * wakes on any change.
- */
-class BoardById implements ReadonlyMap<string, BoardRow> {
-  get(id: string): BoardRow | undefined {
-    return isThreadTab(id) ? threadRowsById.get(id) : rowsById.get(id);
-  }
-  has(id: string): boolean {
-    return isThreadTab(id) ? threadRowsById.has(id) : rowsById.has(id);
-  }
-  get size(): number {
-    return walkedById.size;
-  }
-  entries(): MapIterator<[string, BoardRow]> {
-    return walkedById.entries();
-  }
-  keys(): MapIterator<string> {
-    return walkedById.keys();
-  }
-  values(): MapIterator<BoardRow> {
-    return walkedById.values();
-  }
-  [Symbol.iterator](): MapIterator<[string, BoardRow]> {
-    return walkedById.entries();
-  }
-  forEach(
-    each: (
-      row: BoardRow,
-      id: string,
-      map: ReadonlyMap<string, BoardRow>
-    ) => void
-  ): void {
-    for (const [id, row] of walkedById) {
-      each(row, id, this);
-    }
-  }
-}
-
-/**
- * The rows looked up by id and by session, threads among them: one object
- * for good, each lookup a keyed read (`BoardById`, {@link rowsBySession}).
- * Rebuilt whole on every change, it woke every reader of every row.
+ * The rows looked up by id and by session: one object for good, each
+ * lookup a keyed read ({@link rowsById}, {@link rowsBySession}). Rebuilt
+ * whole on every change, it woke every reader of every row.
  */
 const instanceIndex: InstanceIndex<BoardRow> = {
-  byId: new BoardById(),
+  byId: rowsById,
   bySession: rowsBySession,
 };
 
@@ -1094,46 +994,14 @@ function keepsLast<T>(list: () => T[]): () => T[] {
   };
 }
 
-/** Each project's conversation, by its session's id: what lists show as its threads. */
-const conversations = $derived.by(() => conversationsOf(state.projects));
 const runningInstances = $derived.by(keepsLast(() => instances.filter(isLive)));
-/**
- * What a list shows running: sessions (a lead is its threads, thread-tabs.ts
- * `inLists`) and the threads Caw works on or waits on you in.
- */
-const runningRows = $derived.by(
-  keepsLast(() => [
-    ...inLists(runningInstances, conversations),
-    ...threadRows.filter((row) => row.status === "running"),
-  ])
-);
 const listedInstances = $derived.by(
   keepsLast(() => instances.filter(isListed))
 );
-/** What a list shows of every listed session: as `runningRows`, with every thread. */
-const listedRows = $derived.by(
-  keepsLast(() => [...inLists(listedInstances, conversations), ...threadRows])
-);
-/** `listedRows` by id, built once per change for every list that walks their trees. */
+/** `listedInstances` by id, built once per change for every list that walks their trees. */
 const listedById = $derived(
-  new Map(listedRows.map((row) => [row.id, row] as const))
+  new Map(listedInstances.map((row) => [row.id, row] as const))
 );
-/** The sessions of every project's conversation the hub knows: a list leaves their transcripts out too. */
-let leadsWere: ReadonlySet<string> = new Set();
-const leadSessions = $derived.by<ReadonlySet<string>>(() => {
-  const leads = new Set(
-    instances.flatMap((row) =>
-      conversations.has(row.id) && row.sessionId ? [row.sessionId] : []
-    )
-  );
-  if (
-    leads.size !== leadsWere.size ||
-    [...leads].some((id) => !leadsWere.has(id))
-  ) {
-    leadsWere = leads;
-  }
-  return leadsWere;
-});
 const staleInstances = $derived.by(keepsLast(() => instances.filter(isStale)));
 
 const state = $state({
@@ -1222,11 +1090,6 @@ const state = $state({
   moves: [] as MoveJob[],
   projects: [] as ProjectRow[],
   /**
-   * Each project's threads with its Caw, newest first, by project id: read
-   * with the fleet, then kept by `thread.upsert` frames.
-   */
-  threads: {} as Record<string, ThreadSummary[]>,
-  /**
    * How many times each project's tasks have changed since this page
    * connected, by project id (`tasks.changed` frames): what shows its tasks
    * reads them again when it moves.
@@ -1262,8 +1125,7 @@ const state = $state({
    * The line an ask leaves when it ends with no answer from this tab:
    * withdrawn before it was answered (the turn interrupted, the session
    * gone), or answered somewhere else, keyed by its request id. A session's
-   * transcript draws it as a note; a thread, whose asks are its lead's, reads
-   * it from here.
+   * transcript draws it as a note.
    */
   askEnds: {} as Record<string, Message>,
   /**
@@ -2509,10 +2371,9 @@ function rereadDelegateEvents(): void {
  * opened. Broadcast as it happens *and* readable here, for the same reason the
  * hand-offs are: an exchange that settled an hour ago is still the record, and
  * a settled ask is never pushed again. A read that fails leaves the delegate
- * cards on the transcript markers, and the next open tries again. A Caw
- * thread's (`thread:<id>`) are those of the sessions he started from it.
+ * cards on the transcript markers, and the next open tries again.
  */
-export async function loadDelegateEvents(instanceId: string): Promise<void> {
+async function loadDelegateEvents(instanceId: string): Promise<void> {
   if (delegatesRead.has(instanceId)) {
     return;
   }
@@ -3137,8 +2998,6 @@ async function refresh(): Promise<boolean> {
   readTailnetHttps();
   // The stream relay's journey: Needs you's row and Settings › Browsers.
   readRelayJourney().catch(() => undefined);
-  // Every project's threads, for the rail; frames keep them from here.
-  readThreads();
   // What the socket says about asks from here on is newer than the read.
   const readFrom = askHeard;
   const asked = projectsLeave();
@@ -3554,12 +3413,6 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
-  if (frame.kind === "thread.upsert") {
-    heardFrame(`thread:${frame.thread.id}`);
-    adoptThread(frame.thread);
-    return;
-  }
-
   if (frame.kind === "project.cap") {
     heardFrame(`project.cap:${frame.projectId}`);
     const project = state.projects.find((row) => row.id === frame.projectId);
@@ -3864,7 +3717,6 @@ function handleFrame(frame: FramePayload): void {
         routedTo,
         toolUseId: frame.toolUseId,
         raisedAt: frame.raisedAt,
-        threadId: frame.threadId,
         originInstanceId: frame.originInstanceId,
         browserAsk: frame.browserAsk,
         connectAsk: frame.connectAsk,
@@ -4347,7 +4199,7 @@ export function answerFor(requestId: string): CommandRecord | null {
  */
 const answeredWhileOurs = new Map<string, Message>();
 
-/** The line an ask leaves in its session, kept by request id for a thread to read. */
+/** The line an ask leaves in its session, kept by request id. */
 function sayAskEnd(
   target: SessionState,
   requestId: string,
@@ -5341,8 +5193,7 @@ function isSubscribed(instanceId: string): boolean {
 
 /**
  * Every session something on this page shows: the tabs, the peek, the
- * delegate cards, and a Caw thread's panel (`thread:<id>`, a session's
- * stream like any). Its streams' places ({@link forgetUnwatched}) are kept
+ * delegate cards, and a project's conversation in its panel. Its streams' places ({@link forgetUnwatched}) are kept
  * for all of them, a tab waiting on its name included, so a page read
  * before the tab was asked keeps its `seq`.
  */
@@ -5464,49 +5315,6 @@ export function setPeeked(id: string | null): void {
 export function watchDelegate(instanceId: string): void {
   watchedDelegates.set(instanceId, (watchedDelegates.get(instanceId) ?? 0) + 1);
   syncSubscriptions();
-}
-
-/**
- * Sessions whose plan something on screen shows without streaming the
- * session: a thread's lead, whose plan is the thread's. Counted by reader.
- */
-const watchedPlans = new Map<string, number>();
-/** The plan-follow set last sent, so an unchanged set stays quiet. */
-let lastPlanFollowKey = "";
-
-/** Sends the hub the plans this dashboard follows beside its streams, when the set changed. */
-function syncPlanFollows(): void {
-  const ids = [...watchedPlans.keys()].sort();
-  const socket = globalThis.__cawcoSocket;
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    return;
-  }
-  const key = ids.join("\u0000");
-  if (key === lastPlanFollowKey) {
-    return;
-  }
-  lastPlanFollowKey = key;
-  streamHost.sendToHub({ type: "plan.follow", instanceIds: ids });
-}
-
-/** One more reader of a session's plan alone: it stays live while any reader remains. */
-export function watchPlan(instanceId: string): void {
-  watchedPlans.set(instanceId, (watchedPlans.get(instanceId) ?? 0) + 1);
-  syncPlanFollows();
-}
-
-/** A plan's reader let go; the last one stops following it. */
-export function unwatchPlan(instanceId: string): void {
-  const count = watchedPlans.get(instanceId);
-  if (count === undefined) {
-    return;
-  }
-  if (count > 1) {
-    watchedPlans.set(instanceId, count - 1);
-    return;
-  }
-  watchedPlans.delete(instanceId);
-  syncPlanFollows();
 }
 
 /** A reader let go; the last one stops the instance's frames. */
@@ -5677,8 +5485,6 @@ function hubReached(): void {
     rereadTrays();
     rereadDelegateEvents();
   }
-  lastPlanFollowKey = "";
-  syncPlanFollows();
   resumePendingSends(streamState, streamHost);
   detach(checkServedBuild(), "checkServedBuild");
   detach(updates.loadPolicy(), "loadPolicy");
@@ -6406,11 +6212,7 @@ export async function forkSession({
 }
 
 /** What a turn carries besides its typed text — pastes turned into chips, images. */
-/** What rides with a send besides its words; `projectId` names the project a new Caw thread is made in (core `SendPayload.projectId`). */
-export type SendExtras = Pick<
-  SendPayload,
-  "attachments" | "images" | "projectId"
->;
+export type SendExtras = Pick<SendPayload, "attachments" | "images">;
 
 /**
  * What a send does to the LOCAL store: the row it draws under the message's
@@ -6807,16 +6609,16 @@ export async function machineFs<T>(
 /**
  * New project (`POST /api/projects`), made with Caw: its one place is its
  * folder on the hub until setup picks its checkout. `template` is written as
- * its stages.md; `prompt` opens its Setup thread (as the message `promptId`)
- * and wakes Caw to set it up. The hub's refusal is its own words.
+ * its stages.md; `prompt` starts its conversation (as the message
+ * `promptId`), which sets it up: `conversation` is that session. The hub's
+ * refusal is its own words.
  */
 export async function createProject(project: {
   name: string;
   template?: string;
   prompt: string;
   promptId: string;
-}): Promise<ProjectRow & { place: ProjectPlace; setupThread?: ThreadSummary }> {
-  const mark = readLeaves();
+}): Promise<ProjectRow & { place: ProjectPlace; conversation?: string }> {
   const response = await fetch("/api/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -6827,11 +6629,8 @@ export async function createProject(project: {
   }
   const created = (await response.json()) as ProjectRow & {
     place: ProjectPlace;
-    setupThread?: ThreadSummary;
+    conversation?: string;
   };
-  if (created.setupThread) {
-    keepThread(created.setupThread, mark);
-  }
   await refresh();
   return created;
 }
@@ -7049,9 +6848,7 @@ export async function answerProjectOffer(
     return null;
   }
   const accepted = (await response.json()) as ProjectOfferAccepted;
-  if (accepted.setupThread) {
-    keepThread(accepted.setupThread, mark);
-  } else {
+  if (!accepted.conversation) {
     // In the same change as the offer leaving: its card turns, never blinks.
     state.projectJoins[instanceId] = accepted;
   }
@@ -7065,62 +6862,13 @@ export function dismissProjectJoin(instanceId: string): void {
   delete state.projectJoins[instanceId];
 }
 
-// --- a project's Caw, its threads and views ---------------------------------
+// --- a project's conversation and views -------------------------------------
 
 const projectPath = (projectId: string) =>
   `/api/projects/${encodeURIComponent(projectId)}`;
 
-/** Newest message first: the order the hub lists threads in. */
-const byLastAt = (a: ThreadSummary, b: ThreadSummary): number =>
-  b.lastAt - a.lastAt || (a.id < b.id ? 1 : -1);
-
-/** A thread's row as the hub has it now: placed in its project's list, newest first. */
-function adoptThread(thread: ThreadSummary): void {
-  const list = state.threads[thread.projectId] ?? [];
-  const held = list.find((row) => row.id === thread.id);
-  if (held && equal(held, thread)) {
-    return;
-  }
-  state.threads[thread.projectId] = [
-    thread,
-    ...list.filter((row) => row.id !== thread.id),
-  ].sort(byLastAt);
-}
-
-/** A thread's row as a request that left at `mark` answered it, unless a frame for it came since. */
-function keepThread(thread: ThreadSummary, mark: number): void {
-  if (!heardSince(`thread:${thread.id}`, mark)) {
-    adoptThread(thread);
-  }
-}
-
-/**
- * Every project's threads (`GET /api/threads`): the whole truth on each
- * connect, but for the rows a `thread.upsert` frame moved since it left.
- */
-async function readThreads(): Promise<void> {
-  const mark = readLeaves();
-  const threads = await load<Record<string, ThreadSummary[]>>("/api/threads");
-  if (!threads) {
-    return;
-  }
-  const framed = (thread: ThreadSummary) =>
-    heardSince(`thread:${thread.id}`, mark);
-  const next: Record<string, ThreadSummary[]> = {};
-  for (const [projectId, rows] of Object.entries(threads)) {
-    next[projectId] = rows.filter((thread) => !framed(thread));
-  }
-  for (const thread of Object.values(state.threads).flat().filter(framed)) {
-    next[thread.projectId] = [...(next[thread.projectId] ?? []), thread];
-  }
-  for (const rows of Object.values(next)) {
-    rows.sort(byLastAt);
-  }
-  state.threads = next;
-}
-
-/** A project's Caw: on or off, its harness, its session, why it cannot start, its spend. */
-export const cawOf = (projectId: string): Promise<CawView> =>
+/** A project's conversation: on or off, its harness, its session, why it cannot start, its spend. */
+export const cawOf = (projectId: string): Promise<ProjectConversationView> =>
   askHub(`${projectPath(projectId)}/caw`);
 
 /** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
@@ -7133,8 +6881,8 @@ export const configureCaw = async (
     model?: string | null;
     on?: boolean;
   }
-): Promise<CawView> => {
-  const view = await askHub<CawView>(
+): Promise<ProjectConversationView> => {
+  const view = await askHub<ProjectConversationView>(
     `${projectPath(projectId)}/caw`,
     json("PATCH", change)
   );
@@ -7142,17 +6890,17 @@ export const configureCaw = async (
   // before the `projects.changed` it sent brings the row read again.
   const row = state.projects.find((project) => project.id === projectId);
   if (row) {
-    row.caw = view.on;
+    row.eventsOn = view.on;
     row.cawHarness = view.harness;
     row.cawModel = view.model;
-    row.leadInstanceId = view.leadInstanceId;
+    row.conversationInstanceId = view.instanceId;
   }
   return view;
 };
 
 /**
  * What a routine's notice reads of it (hub routines.ts `RoutineView`): kept
- * or not, on or off, and the thread its runs are noted in.
+ * or not, on or off.
  */
 export interface RoutineState {
   enabled: boolean;
@@ -7209,47 +6957,14 @@ export const changeRoutine = (
 ): Promise<RoutineState> =>
   askHub(routinePath(routineId), json("PATCH", change));
 
-/** A project's threads as the fleet read and the frames keep them, newest first. */
-export const threadsOf = (projectId: string): ThreadSummary[] =>
-  state.threads[projectId] ?? [];
-
-/**
- * Archives one of a project's threads (`archived`), or brings it back: the
- * rails leave an archived thread and the sessions under it out, and the
- * project's thread list keeps it under Archived. The hub's answer is the
- * thread as it stands, adopted unless a frame moved it since.
- */
-export async function archiveThread(
+/** "Ask Caw for a view": your words to the project's conversation, which drafts it; the session they went to. */
+export const requestView = (
   projectId: string,
-  threadId: string,
-  archived: boolean
-): Promise<ThreadSummary> {
-  const mark = readLeaves();
-  const thread = await askHub<ThreadSummary>(
-    `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/${archived ? "archive" : "unarchive"}`,
-    json("POST", {})
-  );
-  keepThread(thread, mark);
-  return thread;
-}
+  text: string
+): Promise<{ instanceId: string }> =>
+  askHub(`${projectPath(projectId)}/view-requests`, json("POST", { text }));
 
-/** "Ask Caw for a view": a new thread with your words, Caw woken to draft it. */
-export async function requestView(
-  projectId: string,
-  text: string,
-  /** The ask's id: the hub takes the same id again as the same ask. */
-  id: string
-): Promise<{ thread: ThreadSummary }> {
-  const mark = readLeaves();
-  const asked = await askHub<{ thread: ThreadSummary }>(
-    `${projectPath(projectId)}/view-requests`,
-    json("POST", { text, id })
-  );
-  keepThread(asked.thread, mark);
-  return asked;
-}
-
-/** What a project has spent: today, this month, its Caw's share, each attempt and thread. */
+/** What a project has spent: today, this month, its conversations' share, each attempt. */
 export const projectSpend = (projectId: string): Promise<ProjectSpend> =>
   askHub(`${projectPath(projectId)}/spend`);
 
@@ -8105,8 +7820,7 @@ export function storedReadWaits(viewId: string): StoredWait | null {
   // Read first, so a reader that runs before the first board runs again
   // when the board's machines land.
   const { machines } = state;
-  // A Caw thread is the hub's own: its page waits on no machine.
-  if (instanceIndex.byId.has(viewId) || threadIdOf(viewId)) {
+  if (instanceIndex.byId.has(viewId)) {
     return null;
   }
   const machineId = contextOf(viewId)?.machine;
@@ -9182,10 +8896,6 @@ export async function takeOverBrowser(
 
 /** What a session needs from you — `idle` for one nothing has been heard from. */
 function activityNow(instanceId: string): Activity {
-  const thread = threadOf(instanceId);
-  if (thread) {
-    return THREAD_DOING[thread.status];
-  }
   const target = state.sessions[instanceId];
   // Blocked wins everywhere: a parked permission is broadcast, not filtered.
   if (target && target.pending.length > 0) {
@@ -9508,25 +9218,9 @@ export const cawco = {
   get runningInstances() {
     return runningInstances;
   },
-  /** Running sessions as lists show them: leads as their threads (thread-tabs.ts `inLists`). */
-  get runningRows() {
-    return runningRows;
-  },
-  /** Listed sessions as lists show them: leads as their threads. */
-  get listedRows() {
-    return listedRows;
-  },
   /** The listed rows by id: one map for every list that walks their trees (the rail's, Recent's). */
   get listedById(): ReadonlyMap<string, BoardRow> {
     return listedById;
-  },
-  /** The sessions of projects' conversations: never listed, nor their stored transcripts. */
-  get leadSessions() {
-    return leadSessions;
-  },
-  /** Each project's conversation by its session's id (thread-tabs.ts `conversationsOf`). */
-  get conversations(): ReadonlySet<string> {
-    return conversations;
   },
   /** Sessions the hub lost track of — shown apart, never as live work. */
   get staleInstances(): InstanceRow[] {
@@ -9548,12 +9242,6 @@ export const cawco = {
   get listedInstances(): InstanceRow[] {
     return listedInstances;
   },
-  /** Every thread with a project's Caw, as session rows (thread-tabs.ts). */
-  get threadRows(): BoardRow[] {
-    return threadRows;
-  },
-  /** The thread a `thread:` id names, when this browser has it. */
-  threadOf,
   /** Spin-offs across the fleet — kept in their own section, not per machine. */
   get scratchInstances(): InstanceRow[] {
     return instances.filter((row) => isListed(row) && row.kind === "scratch");
@@ -9594,8 +9282,6 @@ export const cawco = {
   get now(): number {
     return minute.now;
   },
-  /** A project's threads with its Caw, newest first, live. */
-  threadsOf,
   /** A count that moves each time the project's tasks change (`tasks.changed`). */
   tasksChangedOf: (projectId: string): number =>
     state.tasksChanged[projectId] ?? 0,
@@ -9638,7 +9324,7 @@ export const cawco = {
         .filter(
           (item) =>
             item.parentInstanceId === instanceId ||
-            item.leadInstanceId === instanceId
+            item.conversationInstanceId === instanceId
         )
         .map(itemChild),
       ...(startedBy.get(instanceId) ?? []).map(sessionChild),
@@ -9758,13 +9444,7 @@ export const cawco = {
    * rail has for an unsubscribed session, since the pulse is broadcast for
    * every session while its transcript frames only flow to a watcher.
    */
-  pulseAt: (instanceId: string): number | undefined => {
-    const thread = threadOf(instanceId);
-    if (thread) {
-      return thread.lastAt;
-    }
-    return pulseOf(instanceId)?.at;
-  },
+  pulseAt: (instanceId: string): number | undefined => pulseOf(instanceId)?.at,
   /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
   turnSince: (instanceId: string): number | undefined =>
     heldPulse(instanceId)?.since,

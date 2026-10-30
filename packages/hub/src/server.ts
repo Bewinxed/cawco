@@ -74,6 +74,7 @@ import type {
   PreviewAddress,
   PreviewDown,
   PreviewSource,
+  ProjectNote,
   RegisterAckPayload,
   Rule,
   RuleDraft,
@@ -97,8 +98,6 @@ import type {
   SkillFile,
   SpawnPayload,
   TabNamed,
-  ThreadNote,
-  ThreadSummary,
   ToolSpec,
   ToolState,
   ToolStatus,
@@ -329,6 +328,7 @@ import {
   PREVIEW_START,
   PREVIEW_STOP,
   PREVIEW_WEIGHT,
+  PROJECT_NOTE,
   PROVIDER_ACCOUNT_KINDS,
   PROVIDER_RETRY,
   type PresenceSaid,
@@ -386,8 +386,6 @@ import {
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
   taskLink,
-  threadTarget,
-  threadTargetOf,
   tokenWords,
   toolSpec,
   transcriptUserText,
@@ -649,16 +647,13 @@ import type {
   ProjectRow,
   PublicInstanceRow,
   SentMessageRow,
-  SessionSendRow,
   SourceNote,
-  ThreadMessageRow,
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
 import {
   checkoutOf,
   hashHookMaterial,
-  isSessionSend,
   listedAt,
   MEMORY_ID,
   TURN_UNRECORDED,
@@ -677,7 +672,6 @@ import type {
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
-import { sendWords } from "./db/words";
 import { decidesRoutes } from "./decides-file";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
@@ -734,7 +728,7 @@ import { gateRoutes } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubRepoOf } from "./github";
 import { createHandedInputs } from "./handed-inputs";
-import { byId as handledIds, handleId, isHandle } from "./handles";
+import { handleId, isHandle } from "./handles";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
@@ -958,8 +952,6 @@ import {
   taskRoutes,
   YOU_ACTOR,
 } from "./tasks";
-import { createThreadRepair } from "./thread-repair";
-import { createThreadTranscripts } from "./thread-transcript";
 import {
   createToolCallKeys,
   mcpRefused,
@@ -1292,12 +1284,6 @@ const keepSendsAtStart = (db: DbShape): void => {
   if (tagged !== null) {
     console.info(`[hub] ${tagged} stored send(s) given their marker's tag`);
   }
-  // Once: the person's words kept as a thread's messages become the sends
-  // they are, read where they stood (caw.ts `sent`).
-  const moved = db.migrateThreadWordsOnce(THREAD_WORDS_SENDS, threadWordsSent);
-  if (moved !== null) {
-    console.info(`[hub] ${moved} thread message(s) of yours kept as sends`);
-  }
   const owedAgain = foldFormerSessions(db);
   keepPendingWhole(db);
   for (const uuid of owedAgain) {
@@ -1311,84 +1297,9 @@ const keepSendsAtStart = (db: DbShape): void => {
   }
 };
 
-/** The one-time move of the person's thread messages into `sent_messages` (`data_migrations`). */
-const THREAD_WORDS_SENDS = "thread-words-sends";
-
-/**
- * A thread message of the person's words as its send's record keeps it
- * (server.ts `sentFrame`): its pictures first, by the media store's
- * address they were kept under, then its words, with its files' lines and
- * its pastes folded in as a send's are.
- */
-const threadWordsSent = (row: ThreadMessageRow): NeutralUserMessage => {
-  const viewId = threadTargetOf(row.threadId);
-  const attachments = row.attachments ?? [];
-  const files = attachments
-    .flatMap((attachment) =>
-      attachment.kind === "file"
-        ? [
-            attachedFileLine(
-              `${ATTACHMENTS_HOME}/${attachedFileName(viewId, attachment, true)}`,
-              attachment
-            ),
-          ]
-        : []
-    )
-    .join("\n");
-  const pasted = attachments
-    .map((attachment) =>
-      attachment.kind === "text"
-        ? `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`
-        : ""
-    )
-    .join("");
-  const words = `${row.body}${files ? `\n\n${files}` : ""}${pasted}`;
-  const images = row.images ?? [];
-  return {
-    type: "user",
-    uuid: row.id,
-    message: {
-      role: "user",
-      content:
-        images.length > 0
-          ? [
-              ...images.map(({ mediaType, src }) => ({
-                type: "image" as const,
-                source: {
-                  type: "url",
-                  url: src,
-                  media_type: mediaType,
-                } as unknown as {
-                  type: "base64";
-                  media_type: string;
-                  data: string;
-                },
-              })),
-              { type: "text" as const, text: words },
-            ]
-          : words,
-    },
-    parent_tool_use_id: null,
-    origin: { kind: "human" },
-  };
-};
-
-/** Why a thread's send no lead was handed before the hub restarted did not wake Caw. */
-const CAW_NOT_WOKEN_RESTART =
-  "The hub restarted before Caw was woken with this. Try again.";
-
 const keepPendingWhole = (db: DbShape): void => {
   let keptWhole = 0;
   for (const send of db.unkeptSends()) {
-    // A Caw thread's send no lead was handed before the hub stopped: its
-    // wake went with the hub, and its row offers Try again.
-    if (!isSessionSend(send)) {
-      db.updateSend(send.uuid, {
-        state: "failed",
-        reason: CAW_NOT_WOKEN_RESTART,
-      });
-      continue;
-    }
     const [row] = db.getInstancesByIds([send.instanceId]);
     const envelope = row && envelopeOf(send, row.machineId);
     if (envelope) {
@@ -1413,7 +1324,7 @@ const keepPendingWhole = (db: DbShape): void => {
  * image it carried is no longer stored.
  */
 const envelopeOf = (
-  send: SessionSendRow,
+  send: SentMessageRow,
   machineId: string
 ): Envelope<SendPayload> | undefined => {
   const body = send.body as unknown as SentMessage;
@@ -2491,6 +2402,19 @@ const watchLine = (
   timestamp: new Date(line.at).toISOString(),
 });
 
+/** A project note as the hub's line in its conversation's transcript (core `PROJECT_NOTE`). */
+const projectNoteLine = (
+  row: { sessionId: string | null },
+  kept: { at: number; id: string; note: ProjectNote }
+): HubLineMessage => ({
+  type: "system",
+  subtype: PROJECT_NOTE,
+  uuid: kept.id,
+  session_id: row.sessionId ?? "",
+  content: JSON.stringify(kept.note),
+  timestamp: new Date(kept.at).toISOString(),
+});
+
 /** Why a held session was not taken back, said on its row and in its transcript. */
 const custodyReason = (hours: string): string =>
   `OpenCode's server still holds this session, idle ${hours} h, and CawCo didn't take it back after its restart. Review its pending work before you wake it.`;
@@ -2905,21 +2829,12 @@ const refusedStart = (
     : refused;
 };
 
-/**
- * A record as it goes out: on the stream, and with a history read. `view`
- * is the transcript it goes out on, where that is not its session's: a Caw
- * thread's (`thread:<id>`), whose rows are its own. A thread's send no lead
- * took yet names its thread.
- */
-const toSendRecord = (row: SentMessageRow, view?: string): SendRecord => ({
+/** A record as it goes out: on the stream, and with a history read. */
+const toSendRecord = (row: SentMessageRow): SendRecord => ({
   ...(isKeepAlive(row.body) ? { keepAlive: true } : {}),
   uuid: row.uuid,
-  instanceId:
-    view ??
-    row.instanceId ??
-    threadTargetOf(row.threadId ?? "") /* the CHECK names one of the two */,
+  instanceId: row.instanceId,
   acceptedAt: row.acceptedAt.toISOString(),
-  ...(row.threadId ? { threadId: row.threadId } : {}),
   ...(row.readAt ? { readAt: row.readAt.toISOString() } : {}),
   body: row.body,
   mode: row.mode,
@@ -3279,12 +3194,8 @@ export const createServer = (
   const streams = createStreamHub({
     lifetime,
     // A follower's plan whole (plans.ts), built below with the tasks it reads.
-    // A Caw thread (`thread:<id>`) is followed as a session but has no plan
-    // of its own: its plan is its lead's, which its pane follows by his id.
     planSnapshot: (instanceId, send) => {
-      if (!threadTarget(instanceId)) {
-        plans.snapshotTo(instanceId, send);
-      }
+      plans.snapshotTo(instanceId, send);
     },
     // A screen that follows a session uses its panel's preview: one that
     // stands on no port now (its session slept and gave it up) takes one,
@@ -3298,10 +3209,6 @@ export const createServer = (
     },
     withdrawSend: async (machineId, instanceId, sendId) => {
       const row = db.sendRecord(sendId);
-      const thread = threadTarget(instanceId);
-      if (thread) {
-        return await withdrawThreadSend(thread, row);
-      }
       const [instance] = db.getInstancesByIds([instanceId]);
       if (
         !row ||
@@ -3320,7 +3227,7 @@ export const createServer = (
         changeSend(row, { state: "cancelled" });
         return "withdrawn";
       }
-      const handed = handedSend(row);
+      const handed = row;
       if (row.state !== "pending" || !handed) {
         return "started";
       }
@@ -3682,8 +3589,6 @@ export const createServer = (
     },
     tell: (instanceId, text, origin) =>
       tellSession(instanceId, text, { name: origin }),
-    // A project's Caw asks in his thread (caw.ts, made further down).
-    threadOf: (actor) => lead?.askThread(actor),
   });
   /**
    * Says something to a session, as the hub: `name` is the notice's kind,
@@ -3920,7 +3825,6 @@ export const createServer = (
     },
     tell: (instanceId, text) =>
       tellSession(instanceId, text, { name: UPSTREAM_ORIGIN }),
-    threadOf: (actor) => lead?.askThread(actor),
   });
   // A session's forge_post (forge-posts.ts): decided and made on its
   // machine with the machine's own sign-in, or held as the person's ask.
@@ -3985,10 +3889,6 @@ export const createServer = (
     // A browser ask leaves its session's artifact tabs too.
     if ((parked.payload as PermissionRequestFrame).browserAsk) {
       artifactSessions.refresh(parked.instanceId);
-    }
-    const { threadId } = parked.payload as { threadId?: string };
-    if (threadId) {
-      lead?.asksChanged(threadId);
     }
     const answering = answeringPermissions.get(parked.requestId);
     if (answering) {
@@ -6061,23 +5961,8 @@ export const createServer = (
   /** Pending sends a transcript read is deciding, so none is decided twice. */
   const deciding = new Set<string>();
 
-  /**
-   * A record's latest state onto its session's stream: where every screen
-   * hears it. A send written in a Caw thread goes onto the thread's own
-   * transcript too, and onto the lead's once he was handed it.
-   */
+  /** A record's latest state onto its session's stream: where every screen hears it. */
   const publishSend = (row: SentMessageRow): void => {
-    if (row.threadId) {
-      threadTranscripts.send(row);
-    }
-    if (!isSessionSend(row)) {
-      return;
-    }
-    // Another session's words to one Caw started from a thread: its brief
-    // or a hand-off, which its row on that thread carries.
-    if (row.body.origin?.kind === "peer") {
-      threadTranscripts.delegate(row.instanceId);
-    }
     if (isKeepAlive(row.body)) {
       streams.sequence(row.instanceId, {
         kind: "send",
@@ -6095,39 +5980,6 @@ export const createServer = (
   };
 
   /**
-   * A Caw thread's send withdrawn from the thread (its row's Remove, or
-   * Edit taking its words back): from the lead it was handed to, once one
-   * was; before that, and once it failed, the record alone says it is gone.
-   */
-  const withdrawThreadSend = async (
-    threadId: string,
-    row: SentMessageRow | undefined
-  ): Promise<"withdrawn" | "started"> => {
-    if (row?.threadId !== threadId) {
-      throw new Error("That send does not belong to this thread.");
-    }
-    if (row.state === "cancelled") {
-      return "withdrawn";
-    }
-    const handed = handedSend(row);
-    if (row.state === "failed" || (row.state === "pending" && !handed)) {
-      changeSend(row, { state: "cancelled" });
-      return "withdrawn";
-    }
-    const [reader] = handed ? db.getInstancesByIds([handed.instanceId]) : [];
-    if (!(handed && reader) || row.state !== "pending") {
-      return "started";
-    }
-    return await withdrawPending(handed, reader.machineId);
-  };
-
-  /** A record a session was handed, or undefined: none, or a thread's no lead took yet. */
-  const handedSend = (
-    row: SentMessageRow | undefined
-  ): SessionSendRow | undefined =>
-    row && isSessionSend(row) ? row : undefined;
-
-  /**
    * One change to a record: stored, then said. The only way a record moves.
    * A record a session was handed stays its session's.
    */
@@ -6137,17 +5989,14 @@ export const createServer = (
   ): Row => {
     const moved = (db.updateSend(row.uuid, change) ?? row) as Row;
     publishSend(moved);
-    // A send leaving `pending`, read or never to be: what a lead's turn and
-    // a lead routine's run wait on (caw.ts `sendLeft`, routines.ts `sendLeft`).
+    // A send leaving `pending`, read or never to be: what a routine's run
+    // waits on (routines.ts `sendLeft`).
     if (
       row.state === "pending" &&
       moved.state !== "pending" &&
       !isKeepAlive(moved.body)
     ) {
-      if (isSessionSend(moved)) {
-        lead?.sendLeft(moved.instanceId, moved.uuid, moved.state === "read");
-        leadRuns?.sendLeft(moved);
-      }
+      leadRuns?.sendLeft(moved);
       sendSettles.get(moved.uuid)?.(moved);
     }
     return moved;
@@ -6224,9 +6073,9 @@ export const createServer = (
    * model's turn follows; a read found in a stored transcript follows no turn.
    */
   const readSend = (
-    row: SessionSendRow,
+    row: SentMessageRow,
     answering: boolean
-  ): SessionSendRow => {
+  ): SentMessageRow => {
     if (isKeepAlive(row.body)) {
       return changeSend(row, { state: "read", readAt: new Date() });
     }
@@ -6247,7 +6096,7 @@ export const createServer = (
 
   /** A send that will never be read, and why (what refused it, when the hub did). Final. */
   const failSend = (
-    row: SessionSendRow,
+    row: SentMessageRow,
     reason: string,
     refusal?: StoredSendRefusal
   ): void => {
@@ -6276,7 +6125,7 @@ export const createServer = (
    * hears a report. A screen reads the record itself; CawCo's own notices
    * tell nobody.
    */
-  const tellSender = (row: SessionSendRow, reason: string): void => {
+  const tellSender = (row: SentMessageRow, reason: string): void => {
     const { origin } = row.body as SentMessage;
     const sender = origin.kind === "peer" ? origin.fromSession : undefined;
     if (!sender || sender === row.instanceId) {
@@ -6570,7 +6419,7 @@ export const createServer = (
    * ({@link oweUnread}), a machine that cannot be asked counting as having
    * taken none; `wait` — a live process may still hand it over and say so;
    * `unheld` — what the process holds is known, so a send it neither stored
-   * nor said it held ({@link SessionSendRow.held}), or one a later send
+   * nor said it held ({@link SentMessageRow.held}), or one a later send
    * overtook, never reached it, and is owed to it again. That is decided only
    * on a read the machine answered.
    */
@@ -6581,7 +6430,7 @@ export const createServer = (
    * Every harness takes up what it is sent in the order it was sent, so a
    * send overtaken like this was never handed to it.
    */
-  const overtaken = (send: SessionSendRow): boolean =>
+  const overtaken = (send: SentMessageRow): boolean =>
     db
       .sendsIn(send.instanceId, ["read"])
       .some((later) => later.acceptedAt.getTime() > send.acceptedAt.getTime());
@@ -6598,7 +6447,7 @@ export const createServer = (
     instanceId: string,
     why: string,
     unstored: Unstored,
-    only: (send: SessionSendRow) => boolean = () => true,
+    only: (send: SentMessageRow) => boolean = () => true,
     decided: () => void = () => undefined,
     /** What a failed send offers back, beside `why`. */
     refusal?: StoredSendRefusal
@@ -6689,14 +6538,14 @@ export const createServer = (
    * taken up. True when it is owed again.
    */
   const settleSend = (
-    send: SessionSendRow,
+    send: SentMessageRow,
     stored: Map<string, boolean>,
     unstored: Unstored,
     why: string,
     refusal?: StoredSendRefusal
   ): boolean => {
     // Read meanwhile, or thrown away with its session: that stands.
-    const now = handedSend(db.sendRecord(send.uuid));
+    const now = db.sendRecord(send.uuid);
     if (now?.state !== "pending") {
       return false;
     }
@@ -6726,7 +6575,7 @@ export const createServer = (
     console.log(
       `[hub] send ${now.uuid} to ${now.instanceId} owed again: ${why}`
     );
-    publishSend(handedSend(db.sendRecord(now.uuid)) ?? now);
+    publishSend(db.sendRecord(now.uuid) ?? now);
     return true;
   };
 
@@ -6761,7 +6610,7 @@ export const createServer = (
 
   /** Whether a pending send's current hand-off is the one `send` was given. */
   const currentHandOff = (instanceId: string, send: SendPayload): boolean => {
-    const record = handedSend(db.sendRecord(send.message.uuid));
+    const record = db.sendRecord(send.message.uuid);
     return (
       record?.instanceId === instanceId &&
       record.state === "pending" &&
@@ -6784,7 +6633,7 @@ export const createServer = (
     if (!currentHandOff(instanceId, one.payload)) {
       return Number.POSITIVE_INFINITY;
     }
-    const now = handedSend(db.sendRecord(uuid));
+    const now = db.sendRecord(uuid);
     // Unread: the machine handed it back whole, its own word that no
     // process took it, so it is owed as one the transcript does not hold.
     if (now && !("unread" in stored) && stored.get(uuid)) {
@@ -6795,7 +6644,7 @@ export const createServer = (
     console.log(
       `[hub] send ${uuid} to ${instanceId} came back: no process took it; owed to the session's next process`
     );
-    const owed = handedSend(db.sendRecord(uuid));
+    const owed = db.sendRecord(uuid);
     if (owed) {
       publishSend(owed);
     }
@@ -6908,7 +6757,7 @@ export const createServer = (
       ? commandAwayWords(machineId)
       : `Withdrawal got no answer: ${silentWords(machineId, reply)}.`;
   const withdrawPending = async (
-    row: SessionSendRow,
+    row: SentMessageRow,
     machineId: string
   ): Promise<"withdrawn" | "started"> => {
     if (row.owed !== null && db.takeOwedSend(row.uuid) !== undefined) {
@@ -6934,7 +6783,7 @@ export const createServer = (
       default:
         throw unreachable(reply);
     }
-    const now = handedSend(db.sendRecord(row.uuid));
+    const now = db.sendRecord(row.uuid);
     if (now?.state === "cancelled") {
       return "withdrawn";
     }
@@ -6979,7 +6828,7 @@ export const createServer = (
         workItems.finishingFor(instanceId, origin)
       );
     });
-    const takeBackOne = async (send: SessionSendRow): Promise<void> => {
+    const takeBackOne = async (send: SentMessageRow): Promise<void> => {
       const reply = await callAgent(
         row.machineId,
         "withdrawSend",
@@ -6997,7 +6846,7 @@ export const createServer = (
         console.log(
           `[hub] send ${send.uuid} to ${instanceId} taken back as it called finish_item: it goes as its next turn`
         );
-        publishSend(handedSend(db.sendRecord(send.uuid)) ?? send);
+        publishSend(db.sendRecord(send.uuid) ?? send);
       }
     };
     await Promise.all(unread.map(takeBackOne));
@@ -7021,7 +6870,7 @@ export const createServer = (
    */
   const takeSendSignal = (instanceId: string, signal: SendSignal): void => {
     if (signal.kind === "rejected") {
-      const row = handedSend(db.sendRecord(signal.uuid));
+      const row = db.sendRecord(signal.uuid);
       if (row?.state === "pending" || row?.state === "read") {
         if (isKeepAlive(row.body)) {
           db.updateKeepAlive(instanceId, { keepAliveTurn: null });
@@ -7048,7 +6897,7 @@ export const createServer = (
    * follow. One settled meanwhile stands.
    */
   const takeTaken = (instanceId: string, uuid: string): void => {
-    const row = handedSend(db.sendRecord(uuid));
+    const row = db.sendRecord(uuid);
     if (row?.instanceId !== instanceId || row.state !== "pending") {
       return;
     }
@@ -7063,14 +6912,14 @@ export const createServer = (
    * which, when the hub has heard nothing of the session since it started,
    * a transcript read tells first ({@link storedIn}).
    */
-  const rejectSend = (row: SessionSendRow, reason: string): void => {
+  const rejectSend = (row: SentMessageRow, reason: string): void => {
     if (anchors.has(row.instanceId)) {
       failSend(row, reason);
       return;
     }
     detach(
       storedIn(row.instanceId).then(() => {
-        const now = handedSend(db.sendRecord(row.uuid));
+        const now = db.sendRecord(row.uuid);
         if (now?.state === "pending" || now?.state === "read") {
           failSend(now, reason);
         }
@@ -7106,7 +6955,7 @@ export const createServer = (
    * ({@link overtaken}), and decided against the transcript at once.
    */
   const takeRead = (instanceId: string, ids: string[]): void => {
-    const order = (row: SessionSendRow): number => {
+    const order = (row: SentMessageRow): number => {
       const at = ids.indexOf(row.uuid);
       return at >= 0 ? at : ids.indexOf(row.harnessId ?? "");
     };
@@ -7305,7 +7154,7 @@ export const createServer = (
     onPage: Set<string>,
     newest: boolean,
     start: boolean
-  ): SessionSendRow[] =>
+  ): SentMessageRow[] =>
     db
       .sendsIn(instanceId, newest ? ["pending", "failed"] : ["failed"])
       .filter(
@@ -7324,9 +7173,9 @@ export const createServer = (
   const linkEntries = (
     instanceId: string | undefined,
     entries: SessionMessage[]
-  ): { lines: Map<string, SessionSendRow>; last: string | undefined } => {
+  ): { lines: Map<string, SentMessageRow>; last: string | undefined } => {
     const sendsOf = sendFinder(instanceId, entries);
-    const lines = new Map<string, SessionSendRow>();
+    const lines = new Map<string, SentMessageRow>();
     let last: string | undefined;
     let failures: string[] = [];
     for (const entry of entries) {
@@ -7383,7 +7232,7 @@ export const createServer = (
   const sendFinder = (
     instanceId: string | undefined,
     entries: SessionMessage[]
-  ): ((entry: SessionMessage) => SessionSendRow[]) => {
+  ): ((entry: SessionMessage) => SentMessageRow[]) => {
     const found = db.sendsFor(
       entries
         .filter((entry) => entry.type === "user" || entry.sourceUuid)
@@ -7412,7 +7261,7 @@ export const createServer = (
   };
 
   /** A send's words as the harness was handed them, when they are words alone. */
-  const sentWords = (send: SessionSendRow): string | null => {
+  const sentWords = (send: SentMessageRow): string | null => {
     const content = (send.body as NeutralUserMessage | null)?.message.content;
     return typeof content === "string" ? content : null;
   };
@@ -7429,8 +7278,8 @@ export const createServer = (
   const joinedWith = (
     instanceId: string,
     entry: SessionMessage,
-    last: SessionSendRow
-  ): SessionSendRow[] => {
+    last: SentMessageRow
+  ): SentMessageRow[] => {
     const stored = (entry.message as { content?: unknown }).content;
     const own = sentWords(last);
     if (!(typeof stored === "string" && own && stored.endsWith(`\n${own}`))) {
@@ -7438,7 +7287,7 @@ export const createServer = (
     }
     // What is left to account for, ending in the newline before the next part.
     let rest = stored.slice(0, stored.length - own.length);
-    const partners: SessionSendRow[] = [];
+    const partners: SentMessageRow[] = [];
     const earlier = db
       .sendsIn(
         instanceId,
@@ -7479,8 +7328,8 @@ export const createServer = (
    */
   const linkEntry = (
     entry: SessionMessage,
-    found: SessionSendRow[]
-  ): SessionSendRow[] => {
+    found: SentMessageRow[]
+  ): SentMessageRow[] => {
     if (found.length === 0) {
       return found;
     }
@@ -9289,28 +9138,14 @@ export const createServer = (
    * to the same session, which it never overtakes — but that compaction's
    * own steps (`ahead`), which go first ({@link compactionSend}).
    *
-   * A Caw thread is a target too (`thread:<id>`, core threads.ts): a send to
-   * it is kept as the thread's and wakes the lead that reads it under its
-   * own uuid (caw.ts `sent`), which comes back through here to his session,
-   * where its record is handed on as his ({@link deliverToSession}). The
-   * person's words sent straight to a project's Caw's session are his
-   * thread's ({@link toCawThread}).
    */
   const deliverSend = (
     asked: Envelope<SendPayload>,
     ahead = false
   ): SentMessageRow | undefined => {
-    const thread = threadTarget(asked.payload.instanceId);
-    if (thread) {
-      return lead?.sent(thread, asked.payload);
-    }
     const envelope = toContinuation(byIdNow(asked), "refused");
     if (!envelope) {
       return;
-    }
-    const toThread = toCawThread(envelope);
-    if (toThread) {
-      return toThread;
     }
     tellForkFirst(envelope);
     tellPlanFirst(envelope);
@@ -9398,7 +9233,7 @@ export const createServer = (
    * goes to the session the work goes on in under a fresh uuid, behind what
    * that session was owed; the hub's word to the old process is cancelled.
    */
-  const moveOwedSend = (send: SessionSendRow): void => {
+  const moveOwedSend = (send: SentMessageRow): void => {
     const owed = db.takeOwedSend(send.uuid);
     if (owed === undefined) {
       return;
@@ -9501,38 +9336,6 @@ export const createServer = (
       },
       false
     );
-  };
-
-  /**
-   * A person's words to a project's Caw are a thread's, whatever sent them
-   * to his session (the app's composer on his session, a push's Reply, a
-   * relay): a send to the thread he is in (caw.ts `leadThread`, a new one
-   * when the project has none), under its own uuid, which wakes him under
-   * that uuid. A send the hub already has a record of is the wake carrying
-   * a thread's send to him, or the same send again, and goes on to his
-   * session. Undefined for any other send.
-   */
-  const toCawThread = (
-    envelope: Envelope<SendPayload>
-  ): SentMessageRow | undefined => {
-    const { payload } = envelope;
-    const { message } = payload;
-    if (
-      message.origin.kind !== "human" ||
-      isKeepAlive(message) ||
-      db.sendRecord(message.uuid)
-    ) {
-      return;
-    }
-    const target = lead?.leadThread(payload.instanceId);
-    if (!target) {
-      return;
-    }
-    return lead?.sent(target.threadId, {
-      ...payload,
-      instanceId: threadTargetOf(target.threadId),
-      projectId: target.projectId,
-    });
   };
 
   /**
@@ -9736,30 +9539,14 @@ export const createServer = (
     envelope: Envelope<SendPayload>,
     ahead: boolean
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
-  ): SessionSendRow => {
+  ): SentMessageRow => {
     const { instanceId, message } = envelope.payload;
     const { machineId } = envelope;
     const keepAlive = isKeepAlive(message);
     const known = db.sendRecord(message.uuid);
-    // A Caw thread's send no lead was handed yet is handed on here, as his,
-    // under its uuid (caw.ts `wakeForYou`): its record keeps the words as
-    // the person wrote them, and his session reads them as his wake says.
-    const adopting =
-      known?.threadId && known.instanceId === null && known.state === "pending"
-        ? known
-        : undefined;
-    if (known && !adopting) {
+    if (known) {
       publishSend(known);
-      const handed = handedSend(known);
-      // A thread's send that failed before any lead was handed it is never
-      // handed on now: its row's Try again sends it anew.
-      if (!handed) {
-        throw new WorkItemRefusal(
-          409,
-          known.reason ?? "This message didn't go to Caw. Try it again."
-        );
-      }
-      return handed;
+      return known;
     }
     const refused = keepAlive
       ? undefined
@@ -9879,22 +9666,15 @@ export const createServer = (
             : { kind: "machine-away" as const, machineId },
           anchor: anchors.get(instanceId) ?? null,
         };
-    let record: SessionSendRow = adopting
-      ? {
-          ...adopting,
-          ...(db.updateSend(adopting.uuid, { instanceId, ...outcome }) ??
-            adopting),
-          instanceId,
-        }
-      : (db.recordSend({
-          uuid: message.uuid,
-          instanceId,
-          acceptedAt: new Date(),
-          body: externalizeImages(sentFrame(asSent)),
-          mode,
-          ...(message.replaces ? { replaces: message.replaces } : {}),
-          ...outcome,
-        }) as SessionSendRow);
+    let record: SentMessageRow = db.recordSend({
+      uuid: message.uuid,
+      instanceId,
+      acceptedAt: new Date(),
+      body: externalizeImages(sentFrame(asSent)),
+      mode,
+      ...(message.replaces ? { replaces: message.replaces } : {}),
+      ...outcome,
+    });
     if (owed) {
       record = keepHold(record);
     }
@@ -10051,7 +9831,7 @@ export const createServer = (
    * `HOLD_WORDS`). A hub that starts reads each one back
    * ({@link sayKeptAtStart}). Answers the record as stored.
    */
-  const keepHold = (record: SessionSendRow): SessionSendRow => {
+  const keepHold = (record: SentMessageRow): SentMessageRow => {
     const hold = holdOf(record);
     if (!hold || hold === record.hold) {
       return record;
@@ -10059,7 +9839,7 @@ export const createServer = (
     console.log(
       `[hub] send ${record.uuid} to ${record.instanceId} queued: ${hold}${record.hold ? ` (was ${record.hold})` : ""}`
     );
-    return handedSend(db.updateSend(record.uuid, { hold })) ?? record;
+    return db.updateSend(record.uuid, { hold }) ?? record;
   };
 
   /**
@@ -10070,7 +9850,7 @@ export const createServer = (
    * a build older than the hub's), else sends owed before it. Undefined for
    * a send its machine has.
    */
-  const holdOf = (record: SessionSendRow): SendHold | undefined => {
+  const holdOf = (record: SentMessageRow): SendHold | undefined => {
     if (!record.owed) {
       return;
     }
@@ -10094,7 +9874,7 @@ export const createServer = (
 
   /** {@link holdOf}'s last word: its machine away, its start held, or sends before it. */
   const machineHold = (
-    record: SessionSendRow,
+    record: SentMessageRow,
     row: InstanceRow | undefined
   ): SendHold => {
     const away = row ? machinePresence(row.machineId) : undefined;
@@ -10143,7 +9923,7 @@ export const createServer = (
     if (record.state === "failed") {
       throw new WorkItemRefusal(404, record.reason ?? "the send failed");
     }
-    const hold = isSessionSend(record) ? holdOf(record) : undefined;
+    const hold = holdOf(record);
     const plan =
       !hold && before && wakesForSend(before) ? relaunchOf(before) : undefined;
     return {
@@ -10230,7 +10010,7 @@ export const createServer = (
    * it did; what is owed goes once it is up.
    */
   const relaunchForStep = (
-    send: SessionSendRow,
+    send: SentMessageRow,
     row: ReturnType<typeof db.getInstancesByIds>[number],
     agent: NonNullable<ReturnType<typeof registry.agent>>
   ): boolean => {
@@ -10257,18 +10037,18 @@ export const createServer = (
    * One owed send, as {@link releaseOwed} hands it over; one that stays
    * owed has its hold written again ({@link keepHold}).
    */
-  const releaseOne = (send: SessionSendRow): void => {
+  const releaseOne = (send: SentMessageRow): void => {
     if (handOwed(send)) {
       return;
     }
-    const still = handedSend(db.sendRecord(send.uuid));
+    const still = db.sendRecord(send.uuid);
     if (still?.state === "pending" && still.owed) {
       keepHold(still);
     }
   };
 
   /** {@link releaseOne}'s hand: true once the send has left the hub's keeping (handed, moved or failed). */
-  const handOwed = (send: SessionSendRow): boolean => {
+  const handOwed = (send: SentMessageRow): boolean => {
     const [row] = db.getInstancesByIds([send.instanceId]);
     // Owed to a session whose work a continuation took on: it goes there.
     if (row?.continuedInto) {
@@ -10319,7 +10099,7 @@ export const createServer = (
   /** `send` handed over once its session has a process up or starting and no start held; else it stays owed for that. True when handed. */
   const handToProcess = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
-    send: SessionSendRow,
+    send: SentMessageRow,
     envelope: Envelope<SendPayload>
   ): boolean => {
     const [now] = db.getInstancesByIds([send.instanceId]);
@@ -10347,7 +10127,7 @@ export const createServer = (
    */
   const handReleased = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
-    send: SessionSendRow,
+    send: SentMessageRow,
     envelope: Envelope<SendPayload>
   ): void => {
     const delivery = crypto.randomUUID();
@@ -10396,7 +10176,7 @@ export const createServer = (
    * session has moved, its machine back by then), nor one whose start an
    * update still holds.
    */
-  const waitsOnMachine = (send: SessionSendRow): boolean => {
+  const waitsOnMachine = (send: SentMessageRow): boolean => {
     const [row] = db.getInstancesByIds([send.instanceId]);
     const origin = (send.body as SentMessage | null)?.origin;
     return !(
@@ -13960,7 +13740,7 @@ export const createServer = (
   const signalResponses: ArtifactServiceDeps["signal"] = (
     instance,
     artifact,
-    { since, thread }
+    { since }
   ) =>
     artifactInOrder(`${artifact.id}:picks`, async () => {
       const { withdrawn, replaces } = await withdrawArtifactEvents(
@@ -13974,7 +13754,7 @@ export const createServer = (
           (one) => parseArtifactResponses(one.text)?.since ?? since
         )
       );
-      const sent = sendArtifactEvent(
+      sendArtifactEvent(
         instance,
         artifactResponsesNotice({
           id: artifact.id,
@@ -13985,11 +13765,6 @@ export const createServer = (
         [],
         replaces
       );
-      // Caw's page asked in a thread: the turn that reads the picks answers
-      // there, as one your words in it woke (caw.ts `picked`).
-      if (thread && sent?.state === "pending") {
-        lead?.picked(instance.id, sent.uuid, thread);
-      }
     });
   /**
    * The person's marks on an artifact (artifacts/service.ts
@@ -14489,7 +14264,6 @@ export const createServer = (
       );
     },
     acknowledged: () => noticesSeen.ids(),
-    askThread: (instance) => caw.askThread(instance),
     needsMoved: () => artifactLane.moved(),
     // A pin's reply that asks: the artifact's item as the lane reads it now
     // (its count), pushed unless it is put away with Not now or not in the lane.
@@ -14525,7 +14299,7 @@ export const createServer = (
     ledProjects: (instance) =>
       db
         .listProjects()
-        .filter((project) => project.leadInstanceId === instance.id)
+        .filter((project) => project.conversationInstanceId === instance.id)
         .map((project) => project.id),
     // A delegation tree reads its sessions' artifacts (delegation-tree.ts).
     tree: (instance) => treeSessions(db, instance),
@@ -15842,17 +15616,6 @@ export const createServer = (
    * recorded as every spawn is: the row is what puts it in the rail. A
    * conversation that starts here is named by its first turn.
    */
-  /** The thread a session Caw's work starts belongs to, if it is one (caw.ts `spawnThread`). */
-  const threadOfSpawn = (
-    parentInstanceId: string | undefined,
-    workItemId: string | undefined
-  ): { threadId?: string } => {
-    const threadId = parentInstanceId
-      ? caw.spawnThread(parentInstanceId, workItemId)
-      : undefined;
-    return threadId ? { threadId } : {};
-  };
-
   /** The accounts a project task allows its attempts (`accounts:`), read from its file; null: every account. */
   const taskAccounts = (
     projectId: string | null | undefined,
@@ -16440,12 +16203,9 @@ export const createServer = (
       ...(workItemId ? { workItemId } : {}),
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
-      ...threadOfSpawn(peekParent(payload).parentInstanceId, workItemId),
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
     });
-    // One Caw started from a thread shows on it from now.
-    threadTranscripts.delegate(payload.instanceId);
     const sent = sendSpawn(agent, machineId, {
       verb: "spawn",
       machineId,
@@ -23577,29 +23337,6 @@ export const createServer = (
   };
 
   /**
-   * A session's whole stored history, every window of it, oldest first: for
-   * a reader that needs all of it at once (a thread's repair).
-   */
-  const readHistoryWhole = async (instanceId: string): Promise<HistoryRead> => {
-    const newest = await readHistory(instanceId);
-    if ("fault" in newest) {
-      return newest;
-    }
-    const windows: SessionMessage[][] = [newest.entries];
-    let { records } = newest;
-    for (let cursor = newest.older; cursor !== null;) {
-      const older = await readOlder(instanceId, cursor);
-      if ("fault" in older) {
-        return older;
-      }
-      windows.unshift(older.entries);
-      records = { ...older.records, ...records };
-      cursor = older.older;
-    }
-    return { ...newest, entries: windows.flat(), records, older: null };
-  };
-
-  /**
    * A stored transcript without its keep-alive pings: a ping and its answer
    * are hidden together, also after a hub restart (a new main-loop user
    * prompt closes that range; tool results do not), and their records go.
@@ -23730,6 +23467,9 @@ export const createServer = (
     for (const said of db.watchLinesOf(row.id)) {
       lines.push(placed(lineEntry(row, watchLine(row, said)), said.at));
     }
+    for (const kept of db.projectNotes.of(row.id)) {
+      lines.push(placed(lineEntry(row, projectNoteLine(row, kept)), kept.at));
+    }
     const fresh = db.freshStartOf(row.id);
     if (fresh !== null) {
       lines.push(placed(lineEntry(row, freshStartLine(row, fresh)), fresh));
@@ -23789,25 +23529,6 @@ export const createServer = (
     });
   };
 
-  /** A Caw thread's page as the transcript route answers it (thread-transcript.ts). */
-  const threadPage = (
-    threadId: string,
-    limit: number | undefined,
-    before: string | undefined
-  ): TranscriptPage | Response => {
-    const page = threadTranscripts.page(threadId, limit, before);
-    if (!page) {
-      return new Response("This thread is not on this hub any more.", {
-        status: 404,
-      });
-    }
-    return "gone" in page
-      ? new Response(`the transcript no longer holds block ${page.gone}`, {
-          status: 409,
-        })
-      : page;
-  };
-
   /** A stored transcript's machine is away, as its routes answer it: 503 with {@link awayHeaders}. */
   const historyAway = (fault: HistoryFault): Response =>
     new Response(fault.message, {
@@ -23839,38 +23560,6 @@ export const createServer = (
     commands: (instanceId) => db.instanceCommands(instanceId) ?? undefined,
     cuts: (instanceId) => db.turnCuts.of(instanceId),
     tooling: (instanceId) => db.instanceTooling(instanceId) ?? undefined,
-  });
-
-  /**
-   * Every Caw thread's blocks, built here from the hub's own tables
-   * (thread-transcript.ts): a thread is read and followed as a session is,
-   * under `thread:<id>`.
-   */
-  const threadTranscripts = createThreadTranscripts({
-    db,
-    head: (viewId) => streams.head(viewId),
-    hubRun,
-    record: (row, viewId) => toSendRecord(row, viewId),
-    sequence: (viewId, frame) => streams.sequence(viewId, frame),
-    where: (thread) => {
-      const project = db.project(thread.projectId);
-      const [reader] = project?.leadInstanceId
-        ? db.getInstancesByIds([project.leadInstanceId])
-        : [];
-      return reader
-        ? {
-            machineId: reader.machineId,
-            cwd: reader.cwd,
-            harness: reader.harness,
-            sessionKey: reader.sessionId ?? "",
-          }
-        : {
-            machineId: "hub",
-            cwd: "",
-            harness: project?.cawHarness ?? "claude",
-            sessionKey: "",
-          };
-    },
   });
 
   /** A rewind's spawn, by its request: its transcript is read whole again if the spawn fails. */
@@ -24284,18 +23973,19 @@ export const createServer = (
     name: string;
     /** What the Setup thread opens with: your prompt, or a note of where the project came from. */
     setup?: {
-      note?: ThreadNote;
+      note?: ProjectNote;
       prompt?: string;
       promptId?: string;
     };
     template?: StagesTemplate;
   }
   interface ProjectMade {
+    /** The project's conversation setting it up, when it started. */
+    conversation?: string;
     joined: boolean;
     place: PlaceRow;
     placeAdded: boolean;
     project: ProjectRow;
-    setupThread?: ThreadSummary;
   }
 
   /** Each project being made now, by the id its prompt went as ({@link createOrJoinProject}). */
@@ -24309,9 +23999,9 @@ export const createServer = (
 
   /**
    * A project made, or a folder joined to the one it belongs to. The same
-   * prompt again under the id it went as (a device sending again after its
-   * answer was lost) is the project it made, with its Setup thread: nothing
-   * is made twice, and one still being made answers both.
+   * prompt again under the id it went as while the first is being made (a
+   * device sending again after its answer was lost) answers both: nothing
+   * is made twice.
    */
   const createOrJoinProject = (asked: ProjectAsk): Promise<ProjectMade> => {
     const promptId = asked.setup?.promptId;
@@ -24321,20 +24011,6 @@ export const createServer = (
     const first = projectsMaking.get(promptId);
     if (first !== undefined) {
       return first;
-    }
-    const kept = db.threadMessage(promptId);
-    const thread = kept && db.thread(kept.threadId);
-    const project = thread && db.project(thread.projectId);
-    if (thread && project) {
-      return Promise.resolve({
-        project,
-        place: madeFrom(project),
-        placeAdded: false,
-        joined: false,
-        ...(lead
-          ? { setupThread: lead.read(project.id, thread.id).thread }
-          : {}),
-      });
     }
     const making = makeOrJoinProject(asked);
     projectsMaking.set(promptId, making);
@@ -24383,25 +24059,25 @@ export const createServer = (
     });
     projectsChanged();
     projectStarters.touched(created.id, "project created");
-    const setupThread = await startProject(created, asked);
+    const conversation = await startProject(created, asked);
     return {
       project: created,
       place: madeFrom(created),
       placeAdded: false,
       joined: false,
-      ...(setupThread ? { setupThread } : {}),
+      ...(conversation ? { conversation } : {}),
     };
   };
 
   /**
    * A new project's template applied as any template is (tasks.ts
    * `applyTemplate`: its stages.md and the delegate types they run), and its
-   * Setup thread when it is made with Caw.
+   * conversation set to set it up when it is made with Caw: its session.
    */
   const startProject = async (
     created: ProjectRow,
     asked: ProjectAsk
-  ): Promise<ThreadSummary | undefined> => {
+  ): Promise<string | undefined> => {
     if (asked.template) {
       await tasks.applyTemplate(created.id, asked.template, YOU_ACTOR);
       // Its template's starter skills reach the checkout it was made from.
@@ -24499,8 +24175,9 @@ export const createServer = (
   const placeRepos = createPlaceRepos({
     call: callMachine,
     db,
-    notice: (projectId, threadId, note) =>
-      lead?.notice(projectId, threadId, note) ?? null,
+    notice: (projectId, note) => {
+      lead?.notice(projectId, note);
+    },
   });
   /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (work-items.ts `stageRuns`). */
   const placeStages = new Map<
@@ -25006,11 +24683,10 @@ export const createServer = (
       inboxPassed: (projectId) => routines.inboxPassed(projectId),
     }),
     folderChanged: (projectId) => tasks.touched(projectId),
-    // Caw is made further down; his thread is read only once a call runs.
-    notice: (projectId, threadId, note) => {
-      lead?.notice(projectId, threadId, note);
+    // The conversation's notes are made further down; read once a call runs.
+    notice: (projectId, note) => {
+      lead?.notice(projectId, note);
     },
-    threadOf: (actor) => lead?.askThread(actor),
     park: (envelope) => parkForPerson(envelope),
     settle: (requestId) => {
       pending.resolve(requestId);
@@ -25201,23 +24877,13 @@ export const createServer = (
     workItems.pauseChanged(machineId);
     publishInstances(machineId);
   };
-  // Each project's Caw: its lead session, woken by events only (caw.ts).
+  // Each project's conversation: a session its events reach (caw.ts).
   const caw = createCaw({
-    asks: () => pending.list(),
     blocks,
-    makeNote: (projectId, text) => projectMemory.makeNote(projectId, text),
-    inTurn: (instanceId) => pulses.get(instanceId)?.busy === true,
     caps,
     db,
     proposeType: (actor, path, content, toolUseId) =>
       projectMemory.proposeType(actor, path, content, toolUseId),
-    interrupt: (instanceId) =>
-      interruptTurn(
-        instanceId,
-        true,
-        "by Caw: turned off mid-turn",
-        turnCutWords.cawOff
-      ),
     online: (machineId) =>
       machineId === undefined
         ? onlineMachines().length > 0
@@ -25236,67 +24902,11 @@ export const createServer = (
         : { domain: lastRelayDomain },
     upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
-    // Thread rows reach every dashboard on the ledger, as sessions do.
-    publish: (payload) => {
-      registry.broadcast({ verb: "frames", machineId: "hub", payload });
-    },
-    // A thread's own rows and its tail, onto its transcript.
-    posted: (row) => threadTranscripts.line(row),
-    tail: (threadId, patch) => threadTranscripts.tail(threadId, patch),
-    // Caw's answer in a thread is his turn there ending: the project's
-    // starters are asked again (project-starters.ts), and the person's
-    // phone hears it unless they looked at the thread since.
-    replied: (thread, reply) => {
-      projectStarters.threadAnswered(thread.id);
-      push.threadReply(thread, reply);
-    },
-    // The person's words in a thread are sends, kept as every send is.
-    sends: {
-      record: (payload, threadId, failed) => {
-        const { message } = payload;
-        const record = db.recordSend({
-          uuid: message.uuid,
-          instanceId: null,
-          threadId,
-          acceptedAt: new Date(),
-          body: externalizeImages(sentFrame(payload)),
-          mode: sendMode(payload),
-          ...(message.replaces ? { replaces: message.replaces } : {}),
-          ...(failed
-            ? { state: "failed" as const, reason: failed, refusal: null }
-            : { state: "pending" as const }),
-        });
-        if (message.replaces) {
-          replaceSend(message.replaces, record.uuid);
-        }
-        publishSend(record);
-        return record;
-      },
-      fail: (uuid, reason) => {
-        const row = db.sendRecord(uuid);
-        if (row?.state !== "pending") {
-          return;
-        }
-        const handed = handedSend(row);
-        if (handed) {
-          failSend(handed, reason);
-        } else {
-          changeSend(row, { state: "failed", reason, refusal: null });
-        }
-      },
-      read: (uuid) => {
-        const row = db.sendRecord(uuid);
-        if (row?.state === "pending") {
-          changeSend(row, { state: "read", readAt: new Date() });
-        }
-      },
-      claim: (uuid, threadId, at) => {
-        const row = db.sendRecord(uuid);
-        if (row && !row.threadId) {
-          changeSend(row, { threadId, readAt: at });
-        }
-      },
-    },
+    // A project note, a line in its conversation's transcript as it lands.
+    noted: (instanceId, note) => noteProject(instanceId, note),
+    // The conversation ended a turn: the project's starters are asked again
+    // (project-starters.ts).
+    answered: (projectId) => projectStarters.conversationAnswered(projectId),
     // A conversation's start drains the inbound events that waited for it.
     // Ingress is made further down; nothing starts one before the hub is up.
     conversationStarted: (projectId) => {
@@ -25322,9 +24932,6 @@ export const createServer = (
       running: (projectId) => projectStops.running(projectId),
       stop: (projectId, ids) => projectStops.stop(projectId, ids),
     },
-    // Caw's own wakes are their thread's already: straight to his session,
-    // never taken into a thread again (a wake carrying your words is yours,
-    // `human`, which {@link toCawThread} takes from every other sender).
     send: (envelope) =>
       deliverToSession(byIdNow(envelope), false).state === "pending",
     end: (instanceId) =>
@@ -25350,7 +24957,6 @@ export const createServer = (
           .flatMap((ask) => (ask.instanceId ? [ask.instanceId] : []))
       ),
     artifactNeeds: () => artifactLane.now(),
-    threads: () => caw.allThreads(),
     stageKinds: async (projectId) =>
       new Map(
         (await tasks.stages(projectId)).stages.map((stage) => [
@@ -25444,15 +25050,6 @@ export const createServer = (
     },
   });
   findHears = (ids) => find.instancesChanged(ids);
-  // The owner's thread whose words went to Caw's session alone, before every
-  // word to him went through his threads: written in once (thread-repair.ts),
-  // now and, while his machine is away, as the next machine registers.
-  const repairThread = createThreadRepair({
-    db,
-    history: (instanceId) => readHistoryWhole(instanceId),
-    restore: caw.restore,
-  });
-  offBoot.push(repairThread);
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
   // triage run per episode whose word goes to the session's lead.
   watch = createFleetWatch({
@@ -25640,24 +25237,13 @@ export const createServer = (
         },
       });
     },
-    // A new thread with the person's words, which wake Caw (caw.ts `sent`).
-    wakeCaw: (projectId, text) => {
-      const threadId = crypto.randomUUID();
-      const sent = caw.sent(threadId, {
-        instanceId: threadTargetOf(threadId),
-        projectId,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: { role: "user", content: text },
-          parent_tool_use_id: null,
-          origin: { kind: "human" },
-        },
-      });
-      return sent.state === "failed"
-        ? Promise.reject(new Error(sent.reason ?? "Caw couldn't take them."))
-        : Promise.resolve(threadId);
-    },
+    // The person's words to the project's conversation (caw.ts `tellYours`).
+    tellConversation: (projectId, text) =>
+      caw.tellYours(projectId, {
+        kind: "person-request",
+        trigger: "the person sent a decision page",
+        text,
+      }),
     // The send's own record: unread while pending, then the turn that read
     // it until that session's next turn end (the send may have gone on to
     // a continuation: its record names where).
@@ -25680,17 +25266,6 @@ export const createServer = (
           row.turnEndedAt &&
           row.turnEndedAt.getTime() >= send.readAt.getTime()
         )
-      );
-    },
-    threadWorking: (threadId) => {
-      const thread = db.thread(threadId);
-      return (
-        !!thread &&
-        caw
-          .allThreads()
-          [thread.projectId]?.some(
-            (each) => each.id === threadId && each.status === "working"
-          ) === true
       );
     },
   });
@@ -25739,8 +25314,7 @@ export const createServer = (
     tasks,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
-    notice: (projectId, threadId, note) =>
-      caw.notice(projectId, threadId, note),
+    notice: (projectId, note) => caw.notice(projectId, note),
     // Called on a person's answer, long after both are made.
     declined: (projectId) => projectStarters.designDeclined(projectId),
   });
@@ -25780,8 +25354,7 @@ export const createServer = (
   const lfsOffers = createLfsOffers({
     call: callMachine,
     db,
-    notice: (projectId, threadId, note) =>
-      caw.notice(projectId, threadId, note),
+    notice: (projectId, note) => caw.notice(projectId, note),
   });
   // A project's starters, written for it by Jev from what it holds now, on
   // its changes (project-starters.ts): a task filed or moved here; its
@@ -26547,7 +26120,7 @@ export const createServer = (
     }),
     note: (actor, note) => {
       if (actor.projectId) {
-        caw.notice(actor.projectId, caw.askThread(actor) ?? null, note);
+        caw.notice(actor.projectId, note);
       }
     },
   });
@@ -26686,36 +26259,6 @@ export const createServer = (
           )
         : [];
     },
-    thread: (id) => db.thread(id),
-    threadsByPrefix: (prefix) =>
-      handledIds(prefix, db.allThreads(), (thread) => thread.id).map(
-        (thread) => thread.id
-      ),
-    // A thread's turns: its own rows (Caw's replies, events, your answers)
-    // and your words written there, which are sends (thread-transcript.ts),
-    // each at when it was written.
-    threadMessages: (threadId) =>
-      [
-        ...db.threadMessages(threadId).map((message) => ({
-          id: message.id,
-          at: message.createdAt,
-          author: message.author,
-          body: message.body,
-          noteTitle: message.noteTitle,
-        })),
-        ...db
-          .threadSends(threadId)
-          .filter(
-            (send) => send.state !== "cancelled" && send.state !== "replaced"
-          )
-          .map((send) => ({
-            id: send.uuid,
-            at: send.readAt ?? send.acceptedAt,
-            author: "you",
-            body: sendWords(send.body),
-            noteTitle: null,
-          })),
-      ].sort((a, b) => a.at.getTime() - b.at.getTime()),
   });
   /**
    * A session's transcript, every page back to the conversation's start,
@@ -26928,16 +26471,6 @@ export const createServer = (
     instanceById: (id) => db.getInstancesByIds([id])[0],
     instancesByShortId: (prefix) =>
       db.getInstancesByIds(db.find.idsByPrefix(prefix)),
-    threads: {
-      byId: (id) =>
-        handledIds(id, db.allThreads(), (thread) => thread.id).map(
-          (thread) => ({
-            id: thread.id,
-            title: thread.title,
-          })
-        ),
-      hand: (threadId, from, message) => caw.handed(threadId, from, message),
-    },
     // What `GET /api/instances` and `GET /api/agents` answer, without the
     // hub calling itself over HTTP for them.
     fleet: {
@@ -27810,7 +27343,7 @@ export const createServer = (
     plan: LimitCompaction,
     row: { id: string; machineId: string }
   ): boolean => {
-    const sent = handedSend(db.sendRecord(stepUuid(plan)));
+    const sent = db.sendRecord(stepUuid(plan));
     if (!sent) {
       sendStep(row, plan);
       return false;
@@ -28708,6 +28241,17 @@ export const createServer = (
    * `FLEET_WATCH`): kept on its row and folded into what its screens show
    * now. Never sent to its process.
    */
+  /** A project note placed in its conversation's transcript as it lands (caw.ts `notice`). */
+  const noteProject = (
+    instanceId: string,
+    kept: { at: number; id: string; note: ProjectNote }
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (row) {
+      transcripts.line(row.id, projectNoteLine(row, kept), row.harness);
+    }
+  };
+
   const noteWatch = (instanceId: string, content: string): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
@@ -30086,7 +29630,7 @@ export const createServer = (
             return { ok: true };
           }
           const machineId = project.machineId ?? body.machineId;
-          caw.notice(params.id, db.newestConversation(params.id)?.id ?? null, {
+          caw.notice(params.id, {
             title: "Large files left as pointers: an undeclared LFS server",
             event: {
               kind: "repo",
@@ -31319,12 +30863,6 @@ export const createServer = (
             Number(query.limit) > 0
               ? Math.floor(Number(query.limit))
               : undefined;
-          // A Caw thread is read as a session is: its page is the hub's own
-          // (thread-transcript.ts), never a machine's.
-          const thread = threadTarget(params.id);
-          if (thread) {
-            return threadPage(thread, limit, query.before);
-          }
           // A former id is its session's (the hub's fold of older continuations).
           const id = db.instanceIdOf(params.id);
           const page = await transcripts.page(id, limit, query.before);
@@ -31508,9 +31046,6 @@ export const createServer = (
           }
           const at = body.kind === "unarchive" ? null : new Date();
           const seen = db.markSeen(instanceIds, at);
-          if (body.kind === "look" && at) {
-            push.looked(instanceIds, at);
-          }
           if (body.kind === "look") {
             // Looked at: a session's finished turn or failure, its message
             // and its asks are read, so their notifications come down.
@@ -31620,17 +31155,6 @@ export const createServer = (
         ({ query, status }) => {
           if (!(query.parent || query.instance)) {
             return status(400, "name a parent or an instance");
-          }
-          // A Caw thread (`thread:<id>`): what the sessions he started from
-          // it said, the delegates its page draws.
-          const thread = query.parent ? threadTarget(query.parent) : undefined;
-          if (thread) {
-            return db
-              .threadDelegates(thread)
-              .flatMap((row) => db.listDelegateEvents({ instance: row.id }))
-              .sort(
-                (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id
-              );
           }
           return db.listDelegateEvents(query);
         }
@@ -33447,9 +32971,8 @@ export const createServer = (
       // answer is that project, not a second one. `place` is the folder asked
       // about. With no folder (New project: its checkout is picked once it is
       // set up) its one place is its folder on the hub. `template` writes its
-      // stages.md; made with Caw, it opens its Setup thread with `prompt` as
-      // its first message (`promptId`, the dashboard's id for it) and wakes
-      // Caw to set it up.
+      // stages.md; made with Caw, its conversation starts with `prompt` and
+      // the setup steps (`conversation`, its session).
       .post(
         "/api/projects",
         {
@@ -33504,7 +33027,7 @@ export const createServer = (
             ...projectOut(made.project),
             place: made.place,
             placeAdded: made.placeAdded,
-            ...(made.setupThread ? { setupThread: made.setupThread } : {}),
+            ...(made.conversation ? { conversation: made.conversation } : {}),
           };
         }
       )
@@ -35040,11 +34563,6 @@ export const createServer = (
               artifacts.machineBack(message.machineId);
               // Its folder previews' folders read, never started.
               foldersSeen(message.machineId);
-              // A project Caw could not set up while no machine was online is set up now.
-              soon(() => {
-                caw.machineOnline();
-                repairThread();
-              });
               workItems.discardUnfiled(message.machineId);
               // Landings a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
@@ -36773,20 +36291,6 @@ export const createServer = (
                 // push or a second routing decision.
                 const parkedBefore = pending.get(message.requestId);
                 const alreadyParked = parkedBefore !== undefined;
-                // A project lead's ask goes to a thread: the one whose
-                // message woke this turn, else the project's newest (caw.ts
-                // `askThread`; none for any other session). A replay keeps
-                // the thread it was first given.
-                const askPayload = message.payload as PermissionRequestFrame;
-                let threadId = (
-                  parkedBefore?.payload as PermissionRequestFrame | undefined
-                )?.threadId;
-                if (!alreadyParked && owner) {
-                  threadId = caw.askThread(owner);
-                }
-                if (threadId) {
-                  askPayload.threadId = threadId;
-                }
                 const { requestId } = message;
                 // Its publish is the fan-out below, which every frame no
                 // transcript folds goes out by, after its routing here.
@@ -36801,9 +36305,6 @@ export const createServer = (
                 }
                 if (alreadyParked) {
                   break;
-                }
-                if (threadId) {
-                  caw.asksChanged(threadId);
                 }
                 // A delegate's ask routes to its parent; the user is only the
                 // fallback. The parent must be live, or asleep with a
@@ -37023,11 +36524,6 @@ export const createServer = (
                     .filter((block) => block.type === "text")
                     .map((block) => block.text)
                     .join("");
-                  // What a project's Caw says in plain text is kept for the
-                  // threads of yours his turn may leave unanswered.
-                  if (text.trim()) {
-                    caw.spoke(message.instanceId, text);
-                  }
                   // A tool call means the turn goes on: everything said up
                   // to it, this frame's own text included, was narration.
                   if (
@@ -37475,31 +36971,7 @@ export const createServer = (
                   message.instanceId,
                   message.payload as TranscriptPayload
                 );
-              } else if (
-                // Law `caw-ask-stored-before-sent` (core invariant.ts): an ask
-                // in Caw's thread goes out only once the hub's store holds it
-                // (`pending.remember` above), so an answer, a reload and a
-                // second screen find what it shows. Broken, nothing goes.
-                // Born red, once: this tree with the ask taken out of the
-                // store just before this broadcast (no commit before ever
-                // sent one first, as 1e17e70c found), a stand-in machine's
-                // AskUserQuestion in thread red-thread: "[law] Law broken:
-                // caw-ask-stored-before-sent. … Caw's ask red-ask in thread
-                // red-thread was about to go to the dashboards, and the
-                // hub's store does not hold it."; the dashboard got
-                // laws.broken and no ask. Store kept: the ask went, no law.
-                laws.holds(
-                  !(
-                    kind === "permission_request" &&
-                    (message.payload as PermissionRequestFrame).threadId
-                  ) ||
-                    (message.requestId !== undefined &&
-                      pending.get(message.requestId) !== undefined),
-                  "caw-ask-stored-before-sent",
-                  () =>
-                    `Caw's ask ${message.requestId ?? "(with no request id)"} in thread ${(message.payload as PermissionRequestFrame).threadId} was about to go to the dashboards, and the hub's store does not hold it.`
-                )
-              ) {
+              } else {
                 // A parked ask goes out with its secrets hidden; the ledger
                 // keeps the call as it was asked.
                 registry.broadcast(clientCopy(message));

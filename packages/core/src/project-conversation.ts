@@ -1,19 +1,11 @@
 /**
- * A project's threads: your conversations with its Caw (Projects spec §5.6,
- * the hub's `caw.ts`). A thread is a target a session reads, kept by the
- * hub: it is addressed as `thread:<id>` wherever a session is addressed by
- * its id (a send, a transcript page, a stream), and the hub serves it as a
- * transcript (thread-transcript.ts). The shapes the routes answer, the
- * `thread.upsert` frame carries, and the dashboard draws.
+ * A project's conversation (Projects spec §5.6, the hub's `caw.ts`): the
+ * session its events reach, a session like any other whose scope is the
+ * project. The shapes its routes answer, the notes the hub keeps for the
+ * person in its transcript, and what the project spends.
  */
 
-import type {
-  HarnessKind,
-  OfferedMode,
-  PlaceLfsRow,
-  UserAnswers,
-  UserQuestion,
-} from "./harness";
+import type { HarnessKind, OfferedMode, PlaceLfsRow } from "./harness";
 import type { ItemEnd } from "./work-items";
 
 /**
@@ -26,11 +18,11 @@ import type { ItemEnd } from "./work-items";
 export const CAW_NO_MACHINE =
   "No machine is online, so Caw can't start. Bring one online and he can.";
 
-/** A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
-export interface CawView {
+/** A project's conversation, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
+export interface ProjectConversationView {
   harness: HarnessKind;
-  /** Caw's session, once the hub has started one. */
-  leadInstanceId: string | null;
+  /** The conversation's session, once the hub has started one. */
+  instanceId: string | null;
   /**
    * The permission mode the hub starts the project's conversation in, the
    * project's own; null: the fleet's, else the one the person last chose
@@ -61,8 +53,8 @@ export interface CawView {
 export interface CawRunning {
   cwd: string;
   id: string;
-  /** An attempt at a task, a delegate of his, or his own turn an event started. */
-  kind: "attempt" | "delegate" | "turn";
+  /** An attempt at a task, or a delegate of the conversation's. */
+  kind: "attempt" | "delegate";
   machineId: string;
   /** Its machine is not connected: it stops when its machine is back. */
   offline: boolean;
@@ -79,8 +71,7 @@ export type CawInitiated = "finish" | "stop";
 
 /**
  * What Caw shows: the product's status words, each drawn as its own file,
- * assets/mascot/caw/<status>.riv. A thread's status and a conversation's
- * live state (find.ts `FindLiveState`) are said in these words.
+ * assets/mascot/caw/<status>.riv. A conversation's live state (find.ts `FindLiveState`) are said in these words.
  */
 export const CAW_STATUSES = [
   "ready",
@@ -96,115 +87,8 @@ export const CAW_STATUSES = [
 ] as const;
 export type CawStatus = (typeof CAW_STATUSES)[number];
 
-/**
- * Where a thread stands, derived on every read and never stored: `working`
- * while the lead session is busy on a turn that thread woke, `needs-you`
- * while a question the lead asked in it is parked, else `ready`.
- */
-export type ThreadStatus = Extract<
-  CawStatus,
-  "working" | "needs-you" | "ready"
->;
-
-/** How a thread is addressed wherever a session is addressed by its id: `thread:<id>`. */
-export const THREAD_TARGET = "thread:";
-
-/** The `noteKind` of a thread's event line: something that woke, or was noted for, a project's Caw. */
+/** The `noteKind` of a project note's line in its conversation's transcript (hub caw.ts `notice`). */
 export const CAW_EVENT_NOTE = "caw.event";
-
-/** The id a thread is addressed by: its view id. */
-export const threadTargetOf = (threadId: string): string =>
-  `${THREAD_TARGET}${threadId}`;
-
-/** The thread an address names, or undefined for a session's id. */
-export const threadTarget = (id: string): string | undefined =>
-  id.startsWith(THREAD_TARGET) ? id.slice(THREAD_TARGET.length) : undefined;
-
-/** A thread as the project's list and the `thread.upsert` frame carry it. */
-export interface ThreadSummary {
-  /**
-   * When you archived it, ms epoch: the rails leave it and the sessions
-   * under it out, and the project's thread list keeps it under Archived.
-   * Absent while it is not archived; a new message in it brings it back.
-   */
-  archivedAt?: number;
-  id: string;
-  /** When its newest message was added, ms epoch. */
-  lastAt: number;
-  projectId: string;
-  /**
-   * A Setup thread of the project: the one New project opens with your
-   * prompt, or one you asked Caw to set the project up in, where he shows
-   * the setup page and lists what he wrote. Its replies that name files
-   * offer "Open the board".
-   */
-  setup: boolean;
-  status: ThreadStatus;
-  title: string;
-}
-
-/**
- * The questions the lead asked you in a thread (its AskUserQuestion), from
- * before his choices became decision pages: kept so the answers you gave
- * then still read.
- */
-export interface ThreadQuestion {
-  questions: UserQuestion[];
-  /**
-   * The lead's call that asked them: the parked card on the thread's
-   * composer settles into the answered row that carries it.
-   */
-  toolUseId?: string;
-}
-
-/** How you answered them: your choices, or that you walked away from them. */
-export type ThreadAnswer =
-  | {
-      /** Per-question notes (preview selections), keyed by question text. */
-      annotations?: Record<string, { notes?: string; preview?: string }>;
-      answers: UserAnswers;
-      outcome: "answered";
-    }
-  | { outcome: "dismissed" };
-
-interface ThreadMessageBase {
-  createdAt: number;
-  id: string;
-  threadId: string;
-}
-
-/**
- * A picture your words carried, in the hub's media store (media.ts): its
- * address there (`/api/media/<sha256>.<ext>`), as a send's row names it.
- */
-export interface ThreadImage {
-  mediaType: string;
-  src: string;
-}
-
-/**
- * Your answer to one of the lead's questions from before they became
- * decision pages ({@link ThreadQuestion}): the questions, and your choices
- * or that you walked away; `body` reads it in one line. Your words themselves
- * are sends (`SendRecord` with its `threadId`), never a thread message.
- */
-export interface YourThreadMessage extends ThreadMessageBase {
-  answer: ThreadAnswer;
-  author: "you";
-  body: string;
-  question: ThreadQuestion;
-}
-
-/**
- * Caw's, through `thread_reply`; `tasks` names the tasks it is about
- * (`tsk-12`), `files` the project folder's files it wrote (`stages.md`).
- */
-export interface CawThreadMessage extends ThreadMessageBase {
-  author: "caw";
-  body: string;
-  files?: string[];
-  tasks?: string[];
-}
 
 /** A routine's schedule as the person reads it: its cron in words, in its zone, and its next run. */
 export interface RoutineSchedule {
@@ -218,20 +102,11 @@ export interface RoutineSchedule {
 }
 
 /**
- * What became of one of Caw's shell or edit calls while a gate decided them
- * (until one-session design slice 3), as his threads' notes keep it: `asked`
- * while it waits on your Approve card, `ran` once it was let run (its exit
- * once its result came), `refused` by the hub's rules, `denied` by you,
- * `cut` when its ask left unanswered (its process ended or withdrew it).
- */
-export type LeadCallOutcome = "asked" | "ran" | "refused" | "denied" | "cut";
-
-/**
- * What a thread's event is, as typed data: the ids the dashboard looks
+ * What a project note is about, as typed data: the ids the dashboard looks
  * things up by, and the words the hub had when it wrote it (a task's title,
  * a routine's name). A task or session is never named by its id in words.
  */
-export type ThreadEvent =
+export type ProjectNoteEvent =
   | {
       kind: "routine";
       name: string;
@@ -277,16 +152,6 @@ export type ThreadEvent =
       stage: string;
       taskId: string;
       title: string;
-    }
-  | {
-      /** The command or file of one of Caw's calls while a gate decided them; absent for a wake. */
-      command?: string;
-      kind: "caw";
-      what:
-        | Exclude<LeadCallOutcome, "asked">
-        | "could-not-start"
-        | "edited"
-        | "guard";
     }
   | { kind: "view"; name: string }
   | { kind: "agents"; sha: string }
@@ -338,16 +203,14 @@ export type ThreadEvent =
       /** The folder made a repository, or the clone the refusal was in. */
       root: string;
     }
-  | { kind: "hub"; what: "thread-repaired" }
   /** A session made a routine (routines.ts `announce`). */
-  | RoutineMadeThreadEvent
+  | RoutineMadeNote
   /** Caw asking whether to build a design system. */
-  | DesignOfferThreadEvent;
+  | DesignOfferNote;
 
 /**
  * A session made a routine with `routine_create` (routines.ts `announce`):
- * the notice in the thread its maker's turn was in, or the routine's own
- * thread when it was in none. Keep, Turn off and Open act on `routineId`
+ * the note in its project's conversation. Keep, Turn off and Open act on `routineId`
  * through `/api/routines/:id`.
  */
 export interface RoutineMadeEvent {
@@ -364,8 +227,8 @@ export interface RoutineMadeEvent {
   why: string | null;
 }
 
-/** {@link RoutineMadeEvent} as a ThreadEvent kind. */
-export interface RoutineMadeThreadEvent extends RoutineMadeEvent {
+/** {@link RoutineMadeEvent} as a project note's kind. */
+export interface RoutineMadeNote extends RoutineMadeEvent {
   kind: "routine-made";
 }
 
@@ -383,8 +246,8 @@ export interface DesignOfferEvent {
   taskId: string;
 }
 
-/** {@link DesignOfferEvent} as a ThreadEvent kind. */
-export interface DesignOfferThreadEvent extends DesignOfferEvent {
+/** {@link DesignOfferEvent} as a project note's kind. */
+export interface DesignOfferNote extends DesignOfferEvent {
   kind: "design-offer";
 }
 
@@ -409,29 +272,12 @@ export interface LfsOfferState {
   rows: PlaceLfsRow[];
 }
 
-/** A note in a thread as its writers give it: one line, its fold, and what it is. */
-export interface ThreadNote {
+/** A note of the hub's to the person about a project, as its writers give it: one line, its fold, and what it is. */
+export interface ProjectNote {
   body?: string;
-  event: ThreadEvent;
+  event: ProjectNoteEvent;
   title: string;
 }
-
-/** Something that happened and woke Caw: a routine, an attempt landing, a task waiting for you. */
-export interface EventThreadMessage extends ThreadMessageBase {
-  author: "event";
-  /** What happened, opened like a fold; absent when the title says it all. */
-  body?: string;
-  /** What happened, as typed data; null on a note stored before events were typed. */
-  event: ThreadEvent | null;
-  /**
-   * One line: source and what, like "Routine · Triage issues · 09:00". The
-   * time is not in it: a reader draws `createdAt` in their own time zone.
-   */
-  noteTitle: string;
-}
-
-export type ThreadMessage =
-  YourThreadMessage | CawThreadMessage | EventThreadMessage;
 
 /**
  * What reaching a project's spend cap does (Projects spec §5.3): `pause`
@@ -473,12 +319,10 @@ export const capHolds = (
 
 /**
  * What a project has spent, as `GET /api/projects/:id/spend` answers it, in
- * dollars, read now. Each part has one source: its Caw's turns as they were
- * booked (each turn's cost, from its result), its attempts' and other
- * sessions' usage as their machines reported it (a lead's sessions are not
- * counted twice). The parts add up: `monthUsd` is Caw's month, every
- * attempt's month and the others' month; Caw's month is its threads' month
- * and the turns no thread woke. Days and months are the hub's own (its
+ * dollars, read now. Each part is its sessions' usage as their machines
+ * reported it: its conversations', its attempts' and every other session's.
+ * The parts add up: `monthUsd` is the conversations' month, every attempt's
+ * month and the others' month. Days and months are the hub's own (its
  * zone, as every "today" CawCo shows). What a project's cap counts.
  */
 export interface ProjectSpend {
@@ -500,8 +344,8 @@ export interface ProjectSpend {
   budget: { minutes?: number; turns?: number; usd?: number } | null;
   /** The project's spend cap; null: it has none, and no limit. */
   cap: ProjectCap | null;
-  /** The project's Caw: its booked turns; `unthreadedMonthUsd`, this month's no thread woke. */
-  caw: { monthUsd: number; todayUsd: number; unthreadedMonthUsd: number };
+  /** The project's conversations: what their sessions reported. */
+  caw: { monthUsd: number; todayUsd: number };
   /** What reaching a cap does when the project sets nothing: the fleet's default. */
   fleetOnCap: OnCap;
   /** The first of this month, ms epoch. */
@@ -509,18 +353,6 @@ export interface ProjectSpend {
   monthUsd: number;
   /** Every session of the project that is neither its Caw nor an attempt. */
   others: { monthUsd: number; todayUsd: number };
-  /**
-   * Each thread that moved this month, newest first: how many times it
-   * woke Caw this month (your messages and events) and what those turns
-   * cost (each turn's cost, booked to the thread that woke it).
-   */
-  threads: {
-    id: string;
-    lastAt: number;
-    title: string;
-    usd: number;
-    wakes: number;
-  }[];
   /** Midnight today, ms epoch. */
   todayStart: number;
   /** Every session of the project. */

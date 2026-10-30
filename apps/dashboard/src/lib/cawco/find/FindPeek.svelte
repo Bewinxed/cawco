@@ -56,7 +56,6 @@
     agent: "agent",
     report: "report",
     injected: "injected",
-    caw: "Caw",
   };
 
   const conversation = $derived(result.kind === "conversation" ? result : null);

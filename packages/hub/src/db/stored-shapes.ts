@@ -19,7 +19,7 @@ import {
   MoveSnapshotResultShape,
   MoveStepShape,
   PermissionModeShape,
-  SendAttachmentSchema,
+  SendAttachmentShape,
   SendPayloadShape,
   SendRefusalShape,
 } from "@cawco/core/stored-shapes";
@@ -153,7 +153,7 @@ export const ContinuationAskerSchema: z.ZodType<ContinuationAskerType> =
 
 const ContinueRequestShape = z.object({
   asksOnly: z.literal(true).optional(),
-  attachments: z.array(SendAttachmentSchema).optional(),
+  attachments: z.array(SendAttachmentShape).optional(),
   images: SendPayloadShape.shape.images.optional(),
   note: z.string().optional(),
   summarizer: z
@@ -383,7 +383,6 @@ const ProposalShape = z.object({
   notes: z.array(z.string()),
   projectId: z.string(),
   session: z.string(),
-  threadId: z.string().optional(),
   time: z.string(),
   toolUseId: z.string().optional(),
   why: z.string(),

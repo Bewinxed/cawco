@@ -9,9 +9,9 @@ import Observation
 /// the project's tasks changed (`tasks.changed`: Caw filed one, an attempt
 /// moved one), on a reconnect, and when the app comes back. A move shows at
 /// once, in the column it is going to, until the hub answers it. The
-/// project's custom views are read with them, and again whenever one of its
-/// Caw threads moves (he drafts a view in a thread), so a new draft arrives
-/// as a tab.
+/// project's custom views are read with them, and again whenever a turn of
+/// its conversation ends (it drafts views in its turns), so a new draft
+/// arrives as a tab.
 @MainActor
 @Observable
 public final class ProjectTaskList {
@@ -35,14 +35,14 @@ public final class ProjectTaskList {
     /// Views reads so far, and keeps and discards: only the newest one's answer is kept.
     @ObservationIgnored private var viewReads = 0
     @ObservationIgnored private var changesSeen: Int
-    @ObservationIgnored private var threadsSeen: Int
+    @ObservationIgnored private var turnWas: Bool
     @ObservationIgnored private var wasConnected: Bool
 
     public init(hub: HubConnection, projectId: String) {
         self.hub = hub
         self.projectId = projectId
         changesSeen = hub.tasksChanged[projectId] ?? 0
-        threadsSeen = hub.threadsMoved[projectId] ?? 0
+        turnWas = false
         wasConnected = hub.state == .connected
         watch()
     }
@@ -200,12 +200,12 @@ public final class ProjectTaskList {
 
     /// Reads again when the hub says the tasks changed, and on every
     /// reconnect (a foregrounded app's socket is a new one): the tasks the
-    /// hub may have moved while it was away. The views alone when one of the
-    /// project's threads moved.
+    /// hub may have moved while it was away. The views alone when a turn of
+    /// the project's conversation ended.
     private func watch() {
         withObservationTracking {
             _ = hub.tasksChanged[projectId]
-            _ = hub.threadsMoved[projectId]
+            _ = conversationWorking
             _ = hub.state
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
@@ -218,19 +218,25 @@ public final class ProjectTaskList {
 
     private func moved() {
         let changes = hub.tasksChanged[projectId] ?? 0
-        let threads = hub.threadsMoved[projectId] ?? 0
+        let working = conversationWorking
         let connected = hub.state == .connected
         let reread = (changes != changesSeen) || (connected && !wasConnected)
-        let threadsMoved = threads != threadsSeen
+        let turnEnded = turnWas && !working
         changesSeen = changes
-        threadsSeen = threads
+        turnWas = working
         wasConnected = connected
         guard connected else { return }
         if reread {
             Task { await refresh() }
-        } else if threadsMoved {
+        } else if turnEnded {
             Task { await readViews() }
         }
+    }
+
+    /// The project's conversation (the session its row names) is mid-turn.
+    private var conversationWorking: Bool {
+        guard let id = hub.fleet.projects.first(where: { $0.id == projectId })?.conversationInstanceId else { return false }
+        return hub.fleet.activityPulse(id)?.activity == .working
     }
 }
 

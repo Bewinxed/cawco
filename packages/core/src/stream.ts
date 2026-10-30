@@ -150,9 +150,10 @@ import type { TailnetServing } from "./tailnet-https";
  *    `waitsOn` is a wait as a task keeps it (a string), and the hub's own
  *    wait on a page whole is `waitsOnPage`. A page built for 29 would read
  *    links the hub no longer sends, so it reloads first.
- * 31: a Caw thread is addressed as a session: its page is
- *    `GET /api/instances/thread:<id>/transcript`, its stream is followed
- *    under `thread:<id>`, and a send to it is a `send` command to that id.
+ * 31: a Caw thread is addressed as a session: its page is the
+ *    transcript of its session id (the thread's id after a `thread` prefix),
+ *    its stream is followed under that id, and a send to it is a `send`
+ *    command to that id.
  *    No `thread.message` frame is sent, a thread's row says no `hearing`,
  *    and the thread routes that took and read its messages are gone. A
  *    page built for 30 would read a thread no hub serves, so it reloads
@@ -192,14 +193,21 @@ import type { TailnetServing } from "./tailnet-https";
  * 39: events are sends: a project's Caw view no longer carries `answering`
  *    and carries the `mode` its conversation starts in, and a routine's run
  *    names its session as `instanceId` and no thread. A page built for 38
- *    reads an `answering` and a run's `threadId` the hub no longer sends, so
+ *    reads an `answering` and a run's thread the hub no longer sends, so
  *    it reloads first.
+ * 40: conversations are sessions: no thread is sent or served. The
+ *    `thread.upsert` frame, the thread routes and a project's `threads` are
+ *    gone; a project names its conversation as `conversationInstanceId`,
+ *    its Caw view is the `ProjectConversationView` of that session, and the
+ *    hub's notes for a project are lines in its conversation's transcript.
+ *    A page built for 39 draws threads the hub no longer sends, so it
+ *    reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 39;
+export const WIRE_PROTOCOL = 40;
 
 /**
  * What a session's stream carries: the changes each frame made to its

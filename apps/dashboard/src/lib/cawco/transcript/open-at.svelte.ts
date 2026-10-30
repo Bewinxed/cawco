@@ -1,11 +1,10 @@
 /**
  * OPENING A CONVERSATION AT ONE OF ITS RECORDS.
  *
- * `?at=<docId>` on a conversation's address (`/session/<id>?at=…`, a thread's
- * `/session/thread:<id>?at=…`) asks for that conversation scrolled to the
- * record, centred and highlighted, however far back in its history it is: a
- * Claude transcript record's uuid, an OpenCode message id, a pi entry id, a
- * thread message's id. The finder's "Where it was said" rows link there.
+ * `?at=<docId>` on a conversation's address (`/session/<id>?at=…`) asks for
+ * that conversation scrolled to the record, centred and highlighted, however
+ * far back in its history it is: a Claude transcript record's uuid, an
+ * OpenCode message id, a pi entry id. The finder's "Where it was said" rows link there.
  *
  * The address is read where every address is (`workspace.followUrl`), and
  * the ask is held here, by the view it is for, until that view's transcript

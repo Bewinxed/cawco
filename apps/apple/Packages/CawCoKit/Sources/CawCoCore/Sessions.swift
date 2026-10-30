@@ -387,8 +387,7 @@ public final class SessionsStore {
     }
 
     /// Peek and delegate readers share the same counted transcript watches as
-    /// tabs, so one reader closing never drops another reader's stream. A
-    /// Caw thread is read and followed as a session is (`thread:<id>`).
+    /// tabs, so one reader closing never drops another reader's stream.
     /// A run streams no transcript of its own: its frames are the board's.
     public func watchDelegate(_ id: String) { if !id.hasPrefix("run:") { _ = open(id) } }
     public func unwatchDelegate(_ id: String) { close(id) }
@@ -828,12 +827,9 @@ public final class SessionsStore {
     }
 
     /// The same send by the session's ids, for a sender that has no row: a
-    /// push's Reply, which knows the session and its machine from the push;
-    /// a Caw thread (`thread:<id>`), whose first send names the project the
-    /// hub makes it in (`projectId`, core `SendPayload.projectId`).
+    /// push's Reply, which knows the session and its machine from the push.
     public func steer(sessionId: String, machineId: String, text: String, images: [(mediaType: String, data: Data)] = [],
-                      texts: [(name: String, content: String)] = [], files: [SentFile] = [], replaces: String? = nil,
-                      projectId: String? = nil) -> String {
+                      texts: [(name: String, content: String)] = [], files: [SentFile] = [], replaces: String? = nil) -> String {
         let uuid = UUID().uuidString.lowercased()
         var message: [String: any Sendable] = [
             "type": "user", "uuid": uuid, "origin": ["kind": "human"],
@@ -841,7 +837,6 @@ public final class SessionsStore {
         ]
         if let replaces { message["replaces"] = replaces }
         var body: [String: any Sendable] = ["instanceId": sessionId, "message": message]
-        if let projectId { body["projectId"] = projectId }
         if !images.isEmpty {
             body["images"] = images.map { ["mediaType": $0.mediaType, "data": $0.data.base64EncodedString()] as [String: any Sendable] }
         }

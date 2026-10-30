@@ -1418,7 +1418,6 @@
         class="flex min-w-0 flex-col gap-space-1 pt-space-1 type-label text-ink-strong"
       >
         <CawLeadSwitch
-          label="Leads this project"
           {lead}
           projectId={project.id}
           projectName={project.name}

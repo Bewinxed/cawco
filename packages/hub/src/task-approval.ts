@@ -85,7 +85,7 @@ export const createTaskApproval = ({
       return;
     }
     const why = `its filer takes no input now (${silent})`;
-    if (!db.project(projectId)?.caw) {
+    if (!db.project(projectId)?.eventsOn) {
       console.log(
         `[tasks] ${id} in ${projectId}: approved; ${why}, and Caw is off: nobody is woken, and it waits in ${approval.to}`
       );

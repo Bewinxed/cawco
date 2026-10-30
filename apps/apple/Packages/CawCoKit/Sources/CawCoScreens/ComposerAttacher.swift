@@ -4,8 +4,7 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// What rides with a conversation's words (Composer.svelte `attach`, a
-/// session's and a Caw thread's alike): the sources a file input offers on
+/// What rides with a conversation's words (Composer.svelte `attach`): the sources a file input offers on
 /// iOS (the photo library and files), what is pasted into the field that is
 /// not words, and each pick read off its source into its own place in the
 /// draft; a picture as a picture, a text as text, anything else uploaded to

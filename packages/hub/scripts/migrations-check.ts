@@ -373,7 +373,7 @@ try {
     throw new Error("The hub lists no project from the database's");
   }
   await answer(`/api/projects/${project}/tasks`);
-  await answer(`/api/projects/${project}/threads`);
+  await answer(`/api/projects/${project}/caw`);
   lifetime.close();
   const after = read(dbPath);
   const journal = entries.length;

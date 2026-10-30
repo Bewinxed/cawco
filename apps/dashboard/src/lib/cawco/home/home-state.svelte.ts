@@ -24,6 +24,7 @@ import type { NeutralSessionInfo } from "@cawco/core/harness";
 import type { PairingRequest, WaitingMachine } from "@cawco/core/hub-auth";
 import type { Install } from "@cawco/core/install";
 import { machineLabel } from "@cawco/core/machine-names";
+import type { ProjectCap } from "@cawco/core/project-conversation";
 import {
   projectAt as projectHolding,
   topsIn,
@@ -32,7 +33,6 @@ import { questionsOf } from "@cawco/core/question";
 import type { RelayJourneyView } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
-import type { ProjectCap } from "@cawco/core/threads";
 import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
 import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
 import { mcpWords } from "@cawco/core/words/mcp";
@@ -83,7 +83,6 @@ import { sameRow } from "../same-row";
 import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
-import { threadIdOf, threadTabId } from "../thread-tabs";
 import { rooted, standsAlone, tree } from "../tree";
 import { askNaming } from "./ask-naming";
 import { choices } from "./choices.svelte";
@@ -385,11 +384,6 @@ export interface AskItem {
   request: BlockedRequest["request"];
   /** Its machine is offline: it still stands, and answering waits for it. */
   stale: boolean;
-  /**
-   * Where it opens: the thread a project's Caw asked in (thread-tabs.ts), so
-   * his lead session is never a card's place; null opens the session.
-   */
-  thread: string | null;
   title: string;
 }
 
@@ -672,11 +666,10 @@ export type NeedsItem =
 
 /**
  * Where an ask opens, its card's and a wide screen's landing alike: the
- * thread a project's Caw asked in, else the session whose pane draws it,
- * else the session that asked. His lead session is never where one opens.
+ * session whose pane draws it, else the session that asked.
  */
 export const askView = (item: AskItem): string =>
-  item.thread ?? item.origin ?? item.instanceId;
+  item.origin ?? item.instanceId;
 
 interface RecentItem {
   at: number;
@@ -705,8 +698,7 @@ export const instanceTitle = (row: BoardRow): string =>
 
 /**
  * What `/session/<id>` is called, in the bar and the document title alike:
- * the thread's title where Caw asked in one, else the session's, wherever it
- * lives (session-names.svelte.ts); one the hub names nothing by (a stored
+ * the session's title, wherever it lives (session-names.svelte.ts); one the hub names nothing by (a stored
  * session, a deleted one) as its tab names it. The board (no id) is Fleet.
  */
 export function sessionName(id: string | undefined): string {
@@ -975,22 +967,13 @@ function endOf(row: BoardRow): number | undefined {
 }
 
 /**
- * When a session (or thread) last ended, on the hub's clock as
+ * When a session last ended, on the hub's clock as
  * `seenAt` is; `undefined` while it works or waits on the reader. A
  * session: the end of its turn as the hub took it (`turnEndedAt`), or for
  * a failed one the hub's last change to its row. A pulse's time is its
- * machine's clock, so it is never read here. A thread: its own last move,
- * which the hub stamps.
+ * machine's clock, so it is never read here.
  */
 function endedAt(row: BoardRow): number | undefined {
-  if (threadIdOf(row.id)) {
-    if (isFailed(row)) {
-      return lastAt(row);
-    }
-    return cawco.activityOf(row.id) === "idle"
-      ? cawco.pulseAt(row.id)
-      : undefined;
-  }
   const end = endOf(row);
   if (end === undefined) {
     return;
@@ -1022,16 +1005,14 @@ export function endedUnseen(row: BoardRow): boolean {
   // now: asked first, so the board's hundreds of rows at rest never ask
   // what their sessions are doing, and held per row while the row and the
   // marks are the ones it was asked of.
-  if (!threadIdOf(row.id)) {
-    const marksThen = seenThrough.get(row);
-    if (marksThen === marks) {
-      return false;
-    }
-    const end = endOf(row);
-    if (end === undefined || end <= seenAt(row)) {
-      seenThrough.set(row, marks);
-      return false;
-    }
+  const marksThen = seenThrough.get(row);
+  if (marksThen === marks) {
+    return false;
+  }
+  const end = endOf(row);
+  if (end === undefined || end <= seenAt(row)) {
+    seenThrough.set(row, marks);
+    return false;
   }
   const ended = endedAt(row);
   return ended !== undefined && ended > seenAt(row);
@@ -1322,20 +1303,12 @@ class Home {
     const asks: NeedsItem[] = cawco.blocked.map((item) => {
       const row = cawco.instanceIndex.byId.get(item.instanceId);
       const questions = questionsOf(item.request.toolName, item.request.input);
-      // An ask a project's Caw made is his thread's (his question, a project
-      // setting, a memory proposal he asked about): the card opens the thread.
-      const thread = item.request.threadId
-        ? cawco.threadOf(threadTabId(item.request.threadId))
-        : undefined;
       // A held post is named by itself; an ask no session row stands behind
       // (a memory proposal) is titled by who asked, as the hub named them.
-      const { title, ask } = askNaming(
-        item.request.presentation,
-        () =>
-          thread?.title ??
-          (row
-            ? instanceTitle(row)
-            : item.request.presentation.asker || item.hostname)
+      const { title, ask } = askNaming(item.request.presentation, () =>
+        row
+          ? instanceTitle(row)
+          : item.request.presentation.asker || item.hostname
       );
       return {
         kind: "ask",
@@ -1343,7 +1316,6 @@ class Home {
         instanceId: item.instanceId,
         cwd: row?.cwd || item.cwd,
         origin: item.request.originInstanceId ?? null,
-        thread: thread ? threadTabId(thread.id) : null,
         machineId: item.machineId,
         title,
         place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
@@ -1660,7 +1632,7 @@ class Home {
       // The latest to end first. A failure says so on its own row (its
       // mark, its line, the tab's numeral), not by jumping the queue. Two
       // that ended together go by id, so every device lists them alike.
-      newestFirst(cawco.listedRows.filter(endedUnseen)),
+      newestFirst(cawco.listedInstances.filter(endedUnseen)),
       (row) => row.id
     );
   });
@@ -1691,7 +1663,7 @@ class Home {
    */
   get empty(): boolean {
     return (
-      cawco.listedRows.length === 0 &&
+      cawco.listedInstances.length === 0 &&
       cawco.machines.every((machine) => !cawco.hasStored(machine.machineId))
     );
   }
@@ -1742,12 +1714,8 @@ class Home {
         continue;
       }
       for (const info of cawco.catalogOf(machineId)) {
-        // A listed session's transcript is its row; a lead's is its
-        // project's threads, never a stored session of its own.
-        if (
-          running.has(info.sessionId) ||
-          cawco.leadSessions.has(info.sessionId)
-        ) {
+        // A listed session's transcript is its row.
+        if (running.has(info.sessionId)) {
           continue;
         }
         const where = projectOf(machineId, info.cwd);
@@ -1805,7 +1773,7 @@ class Home {
   });
 
   /**
-   * The listed rows as Recent's membership reads them: `cawco.listedRows`,
+   * The listed rows as Recent's membership reads them: `cawco.listedInstances`,
    * or the very array it was while every row stands as it was
    * ({@link standsAsItWas}). A turn moving on in a session changes its row
    * and nothing Recent holds, so nothing below walks the board for it: the
@@ -1814,7 +1782,7 @@ class Home {
    */
   #standingWas: BoardRow[] | undefined;
   readonly #standing = $derived.by<BoardRow[]>(() => {
-    const next = cawco.listedRows;
+    const next = cawco.listedInstances;
     const was = this.#standingWas;
     if (
       was?.length === next.length &&
@@ -1896,7 +1864,7 @@ class Home {
 
   /**
    * Recent's own rows among the sessions: the top of each tree, as the
-   * lists have them (a delegate of Caw's work is under its thread). A
+   * lists have them. A
    * delegate is in its parent's tree, never a row of the list, so the
    * list's count and its cap are of these.
    */
@@ -1963,7 +1931,7 @@ class Home {
     );
     // The one that moved last; of two that moved together, the first listed.
     let latest: { at: number; id: string } | null = null;
-    for (const row of cawco.runningRows) {
+    for (const row of cawco.runningInstances) {
       if (!listed(row) || cancelled.has(row.id)) {
         continue;
       }
@@ -1998,7 +1966,7 @@ function listedIn(all: BoardRow[]): BoardRow[] {
  * turn moving on or a row outside it changing wakes nothing past it.
  */
 function workingNow(): BoardRow[] {
-  const rows = cawco.runningRows.filter(
+  const rows = cawco.runningInstances.filter(
     (row) => cawco.activityOf(row.id) === "working"
   );
   // Ordered by when each joined Working this stint, newest first: a key

@@ -81,7 +81,7 @@
   }
 
   const liveOn = (machineId: string): number =>
-    cawco.runningRows.filter((row) => row.machineId === machineId).length;
+    cawco.runningInstances.filter((row) => row.machineId === machineId).length;
   /** The row's dot: down, up but in trouble, or fine. */
   function presenceOf(up: boolean, fault: string | undefined): MachinePresence {
     if (!up) {

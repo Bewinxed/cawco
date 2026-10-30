@@ -105,8 +105,6 @@ export type AskResult = z.infer<typeof RESULT>;
  * session's fold or a query reads them without the record.
  */
 export const ASK_STORED = z.object({
-  /** Caw's: drawn and answered in his thread. */
-  threadId: z.string().optional(),
   /** The tool call the card is drawn at. */
   toolUseId: z.string().optional(),
   asked: z.discriminatedUnion("kind", [APPROVE, QUESTION]),
@@ -164,10 +162,9 @@ const askLabel = (asked: AskRecord["asked"]): string =>
     ? `approval of ${asked.tool}`
     : `question: ${asked.questions[0]?.question ?? ""}`;
 
-/** An ask's link, in the session (or Caw's thread) that asked it. */
-export const askLink = (
-  ask: Pick<AskRecord, "asked" | "instanceId" | "threadId">
-): string => sessionLink(ask.threadId ?? ask.instanceId, askLabel(ask.asked));
+/** An ask's link, in the session that asked it. */
+export const askLink = (ask: Pick<AskRecord, "asked" | "instanceId">): string =>
+  sessionLink(ask.instanceId, askLabel(ask.asked));
 
 /** What a question's `ask` call answers at once: what waits on the answer, or what goes ahead. */
 export const askQuestionWords = (link: string, asked: AskedQuestion): string =>

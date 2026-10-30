@@ -51,7 +51,7 @@ private struct OwnerPass: ClientMiddleware {
     }
 }
 
-/// The connect-time reads (`HubConnection.readFleet`), a transcript's page and a Caw thread, read as the socket's
+/// The connect-time reads (`HubConnection.readFleet`) and a transcript's page, read as the socket's
 /// frames are (`Wire.lossy`): a machine, a row or a project this app's types
 /// refuse is left out of its list, and the list is read, where the generated
 /// client alone would refuse the whole answer and the board would not read.

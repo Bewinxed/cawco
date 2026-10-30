@@ -456,11 +456,10 @@
     notices.acknowledge([item.notNow]).catch(() => undefined);
   }
   /**
-   * A session's ask can be peeked, in the wide layout: a thread is opened,
-   * not peeked (it is the conversation itself), and a run and a budget have
-   * no tail.
+   * A session's ask can be peeked, in the wide layout: a run and a budget
+   * have no tail.
    */
-  const peeks = $derived(item.kind === "ask" && !item.thread && peekable());
+  const peeks = $derived(item.kind === "ask" && peekable());
 
   function peekAsk(): void {
     if (item.kind !== "ask") {

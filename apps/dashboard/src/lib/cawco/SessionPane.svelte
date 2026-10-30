@@ -16,6 +16,12 @@
    * (`composer-dock.svelte.ts`). Only the server's first paint, which has no
    * group composer yet, draws one here. The half-typed message is this
    * pane's either way — `draft` below.
+   *
+   * Docked in a project's panel (`docked`, ProjectConversation) it is no tab
+   * of a group: it draws its own composer on the panel's draft, follows its
+   * stream while the panel shows it, and stands nothing beside it. A
+   * project's conversation is Caw's (session-status.ts `cawOf`, or docked):
+   * its agent is named Caw and his face marks its turns.
    */
   import { type Snippet, untrack } from "svelte";
   import {
@@ -53,11 +59,14 @@
     seededSession,
     sendFailureNotice,
     submitCommand,
+    unwatchDelegate,
+    watchDelegate,
   } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
   import { frameSize } from "./frame-observer";
+  import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
   import { deadlineIn } from "./hub-read";
   import { rowHref } from "./links";
@@ -76,12 +85,12 @@
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import { planAsked } from "./reference-things.svelte";
+  import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
-  import { threadTabId } from "./thread-tabs";
   import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
   import ConnectNeedsChip from "./transcript/ConnectNeedsChip.svelte";
   import {
@@ -99,6 +108,7 @@
   import { speakerName } from "./transcript/speaker";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
+  import { setVoice } from "./turn/voice";
   import {
     type ComposerBinding,
     composerBindings,
@@ -117,6 +127,7 @@
     active,
     focused,
     serverTail = null,
+    docked,
 
     /** Whether this pane is on screen at all — governs row building. */
     /**
@@ -139,6 +150,12 @@
     active: boolean;
     focused?: boolean;
     serverTail?: ServerTail | null;
+    /**
+     * Drawn in a project's panel (ProjectConversation), not as a tab: its
+     * composer writes on the panel's `draft`, so half-written words outlive
+     * the panel being put away.
+     */
+    docked?: { draft: ComposerDraft };
   } = $props();
 
   /**
@@ -273,35 +290,26 @@
     isLive ? [] : parkedAsks(cawco.session(viewId)?.pending ?? [])
   );
   /**
-   * An ask is answered where it was made: one Caw made opens his thread,
-   * one a curator run made opens that run's session, each drawing it in
-   * its composer. This tab goes there.
+   * An ask is answered where it was made: one a curator run made opens that
+   * run's session, drawing it in its composer. This tab goes there.
    */
-  const madeIn = $derived.by((): string | null => {
-    const ask = rowless.find((one) => one.threadId || one.originInstanceId);
-    if (!ask) {
-      return null;
-    }
-    return ask.threadId
-      ? threadTabId(ask.threadId)
-      : (ask.originInstanceId ?? null);
-  });
+  const madeIn = $derived(
+    rowless.find((one) => one.originInstanceId)?.originInstanceId ?? null
+  );
   $effect(() => {
     const to = madeIn;
-    if (to) {
+    if (to && !docked) {
       untrack(() => workspace.retarget(viewId, to));
     }
   });
   /**
-   * An ask made in no conversation (a proposal Caw made before proposals
-   * kept their thread): the pane is that ask's card and nothing else. No
+   * An ask made in no conversation: the pane is that ask's card and nothing
+   * else. No
    * transcript is read and no "no such session" is said; the composer is
    * the card (it grows into the ask). Kept once seen, so the pane does not
    * read or say anything in the moment between the answer and its close.
    */
-  const asking = $derived(
-    rowless.some((one) => !(one.threadId || one.originInstanceId))
-  );
+  const asking = $derived(rowless.some((one) => !one.originInstanceId));
   let askHeld = $state(false);
   const askAlone = $derived(asking || askHeld);
   // Answered (or settled anywhere), the pane closes as its tab's own close
@@ -313,7 +321,7 @@
     untrack(() => {
       if (now) {
         askHeld = true;
-      } else if (askHeld && !row) {
+      } else if (askHeld && !row && !docked) {
         workspace.close(viewId);
       }
     });
@@ -821,7 +829,24 @@
     });
   });
 
-  const agentName = $derived(speakerName(session?.harness));
+  /** A project's conversation: its agent is Caw, his face on its turns. */
+  const caw = $derived(!!docked || cawOf(viewId) !== null);
+  const agentName = $derived(caw ? "Caw" : speakerName(session?.harness));
+  setVoice({
+    get face() {
+      return caw ? face : undefined;
+    },
+  });
+  // Docked in its panel it is no tab of the workspace's: its stream is
+  // followed while the panel shows it, as a delegate card's is.
+  $effect(() => {
+    const id = viewId;
+    if (!docked) {
+      return;
+    }
+    untrack(() => watchDelegate(id));
+    return () => unwatchDelegate(id);
+  });
 
   const commands = $derived(cawco.commandsOf(viewId));
 
@@ -950,13 +975,16 @@
   /** The project the offer joined: the card says so where it stood. */
   const projectJoin = $derived(cawco.projectJoinOf(viewId));
 
-  /** What this conversation has half-written, whichever composer draws it. */
-  const draft = new ComposerDraft();
+  /** What this conversation has half-written, whichever composer draws it; docked, the panel's. */
+  const draft = untrack(() => docked?.draft) ?? new ComposerDraft();
 
   // The draft across a reload, under the conversation's id. A pane is
   // mounted once per conversation (PaneHost keys it by id), so the id is
   // fixed for its life, and the draft is written once more as it closes.
-  keepDraft(draft, () => viewId);
+  // Docked, the panel keeps it.
+  if (!untrack(() => docked)) {
+    keepDraft(draft, () => viewId);
+  }
 
   // Reachable from outside the composer while the pane stands (Files' Ask).
   $effect(() => {
@@ -1064,6 +1092,18 @@
       ? `var(--c-composer-panel) + var(--c-tray-row)${suggestions.enabled ? " + var(--c-suggest-room)" : ""}`
       : "0px"
   );
+  /**
+   * Docked, the composer has a place of its own at the pane's foot and the
+   * transcript's room ends over it: nothing scrolls under it. The place is
+   * the composer at rest, from its tokens (`composerRoom`), never its
+   * measured height: what grows out of it stands over the transcript's foot
+   * as it does in a tab (DESIGN.md, The Composer Layer Rule).
+   */
+  const reserved = $derived(
+    docked && writable
+      ? `calc(var(--space-4) + var(--safe-bottom) + ${composerRoom} + var(--space-2))`
+      : null
+  );
 
   /**
    * This conversation, as its group's composer sees it. Read through getters,
@@ -1123,7 +1163,7 @@
   };
 
   $effect(() => {
-    if (!(browser && writable)) {
+    if (!(browser && writable) || docked) {
       return;
     }
     const id = viewId;
@@ -1135,6 +1175,11 @@
     };
   });
 </script>
+
+<!-- Caw's face on a project conversation's turns (`live`: the turn in flight). -->
+{#snippet face(live: boolean)}
+  <CawFace size={18} status={live ? "working" : "ready"} />
+{/snippet}
 
 <!-- The composer's two slots, drawn by whichever composer is writing to this
      conversation: the one below on a desk, the deck's on a phone. -->
@@ -1231,6 +1276,157 @@
   </EmptyState>
 {/snippet}
 
+<!-- The composer this pane draws itself: docked, where no group lends one;
+     and in the server's first paint, before the group's exists. -->
+{#snippet ownComposer()}
+  <Composer
+    fleet={composerFleet}
+    {agentName}
+    ask={firstAsk}
+    busy={session?.busy ?? false}
+    {commands}
+    {draft}
+    mentionsFrom={viewId}
+    onfoot={(foot) => {
+      parkedRoom = foot.parked;
+    }}
+    onmenu={refreshMenu}
+    {onstop}
+    {onsubmit}
+    paneVisible={visible}
+    recallOf={viewId}
+    sendError={sendFailure}
+    {faultAgain}
+    sending={sends.sending}
+    showing={viewId}
+    {suggest}
+    trayRows={[{ delegatesOf: viewId, id: viewId, prompts: offer }]}
+  />
+{/snippet}
+
+{#snippet body(held: SessionState)}
+  <div
+    data-slot="body"
+    class="relative flex min-h-0 min-w-0 flex-auto flex-col pb-(--reserved)"
+    style:--composer-clearance={reserved
+      ? "var(--space-4)"
+      : `calc(${composerRoom} + var(--space-4) + var(--space-4))`}
+    style:--reserved={reserved}
+  >
+    <!-- The transcript area. Movement between conversations is owned by the
+       pane above this one, so nothing here animates on a switch — this is
+       the surface a swipe carries, not the thing that carries it. -->
+    <div
+      data-slot="transcript-slide"
+      class="relative isolate flex min-h-0 flex-auto flex-col overflow-hidden timeline-scope-transcript-head"
+    >
+      <!-- A named state, not an empty pane: what happened, in one line,
+               and the one thing that can be done about it. -->
+      {#if fault}
+        <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
+          {@render faultState(fault)}
+        </div>
+      {:else if unaddressable}
+        <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
+          {@render missingState()}
+        </div>
+      {:else if blank}
+        <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
+          <!-- Its own agent fills it (The Empty Starts Work Rule, a
+               session's own case): the ask goes in this composer, unsent;
+               with none here, the New Session form in its folder. -->
+          <EmptyState
+            pad="transcript"
+            icon={IconChat}
+            title="Nothing has been said here yet"
+          >
+            {#snippet action()}
+              <EmptyAsk
+                label={firstAskLabel(session?.harness)}
+                onask={(anchor) => askFirst(viewId, writable, anchor)}
+              />
+            {/snippet}
+          </EmptyState>
+        </div>
+      {:else if mounted}
+        <div class="flex min-h-0 flex-auto flex-col">
+          <RegionBoundary region="transcript">
+            <Transcript
+              {agentName}
+              {firstScreen}
+              {focused}
+              latestInset={reserved ? "var(--space-2)" : undefined}
+              onshown={(drawn) => {
+                shown = drawn;
+              }}
+              parkedHeight={writable ? parkedRoom : 0}
+              session={held}
+              {visible}
+            />
+          </RegionBoundary>
+        </div>
+        <HeadFade />
+      {/if}
+      <!-- The skeleton stands in for rows still on their way and hands its
+           place to them in its reveal (motion/curves `reveal`) once they are
+           drawn: its blur carries its rows into the real ones, which fall
+           elsewhere. -->
+      {#if writable && browser}
+        <FootFade />
+      {/if}
+      {#if veiled}
+        <div
+          class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
+          in:crossIn
+          out:reveal
+        >
+          <TranscriptSkeleton />
+        </div>
+      {/if}
+    </div>
+
+    <!-- The group draws the composer; only the server's first paint,
+             before any group composer exists, draws one here. -->
+    {#if continuedTo}
+      <p
+        data-slot="continued"
+        class="mx-auto mt-0 mb-space-4 flex max-w-full justify-center gap-space-1 px-space-3 py-space-2 text-center text-meta text-ink-muted"
+        in:crossIn
+        out:crossOut
+      >
+        <span class="flex-none whitespace-nowrap">{CONTINUED_IN}</span>
+        <a
+          class="touch-hit pointer-hit min-w-0 text-link-ink underline-offset-2 hover:underline"
+          href={rowHref(continuedTo.id)}
+          ><span class="block truncate">{continuedTo.title}</span></a
+        >
+      </p>
+    {:else if !fault && (unaddressable || readOnly)}
+      <p
+        class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center text-meta text-ink-muted"
+        in:crossIn
+        out:crossOut
+      >
+        This transcript is stored; the session isn't reachable from here.
+      </p>
+    {:else if docked && writable && browser}
+      <!-- No group lends a docked pane a composer: it draws its own, where
+           the group's stands (PaneLeaf `.dock`), over the pane, taking no
+           press but the composer's own. -->
+      <div
+        data-slot="composer-dock"
+        class="absolute inset-0 z-1 pointer-events-none"
+      >
+        <RegionBoundary kept="Your draft is kept." region="composer">
+          {@render ownComposer()}
+        </RegionBoundary>
+      </div>
+    {:else if writable && !browser}
+      {@render ownComposer()}
+    {/if}
+  </div>
+{/snippet}
+
 <div
   data-slot="pane"
   class="relative flex min-h-0 min-w-0 flex-auto flex-col @container bg-surface-recess"
@@ -1239,139 +1435,21 @@
   {#if prestart}
     <!-- Nothing stands behind the wait: the session does not exist yet. -->
   {:else if session}
-    <SideSplit
-      {active}
-      phone={drawer}
-      task={besideStages ? besideSurface : undefined}
-      taskOpen={!!beside}
-      {viewId}
-      {visible}
-      bind:share={previewShare}
-    >
-      <div
-        data-slot="body"
-        class="relative flex min-h-0 min-w-0 flex-auto flex-col"
-        style:--composer-clearance="calc({composerRoom} + var(--space-4) + var(--space-4))"
+    {#if docked}
+      {@render body(session)}
+    {:else}
+      <SideSplit
+        {active}
+        phone={drawer}
+        task={besideStages ? besideSurface : undefined}
+        taskOpen={!!beside}
+        {viewId}
+        {visible}
+        bind:share={previewShare}
       >
-        <!-- The transcript area. Movement between conversations is owned by the
-           pane above this one, so nothing here animates on a switch — this is
-           the surface a swipe carries, not the thing that carries it. -->
-        <div
-          data-slot="transcript-slide"
-          class="relative isolate flex min-h-0 flex-auto flex-col overflow-hidden timeline-scope-transcript-head"
-        >
-          <!-- A named state, not an empty pane: what happened, in one line,
-                   and the one thing that can be done about it. -->
-          {#if fault}
-            <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
-              {@render faultState(fault)}
-            </div>
-          {:else if unaddressable}
-            <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
-              {@render missingState()}
-            </div>
-          {:else if blank}
-            <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
-              <!-- Its own agent fills it (The Empty Starts Work Rule, a
-                   session's own case): the ask goes in this composer, unsent;
-                   with none here, the New Session form in its folder. -->
-              <EmptyState
-                pad="transcript"
-                icon={IconChat}
-                title="Nothing has been said here yet"
-              >
-                {#snippet action()}
-                  <EmptyAsk
-                    label={firstAskLabel(session?.harness)}
-                    onask={(anchor) => askFirst(viewId, writable, anchor)}
-                  />
-                {/snippet}
-              </EmptyState>
-            </div>
-          {:else if mounted}
-            <div class="flex min-h-0 flex-auto flex-col">
-              <RegionBoundary region="transcript">
-                <Transcript
-                  {agentName}
-                  {firstScreen}
-                  {focused}
-                  onshown={(drawn) => {
-                    shown = drawn;
-                  }}
-                  parkedHeight={writable ? parkedRoom : 0}
-                  {session}
-                  {visible}
-                />
-              </RegionBoundary>
-            </div>
-            <HeadFade />
-          {/if}
-          <!-- The skeleton stands in for rows still on their way and hands its
-               place to them in its reveal (motion/curves `reveal`) once they are
-               drawn: its blur carries its rows into the real ones, which fall
-               elsewhere. -->
-          {#if writable && browser}
-            <FootFade />
-          {/if}
-          {#if veiled}
-            <div
-              class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
-              in:crossIn
-              out:reveal
-            >
-              <TranscriptSkeleton />
-            </div>
-          {/if}
-        </div>
-
-        <!-- The group draws the composer; only the server's first paint,
-                 before any group composer exists, draws one here. -->
-        {#if continuedTo}
-          <p
-            data-slot="continued"
-            class="mx-auto mt-0 mb-space-4 flex max-w-full justify-center gap-space-1 px-space-3 py-space-2 text-center text-meta text-ink-muted"
-            in:crossIn
-            out:crossOut
-          >
-            <span class="flex-none whitespace-nowrap">{CONTINUED_IN}</span>
-            <a
-              class="touch-hit pointer-hit min-w-0 text-link-ink underline-offset-2 hover:underline"
-              href={rowHref(continuedTo.id)}
-              ><span class="block truncate">{continuedTo.title}</span></a
-            >
-          </p>
-        {:else if !fault && (unaddressable || readOnly)}
-          <p
-            class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center text-meta text-ink-muted"
-            in:crossIn
-            out:crossOut
-          >
-            This transcript is stored; the session isn't reachable from here.
-          </p>
-        {:else if writable && !browser}
-          <Composer
-            fleet={composerFleet}
-            {agentName}
-            ask={firstAsk}
-            busy={session.busy}
-            {commands}
-            {draft}
-            mentionsFrom={viewId}
-            onmenu={refreshMenu}
-            {onstop}
-            {onsubmit}
-            paneVisible={visible}
-            recallOf={viewId}
-            sendError={sendFailure}
-            {faultAgain}
-            sending={sends.sending}
-            showing={viewId}
-            {suggest}
-            trayRows={[{ delegatesOf: viewId, id: viewId, prompts: offer }]}
-          />
-        {/if}
-      </div>
-    </SideSplit>
+        {@render body(session)}
+      </SideSplit>
+    {/if}
   {:else if fault}
     <!-- No session in the store yet, and the server's read was refused: the
          same named state the pane's own read would show. -->

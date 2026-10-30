@@ -229,7 +229,8 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
 
   /** The project whose conversation `row` is, if it is one. */
   const ledProject = (row: InstanceRow): string | undefined =>
-    row.projectId && db.project(row.projectId)?.leadInstanceId === row.id
+    row.projectId &&
+    db.project(row.projectId)?.conversationInstanceId === row.id
       ? row.projectId
       : undefined;
 

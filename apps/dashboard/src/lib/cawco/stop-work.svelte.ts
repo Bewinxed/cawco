@@ -19,7 +19,10 @@
 
 import { detach } from "@cawco/core/detach";
 import type { ProjectStopFrame } from "@cawco/core/frames";
-import type { CawRunning, CawView } from "@cawco/core/threads";
+import type {
+  CawRunning,
+  ProjectConversationView,
+} from "@cawco/core/project-conversation";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
@@ -60,8 +63,6 @@ export interface StopRow {
   s: RunningSession;
   /** `away`: its machine is not connected; it stops when it is back. */
   state: "running" | "away" | "stopping" | "stopped" | "failed";
-  /** Caw's own turn, not a session: his turning off stops it. */
-  turn: boolean;
   /** Its title and link, where the caller names them. */
   view: { href?: string; title?: string };
 }
@@ -176,9 +177,6 @@ export function wordsOf(job: StopJob): StopWords {
 
 /** A Caw-off row as the tray names it: what it is, and its session. */
 function cawView(one: CawRunning): StopRow["view"] {
-  if (one.kind === "turn") {
-    return { title: `Caw · ${one.title ?? "his turn"}` };
-  }
   const href = `/session/${encodeURIComponent(one.id)}`;
   if (one.kind === "attempt" && one.taskId) {
     return { href, title: `${one.taskId} · ${one.title ?? "attempt"}` };
@@ -188,8 +186,7 @@ function cawView(one: CawRunning): StopRow["view"] {
 
 const asRows = (
   listed: RunningSession[],
-  view: (s: RunningSession) => StopRow["view"] = () => ({}),
-  turns: ReadonlySet<string> = new Set()
+  view: (s: RunningSession) => StopRow["view"] = () => ({})
 ): StopRow[] =>
   listed.map((s) => ({
     s: {
@@ -201,7 +198,6 @@ const asRows = (
       title: s.title,
     },
     view: view(s),
-    turn: turns.has(s.id),
     state: s.offline ? "away" : "running",
     owed: false,
     departed: false,
@@ -236,7 +232,10 @@ class StopWork {
     Set<ReturnType<typeof setTimeout>>
   >();
   private readonly fliers = new Map<string, Flier>();
-  private readonly cawViews = new Map<string, Set<(view: CawView) => void>>();
+  private readonly cawViews = new Map<
+    string,
+    Set<(view: ProjectConversationView) => void>
+  >();
   /** The one `project.stop` listener every job hears through, once one stop runs. */
   private unhear: (() => void) | null = null;
 
@@ -312,13 +311,7 @@ class StopWork {
       kind: "caw-off",
       projectId: project.id,
       projectName: project.name,
-      rows: asRows(
-        running,
-        (s) => views.get(s.id) ?? {},
-        new Set(
-          running.filter((one) => one.kind === "turn").map((one) => one.id)
-        )
-      ),
+      rows: asRows(running, (s) => views.get(s.id) ?? {}),
     });
   }
 
@@ -350,14 +343,17 @@ class StopWork {
   }
 
   /** Hands the page's Caw the hub's view of him once a stop or a finish turned him off. */
-  onCawView(projectId: string, take: (view: CawView) => void): () => void {
+  onCawView(
+    projectId: string,
+    take: (view: ProjectConversationView) => void
+  ): () => void {
     const set = this.cawViews.get(projectId) ?? new Set();
     set.add(take);
     this.cawViews.set(projectId, set);
     return () => set.delete(take);
   }
 
-  private settled(projectId: string, view: CawView): void {
+  private settled(projectId: string, view: ProjectConversationView): void {
     for (const take of this.cawViews.get(projectId) ?? []) {
       take(view);
     }
@@ -513,10 +509,7 @@ class StopWork {
       return [];
     }
     if (job.off) {
-      await stopProjectSessions(
-        job.projectId,
-        ids.filter((id) => !isTurn(job, id))
-      );
+      await stopProjectSessions(job.projectId, ids);
       return [];
     }
     const view = await configureCaw(job.projectId, {
@@ -731,9 +724,7 @@ class StopWork {
       if (job.kind === "forget") {
         job.rows = asRows(running);
       } else {
-        job.rows = job.rows.filter(
-          (row) => still.has(row.s.id) || isTurn(job, row.s.id)
-        );
+        job.rows = job.rows.filter((row) => still.has(row.s.id));
       }
       job.phase = job.rows.length > 0 ? "list" : "none";
       this.keep();
@@ -827,10 +818,6 @@ async function stillRunning(
   } catch (error) {
     return { refused: failureWords(error) };
   }
-}
-
-function isTurn(job: StopJob, id: string): boolean {
-  return job.rows.some((row) => row.s.id === id && row.turn);
 }
 
 /** Nothing is still stopping and something failed: offer Try again. */

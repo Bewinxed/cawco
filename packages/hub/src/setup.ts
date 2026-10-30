@@ -146,15 +146,13 @@ export interface SetupAsk {
   askUpstream: boolean;
   /**
    * Why it is set up: New project's prompt, a session's offer, or the
-   * person's ask in a thread of a project that has one (`project_setup`).
+   * person's ask in any session of the project (`project_setup`).
    */
   from: "prompt" | "offer" | "ask";
   /**
-   * The Setup thread's first message as it reads, which the wake carries as
-   * a thread's wake carries your words (caw.ts `yourWords`): the person's
-   * words (`prompt`), or the note of the offer it was made from (`offer`).
-   * None on the person's ask (`ask`), answered inside the wake that carried
-   * their words.
+   * The person's words the project was made with (`prompt`); none when it
+   * was made from a session's offer (`offer`), or on the person's ask
+   * (`ask`), answered inside the turn that read their words.
    */
   opened?: string;
   /** It has its checkout already (made from a folder): no card asks for its place. */
@@ -169,19 +167,16 @@ export interface SetupAsk {
   stages?: string;
   /** The template it was made from; the code template stands in when none. */
   template: StagesTemplate | null;
-  threadId: string;
 }
 
 /** The opening paragraph: why Caw is setting the project up, and from what. */
 const openingOf = (ask: SetupAsk): string => {
   if (ask.from === "ask") {
-    return `Setup: the person asked you to set the project “${ask.projectName}” up in thread ${ask.threadId}. ${ask.stages ? "Its stages.md as it stands is below." : "It has no stages.md yet."} Set the project up with them in that thread.`;
+    return `Setup: the person asked you to set the project “${ask.projectName}” up. ${ask.stages ? "Its stages.md as it stands is below." : "It has no stages.md yet."} Set the project up with them.`;
   }
-  return `Event setup: the person just made the project “${ask.projectName}”${
-    ask.from === "prompt"
-      ? ", and their words are the first message of the Setup thread"
-      : " from a session's offer, noted in the Setup thread"
-  } (thread ${ask.threadId})${ask.opened ? `:\n\n${ask.opened}\n\n` : ". "}${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`;
+  return `Setup: the person just made the project “${ask.projectName}”${
+    ask.from === "prompt" ? ", with these words" : " from a session's offer"
+  }${ask.opened ? `:\n\n${ask.opened}\n\n` : ". "}${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`;
 };
 
 const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — sessions hand work to CawCo's delegates rather than their harness's own subagents. Options \`on\` labelled "Use delegates" (recommended) and \`off\` labelled "Keep subagents". It is the fleet's, asked once: say so on the card.`;
@@ -236,6 +231,6 @@ export const setupEvent = (ask: SetupAsk): string => {
     ].join("\n"),
     stagesText,
     `2. End your turn. When the person sends their picks you hear that the page has new responses; artifact_read() has them in full. CawCo has then already applied the fleet's choices and added the place they picked; do not write those. Write, with folder_write: stages.md (${ask.stages ? "its block" : "the template's block"} with the stage names they kept; it must read cleanly, or folder_write refuses it with the reason).${picked}${kept} AGENTS.md is the person's, so propose it with memory_propose({ path: "AGENTS.md", content, why, ask: true }): what the project is and how its work is done, from their words, in CawCo's voice, no folder or file paths inside its sentences. They approve it from Needs you.`,
-    `3. Answer in thread ${ask.threadId} with thread_reply: one or two sentences on what you set up, naming no paths (the files are shown from \`files\`), with every file you wrote in \`files\`, and that AGENTS.md waits for their approval. The person opens the board from there.`,
+    "3. Answer in one or two sentences: what you set up, naming no paths, and that AGENTS.md waits for their approval. The person opens the board from the project's page.",
   ].join("\n\n");
 };

@@ -38,7 +38,6 @@ const held = (post: UpstreamPost, repo: string, asker = ASKER): NeedsItem => {
     instanceId: "probe-instance",
     cwd: "/home/bewinxed/cockpit",
     origin: null,
-    thread: null,
     machineId: "obelisk",
     title,
     place: "obelisk · cockpit",

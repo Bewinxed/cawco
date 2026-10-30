@@ -1,34 +1,9 @@
-<script lang="ts" module>
-  import { detach } from "@cawco/core/detach";
-  import { cawco, readTranscript } from "./client.svelte";
-  import { threadIdOf, threadTabId } from "./thread-tabs";
-
-  /**
-   * The session whose live tail a card draws: the session itself, and none
-   * for a thread, whose card is its newest line.
-   */
-  export const tailOf = (id: string | null): string | null =>
-    !id || threadIdOf(id) ? null : id;
-
-  /** A thread's card reads its transcript, as a session's is read, so it opens on its newest line. */
-  export function readThreadCard(threadId: string): void {
-    const viewId = threadTabId(threadId);
-    if (cawco.threadOf(viewId) && !cawco.session(viewId)?.initialized) {
-      detach(
-        readTranscript(viewId).catch(() => undefined),
-        "readTranscript"
-      );
-    }
-  }
-</script>
-
 <script lang="ts">
   import { commonWords } from "@cawco/core/words/common";
   /**
    * A session's card, as the house hover panel (HoverPanel) draws it: its
    * mark, title and state, then what its row cannot show: its live tail and
-   * the question it is waiting on or why it failed; a thread's newest line.
-   * The rail's session
+   * the question it is waiting on or why it failed. The rail's session
    * card (SessionHover) and a session's chip in written words
    * (SessionReference) both draw this. `open`, when given, is where the
    * card's "Open session" action goes.
@@ -37,7 +12,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { STOPPING_LABEL } from "./activity";
-  import { isFailed } from "./client.svelte";
+  import { cawco, isFailed } from "./client.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
   import {
@@ -46,11 +21,11 @@
     sessionPlace,
     sessionTitle,
   } from "./session-names.svelte";
+  import { cawOf } from "./session-status";
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
   import { askDetailOf } from "./transcript/present";
-  import type { Message } from "./types";
 
   let { id, open }: { id: string; open?: string } = $props();
 
@@ -60,41 +35,12 @@
     "needs-you": "needs",
     idle: "idle",
     sleeping: "idle",
-    ready: "idle",
     unknown: "idle",
     ended: "done",
   };
 
-  /** A thread's newest line, as the card's tail ends on it. */
-  /** Who said a thread's row: you, Caw, or an event noted in it; null for a row that is no one's line. */
-  const SPEAKERS: Partial<Record<Message["type"], string>> = {
-    user: "You",
-    assistant: "Caw",
-    "ui.system_note": "Event",
-  };
-  const speakerOf = (message: Message): string | null =>
-    SPEAKERS[message.type] ?? null;
-  /** A thread's row as its card's one line: its words' first line, an event's title. */
-  const newestLine = (message: Message | undefined): string | null => {
-    if (!message) {
-      return null;
-    }
-    const words =
-      message.type === "ui.system_note"
-        ? (message.metadata?.noteTitle ?? "")
-        : message.content;
-    return words.trim().split("\n")[0] || null;
-  };
-
   type Tone = "live" | "needs" | "stopping" | "done" | "failed" | "idle";
   const toneOf = (of: string): Tone => {
-    const thread = cawco.threadOf(of);
-    if (thread) {
-      if (thread.status === "needs-you") {
-        return "needs";
-      }
-      return thread.status === "working" ? "live" : "idle";
-    }
     const row = cawco.instanceIndex.byId.get(of);
     if (row && isFailed(row)) {
       return "failed";
@@ -152,13 +98,11 @@
   };
 
   const row = $derived(cawco.instanceIndex.byId.get(id));
-  const thread = $derived(cawco.threadOf(id));
   /** The hub's answer, for a session this browser holds no row of (session-names.svelte.ts). */
-  const answer = $derived(row || thread ? undefined : sessionAnswer(id));
+  const answer = $derived(row ? undefined : sessionAnswer(id));
   const tone = $derived(answer ? NAMED_TONE[answer.state] : toneOf(id));
-  const caw = $derived(
-    thread?.status ?? (answer?.kind === "thread" ? answer.state : null)
-  );
+  /** A project's conversation's mark is Caw (session-status.ts `cawOf`). */
+  const caw = $derived(cawOf(id));
   const Sprite = $derived(sessionSprite(id));
 </script>
 
@@ -211,23 +155,7 @@
       {/if}
     </span>
   </div>
-  {#if thread}
-    <!-- A thread's card: its newest line. -->
-    {@const newest = cawco
-      .session(threadTabId(thread.id))
-      ?.messages.findLast((message) => speakerOf(message) !== null)}
-    {@const line = newestLine(newest)}
-    {#if newest && line}
-      <p class="flex min-w-0 gap-space-2 text-size-meta text-ink-strong">
-        <span data-slot="who" class="flex-none font-medium"
-          >{speakerOf(newest)}</span
-        >
-        <span class="min-w-0 truncate">{line}</span>
-      </p>
-    {/if}
-  {:else}
-    <DelegateTail instanceId={id} note={noteOf(id, tone)} />
-  {/if}
+  <DelegateTail instanceId={id} note={noteOf(id, tone)} />
   {#if open}
     <div data-slot="acts" class="mt-space-3 flex gap-space-2">
       <Button href={open} size="sm" variant="outline">Open session</Button>

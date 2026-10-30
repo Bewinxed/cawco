@@ -26,7 +26,7 @@ const ENDS_IN_SPACE = /\s$/u;
 const MENU_ROWS = 5;
 
 /** What @ offers without a kind word: what a message hands work to. */
-const NAMED: FindKind[] = ["conversation", "thread", "machine"];
+const NAMED: FindKind[] = ["conversation", "machine"];
 /** Kind words that widen it to things a message can point at (T7). */
 const KIND_WORDS = new Set([
   "task",

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { CawStatus } from "@cawco/core/threads";
+  import type { CawStatus } from "@cawco/core/project-conversation";
   import { stageCaw } from "./Caw.svelte";
   import CawFace from "./CawFace.svelte";
   import { CAW_STILL_BLEED, cawStill } from "./caw-still.svelte";

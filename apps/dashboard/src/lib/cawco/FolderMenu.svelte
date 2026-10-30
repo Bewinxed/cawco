@@ -9,7 +9,6 @@
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
-    IconChatAdd,
     IconCollapseOthers,
     IconExternal,
     IconPalette,
@@ -18,12 +17,11 @@
     IconTrash,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import { cawOf, type ProjectRow } from "./client.svelte";
+  import type { ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { forgetAtRail, forgetHost, forgetProject } from "./forget.svelte";
   import { HUES } from "./identity";
   import { rail } from "./rail.svelte";
-  import { newThreadTab } from "./thread-tabs";
 
   interface Props {
     children: Snippet;
@@ -50,33 +48,6 @@
   const pinned = $derived(project ? rail.isPinned(project.id) : false);
 
   let open = $state(false);
-  /**
-   * The project's Caw can take a thread now, on or off: the hub can start
-   * him. Read each time the menu opens, so it says what is true then.
-   */
-  let canTalk = $state(false);
-  $effect(() => {
-    const id = project?.id;
-    if (!(open && id)) {
-      return;
-    }
-    let live = true;
-    cawOf(id).then(
-      (view) => {
-        if (live) {
-          canTalk = !view.problem;
-        }
-      },
-      () => {
-        if (live) {
-          canTalk = false;
-        }
-      }
-    );
-    return () => {
-      live = false;
-    };
-  });
 </script>
 
 <ContextMenu.Root bind:open>
@@ -97,14 +68,6 @@
       <IconSessionAdd />
       <span>New session here</span>
     </ContextMenu.Item>
-    {#if project && canTalk}
-      <ContextMenu.Item
-        onSelect={() => goto(`/session/${newThreadTab(project.id)}`)}
-      >
-        <IconChatAdd />
-        <span>New thread</span>
-      </ContextMenu.Item>
-    {/if}
     {#if project}
       <ContextMenu.Item onSelect={() => goto(`/project/${project.id}`)}>
         <IconExternal />

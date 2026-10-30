@@ -8,7 +8,7 @@
  *
  * Words are DESIGN.md's state words (Working, Needs you, Idle, Sleeping,
  * Stopped, Failed, Unreachable) and core/words' nouns (session, delegate,
- * thread, task, routine, preview, decision, report, machine, project).
+ * task, routine, preview, decision, report, machine, project).
  */
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { FindSecrets, SecretSpan } from "@cawco/core/find";
@@ -49,7 +49,6 @@ import type {
   FindResult,
   FindRoutine,
   FindTask,
-  FindThread,
   WaitingItem,
 } from "./find-client";
 
@@ -116,13 +115,6 @@ const STATE: Record<FindLiveState, Shape> = {
   sleeping: { glyph: Sleeping, tone: "quiet", word: "Sleeping" },
   ended: { glyph: Idle, tone: "quiet", word: "Stopped" },
   unknown: { glyph: Unreachable, tone: "quiet", word: "Unreachable" },
-};
-
-/** A thread's state on a session's scale: Caw at work, waiting on him, or at rest. */
-const THREAD: Record<FindThread["state"], Shape> = {
-  working: STATE.working,
-  "needs-you": STATE["needs-you"],
-  ready: STATE.idle,
 };
 
 const WENT_WRONG = /fail|error/iu;
@@ -208,7 +200,6 @@ const AUTHOR: Record<FindMoment["author"], string> = {
   agent: "agent",
   report: "report",
   injected: "injected",
-  caw: "Caw",
 };
 
 /** A moment's excerpt as runs, its secrets keyed by the result it is in (`kind:id`). */
@@ -421,19 +412,6 @@ function conversationRow(r: FindConversation, reason: Reason): Drawn {
   };
 }
 
-function threadRow(r: FindThread): Drawn {
-  const s = THREAD[r.state];
-  const [moment] = r.moments;
-  return {
-    ...live(r.title, s, r.state === "working"),
-    meta: words(r.project?.name, "Caw thread"),
-    reason:
-      !r.matched.includes("title") && moment
-        ? momentReason(ownerOf(r), moment)
-        : null,
-  };
-}
-
 function taskRow(r: FindTask): Drawn {
   const kindWord = r.stageKind ? STAGE_KIND_WORD[r.stageKind] : undefined;
   return {
@@ -526,8 +504,6 @@ function drawnOf(result: FindResult, reason: Reason): Drawn {
   switch (result.kind) {
     case "conversation":
       return conversationRow(result, reason);
-    case "thread":
-      return threadRow(result);
     case "task":
       return taskRow(result);
     case "routine":

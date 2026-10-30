@@ -153,8 +153,7 @@ final class SessionHover: NSObject {
 
     /// The session whose tail a card draws: its own.
     private func tailId(of id: String) -> String? {
-        // A thread's card has no tail: it is the conversation itself.
-        ThreadTabs.isThread(id) ? nil : id
+        id
     }
 
     /// Follows `id`'s stream, and lets the last one go 2s later, so a pointer

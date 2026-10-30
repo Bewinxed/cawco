@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Under a thread's notice that a session made a routine (core ThreadEvent
+   * Under a project note that a session made a routine (core ProjectNoteEvent
    * `routine-made`): how long it lasts, and Keep, Turn off and Open. It reads
    * the routine as it stands now, so a routine kept or turned off since says
    * so, and acts through `/api/routines/:id`.
@@ -13,7 +13,7 @@
     readRoutine,
   } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { routineHref } from "#lib/cawco/thread-tabs.js";
+  import { routineHref } from "#lib/cawco/links.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import type { MessageMetadata } from "../types";
 

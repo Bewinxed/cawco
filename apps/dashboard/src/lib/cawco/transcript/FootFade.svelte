@@ -20,10 +20,8 @@
    * and only its rows pass under.
    *
    * At rest it is 96px, solid at its foot. With `solid` (a length from the
-   * foot: in a thread, up to Caw perched on the pill and the way back to the
-   * latest beside him) it is solid that high, then dissolves: rows pass
-   * behind him as they pass behind the pill, and neither stands over words
-   * being read. Its height is {@link footFadeRun}, the run its pane
+   * foot) it is solid that high, then dissolves: rows pass behind it as they
+   * pass behind the pill, and nothing stands over words being read. Its height is {@link footFadeRun}, the run its pane
    * publishes to the transcript's foot room.
    */
   import { fade } from "svelte/transition";

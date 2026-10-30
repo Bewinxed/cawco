@@ -99,8 +99,6 @@ import {
   questionsOf,
   SHELL_TOOLS,
   type TurnWakes,
-  threadTarget,
-  threadTargetOf,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
@@ -109,13 +107,7 @@ import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import { isProjectConversation } from "./caw";
-import type {
-  DbShape,
-  PushDeviceRow,
-  ThreadMessageRow,
-  ThreadRow,
-  WorkItemRow,
-} from "./db";
+import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
 import { hidden } from "./hidden";
 import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -195,8 +187,6 @@ const MAX_INLINE_OPTIONS = 3;
 const LOOK_GRACE_MS = 5000;
 /** A finished turn's visible body: the reply itself goes sealed. */
 const TURN_ENDED = "Finished its turn";
-/** Caw's reply in a thread, its visible body: the reply itself goes sealed. */
-const CAW_REPLIED = "Caw replied";
 /** A session's `send_to_user`'s visible body: the message itself goes sealed. */
 const SENT_YOU = "Sent you a message";
 /** A failed session's visible body: the reason goes sealed. */
@@ -233,8 +223,6 @@ type PushData =
       originInstanceId: string | null;
       projectId: string | null;
       requestId: string;
-      /** The Caw thread the ask was made in: a tap opens it at the card. Null otherwise. */
-      threadId: string | null;
     }
   | {
       /** A session the owner started finished its turn and waits on them. */
@@ -276,10 +264,9 @@ type PushData =
   | {
       /**
        * A routine's run (routines.ts): failed twice and needs you, or, for a
-       * routine in no project (no thread to note it in), delivered. Or a
-       * session made a routine (`runId` null): the Caw thread its notice
-       * went to is `threadId`. The app opens the board for a kind it does
-       * not know.
+       * routine in no project, delivered. Or a session made a routine
+       * (`runId` null). The app opens the board for a kind it does not
+       * know.
        */
       kind: "routine";
       /** Its run's session, while the hub holds it; Reply writes to it. */
@@ -289,8 +276,6 @@ type PushData =
       routineId: string;
       /** The run; null for the notice that a session made the routine. */
       runId: string | null;
-      /** The thread the made notice went to; absent on a run's push. */
-      threadId?: string;
     }
   | {
       /**
@@ -359,6 +344,8 @@ interface Notification {
   readonly category: string;
   readonly collapseId: string;
   readonly data: PushData;
+  /** APNs' `thread-id`: what the device groups the push with. */
+  readonly group: string;
   /**
    * It replaces one because the person acted (an ask answered, here or
    * elsewhere): nothing newly needs them, so it updates in place without a
@@ -370,7 +357,6 @@ interface Notification {
   readonly sealed: Alert;
   /** The alert Cawrier and Apple see: never what the work said (see `sessionName`). */
   readonly shown: Alert;
-  readonly threadId: string;
 }
 
 /** What an ask's visible name reads of its session's row. */
@@ -469,7 +455,7 @@ const burstOf = (id: string, items: readonly Arrival[]): Notification => {
     sealed: alertOf(title, project ?? null, firstOf(first.sealed, count)),
     category: PUSH_CATEGORIES.needs,
     collapseId: id,
-    threadId: "needs",
+    group: "needs",
     data: { kind: "needs", count },
   };
 };
@@ -562,7 +548,7 @@ const payloadOf = (
       ? { "interruption-level": "passive" }
       : { sound: "default" }),
     category: notification.category,
-    "thread-id": notification.threadId,
+    "thread-id": notification.group,
     "mutable-content": 1,
   },
   e,
@@ -872,8 +858,6 @@ export const createPush = ({
   const recent = new Map<string, number>();
   /** Sessions whose running turn the operator interrupted: its end pushes nothing. */
   const stopped = new Set<string>();
-  /** When each Caw thread was last looked at, by its view id (`thread:<id>`): a reply before then pushes nothing. */
-  const threadLooks = new Map<string, Date>();
   /** By pairing: the clear count the device was last handed the whole cleared set at. */
   const told = new Map<string, number>();
   /** By pairing: when its last background push went. */
@@ -1353,7 +1337,7 @@ export const createPush = ({
       sealed: alertOf(boardTitle(row), project, firstLine(text) ?? said),
       category: PUSH_CATEGORIES.turn,
       collapseId,
-      threadId: row.projectId ?? row.id,
+      group: row.projectId ?? row.id,
       data: {
         kind: "turn",
         instanceId: row.id,
@@ -1448,7 +1432,7 @@ export const createPush = ({
           // Open only, the category every installed app registers so.
           category: PUSH_CATEGORIES.taskOpenOnly,
           collapseId: artifactCollapseId(left.artifactId),
-          threadId: row.projectId ?? row.id,
+          group: row.projectId ?? row.id,
           data: {
             kind: "artifact",
             artifactId: left.artifactId,
@@ -1643,7 +1627,7 @@ export const createPush = ({
         ),
         category: PUSH_CATEGORIES.taskOpenOnly,
         collapseId: artifactCollapseId(need.artifactId),
-        threadId: need.artifactId,
+        group: need.artifactId,
         data: {
           kind: "artifact",
           artifactId: need.artifactId,
@@ -1754,7 +1738,7 @@ export const createPush = ({
           },
           category,
           collapseId: askCollapseId(requestId),
-          threadId: projectId ?? instanceId,
+          group: projectId ?? instanceId,
           data: {
             kind: "ask",
             instanceId,
@@ -1762,7 +1746,6 @@ export const createPush = ({
             originInstanceId: payload.originInstanceId ?? null,
             projectId,
             requestId,
-            threadId: payload.threadId ?? null,
           },
         },
       });
@@ -1828,69 +1811,10 @@ export const createPush = ({
     },
 
     /**
-     * The owner had these in front (`/api/seen` `look`): the Caw threads
-     * among them (`thread:<id>`) are looked at now, so a reply of his before
-     * this pushes nothing ({@link threadReply}).
-     */
-    looked(ids: readonly string[], at: Date): void {
-      for (const id of ids) {
-        if (threadTarget(id)) {
-          threadLooks.set(id, at);
-        }
-      }
-    },
-
-    /**
-     * Caw replied in a thread (caw.ts `said`): his turn's end is no push of
-     * its own ({@link turnEnded} leaves a lead out), his reply is. One
-     * collapse id per thread, so a newer reply replaces the older on the
-     * device; a tap opens the thread. It waits {@link LOOK_GRACE_MS} as a
-     * turn's push does, and nothing goes when the thread was looked at since.
-     */
-    threadReply(thread: ThreadRow, reply: ThreadMessageRow): void {
-      const viewId = threadTargetOf(thread.id);
-      const at = reply.createdAt;
-      const unseen = () =>
-        (threadLooks.get(viewId)?.getTime() ?? 0) < at.getTime();
-      lifetime.after(LOOK_GRACE_MS, () => {
-        if (!unseen()) {
-          return;
-        }
-        const project = projectName(thread.projectId);
-        arrive(
-          {
-            ask: false,
-            instanceId: viewId,
-            landedAt: at,
-            still: unseen,
-            notification: {
-              shown: alertOf("Caw", project, CAW_REPLIED),
-              sealed: alertOf(
-                thread.title,
-                project,
-                firstLine(reply.body) ?? CAW_REPLIED
-              ),
-              category: PUSH_CATEGORIES.turn,
-              collapseId: turnCollapseId(viewId),
-              threadId: thread.projectId,
-              data: {
-                kind: "turn",
-                instanceId: viewId,
-                machineId: "hub",
-                projectId: thread.projectId,
-              },
-            },
-          },
-          false
-        );
-      });
-    },
-
-    /**
      * A session's turn ended with its result, and no standing instruction
      * answered it (server.ts, at the turn's end; a turn cut by a restart has
      * no result and never comes here). Pushes when the session is one the
-     * owner started: top level, not a delegate, a project's lead or a continuation's worker; not stopped by them; and
+     * owner started: top level, not a delegate or a continuation's worker; not stopped by them; and
      * waiting on them, not on work of its own ({@link ownWork}, read as the
      * turn ends): that work's end starts its next turn, and the end of the
      * turn that leaves it waiting on nothing pushes.
@@ -1919,8 +1843,7 @@ export const createPush = ({
           !row ||
           row.parentInstanceId ||
           row.workItemId ||
-          row.kind === "summariser" ||
-          isProjectConversation(row, db.project)
+          row.kind === "summariser"
         ) {
           return;
         }
@@ -1995,7 +1918,7 @@ export const createPush = ({
                 ? PUSH_CATEGORIES.task
                 : PUSH_CATEGORIES.taskOpenOnly,
               collapseId: taskCollapseId(projectId, id),
-              threadId: projectId,
+              group: projectId,
               data: {
                 kind: "task",
                 instanceId: row?.id ?? null,
@@ -2045,7 +1968,7 @@ export const createPush = ({
               ),
               category: PUSH_CATEGORIES.attempt,
               collapseId: taskCollapseId(projectId, taskId),
-              threadId: projectId,
+              group: projectId,
               data: {
                 kind: "attempt",
                 instanceId: item.instanceId,
@@ -2096,7 +2019,7 @@ export const createPush = ({
             ? PUSH_CATEGORIES.attempt
             : PUSH_CATEGORIES.taskOpenOnly,
           collapseId: `routine-${run.routineId}`,
-          threadId: run.projectId ?? `routine-${run.routineId}`,
+          group: run.projectId ?? `routine-${run.routineId}`,
           data: {
             kind: "routine",
             instanceId: row?.id ?? null,
@@ -2114,7 +2037,7 @@ export const createPush = ({
 
     /**
      * A session made a routine (routines.ts `announce`): you hear of it once,
-     * beside its notice in the Caw thread. Its name and what it said are the
+     * beside its note in the project's conversation. Its name and what it said are the
      * agent's words, so they go sealed; the visible words are "Routine" and
      * "New routine". Open only: there is nothing to answer from the lock
      * screen, and Keep and Turn off are on its notice.
@@ -2123,10 +2046,9 @@ export const createPush = ({
       /** The sealed line under its name: its schedule and when it turns off. */
       line: string;
       name: string;
-      /** Null for a routine in no project: it has no thread, so this push is all you hear. */
+      /** Null for a routine in no project. */
       projectId: string | null;
       routineId: string;
-      threadId: string | null;
     }): void {
       const project = projectName(made.projectId);
       arrive({
@@ -2139,7 +2061,7 @@ export const createPush = ({
           sealed: alertOf(made.name, project, made.line),
           category: PUSH_CATEGORIES.taskOpenOnly,
           collapseId: `routine-made-${made.routineId}`,
-          threadId: made.projectId ?? `routine-${made.routineId}`,
+          group: made.projectId ?? `routine-${made.routineId}`,
           data: {
             kind: "routine",
             instanceId: null,
@@ -2147,7 +2069,6 @@ export const createPush = ({
             projectId: made.projectId,
             routineId: made.routineId,
             runId: null,
-            ...(made.threadId ? { threadId: made.threadId } : {}),
           },
         },
       });
@@ -2177,7 +2098,7 @@ export const createPush = ({
           ),
           category: PUSH_CATEGORIES.turn,
           collapseId: `watch-${notice.instanceId}`,
-          threadId: notice.projectId ?? notice.instanceId,
+          group: notice.projectId ?? notice.instanceId,
           data: {
             kind: "turn",
             instanceId: notice.instanceId,
@@ -2239,8 +2160,7 @@ export const createPush = ({
         !row ||
         row.parentInstanceId ||
         row.workItemId ||
-        row.kind === "summariser" ||
-        isProjectConversation(row, db.project)
+        row.kind === "summariser"
       ) {
         return;
       }
@@ -2301,7 +2221,7 @@ export const createPush = ({
           ),
           category: PUSH_CATEGORIES.permissionOpenOnly,
           collapseId: `action-${action.id}`,
-          threadId: action.projectId,
+          group: action.projectId,
           data: {
             kind: "action",
             actionId: action.id,
@@ -2331,7 +2251,7 @@ export const createPush = ({
         sealed: alert,
         category: PUSH_CATEGORIES.pairing,
         collapseId,
-        threadId: "pairing",
+        group: "pairing",
         data: { kind: "pairing", userCode: request.userCode },
       });
     },
@@ -2363,7 +2283,7 @@ export const createPush = ({
           sealed: alert,
           category: PUSH_CATEGORIES.needs,
           collapseId,
-          threadId: "install",
+          group: "install",
           data: { kind: "install", installId: install.id },
         },
       });
@@ -2405,7 +2325,7 @@ export const createPush = ({
           sealed: alertOf(title, null, `${body}\n${ended.why}`),
           category: PUSH_CATEGORIES.needs,
           collapseId,
-          threadId: "mcp",
+          group: "mcp",
           data: { kind: "mcp", server: ended.name },
         },
       });
@@ -2441,7 +2361,7 @@ export const createPush = ({
           sealed: alert,
           category: PUSH_CATEGORIES.needs,
           collapseId,
-          threadId: "machine",
+          group: "machine",
           data: { kind: "machine", machineId: lost.machineId },
         },
       });
@@ -2485,7 +2405,7 @@ export const createPush = ({
             ),
             category: PUSH_CATEGORIES.test,
             collapseId: "test",
-            threadId: "test",
+            group: "test",
             data: { kind: "test" },
           },
           devices

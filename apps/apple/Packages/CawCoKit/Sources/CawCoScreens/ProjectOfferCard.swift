@@ -13,8 +13,8 @@ import UIKit
 final class ProjectOfferCard: UIView {
     private let hub: HubConnection
     private let instanceId: String
-    /// The answer made a new project: its Setup thread, where its Caw sets it up.
-    var onSetupThread: (String) -> Void = { _ in }
+    /// The answer made a new project: its conversation, which sets it up.
+    var onConversation: (String) -> Void = { _ in }
     var onOpenProject: (String) -> Void = { _ in }
     /// Its height changed (a refusal under it, the offer turned into what it joined).
     var onHeight: () -> Void = {}
@@ -131,8 +131,8 @@ final class ProjectOfferCard: UIView {
             do {
                 let accepted = try await hub.answerProjectOffer(instanceId, accept: which == .accept)
                 self?.pending = nil
-                // A new project: Caw sets it up in its Setup thread, with the session's plan already on its board.
-                if let thread = accepted?.setupThread { self?.onSetupThread(thread.id) }
+                // A new project: its conversation sets it up, with the session's plan already on its board.
+                if let conversation = accepted?.conversation { self?.onConversation(conversation) }
             } catch {
                 self?.pending = nil
                 self?.refused.text = (error as? TaskRefusal)?.message ?? error.localizedDescription

@@ -32,9 +32,9 @@ final class NewSessionFlow {
         self.hub = hub
     }
 
-    /// A new session, with what the caller already knows filled in; `spinOff` opens it as a spin-off.
-    func start(machineId: String? = nil, cwd: String? = nil, projectId: String? = nil, spinOff: Bool = false) {
-        show(NewSessionViewController(hub: hub, machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff))
+    /// A new session, with what the caller already knows filled in; `spinOff` opens it as a spin-off, `prompt` on its first words.
+    func start(machineId: String? = nil, cwd: String? = nil, projectId: String? = nil, spinOff: Bool = false, prompt: String? = nil) {
+        show(NewSessionViewController(hub: hub, machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff, prompt: prompt))
     }
 
     /// A Fork whose source carries no mode to start on: the form on the branch, whose Start waits for a pick.

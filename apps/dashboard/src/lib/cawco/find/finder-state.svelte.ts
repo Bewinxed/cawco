@@ -26,7 +26,6 @@ import {
   type FindCoverage,
   type FindMoment,
   type FindResult,
-  type FindThread,
   findEverywhere,
   findNames,
   findWaiting,
@@ -46,7 +45,6 @@ export const WHO: { label: string; value: Who }[] = [
   { value: "anyone", label: "Anyone" },
   { value: "me", label: "You" },
   { value: "report", label: "Reports" },
-  { value: "caw", label: "Caw" },
 ];
 
 /** Time words he types, kept out of the words sent and applied here. */
@@ -156,10 +154,9 @@ export type Answer<T> =
   | { state: "unreached"; for: string }
   | { state: "refused"; for: string; detail: string };
 
-export type Spoken = FindConversation | FindThread;
+export type Spoken = FindConversation;
 
-const isSpoken = (r: FindResult): r is Spoken =>
-  r.kind === "conversation" || r.kind === "thread";
+const isSpoken = (r: FindResult): r is Spoken => r.kind === "conversation";
 
 /** One Go-to entry: a thing, or several of one kind folded behind one row. */
 export type GoTo =

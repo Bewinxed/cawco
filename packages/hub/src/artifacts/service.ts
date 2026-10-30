@@ -1490,8 +1490,6 @@ export interface ArtifactServiceDeps {
     name: string,
     cards: DecisionCard[]
   ) => Promise<AfterLinks>;
-  /** The Caw thread a project's lead's turn answers now (caw.ts `askThread`); none for any other session. */
-  askThread: (instance: InstanceRow) => string | undefined;
   /**
    * Where session `instance`'s own browser opens artifact `row`, which it
    * may read (`artifact_browse`, server.ts `browseAt`): its address, behind
@@ -1754,13 +1752,12 @@ export interface ArtifactServiceDeps {
    * reads from `since` with `artifact_read` (core `artifactResponsesNotice`).
    * One the session has not read yet for the same artifact is superseded,
    * not added to: the session hears once, from the earliest `since` it was
-   * not told of. `thread` is the Caw thread the session's turn answered as it
-   * asked ({@link ArtifactAsked}): the turn that reads the picks answers it.
+   * not told of.
    */
   signal: (
     instance: InstanceRow,
     artifact: ArtifactRow,
-    responses: { since: number; thread?: string }
+    responses: { since: number }
   ) => Promise<void>;
   /**
    * The stage story file `file` runs on in a workspace (agent stage.ts
@@ -6158,12 +6155,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       row.does === "pick" || row.does === "judge"
         ? deps.waitOn(writer.id, row.id)
         : null;
-    const thread = deps.askThread(writer);
     const asked: ArtifactAsked = {
       by: writer.id,
       at: new Date().toISOString(),
       ...(step ? { step } : {}),
-      ...(thread ? { thread } : {}),
     };
     docs.transact(row.id, "hub", (doc) =>
       doc.getMap("meta").set("asked", asked)
@@ -8048,13 +8043,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (picked) {
         await deps.sending(instance, row, state);
       }
-      // Asked by Caw in a thread: his turn that reads the picks answers there.
-      const asked = askOf(row, factsOf(row));
-      const thread = asked?.by === instance.id ? asked.thread : undefined;
-      await deps.signal(instance, row, {
-        since: row.deliveredSeq,
-        ...(thread ? { thread } : {}),
-      });
+      await deps.signal(instance, row, { since: row.deliveredSeq });
       const at = new Date().toISOString();
       docs.transact(row.id, "hub", (live) => {
         const meta = live.getMap("meta");

@@ -34,7 +34,6 @@ const ANSWERED: Record<NamedSession["state"], SessionStatusOf> = {
   working: { label: "Working", icon: Working, tone: "working" },
   "needs-you": { label: "Needs you", icon: Attention, tone: "attention" },
   idle: { label: "Idle", icon: Pause, tone: "quiet" },
-  ready: { label: "Idle", icon: Pause, tone: "quiet" },
   sleeping: { label: "Sleeping", icon: Sleeping, tone: "quiet" },
   ended: { label: STOPPED_LABEL, icon: Pause, tone: "quiet" },
   unknown: { label: "Unreachable", icon: Unknown, tone: "quiet" },

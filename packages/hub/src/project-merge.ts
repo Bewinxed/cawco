@@ -9,7 +9,7 @@
  * (tasks.ts `adopt`, one commit), its folder's other files the kept project
  * lacks are copied in (one commit; a file both have keeps the kept project's
  * copy, and the duplicate's goes to the trash with its folder), then its
- * places, sessions, work items, threads and fleet rows move and its row goes
+ * places, sessions, work items, notes and fleet rows move and its row goes
  * (db `foldProject`), its connections are granted to the kept project
  * (connections.ts `projectFolded`, so its GitHub poller follows them), and
  * its folder is trashed. A duplicate that could not
@@ -206,7 +206,7 @@ const fold = async (
     deps.folderMoved();
   }
   log(
-    `${dup.name} (${dup.id}) folded into ${keep.name} (${keep.id}), one repository ${keep.remote}: ${ids.size} task(s), ${folder.others.length} other file(s), ${moved.places} place(s), ${moved.sessions} session(s), ${moved.workItems} work item(s), ${moved.threads} thread(s).`
+    `${dup.name} (${dup.id}) folded into ${keep.name} (${keep.id}), one repository ${keep.remote}: ${ids.size} task(s), ${folder.others.length} other file(s), ${moved.places} place(s), ${moved.sessions} session(s), ${moved.workItems} work item(s).`
   );
   for (const machineId of new Set(
     dup.places

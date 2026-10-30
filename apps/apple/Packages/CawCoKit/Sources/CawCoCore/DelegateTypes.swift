@@ -50,7 +50,7 @@ public final class FleetDelegateTypes {
             types = try ok.body.json.types
             problem = nil
         } catch {
-            problem = ThreadsStore.failureWords(error)
+            problem = CawStore.failureWords(error)
         }
         await projects
     }
@@ -60,7 +60,7 @@ public final class FleetDelegateTypes {
             projectTypes = try await Self.projects(hub: hub)
             projectProblem = nil
         } catch {
-            projectProblem = ThreadsStore.failureWords(error)
+            projectProblem = CawStore.failureWords(error)
         }
     }
 

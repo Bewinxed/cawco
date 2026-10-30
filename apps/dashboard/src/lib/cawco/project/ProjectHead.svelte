@@ -442,7 +442,7 @@
             data-bar-item
             data-box
             data-new-session
-            {...mergeProps(tip, { onclick: () => lead.newThread() })}
+            {...mergeProps(tip, { onclick: () => lead.newConversation() })}
             aria-label={projectWords.askCaw}
             class="select-none touch-hit press-tint max-phone:hidden"
             type="button"
@@ -612,7 +612,7 @@
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
     <!-- The recipe's foot: 16px plus the safe area (DESIGN.md, Drawer). -->
-    <Drawer.Content title={`Caw, lead of ${project.name}`}>
+    <Drawer.Content title={`Caw, ${project.name}`}>
       <CawPanel
         {lead}
         projectId={project.id}
@@ -625,7 +625,7 @@
   <Popover.Root bind:open={cawOpen}>
     <Popover.Content
       align="end"
-      aria-label="Caw, lead of {project.name}"
+      aria-label="Caw, {project.name}"
       class="w-(--settings-w) max-desk:w-(--settings-w-narrow)"
       pad="inset"
       style="--settings-w: min(var(--c-panel-w), calc(100vw - var(--space-7))); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - var(--space-3) - env(safe-area-inset-right, 0px)))"

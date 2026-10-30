@@ -649,7 +649,7 @@ final class SessionRowView: UIView, HoverSessionRow {
         ContextMenuHost.attach(to: self) { [weak self] host in self?.menu?(host) }
     }
 
-    /// The session's menu, built as it opens from the fleet at that moment; nil where the row has none (a thread).
+    /// The session's menu, built as it opens from the fleet at that moment; nil where the row has none.
     var menu: ((MenuHost) -> UIMenu?)?
     /// The session drawn: a field renaming another one goes when the cell is given this one.
     private var drawnId: String?
@@ -700,8 +700,7 @@ final class SessionRowView: UIView, HoverSessionRow {
 
         /// The session Peek shows: a live instance's. A stored session has no
         /// instance.
-        // A thread is opened, never peeked: it is the conversation itself.
-        var peek: String? { hover.flatMap { !ThreadTabs.isThread($0) ? $0 : nil } }
+        var peek: String? { hover }
     }
 
     /// HomeRow.svelte's `data-hover-session`: the rail's session card opens over the home's rows too.
@@ -718,7 +717,6 @@ final class SessionRowView: UIView, HoverSessionRow {
         hoverSessionId = content.hover
         mark.beat = (content.beat, content.beats)
         mark.configure(id: content.id, place: content.place, status: content.status, count: content.fold?.count ?? 0, open: content.fold?.open ?? false)
-        mark.portrait = ThreadFace.portrait(content.id, status: content.status, held: mark.portrait)
         title.text = content.title
         title.ink = content.context ? Palette.inkMuted : Palette.inkStrong
         trail.text = content.trail

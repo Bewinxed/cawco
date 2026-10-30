@@ -16,7 +16,6 @@ import {
   machineLabel,
   type NeutralSessionInfo,
   type StageKind,
-  type ThreadSummary,
 } from "@cawco/core";
 import { field, KIND_WORDS, type MatchEntry } from "@cawco/core/find-match";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -54,16 +53,9 @@ const STATE_POINTS: Record<FindLiveState, number> = {
   ended: 0,
 };
 
-/** Points for where a result stands now: a session's live state, Caw on a thread. */
-const statePoints = (result: FindResult): number => {
-  if (result.kind === "conversation") {
-    return STATE_POINTS[result.state];
-  }
-  if (result.kind === "thread") {
-    return result.state === "ready" ? 8 : 20;
-  }
-  return 0;
-};
+/** Points for where a result stands now: a session's live state. */
+const statePoints = (result: FindResult): number =>
+  result.kind === "conversation" ? STATE_POINTS[result.state] : 0;
 
 /** One result's rank: the match first, then recency, live state and parentage. */
 export const rankOf = (
@@ -81,7 +73,6 @@ export const rankOf = (
 export const MOMENT_WEIGHT: Record<MomentAuthor, number> = {
   owner: 1,
   report: 0.85,
-  caw: 0.8,
   agent: 0.6,
   injected: 0.3,
 };
@@ -98,7 +89,6 @@ export const MOMENT_WEIGHT: Record<MomentAuthor, number> = {
 export const AUTHOR_POINTS: Record<MomentAuthor, number> = {
   owner: 0,
   report: -10,
-  caw: -12,
   agent: -50,
   injected: -60,
 };
@@ -204,7 +194,6 @@ export interface ConversationSources {
     byId: Map<string, FindWorkItemRow>;
     latest: Map<string, FindWorkItemRow>;
   };
-  leads: ReadonlySet<string>;
   machineName: (id: string) => string;
   now: number;
   projectOf: ProjectOf;
@@ -363,33 +352,6 @@ export const storedEntry = (
   };
 };
 
-export const threadEntry = (
-  thread: ThreadSummary,
-  project: { id: string; name: string } | null,
-  cwd: string
-): Entry => ({
-  asked: new Set(KIND_WORDS.thread),
-  kin: 0,
-  fields: [
-    ...field("title", thread.title),
-    ...field("project", project?.name),
-    ...field("id", thread.id),
-  ],
-  result: {
-    kind: "thread",
-    moments: [],
-    id: thread.id,
-    cwd,
-    handle: `thread#${thread.id.slice(0, 8)}`,
-    title: thread.title,
-    project,
-    state: thread.status,
-    lastActivity: thread.lastAt,
-    matched: [],
-    score: 0,
-  },
-});
-
 export const taskEntry = (
   task: {
     id: string;
@@ -448,7 +410,6 @@ export const routineEntry = (
     enabled: routine.enabled,
     lastOutcome: routine.lastOutcome,
     nextRun: routine.nextSlot.getTime(),
-    threadId: routine.threadId,
     lastActivity: routine.lastRunAt?.getTime() ?? null,
     matched: [],
     score: 0,

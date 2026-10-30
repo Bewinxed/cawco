@@ -1,6 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import { CAW_NO_MACHINE } from "@cawco/core/threads";
+  import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
   import { DAY_MS } from "@cawco/core/time";
   import { connectWords } from "@cawco/core/words/connect";
   import { routinesWords as words } from "@cawco/core/words/routines";
@@ -10,13 +10,15 @@
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
   import CantStart from "#lib/cawco/CantStart.svelte";
-  import { cawco, submitCommand, threadsOf } from "#lib/cawco/client.svelte.js";
+  import { cawco } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import { rowHref } from "#lib/cawco/links.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { startConversation } from "#lib/cawco/project/conversation.js";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
    * (Event sources), and what its runs asked you to approve (Approved
@@ -39,8 +41,8 @@
    *
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
    * starters written for the project from what it repeats or waits on over
-   * the session Composer to Caw (words alone), whose words open a thread
-   * with him. A starter puts its words in the composer, unsent. Where Caw
+   * the session Composer to Caw (words alone), whose words start a
+   * conversation in the project. A starter puts its words in the composer, unsent. Where Caw
    * can't start, the way by hand: Create routine, the routine form
    * (RoutineForm) in the empty state's place. Where Caw can start, the
    * block's head offers Create routine beside the empty state; with
@@ -49,8 +51,7 @@
    * ledger open, its test run going.
    *
    * The page is the hub's (routines-api): read on arrival and on every
-   * reconnect, again when the project's threads move (a run notes its slot
-   * and its result in one) or the actions waiting on you change, when the
+   * reconnect, again when the actions waiting on you change, when the
    * tab comes back, after each of its own row actions, and every few
    * seconds while a run goes.
    */
@@ -84,7 +85,6 @@
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { GLYPHS } from "#lib/cawco/starter-glyphs.js";
-  import { newThreadTab } from "#lib/cawco/thread-tabs.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -188,17 +188,13 @@
       });
     }
   });
-  // A run notes its slot and its result in a thread of the project; an
-  // action waiting on you comes or goes: the page is read again.
-  const moved = $derived(
-    Math.max(0, ...threadsOf(project.id).map((thread) => thread.lastAt))
-  );
+  // An action waiting on you comes or goes: the page is read again.
   const waitingIds = $derived(
     cawco.actions.map((action) => `${action.id}:${action.state}`).join()
   );
   let seen: string | null = null;
   $effect(() => {
-    const now = `${moved}|${waitingIds}`;
+    const now = waitingIds;
     if (seen !== null && now !== seen) {
       untrack(() => read());
     }
@@ -221,7 +217,7 @@
   const polls = $derived(page?.polls ?? []);
   const empty = $derived(page !== null && routines.length === 0);
 
-  /** While a run goes its end is read every few seconds: a delegate's run notes it in no thread. */
+  /** While a run goes its end is read every few seconds. */
   const RUN_READ_MS = 5000;
   const anyGoing = $derived(
     routines.some((routine) => going(routine) || queued(routine))
@@ -292,7 +288,7 @@
 
   /**
    * The one routine open: opening another folds it. It is in the URL
-   * (`routine`, thread-tabs `routineHref`), so a link opens it: a routine
+   * (`routine`, links.ts `routineHref`), so a link opens it: a routine
    * notice's Open lands here, on the Routines view with its row open and
    * scrolled into view once the page has read it.
    */
@@ -592,23 +588,24 @@
 
   /**
    * The words to Caw, in the session Composer with words alone (`attach`
-   * off), as the project page's view ask is: they are the first send of a
-   * new thread with him in the project, whose id is minted here as the
-   * send's is (thread-tabs.ts `newThreadTab`), and the page goes there,
-   * where the send's row says what became of it.
+   * off): they are the first prompt of a new conversation in the project
+   * (project/conversation.ts), and the page goes there. A start refused
+   * says why over the field, the words kept in it.
    */
   const askDraft = new ComposerDraft();
   /** What the Composer stands over its foot: its box holds that much room. */
   let askFoot = $state(0);
-  async function ask(text: string, id: string) {
-    const viewId = newThreadTab(project.id);
-    submitCommand(
-      viewId,
-      "hub",
-      "send",
-      { text, extras: { projectId: project.id } },
-      id
-    );
+  let askError = $state("");
+  async function ask(text: string) {
+    askError = "";
+    let instanceId: string;
+    try {
+      instanceId = await startConversation(project.id, text);
+    } catch (error) {
+      askError = message(error);
+      askDraft.text = text;
+      return;
+    }
     // A starter pressed into the field went, as it stood or changed:
     // Jev's steering (hub project-starters.ts), told without a wait.
     const pressed = askDraft.takePressed(text);
@@ -616,7 +613,7 @@
       tellStarterOutcome(project.id, pressed).catch(() => undefined);
     }
     askDraft.settle();
-    await goto(`/session/${viewId}`);
+    await goto(rowHref(instanceId));
   }
   /** A starter: its words in the composer, the caret after them; nothing is sent. */
   function pick(text: string) {
@@ -814,10 +811,11 @@
         askFoot = foot.stack;
       }}
       onstop={() => undefined}
-      onsubmit={(text, _extras, id) => {
-        detach(ask(text, id), "ask");
+      onsubmit={(text) => {
+        detach(ask(text), "ask");
       }}
       placeholder={words.placeholder}
+      sendError={askError}
     />
   </div>
 {/snippet}

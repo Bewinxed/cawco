@@ -97,22 +97,13 @@ export interface BlockMetadata {
    */
   continuation?: true;
   cwd?: string;
-  /**
-   * On a Caw thread's delegate row (hub thread-transcript.ts): each hand-off
-   * its starter sent it after its brief, oldest first, its words without the
-   * marker. A session's transcript draws those hand-offs as rows of their
-   * own and carries none here.
-   */
-  delegateHandoffs?: Array<{ at: string; text: string }>;
   /** The delegate a `tool.handoff` started, read once off its result. */
   delegateInstanceId?: string;
   /** The delegate's brief headline, carried beside {@link delegateInstanceId}. */
   delegateTitle?: string;
   /**
-   * A thread's note of Caw asking whether to build a design system: the
-   * project it is for, whose Build and Not now the note draws under it
-   * (EventThreadMessage `designOffer`, as a thread's blocks carry it on the
-   * dashboard and in the app).
+   * A project note of Caw asking whether to build a design system: the
+   * project it is for, whose Build and Not now the note draws under it.
    */
   designOffer?: { projectId: string };
   /**
@@ -121,8 +112,6 @@ export interface BlockMetadata {
    */
   errorTitle?: string;
   exitCode?: number;
-  /** A Caw thread's reply: the project folder's files it says he wrote (`stages.md`), drawn as chips under it. */
-  files?: string[];
   handoffBrief?: string;
   handoffKind?: "handoff" | "start" | "delegate";
   /**
@@ -136,8 +125,8 @@ export interface BlockMetadata {
   images?: Array<{ mediaType: string; src?: string }>;
   isRedactedThinking?: boolean;
   /**
-   * A thread's note that a folder was made a repository with files left out
-   * for their size: the offer of Git LFS for them (ThreadEvent `repo`'s
+   * A project note that a folder was made a repository with files left out
+   * for their size: the offer of Git LFS for them (ProjectNoteEvent `repo`'s
    * `lfsOffer`), whose Track with LFS and Not now the note draws under it.
    */
   lfsOffer?: { id: string };
@@ -170,7 +159,7 @@ export interface BlockMetadata {
   resultImages?: Array<{ mediaType: string; src: string }>;
   resultSubtype?: string;
   /**
-   * A Caw thread's notice that a session made a routine (ThreadEvent
+   * A project note that a session made a routine (ProjectNoteEvent
    * `routine-made`): the note draws Keep, Turn off and Open beside it.
    */
   routineMade?: { expiresAt: number | null; routineId: string };
@@ -192,8 +181,6 @@ export interface BlockMetadata {
   subagentModel?: string;
   subagentType?: string;
   subtype?: string;
-  /** A Caw thread's reply: the tasks it is about (`tsk-12`), drawn as cards under it. */
-  tasks?: string[];
   thinking?: string;
   /**
    * How long the thinking block ran, measured by the hub's clock between the

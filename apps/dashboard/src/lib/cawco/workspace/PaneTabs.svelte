@@ -21,9 +21,7 @@
 
 <script lang="ts">
   import type { Activity } from "@cawco/core/activity";
-  import type { ThreadStatus } from "@cawco/core/threads";
   import { commonWords } from "@cawco/core/words/common";
-  import { threadWords } from "@cawco/core/words/threads";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { Popover } from "bits-ui";
   /**
@@ -85,13 +83,11 @@
   import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import { frameSize } from "../frame-observer";
-  import CawFace from "../home/CawFace.svelte";
   import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
   import { integrate, type Sample, sampleAt } from "../motion/spring";
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";
-  import { isThreadTab } from "../thread-tabs";
   import { workingSet } from "../working-set.svelte";
   import { dropHint, tabDropTarget } from "./dnd.svelte";
   import { cardWidthIn, placeUnder } from "./hang-place";
@@ -143,26 +139,10 @@
     tone: StatusTone;
   }
 
-  /** A thread's status on the session's scale. */
-  const THREAD_TONE = {
-    working: "working",
-    "needs-you": "attention",
-    ready: "quiet",
-  } as const satisfies Record<string, StatusTone>;
-  /** A thread's status in words, as Caw's face for it would be read. */
-  const THREAD_LABEL = {
-    working: "Working",
-    "needs-you": "Needs you",
-    ready: "Ready",
-  } as const;
-
   function resolve(id: string): Tab {
     const row = cawco.instanceIndex.byId.get(id);
     const ctx = contextOf(id);
-    const thread = cawco.threadOf(id);
-    const { label, named } = isThreadTab(id)
-      ? { label: thread?.title ?? threadWords.newThread, named: true }
-      : sessionName(id, servedNames);
+    const { label, named } = sessionName(id, servedNames);
     const activity = cawco.activityOf(id);
     const failed = row ? isFailed(row) : false;
     const stale = row ? isStale(row) : false;
@@ -178,7 +158,7 @@
           ? `${ACTIVITY_LABEL.working} — ${tool}`
           : ACTIVITY_LABEL[activity];
     }
-    const state = isThreadTab(id) ? null : sessionStatusOf(id);
+    const state = sessionStatusOf(id);
     return {
       id,
       key: `${id}:${arrivals.get(id) ?? 0}`,
@@ -192,14 +172,9 @@
       failed,
       stale,
       status,
-      statusLabel: status || (state?.label ?? THREAD_LABEL[threadFace(id)]),
-      tone: state?.tone ?? THREAD_TONE[threadFace(id)],
+      statusLabel: status || state.label,
+      tone: state.tone,
     };
-  }
-
-  /** Which of Caw's files a thread's tab shows: what the thread is doing. */
-  function threadFace(id: string): ThreadStatus {
-    return cawco.threadOf(id)?.status ?? "ready";
   }
 
   /**
@@ -337,10 +312,6 @@
     morphing = false;
   }
   function showDetails(id: string, anchor: HTMLElement, pin: boolean) {
-    // A thread's tab is its messages: it has no session card.
-    if (isThreadTab(id)) {
-      return;
-    }
     clearTimeout(timer);
     holdMove();
     pinned = pin;
@@ -710,9 +681,8 @@
   /* ── A new session, from the strip's end ──────────────────────────
      The "+" after the last tab opens the New Session form at the "+" (the
      popover, the bottom sheet under 640px: spawn/NewSessionPopover), in the
-     place of the tab in front: its machine, its folder and its project. A
-     tab with no place of its own (a thread) gives its
-     machine at most. Harness, model and mode are the form's own: the last
+     place of the tab in front: its machine, its folder and its project.
+     Harness, model and mode are the form's own: the last
      start's (the mode last chosen on its machine), else none, and Start
      says it waits for a mode. The session it starts
      arrives as any started session does.
@@ -723,7 +693,7 @@
      only under the pointer. */
   function startHere(plus: HTMLElement) {
     const here = leaf.active;
-    const ctx = here && !isThreadTab(here) ? contextOf(here) : null;
+    const ctx = here ? contextOf(here) : null;
     const projectId =
       here && ctx?.cwd
         ? cawco.instanceIndex.byId.get(here)?.projectId
@@ -1489,29 +1459,27 @@
         >
         <!-- The tab's options: a finger's hanging menu and a mouse's both. -->
         {#snippet options()}
-          {#if !isThreadTab(tab.id)}
-            <ContextMenu.Item
-              onSelect={() => {
-                const anchor = anchorOf(tab.id);
-                if (anchor) {
-                  showDetails(tab.id, anchor, true);
-                }
-              }}
-            >
-              <IconInfo />
-              <span>{transcriptWords.sessionDetails}</span>
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={() =>
-                continueInNewSession(continueSourceOf(tab.id, tab.label))}
-            >
-              <IconArrowRight />
-              <span>Continue in new session…</span>
-            </ContextMenu.Item>
-            {@const row = cawco.rowOf(tab.id)}
-            {#if row}
-              <AccountSubmenu instance={row} />
-            {/if}
+          <ContextMenu.Item
+            onSelect={() => {
+              const anchor = anchorOf(tab.id);
+              if (anchor) {
+                showDetails(tab.id, anchor, true);
+              }
+            }}
+          >
+            <IconInfo />
+            <span>{transcriptWords.sessionDetails}</span>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            onSelect={() =>
+              continueInNewSession(continueSourceOf(tab.id, tab.label))}
+          >
+            <IconArrowRight />
+            <span>Continue in new session…</span>
+          </ContextMenu.Item>
+          {@const row = cawco.rowOf(tab.id)}
+          {#if row}
+            <AccountSubmenu instance={row} />
           {/if}
           <!-- Every gesture has a command that does the same thing. Splitting
                  and moving are reachable from here before drag-and-drop exists,
@@ -1634,26 +1602,19 @@
                      mobile not"); the tab's label says the status in words
                      either way. -->
                 <span class="max-desk:hidden">
-                  {#if isThreadTab(tab.id)}
-                    <!-- A thread's mark is Caw, at what the thread is doing. -->
-                    <CawFace size={18} status={threadFace(tab.id)} />
-                  {:else}
-                    <SessionStatus compact sessionId={tab.id} />
-                  {/if}
+                  <SessionStatus compact sessionId={tab.id} />
                 </span>
               {/snippet}
               {#snippet trail()}
                 <!-- Every tab keeps the details slot, so choosing one never
                      changes its width; the chevron shows on the chosen tab
                      only. The empty slot on another tab is part of that
-                     tab, and a click there chooses it. A thread's tab has
-                     no details card, and so no slot. A phone draws no
+                     tab, and a click there chooses it. A phone draws no
                      slot at all: the tab's menu is its long press. It is a
                      pointer's alone, as the close is: a tablist holds tabs
                      (axe, aria-required-children), and the tab itself opens
                      its details (ArrowDown or Space, and its name says so). -->
-                {#if !isThreadTab(tab.id)}
-                  <!-- The trailing controls sit 4px after the title and 4px
+                <!-- The trailing controls sit 4px after the title and 4px
                        apart, on every pointer (owner: "a lot of wasted space
                        until the x button"); where the chevron stands beside
                        the close, their hit areas meet between them. Its 12px
@@ -1663,34 +1624,33 @@
                        no chevron: a long press opens the tab's menu (Session
                        details first), and a tap on the chosen tab its
                        details. -->
-                  <span
-                    class="group/tdetails flex flex-none data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
-                    data-idle={!chosen || undefined}
-                    data-open={chosen && detailsOpen && detailId === tab.id
-                      ? ""
-                      : undefined}
+                <span
+                  class="group/tdetails flex flex-none data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
+                  data-idle={!chosen || undefined}
+                  data-open={chosen && detailsOpen && detailId === tab.id
+                    ? ""
+                    : undefined}
+                >
+                  <Button
+                    data-slot="tdetails"
+                    aria-hidden="true"
+                    onclick={(event) => {
+                      if (chosen) {
+                        clickTab(tab.id, event);
+                      } else {
+                        workspace.activate(tab.id, leaf.id);
+                      }
+                    }}
+                    size="icon-xs"
+                    tabindex={-1}
+                    tone="muted"
+                    variant="ghost"
                   >
-                    <Button
-                      data-slot="tdetails"
-                      aria-hidden="true"
-                      onclick={(event) => {
-                        if (chosen) {
-                          clickTab(tab.id, event);
-                        } else {
-                          workspace.activate(tab.id, leaf.id);
-                        }
-                      }}
-                      size="icon-xs"
-                      tabindex={-1}
-                      tone="muted"
-                      variant="ghost"
-                    >
-                      <IconChevronDown
-                        class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
-                      />
-                    </Button>
-                  </span>
-                {/if}
+                    <IconChevronDown
+                      class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+                    />
+                  </Button>
+                </span>
                 <!-- A mouse's close. A finger's is in the tab's options,
                      held or pulled down from the tab, and the phone's row
                      draws none. The keyboard's and a screen reader's is the

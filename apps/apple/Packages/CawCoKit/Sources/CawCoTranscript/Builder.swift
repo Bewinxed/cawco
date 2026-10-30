@@ -15,11 +15,9 @@ nonisolated struct Builder {
     /// The answers this view streamed, by block id: the live row's key each keeps,
     /// so a streamed answer settles into the cells already drawing it (rows.ts `keepLive`).
     var keys: [String: String] = [:]
-    /// The transcript has a voice (a project's Caw, TranscriptVoice): his
-    /// face marks his turns, and what each reply carries stands under it.
+    /// The transcript has a voice (a project's conversation, TranscriptVoice):
+    /// Caw's face marks his turns.
     var voiced = false
-    var extras: [String: ThreadExtras] = [:]
-    var voiceRevision = 0
 
     /// rows' kinds that never paint (Transcript `unpainted`).
     static func unpainted(_ row: Row) -> Bool {
@@ -82,11 +80,7 @@ nonisolated struct Builder {
             return [Item(id: key, top: grouped ? 0 : Space.space4, kind: .user(.init(block: block, grouped: grouped, runsOn: runsOn)),
                          print: Self.print(block) + "\(grouped)\(runsOn)")]
         case "assistant":
-            let turn = pieces(id: keys[key] ?? key, source: block.content, grouped: grouped, date: block.date)
-            // The tasks the reply is about and the files it wrote, under it (MessageRow.svelte).
-            guard let carried = extras[block.id] else { return turn }
-            let print = "voice:\(voiceRevision):\(carried.tasks.joined(separator: ","))|\(carried.files.joined(separator: ","))"
-            return turn + [Item(id: "\(key):voice", top: Space.space3, kind: .voice(block.id, carried), print: print)]
+            return pieces(id: keys[key] ?? key, source: block.content, grouped: grouped, date: block.date)
         case "thinking":
             return [Item(id: key, top: gap, kind: .thinking(.init(key: "think:\(block.id)", text: block.content, live: false, folding: false)),
                          print: block.content)]

@@ -38,9 +38,7 @@ export interface ComposerBinding {
   onstop: () => void;
   onsubmit: (text: string, extras: SendExtras, id: string) => void;
   readonly paneVisible: boolean;
-  /** What stands on the pill's top-leading corner: a project's Caw, in a thread. */
-  readonly perch?: Snippet;
-  /** The field's hint, where the agent takes no `/` or `@` (a project's Caw). */
+  /** The field's hint, where the agent takes no `/` or `@`. */
   readonly placeholder?: string;
   /** The plan's ring, which opens it over the composer's row; none without a plan. */
   readonly planRing?: Snippet;
@@ -83,7 +81,6 @@ export const composerOf = (binding: ComposerBinding) => ({
   onstop: binding.onstop,
   onsubmit: binding.onsubmit,
   paneVisible: binding.paneVisible,
-  perch: binding.perch,
   placeholder: binding.placeholder,
   planRing: binding.planRing,
   recallOf: binding.recallOf,

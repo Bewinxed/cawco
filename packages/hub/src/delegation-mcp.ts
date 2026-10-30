@@ -34,7 +34,6 @@ import type {
   Fleet,
   ForkOrigin,
   HandoffDeps,
-  HandoffThreads,
   ItemEnd,
   SendDelivery,
 } from "./delegation-actions";
@@ -227,8 +226,6 @@ export function createDelegationMcp(options: {
   instanceById: (id: string) => InstanceRow | undefined;
   /** Sessions whose id starts with `prefix`, in any state find holds: a mention of one past the board's listing. */
   instancesByShortId: (prefix: string) => InstanceRow[];
-  /** Threads a mention names, and the hand-off into one (delegation-actions.ts `HandoffThreads`). */
-  threads: HandoffThreads;
   /** The board and the machines, read in the hub's own process (delegation-actions.ts). */
   fleet: Fleet;
   /** Every former id, by the id its session has now (db `formerIds`). */
@@ -305,8 +302,8 @@ export function createDelegationMcp(options: {
     query: DelegateListQuery
   ) => Promise<DelegateList>;
   /**
-   * Caw's own tools (threads, views, his folder), for a
-   * project's lead (caw.ts). `toolUseId` is the call's own: a delegate type
+   * The project tools (views, the project's folder), for a session in a
+   * project (caw.ts). `toolUseId` is the call's own: a delegate type
    * his `folder_write` parks as a proposal is drawn at it.
    */
   cawTools?: (actor: InstanceRow | undefined, toolUseId?: string) => CawTool[];
@@ -805,7 +802,7 @@ export function createDelegationMcp(options: {
     return await projectFromSessionTool(() => make(actor)).call(input);
   };
 
-  /** One of Caw's own tools (threads, views, his folder), its role already checked. */
+  /** One of the project tools (views, the project's folder), its role already checked. */
   const cawCall = async (
     actor: InstanceRow,
     name: string,
@@ -1032,7 +1029,6 @@ export function createDelegationMcp(options: {
       sendToUser: (message) => options.sendToUser(actor, message),
       shownRefusal: (tool, paths) => options.shownRefusal?.(actor, tool, paths),
       instancesByShortId: options.instancesByShortId,
-      threads: options.threads,
       deliver: (envelope) => options.deliver(envelope, actor),
       emit: (envelope) => emitted.push(envelope),
       spawn: (envelope) => options.spawn(envelope, actor),

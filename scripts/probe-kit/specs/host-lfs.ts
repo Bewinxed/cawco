@@ -417,7 +417,6 @@ const folderLeg = async (kit: Kit, root: string): Promise<void> => {
   const offers = new Map<string, Record<string, unknown>>();
   const db = {
     listAgents: () => [],
-    newestConversation: () => ({ id: "probe-thread" }),
     project: () => ({ id: "probe-project", places: [] }),
     lfsOffers: {
       offer: (row: Record<string, unknown>) => offers.set(String(row.id), row),
@@ -426,9 +425,8 @@ const folderLeg = async (kit: Kit, root: string): Promise<void> => {
         offers.set(id, { ...offers.get(id), answer, commit: commit ?? null }),
     },
   };
-  const notice = (_project: string, _thread: string | null, note: unknown) => {
+  const notice = (_project: string, note: unknown) => {
     notes.push(note as (typeof notes)[number]);
-    return "probe-thread";
   };
   const call = (_machine: string, method: string, args: unknown[]) => {
     const run = placeRepo[method];
@@ -697,17 +695,17 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
         body: { root: "/srv/probe", endpoint, machineId: "probe-place" },
       })
     );
-    // A project nobody has talked in yet gets the note in a thread of its own.
-    const note = db
-      .projectThreads("probe-project")
-      .flatMap((thread) => db.threadMessages(thread.id))
+    // A project with no conversation yet keeps the note for the next one.
+    db.projectNotes.adopt("probe-project", "probe-conversation");
+    const note = db.projectNotes
+      .of("probe-conversation")
+      .map((kept) => kept.note)
       .find(
-        (message) =>
-          message.event?.kind === "repo" &&
-          message.event.lfsRefused === endpoint
+        (kept) =>
+          kept.event.kind === "repo" && kept.event.lfsRefused === endpoint
       );
     kit.check(
-      "E: the machine's word of a refused .lfsconfig lands in the project's thread, naming the endpoint and how to declare it",
+      "E: the machine's word of a refused .lfsconfig is kept for the project's conversation, naming the endpoint and how to declare it",
       told.status === 200 &&
         (note?.body ?? "").includes(endpoint) &&
         (note?.body ?? "").includes("Project details › Large files"),

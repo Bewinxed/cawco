@@ -12,9 +12,8 @@
    *
    * The send makes the project with Caw (its folder on the hub its place until
    * setup picks the checkout), with the picked template's stages, and lands
-   * on the project's page with his panel open on its Setup thread, the words
-   * its first message: they fly into that row, and Caw from where he stands
-   * into the thread's seat.
+   * on the project's page with his panel open on the conversation setting
+   * it up, the words its first message.
    */
   import { tick } from "svelte";
   import { barGlass } from "#lib/cawco/bar-glass.svelte.js";
@@ -22,7 +21,7 @@
   import Caw from "#lib/cawco/home/Caw.svelte";
   import {
     failureWords,
-    THREAD_SEND_UNREACHED,
+    PROMPT_UNREACHED,
     unreachable,
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
@@ -129,8 +128,8 @@
   let footHeight = $state(0);
 
   /**
-   * The words go as a thread tab's send does (ThreadPane): a refusal puts
-   * them back in the composer with the reason over them.
+   * The words start the project's conversation: a refusal puts them back in
+   * the composer with the reason over them.
    */
   /** The prompt a start that did not go through carried, and its id: the same prompt again is the same project. */
   let unsent: SentWords | null = null;
@@ -151,14 +150,14 @@
     } catch (error) {
       draft.restore(text);
       again = unreachable(error);
-      refused = again ? THREAD_SEND_UNREACHED : failureWords(error);
+      refused = again ? PROMPT_UNREACHED : failureWords(error);
       starting = false;
       return;
     }
     made = created.id;
-    // It lands on the project's page with his panel open, the Setup thread
-    // in it (its newest and only one): the board and the conversation in
-    // sight together.
+    // It lands on the project's page with his panel open, the conversation
+    // setting it up in it (its newest and only one): the board and the
+    // conversation in sight together.
     openOnArrival(created.id);
     // His box carries the project's key before the navigation departs it.
     await tick();

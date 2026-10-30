@@ -51,7 +51,6 @@ import type {
   StarterPlace,
   StarterSourceKind,
   StrategyChoice,
-  ThreadMessage,
   ToolStatus,
   WorkspaceKind,
 } from "@cawco/core";
@@ -90,21 +89,17 @@ import {
   OrphanedCommentsSchema,
   PlaceLfsRowSchema,
   PlanStepSchema,
+  ProjectNoteSchema,
   RelayPortHealthSchema,
   RelayPortsSchema,
   RelayReachSchema,
   ScratchWorktreeSchema,
-  SendAttachmentSchema,
   SendPayloadShape,
   SessionCommandsSchema,
   SessionToolingSchema,
   SkillFileSchema,
   SpawnPayloadSchema,
   StoppedCommandsSchema,
-  ThreadAnswerSchema,
-  ThreadEventSchema,
-  ThreadImageSchema,
-  ThreadQuestionSchema,
   WaitWitnessSchema,
   WorkspaceCutSchema,
   WorkspaceHoldingSchema,
@@ -428,18 +423,19 @@ export const projects = sqliteTable("projects", {
    */
   tracker: text("tracker").$type<Tracker>().notNull().default("cawco"),
   /**
-   * The project's lead (§5.3): its Caw's session, which the hub starts on the
-   * first event while `caw` is on (caw.ts). The attempts the dispatcher starts
-   * on its own report to it. Null: no session yet, or Caw is off, and nothing
-   * is dispatched without someone asking.
+   * The project's conversation (§5.3): the session its events reach, which
+   * the hub starts on the first event while `caw` is on (caw.ts). The
+   * attempts the dispatcher starts on its own report to it. Null: no session
+   * yet, and nothing is dispatched without someone asking.
    */
-  leadInstanceId: text("lead_instance_id"),
+  conversationInstanceId: text("conversation_instance_id"),
   /**
-   * Whether the project has a Caw (§5.3, §5.6): a lead session woken by
-   * events only. On for projects made with Caw; off for every project from
-   * before it, and off means nothing for the project wakes a model.
+   * Whether the project's events reach a conversation: on, the hub sends
+   * each to its conversation, starting one when none runs (caw.ts). On for
+   * projects made with Caw; off for every project from before it, and off
+   * means nothing for the project wakes a model.
    */
-  caw: integer("caw", { mode: "boolean" }).notNull().default(false),
+  eventsOn: integer("events_on", { mode: "boolean" }).notNull().default(false),
   /** The harness Caw runs on. */
   cawHarness: text("caw_harness")
     .$type<HarnessKind>()
@@ -799,305 +795,291 @@ export const projectRepositories = sqliteTable(
 );
 
 /** A running or resumable `query()`. Messages live in SDK session storage, not here. */
-export const instances = sqliteTable(
-  "instances",
-  {
-    /** Removed machines keep ownership hidden without an end decision. */
-    machineRemoved: integer("machine_removed", { mode: "boolean" })
-      .notNull()
-      .default(false),
-    scratchWorktree: storedJson(ScratchWorktreeSchema)("scratch_worktree"),
-    endReason: text("end_reason"),
-    endRetryAt: timestamp("end_retry_at"),
-    endAttempts: integer("end_attempts").notNull().default(0),
-    /** The hub's decision, independent of process presence and attachment. */
-    endIntent: text("end_intent").$type<SessionEndIntent>(),
-    endConfirmedAt: timestamp("end_confirmed_at"),
-    /**
-     * A start the hub accepted but did not forward because its machine was
-     * installing an update: the envelope to send, kept until the machine can take
-     * it. The row stays `starting` meanwhile, which is how the person sees it.
-     */
-    owedSpawn: storedJson(SpawnEnvelopeSchema)("owed_spawn"),
-    /** When it was asked for, so what a machine is owed goes out in order. */
-    owedAt: integer("owed_at"),
-    /**
-     * When the session started again fresh under its id (core `relaunchOf`):
-     * its first start never began, so it had no conversation to resume. Its
-     * transcript says so there (core `FRESH_START_LINE`).
-     */
-    freshStartAt: integer("fresh_start_at"),
-    /**
-     * When the hub first heard the session's turn under way (its frames, or its
-     * harness reading a send), on the hub's clock; null between turns. Cleared
-     * by the turn's `result`, which every harness ends every turn with, an
-     * interrupted one too. Older than `spawnedAt`: the turn ran in a launch
-     * that is gone and nothing ended it. Every start but a restore clears it,
-     * so that is a turn a restart cut, which the restored process is handed
-     * back once (server.ts `resumeCutTurn`). {@link TURN_UNRECORDED} on a row
-     * from before the hub kept it, until its next turn.
-     */
-    turnOpenAt: integer("turn_open_at"),
-    keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
-      .notNull()
-      .default(false),
-    keepAliveSent: integer("keep_alive_sent").notNull().default(0),
-    keepAliveStopped: text("keep_alive_stopped").$type<"stopped-cap">(),
-    cacheTtl: text("cache_ttl").$type<"5m" | "1h">(),
-    lastRequestAt: timestamp("last_request_at"),
-    contextTokens: integer("context_tokens"),
-    contextReadAt: timestamp("context_read_at"),
-    cacheCold: storedJson(
-      z.object({
-        reason: z.string(),
-        at: z.number(),
-      })
-    )("cache_cold"),
-    lastPingUsage: storedJson(
-      z.object({
-        input: z.number(),
-        read: z.number(),
-        write: z.number(),
-        at: z.number(),
-      })
-    )("last_ping_usage"),
-    /** In-flight ping identity survives a hub or agent restart. */
-    keepAliveTurn: text("keep_alive_turn"),
-    /**
-     * Claude: the cumulative `modelUsage` of the session's last result, which a
-     * turn's spend is the change from. Claude Code restores it on resume from
-     * the transcript's cost-state, so it runs across processes. `{}` for a
-     * conversation started fresh; null while unknown (a resumed or forked start
-     * this hub has seen no result of), until a result sets it.
-     */
-    modelUsageSeen: storedJson(z.record(z.string(), ClaudeModelUsageSchema))(
-      "model_usage_seen"
-    ),
-    /**
-     * The thread with the project's Caw this session works for: an attempt at
-     * a task, the thread that named the task; a session Caw started, the
-     * thread his turn was answering. Set once, at its spawn.
-     */
-    threadId: text("thread_id"),
-    id: text("id").primaryKey(),
-    /**
-     * The machine it runs on. Not a foreign key: a removed machine's sessions
-     * stay, `machineRemoved`, under its id, and come back if it rejoins.
-     */
-    machineId: text("machine_id").notNull(),
-    /** Its project; a deleted project's sessions outlive it, just not as its. */
-    projectId: text("project_id").references(() => projects.id, {
-      onDelete: "set null",
-    }),
-    /** SDK session id, absent until the first init frame arrives. */
-    sessionId: text("session_id"),
-    /** Which harness owns `sessionId` — what a resume and a catalog read route on. */
-    harness: text("harness").$type<HarnessKind>().notNull(),
-    /**
-     * The account the session runs on, chosen by placement when it started (a
-     * fork's is its origin's). Every later spawn of the row runs on it, until
-     * the hub moves it to another at its limit. Null: a harness without
-     * accounts, or a session from before accounts.
-     */
-    accountId: text("account_id"),
-    /**
-     * The session this one was forked from, when it was: it reads that
-     * session's cache, so it never moves to another account on its own.
-     */
-    forkedFrom: text("forked_from"),
-    /**
-     * The session that started this one (`delegate`, `start_session`): nested under it in every rail. Null on a session
-     * a person started. Whether it is delegated work is {@link workItemId}'s.
-     */
-    parentInstanceId: text("parent_instance_id"),
-    /**
-     * Who started it (core `SessionOrigin`), stamped once as its row opens
-     * from who asked for the start, never from the start's payload: `person`,
-     * `delegate`, `project` or `check`. Only a person's sessions stand at the top
-     * of a project in the rails; the rest nest under their parent, and one
-     * whose work item has ended is listed a day, asleep or not.
-     */
-    origin: text("origin")
-      .$type<import("@cawco/core").SessionOrigin>()
-      .notNull()
-      .default("person"),
-    /** The delegating tool call, so the parent transcript can render the round trip. */
-    parentToolUseId: text("parent_tool_use_id"),
-    /**
-     * The directory the session was launched in: its spawn's, or, for a scratch
-     * session, the worktree its machine made for it, as its first `init` names
-     * it resolved (`~` expanded). Set at its first spawn and never changed:
-     * every resume, revive, restore, relaunch, fork and move spawns here, since
-     * a harness keeps the conversation under the directory it was launched in.
-     * Where the CLI later wanders (`cd`) is not recorded at all, so a folder it
-     * wandered into and deleted cannot stop it resuming, and its name in every
-     * listing (the folder's leaf) does not drift.
-     */
-    cwd: text("cwd").$type<MachinePath>().notNull(),
-    /**
-     * Whether `cwd` is the launch directory. `known` on every row spawned since
-     * `cwd` was pinned. `unread` on a row from before, whose launch directory is
-     * still to be read from its conversation (the harness's first recorded cwd):
-     * its machine is asked at its next register, before anything is restored.
-     * `unknown` when that machine had no record of the conversation: `cwd` may be
-     * a folder the CLI wandered into, so the row is never named by it nor
-     * spawned there.
-     */
-    launchDir: text("launch_dir", { enum: ["known", "unread", "unknown"] })
-      .notNull()
-      .default("known"),
-    /**
-     * The session's given name: the owner's rename, or the name the session
-     * gave itself (`set_title`) or was spawned under (a delegate's title).
-     * Null on a session nobody named — the rails fall back to `derivedTitle`,
-     * then to where it runs.
-     */
-    title: text("title"),
-    /**
-     * Who gave `title`: `owner` (a rename in the dashboard), which nothing the
-     * session does overwrites, or `agent` (its spawn's title or `set_title`).
-     */
-    titleSource: text("title_source").$type<"owner" | "agent">(),
-    /**
-     * The MCP servers and tool names the session's newest `init` announced, as
-     * JSON — overwritten on every `init` that carries them, so a reload or a hub
-     * restart still knows what the session has. Null for a harness whose `init`
-     * carries neither.
-     */
-    tooling: storedJson(SessionToolingSchema)("tooling"),
-    /**
-     * The `/` menu the session's newest `init` listed (its names, and which of
-     * them are skills), as JSON, overwritten as `tooling` is: a transcript the
-     * hub reads back from the machine's stored file (a Claude session's holds no
-     * `init`) still offers it, once the hub let the built one go
-     * (transcripts.ts `sweep`) or restarted. Null for a harness whose `init`
-     * lists none.
-     */
-    commands: storedJson(SessionCommandsSchema)("commands"),
-    /**
-     * What the session called itself by what it was first asked to do: the first
-     * user message, cleaned by core's `deriveTitleFromFirstMessage`. Written once,
-     * the first time the hub sees that message, so a listing already carries the
-     * name a reader would otherwise only see after the transcript loaded. Never
-     * written over `title`, and never rewritten — a given title always wins.
-     */
-    derivedTitle: text("derived_title"),
-    /**
-     * When the owner last looked at the session (its tab in front, after it
-     * ended) or archived it off Finished, on any device: a turn that ended
-     * after this is news. Null on one never seen.
-     */
-    seenAt: timestamp("seen_at"),
-    /**
-     * When the session's latest turn ended, on the hub's clock: the moment
-     * the hub took the turn's `result` (server.ts, the `endedAt` a turn's push
-     * waits from). Read against `seenAt`, also the hub's, it decides "ended
-     * since the owner last looked" on every device without reading a device's
-     * or a machine's clock. Null on one whose turn never ended.
-     */
-    turnEndedAt: timestamp("turn_ended_at"),
-    /**
-     * `scratch`: a spin-off (NEW.md §1), shown apart from mainline work.
-     * `summariser`: a continuation's internal worker, never on the board.
-     */
-    kind: text("kind")
-      .$type<"mainline" | "scratch" | "summariser">()
-      .notNull()
-      .default("mainline"),
-    /**
-     * How the session answers tool permissions, and which model answers: two of
-     * the three settings the user keeps changing, so a dashboard that was not open
-     * when they chose still shows what the session is really running. Null until a
-     * spawn or a session's own `init` says.
-     */
-    permissionMode: text("permission_mode"),
-    model: text("model"),
-    /**
-     * The third: how hard that model thinks, as the session's agent last read it
-     * back from the harness (`EFFORT_READ`) — a level, or `none` when the session
-     * sends no effort. Null until the first reading. What the session runs at,
-     * shown on its chip; never what a launch asks for ({@link chosenEffort}).
-     */
-    effort: text("effort").$type<SessionEffort>(),
-    /**
-     * The effort the operator chose for the session: the level its spawn named,
-     * or the last `set-effort` sent it. Every launch of the session asks for it
-     * (`bounded`), whatever brings it back. Null: nobody chose, and its launches
-     * name none, so the harness runs its model's default. Only a choice writes
-     * it, never a reading.
-     */
-    chosenEffort: text("chosen_effort").$type<EffortLevel>(),
-    /**
-     * Whether the session may delegate or start sessions of its own. `false` on a
-     * leaf delegate — one spawned with `can_delegate: false`, which is what a
-     * `delegate` call means unless it says otherwise. Every spawn with a parent
-     * says which; null is a session nobody delegated, and it may.
-     */
-    canDelegate: integer("can_delegate", { mode: "boolean" }),
-    /**
-     * The toolset the session runs in (§5.3), written once by its first spawn:
-     * a delegate type's `role` for its work item's session. Null: derived
-     * from how it started (roles.ts `roleOf`).
-     */
-    role: text("role").$type<import("@cawco/core").SessionRole>(),
-    /**
-     * The delegate type its spawn named (a fleet type, or its project's), so
-     * what the type says (its denied tools) reads the same for every session
-     * however it started. Null: none.
-     */
-    delegateType: text("delegate_type"),
-    /** The project whose catalog `delegateType` came from; null: the fleet's. */
-    delegateTypeProject: text("delegate_type_project"),
-    /**
-     * What was last *written down* about the session — history, not liveness.
-     *
-     * Read this column raw and you are reading a fact that was true at the moment
-     * of a write and has been re-checked by nobody since; that is exactly how the
-     * hub came to report 178 sessions `running` on a machine carrying 42
-     * processes. Every read that reaches a person or an API client goes through
-     * `withSessionPresence` in `server.ts`, which answers `unknown` for any row
-     * whose machine the hub is not currently holding a socket for. The column
-     * itself is deliberately left alone by that overlay: it is the record of what
-     * last happened, and the last thing that happened does not stop having
-     * happened because the machine went quiet.
-     *
-     * The union is core's {@link import('@cawco/core').InstanceStatus} (see its
-     * doc comment for what each value means). Plain text, no SQL migration:
-     * `sleeping` arrived by a one-time boot sweep over rows the old taxonomy had
-     * to file under `error`.
-     */
-    status: text("status")
-      .$type<InstanceStatus>()
-      .notNull()
-      .default("starting"),
-    /** Why the session died, for a dashboard that was not watching when it did. */
-    lastError: text("last_error"),
-    /** What `lastError` was, typed where it was found (core `LastErrorKind`); null when nothing typed it. */
-    lastErrorKind:
-      text("last_error_kind").$type<import("@cawco/core").LastErrorKind>(),
-    createdAt: stampedNow("created_at"),
-    updatedAt: stampedNow("updated_at"),
-    /**
-     * When the hub last issued a spawn or restore for this row. A `starting` row's
-     * grace measures from here: asking for a process is not session activity.
-     */
-    spawnedAt: timestamp("spawned_at"),
-    /**
-     * The work item this session runs ({@link workItems}). Every delegate is one
-     * work item in one fresh session; null on a session nobody delegated, and on
-     * a delegate from before work items existed.
-     */
-    workItemId: text("work_item_id"),
-    /**
-     * The session a continuation moved this one's work item to (server.ts
-     * `retireContinued`): this one never runs again (core `relaunchOf`
-     * refuses it), and what is sent to it goes there. Null on every other.
-     */
-    continuedInto: text("continued_into"),
-  },
-  // A thread's page reads the sessions Caw started from it by this.
-  (table) => [index("instances_thread").on(table.threadId)]
-);
+export const instances = sqliteTable("instances", {
+  /** Removed machines keep ownership hidden without an end decision. */
+  machineRemoved: integer("machine_removed", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  scratchWorktree: storedJson(ScratchWorktreeSchema)("scratch_worktree"),
+  endReason: text("end_reason"),
+  endRetryAt: timestamp("end_retry_at"),
+  endAttempts: integer("end_attempts").notNull().default(0),
+  /** The hub's decision, independent of process presence and attachment. */
+  endIntent: text("end_intent").$type<SessionEndIntent>(),
+  endConfirmedAt: timestamp("end_confirmed_at"),
+  /**
+   * A start the hub accepted but did not forward because its machine was
+   * installing an update: the envelope to send, kept until the machine can take
+   * it. The row stays `starting` meanwhile, which is how the person sees it.
+   */
+  owedSpawn: storedJson(SpawnEnvelopeSchema)("owed_spawn"),
+  /** When it was asked for, so what a machine is owed goes out in order. */
+  owedAt: integer("owed_at"),
+  /**
+   * When the session started again fresh under its id (core `relaunchOf`):
+   * its first start never began, so it had no conversation to resume. Its
+   * transcript says so there (core `FRESH_START_LINE`).
+   */
+  freshStartAt: integer("fresh_start_at"),
+  /**
+   * When the hub first heard the session's turn under way (its frames, or its
+   * harness reading a send), on the hub's clock; null between turns. Cleared
+   * by the turn's `result`, which every harness ends every turn with, an
+   * interrupted one too. Older than `spawnedAt`: the turn ran in a launch
+   * that is gone and nothing ended it. Every start but a restore clears it,
+   * so that is a turn a restart cut, which the restored process is handed
+   * back once (server.ts `resumeCutTurn`). {@link TURN_UNRECORDED} on a row
+   * from before the hub kept it, until its next turn.
+   */
+  turnOpenAt: integer("turn_open_at"),
+  keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  keepAliveSent: integer("keep_alive_sent").notNull().default(0),
+  keepAliveStopped: text("keep_alive_stopped").$type<"stopped-cap">(),
+  cacheTtl: text("cache_ttl").$type<"5m" | "1h">(),
+  lastRequestAt: timestamp("last_request_at"),
+  contextTokens: integer("context_tokens"),
+  contextReadAt: timestamp("context_read_at"),
+  cacheCold: storedJson(
+    z.object({
+      reason: z.string(),
+      at: z.number(),
+    })
+  )("cache_cold"),
+  lastPingUsage: storedJson(
+    z.object({
+      input: z.number(),
+      read: z.number(),
+      write: z.number(),
+      at: z.number(),
+    })
+  )("last_ping_usage"),
+  /** In-flight ping identity survives a hub or agent restart. */
+  keepAliveTurn: text("keep_alive_turn"),
+  /**
+   * Claude: the cumulative `modelUsage` of the session's last result, which a
+   * turn's spend is the change from. Claude Code restores it on resume from
+   * the transcript's cost-state, so it runs across processes. `{}` for a
+   * conversation started fresh; null while unknown (a resumed or forked start
+   * this hub has seen no result of), until a result sets it.
+   */
+  modelUsageSeen: storedJson(z.record(z.string(), ClaudeModelUsageSchema))(
+    "model_usage_seen"
+  ),
+  id: text("id").primaryKey(),
+  /**
+   * The machine it runs on. Not a foreign key: a removed machine's sessions
+   * stay, `machineRemoved`, under its id, and come back if it rejoins.
+   */
+  machineId: text("machine_id").notNull(),
+  /** Its project; a deleted project's sessions outlive it, just not as its. */
+  projectId: text("project_id").references(() => projects.id, {
+    onDelete: "set null",
+  }),
+  /** SDK session id, absent until the first init frame arrives. */
+  sessionId: text("session_id"),
+  /** Which harness owns `sessionId` — what a resume and a catalog read route on. */
+  harness: text("harness").$type<HarnessKind>().notNull(),
+  /**
+   * The account the session runs on, chosen by placement when it started (a
+   * fork's is its origin's). Every later spawn of the row runs on it, until
+   * the hub moves it to another at its limit. Null: a harness without
+   * accounts, or a session from before accounts.
+   */
+  accountId: text("account_id"),
+  /**
+   * The session this one was forked from, when it was: it reads that
+   * session's cache, so it never moves to another account on its own.
+   */
+  forkedFrom: text("forked_from"),
+  /**
+   * The session that started this one (`delegate`, `start_session`): nested under it in every rail. Null on a session
+   * a person started. Whether it is delegated work is {@link workItemId}'s.
+   */
+  parentInstanceId: text("parent_instance_id"),
+  /**
+   * Who started it (core `SessionOrigin`), stamped once as its row opens
+   * from who asked for the start, never from the start's payload: `person`,
+   * `delegate`, `project` or `check`. Only a person's sessions stand at the top
+   * of a project in the rails; the rest nest under their parent, and one
+   * whose work item has ended is listed a day, asleep or not.
+   */
+  origin: text("origin")
+    .$type<import("@cawco/core").SessionOrigin>()
+    .notNull()
+    .default("person"),
+  /** The delegating tool call, so the parent transcript can render the round trip. */
+  parentToolUseId: text("parent_tool_use_id"),
+  /**
+   * The directory the session was launched in: its spawn's, or, for a scratch
+   * session, the worktree its machine made for it, as its first `init` names
+   * it resolved (`~` expanded). Set at its first spawn and never changed:
+   * every resume, revive, restore, relaunch, fork and move spawns here, since
+   * a harness keeps the conversation under the directory it was launched in.
+   * Where the CLI later wanders (`cd`) is not recorded at all, so a folder it
+   * wandered into and deleted cannot stop it resuming, and its name in every
+   * listing (the folder's leaf) does not drift.
+   */
+  cwd: text("cwd").$type<MachinePath>().notNull(),
+  /**
+   * Whether `cwd` is the launch directory. `known` on every row spawned since
+   * `cwd` was pinned. `unread` on a row from before, whose launch directory is
+   * still to be read from its conversation (the harness's first recorded cwd):
+   * its machine is asked at its next register, before anything is restored.
+   * `unknown` when that machine had no record of the conversation: `cwd` may be
+   * a folder the CLI wandered into, so the row is never named by it nor
+   * spawned there.
+   */
+  launchDir: text("launch_dir", { enum: ["known", "unread", "unknown"] })
+    .notNull()
+    .default("known"),
+  /**
+   * The session's given name: the owner's rename, or the name the session
+   * gave itself (`set_title`) or was spawned under (a delegate's title).
+   * Null on a session nobody named — the rails fall back to `derivedTitle`,
+   * then to where it runs.
+   */
+  title: text("title"),
+  /**
+   * Who gave `title`: `owner` (a rename in the dashboard), which nothing the
+   * session does overwrites, or `agent` (its spawn's title or `set_title`).
+   */
+  titleSource: text("title_source").$type<"owner" | "agent">(),
+  /**
+   * The MCP servers and tool names the session's newest `init` announced, as
+   * JSON — overwritten on every `init` that carries them, so a reload or a hub
+   * restart still knows what the session has. Null for a harness whose `init`
+   * carries neither.
+   */
+  tooling: storedJson(SessionToolingSchema)("tooling"),
+  /**
+   * The `/` menu the session's newest `init` listed (its names, and which of
+   * them are skills), as JSON, overwritten as `tooling` is: a transcript the
+   * hub reads back from the machine's stored file (a Claude session's holds no
+   * `init`) still offers it, once the hub let the built one go
+   * (transcripts.ts `sweep`) or restarted. Null for a harness whose `init`
+   * lists none.
+   */
+  commands: storedJson(SessionCommandsSchema)("commands"),
+  /**
+   * What the session called itself by what it was first asked to do: the first
+   * user message, cleaned by core's `deriveTitleFromFirstMessage`. Written once,
+   * the first time the hub sees that message, so a listing already carries the
+   * name a reader would otherwise only see after the transcript loaded. Never
+   * written over `title`, and never rewritten — a given title always wins.
+   */
+  derivedTitle: text("derived_title"),
+  /**
+   * When the owner last looked at the session (its tab in front, after it
+   * ended) or archived it off Finished, on any device: a turn that ended
+   * after this is news. Null on one never seen.
+   */
+  seenAt: timestamp("seen_at"),
+  /**
+   * When the session's latest turn ended, on the hub's clock: the moment
+   * the hub took the turn's `result` (server.ts, the `endedAt` a turn's push
+   * waits from). Read against `seenAt`, also the hub's, it decides "ended
+   * since the owner last looked" on every device without reading a device's
+   * or a machine's clock. Null on one whose turn never ended.
+   */
+  turnEndedAt: timestamp("turn_ended_at"),
+  /**
+   * `scratch`: a spin-off (NEW.md §1), shown apart from mainline work.
+   * `summariser`: a continuation's internal worker, never on the board.
+   */
+  kind: text("kind")
+    .$type<"mainline" | "scratch" | "summariser">()
+    .notNull()
+    .default("mainline"),
+  /**
+   * How the session answers tool permissions, and which model answers: two of
+   * the three settings the user keeps changing, so a dashboard that was not open
+   * when they chose still shows what the session is really running. Null until a
+   * spawn or a session's own `init` says.
+   */
+  permissionMode: text("permission_mode"),
+  model: text("model"),
+  /**
+   * The third: how hard that model thinks, as the session's agent last read it
+   * back from the harness (`EFFORT_READ`) — a level, or `none` when the session
+   * sends no effort. Null until the first reading. What the session runs at,
+   * shown on its chip; never what a launch asks for ({@link chosenEffort}).
+   */
+  effort: text("effort").$type<SessionEffort>(),
+  /**
+   * The effort the operator chose for the session: the level its spawn named,
+   * or the last `set-effort` sent it. Every launch of the session asks for it
+   * (`bounded`), whatever brings it back. Null: nobody chose, and its launches
+   * name none, so the harness runs its model's default. Only a choice writes
+   * it, never a reading.
+   */
+  chosenEffort: text("chosen_effort").$type<EffortLevel>(),
+  /**
+   * Whether the session may delegate or start sessions of its own. `false` on a
+   * leaf delegate — one spawned with `can_delegate: false`, which is what a
+   * `delegate` call means unless it says otherwise. Every spawn with a parent
+   * says which; null is a session nobody delegated, and it may.
+   */
+  canDelegate: integer("can_delegate", { mode: "boolean" }),
+  /**
+   * The toolset the session runs in (§5.3), written once by its first spawn:
+   * a delegate type's `role` for its work item's session. Null: derived
+   * from how it started (roles.ts `roleOf`).
+   */
+  role: text("role").$type<import("@cawco/core").SessionRole>(),
+  /**
+   * The delegate type its spawn named (a fleet type, or its project's), so
+   * what the type says (its denied tools) reads the same for every session
+   * however it started. Null: none.
+   */
+  delegateType: text("delegate_type"),
+  /** The project whose catalog `delegateType` came from; null: the fleet's. */
+  delegateTypeProject: text("delegate_type_project"),
+  /**
+   * What was last *written down* about the session — history, not liveness.
+   *
+   * Read this column raw and you are reading a fact that was true at the moment
+   * of a write and has been re-checked by nobody since; that is exactly how the
+   * hub came to report 178 sessions `running` on a machine carrying 42
+   * processes. Every read that reaches a person or an API client goes through
+   * `withSessionPresence` in `server.ts`, which answers `unknown` for any row
+   * whose machine the hub is not currently holding a socket for. The column
+   * itself is deliberately left alone by that overlay: it is the record of what
+   * last happened, and the last thing that happened does not stop having
+   * happened because the machine went quiet.
+   *
+   * The union is core's {@link import('@cawco/core').InstanceStatus} (see its
+   * doc comment for what each value means). Plain text, no SQL migration:
+   * `sleeping` arrived by a one-time boot sweep over rows the old taxonomy had
+   * to file under `error`.
+   */
+  status: text("status").$type<InstanceStatus>().notNull().default("starting"),
+  /** Why the session died, for a dashboard that was not watching when it did. */
+  lastError: text("last_error"),
+  /** What `lastError` was, typed where it was found (core `LastErrorKind`); null when nothing typed it. */
+  lastErrorKind:
+    text("last_error_kind").$type<import("@cawco/core").LastErrorKind>(),
+  createdAt: stampedNow("created_at"),
+  updatedAt: stampedNow("updated_at"),
+  /**
+   * When the hub last issued a spawn or restore for this row. A `starting` row's
+   * grace measures from here: asking for a process is not session activity.
+   */
+  spawnedAt: timestamp("spawned_at"),
+  /**
+   * The work item this session runs ({@link workItems}). Every delegate is one
+   * work item in one fresh session; null on a session nobody delegated, and on
+   * a delegate from before work items existed.
+   */
+  workItemId: text("work_item_id"),
+  /**
+   * The session a continuation moved this one's work item to (server.ts
+   * `retireContinued`): this one never runs again (core `relaunchOf`
+   * refuses it), and what is sent to it goes there. Null on every other.
+   */
+  continuedInto: text("continued_into"),
+});
 
 /** Only hashes reach disk; installing a replacement does not revoke a live credential before ACK. */
 export const sessionIdentities = sqliteTable("session_identities", {
@@ -1787,23 +1769,8 @@ export const sentMessages = sqliteTable(
   {
     /** The send's own uuid (`SentMessage.uuid`), the id it keeps everywhere. */
     uuid: text("uuid").primaryKey(),
-    /**
-     * The session it went to. A send to a Caw thread (`thread_id`) names the
-     * lead session it was handed to, and none until one took it or when none
-     * could (it failed first).
-     */
-    instanceId: text("instance_id"),
-    /**
-     * The Caw thread it was written in (core threads.ts): the person's words
-     * there are sends, kept here as any send is, and the thread's page draws
-     * them from these records (thread-transcript.ts).
-     */
-    threadId: text("thread_id").references(
-      (): AnySQLiteColumn => projectThreads.id,
-      {
-        onDelete: "cascade",
-      }
-    ),
+    /** The session it went to. */
+    instanceId: text("instance_id").notNull(),
     acceptedAt: timestamp("accepted_at").notNull(),
     /** When its reader read it (`readSend`): where a thread's page places it. Null until then. */
     readAt: timestamp("read_at"),
@@ -1875,13 +1842,6 @@ export const sentMessages = sqliteTable(
   (table) => [
     index("sent_messages_harness_id").on(table.harnessId),
     index("sent_messages_state").on(table.instanceId, table.state),
-    index("sent_messages_thread").on(table.threadId, table.state),
-    // Its columns by bare name, as every check's (migrations-check.ts
-    // `qualifiedChecks`).
-    check(
-      "sent_messages_target",
-      sql`${sql.identifier("instance_id")} IS NOT NULL OR ${sql.identifier("thread_id")} IS NOT NULL`
-    ),
   ]
 );
 
@@ -3773,8 +3733,6 @@ export const designOffers = sqliteTable("design_offers", {
   projectId: text("project_id").primaryKey(),
   /** The task whose move into an active stage raised it. */
   taskId: text("task_id").notNull(),
-  /** The thread the card went to. */
-  threadId: text("thread_id").notNull(),
   offeredAt: timestamp("offered_at").notNull(),
   answer: text("answer").$type<"built" | "dismissed">(),
   answeredAt: timestamp("answered_at"),
@@ -3794,8 +3752,6 @@ export const lfsOffers = sqliteTable("lfs_offers", {
   machineId: text("machine_id").notNull(),
   /** The folder made a repository, on its machine. */
   root: text("root").notNull(),
-  /** The thread the card went to. */
-  threadId: text("thread_id").notNull(),
   /** What is offered, a row per pattern (core `PlaceLfsRow`). */
   rows: storedJson(z.array(PlaceLfsRowSchema))("rows").notNull(),
   offeredAt: timestamp("offered_at").notNull(),
@@ -4545,108 +4501,26 @@ export const purgedSessions = sqliteTable(
   (table) => [primaryKey({ columns: [table.machineId, table.sessionId] })]
 );
 
-/** A conversation with a project's Caw (caw.ts). */
-export const projectThreads = sqliteTable(
-  "project_threads",
-  {
-    id: text("id").primaryKey(),
-    projectId: projectKey(),
-    /** The first message's opening words. */
-    title: text("title").notNull(),
-    /** A Setup thread of the project: opened when New project made it (caw.ts `setup`), or one the person asked Caw for Setup in (`project_setup`). */
-    setup: integer("setup", { mode: "boolean" }).notNull().default(false),
-    createdAt: timestamp("created_at").notNull(),
-    /** When its newest message was added. */
-    updatedAt: timestamp("updated_at").notNull(),
-    /**
-     * When you archived it: the rails leave it and the sessions under it
-     * out. Null while it is not; any new message in it clears it.
-     */
-    archivedAt: timestamp("archived_at"),
-  },
-  (table) => [index("project_threads_project").on(table.projectId)]
-);
-
 /**
- * What each of a project's Caw turns cost, booked as the turn's result came
- * in (caw.ts `turnCost`): the one source of Caw's dollars, so a period's
- * total, each thread's share and the turns no thread woke always add up.
+ * What the hub says to the person about a project (caw.ts `notice`): a
+ * repository made, an offer to answer, a routine made. Each is a line in its
+ * conversation's transcript (`instance_id`), waking nobody; one written
+ * while the project had no conversation waits for the next to start
+ * (`instance_id` null until then).
  */
-export const cawTurns = sqliteTable(
-  "caw_turns",
+export const projectNotes = sqliteTable(
+  "project_notes",
   {
     id: text("id").primaryKey(),
     projectId: projectKey(),
-    /** The thread that woke the turn; null when none did. */
-    threadId: text("thread_id").references(
-      (): AnySQLiteColumn => projectThreads.id,
-      {
-        onDelete: "set null",
-      }
-    ),
-    /**
-     * The harness whose own result said what the turn cost: Claude Code's
-     * `total_cost_usd`, or the agent's OpenCode adapter's, which sums each
-     * request's CawCo price (`costForUsage`) into the same field. Turns booked before it was
-     * recorded take their project's Caw harness then (migration 0096).
-     */
-    harness: text("harness"),
-    usd: real("usd").notNull(),
+    /** The conversation it is a line of; null until the project has one. */
+    instanceId: text("instance_id"),
     at: timestamp("at").notNull(),
-  },
-  (table) => [index("caw_turns_project_at").on(table.projectId, table.at)]
-);
-
-/**
- * One message in a thread: yours from the dashboard (or your answer to Caw's
- * question), Caw's through `thread_reply`, or an event that woke Caw.
- */
-export const threadMessages = sqliteTable(
-  "thread_messages",
-  {
-    id: text("id").primaryKey(),
-    threadId: text("thread_id")
-      .notNull()
-      .references(() => projectThreads.id, { onDelete: "cascade" }),
-    author: text("author").$type<ThreadMessage["author"]>().notNull(),
-    /** Empty for an event whose title says it all. */
-    body: text("body").notNull(),
-    /** An event's one line. */
-    noteTitle: text("note_title"),
-    /** What an event is, as typed data (`ThreadEvent`); null on notes stored before it was kept. */
-    event: storedJson(ThreadEventSchema)("event"),
-    /** The project folder's files Caw's message says he wrote (`stages.md`). */
-    files: storedJson(z.array(z.string()))("files"),
-    /** Your answer's question and answer, from the lead's AskUserQuestion. */
-    question: storedJson(ThreadQuestionSchema)("question"),
-    answer: storedJson(ThreadAnswerSchema)("answer"),
-    /** The pictures your words carried, as the media store keeps them (media.ts), and its addresses for them. */
-    images: storedJson(z.array(ThreadImageSchema))("images"),
-    /** The pastes and files your words carried, files by the hub's reference (`POST /api/files`). */
-    attachments: storedJson(z.array(SendAttachmentSchema))("attachments"),
-    createdAt: timestamp("created_at").notNull(),
-  },
-  (table) => [index("thread_messages_thread").on(table.threadId)]
-);
-
-/**
- * The tasks Caw's message is about (`tsk-12`), one row each, in the order he
- * named them (rowid); the thread a task's work reports to is the newest
- * message naming it (db `threadOfTask`).
- */
-export const threadMessageTasks = sqliteTable(
-  "thread_message_tasks",
-  {
-    messageId: text("message_id")
-      .notNull()
-      .references(() => threadMessages.id, { onDelete: "cascade" }),
-    /** The message's thread's project, which a task id is unique within. */
-    projectId: projectKey(),
-    taskId: text("task_id").notNull(),
+    note: storedJson(ProjectNoteSchema)("note").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.messageId, table.taskId] }),
-    index("thread_message_tasks_task").on(table.projectId, table.taskId),
+    index("project_notes_project").on(table.projectId),
+    index("project_notes_instance").on(table.instanceId),
   ]
 );
 
@@ -4705,8 +4579,6 @@ export const routines = sqliteTable(
      * hub's, and routines made before the hub kept where.
      */
     madeInInstance: text("made_in_instance"),
-    /** The Caw thread that session's turn was in, when it was in one. */
-    madeInThread: text("made_in_thread"),
     /**
      * What the making turn said just before its `routine_create` call, one
      * paragraph; null when it said nothing, or the routine is not an agent's.
@@ -4728,8 +4600,6 @@ export const routines = sqliteTable(
     lastSlot: timestamp("last_slot"),
     /** The next scheduled slot. */
     nextSlot: timestamp("next_slot").notNull(),
-    /** The project thread its notices and its lead messages go to, once it has one. */
-    threadId: text("thread_id"),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("routines_project").on(table.projectId)]
@@ -4772,7 +4642,7 @@ export const routineRuns = sqliteTable(
      * the turn that took it ends the run, with its `routine_result` or
      * failed.
      */
-    leadInstanceId: text("lead_instance_id"),
+    instanceId: text("instance_id"),
     outcome: text("outcome").$type<RoutineOutcome>(),
     /** What its delegate said, when it said more than the contract's words. */
     output: text("output"),

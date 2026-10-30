@@ -1,50 +1,19 @@
 public import CawCoAPI
 public import Foundation
-import Observation
 import OpenAPIRuntime
 import OSLog
 
-// A project's threads with its Caw (hub caw.ts, the web's client.svelte.ts
-// "a project's Caw, its threads and views", thread-tabs.ts and
-// ThreadPane.svelte): their rows read on connect and kept by `thread.upsert`
-// frames. A thread is addressed as a session (`thread:<id>`): its transcript
-// is read and followed through `SessionsStore` and a send to it goes through
-// the one send path, as any session's (hub thread-transcript.ts).
+// A project's conversation as the hub answers it (hub caw.ts, the web's
+// client.svelte.ts "a project's conversation and views"): the session its
+// events reach, a session like any other, read and followed through
+// `SessionsStore`. What only the project carries is read here: its
+// conversation's view, a view asked of it, its folder's files.
 
-public typealias ThreadSummary = Components.Schemas.ThreadSummary
-/// A project's Caw as the hub answers it (`GET`/`PATCH /api/projects/:id/caw`); the mascot is `CawView`.
-public typealias CawLeadView = Components.Schemas.CawView
+/// A project's conversation as the hub answers it (`GET`/`PATCH /api/projects/:id/caw`); the mascot is `CawView`.
+public typealias ConversationView = Components.Schemas.ProjectConversationView
 
-/// How a thread is addressed as a session (thread-tabs.ts, core threads.ts
-/// `threadTarget`): `thread:<id>`, wherever a session is addressed by its
-/// id. A thread not started yet has its id already, minted as a send's is
-/// (`newTabId`): its first send carries its project, and the hub makes the
-/// thread under that id.
-public enum ThreadTabs {
-    public static let prefix = "thread:"
-
-    /// The session-shaped id a thread is listed, opened and linked by.
-    public static func tabId(_ threadId: String) -> String { prefix + threadId }
-    /// A new thread of `projectId`'s: its id minted here, its project kept
-    /// for its first send (`mintedProject`).
-    @MainActor
-    public static func newTabId(_ projectId: String) -> String {
-        let id = tabId(UUID().uuidString.lowercased())
-        minted[id] = projectId
-        return id
-    }
-    /// The thread an id names; nil for anything else.
-    public static func threadId(of id: String) -> String? {
-        id.hasPrefix(prefix) ? String(id.dropFirst(prefix.count)) : nil
-    }
-    /// The project of a thread this device minted and the hub has not made yet.
-    @MainActor
-    public static func mintedProject(of id: String) -> String? { minted[id] }
-    /// A thread's tab: the ids the thread screen draws.
-    public static func isThread(_ id: String) -> Bool { id.hasPrefix(prefix) }
-    /// The threads this device minted, by tab id: their project.
-    @MainActor private static var minted: [String: String] = [:]
-    /// The `noteKind` of a thread's event: something that woke a project's Caw (core `CAW_EVENT_NOTE`).
+/// The `noteKind` of a project note's line in its conversation's transcript (core `CAW_EVENT_NOTE`).
+public enum ProjectNotes {
     public static let cawEvent = "caw.event"
 }
 
@@ -59,103 +28,16 @@ public enum ArtifactTabs {
     }
 }
 
-/// What one of Caw's replies carries under it, by its block's id
-/// (ThreadPane.svelte `setVoice`): the tasks it is about and the files it
-/// wrote, from the block's metadata.
-public struct ThreadExtras: Sendable, Equatable {
-    public let tasks: [String]
-    public let files: [String]
-
-    public init(tasks: [String], files: [String]) {
-        self.tasks = tasks
-        self.files = files
-    }
-
-    /// What each of a thread's replies carries, by block id, read off its transcript's blocks.
-    public static func of(_ blocks: [Components.Schemas.TranscriptBlock]) -> [String: ThreadExtras] {
-        var out: [String: ThreadExtras] = [:]
-        for block in blocks {
-            let tasks = block.metadata?.tasks ?? []
-            let files = block.metadata?.files ?? []
-            if !tasks.isEmpty || !files.isEmpty { out[block.id] = ThreadExtras(tasks: tasks, files: files) }
-        }
-        return out
-    }
-}
-
-/// Every project's threads with its Caw: the hub's word, read on connect
-/// and kept by its frames (client.svelte.ts `state.threads`).
+/// What only a project carries of its conversation: its view, a view asked
+/// of it, its folder's files; and the words every failed request is said in.
 @MainActor
-@Observable
-public final class ThreadsStore {
-    /// Each project's threads, newest message first.
-    public private(set) var byProject: [String: [ThreadSummary]] = [:]
-    /// Each thread by its id.
-    public private(set) var byId: [String: ThreadSummary] = [:]
-    /// The threads were read once on this connection.
-    public private(set) var read = false
-    /// The fleet lists the threads as rows (thread-tabs.ts `threadRowOf`).
-    @ObservationIgnored var onThreads: () -> Void = {}
-
+public final class CawStore {
     private unowned let hub: HubConnection
-    private let log = Logger(subsystem: "dev.cawco.app", category: "Threads")
+    private let log = Logger(subsystem: "dev.cawco.app", category: "Caw")
 
     init(hub: HubConnection) {
         self.hub = hub
     }
-
-    func reset() {
-        byProject = [:]
-        byId = [:]
-        read = false
-        onThreads()
-    }
-
-    /// A project's threads, newest first.
-    public func of(_ projectId: String) -> [ThreadSummary] { byProject[projectId] ?? [] }
-
-    /// The thread a `thread:` id names, when the hub has told of it.
-    public func thread(_ id: String) -> ThreadSummary? { ThreadTabs.threadId(of: id).flatMap { byId[$0] } }
-
-    // MARK: The hub's word
-
-    /// A thread's row as the hub has it now, in its project's list, newest first (`adoptThread`).
-    func adopt(_ thread: ThreadSummary) {
-        guard byId[thread.id] != thread else { return }
-        byId[thread.id] = thread
-        let list = (byProject[thread.projectId] ?? []).filter { $0.id != thread.id } + [thread]
-        byProject[thread.projectId] = list.sorted { $0.lastAt != $1.lastAt ? $0.lastAt > $1.lastAt : $0.id > $1.id }
-        onThreads()
-    }
-
-    /// Every project's threads (`GET /api/threads`): the whole truth on each connect.
-    func readAll() async {
-        guard let client = hub.client else { return }
-        do {
-            let answer = try await client.getApiThreads().ok.body.json
-            let threads = try Wire.transcode(answer, as: [String: [ThreadSummary]].self)
-            var ids: [String: ThreadSummary] = [:]
-            var lists: [String: [ThreadSummary]] = [:]
-            for (projectId, list) in threads {
-                lists[projectId] = list.sorted { $0.lastAt != $1.lastAt ? $0.lastAt > $1.lastAt : $0.id > $1.id }
-                for thread in list { ids[thread.id] = thread }
-            }
-            byProject = lists
-            byId = ids
-            read = true
-            onThreads()
-            log.notice("threads read: \(ids.count, privacy: .public) in \(lists.count, privacy: .public) projects")
-        } catch {
-            log.error("threads unreadable: \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    /// An ask of Caw's that got no answer (a view asked for), in the error
-    /// formula: what, why, what is kept, the way back (hub-read.ts
-    /// `THREAD_SEND_UNREACHED`). It may have reached him: the same words go
-    /// again under the id they went as, the same ask to the hub.
-    public static let sendUnreached =
-        "Your message may not have gone: the hub didn't answer. Your words are back in the field. Send again once the hub answers, and it goes once."
 
     /// A request that got no answer, in the error formula (hub-read.ts `HUB_UNREACHABLE`).
     public static let hubUnreached =
@@ -177,37 +59,21 @@ public final class ThreadsStore {
 
     private static let noHub = "No hub is connected."
 
-    /// A new thread of the project's, opened by your words: its id minted
-    /// here (`ThreadTabs.newTabId`) and your words its first send, through
-    /// the one send path as any session's (`SessionsStore.steer`), carrying
-    /// the project the hub makes it in. Answers the thread's tab id.
-    @discardableResult
-    public func start(projectId: String, text: String) -> String {
-        let viewId = ThreadTabs.newTabId(projectId)
-        _ = hub.sessions.steer(sessionId: viewId, machineId: "hub", text: text, projectId: projectId)
-        log.notice("started thread \(viewId, privacy: .public) in project \(projectId, privacy: .public)")
-        return viewId
-    }
-
     /// Ask Caw for a view (client.svelte.ts `requestView`): your words go to
-    /// him in a thread of their own, and he drafts the view there. `id` is
-    /// the ask's: the hub takes the same id again as the same ask. Answers
-    /// the thread they went to.
+    /// the project's conversation, which drafts the view. Answers the session
+    /// they went to.
     @discardableResult
-    public func requestView(projectId: String, text: String, id: String) async throws -> ThreadSummary {
+    public func requestView(projectId: String, text: String) async throws -> String {
         guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
-        let output = try await client.postApiProjectsByIdViewRequests(path: .init(id: projectId), body: .json(.init(text: text, id: id)))
+        let output = try await client.postApiProjectsByIdViewRequests(path: .init(id: projectId), body: .json(.init(text: text)))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
         let said = try ok.body.json
-        adopt(said.thread)
-        log.notice("asked for a view in thread \(said.thread.id, privacy: .public) as message \(id, privacy: .public)")
-        return said.thread
+        log.notice("asked for a view in conversation \(said.instanceId, privacy: .public)")
+        return said.instanceId
     }
 
-    // MARK: Caw
-
     /// A project's Caw: on or off, his harness, his session, why he cannot start (`cawOf`).
-    public func caw(_ projectId: String) async throws -> CawLeadView {
+    public func caw(_ projectId: String) async throws -> ConversationView {
         guard let client = hub.client else { throw TaskRefusal(message: "No hub is connected.") }
         let output = try await client.getApiProjectsByIdCaw(path: .init(id: projectId))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
@@ -219,7 +85,7 @@ public final class ThreadsStore {
     /// as the JSON itself: the generated body leaves a null model out, and
     /// null is what names the default.
     public func configureCaw(_ projectId: String, on: Bool? = nil, harness: String? = nil,
-                             model: String?? = nil, initiated: String? = nil) async throws -> CawLeadView {
+                             model: String?? = nil, initiated: String? = nil) async throws -> ConversationView {
         guard let address = hub.address else { throw TaskRefusal(message: "No hub is connected.") }
         var change: [String: Any] = [:]
         if let on { change["on"] = on }
@@ -233,12 +99,12 @@ public final class ThreadsStore {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw TaskRefusal(message: Wire.reason(data, status: status)) }
-        return try Wire.decoder().decode(CawLeadView.self, from: data)
+        return try Wire.decoder().decode(ConversationView.self, from: data)
     }
 
     /// A file of the project's folder as it reads on the hub (FolderFiles.svelte `read`).
     public func file(_ projectId: String, path: String) async throws -> String {
-        guard let client = hub.client else { throw TaskRefusal(message: "No hub is connected.") }
+        guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
         let output = try await client.getApiProjectsByIdFolderFile(path: .init(id: projectId), query: .init(path: path))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
         return try ok.body.json.content

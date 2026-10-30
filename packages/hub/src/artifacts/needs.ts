@@ -75,8 +75,6 @@ export interface ArtifactAsked {
   by: string;
   movedAt?: string;
   step?: string;
-  /** The Caw thread a lead's turn answered as it asked: where its item opens, his panel beside it. */
-  thread?: string;
 }
 
 /** What an artifact's doc and row say, read once per change of either. */
@@ -245,11 +243,9 @@ const stopOf = (
   }
 };
 
-/** Where its item opens: the thread a lead asked in, else the session that holds it. */
-const viewOf = (row: ArtifactRow, facts: ArtifactFacts): string =>
-  facts.asked?.thread && facts.asked.by === row.instanceId
-    ? `thread:${facts.asked.thread}`
-    : (row.instanceId as string);
+/** Where its item opens: the session that holds it. */
+const viewOf = (row: ArtifactRow, _facts: ArtifactFacts): string =>
+  row.instanceId as string;
 
 /** Its pending state as its own list reads it (Files, the panel's menu): null when it asks nothing now. */
 export const pendingOf = (

@@ -20,9 +20,9 @@
   import { sessionName } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
   import { markHue, sessionSprite } from "./mark";
-  import SessionCard, { readThreadCard, tailOf } from "./SessionCard.svelte";
-  import { sessionAnswer, sessionPlace } from "./session-names.svelte";
-  import { threadIdOf } from "./thread-tabs";
+  import SessionCard from "./SessionCard.svelte";
+  import { sessionPlace } from "./session-names.svelte";
+  import { cawOf } from "./session-status";
 
   /**
    * The session, as the instance index holds it or the hub's names answered
@@ -32,23 +32,12 @@
   let { id }: { id: string; label?: string } = $props();
 
   const panelId = $props.id();
-  const row = $derived(cawco.instanceIndex.byId.get(id));
-  const thread = $derived(cawco.threadOf(id));
-  /** The hub's answer, for a session this browser holds no row of. */
-  const answer = $derived(row || thread ? undefined : sessionAnswer(id));
   const title = $derived(sessionName(id));
-  const caw = $derived(
-    thread?.status ?? (answer?.kind === "thread" ? answer.state : null)
-  );
+  /** A project's conversation's mark is Caw (session-status.ts `cawOf`). */
+  const caw = $derived(cawOf(id));
   const Sprite = $derived(sessionSprite(id));
 
-  // A thread's card reads its messages as it opens.
-  const panel = new ChipPanel(panelId, () => {
-    const threadId = threadIdOf(id);
-    if (threadId) {
-      readThreadCard(threadId);
-    }
-  });
+  const panel = new ChipPanel(panelId);
 </script>
 
 <!-- The chip stands in a line of text as a word does (ui/chip `inline`),
@@ -89,7 +78,7 @@
     style="--x: {panel.place.x}px; --y: {panel.place.y}px; --origin: {panel
       .place
       .origin}px; --room: var(--c-session-hover-room); --span: calc(100vw - 2 * var(--hover-panel-inset))"
-    watch={panel.open ? tailOf(id) : null}
+    watch={panel.open ? id : null}
   >
     {#snippet children(shown)}
       <SessionCard

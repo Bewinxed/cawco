@@ -1416,7 +1416,6 @@ public enum OpenEnums {
     public enum CawRunningKind: OpenEnum {
         case attempt
         case delegate
-        case turn
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -1424,7 +1423,6 @@ public enum OpenEnums {
             switch rawValue {
             case "attempt": self = .attempt
             case "delegate": self = .delegate
-            case "turn": self = .turn
             default: self = .unrecognized(rawValue)
             }
         }
@@ -1433,7 +1431,6 @@ public enum OpenEnums {
             switch self {
             case .attempt: "attempt"
             case .delegate: "delegate"
-            case .turn: "turn"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -1442,54 +1439,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.attempt, .delegate, .turn]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/CawViewMode`.
-    public enum CawViewMode: OpenEnum {
-        case acceptEdits
-        case bypassPermissions
-        case _default
-        case fullSend
-        case plan
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "acceptEdits": self = .acceptEdits
-            case "bypassPermissions": self = .bypassPermissions
-            case "default": self = ._default
-            case "fullSend": self = .fullSend
-            case "plan": self = .plan
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .acceptEdits: "acceptEdits"
-            case .bypassPermissions: "bypassPermissions"
-            case ._default: "default"
-            case .fullSend: "fullSend"
-            case .plan: "plan"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.acceptEdits, .bypassPermissions, ._default, .fullSend, .plan]
+        public static let allCases: [Self] = [.attempt, .delegate]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -2703,6 +2653,53 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.compile, .missing, .page]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/EventRouteViewMode`.
+    public enum EventRouteViewMode: OpenEnum {
+        case acceptEdits
+        case bypassPermissions
+        case _default
+        case fullSend
+        case plan
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "acceptEdits": self = .acceptEdits
+            case "bypassPermissions": self = .bypassPermissions
+            case "default": self = ._default
+            case "fullSend": self = .fullSend
+            case "plan": self = .plan
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .acceptEdits: "acceptEdits"
+            case .bypassPermissions: "bypassPermissions"
+            case ._default: "default"
+            case .fullSend: "fullSend"
+            case .plan: "plan"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.acceptEdits, .bypassPermissions, ._default, .fullSend, .plan]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -4982,7 +4979,6 @@ public enum OpenEnums {
     /// `#/components/schemas/Law`.
     public enum Law: OpenEnum {
         case artifactNoticeDrawn
-        case cawAskStoredBeforeSent
         case liveWorkspaceJudgeAnswers
         case owedSendMachineHasDeadline
         case registerSpawnedNothing
@@ -4993,7 +4989,6 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "artifact-notice-drawn": self = .artifactNoticeDrawn
-            case "caw-ask-stored-before-sent": self = .cawAskStoredBeforeSent
             case "live-workspace-judge-answers": self = .liveWorkspaceJudgeAnswers
             case "owed-send-machine-has-deadline": self = .owedSendMachineHasDeadline
             case "register-spawned-nothing": self = .registerSpawnedNothing
@@ -5005,7 +5000,6 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .artifactNoticeDrawn: "artifact-notice-drawn"
-            case .cawAskStoredBeforeSent: "caw-ask-stored-before-sent"
             case .liveWorkspaceJudgeAnswers: "live-workspace-judge-answers"
             case .owedSendMachineHasDeadline: "owed-send-machine-has-deadline"
             case .registerSpawnedNothing: "register-spawned-nothing"
@@ -5018,7 +5012,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.artifactNoticeDrawn, .cawAskStoredBeforeSent, .liveWorkspaceJudgeAnswers, .owedSendMachineHasDeadline, .registerSpawnedNothing, .runningSessionMachineConnected]
+        public static let allCases: [Self] = [.artifactNoticeDrawn, .liveWorkspaceJudgeAnswers, .owedSendMachineHasDeadline, .registerSpawnedNothing, .runningSessionMachineConnected]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5296,7 +5290,6 @@ public enum OpenEnums {
     /// `#/components/schemas/MomentAuthor`.
     public enum MomentAuthor: OpenEnum {
         case agent
-        case caw
         case injected
         case owner
         case report
@@ -5306,7 +5299,6 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "agent": self = .agent
-            case "caw": self = .caw
             case "injected": self = .injected
             case "owner": self = .owner
             case "report": self = .report
@@ -5317,7 +5309,6 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .agent: "agent"
-            case .caw: "caw"
             case .injected: "injected"
             case .owner: "owner"
             case .report: "report"
@@ -5329,7 +5320,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.agent, .caw, .injected, .owner, .report]
+        public static let allCases: [Self] = [.agent, .injected, .owner, .report]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -8351,47 +8342,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/ThreadStatus`.
-    public enum ThreadStatus: OpenEnum {
-        case needsYou
-        case ready
-        case working
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "needs-you": self = .needsYou
-            case "ready": self = .ready
-            case "working": self = .working
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .needsYou: "needs-you"
-            case .ready: "ready"
-            case .working: "working"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.needsYou, .ready, .working]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/ToolPlatform`.
     public enum ToolPlatform: OpenEnum {
         case darwin
@@ -8814,44 +8764,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.admission, .control, .frames, .fs, .heartbeat, .launch, .register, .send, .spawn, .stop, .usage]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/ViewAskedCaw`.
-    public enum ViewAskedCaw: OpenEnum {
-        case off
-        case on
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "off": self = .off
-            case "on": self = .on
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .off: "off"
-            case .on: "on"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.off, .on]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

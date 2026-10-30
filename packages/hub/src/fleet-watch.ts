@@ -400,7 +400,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       ? {
           kind: "caw",
           projectId: project.id,
-          leadId: project.leadInstanceId,
+          leadId: project.conversationInstanceId,
           name: "Caw",
         }
       : undefined;
@@ -473,7 +473,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       return;
     }
     const project = row.projectId ? db.project(row.projectId) : undefined;
-    if (project && !project.caw) {
+    if (project && !project.eventsOn) {
       if (watch.open.size >= 2) {
         episode.settled = true;
         const title = together(watch);

@@ -6,7 +6,7 @@
    * mark's, and the row says the status in its name (session-status.ts
    * `statusWord`). It reads no fleet: what it draws comes in its props.
    */
-  import type { ThreadStatus } from "@cawco/core/threads";
+  import type { CawStatus } from "@cawco/core/project-conversation";
   import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
   import TreeMark, { type MarkStatus } from "./TreeMark.svelte";
@@ -26,7 +26,7 @@
     place: string;
     status: MarkStatus;
     /** A thread's: Caw at what it is doing, its face instead of a sprite (session-status.ts `cawOf`). */
-    caw?: ThreadStatus | null;
+    caw?: CawStatus | null;
     /** The delegates under it, at every depth. */
     count?: number;
     /** Its delegates' rows are out. */

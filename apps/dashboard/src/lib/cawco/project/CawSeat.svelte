@@ -45,7 +45,7 @@
   data-slot="caw-seat"
   aria-expanded={lead.open}
   aria-haspopup="dialog"
-  aria-label="Caw, lead of {projectName}. {lead.sentence}"
+  aria-label="Caw, {projectName}. {lead.sentence}"
   class="select-none press-tint grid size-(--seat) flex-none place-items-center rounded-md border-none border-current bg-transparent p-0"
   data-share="caw:{projectId}"
   onclick={() => {

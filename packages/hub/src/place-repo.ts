@@ -29,7 +29,7 @@ import {
   machineCalled,
   type PlaceLeftOut,
   type PlaceRepo,
-  type ThreadNote,
+  type ProjectNote,
 } from "@cawco/core";
 import type { DbShape } from "./db";
 
@@ -41,20 +41,13 @@ export interface PlaceRepoDeps {
     method: string,
     args: unknown[]
   ) => Promise<unknown>;
-  readonly db: Pick<
-    DbShape,
-    "lfsOffers" | "listAgents" | "newestConversation" | "project"
-  >;
+  readonly db: Pick<DbShape, "lfsOffers" | "listAgents" | "project">;
   /**
-   * A note in a project's thread, waking no model (caw.ts `notice`); called
-   * only once the hub is up, so it may reach a Caw made after this. Answers
-   * the thread it went to; null when no Caw took it.
+   * A note to the person in the project's conversation, waking no model
+   * (caw.ts `notice`); called only once the hub is up, so it may reach a
+   * conversation made after this.
    */
-  readonly notice: (
-    projectId: string,
-    threadId: string | null,
-    note: ThreadNote
-  ) => string | null;
+  readonly notice: (projectId: string, note: ProjectNote) => void;
 }
 
 /** A place as {@link PlaceRepos.ensure} takes it. */
@@ -89,7 +82,7 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     machineCalled(machineId, db.listAgents());
 
   /**
-   * The note a made repository leaves in the project's newest conversation;
+   * The note a made repository leaves in the project's conversation;
    * when its first commit left files out for their size alone, it carries
    * the offer to commit them through Git LFS (lfs-offers.ts), filed with it.
    */
@@ -100,28 +93,23 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     const leaf = made.root.split("/").filter(Boolean).at(-1) ?? made.root;
     const offer = made.lfs.length > 0 ? crypto.randomUUID() : undefined;
     const large = made.lfs.reduce((sum, row) => sum + row.count, 0);
-    const threadId = notice(
-      place.projectId,
-      db.newestConversation(place.projectId)?.id ?? null,
-      {
-        title: `Made ${leaf} a git repository`,
-        event: {
-          kind: "repo",
-          root: made.root,
-          machineId: place.machineId,
-          commit: made.commit,
-          ...(offer ? { lfsOffer: offer } : {}),
-        },
-        body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}${offer ? `\n\n${large} of them ${large === 1 ? "was" : "were"} left out for size alone, ${LARGE_FILE_BYTES / MB} MB or more: Git LFS can keep ${large === 1 ? "it" : "them"} instead, by pattern.` : ""}`,
-      }
-    );
-    if (offer && threadId) {
+    notice(place.projectId, {
+      title: `Made ${leaf} a git repository`,
+      event: {
+        kind: "repo",
+        root: made.root,
+        machineId: place.machineId,
+        commit: made.commit,
+        ...(offer ? { lfsOffer: offer } : {}),
+      },
+      body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}${offer ? `\n\n${large} of them ${large === 1 ? "was" : "were"} left out for size alone, ${LARGE_FILE_BYTES / MB} MB or more: Git LFS can keep ${large === 1 ? "it" : "them"} instead, by pattern.` : ""}`,
+    });
+    if (offer) {
       db.lfsOffers.offer({
         id: offer,
         projectId: place.projectId,
         machineId: place.machineId,
         root: made.root,
-        threadId,
         rows: made.lfs,
         offeredAt: new Date(),
       });

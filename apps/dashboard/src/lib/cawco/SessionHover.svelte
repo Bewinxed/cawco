@@ -19,8 +19,7 @@
   import { Portal } from "bits-ui";
   import { cawco, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
-  import SessionCard, { readThreadCard, tailOf } from "./SessionCard.svelte";
-  import { threadIdOf } from "./thread-tabs";
+  import SessionCard from "./SessionCard.svelte";
 
   /** The rail whose session rows open the card. */
   let { within }: { within: HTMLElement | undefined } = $props();
@@ -46,11 +45,6 @@
       return;
     }
     fetched = id;
-    const threadId = threadIdOf(id);
-    if (threadId) {
-      readThreadCard(threadId);
-      return;
-    }
     if (!cawco.session(id)?.messages.length) {
       detach(readTranscript(id), "readTranscript");
     }
@@ -200,7 +194,7 @@
     onpointerleave={release}
     side="right"
     style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: var(--c-session-hover-room)"
-    watch={tailOf(openId)}
+    watch={openId}
   >
     {#snippet children(id)}
       <SessionCard {id} />

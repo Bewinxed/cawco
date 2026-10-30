@@ -16,13 +16,12 @@
    *    Outcome (the page's status glyph and its word), Took, and Result,
    *    the words the run set (Caw's `routine_result`, a delegate's
    *    `finish_item`, the hub's reason for a failure or an empty run), a
-   *    link to the run's thread where it is read whole.
+   *    link to the run's session where it is read whole.
    * 3. Actions, when its runs proposed any: the Approved actions table
    *    (ActionsTable), without the routine's name, which is the row's.
    */
   import { rowHref } from "#lib/cawco/links.js";
   import { since } from "#lib/cawco/rules.js";
-  import { threadHref } from "#lib/cawco/thread-tabs.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
@@ -50,13 +49,9 @@
   /** The runs shown: the newest five. */
   const SHOWN = 5;
   const recent = $derived(routine.runs.slice(0, SHOWN));
-  /** Where a run is read whole: its session, else the routine's thread, where its result is noted. */
-  const runHref = (run: RoutineRun): string | null => {
-    if (run.instanceId) {
-      return rowHref(run.instanceId);
-    }
-    return routine.threadId ? threadHref(routine.threadId) : null;
-  };
+  /** Where a run is read whole: its session; null for a run no session took. */
+  const runHref = (run: RoutineRun): string | null =>
+    run.instanceId ? rowHref(run.instanceId) : null;
 
   /** A run's outcome, in the page's status vocabulary. */
   function outcomeOf(run: RoutineRun): { status: Status; word: string } {

@@ -13,8 +13,6 @@
   import type { ServerTail } from "../client.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
-  import ThreadPane from "../ThreadPane.svelte";
-  import { isThreadTab } from "../thread-tabs";
   import { dock, shownPanes, slots } from "./dock.svelte";
   import { contextOf, workspace } from "./workspace.svelte";
 
@@ -93,26 +91,16 @@
          is the pane's whole box. -->
     <div class="flex min-h-0 min-w-0 flex-auto" use:dock={id}>
       <RegionBoundary region="conversation">
-        {#if isThreadTab(id)}
-          <!-- A thread with a project's Caw (ThreadPane). -->
-          <ThreadPane
-            active={isActive}
-            focused={isActive && leaf?.id === workspace.focusedLeafId}
-            viewId={id}
-            visible={shownPanes.get(id) ?? false}
-          />
-        {:else}
-          <SessionPane
-            active={isActive}
-            browsing={ctx?.machine ?? null}
-            browsingCwd={ctx?.cwd ?? ""}
-            browsingHarness={ctx?.harness}
-            focused={isActive && leaf?.id === workspace.focusedLeafId}
-            serverTail={id === entryId ? entryTail : null}
-            viewId={id}
-            visible={shownPanes.get(id) ?? false}
-          />
-        {/if}
+        <SessionPane
+          active={isActive}
+          browsing={ctx?.machine ?? null}
+          browsingCwd={ctx?.cwd ?? ""}
+          browsingHarness={ctx?.harness}
+          focused={isActive && leaf?.id === workspace.focusedLeafId}
+          serverTail={id === entryId ? entryTail : null}
+          viewId={id}
+          visible={shownPanes.get(id) ?? false}
+        />
       </RegionBoundary>
     </div>
   {/each}

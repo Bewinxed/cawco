@@ -35,7 +35,6 @@ export type {
   FindResult,
   FindRoutine,
   FindTask,
-  FindThread,
   MomentAuthor,
   WaitingAnswer,
   WaitingItem,

@@ -95,9 +95,6 @@ const TASK_READ = [
   "task_comment",
 ] as const satisfies readonly TaskTool[];
 
-/** A project's conversations with Caw (caw.ts), until a conversation is a session. */
-const THREAD_TOOLS = ["thread_read", "thread_reply"] as const;
-
 /** The project's own tools caw.ts answers: its views, its folder on the hub, its Setup's steps. */
 const CAW_PROJECT_TOOLS = [
   "view_draft",
@@ -107,8 +104,8 @@ const CAW_PROJECT_TOOLS = [
   "project_setup",
 ] as const;
 
-/** The tools caw.ts answers (its `tools`): threads, views, the folder, Setup's steps. */
-export const CAW_TOOLS = [...THREAD_TOOLS, ...CAW_PROJECT_TOOLS] as const;
+/** The tools caw.ts answers (its `tools`): views, the folder, Setup's steps. */
+export const CAW_TOOLS = CAW_PROJECT_TOOLS;
 
 /**
  * A project's own tools: caw.ts's, its settings (project-settings.ts), how

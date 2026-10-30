@@ -333,9 +333,12 @@ import type { Tasks } from "./tasks";
  * threads (thread_read, thread_reply) until a conversation is a session.
  * The threads are about 420 tokens for the worker (worker 28,073 measured).
  * Raised deliberately, to the lead's budget it replaces.
+ * 2026-10-30: conversations are sessions (slice 3): thread_read and
+ * thread_reply go, and project_setup takes no thread (worker 27,907
+ * measured). Lowered to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 28_300,
+  worker: 27_950,
   delegate: 10_224,
   overseer: 770,
   "web-facing": 3400,
@@ -425,10 +428,6 @@ export const listRoleTools = (): RoleTools[] => {
       rows.filter((row) => row.harness === harness && row.status === "running"),
     instanceById: (id) => rows.find((row) => row.id === id),
     instancesByShortId: () => [],
-    threads: {
-      byId: () => [],
-      hand: () => Promise.reject(new Error("A budget read hands nothing")),
-    },
     fleet: { instances: () => rows, machines: () => [] },
     formerIds: () => ({}),
     forward: () => Promise.resolve(),
@@ -449,28 +448,20 @@ export const listRoleTools = (): RoleTools[] => {
     },
     cawTools: (actor) =>
       createCaw({
-        asks: () => [],
+        answered: () => undefined,
         blocks: {} as never,
         caps: {} as never,
-        // Caw reads back the turns his leads are in as he is made: none here.
         db: {} as never,
         proposeType: () => Promise.reject(new Error("measuring")),
         end: () => undefined,
-        inTurn: () => false,
-        interrupt: () => undefined,
-        posted: () => undefined,
-        replied: () => undefined,
-        sends: {} as never,
-        tail: () => undefined,
         fleetChoicesSet: () => false,
         relayOffer: () => null,
         upstreamAnswered: () => false,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),
-        makeNote: () => Promise.reject(new Error("measuring")),
+        noted: () => undefined,
         online: () => false,
         projectsChanged: () => undefined,
-        publish: () => undefined,
         send: () => false,
         stops: { running: () => [], stop: () => undefined },
         spawn: () => Promise.resolve(),
@@ -536,7 +527,6 @@ export const listRoleTools = (): RoleTools[] => {
         notice: () => undefined,
         park: () => undefined,
         settle: () => undefined,
-        threadOf: () => undefined,
         watch: createTurnWatch({
           fleetHosts: () => [],
           get: () => undefined,

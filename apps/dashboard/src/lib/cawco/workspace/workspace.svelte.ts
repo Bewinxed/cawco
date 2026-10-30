@@ -30,7 +30,6 @@ import { conversationHref, isSessionRow } from "../links";
 import { asPref, keepPrefs } from "../prefs";
 import { openArtifactIn } from "../reference-open.svelte";
 import { store, stored as storedIn } from "../storage";
-import { isThreadTab, threadIdOf } from "../thread-tabs";
 import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -135,7 +134,7 @@ const toName = new Set<string>();
 
 /** Asks the hub what tab `id` names, beside every other tab asked in this task. */
 function askName(id: string): void {
-  if (!browser || isThreadTab(id) || unnamed.has(id) || resolved.has(id)) {
+  if (!browser || unnamed.has(id) || resolved.has(id)) {
     return;
   }
   unnamed.add(id);
@@ -714,13 +713,7 @@ export const workspace = {
     // (`?artifact=`, a Needs-you row's address), asked whether or not the
     // conversation is in front.
     const artifact = url.searchParams.get("artifact");
-    // A thread's panel is its project's lead's (ThreadPane `previewOf`).
-    const holder =
-      urlId && threadIdOf(urlId)
-        ? cawco.projects.find(
-            (one) => one.id === cawco.threadOf(urlId)?.projectId
-          )?.leadInstanceId
-        : urlId;
+    const holder = urlId;
     if (browser && holder && artifact) {
       detach(
         openArtifactIn(

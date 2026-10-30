@@ -389,17 +389,16 @@ export interface DecisionsDeps {
   tasks: (projectId: string) => Promise<DecidedTask[]>;
   /** The person's own words to a session, through the one send path, as the send `uuid`. */
   tell: (instance: InstanceRow, text: string, uuid: string) => void;
-  /** Whether Caw's turn is on a thread now. */
-  threadWorking: (threadId: string) => boolean;
-  /** Wakes the project's Caw with the person's words, in a new thread; its id. */
-  wakeCaw: (projectId: string, text: string) => Promise<string>;
+  /** The person's words to the project's conversation (caw.ts `tellYours`): its session, and the send's uuid. */
+  tellConversation: (
+    projectId: string,
+    text: string
+  ) => Promise<{ instanceId: string; send: string }>;
 }
 
 /** The record as written: what the hub reads back, with who it asked. */
 interface StoredRecord extends DecisionRecord {
-  /** The thread Caw was asked in, when Caw was asked: the ask's own thread. */
-  askedIn?: string | null;
-  /** The send that asked its session, when a session was asked. */
+  /** The send that asked its session, or the project's conversation. */
   askedSend?: string;
 }
 
@@ -646,16 +645,11 @@ export const createDecisions = (deps: DecisionsDeps) => {
   };
 
   /**
-   * Whether its Make tasks ask is in flight: Caw's turn on the thread it
-   * was asked in, or the session's send of it unread or its turn not ended.
-   * Never the asked session's other work.
+   * Whether its Make tasks ask is in flight: the asked session's send of it
+   * unread or its turn not ended. Never the asked session's other work.
    */
-  const making = (record: StoredRecord): boolean => {
-    if (record.askedIn) {
-      return deps.threadWorking(record.askedIn);
-    }
-    return !!record.askedSend && deps.sendInFlight(record.askedSend);
-  };
+  const making = (record: StoredRecord): boolean =>
+    !!record.askedSend && deps.sendInFlight(record.askedSend);
 
   /**
    * Where a page stands: decided from his Send of its picks (its record
@@ -865,7 +859,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
           ? prior.madeAt
           : new Date().toISOString(),
       askedOf: prior?.askedOf ?? null,
-      ...(prior?.askedIn ? { askedIn: prior.askedIn } : {}),
       ...(prior?.askedSend ? { askedSend: prior.askedSend } : {}),
       cards,
     };
@@ -950,14 +943,14 @@ export const createDecisions = (deps: DecisionsDeps) => {
         deps.tell(to.instance, ask, record.askedSend ?? crypto.randomUUID());
         return null;
       }
-      const askedIn = await deps.wakeCaw(projectId, ask);
+      const { send } = await deps.tellConversation(projectId, ask);
       await deps.commit(
         projectId,
         {
           writes: [
             {
               path: recordPath(record.name),
-              content: recordText({ ...record, askedIn }),
+              content: recordText({ ...record, askedSend: send }),
             },
           ],
           deletes: [],
@@ -1123,7 +1116,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
       const said = words
         ? noted
         : `I'm done picking on the decision page “${read.title}” (decisions/${name}/).`;
-      const threadId = await deps.wakeCaw(
+      const { instanceId } = await deps.tellConversation(
         projectId,
         `${said}\n\n${handedToCaw(read)}`
       );
@@ -1131,7 +1124,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
         deps.stampSent(read.artifactId);
       }
       deps.changed(projectId);
-      return { to: "caw", threadId };
+      return { to: "caw", instanceId };
     },
 
     /**
@@ -1184,11 +1177,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
             `This project has no decision page ${name}.`
           );
         }
-        const {
-          askedIn: _askedInBefore,
-          askedSend: _askedSendBefore,
-          ...picks
-        } = now;
+        const { askedSend: _askedSendBefore, ...picks } = now;
         const record: StoredRecord = { ...picks, ...asked };
         await deps.commit(
           projectId,

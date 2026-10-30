@@ -266,11 +266,6 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         let face: SessionStatusView.Face = {
             // An artifact's own tab is no session: at rest, unless the hub is out of reach.
             if ArtifactTabs.artifactId(of: id) != nil { return context.hub.state == .connected ? .idle : .unreachable }
-            // A thread is what its status says: Caw working on it, waiting on you in it, or at rest.
-            if ThreadTabs.isThread(id) {
-                if context.hub.state != .connected { return .unreachable }
-                return activity == .blocked ? .needsYou : activity == .working ? .working : .idle
-            }
             guard let row else { return .stored }
             if row.isFailed { return .failed }
             if row.isStale || context.hub.state != .connected { return .unreachable }
@@ -282,9 +277,9 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             return .idle
         }()
         let status = face == .idle || face == .stored ? "" : face.label
-        // A thread or an artifact has no session details behind its tab.
+        // An artifact has no session details behind its tab.
         return PaneTab(id: id, label: label, face: face, needs: activity == .blocked,
-                       noDetails: ThreadTabs.isThread(id) || ArtifactTabs.artifactId(of: id) != nil, status: status)
+                       noDetails: ArtifactTabs.artifactId(of: id) != nil, status: status)
     }
 
     // MARK: Panes
@@ -322,11 +317,6 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         if var pane = controller as? ComposerPane {
             pane.composerInset = dock.inset
             pane.onTranscriptShare = { [weak self] in self?.shareChanged() }
-        }
-        // A thread's composer comes when Caw can start, and goes when he cannot.
-        (controller as? ThreadViewController)?.onComposes = { [weak self, weak controller] in
-            guard let self, let thread = controller as? ThreadViewController, shownId == thread.viewId else { return }
-            dock.bind(panes.binding(for: thread.viewId), direction: 0, landing: 0)
         }
         layoutPanes()
     }
@@ -484,8 +474,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     /// a tab's long press, its pull down and VoiceOver all offer (`TabAction`).
     private func actions(for id: String) -> [[TabAction]] {
         var first: [TabAction] = []
-        // A Caw thread and an artifact's own tab are no harness session: no details, no continuing.
-        if !ThreadTabs.isThread(id), ArtifactTabs.artifactId(of: id) == nil {
+        // An artifact's own tab is no harness session: no details, no continuing.
+        if ArtifactTabs.artifactId(of: id) == nil {
             first.append(TabAction(title: Words.Transcript.sessionDetails) { [weak self] in
                 guard let self else { return }
                 tabDetails.pin(id, tab: strip.tabView(id))

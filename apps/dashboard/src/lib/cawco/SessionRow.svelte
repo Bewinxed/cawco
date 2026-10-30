@@ -127,8 +127,6 @@
     sessionAct,
   } from "./session-acts.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
-  import ThreadMenu from "./ThreadMenu.svelte";
-  import { isThreadTab } from "./thread-tabs";
   import AccountDot from "./usage/AccountDot.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
 
@@ -197,8 +195,6 @@
   );
 
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
-  /** The row is a thread with the project's Caw (thread-tabs.ts), not a session. */
-  const thread = $derived(instance ? isThreadTab(instance.id) : false);
   const status = $derived(sessionStatus(instance, done));
   /** Stopped at its account's limit: the error its meta line says (switch.svelte.ts `stopWords`). */
   const stopped = $derived(instance ? stopWords(instance) : undefined);
@@ -207,11 +203,10 @@
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
   /**
-   * Peek rises at the row's end: a live session's, not a thread's (a
-   * thread is opened: it is the conversation itself), and only in the wide
+   * Peek rises at the row's end: a live session's, and only in the wide
    * layout (peek.svelte.ts).
    */
-  const peeks = $derived(peek && instance !== null && !thread);
+  const peeks = $derived(peek && instance !== null);
   const showPeek = $derived(peeks && peekable());
   /**
    * The trailing column's width (the wider of the age and the count), on its
@@ -628,17 +623,7 @@
   </div>
 {/snippet}
 
-{#if thread && instance?.projectId}
-  <!-- A thread takes no session commands: its own menu opens it and
-       archives it (ThreadMenu). -->
-  <ThreadMenu id={instance.id} projectId={instance.projectId}>
-    {#snippet children(trigger)}
-      {@render body(trigger)}
-    {/snippet}
-  </ThreadMenu>
-{:else if thread}
-  {@render body({})}
-{:else if instance && isSessionRow(instance)}
+{#if instance && isSessionRow(instance)}
   <LiveSessionMenu asker={asks} {instance} {onarchive} onrename={editTitle}>
     {#snippet children(trigger)}
       {@render body(trigger)}

@@ -52,11 +52,11 @@ import {
   type InstanceRow,
   PROJECT_LANDS,
   PROJECT_SETTING_KINDS,
+  type ProjectNote,
   type ProjectSettingChange,
   projectSettingsWords,
   projectSettingWords,
   publishedWords,
-  type ThreadNote,
 } from "@cawco/core";
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
 import { unhandled } from "@cawco/core/unhandled";
@@ -293,7 +293,7 @@ export interface ProjectSettingsDeps {
    */
   readonly edit: (projectId: string, change: ProjectEdit) => Promise<unknown>;
   /** Notes what happened in the thread Caw's turn answers (caw.ts `askThread`, `notice`). */
-  readonly note: (actor: InstanceRow, note: ThreadNote) => void;
+  readonly note: (actor: InstanceRow, note: ProjectNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;
 }
@@ -399,7 +399,7 @@ export const createProjectSettings = ({
     asked: AskedChange
   ): ProjectSettingChange => {
     const on = asked.caw ?? refuse(projectSettingsWords.needs.caw);
-    if (on === project.caw) {
+    if (on === project.eventsOn) {
       refuse(projectSettingsWords.already.caw(on));
     }
     return { kind: "set_caw", caw: on };
@@ -605,7 +605,7 @@ export const createProjectSettings = ({
     const now = await dispatch.view(project.id);
     return projectSettingsWords.read({
       name: project.name,
-      caw: project.caw,
+      caw: project.eventsOn,
       dispatch: now.dispatch,
       maxAttempts: now.maxAttempts,
       reviewLimit: now.reviewLimit,

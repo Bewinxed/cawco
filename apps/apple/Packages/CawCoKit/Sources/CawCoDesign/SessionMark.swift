@@ -71,8 +71,8 @@ public final class SessionMarkView: UIView {
     private var over = false
     private var hue = UIColor.clear
 
-    /// Who stands in the sprite's place, when the row is someone's own (a
-    /// Caw thread's: Caw at what the thread is doing, SessionMark.svelte):
+    /// Who stands in the sprite's place, when the row is someone's own (Caw
+    /// at what he is doing, SessionMark.svelte):
     /// the tile keeps its face, and this is drawn on it.
     public var portrait: UIView? {
         didSet {

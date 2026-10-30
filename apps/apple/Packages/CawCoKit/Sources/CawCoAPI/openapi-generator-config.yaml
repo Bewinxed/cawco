@@ -43,7 +43,6 @@ typeOverrides:
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawRunningKind: OpenEnums.CawRunningKind
-    CawViewMode: OpenEnums.CawViewMode
     ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
@@ -73,6 +72,7 @@ typeOverrides:
     EffortLevel: OpenEnums.EffortLevel
     ErrorFrameLastErrorKind: OpenEnums.ErrorFrameLastErrorKind
     ErrorSaidKind: OpenEnums.ErrorSaidKind
+    EventRouteViewMode: OpenEnums.EventRouteViewMode
     Exclude: OpenEnums.Exclude
     Exclude_1: OpenEnums.Exclude_1
     ExternalActorKind: OpenEnums.ExternalActorKind
@@ -198,7 +198,6 @@ typeOverrides:
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
-    ThreadStatus: OpenEnums.ThreadStatus
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState
     Tracker: OpenEnums.Tracker
@@ -208,7 +207,6 @@ typeOverrides:
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
     TrashKind: OpenEnums.TrashKind
     Verb: OpenEnums.Verb
-    ViewAskedCaw: OpenEnums.ViewAskedCaw
     WaitKind: OpenEnums.WaitKind
     WaitReason: OpenEnums.WaitReason
     WaitingKind: OpenEnums.WaitingKind

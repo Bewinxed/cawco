@@ -5,12 +5,11 @@
  * whose pin card asks in place) draws marks too.
  */
 
-import type { ThreadStatus } from "@cawco/core/threads";
+import type { CawStatus } from "@cawco/core/project-conversation";
 import { commonWords } from "@cawco/core/words/common";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
 import { type BoardRow, cawco, isFailed, isStale } from "./client.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
-import { isThreadTab } from "./thread-tabs";
 
 const STATUS_WORD: Record<MarkStatus, string> = {
   live: "Working",
@@ -82,6 +81,19 @@ export function sessionStatus(
   return done ? "done" : "idle";
 }
 
-/** A thread's mark is Caw at what the thread is doing (thread-tabs.ts); null for any other session. */
-export const cawOf = (id: string): ThreadStatus | null =>
-  isThreadTab(id) ? (cawco.threadOf(id)?.status ?? "ready") : null;
+/**
+ * A project's conversation's mark is Caw at what it is doing: the session
+ * its project's row names (`conversationInstanceId`), which the project's
+ * events reach. Null for any other session, which is never named Caw.
+ */
+export const cawOf = (id: string): CawStatus | null => {
+  const projectId = cawco.rowOf(id)?.projectId;
+  if (!projectId || cawco.project(projectId)?.conversationInstanceId !== id) {
+    return null;
+  }
+  const activity = cawco.activityOf(id);
+  if (activity === "blocked") {
+    return "needs-you";
+  }
+  return activity === "working" ? "working" : "ready";
+};

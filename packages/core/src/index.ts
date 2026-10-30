@@ -83,6 +83,8 @@ export * from "./permission-presentation";
 // A session's plan: its steps, its spec, its task's to-dos, and their live frames.
 export * from "./plan";
 export * from "./presence-onboarding";
+// A project's conversation: its view, the hub's notes in it, its spend.
+export * from "./project-conversation";
 // A project's landing gate as its gate.md declares it: the hub reads it, Settings draws it.
 export type {
   DeclaredStep,
@@ -122,8 +124,6 @@ export * from "./tailnet-https";
 export * from "./task-history";
 // A project's tasks and stages as the hub answers them and the dashboard reads them.
 export * from "./task-views";
-// A project's threads with its Caw: rows, messages and their frames.
-export * from "./threads";
 // The tool catalog and its status/policy shapes (NEW.md §10).
 export * from "./tools";
 // Where a project's tasks live (Projects spec D2): CawCo's files, GitHub Issues or Linear.
@@ -209,6 +209,7 @@ export * from "./words/presence";
 export * from "./words/presence-log";
 export * from "./words/preview";
 export * from "./words/project";
+export * from "./words/project-conversation";
 export * from "./words/project-settings";
 export * from "./words/routines";
 export * from "./words/rules";
@@ -222,7 +223,6 @@ export * from "./words/spend";
 export * from "./words/tailnet";
 export * from "./words/task-links";
 export * from "./words/task-review";
-export * from "./words/threads";
 export * from "./words/transcript";
 export * from "./words/updates";
 export * from "./words/views";

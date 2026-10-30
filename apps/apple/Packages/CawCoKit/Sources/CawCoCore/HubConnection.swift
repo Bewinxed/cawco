@@ -193,17 +193,16 @@ public final class HubConnection {
         fleet.byId[id] == nil ? needs.parked[id] ?? [] : []
     }
 
-    /// Where a row-less ask under `id` is drawn and answered: the Caw thread
-    /// it was made in (`thread:<id>`), else the session it was made in
-    /// (SessionPane.svelte `madeIn`). A pane opened on `id` moves there.
+    /// Where a row-less ask under `id` is drawn and answered: the session it
+    /// was made in (SessionPane.svelte `madeIn`). A pane opened on `id` moves there.
     public func askOrigin(_ id: String) -> String? {
-        rowlessAsks(id).lazy.compactMap { $0.threadId.map(ThreadTabs.tabId) ?? $0.originInstanceId }.first
+        rowlessAsks(id).lazy.compactMap(\.originInstanceId).first
     }
 
-    /// A row-less ask made in no thread and in no session the app draws: its
-    /// pane is that ask's card alone (SessionPane.svelte `askAlone`).
+    /// A row-less ask made in no session the app draws: its pane is that
+    /// ask's card alone (SessionPane.svelte `askAlone`).
     public func askAlone(_ id: String) -> Bool {
-        rowlessAsks(id).contains { $0.threadId == nil && $0.originInstanceId == nil }
+        rowlessAsks(id).contains { $0.originInstanceId == nil }
     }
     public private(set) var sessions: SessionsStore!
     /// The delegates' work items their parents' trays read.
@@ -214,10 +213,6 @@ public final class HubConnection {
     /// changed (`tasks.changed`), whoever changed them: what shows a
     /// project's tasks reads them again when it moves.
     public private(set) var tasksChanged: [String: Int] = [:]
-    /// A count per project that moves each time one of its Caw threads
-    /// changes (`thread.upsert`): Caw drafts a view in a thread, so the
-    /// project's views are read again when it moves, as the web's are.
-    public private(set) var threadsMoved: [String: Int] = [:]
     /// A count per project that moves each time its decision pages change
     /// (`decisions.changed`: one built, picked on or sent, its record
     /// written): the Decisions tab and its strip count read them again.
@@ -241,9 +236,9 @@ public final class HubConnection {
         starters["\(place.rawValue):\(projectId)"] ?? read ?? []
     }
 
-    /// Every project's threads with its Caw, and the messages of those opened here.
-    public private(set) var threads: ThreadsStore!
-    /// The plans followed beside the sessions streamed: a thread's lead's.
+    /// What only a project carries of its conversation (CawStore).
+    public private(set) var caw: CawStore!
+    /// The plans followed beside the sessions streamed.
     public let plans = PlanFollows()
     /// The "make this a project" offers standing on plain sessions.
     public let offers = ProjectOffers()
@@ -298,11 +293,7 @@ public final class HubConnection {
         sessions = SessionsStore(hub: self)
         configuration = FleetConfig(hub: self)
         workItems = WorkItemsStore(hub: self)
-        threads = ThreadsStore(hub: self)
-        threads.onThreads = { [weak self] in
-            guard let self else { return }
-            fleet.adopt(threads: Array(threads.byId.values))
-        }
+        caw = CawStore(hub: self)
         needs.sayEnd = { [weak self] ask, line in
             self?.sayAskEnd(ask.instanceId, ask, line)
         }
@@ -450,7 +441,6 @@ public final class HubConnection {
         restartDeadline?.cancel(); restartDeadline = nil
         sessions.reset()
         workItems.reset()
-        threads.reset()
         live = nil
         for waiter in waiters.values { waiter.resume(throwing: URLError(.cancelled)) }
         waiters = [:]
@@ -475,7 +465,6 @@ public final class HubConnection {
         needs.parked = [:]
         sessions.reset()
         workItems.reset()
-        threads.reset()
     }
 
     private func start() {
@@ -1084,8 +1073,6 @@ public final class HubConnection {
         // What the socket says about asks from here on is newer than the read.
         let adopt = await Self.readFleet(client, asksFrom: needs.heardMark)
         guard adopt(self) else { return false }
-        // Every project's threads, for the rail and the thread screens; frames keep them from here.
-        await threads.readAll()
         return true
     }
 
@@ -1583,9 +1570,6 @@ public final class HubConnection {
             fleet.adopt(spend: frame.spend)
             // The hub says this when an account's reading, sign-in or catalog moved.
             readAccounts()
-        case let .threadUpsert(thread):
-            threads.adopt(thread)
-            threadsMoved[thread.projectId, default: 0] += 1
         case let .preview(frame):
             previews.adopt(frame)
         case let .moves(jobs):

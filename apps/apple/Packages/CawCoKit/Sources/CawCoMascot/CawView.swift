@@ -60,7 +60,7 @@ public enum CawStatus: String, CaseIterable, Sendable {
 /// anywhere else. The status files draw nothing below the line: their body is behind the edge.
 /// Under Reduce Motion there is no peek: the status's file, behind the edge, fades in.
 ///
-/// The ledge files are two: `peek` (peer-over, a Caw thread's composer corner) and `climb`
+/// The ledge files are two: `peek` (peer-over, a composer's corner) and `climb`
 /// (climb-peer, the paywall's poster hero: he climbs up and peeks over the cards). Both rest on
 /// the same ledge line.
 ///

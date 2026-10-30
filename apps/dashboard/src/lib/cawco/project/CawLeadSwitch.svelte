@@ -1,15 +1,14 @@
 <script lang="ts">
   /**
-   * Caw's lead switch, the project's own (fable-lead-switch.md §1): one
-   * component wherever it stands, CawPanel (⋯ › Caw settings…) and the
-   * head's details tray (ProjectDetails), so its three ways off come with
-   * it. Off, he acts only when you write to him: no event wakes him
-   * (Caw on and off).
+   * Whether the project's events reach a conversation, the project's own
+   * switch (fable-lead-switch.md §1): one component wherever it stands,
+   * CawPanel (⋯ › Caw settings…) and the head's details tray
+   * (ProjectDetails), so its ways off come with it. Off, no event starts or
+   * reaches a conversation.
    *
-   * Turning him off (The Stay In Context Rule): nothing he started runs,
-   * and it just flips. Only his own turn an event started is in flight: one
-   * line under the switch asks whether it finishes or stops, a light choice
-   * about one thing. Sessions he started still run: the stop tray
+   * Turning it off (The Stay In Context Rule): nothing the project's
+   * conversation started runs, and it just flips. Sessions it started still
+   * run: the stop tray
    * (StopTray, its Caw-off job in stop-work.svelte.ts) unfolds under the
    * switch and names each one first, as a forget does: "Let them finish",
    * or stop them and he is off. Put away part-way, the stops go on and are
@@ -19,13 +18,9 @@
    * now. The hub's answer is the switch's state: a refusal leaves it where
    * the hub says Caw is, its words under it.
    */
-  import type { CawInitiated, CawRunning } from "@cawco/core/threads";
-  import { onProjectStop } from "#lib/cawco/client.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import StopParked from "#lib/cawco/StopParked.svelte";
   import StopTray from "#lib/cawco/StopTray.svelte";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import type { CawLead } from "./caw-lead.svelte";
 
@@ -33,7 +28,7 @@
     lead,
     projectId,
     projectName,
-    label = "Caw lead",
+    label = "Events reach a conversation",
   }: {
     lead: CawLead;
     projectId: string;
@@ -44,9 +39,6 @@
 
   const on = $derived(lead.on ?? false);
 
-  let turnLine = $state<CawRunning | null>(null);
-  /** The turn's stop was asked: the line waits for the hub's word that it stopped. */
-  let cutting = $state(false);
   /** The switch's place: the Caw-off tray stands here when asked here. */
   const at = $derived(cawOffAt(projectId));
   /** What he started still runs: the tray's job, asked or parked. */
@@ -61,11 +53,6 @@
   );
 
   async function flip(next: boolean): Promise<void> {
-    if (turnLine) {
-      // The switch again while the line asks: nothing changes.
-      turnLine = null;
-      return;
-    }
     if (offJob?.open && ["none", "list", "armed"].includes(offJob.phase)) {
       // The switch again while the tray asks: nothing changes.
       stopWork.dismiss(offJob);
@@ -79,36 +66,8 @@
     const running = lead.view?.running ?? [];
     if (running.length === 0) {
       await lead.configure({ on: false });
-    } else if (running.every((one) => one.kind === "turn")) {
-      turnLine = running[0] ?? null;
     } else {
       stopWork.askCawOff({ id: projectId, name: projectName }, at, running);
-    }
-  }
-
-  /** His own turn finishes or stops as he turns off; a stop's line stays until it has. */
-  async function offWithTurn(initiated: CawInitiated): Promise<void> {
-    const turn = turnLine;
-    if (!turn) {
-      return;
-    }
-    if (initiated === "finish") {
-      await lead.configure({ on: false, initiated });
-      turnLine = null;
-      return;
-    }
-    cutting = true;
-    const unhear = onProjectStop((frame) => {
-      if (frame.instanceId === turn.id) {
-        unhear();
-        cutting = false;
-        turnLine = null;
-      }
-    });
-    await lead.configure({ on: false, initiated });
-    if (lead.refused) {
-      unhear();
-      cutting = false;
     }
   }
 </script>
@@ -116,38 +75,11 @@
 <label data-slot="lead-switch" class="flex flex-wrap items-center gap-space-2">
   <Switch
     data-caw-lead-switch
-    disabled={lead.moving || lead.on === null || cutting}
+    disabled={lead.moving || lead.on === null}
     bind:checked={() => on, (next) => flip(next)}
   />
   <span>{label}</span>
 </label>
-{#if turnLine}
-  <div
-    class="flex min-h-c-btn-h-sm flex-wrap items-center gap-space-2"
-    data-caw-turn-line
-    transition:unfold
-  >
-    <span class="type-meta min-w-0 shrink grow basis-full text-ink-muted"
-      >{turnLine.title ?? "Answering an event"}. Off, it can finish or stop now.</span
-    >
-    <Button
-      disabled={cutting || lead.moving}
-      label="Let him finish"
-      onclick={() => offWithTurn("finish")}
-      size="sm"
-      variant="outline"
-    />
-    <Button
-      disabled={lead.moving}
-      label="Stop now"
-      onclick={() => offWithTurn("stop")}
-      pending={cutting}
-      pendingLabel="Stopping…"
-      size="sm"
-      variant="outline"
-    />
-  </div>
-{/if}
 {#if offJob}
   {#if offJob.at === at}
     <StopTray job={offJob} />

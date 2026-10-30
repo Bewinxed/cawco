@@ -2,8 +2,7 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-/// A tab's screen that its group's one composer writes into: a session's,
-/// and a Caw thread's.
+/// A tab's screen that its group's one composer writes into: a session's.
 @MainActor
 protocol ComposerPane: UIViewController {
     var composerBinding: SessionComposerBinding { get }
@@ -35,11 +34,11 @@ final class PaneHost {
     var onOpen: (String) -> Void = { _ in }
     /// Session details' "Continue in new session…", when that flow exists.
     var continueHandler: ((String) -> Void)?
-    /// A thread's task card: the task's sheet over its project's page.
+    /// A task card: the task's sheet over its project's page.
     var onOpenTask: (_ projectId: String, _ taskId: String) -> Void = { _, _ in }
-    /// A thread's "Open the board": its project's page.
+    /// "Open the board": its project's page.
     var onOpenProject: (String) -> Void = { _ in }
-    /// A thread's "Check machines": the machines card, from the button.
+    /// "Check machines": the machines card, from the button.
     var onCheckMachines: (UIView) -> Void = { _ in }
 
     init(hub: HubConnection) {
@@ -60,15 +59,6 @@ final class PaneHost {
             tab.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
             tab.onNamed = { [weak self] name in self?.name(id, name) }
             made = tab
-        } else if ThreadTabs.isThread(id) {
-            let thread = ThreadViewController(hub: hub, id: id)
-            thread.onReturnToFleet = { [weak self, weak thread] in self?.onReturnToFleet(thread?.viewId ?? id) }
-            thread.onOpenSession = { [weak self] id in self?.onOpen(id) }
-            thread.onOpenTask = { [weak self] projectId, taskId in self?.onOpenTask(projectId, taskId) }
-            thread.onOpenProject = { [weak self] projectId in self?.onOpenProject(projectId) }
-            thread.onCheckMachines = { [weak self] source in self?.onCheckMachines(source) }
-            if let values = parked.removeValue(forKey: id) { thread.restoreValues(values) }
-            made = thread
         } else {
             let session = SessionViewController(hub: hub, id: id)
             session.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
@@ -134,8 +124,6 @@ final class PaneHost {
     func binding(for id: String?) -> SessionComposerBinding? {
         guard let id, !hub.fleet.moving(id) else { return nil }
         let screen = controller(for: id)
-        // A thread whose Caw cannot start now has no composer: a line says why in its place.
-        if let thread = screen as? ThreadViewController { return thread.composes ? thread.composerBinding : nil }
         return (screen as? SessionViewController)?.composerBinding
     }
 
@@ -178,8 +166,6 @@ final class PaneHost {
     /// transcript's, else its row's folder, else who asked what is parked
     /// on it (an ask no row stands behind: a memory proposal), else its id.
     func label(_ id: String) -> String {
-        // A thread not started yet (FolderMenu.svelte "New thread").
-        if ThreadTabs.mintedProject(of: id) != nil, hub.threads.thread(id) == nil { return "New thread" }
         // An artifact's own tab: its name once the hub has said it.
         if ArtifactTabs.artifactId(of: id) != nil { return names[id] ?? "Artifact" }
         let fleet = hub.fleet

@@ -51,7 +51,7 @@
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
-  import { cawco, requestView, threadsOf } from "#lib/cawco/client.svelte.js";
+  import { cawco, requestView } from "#lib/cawco/client.svelte.js";
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
@@ -60,10 +60,8 @@
     failureSentence,
     type HubRead,
     failureWords as message,
-    THREAD_SEND_UNREACHED,
     unreachable,
   } from "#lib/cawco/hub-read.js";
-  import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import {
     crossOut,
     dur,
@@ -538,7 +536,7 @@
   /**
    * A decision page opened on a phone puts Caw's sheet away, as his Close
    * does (DESIGN.md, The Work Outlives Its Surface Rule): the sheet leaves
-   * by its own exit, his thread keeps its place, and his seat brings it
+   * by its own exit, his conversation keeps its place, and his seat brings it
    * back over the page when the person asks. Only an opening moves it: his
    * panel reopened over the page stays.
    */
@@ -1236,24 +1234,20 @@
     viewDraft.focusWanted = true;
   }
   /**
-   * The view is asked for, as a thread tab sends (ThreadPane): a refusal
-   * puts the words back in the composer with the reason over them.
+   * The view is asked of the project's conversation (client `requestView`):
+   * a refusal puts the words back in the composer with the reason over them.
    */
-  /** The words a view ask that did not go through carried, and its id: the same words again are the same ask. */
-  let viewUnsent: SentWords | null = null;
   async function askView(text: string) {
     viewSending = true;
     viewRefused = "";
     viewAgain = false;
-    viewUnsent = idForWords(viewUnsent, text);
     try {
-      await requestView(projectId, text, viewUnsent.id);
-      viewUnsent = null;
+      await requestView(projectId, text);
       askOpen = false;
     } catch (error) {
       viewDraft.restore(text);
       viewAgain = unreachable(error);
-      viewRefused = viewAgain ? THREAD_SEND_UNREACHED : message(error);
+      viewRefused = message(error);
     } finally {
       viewSending = false;
     }
@@ -1288,13 +1282,13 @@
     });
   });
 
-  // Another hand flipped Caw (another dashboard, the app): the project row the
-  // hub's `projects.changed` brings says where he stands, which every switch
-  // on him reads; his view is read again for what only it carries (what he
-  // started that still runs, his turn's words).
+  // Another hand flipped the project's events (another dashboard, the app):
+  // the project row the hub's `projects.changed` brings says where they
+  // stand, which every switch reads; the view is read again for what only it
+  // carries (what the conversation started that still runs).
   let cawSeen: boolean | undefined;
   $effect(() => {
-    const on = project?.caw;
+    const on = project?.eventsOn;
     if (cawSeen !== undefined && on !== undefined && on !== cawSeen) {
       untrack(() => {
         if (!lead.moving) {
@@ -1355,22 +1349,15 @@
     return () => document.removeEventListener("visibilitychange", back);
   });
 
-  // Caw drafts a view in a thread; when a thread of the project moves, the
-  // views are read again, so a new draft arrives as a tab.
-  const threadsMoved = $derived(
-    Math.max(0, ...threadsOf(projectId).map((thread) => thread.lastAt))
-  );
-  let threadsSeen = 0;
+  // Caw drafts a view in a turn of the project's conversation; when that
+  // turn ends, the views are read again, so a new draft arrives as a tab.
+  let turnWas = false;
   $effect(() => {
-    const at = threadsMoved;
-    if (threadsSeen === 0) {
-      threadsSeen = at || 1;
-      return;
-    }
-    if (at > threadsSeen) {
-      threadsSeen = at;
+    const working = lead.status === "working";
+    if (turnWas && !working) {
       untrack(() => readViews());
     }
+    turnWas = working;
   });
 
   // A task that lands in a done stage: Caw says so for two breaths.
@@ -2209,7 +2196,7 @@
                 needs={needsYou.length}
                 needsOn={filtering}
                 onchoose={choose}
-                onnewsession={() => lead.newThread()}
+                onnewsession={() => lead.newConversation()}
                 ontoggleneeds={() => {
                   needsOnly = !filtering;
                 }}

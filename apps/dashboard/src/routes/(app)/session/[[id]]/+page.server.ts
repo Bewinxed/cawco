@@ -2,7 +2,6 @@ import type { TranscriptPage } from "@cawco/core/transcript-types";
 import type { ServerTail } from "#lib/cawco/client.svelte.js";
 import { hubFailure, machineAway } from "#lib/cawco/hub-read.js";
 import { transcriptUrl } from "#lib/cawco/links.js";
-import { isThreadTab } from "#lib/cawco/thread-tabs.js";
 import { FIRST_SCREEN_PAGE } from "#lib/config.js";
 import type { PageServerLoad } from "./$types";
 
@@ -44,9 +43,8 @@ export const load: PageServerLoad = async ({
   isDataRequest,
 }): Promise<{ tail: ServerTail | null }> => {
   const viewId = untrack(() => params.id);
-  // The board or a thread's tab: neither has a transcript page to read (a
-  // thread's messages are read by its pane).
-  if (!viewId || isThreadTab(viewId) || isDataRequest) {
+  // The board has no transcript page to read.
+  if (!viewId || isDataRequest) {
     return { tail: null };
   }
   const response = await fetch(

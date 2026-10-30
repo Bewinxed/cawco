@@ -132,7 +132,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   const sessionOfReceiver = (to: PlanReceiver): string | undefined =>
     to.kind === "session"
       ? to.instanceId
-      : (db.project(to.projectId)?.leadInstanceId ?? undefined);
+      : (db.project(to.projectId)?.conversationInstanceId ?? undefined);
 
   /**
    * The message that tells `to` of `rows`, each plan's changes under the
@@ -306,7 +306,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     const keys = [
       receiverKey({ kind: "session", instanceId }),
       ...(row?.projectId &&
-      db.project(row.projectId)?.leadInstanceId === instanceId
+      db.project(row.projectId)?.conversationInstanceId === instanceId
         ? [receiverKey({ kind: "caw", projectId: row.projectId })]
         : []),
     ];

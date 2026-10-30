@@ -252,14 +252,14 @@ export interface DispatchDeps {
 export interface DispatchView {
   /** What an attempt may spend where its task and its delegate call say nothing; null: no limit. */
   budget: WorkBudget | null;
+  /** The project's Caw session, once the hub has started one. */
+  conversationInstanceId: string | null;
   /** Whether the hub starts attempts at ready tasks on its own. */
   dispatch: boolean;
   /** The tasks it would start next, in order. */
   frontier: string[];
   /** Where an attempt lands when its task and type say nothing. */
   lands: LandsMode;
-  /** The project's Caw session, once the hub has started one. */
-  leadInstanceId: string | null;
   /** Attempts starting or running now. */
   live: number;
   maxAttempts: number;
@@ -637,7 +637,7 @@ const pauseOf = (
   if (!project.dispatch) {
     return "Dispatch is off: attempts start only when a session or you start them.";
   }
-  if (!project.caw) {
+  if (!project.eventsOn) {
     return "Caw is off, so the project has no lead to take the reports of the attempts the hub starts; they start only when a session or you start them.";
   }
   if (now.stagesProblems.length > 0) {
@@ -740,7 +740,7 @@ export const createDispatcher = ({
     by: Origin = "event"
   ): Promise<InstanceRow | undefined> => {
     const row =
-      by === "you" || project.caw
+      by === "you" || project.eventsOn
         ? await conversationFor(project.id, by)
         : undefined;
     return row && !parentProblem(row, project.id) ? row : undefined;
@@ -1015,7 +1015,7 @@ export const createDispatcher = ({
             checks: task.checks.length,
             fields: byId.get(task.id)?.fields ?? {},
           },
-          project.caw
+          project.eventsOn
         )
       )
       .map((task) => task.id);
@@ -1025,7 +1025,7 @@ export const createDispatcher = ({
     offLine(
       "ready",
       project.id,
-      `${project.caw ? "the lead's scores" : "with the lead off, a check must exist"}: ready ${ready.join(", ") || "none"}${waiting.length > 0 ? `; not ready ${waiting.join(", ")}` : ""}`
+      `${project.eventsOn ? "the lead's scores" : "with the lead off, a check must exist"}: ready ${ready.join(", ") || "none"}${waiting.length > 0 ? `; not ready ${waiting.join(", ")}` : ""}`
     );
     if (ready.length > 0) {
       offLine(
@@ -1372,7 +1372,7 @@ export const createDispatcher = ({
       budget: project.budget,
       dispatch: project.dispatch,
       lands: project.lands,
-      leadInstanceId: project.leadInstanceId,
+      conversationInstanceId: project.conversationInstanceId,
       maxAttempts: project.maxAttempts,
       reviewLimit: project.reviewLimit,
       runsOn: project.runsOn,
@@ -1400,7 +1400,7 @@ export const createDispatcher = ({
     { live: number; project: ProjectRow; ready: string[] } | undefined
   > => {
     const project = db.project(projectId);
-    if (!(project?.dispatch && project.caw)) {
+    if (!(project?.dispatch && project.eventsOn)) {
       return;
     }
     const view = await viewOf(project);
@@ -1711,7 +1711,7 @@ export const createDispatcher = ({
     const { runs } = stage?.hooks ?? {};
     if (!(
       stage?.kind === "active" &&
-      (runs || (held && project.dispatch && project.caw))
+      (runs || (held && project.dispatch && project.eventsOn))
     )) {
       return;
     }
@@ -1998,7 +1998,7 @@ export const createDispatcher = ({
         return "you";
       }
     }
-    if (db.project(projectId)?.caw) {
+    if (db.project(projectId)?.eventsOn) {
       offLine(
         "judged",
         projectId,
@@ -2266,7 +2266,7 @@ export const createDispatcher = ({
       lifetime.every(SAFETY_MS, () => {
         for (const project of db.listProjects()) {
           if (
-            (project.dispatch && project.caw) ||
+            (project.dispatch && project.eventsOn) ||
             db.queuedTaskStarts(project.id).length > 0
           ) {
             evaluate(project.id);

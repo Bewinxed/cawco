@@ -60,11 +60,9 @@ const ofArtifact = (id: string, artifact: string | undefined): string | null =>
 
 const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
   /**
-   * A session, delegate or Caw thread, by its full id, a
-   * short one or its handle (session-names.svelte.ts): a row of the
-   * instance index, else the session the hub's names hold. A thread is
-   * written by its own id (hub caw.ts) and listed by its tab's,
-   * `thread:<id>` (thread-tabs.ts).
+   * A session or delegate, by its full id, a short one or its handle
+   * (session-names.svelte.ts): a row of the instance index, else the
+   * session the hub's names hold.
    */
   session: {
     find: sessionNamed,

@@ -120,11 +120,9 @@ public extension ProjectTasks {
 }
 
 /// A project's routines page as its tab holds it (ViewRoutines.svelte): read
-/// on arrival and on every reconnect, again when the project's threads move
-/// (a run notes its slot and its result in one) or the actions waiting on
-/// you change, when the app comes back, after each of its own row actions,
-/// and every few seconds while a run goes (a delegate's run notes it in no
-/// thread). Only the newest read's answer is kept.
+/// on arrival and on every reconnect, again when the actions waiting on you
+/// change, when the app comes back, after each of its own row actions, and
+/// every few seconds while a run goes. Only the newest read's answer is kept.
 @MainActor
 @Observable
 public final class ProjectRoutines {
@@ -152,9 +150,9 @@ public final class ProjectRoutines {
         watch()
     }
 
-    /// What moving means for the page: its threads, and the waiting actions' states.
+    /// What moving means for the page: the waiting actions' states.
     private var moved: String {
-        "\(hub.threadsMoved[projectId] ?? 0)|\(hub.fleet.actions.map { "\($0.id):\($0.state.rawValue)" }.joined(separator: ","))"
+        hub.fleet.actions.map { "\($0.id):\($0.state.rawValue)" }.joined(separator: ",")
     }
 
     public func read() async {

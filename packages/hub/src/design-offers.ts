@@ -13,8 +13,8 @@
  *   cannot be read now is asked again on the next such move);
  * - no task already builds one, and the project was never offered.
  *
- * Then one card in the thread that named the task (else a thread of its
- * own): "This work needs a design system. Build one from <sources>?", with
+ * Then one card in the project's conversation: "This work needs a design
+ * system. Build one from <sources>?", with
  * Build and Not now. The `design_offers` row is written as he asks, so he
  * asks once; Not now is recorded there and he never asks again unless the
  * person does. Build files "Build the design system" in the project's first
@@ -27,8 +27,8 @@ import { join } from "node:path";
 import type {
   CommandResult,
   DesignOfferState,
+  ProjectNote,
   StagesTemplate,
-  ThreadNote,
 } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
@@ -54,12 +54,8 @@ export interface DesignOffersDeps {
   db: DbShape;
   /** The person said Not now: the project's starters stop suggesting one (project-starters.ts). */
   declined: (projectId: string) => void;
-  /** A note in a project's thread that wakes no one; answers the thread it went to (caw.ts `notice`). */
-  notice: (
-    projectId: string,
-    threadId: string | null,
-    note: ThreadNote
-  ) => string;
+  /** A note to the person in the project's conversation that wakes no one (caw.ts `notice`). */
+  notice: (projectId: string, note: ProjectNote) => void;
   online: (machineId: string) => boolean;
   run: (
     machineId: string,
@@ -200,7 +196,7 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
 
   const offer = async (projectId: string, taskId: string): Promise<void> => {
     const project = db.project(projectId);
-    if (!project?.caw || db.designOffers.of(projectId)) {
+    if (!project?.eventsOn || db.designOffers.of(projectId)) {
       return;
     }
     const task = await tasks.get(projectId, taskId);
@@ -216,15 +212,11 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
     const line = `This work needs a design system. Build one${sources.length ? ` from ${listed(sources)}` : ""}?`;
     // One project is looked at once at a time (`looking`), and the row was
     // absent above: the card and its row go together.
-    const threadId = deps.notice(
-      projectId,
-      db.threadOfTask(projectId, task.id)?.id ?? null,
-      {
-        title: `Design system · ${line}`,
-        event: { kind: "design-offer", projectId, sources, taskId: task.id },
-      }
-    );
-    db.designOffers.offer({ projectId, taskId: task.id, threadId });
+    deps.notice(projectId, {
+      title: `Design system · ${line}`,
+      event: { kind: "design-offer", projectId, sources, taskId: task.id },
+    });
+    db.designOffers.offer({ projectId, taskId: task.id });
   };
 
   const consider = (projectId: string, taskId: string): void => {

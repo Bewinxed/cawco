@@ -6,8 +6,7 @@
   /**
    * What a composer stands over the transcript's foot, in px: `stack`, the
    * panel with the tray row and what stands on it, or the grown ask when it
-   * reaches higher; `perch`, how far Caw perched on the pill rises over its
-   * top (0 with no perch, or while an ask has it stepped aside); `parked`,
+   * reaches higher; `parked`,
    * what stands higher than the panel and its tray row (0 with nothing).
    * What floats out of the composer (the tray's shelf and panel, the `/`
    * and `@` menu, the recall wheel) is in none of them: a layer over the
@@ -15,7 +14,6 @@
    */
   export interface ComposerFoot {
     parked: number;
-    perch: number;
     stack: number;
   }
 
@@ -24,7 +22,7 @@
    * waiting: the composer grows into it until it is answered or withdrawn.
    */
   export interface ComposerAsk {
-    /** Who asks, as the conversation names its agent ("Caw" in a thread). */
+    /** Who asks, as the conversation names its agent ("Caw" in a project's conversation). */
     asker: string;
     /** How many more asks wait behind this one. */
     more: number;
@@ -155,7 +153,6 @@
     trayRows = [],
     showing = "",
     ask = null,
-    perch,
     planRing,
     onfoot,
     placeholder,
@@ -234,11 +231,6 @@
     showing?: string;
     /** The ask parked on this conversation, which the composer grows into; none with none. */
     ask?: ComposerAsk | null;
-    /**
-     * What stands on the pill's top-leading corner, its box's foot on the
-     * pill's top edge: a project's Caw peeking over the composer.
-     */
-    perch?: Snippet;
     /**
      * How far the conversation's plan has got, as the control that opens it
      * (PlanRing), at the tray row's trailing end; none while it has no plan.
@@ -340,7 +332,6 @@
   $effect(() => {
     onfoot?.({
       stack: standing,
-      perch: perch && !askRaised ? perchHeight : 0,
       parked: standing - panel - lift,
     });
   });
@@ -376,14 +367,6 @@
    * measured, not the viewport: a narrow pane on a wide screen is narrow.
    */
   let hint = $state(untrack(() => HINT_SHORT));
-  /**
-   * How far the perch stands above the pill: the parked cards stand clear of
-   * it, above. Read as it mounts, and a change in the next frame (frameSize).
-   */
-  let perchHeight = $state(0);
-  const measurePerch = frameSize<HTMLElement>((node) => {
-    perchHeight = node.clientHeight;
-  });
   const fitHint = (node: HTMLElement) => {
     const probe = document.createElement("span");
     probe.setAttribute("aria-hidden", "true");
@@ -2691,7 +2674,7 @@
    * card: the shape the recall wheel and a queued edit grow (grown.ts), its
    * sides straight and its top solid, since an ask has no rows leaning back
    * and no oldest row fading out. What stands over the pill (the delegate
-   * tray, the plan's ring, the suggestion chips, an offer, a perch) steps
+   * tray, the plan's ring, the suggestion chips, an offer) steps
    * aside while it is up, so nothing covers it, and so do the pill's own
    * controls and the attachments: the only controls in the composer are the
    * ask's. The card stands on the shell's foot, over the pill, so no empty
@@ -3149,8 +3132,8 @@
 <!-- What steps aside while an ask holds the composer comes back at once and
      fades in (transition-fade-show). While the composer is grown into an
      ask, everything in it that does not act on the ask steps aside: the
-     offer column, the tray row with its chips and the plan's ring, a perch,
-     the attachments, and the pill's own controls. They fade out and are
+     offer column, the tray row with its chips and the plan's ring, the
+     attachments, and the pill's own controls. They fade out and are
      gone, out of the tab order with them (transition-fade-hide), and come
      back the same way as the ask folds. A minimized question's bar takes
      the tray row: the tray and the plan's ring step aside under it and come
@@ -3167,13 +3150,11 @@
   data-asking={askRaised || undefined}
   data-drawing={canvasUp || undefined}
   data-minimized={minimized || undefined}
-  data-perched={!!perch || undefined}
   data-flush={flush || undefined}
   class="group/dock not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
   data-keeps-draft
   data-safe-bottom
   bind:this={dockEl}
-  style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
   style:--dock-foot={flush
     ? undefined
     : "calc(var(--space-4) + var(--safe-bottom))"}
@@ -3207,7 +3188,7 @@
          the desktop's step off the panel. -->
     <div
       data-slot="prompts"
-      class="grow shrink basis-0 min-h-0 w-c-composer-w flex flex-col justify-end pointer-events-none transition-fade-show group-data-perched/dock:pb-(--perch-rise) group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
+      class="grow shrink basis-0 min-h-0 w-c-composer-w flex flex-col justify-end pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
       inert={askRaised}
       bind:this={offers}
       {@attach reflow({ on: ["data-open", "data-railed"] })}
@@ -3629,19 +3610,6 @@
         style:--cin-pad="var(--c-composer-inset)"
         style:--cin-ctl="var(--c-composer-field)"
       >
-        {#if perch}
-          <!-- On the pill's top-leading corner, its foot on the pill's top
-               edge: what stands there (a project's Caw) peeks over the
-               composer and takes no pointer. -->
-          <div
-            data-slot="perch"
-            aria-hidden="true"
-            class="absolute bottom-full start-space-3 pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide"
-            {@attach measurePerch}
-          >
-            {@render perch()}
-          </div>
-        {/if}
         {#if menuOpen}
           <!-- Above the input, not over it: the sentence being written stays legible
            while its next word is being chosen. -->

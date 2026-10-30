@@ -83,7 +83,6 @@ export interface JevTasksDeps {
     | "getJevSettings"
     | "getOpenRouterConnection"
     | "projectAttempts"
-    | "threadOfTask"
   >;
   readonly dispatcher: Pick<Dispatcher, "retryFor" | "startFor">;
   /**

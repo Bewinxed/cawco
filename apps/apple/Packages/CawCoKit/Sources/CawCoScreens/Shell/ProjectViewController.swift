@@ -420,7 +420,10 @@ final class ProjectViewController: ObservedViewController {
         }
         routinesPane = RoutinesPane(hub: context.hub, projectId: projectId, blocks: blocks)
         routinesPane.onChange = { [weak self] in self?.requestRefresh() }
-        routinesPane.openThread = { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) }
+        routinesPane.newConversation = { [weak self] words in
+            guard let self else { return }
+            context.startConversation(projectId, words)
+        }
         routinesPane.openSession = { [weak self] id in self?.context.openSession(id) }
         routinesPane.viewItems = { [weak self] in self?.viewItems(on: .routines) ?? [:] }
         routinesPane.isHidden = true
@@ -521,13 +524,13 @@ final class ProjectViewController: ObservedViewController {
     }
 
     /// Caw's face, and his words in the place line's stead while he has
-    /// something to say: what his session is doing, his question as a way
-    /// to its thread (ProjectHead.svelte). His view is read on arrival, on
-    /// each connection, and as a turn begins.
+    /// something to say: what the conversation is doing, its question as a
+    /// way to it (ProjectHead.svelte). His view is read on arrival, on each
+    /// connection, and as a turn begins.
     private func showCaw() {
         let hub = context.hub
-        let working = lead.view?.leadInstanceId.flatMap { hub.fleet.activityPulse($0)?.activity } == .working
-        let on = "\(hub.state == .connected)|\(working)|\(hub.threadsMoved[projectId] ?? 0)"
+        let working = lead.conversationId.flatMap { hub.fleet.activityPulse($0)?.activity } == .working
+        let on = "\(hub.state == .connected)|\(working)"
         if hub.state == .connected, on != leadReadOn {
             leadReadOn = on
             Task { [lead] in await lead.read() }
@@ -537,17 +540,27 @@ final class ProjectViewController: ObservedViewController {
         placeLine = placeLine ?? place.superview
         placeLine?.isHidden = words != nil
         cawWords.isHidden = words == nil
-        let ink = words?.threadId != nil ? Palette.linkInk : Palette.inkMuted
+        let ink = words?.opens != nil ? Palette.linkInk : Palette.inkMuted
         cawWords.configuration?.attributedTitle = AttributedString(words?.text ?? "", attributes: TypeScale.typeLabel.container(color: ink))
-        cawWords.isEnabled = words?.threadId != nil
+        cawWords.isEnabled = words?.opens != nil
     }
 
     /// His panel over the page from whichever seat stands (CawFloat): the
-    /// head's, or his 80pt one over an empty tab; a starter's words in his field.
+    /// head's, or his 80pt one over an empty tab. A starter's words start a
+    /// new conversation instead: the New Session form at the project's
+    /// checkout, the words in it, nothing sent.
     private func openCaw(from source: UIView? = nil, ask: String? = nil) {
         guard let project else { return }
-        let panel = ProjectCawPanel(lead: lead, hub: context.hub, projectName: project.name, ask: ask,
-                                    openThread: { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) })
+        if let ask {
+            context.startConversation(projectId, ask)
+            return
+        }
+        let panel = ProjectCawPanel(lead: lead, hub: context.hub, projectName: project.name,
+                                    openSession: { [weak self] id in self?.context.openSession(id) },
+                                    newConversation: { [weak self] words in
+                                        guard let self else { return }
+                                        context.startConversation(projectId, words)
+                                    })
         KitPopover.present(panel, from: source ?? seat, in: self, align: .start)
     }
 
@@ -660,10 +673,10 @@ final class ProjectViewController: ObservedViewController {
     /// You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it.
     private var canTalk: Bool { lead.view != nil && lead.view?.problem == nil }
 
-    /// His question, as a link: its thread, the card on its composer.
+    /// His question, as a link: its conversation, the card on its composer.
     private func openAsk() {
-        guard let threadId = lead.words?.threadId else { return }
-        context.openSession(ThreadTabs.tabId(threadId))
+        guard let opens = lead.words?.opens else { return }
+        context.openSession(opens)
     }
 
     private func showNotices(_ project: ProjectRow) {
@@ -929,8 +942,7 @@ final class ProjectViewController: ObservedViewController {
     }
 
     /// A file of the project's folder a view links to (the project page's
-    /// `?file=`), read as it is on the hub, in the sheet a Caw reply's chip
-    /// opens (ThreadViewController `openFile`).
+    /// `?file=`), read as it is on the hub, in its sheet.
     private func openFile(_ path: String) {
         let sheet = FolderFileController(hub: context.hub, projectId: projectId, path: path)
         present(HouseSheetController(sheet, title: path, scroller: sheet.scroll), animated: true)

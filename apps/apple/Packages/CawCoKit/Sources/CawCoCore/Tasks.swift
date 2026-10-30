@@ -65,7 +65,7 @@ public struct SessionPlan: Sendable, Equatable {
 }
 
 /// The plans this device follows (client.svelte.ts `watchPlan`, core
-/// plan.ts): a session's screen, its peek, a thread showing its lead's.
+/// plan.ts): a session's screen and its peek.
 /// `plan.follow` names them, the hub answers each new one with its
 /// `plan.snapshot` (what `GET /api/instances/:id/plan` reads), then
 /// `plan.delta`s, RFC 6902 patches applied in sequence; a gap asks it

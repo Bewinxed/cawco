@@ -755,12 +755,6 @@ export async function jevStarters(
         },
       ])
     ),
-    threads: Object.fromEntries(
-      inputs.threads.map((thread) => [
-        thread.id,
-        { title: thread.title, last_line: thread.last },
-      ])
-    ),
     repository: {
       branch: inputs.branch,
       commits: inputs.commits,

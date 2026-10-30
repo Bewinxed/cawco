@@ -11,8 +11,8 @@
  * read, so the next page is asked from before it; any other filter lists what
  * matches it, newest moved first. A query is needed only when nothing narrows
  * the set. `around` reads a hit's neighbouring turns
- * from its machine's transcript index (agent search/index.ts `turns`) or its
- * thread, so reading a hit needs no second tool. The index, never the
+ * from its machine's transcript index (agent search/index.ts `turns`), so
+ * reading a hit needs no second tool. The index, never the
  * session's stored transcript: compaction and account moves drop turns from
  * there, and a hit find found must show its words.
  *
@@ -72,7 +72,7 @@ import {
   FindRefusal,
   type HeldMoment,
 } from "./find";
-import { byId, HANDLE_MIN, handleId, isHandle } from "./handles";
+import { byId, handleId, isHandle } from "./handles";
 import { boardTitle } from "./labels";
 import { tool } from "./mcp-tool";
 import { findWords } from "./presenters/find";
@@ -114,21 +114,19 @@ const STALE_MS = 5 * 60_000;
  */
 const ANSWER_MAX_CHARS = 60_000;
 
-const BY = ["person", "agent", "report", "caw"] as const;
+const BY = ["person", "agent", "report"] as const;
 type By = (typeof BY)[number];
 /** The engine's word for each `by` (find.ts `AUTHOR_OF`): `person` is its `me`. */
 const AUTHOR: Record<By, MomentAuthor> = {
   person: "owner",
   agent: "agent",
   report: "report",
-  caw: "caw",
 };
 /** Who said a moment, in the agent's words. */
 const WHO: Record<MomentAuthor, string> = {
   owner: "person",
   agent: "agent",
   report: "report",
-  caw: "caw",
   injected: "handed in",
 };
 
@@ -239,21 +237,9 @@ export interface FindToolDeps {
   projects: () => { id: string; name: string }[];
   /** Every harness session id a held session went by, its current one first. */
   sessionIds: (instanceId: string) => string[];
-  /** A thread, by id: its title and project. */
-  thread: (id: string) => { projectId: string; title: string } | undefined;
-  /** A thread's messages, oldest first. */
-  threadMessages: (threadId: string) => {
-    at: Date;
-    author: string;
-    body: string;
-    id: string;
-    noteTitle: string | null;
-  }[];
-  /** The ids of the threads whose id begins with `prefix`. */
-  threadsByPrefix: (prefix: string) => string[];
 }
 
-/** One turn of a conversation or thread, as an answer shows it. */
+/** One turn of a conversation, as an answer shows it. */
 interface Turn {
   here?: true;
   ref: string;
@@ -334,7 +320,6 @@ const whereOf = (result: FindResult): string => {
       break;
     case "project":
     case "routine":
-    case "thread":
       break;
   }
   return parts.join(" · ");
@@ -355,15 +340,12 @@ const summaryOf = (result: FindResult): string | null => {
     case "machine":
     case "project":
     case "task":
-    case "thread":
       return null;
   }
 };
 
 const momentsOf = (result: FindResult): FindMoment[] =>
-  result.kind === "conversation" || result.kind === "thread"
-    ? result.moments
-    : [];
+  result.kind === "conversation" ? result.moments : [];
 
 /** A moment as a detailed hit lists it. */
 const momentLine = (result: FindResult, moment: FindMoment) => ({
@@ -390,8 +372,6 @@ const detailOf = (result: FindResult) => {
         ...(result.parent ? { parent: named(result.parent) } : {}),
         ...(result.task ? { task: named(result.task) } : {}),
       };
-    case "thread":
-      return { state: result.state };
     case "task":
       return {
         stage: result.stage,
@@ -417,10 +397,6 @@ const detailOf = (result: FindResult) => {
       return {};
   }
 };
-
-/** Whether `id` is `docId`, or begins with it when `docId` is a handle (six or more characters). */
-const names = (id: string | undefined, docId: string): boolean =>
-  id === docId || (docId.length >= HANDLE_MIN && !!id?.startsWith(docId));
 
 /** Turns read around a centre, and whether the conversation goes on either side. */
 interface TurnsRead {
@@ -514,43 +490,6 @@ interface Conversation {
   sessions: string[];
 }
 
-/** Who a thread message is, in the agent's words. */
-const THREAD_WHO: Record<string, string> = {
-  you: "person",
-  caw: "caw",
-  event: "event",
-};
-
-/** A thread's messages around `messageId`, its latest without one. */
-const threadTurnsOf = (
-  messages: ReturnType<FindToolDeps["threadMessages"]>,
-  threadId: string,
-  messageId: string | undefined,
-  side: number
-): TurnsRead | NoTurns => {
-  const centre = messageId
-    ? messages.findIndex((message) => names(message.id, messageId))
-    : messages.length - 1;
-  if (centre < 0) {
-    return {
-      why: `${messageId} is no message of thread ${threadId}; pass "${threadId}" for its latest`,
-    };
-  }
-  const from = Math.max(0, centre - side);
-  const to = Math.min(messages.length, centre + side + 1);
-  return {
-    turns: messages.slice(from, to).map((message, offset): Turn => ({
-      who: THREAD_WHO[message.author] ?? message.author,
-      when: whenOf(message.at.getTime()),
-      text: [message.noteTitle, message.body].filter(Boolean).join(": "),
-      ref: `${threadId}${REF_MARK}${message.id}`,
-      ...(from + offset === centre ? { here: true as const } : {}),
-    })),
-    earlier: from > 0,
-    later: to < messages.length,
-  };
-};
-
 /** A turn's time (`when`, the minute in UTC) as ms epoch; null for none. */
 const turnAt = (turn: Turn): number | null =>
   turn.when ? Date.parse(turn.when.replace(" ", "T")) : null;
@@ -643,7 +582,7 @@ const rendered = (
  * all, never a stop word alone), its matched tokens marked whole. The words
  * are the moment's `context` as its machine's index marked them (by its own
  * tokenizer), every query word it did not mark marked here, whole words
- * only (`withWords`: a thread's message, a kind word, a short last word),
+ * only (`withWords`: a kind word, a short last word),
  * read by the secret filter first; a moment that came without
  * them is its snippet, masked harder (`outOfSentenceRanges`: every
  * password-shaped word cut). The words around it go no further.
@@ -932,20 +871,6 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
-  /** A thread's messages around `messageId`, as an agent reads them ({@link told}). */
-  const threadTurns = (
-    threadId: string,
-    messageId: string | undefined,
-    side: number,
-    chars: number,
-    before?: number
-  ) =>
-    told(
-      threadTurnsOf(deps.threadMessages(threadId), threadId, messageId, side),
-      chars,
-      before
-    );
-
   const projectWords = (projectId: string | null | undefined) => {
     const project = deps.projects().find((each) => each.id === projectId);
     return project ? `project ${named(project)}` : null;
@@ -954,7 +879,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     deps.machines().find((each) => each.id === machineId)?.name;
 
   /**
-   * What `around` reads for an id: a session the hub holds, a thread, or a
+   * What `around` reads for an id: a session the hub holds, or a
    * session it never started (`<machine id>:<harness session id>`, as find
    * names one); undefined for anything else.
    */
@@ -978,19 +903,6 @@ export const createFindTool = (deps: FindToolDeps) => {
             side,
             chars
           ),
-      };
-    }
-    const thread = deps.thread(id);
-    if (thread) {
-      return {
-        header: {
-          kind: "thread",
-          id,
-          title: thread.title,
-          where: projectWords(thread.projectId) ?? "",
-        },
-        read: (centre: Centre, side: number, chars: number) =>
-          threadTurns(id, centre.docId, side, chars),
       };
     }
     const [machineId, sessionId, ...rest] = id.split(":");
@@ -1018,7 +930,7 @@ export const createFindTool = (deps: FindToolDeps) => {
   /**
    * The full id a hit's id or handle names, as every tool reads one
    * (handles.ts `byId`: a short id, a `name#` handle, a mention chip): a
-   * session's or a thread's; as given when none or several do.
+   * session's; as given when none or several do.
    */
   const wholeId = (asked: string): string => {
     if (deps.instance(asked) || !isHandle(asked)) {
@@ -1027,10 +939,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     const prefix = handleId(asked);
     const [one, ...more] = byId(
       asked,
-      [
-        ...deps.instancesByPrefix(prefix).map((row) => row.id),
-        ...deps.threadsByPrefix(prefix),
-      ],
+      deps.instancesByPrefix(prefix).map((row) => row.id),
       (id) => id
     );
     return one && more.length === 0 ? one : asked;
@@ -1051,7 +960,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     const target = targetOf(id);
     if (!target) {
       throw new FindToolRefusal(
-        `around "${ref}" names no session or thread: pass a conversation or thread hit's id or ref (tasks, artifacts and the rest have no turns; read them with their own tools). Example: {"around": "${id || "3f2c9a1e-…"}"}`
+        `around "${ref}" names no session: pass a conversation hit's id or ref (tasks, artifacts and the rest have no turns; read them with their own tools). Example: {"around": "${id || "3f2c9a1e-…"}"}`
       );
     }
     const read = await target.read(centre, side, chars);
@@ -1108,12 +1017,6 @@ export const createFindTool = (deps: FindToolDeps) => {
             : null,
           moments: await shownMoments(result.moments, words),
         };
-      case "thread":
-        return {
-          ...result,
-          title,
-          moments: await shownMoments(result.moments, words),
-        };
       case "commit":
       case "file":
         return { ...result, title, what: await redacted(result.what) };
@@ -1137,15 +1040,7 @@ export const createFindTool = (deps: FindToolDeps) => {
   const neighboursOf = async (result: FindResult, before?: number) => {
     const [best] = momentsOf(result);
     let read: TurnsRead | NoTurns | undefined;
-    if (best && result.kind === "thread") {
-      read = await threadTurns(
-        result.id,
-        best.docId,
-        1,
-        NEIGHBOUR_CHARS,
-        before
-      );
-    } else if (best && result.kind === "conversation") {
+    if (best && result.kind === "conversation") {
       read = await conversationTurns(
         conversationOf(result),
         { docId: best.docId, ...(best.at ? { at: best.at } : {}) },

@@ -28,7 +28,7 @@
  * lands (css-tricks, same page: "detect how much time has actually passed
  * between each frame").
  */
-import type { CawStatus } from "@cawco/core/threads";
+import type { CawStatus } from "@cawco/core/project-conversation";
 import { untrack } from "svelte";
 import needsYouStill from "#lib/assets/brand/tab-icon-needs-you.png";
 import needsYouWave from "#lib/assets/brand/tab-icon-needs-you-wave.png";

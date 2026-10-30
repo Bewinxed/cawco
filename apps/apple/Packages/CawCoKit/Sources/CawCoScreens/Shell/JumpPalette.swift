@@ -6,7 +6,7 @@ import OSLog
 import UIKit
 
 // Jump to (JumpPalette.svelte, find-names.svelte.ts, jump-search.svelte.ts):
-// one field over the fleet's projects, threads, machines, running and stored
+// one field over the fleet's projects, machines, running and stored
 // sessions, found by name at the hub (`GET /api/find`, the one ranking the
 // composer's `@` reads too), and the transcripts' full text under them,
 // scoped to what you or the agent wrote with `@me` / `@agent`.
@@ -14,7 +14,7 @@ import UIKit
 // MARK: Names
 
 /// Which group a row belongs to: its mark and its cap.
-enum JumpKind { case project, thread, machine, live, stored }
+enum JumpKind { case project, machine, live, stored }
 
 /// Where a row goes.
 enum JumpTarget {
@@ -42,7 +42,6 @@ struct JumpGroup {
 /// One thing the hub found by name, as much of it as a row reads.
 enum JumpFound {
     case project(id: String, title: String)
-    case thread(id: String, title: String, project: String?, lastActivity: Double?)
     case machine(id: String, title: String, online: Bool)
     case conversation(instanceId: String?, sessionId: String?, title: String, dir: String?, machineId: String, machineName: String, running: Bool)
 }
@@ -64,7 +63,7 @@ final class JumpNames {
 
     /// The groups, in order, and how many rows each shows with a query.
     static let groups: [(name: String, kind: JumpKind, cap: Int)] = [
-        ("Projects", .project, 8), ("Threads", .thread, 8), ("Machines", .machine, 8),
+        ("Projects", .project, 8), ("Machines", .machine, 8),
         ("Running sessions", .live, 10), ("Recent sessions", .stored, 16),
     ]
     /// The empty query is a preview, not a listing.
@@ -81,7 +80,7 @@ final class JumpNames {
         task?.cancel()
         task = Task { @MainActor [weak self, hub] in
             do {
-                let response = try await hub.api.search.find(.init(query: .init(q: words, limit: "50", kinds: "project,thread,machine,conversation",
+                let response = try await hub.api.search.find(.init(query: .init(q: words, limit: "50", kinds: "project,machine,conversation",
                                                                                 transcripts: .init(rawValue: "0"))))
                 guard !Task.isCancelled, let self else { return }
                 let body = try response.ok.body.json
@@ -95,11 +94,8 @@ final class JumpNames {
                                              dir: conversation.dir, machineId: conversation.machine.id, machineName: conversation.machine.name,
                                              running: running)
                     }
-                    if let thread = result.value2 {
-                        return .thread(id: thread.id, title: thread.title, project: thread.project?.name, lastActivity: thread.lastActivity)
-                    }
-                    if let project = result.value5 { return .project(id: project.id, title: project.title) }
-                    if let machine = result.value6 { return .machine(id: machine.id, title: machine.title, online: machine.online) }
+                    if let project = result.value4 { return .project(id: project.id, title: project.title) }
+                    if let machine = result.value5 { return .machine(id: machine.id, title: machine.title, online: machine.online) }
                     return nil
                 }
                 failure = nil
@@ -470,7 +466,6 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
             _ = search.failures
             _ = search.pending
             _ = hub.fleet.rows
-            _ = hub.fleet.threadRows
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -491,10 +486,6 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
             switch found {
             case let .project(id, title):
                 row = ("project:\(id)", .project, title, fleet.projects.first { $0.id == id }?.primaryPlace?.path ?? "", .project(id))
-            case let .thread(id, title, project, lastActivity):
-                let tab = ThreadTabs.tabId(id)
-                let when = Date(timeIntervalSince1970: (lastActivity ?? Date().timeIntervalSince1970 * 1000) / 1000).formatted(.relative(presentation: .named))
-                row = ("thread:\(id)", .thread, title, "\(project ?? "") · \(activity[home.activity(tab)] ?? "") · \(when)", .conversation(tab))
             case let .machine(id, title, online):
                 // A machine is offered to start a session on: only one that is up.
                 guard online else { return nil }
@@ -835,7 +826,6 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
     private static func mark(_ kind: JumpKind) -> Glyph {
         switch kind {
         case .project: .folder
-        case .thread: .chatRound
         case .machine: .monitor
         case .live: .cpu
         case .stored: .chat

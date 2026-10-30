@@ -58,7 +58,6 @@
   import MessageBody from "../MessageBody.svelte";
   import { newSession, startFork } from "../spawn/new-session.svelte";
   import Turn from "../turn/Turn.svelte";
-  import { useVoice } from "../turn/voice";
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
@@ -101,8 +100,6 @@
   } = $props();
 
   const kind = $derived(message.type);
-  /** Who answers here, when a pane says: what it draws under a turn. */
-  const voice = useVoice();
   /**
    * What the row offers. A queued message is edited in the composer, so it
    * offers Edit in place only where a composer is writing to its
@@ -1230,14 +1227,6 @@
   <Turn {grouped}>
     <Who {grouped} name={agentName} timestamp={message.timestamp} />
     <MessageBody source={message.content} />
-    {#if voice?.tasks && message.metadata?.tasks?.length}
-      <!-- The tasks the turn is about, under it (a project's Caw). -->
-      {@render voice.tasks(message.metadata.tasks, message.id)}
-    {/if}
-    {#if voice?.files && message.metadata?.files?.length}
-      <!-- The files of the project's folder the turn wrote (a project's Caw). -->
-      {@render voice.files(message.metadata.files, message.id)}
-    {/if}
   </Turn>
 {:else if kind === "thinking"}
   {#if message.content.trim()}

@@ -120,7 +120,7 @@ func epochMs(_ date: Date?, _ text: String?, _ number: Double? = nil) -> Double 
 
 extension Components.Schemas.InstanceRow {
     /// When the hub opened the row, ms epoch (0 when it never said).
-    var createdMs: Double { epochMs(createdAt?.value1, createdAt?.value2, createdAt?.value3) }
+    public var createdMs: Double { epochMs(createdAt?.value1, createdAt?.value2, createdAt?.value3) }
     /// When the hub last moved the row, ms epoch (0 when it never said).
     var updatedMs: Double { epochMs(updatedAt?.value1, updatedAt?.value2, updatedAt?.value3) }
     /// When the owner last looked at it or archived it, on any device, ms epoch.
@@ -236,8 +236,6 @@ enum Frame {
     case pulse(Components.Schemas.PulseFrame)
     /// A delegate's work item changed: its parent's tray reads it.
     case workItem(Components.Schemas.WorkItemSummary)
-    /// A Caw thread started, or its last message or status changed.
-    case threadUpsert(ThreadSummary)
     /// A session's preview opened, changed or closed.
     case preview(Components.Schemas.PreviewFrame)
     /// Every project move the hub is carrying, whole, on each change.
@@ -297,8 +295,6 @@ enum Frame {
             self = .pulse(frame)
         case .workItem(let frame):
             self = .workItem(frame.item)
-        case .thread_upsert(let frame):
-            self = .threadUpsert(frame.thread)
         case .preview(let frame):
             self = .preview(frame)
         case .moves(let frame):

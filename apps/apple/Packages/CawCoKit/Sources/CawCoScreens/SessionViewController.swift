@@ -1220,7 +1220,7 @@ final class SessionViewController: ObservedViewController {
             let card = offerCard ?? {
                 let made = ProjectOfferCard(hub: hub, instanceId: sessionId, arriving: shownOnce && composerBinding.composer != nil)
                 made.onHeight = { [weak self] in self?.composerBinding.composer?.onHeight() }
-                made.onSetupThread = { [weak self] id in self?.onOpenSession(ThreadTabs.tabId(id)) }
+                made.onConversation = { [weak self] id in self?.onOpenSession(id) }
                 made.onOpenProject = { [weak self] id in self?.onOpenProject(id) }
                 offerCard = made
                 return made

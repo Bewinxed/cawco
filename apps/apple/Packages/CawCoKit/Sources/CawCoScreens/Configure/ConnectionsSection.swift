@@ -279,7 +279,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
                 name = try await store.create(service, way: way, account: sent.account, url: sent.url)
             } catch {
                 form.pending = false
-                form.problem = ThreadsStore.failureWords(error)
+                form.problem = CawStore.failureWords(error)
                 return
             }
             form.pending = false
@@ -290,7 +290,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
                 if way.auth == "bearer" { try await store.setKey(name, key: key) }
                 if way.auth == "app", let app { try await store.setApp(name, app) }
             } catch {
-                problems[name] = ThreadsStore.failureWords(error)
+                problems[name] = CawStore.failureWords(error)
                 ready = false
             }
             if ready, Self.signsInByPage(service.service, way), let row = store.rows?.first(where: { $0.name == name }) {
@@ -320,7 +320,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
                 appForms[name] = nil
             } catch {
                 appForms[name]?.pending = false
-                problems[name] = ThreadsStore.failureWords(error)
+                problems[name] = CawStore.failureWords(error)
                 requestRefresh()
                 return
             }
@@ -343,7 +343,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
                 keyFields[name] = nil
             } catch {
                 keyFields[name]?.pending = false
-                problems[name] = ThreadsStore.failureWords(error)
+                problems[name] = CawStore.failureWords(error)
             }
             requestRefresh()
         }
@@ -369,7 +369,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
                 watch(name)
             } catch {
                 signing.remove(name)
-                problems[name] = ThreadsStore.failureWords(error)
+                problems[name] = CawStore.failureWords(error)
                 requestRefresh()
             }
         }
@@ -421,7 +421,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
             do {
                 try await store.setProjects(name, projects: next)
             } catch {
-                problems[name] = ThreadsStore.failureWords(error)
+                problems[name] = CawStore.failureWords(error)
             }
             requestRefresh()
         }
@@ -440,7 +440,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
                     await store.read()
                 }
             } catch {
-                problems[row.name] = ThreadsStore.failureWords(error)
+                problems[row.name] = CawStore.failureWords(error)
             }
             removing = nil
             await store.read()

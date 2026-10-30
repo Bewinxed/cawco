@@ -172,7 +172,7 @@
     "./words/spend": "./src/words/spend.ts",
     "./words/tailnet": "./src/words/tailnet.ts",
     "./words/task-review": "./src/words/task-review.ts",
-    "./words/threads": "./src/words/threads.ts",
+    "./words/project-conversation": "./src/words/project-conversation.ts",
     "./words/views": "./src/words/views.ts",
     "./words/workspace-needs": "./src/words/workspace-needs.ts",
     ".": {
@@ -223,7 +223,7 @@
     "./transcript-types": "./src/transcript-types.ts",
     "./actions": "./src/actions.ts",
     "./artifact-needs": "./src/artifact-needs.ts",
-    "./threads": "./src/threads.ts",
+    "./project-conversation": "./src/project-conversation.ts",
     "./routine-kinds": "./src/routine-kinds.ts",
     "./task-history": "./src/task-history.ts",
     "./work-items": "./src/work-items.ts",

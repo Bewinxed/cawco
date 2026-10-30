@@ -26,7 +26,7 @@ public final class SessionComposerBinding {
     /// The parked permission and question cards, in arrival order. The pane
     /// builds them; the composer stands them on its pill.
     public var prompts: [UIView] = []
-    /// What Attach offers; none, no Attach (a Caw thread takes words alone).
+    /// What Attach offers; none, no Attach (a surface that takes words alone).
     public var attachMenu: UIMenu?
     /// Who answers here, when it is not "the agent" (ComposerBinding
     /// `agentName`): the field is named for them.
@@ -108,7 +108,7 @@ public final class SessionComposerBinding {
     public var standsQuestion: Bool { questionCard != nil }
 
     /// The keys the first question card owns, the digits and Return: the
-    /// same in a session and in a Caw thread, each pane listing them among
+    /// same in every session, each pane listing them among
     /// its key commands with its own `action`, which calls `cardKey`, while
     /// nothing that takes text holds the keyboard (a field, or a preview's
     /// page). Never Escape: a question is put down only by its own Dismiss button.

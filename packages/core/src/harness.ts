@@ -526,6 +526,15 @@ export const SESSION_STOPPED = "session_stopped";
  */
 export const FLEET_WATCH = "fleet_watch";
 
+/**
+ * The hub's line in a project conversation's transcript for one of its
+ * notes to the person (hub caw.ts `notice`, core threads.ts `ProjectNote`):
+ * `content` is the note as JSON, drawn as a note titled by its title, its
+ * body under it, with what its event offers (a made routine's Keep, a design
+ * or LFS offer) under that. Never sent to the session.
+ */
+export const PROJECT_NOTE = "project_note";
+
 /** Which limit a keeper's child reached: its task limit, or its memory limit (an OOM kill inside it). */
 export type ChildLimit = "tasks" | "memory";
 
@@ -1169,17 +1178,13 @@ export interface SendRecord {
    * another's record ({@link SessionMessage.joined}) — that record's uuid.
    */
   harnessId?: string;
-  /**
-   * The session it went to. A send to a Caw thread ({@link threadId}) names
-   * the thread's view id (`thread:<id>`) until a lead session was handed it,
-   * and that lead's id from then on.
-   */
+  /** The session it went to. */
   instanceId: string;
   keepAlive?: true;
   mode: SendMode;
   /** No permission mode to wake its session on: the page asks for one, and it goes again ({@link ModeAsk}). */
   modeAsk?: ModeAsk;
-  /** ISO-8601: when its reader read it; absent until then. A thread's page places it here. */
+  /** ISO-8601: when its reader read it; absent until then. */
   readAt?: string;
   /** Why it failed, in the harness's words or the hub's. */
   reason?: string;
@@ -1193,8 +1198,6 @@ export interface SendRecord {
   /** The failed send this one was sent in place of. */
   replaces?: string;
   state: SendState;
-  /** The Caw thread it was written in (core threads.ts), when it was a thread's. */
-  threadId?: string;
   uuid: string;
 }
 

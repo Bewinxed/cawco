@@ -126,7 +126,7 @@ final class McpSectionController: ConfigSectionController {
             do {
                 try await FleetMcp.save(server.name, run: McpRun(server.config), enabled: on, projectId: server.projectId, hub: hub)
             } catch {
-                toggleFailed[server.name] = ThreadsStore.failureWords(error)
+                toggleFailed[server.name] = CawStore.failureWords(error)
             }
             busy.remove(server.name)
             requestRefresh()
@@ -145,7 +145,7 @@ final class McpSectionController: ConfigSectionController {
                     await hub.configuration.load()
                 }
             } catch {
-                Toast.error(ThreadsStore.failureWords(error), in: view.window)
+                Toast.error(CawStore.failureWords(error), in: view.window)
             }
             busy.remove(name)
             requestRefresh()
@@ -162,7 +162,7 @@ final class McpSectionController: ConfigSectionController {
                 // Each row's rollout chip says its sync, machine by machine.
                 try await FleetMcp.syncAll(hub: hub)
             } catch {
-                syncFault.text = ThreadsStore.failureWords(error)
+                syncFault.text = CawStore.failureWords(error)
                 syncFault.isHidden = false
             }
             syncing = false
@@ -271,7 +271,7 @@ final class McpSignInControl: UIStackView, ASWebAuthenticationPresentationContex
                 session.start()
             } catch {
                 waiting = false
-                fault.text = ThreadsStore.failureWords(error)
+                fault.text = CawStore.failureWords(error)
                 fault.isHidden = false
                 show(server)
             }
@@ -594,7 +594,7 @@ final class McpEditorController: ConfigEditorController, UITextFieldDelegate {
             draw()
             return true
         } catch {
-            refusal = ThreadsStore.failureWords(error)
+            refusal = CawStore.failureWords(error)
             draw()
             return false
         }
@@ -614,7 +614,7 @@ final class McpEditorController: ConfigEditorController, UITextFieldDelegate {
                     await hub.configuration.load()
                 }
             } catch {
-                refusal = ThreadsStore.failureWords(error)
+                refusal = CawStore.failureWords(error)
                 draw()
             }
         }

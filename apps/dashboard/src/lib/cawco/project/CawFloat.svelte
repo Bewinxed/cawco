@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Caw's panel (CawThread) on the project's page. One panel for the page,
+   * Caw's panel (ProjectConversation) on the project's page. One panel for the page,
    * opened from whichever seat stands (CawSeat, its `lead.anchor`), the
    * same whether the board is empty or full, so it never jumps between the
    * two and never covers a column of the board or the head.
@@ -30,8 +30,8 @@
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { appearOnMount } from "../motion/curves.svelte";
   import { stopWork } from "../stop-work.svelte";
-  import CawThread from "./CawThread.svelte";
   import type { CawLead } from "./caw-lead.svelte";
+  import ProjectConversation from "./ProjectConversation.svelte";
 
   let {
     lead,
@@ -101,7 +101,7 @@
          and flush on the screen's foot, its top corners rounded, its hairline
          along the top edge. The panel runs edge to edge inside it, from under
          the grabber to the foot, which keeps the safe area clear itself
-         (ThreadPane's docked composer). His head is the sheet's one header,
+         (SessionPane's docked composer). His head is the sheet's one header,
          his name right under the grabber and Close at its trailing edge. -->
     <Drawer.Content
       class="z-(--layer-sheet)"
@@ -110,11 +110,11 @@
       modal={false}
       ownHead
       pad="none"
-      title={`Caw, lead of ${projectName}`}
+      title={`Caw, ${projectName}`}
     >
       <div class="flex min-h-0 flex-auto flex-col overflow-hidden">
         {#key projectId}
-          <CawThread {lead} {projectId} {projectName} sheet />
+          <ProjectConversation {lead} {projectId} {projectName} sheet />
         {/key}
       </div>
     </Drawer.Content>
@@ -128,7 +128,7 @@
        no transition and the panel only faded (probe-kit ios-safari-motion,
        2026-10-23). -->
   <aside
-    aria-label="Caw, lead of {projectName}"
+    aria-label="Caw, {projectName}"
     class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
     data-caw-dock
     {@attach dock}
@@ -138,7 +138,7 @@
     })}
   >
     {#key projectId}
-      <CawThread {lead} {projectId} {projectName} />
+      <ProjectConversation {lead} {projectId} {projectName} />
     {/key}
   </aside>
 {/if}

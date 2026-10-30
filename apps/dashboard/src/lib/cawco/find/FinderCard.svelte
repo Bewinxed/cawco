@@ -14,9 +14,9 @@
    * shortcuts, shell-shortcut.ts): the finder's contents, hung where the
    * Jump palette hung, opening what it finds where the dashboard opens it.
    *
-   * - A session or a stored session: its conversation; a thread: its tab. At
-   *   a moment, `?at=<docId>` with the engine's own record id (a transcript
-   *   record's uuid, an opencode message id, a thread message's id), which
+   * - A session or a stored session: its conversation. At a moment,
+   *   `?at=<docId>` with the engine's own record id (a transcript record's
+   *   uuid, an opencode message id), which
    *   the transcript scrolls to and marks.
    * - A task: its project with its sheet open (`?task=`); a routine: open
    *   in its project's Routines tab (a fleet routine has none, and ↵
@@ -33,8 +33,7 @@
   import { showArtifact } from "../artifact-api";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
-  import { conversationHref } from "../links";
-  import { routineHref, threadHref } from "../thread-tabs";
+  import { conversationHref, routineHref } from "../links";
   import Finder from "./Finder.svelte";
   import type { FindMoment, FindResult, WaitingItem } from "./find-client";
   import type { MachineAct, Opening } from "./finder-state.svelte";
@@ -74,8 +73,6 @@
           ),
           moment
         );
-      case "thread":
-        return at(threadHref(result.id), moment);
       case "task":
         return result.project
           ? taskHref(result.project.id, result.taskId)

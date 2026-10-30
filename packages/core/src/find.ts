@@ -3,12 +3,12 @@
  * at the hub answers "find anything" and "name something while writing" from
  * the same ranking. A result is always one of the task model's objects, never
  * a transcript line: a conversation (with the moments in it that matched), a
- * thread, a task, a routine, a project, a machine, an artifact, a decision, a
- * commit or a file.
+ * task, a routine, a project, a machine, an artifact, a decision, a commit or
+ * a file.
  */
 
 import type { DocAuthor } from "@cawco/jsonl-parser";
-import type { CawStatus, ThreadStatus } from "./threads";
+import type { CawStatus } from "./project-conversation";
 import type { StageKind } from "./views";
 
 // The index's own words (jsonl-parser text.ts `DocAuthor`); an `Extract` of its
@@ -145,7 +145,6 @@ export type TranscriptTurns =
 /** Every kind of thing a find answers with. */
 export const FIND_KINDS = [
   "conversation",
-  "thread",
   "task",
   "routine",
   "project",
@@ -181,21 +180,18 @@ export type FindField =
   | "path"
   | "transcript";
 
-/**
- * Who said a moment: a transcript's author, or `caw`, a project's Caw in one
- * of his threads (a thread's own messages are kept at the hub).
- */
-export type MomentAuthor = TranscriptAuthor | "caw";
+/** Who said a moment: a transcript's author. */
+export type MomentAuthor = TranscriptAuthor;
 
 /** Who said it, as `GET /api/find`'s `by` names it: `me` is the owner's own words. */
-export type FindBy = "me" | "agent" | "report" | "caw";
+export type FindBy = "me" | "agent" | "report";
 
-/** A moment inside a conversation or thread: a jump target, and why it matched. */
+/** A moment inside a conversation: a jump target, and why it matched. */
 export interface FindMoment {
   /** When it was said, ms epoch; null when the transcript kept no time. */
   at: number | null;
   author: MomentAuthor;
-  /** The record to open at: a transcript's record (uuid, opencode message id), or a thread message's id. */
+  /** The record to open at: a transcript's record (uuid, opencode message id). */
   docId: string;
   /** The matching words, terms between 「 and 」. */
   excerpt: string;
@@ -236,12 +232,11 @@ export interface FindSettings {
 interface FindBase {
   /**
    * What a mention of it carries, which the hub resolves to exactly it:
-   * `<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the
-   * hostname for a machine, `tsk-142` for a task, the id for anything else.
+   * `<dir>#<id8>` for a conversation, the hostname for a machine, `tsk-142` for a task, the id for anything else.
    * Null for what nothing can name (a conversation the hub never started).
    */
   handle: string | null;
-  /** The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path. */
+  /** The object's own id: an instance id, `project:tsk-142`, a sha, a path. */
   id: string;
   /** When it last moved, ms epoch; null when nothing says. */
   lastActivity: number | null;
@@ -299,20 +294,6 @@ export interface FindConversation extends FindBase {
   task: { id: string; taskId: string; title: string } | null;
 }
 
-export interface FindThread extends FindBase {
-  /**
-   * Where its board row places it: its project's primary checkout, else its
-   * first place, else its folder on the hub (`projects/<id>`), as the
-   * dashboard's thread row has it: what its mark's hue is seeded from.
-   */
-  cwd: string;
-  kind: "thread";
-  /** Its best messages that matched, best first: present when its words did. */
-  moments: FindMoment[];
-  /** Caw on it now: working, waiting on you, or ready. */
-  state: ThreadStatus;
-}
-
 export interface FindTask extends FindBase {
   kind: "task";
   stage: string;
@@ -330,8 +311,6 @@ export interface FindRoutine extends FindBase {
   lastOutcome: string | null;
   /** Its next run, ms epoch. */
   nextRun: number;
-  /** The thread its runs are noted in, where it opens; null before its first note. */
-  threadId: string | null;
 }
 
 export interface FindProject extends FindBase {
@@ -371,7 +350,6 @@ export interface FindChange extends FindBase {
 
 export type FindResult =
   | FindConversation
-  | FindThread
   | FindTask
   | FindRoutine
   | FindProject

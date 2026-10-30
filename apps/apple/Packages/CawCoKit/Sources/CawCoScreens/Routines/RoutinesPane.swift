@@ -9,10 +9,11 @@ import UIKit
 /// person's arrangement, beside any custom view placed here; each headed
 /// with its count and the needs-you mark when something in it waits on you.
 /// Side by side on a wide screen, stacked on a phone. With no routine yet it
-/// offers to start one: starters over the Composer to Caw, whose words open
-/// a thread with him. Held as a skeleton until the hub's first read.
+/// offers to start one: starters over the Composer to Caw, whose words start
+/// a new conversation in the project. Held as a skeleton until the hub's first read.
 final class RoutinesPane: UIView {
-    var openThread: (String) -> Void = { _ in }
+    /// A new conversation in the project on these words: the New Session form at its checkout.
+    var newConversation: (String) -> Void = { _ in }
     /// A session by its id: a conversation run's.
     var openSession: (String) -> Void = { _ in }
     /// The custom views placed on this page, as blocks, by block id (B3e).
@@ -107,15 +108,13 @@ final class RoutinesPane: UIView {
                 }
             }
         }
-        ledger.openThread = { [weak self] id in self?.openThread(id) }
         ledger.openSession = { [weak self] id in self?.openSession(id) }
-        // His words open a thread with him in the project, and the page goes there.
-        ask.submit = { [weak self] text, id in
+        // His words start a new conversation in the project: the New Session
+        // form at its checkout, the words in it.
+        ask.submit = { [weak self] text in
             guard let self else { return }
-            _ = id
-            let viewId = hub.threads.start(projectId: projectId, text: text)
             asking = false
-            openThread(ThreadTabs.threadId(of: viewId) ?? viewId)
+            newConversation(text)
         }
         newRoutine = KitButton.make(Words.Routines.newRoutine, variant: .outline, height: .sm) { [weak self] in
             guard let self else { return }

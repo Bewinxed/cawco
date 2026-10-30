@@ -1,13 +1,13 @@
 <script lang="ts">
   /**
    * Under the note that a folder was made a repository with files left out
-   * for their size (core ThreadEvent `repo`'s `lfsOffer`): the offer of Git
+   * for their size (core ProjectNoteEvent `repo`'s `lfsOffer`): the offer of Git
    * LFS for them, a row per pattern with its count and size, and Track with
    * LFS and Not now while it stands, then what was answered, read from the
    * hub as it is now (`/api/lfs-offers/:id`). Nothing is tracked before
    * Track.
    */
-  import type { LfsOfferState } from "@cawco/core/threads";
+  import type { LfsOfferState } from "@cawco/core/project-conversation";
   import { lfsWords } from "@cawco/core/words/lfs";
   import { untrack } from "svelte";
   import { answerLfsOffer, readLfsOffer } from "#lib/cawco/client.svelte.js";

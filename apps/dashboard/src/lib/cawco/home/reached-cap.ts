@@ -3,7 +3,7 @@
  * day. What Needs you's budget row draws in its stories and the address
  * previews.
  */
-import type { ProjectCap } from "@cawco/core/threads";
+import type { ProjectCap } from "@cawco/core/project-conversation";
 import { HOUR_MS } from "@cawco/core/time";
 
 export const reachedCap = (): ProjectCap => ({

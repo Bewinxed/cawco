@@ -9,7 +9,7 @@
  * built in-process (hub-in-process.ts) at the newest published nightly (or
  * `--at <ref>`), the schema a real hub upgrades from, seeded through the
  * hub's Db with many machines, projects, sessions (live, ended, failed,
- * delegates), sends, tasks, threads, workspaces and work items. Every value
+ * delegates), sends, tasks, workspaces and work items. Every value
  * is made up here, so nothing in it needs sanitizing: no person's words, no
  * secret, no path off a real machine.
  *
@@ -136,8 +136,8 @@ function seedSessions(db: HubDb, projects: string[]): Seeded[] {
   return sessions;
 }
 
-/** Each project's tasks and its threads with Caw. */
-function seedTasksAndThreads(db: HubDb, projects: string[]): void {
+/** Each project's tasks. */
+function seedTasks(db: HubDb, projects: string[]): void {
   for (const projectId of projects) {
     db.putTaskIndex(
       Array.from({ length: 18 }, (_, t) => ({
@@ -164,21 +164,6 @@ function seedTasksAndThreads(db: HubDb, projects: string[]): void {
         updatedAt: new Date(Date.UTC(2026, 9, 2) + t * HOUR_MS),
       }))
     );
-    for (let t = 0; t < 4; t += 1) {
-      const { thread } = db.createThread({
-        id: crypto.randomUUID(),
-        projectId,
-        title: pick(WORDS),
-        first: { author: "you", body: pick(WORDS) },
-      });
-      for (let m = 0; m < 10; m += 1) {
-        db.addThreadMessage({
-          threadId: thread.id,
-          author: m % 2 ? "you" : "caw",
-          body: pick(WORDS),
-        });
-      }
-    }
   }
 }
 
@@ -214,7 +199,7 @@ async function seed(dbPath: string, home: string): Promise<void> {
   const { db, lifetime } = await hubInProcess(dbPath, home);
   const projects = seedProjects(db);
   const sessions = seedSessions(db, projects);
-  seedTasksAndThreads(db, projects);
+  seedTasks(db, projects);
   seedWorkspaces(db, sessions);
   lifetime.close();
 }

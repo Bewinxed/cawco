@@ -51,7 +51,7 @@ const SPACES = /\s+/gu;
 
 /**
  * What the recognizer reads for a moment: the words around its excerpt
- * (`HeldMoment.context`, the machine's or a thread message's whole), so a
+ * (`HeldMoment.context`, the machine's whole), so a
  * password typed in prose is told by its sentence even when the word that
  * tells it stands outside the excerpt; the excerpt alone when it carries
  * none, or its words are not found in them.
@@ -95,7 +95,7 @@ const saidOf = (result: FindResult): Said[] => {
       });
     }
   }
-  if (result.kind === "conversation" || result.kind === "thread") {
+  if (result.kind === "conversation") {
     result.moments.forEach((moment, index) => {
       said.push(momentSaid(moment, index));
     });
@@ -137,7 +137,7 @@ const marked = (
     }
   });
   const named = Object.keys(secrets).length > 0 ? { secrets } : {};
-  if (result.kind !== "conversation" && result.kind !== "thread") {
+  if (result.kind !== "conversation") {
     return { ...result, ...named };
   }
   const withSpans = result.moments.map((held, index): FindMoment => {
@@ -162,7 +162,7 @@ export const forScreens = (
     : {
         ...answer,
         results: answer.results.map((result) =>
-          result.kind === "conversation" || result.kind === "thread"
+          result.kind === "conversation"
             ? { ...result, moments: result.moments.map(bare) }
             : result
         ),

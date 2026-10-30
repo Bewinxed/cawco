@@ -92,10 +92,8 @@ public struct PushNote: Sendable {
         let instanceId = fields["instanceId"]
         switch kind {
         case "ask":
-            // Caw's ask opens the thread it was made in, its card on the composer (push.ts `threadId`).
-            if let threadId = fields["threadId"], !threadId.isEmpty { return .session(ThreadTabs.tabId(threadId)) }
-            // Else where it was made: the session whose pane draws it (a
-            // memory curator run's proposal), else its own.
+            // Where it was made: the session whose pane draws it (a memory
+            // curator run's proposal), else its own.
             if let origin = fields["originInstanceId"], !origin.isEmpty { return .session(origin) }
             if let instanceId, !instanceId.isEmpty { return .session(instanceId) }
             return .board

@@ -120,7 +120,7 @@ final class MemorySectionController: ConfigSectionController {
                     await hub.configuration.load()
                 }
             } catch {
-                Toast.error(ThreadsStore.failureWords(error), in: view.window)
+                Toast.error(CawStore.failureWords(error), in: view.window)
             }
             busy.remove(path)
             requestRefresh()
@@ -223,7 +223,7 @@ final class NewMemoryController: KitPopoverController {
                     failure.text = Words.Memory.writtenElsewhere(path: wanted)
                 }
             } catch {
-                failure.text = ThreadsStore.failureWords(error)
+                failure.text = CawStore.failureWords(error)
             }
             busy = false
             failure.isHidden = false

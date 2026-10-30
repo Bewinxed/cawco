@@ -106,7 +106,7 @@ import {
   type NeutralMessage,
   type NeutralOrigin,
   type PermissionResult,
-  type ThreadNote,
+  type ProjectNote,
 } from "@cawco/core";
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
@@ -266,12 +266,12 @@ class MemoryRefusal extends StatusRefusal {}
 
 const refuse = refuser(MemoryRefusal);
 
-/** Your answer to a proposal for `paths`, as its note in Caw's thread: `sha` is your commit, null when you declined; it links the first file. */
+/** Your answer to a proposal for `paths`, as its note in the project's conversation: `sha` is your commit, null when you declined; it links the first file. */
 const answeredNote = (
   paths: string[],
   sha: string | null,
   result: PermissionResult
-): ThreadNote => {
+): ProjectNote => {
   const path = paths[0] ?? "";
   const named = paths.join(", ");
   return sha === null
@@ -822,8 +822,6 @@ export interface Proposal {
   projectId: string;
   /** The proposing session. */
   session: string;
-  /** Caw's thread it was asked in; none for the curator's, which is its session's. */
-  threadId?: string;
   time: string;
   /** The `memory_propose` call that made it (Claude Code's `_meta`): where it is drawn. */
   toolUseId?: string;
@@ -1731,18 +1729,12 @@ export interface MemoryDeps {
   >;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
-  /** Notes a line in a project's thread, else its newest (caw.ts `notice`); wakes no model. */
-  readonly notice: (
-    projectId: string,
-    threadId: string | null,
-    note: ThreadNote
-  ) => void;
+  /** A note to the person in the project's conversation (caw.ts `notice`); wakes no model. */
+  readonly notice: (projectId: string, note: ProjectNote) => void;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   readonly park: (envelope: Envelope) => void;
   /** Takes a settled ask off the pending ledger. */
   readonly settle: (requestId: string) => void;
-  /** The thread a project's Caw's turn answers (caw.ts `askThread`); undefined for any other session. */
-  readonly threadOf: (actor: InstanceRow) => string | undefined;
   readonly watch: TurnWatch;
 }
 
@@ -1753,7 +1745,6 @@ export const createMemory = ({
   notice,
   park,
   settle,
-  threadOf,
   watch,
 }: MemoryDeps) => {
   /** Open proposals, by id: the project each is in. */
@@ -2615,13 +2606,9 @@ export const createMemory = ({
       projectId: proposal.projectId,
       proposer: `${proposal.by} · ${projectName}`,
       raisedAt: new Date(proposal.time).getTime(),
-      // Where it was made: Caw's thread, or the curator run's session. One
-      // Caw proposed before proposals kept their thread has neither, nor do
-      // Jev's sort, the archive and a withdrawal: their pane is the card alone.
-      ...(proposal.threadId ? { threadId: proposal.threadId } : {}),
-      ...(proposal.by === CURATOR_NAME
-        ? { originInstanceId: proposal.session }
-        : {}),
+      // Where it was made: the proposing session. Jev's sort, the archive and
+      // a withdrawal have none: their pane is the card alone.
+      ...(proposal.session ? { originInstanceId: proposal.session } : {}),
       ...(proposal.toolUseId ? { toolUseId: proposal.toolUseId } : {}),
     },
   });
@@ -2751,25 +2738,19 @@ export const createMemory = ({
       notes,
       curatorRun
     );
-    const [head] = (await folderHistory(projectId, "", 1)).commits;
-    const at = new Date();
-    const threadId = curatorRun ? undefined : threadOf(actor);
+    const { at, opened } = await openProposal(projectId, files);
     const proposal: Proposal = {
-      id: idAt("p", at),
-      projectId,
-      files,
-      base: head?.sha ?? "",
+      ...opened,
       notes,
       why,
       by: curatorRun ? CURATOR_NAME : boardTitle(actor),
       session: actor.id,
       time: at.toISOString(),
-      ...(threadId ? { threadId } : {}),
       ...(toolUseId ? { toolUseId } : {}),
     };
     if (!(curatorRun || asked.ask)) {
       const sha = await apply(proposal, { name: proposal.by }, false);
-      notice(projectId, threadId ?? null, {
+      notice(projectId, {
         title: `${proposal.by} wrote ${pathsOf(proposal)}`,
         body: `Committed as ${proposal.by} ${sha.slice(0, 9)}.\n\nWhy: ${why}`,
         event: { kind: "file", what: "wrote", path: paths[0] ?? "", sha },
@@ -2778,6 +2759,16 @@ export const createMemory = ({
     }
     await keep(proposal, project);
     return { id: proposal.id, paths, notes, waiting: WAITING };
+  };
+
+  /** A new proposal's own facts: its id, made now, its project, its files and the folder commit it is based on. */
+  const openProposal = async (projectId: string, files: Proposal["files"]) => {
+    const [head] = (await folderHistory(projectId, "", 1)).commits;
+    const at = new Date();
+    return {
+      at,
+      opened: { id: idAt("p", at), projectId, files, base: head?.sha ?? "" },
+    };
   };
 
   /** A proposal kept as its file, then parked for the person where it was made. */
@@ -2826,14 +2817,11 @@ export const createMemory = ({
       refuse(409, `${path} already says exactly that; nothing to change.`);
     }
     const name = path.slice(DELEGATES_DIR.length, -".md".length);
-    const [head] = (await folderHistory(projectId, "", 1)).commits;
-    const at = new Date();
-    const threadId = threadOf(actor);
+    const { at, opened } = await openProposal(projectId, [
+      { path, before, content },
+    ]);
     const proposal: Proposal = {
-      id: idAt("p", at),
-      projectId,
-      files: [{ path, before, content }],
-      base: head?.sha ?? "",
+      ...opened,
       notes: [],
       why: before
         ? `a change to the delegate type ${name}`
@@ -2841,7 +2829,6 @@ export const createMemory = ({
       by: boardTitle(actor),
       session: actor.id,
       time: at.toISOString(),
-      ...(threadId ? { threadId } : {}),
       ...(toolUseId ? { toolUseId } : {}),
     };
     await keep(proposal, project);
@@ -3163,13 +3150,9 @@ export const createMemory = ({
       folderChanged(projectId);
       return { withdrawn: id, sha: done.sha, retires: 0, keeps: 0 };
     }
-    const [head] = (await folderHistory(projectId, "", 1)).commits;
-    const at = new Date();
+    const { at, opened } = await openProposal(projectId, files);
     const proposal: Proposal = {
-      id: idAt("p", at),
-      projectId,
-      files,
-      base: head?.sha ?? "",
+      ...opened,
       notes: [],
       withdraws: id,
       why: `withdraw ${id}: ${retired} fact${retired === 1 ? "" : "s"} resting on it alone move${retired === 1 ? "s" : ""} to ${KNOWLEDGE_ARCHIVE}/, ${trimmed} keep${trimmed === 1 ? "s" : ""} ${trimmed === 1 ? "its" : "their"} other sources`,
@@ -3618,18 +3601,15 @@ export const createMemory = ({
         } else {
           await reject(proposal, result.message.trim());
         }
-        // Caw's thread hears it, where he asked.
-        if (proposal.threadId) {
-          notice(
-            projectId,
-            proposal.threadId,
-            answeredNote(
-              proposal.files.map((file) => file.path),
-              approved ? sha : null,
-              result
-            )
-          );
-        }
+        // The project's conversation keeps your answer as a note.
+        notice(
+          projectId,
+          answeredNote(
+            proposal.files.map((file) => file.path),
+            approved ? sha : null,
+            result
+          )
+        );
       }
       open.delete(requestId);
       settle(requestId);
@@ -3719,7 +3699,7 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
 const memoryAnswer = refusalAnswer(MemoryRefusal, refused);
 
 /**
- * The person's own memory acts outside a Caw thread: "Make a note" straight
+ * The person's own memory acts outside a conversation: "Make a note" straight
  * into AGENTS.md, and withdrawing a note, which proposes retiring the facts
  * that rest on it alone in the same card.
  */
@@ -3750,6 +3730,3 @@ export const memoryRoutes = (memory: Memory) =>
         }
       }
     );
-
-/** What opens a Caw thread message that is the person's note, not words to Caw. */
-export const MAKE_A_NOTE = /^make a note\s*:\s*/iu;

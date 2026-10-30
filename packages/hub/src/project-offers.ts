@@ -25,10 +25,9 @@ import {
   type InstanceRow,
   machineCalled,
   type PlanStep,
+  type ProjectNote,
   type ProjectOfferReason,
   type ProjectOfferSummary,
-  type ThreadNote,
-  type ThreadSummary,
 } from "@cawco/core";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -77,8 +76,8 @@ export interface ProjectOffersDeps {
     cmd: string,
     timeoutMs?: number
   ) => Promise<CommandResult>;
-  /** Opens a new project's Setup thread with a note and wakes its Caw to set it up (caw.ts `setup`). */
-  setup: (projectId: string, note: ThreadNote) => ThreadSummary;
+  /** Notes a new project's start and sends its conversation the setup steps (caw.ts `setup`): its session, when it started. */
+  setup: (projectId: string, note: ProjectNote) => Promise<string | undefined>;
   tasks: Tasks;
 }
 
@@ -387,11 +386,11 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         await openSteps(row.id),
         actor
       );
-      // A new project is set up with Caw once its plan is on the board.
+      // A new project is set up by its conversation once its plan is on the board.
       const from = row.title || sessionLabel(row).name;
-      const setupThread = joined
+      const conversation = joined
         ? undefined
-        : deps.setup(project.id, {
+        : await deps.setup(project.id, {
             title: `Project · made from ${from}`,
             event: { kind: "project", what: "made", name: project.name, from },
             body: filed.length
@@ -404,7 +403,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         sessions: moving.map((r) => r.id),
         tasks: filed,
         unfiled,
-        ...(setupThread ? { setupThread } : {}),
+        ...(conversation ? { conversation } : {}),
       };
     },
   };
@@ -470,8 +469,8 @@ export const projectFromSessionTool = (accept?: () => Promise<AcceptResult>) =>
 const acceptedWords = (result: AcceptResult): string =>
   [
     `${result.joined ? "Joined" : "Made"} project ${result.project.name}; ${result.sessions.length === 1 ? "this session moved" : `this session and ${result.sessions.length - 1} delegates moved`} into it.`,
-    result.setupThread
-      ? `Its Caw sets it up in the thread “${result.setupThread.title}”.`
+    result.conversation
+      ? "Its conversation sets it up; the person reads it on the project's page."
       : "",
     result.tasks.length > 0
       ? `Filed as proposed tasks: ${result.tasks.map((task) => `${task.id} “${task.title}”`).join(", ")}.`

@@ -4,7 +4,7 @@ import os
 import UIKit
 
 /// Under Caw's note asking whether to build a design system
-/// (transcript/DesignOfferActions.svelte, core ThreadEvent `design-offer`):
+/// (transcript/DesignOfferActions.svelte, core ProjectNoteEvent `design-offer`):
 /// Build and Not now while it stands, then what was answered, read from the
 /// hub as it is now (`/api/projects/:id/design-offer`). Build files the
 /// task; nothing is built before it. `space-2` apart, wrapping, the

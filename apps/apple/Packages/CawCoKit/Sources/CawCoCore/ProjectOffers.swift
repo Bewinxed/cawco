@@ -4,9 +4,9 @@ import Observation
 
 /// "Make this a project": the one offer a plain session gets when it outgrows itself (core `ProjectOfferSummary`).
 public typealias ProjectOffer = Components.Schemas.ProjectOfferSummary
-/// What "Create project" did: the project, the plan items it filed, and a new project's Setup thread.
+/// What "Create project" did: the project, the plan items it filed, and a new project's conversation.
 public typealias ProjectOfferAccepted = Components.Schemas.AcceptResult
-/// Where a project's design-system offer stands (core threads.ts `DesignOfferState`).
+/// Where a project's design-system offer stands (core project-conversation.ts `DesignOfferState`).
 public typealias DesignOffer = Components.Schemas.DesignOfferState
 
 /// The "make this a project" offers standing on plain sessions, by session
@@ -48,7 +48,7 @@ public extension HubConnection {
     /// Answers a session's offer (client.svelte.ts `answerProjectOffer`).
     /// "Create project" makes (or joins, by remote) the project from the
     /// session's folder and moves the session and its delegates into it; a
-    /// new project's Setup thread comes back, where its Caw sets it up.
+    /// new project's conversation comes back, which sets it up.
     /// "Not now" is recorded, and the session is never offered again.
     @discardableResult
     func answerProjectOffer(_ instanceId: String, accept: Bool) async throws -> ProjectOfferAccepted? {
@@ -62,8 +62,7 @@ public extension HubConnection {
         let output = try await client.postApiProjectOffersByInstanceIdAccept(path: .init(instanceId: instanceId))
         guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
         let accepted = try answer.body.json
-        if let thread = accepted.setupThread {
-            threads.adopt(thread)
+        if accepted.conversation != nil {
             offers.answered(instanceId, joined: nil)
         } else {
             offers.answered(instanceId, joined: accepted)

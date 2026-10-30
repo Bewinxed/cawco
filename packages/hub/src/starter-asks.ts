@@ -4,7 +4,7 @@
  * asks Jev which). TypeSafe's System One answers noul, choice and score
  * only (https://docs.typesafe.ai/api.md: "Noul: A yes/no question",
  * "Choice: Picks one option from a set you define"), so the words are the
- * hub's: each thing in the project (a task, a thread, a commit, a failure,
+ * hub's: each thing in the project (a task, a commit, a failure,
  * an event source, a draft view) offers the asks that fit it now, each one
  * sentence the person would say to Caw with the thing's own title or name in
  * it, and Jev chooses one ask per thing, or none.
@@ -38,7 +38,6 @@ export const STARTER_BOUNDS = {
   path: 160,
   tasks: 12,
   title: 160,
-  threads: 5,
   line: 200,
   commits: 5,
   subject: 120,
@@ -120,7 +119,6 @@ export interface StarterInputs {
   shown: { outcome: StarterOutcome; place: StarterPlace; text: string }[];
   tasks: StarterTask[];
   template: string | null;
-  threads: { id: string; last: string; title: string }[];
   /** Event sources and kinds whose events in {@link STARTER_RECENT_DAYS} reached no routine, most first. */
   unrouted: { count: number; kind: string; source: string }[];
 }
@@ -128,9 +126,6 @@ export interface StarterInputs {
 /** `words` in at most `max` characters, its mark included: a bound is a ceiling. */
 const within = (words: string, max: number): string =>
   words.length > max ? `${words.slice(0, max - 1)}…` : words;
-/** `words`' end in at most `max` characters, its mark included: a conversation's last words are where it stands. */
-const endWithin = (words: string, max: number): string =>
-  words.length > max ? `…${words.slice(-(max - 1))}` : words;
 const SPACES = /\s+/gu;
 
 /** Every text cut to its length and every list to its count. */
@@ -148,11 +143,6 @@ export const boundStarterInputs = (raw: StarterInputs): StarterInputs => {
       title: within(task.title, b.title),
       stage: within(task.stage, b.name),
       failed: task.failed === null ? null : within(task.failed, b.failure),
-    })),
-    threads: raw.threads.slice(0, b.threads).map((thread) => ({
-      id: thread.id,
-      title: within(thread.title, b.title),
-      last: endWithin(thread.last.trim().replace(SPACES, " "), b.line),
     })),
     branch: raw.branch,
     commits: raw.commits.slice(0, b.commits).map((commit) => ({
@@ -381,51 +371,6 @@ const taskAsks = (task: StarterTask): Record<string, Ask> => {
   return asks;
 };
 
-/** A thread with words in it: pick it up, or turn what it settled into tasks. */
-const threadSubject = (thread: StarterInputs["threads"][number]): Subject => {
-  const sources: StarterSource[] = [{ kind: "thread", ref: thread.id }];
-  const say = (make: (q: string) => string) =>
-    text((title) => make(named(title)), thread.title);
-  return {
-    at: `threads["${thread.id}"]`,
-    asks: {
-      continue: {
-        about:
-          "The conversation stopped before it was done: pick it up where it left off.",
-        glyph: "reply",
-        text: say((q) => `Pick up ${q} where we left off`),
-        reason: "This conversation stopped before it was done.",
-        sources,
-      },
-      tasks: {
-        about: "It settled what to do: turn that into tasks.",
-        glyph: "tasks",
-        text: say((q) => `Turn what we settled in ${q} into tasks`),
-        reason: "This conversation settled what to do next.",
-        sources,
-      },
-    },
-  };
-};
-
-/** A thread as a subject with the one ask `key`: `say` words it from the thread's title. */
-const threadAsk = (
-  thread: StarterInputs["threads"][number],
-  key: string,
-  ask: Omit<Ask, "sources" | "text"> & { say: (title: string) => string }
-): Subject => ({
-  at: `threads["${thread.id}"]`,
-  asks: {
-    [key]: {
-      about: ask.about,
-      glyph: ask.glyph,
-      text: text(ask.say, thread.title),
-      reason: ask.reason,
-      sources: [{ kind: "thread", ref: thread.id }],
-    },
-  },
-});
-
 /** A routine whose last run failed: find why, and fix it. */
 const routineSubject = (
   failure: StarterInputs["failures"][number]
@@ -471,7 +416,7 @@ const commitSubject = (
  * one. The signal only; Jev decides whether it is worth saying now. Never
  * once the person said Not now to Caw's offer (spec §5.7: "Not now is
  * recorded and he does not ask that project again unless the person does"):
- * a starter is Caw suggesting, and the person can still ask in a thread.
+ * a starter is Caw suggesting, and the person can still ask in a conversation.
  */
 const designSubject = (inputs: StarterInputs): Subject | undefined => {
   if (
@@ -558,9 +503,6 @@ const boardSubjects = (inputs: StarterInputs): Map<string, Subject> => {
     if (Object.keys(asks).length > 0) {
       subjects.set(`task:${task.id}`, { at: `tasks["${task.id}"]`, asks });
     }
-  }
-  for (const thread of inputs.threads.filter((each) => each.last)) {
-    subjects.set(`thread:${thread.id}`, threadSubject(thread));
   }
   for (const failure of inputs.failures) {
     if (failure.kind === "routine") {
@@ -710,19 +652,6 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
       },
     });
   }
-  for (const thread of inputs.threads.filter((each) => each.last)) {
-    subjects.set(
-      `thread:${thread.id}`,
-      threadAsk(thread, "repeat", {
-        about:
-          "The person asks this again and again (another thread asks the same, or it asks for something recurring): make it a routine.",
-        glyph: "routine",
-        say: (title) => `Every Monday, do what “${title}” asked`,
-        reason:
-          "This conversation asks for work that comes back again and again.",
-      })
-    );
-  }
   for (const failure of inputs.failures) {
     if (failure.kind !== "attempt") {
       continue;
@@ -805,18 +734,6 @@ const decisionSubjects = (inputs: StarterInputs): Map<string, Subject> => {
       },
     });
   }
-  for (const thread of inputs.threads.filter((each) => each.last)) {
-    subjects.set(
-      `thread:${thread.id}`,
-      threadAsk(thread, "options", {
-        about:
-          "Its last words lay out two or more proposals for the person to choose between.",
-        glyph: "explore",
-        say: (title) => `Lay out the options in “${title}” as a decision page`,
-        reason: "Its last answer lays out options for you to choose between.",
-      })
-    );
-  }
   for (const path of inputs.drafts) {
     const name = draftName(path);
     subjects.set(`view:${path}`, {
@@ -883,7 +800,6 @@ export const refsOf = (inputs: StarterInputs): Set<string> =>
       (failure) =>
         `${failure.kind === "routine" ? "routine" : "task"}:${failure.id}`
     ),
-    ...inputs.threads.map((thread) => `thread:${thread.id}`),
     ...inputs.commits.map((commit) => `commit:${commit.sha}`),
     ...inputs.unrouted.map((event) => `event:${event.source} ${event.kind}`),
     `path:${AGENTS_PATH}`,

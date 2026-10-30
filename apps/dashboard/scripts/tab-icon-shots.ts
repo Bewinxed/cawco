@@ -9,7 +9,7 @@
  * (assets/mascot/loops/<loop>/timing.json); a drawing holds two.
  */
 
-import type { CawStatus } from "@cawco/core/threads";
+import type { CawStatus } from "@cawco/core/project-conversation";
 
 /** Frames a second in every loop's animation. */
 export const FPS = 24;

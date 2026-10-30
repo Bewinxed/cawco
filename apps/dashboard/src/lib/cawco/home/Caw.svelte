@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { CawStatus } from "@cawco/core/threads";
+  import type { CawStatus } from "@cawco/core/project-conversation";
   import type { Rive } from "@rive-app/canvas";
   import riveWasm from "@rive-app/canvas/rive.wasm?url";
   import rests from "../../../../../../assets/mascot/loops/rests.json";

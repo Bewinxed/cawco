@@ -35,7 +35,6 @@ export interface Routine {
   prompt: string;
   runs: RoutineRun[];
   target: RoutineTarget;
-  threadId: string | null;
   timeZone: string;
 }
 

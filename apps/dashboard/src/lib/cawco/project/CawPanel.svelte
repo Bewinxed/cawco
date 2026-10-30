@@ -1,11 +1,10 @@
 <script lang="ts">
   /**
    * Caw's on/off, the project's own (fable-lead-switch.md §1), opened from
-   * the project head's `⋯`: who he is and what he is doing in one
-   * sentence, and the lead switch (CawLeadSwitch, the one the head's details
-   * tray draws too). Talking to him is his panel over the page (CawFloat);
-   * his harness and model are his lead session's card, from his name there
-   * (SessionDetails).
+   * the project head's `⋯`: what he is doing in one sentence, and the
+   * switch for whether the project's events reach a conversation
+   * (CawLeadSwitch, the one the head's details tray draws too). Talking to
+   * him is his panel over the page (CawFloat).
    */
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
@@ -29,8 +28,7 @@
     sheet?: boolean;
   } = $props();
 
-  // A turn begins: his view is read again, so the panel says what it answers
-  // (a turn no thread woke works here, not on a thread).
+  // A turn begins: his view is read again, so the panel says what runs.
   let wasWorking = false;
   $effect(() => {
     const working = lead.status === "working";
@@ -47,11 +45,6 @@
   data-sheet={sheet || undefined}
   style:--panel-w="min(var(--c-panel-w), calc(100vw - 2 * var(--space-5)))"
 >
-  {#if !sheet}
-    <p data-slot="head" class="type-label font-medium">
-      Caw · lead of {projectName}
-    </p>
-  {/if}
   <div
     data-slot="row"
     class="mark-line flex flex-wrap items-center gap-space-2"

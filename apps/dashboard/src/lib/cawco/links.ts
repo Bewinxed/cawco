@@ -3,9 +3,8 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 
 /**
- * A row the lists draw: a session's, or a Caw thread's drawn as one
- * (thread-tabs.ts), which runs on no harness of its own and says so with a
- * null `harness`.
+ * A row the lists draw: a session's. Its `harness` is null where the row
+ * stands for something no harness runs.
  */
 export type BoardRow = Omit<InstanceRow, "harness"> & {
   harness: HarnessKind | null;
@@ -114,8 +113,8 @@ export function conversationHref(
 
 /**
  * {@link conversationHref} for a row the instance index holds, by its id: a
- * hub row, or a thread's under its `thread:` id, is found in the index
- * under that id, so its address is always that id. It reads nothing:
+ * hub row is found in the index under that id, so its address is always
+ * that id. It reads nothing:
  * a link drawn from it changes only when the row does, where one drawn
  * through the index was worked out again for every row on every
  * `instances` frame.
@@ -201,3 +200,16 @@ export function catalogTitle(
     instanceForSession(index, info.sessionId, { machineId, cwd: info.cwd })
   );
 }
+
+/**
+ * Where a routine opens: open in its project's Routines tab
+ * (ViewRoutines reads `routine`); null for a fleet routine, which has no
+ * project page.
+ */
+export const routineHref = (routine: {
+  id: string;
+  projectId: string | null;
+}): string | null =>
+  routine.projectId
+    ? `/project/${encodeURIComponent(routine.projectId)}?${new URLSearchParams({ view: "routines", routine: routine.id })}`
+    : null;

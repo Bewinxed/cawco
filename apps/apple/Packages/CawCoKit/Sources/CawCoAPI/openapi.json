@@ -10896,7 +10896,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CawView"
+                  "$ref": "#/components/schemas/ProjectConversationView"
                 }
               }
             }
@@ -11020,7 +11020,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CawView"
+                  "$ref": "#/components/schemas/ProjectConversationView"
                 }
               }
             }
@@ -11235,270 +11235,6 @@
         }
       }
     },
-    "/api/threads": {
-      "get": {
-        "operationId": "getApiThreads",
-        "responses": {
-          "200": {
-            "description": "getApiThreads 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/getApiThreads200"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/threads": {
-      "get": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiProjectsByIdThreads",
-        "responses": {
-          "200": {
-            "description": "getApiProjectsByIdThreads 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/getApiProjectsByIdThreads200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "getApiProjectsByIdThreads 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "getApiProjectsByIdThreads 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "getApiProjectsByIdThreads 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "getApiProjectsByIdThreads 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "getApiProjectsByIdThreads 502",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/threads/{threadId}/archive": {
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "threadId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "postApiProjectsByIdThreadsByThreadIdArchive",
-        "responses": {
-          "200": {
-            "description": "postApiProjectsByIdThreadsByThreadIdArchive 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadSummary"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "postApiProjectsByIdThreadsByThreadIdArchive 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "postApiProjectsByIdThreadsByThreadIdArchive 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiProjectsByIdThreadsByThreadIdArchive 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiProjectsByIdThreadsByThreadIdArchive 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiProjectsByIdThreadsByThreadIdArchive 502",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/threads/{threadId}/unarchive": {
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "threadId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "postApiProjectsByIdThreadsByThreadIdUnarchive",
-        "responses": {
-          "200": {
-            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadSummary"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiProjectsByIdThreadsByThreadIdUnarchive 502",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/projects/{id}/view-requests": {
       "post": {
         "parameters": [
@@ -11533,9 +11269,6 @@
                   "position": {
                     "minimum": 0,
                     "type": "integer"
-                  },
-                  "id": {
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -11665,7 +11398,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ViewAsked"
+                  "$ref": "#/components/schemas/postApiProjectsByIdViewsByNameAsks200"
                 }
               }
             }
@@ -20760,8 +20493,7 @@
               "enum": [
                 "me",
                 "agent",
-                "report",
-                "caw"
+                "report"
               ]
             }
           },
@@ -27599,7 +27331,7 @@
         "type": "object",
         "properties": {
           "mode": {
-            "$ref": "#/components/schemas/CawViewMode"
+            "$ref": "#/components/schemas/EventRouteViewMode"
           }
         }
       },
@@ -27607,28 +27339,30 @@
         "type": "object",
         "properties": {
           "mode": {
-            "$ref": "#/components/schemas/CawViewMode"
+            "$ref": "#/components/schemas/EventRouteViewMode"
           }
-        }
-      },
-      "getApiThreads200": {
-        "type": "object"
-      },
-      "getApiProjectsByIdThreads200": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/ThreadSummary"
         }
       },
       "postApiProjectsByIdViewRequests200": {
         "type": "object",
         "properties": {
-          "thread": {
-            "$ref": "#/components/schemas/ThreadSummary"
+          "instanceId": {
+            "type": "string"
           }
         },
         "required": [
-          "thread"
+          "instanceId"
+        ]
+      },
+      "postApiProjectsByIdViewsByNameAsks200": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId"
         ]
       },
       "getApiRoutines200": {
@@ -28385,12 +28119,6 @@
               "status": {
                 "$ref": "#/components/schemas/InstanceStatus"
               },
-              "threadId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
               "title": {
                 "type": [
                   "null",
@@ -28439,7 +28167,6 @@
               "projectId",
               "sessionId",
               "status",
-              "threadId",
               "title",
               "updatedAt",
               "workItemId"
@@ -28648,12 +28375,6 @@
             "status": {
               "$ref": "#/components/schemas/InstanceStatus"
             },
-            "threadId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
             "title": {
               "type": [
                 "null",
@@ -28704,7 +28425,6 @@
             "runningDelegates",
             "sessionId",
             "status",
-            "threadId",
             "title",
             "updatedAt",
             "workItemId"
@@ -29760,16 +29480,19 @@
                 "number"
               ]
             },
-            "caw": {
-              "type": "boolean"
-            },
             "cawHarness": {
               "$ref": "#/components/schemas/HarnessKind"
             },
             "cawMode": {
-              "$ref": "#/components/schemas/CawViewMode"
+              "$ref": "#/components/schemas/EventRouteViewMode"
             },
             "cawModel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "conversationInstanceId": {
               "type": [
                 "null",
                 "string"
@@ -29782,17 +29505,14 @@
             "dispatch": {
               "type": "boolean"
             },
+            "eventsOn": {
+              "type": "boolean"
+            },
             "id": {
               "type": "string"
             },
             "lands": {
               "$ref": "#/components/schemas/LandsMode"
-            },
-            "leadInstanceId": {
-              "type": [
-                "null",
-                "string"
-              ]
             },
             "lfsConnection": {
               "type": [
@@ -29898,14 +29618,14 @@
           "required": [
             "appleGate",
             "capUsd",
-            "caw",
             "cawHarness",
             "cawModel",
+            "conversationInstanceId",
             "createdAt",
             "dispatch",
+            "eventsOn",
             "id",
             "lands",
-            "leadInstanceId",
             "lfsConnection",
             "lfsUrl",
             "maxAttempts",
@@ -29945,16 +29665,22 @@
               "number"
             ]
           },
-          "caw": {
-            "type": "boolean"
-          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/CawViewMode"
+            "$ref": "#/components/schemas/EventRouteViewMode"
           },
           "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conversation": {
+            "type": "string"
+          },
+          "conversationInstanceId": {
             "type": [
               "null",
               "string"
@@ -29967,17 +29693,14 @@
           "dispatch": {
             "type": "boolean"
           },
+          "eventsOn": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
-          },
-          "leadInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "lfsConnection": {
             "type": [
@@ -30109,9 +29832,6 @@
               "string"
             ]
           },
-          "setupThread": {
-            "$ref": "#/components/schemas/ThreadSummary"
-          },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
@@ -30125,14 +29845,14 @@
         "required": [
           "appleGate",
           "capUsd",
-          "caw",
           "cawHarness",
           "cawModel",
+          "conversationInstanceId",
           "createdAt",
           "dispatch",
+          "eventsOn",
           "id",
           "lands",
-          "leadInstanceId",
           "lfsConnection",
           "lfsUrl",
           "maxAttempts",
@@ -30201,16 +29921,19 @@
               "number"
             ]
           },
-          "caw": {
-            "type": "boolean"
-          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/CawViewMode"
+            "$ref": "#/components/schemas/EventRouteViewMode"
           },
           "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conversationInstanceId": {
             "type": [
               "null",
               "string"
@@ -30223,17 +29946,14 @@
           "dispatch": {
             "type": "boolean"
           },
+          "eventsOn": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
-          },
-          "leadInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "lfsConnection": {
             "type": [
@@ -30339,14 +30059,14 @@
         "required": [
           "appleGate",
           "capUsd",
-          "caw",
           "cawHarness",
           "cawModel",
+          "conversationInstanceId",
           "createdAt",
           "dispatch",
+          "eventsOn",
           "id",
           "lands",
-          "leadInstanceId",
           "lfsConnection",
           "lfsUrl",
           "maxAttempts",
@@ -30396,16 +30116,19 @@
               "number"
             ]
           },
-          "caw": {
-            "type": "boolean"
-          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/CawViewMode"
+            "$ref": "#/components/schemas/EventRouteViewMode"
           },
           "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conversationInstanceId": {
             "type": [
               "null",
               "string"
@@ -30418,17 +30141,14 @@
           "dispatch": {
             "type": "boolean"
           },
+          "eventsOn": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
-          },
-          "leadInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "lfsConnection": {
             "type": [
@@ -30573,14 +30293,14 @@
         "required": [
           "appleGate",
           "capUsd",
-          "caw",
           "cawHarness",
           "cawModel",
+          "conversationInstanceId",
           "createdAt",
           "dispatch",
+          "eventsOn",
           "id",
           "lands",
-          "leadInstanceId",
           "lfsConnection",
           "lfsUrl",
           "maxAttempts",
@@ -30621,16 +30341,19 @@
               "number"
             ]
           },
-          "caw": {
-            "type": "boolean"
-          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/CawViewMode"
+            "$ref": "#/components/schemas/EventRouteViewMode"
           },
           "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conversationInstanceId": {
             "type": [
               "null",
               "string"
@@ -30643,17 +30366,14 @@
           "dispatch": {
             "type": "boolean"
           },
+          "eventsOn": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
-          },
-          "leadInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "lfsConnection": {
             "type": [
@@ -30759,14 +30479,14 @@
         "required": [
           "appleGate",
           "capUsd",
-          "caw",
           "cawHarness",
           "cawModel",
+          "conversationInstanceId",
           "createdAt",
           "dispatch",
+          "eventsOn",
           "id",
           "lands",
-          "leadInstanceId",
           "lfsConnection",
           "lfsUrl",
           "maxAttempts",
@@ -32255,9 +31975,6 @@
             "$ref": "#/components/schemas/ProjectOfferFrame"
           },
           {
-            "$ref": "#/components/schemas/ThreadUpsertFrame"
-          },
-          {
             "$ref": "#/components/schemas/TasksChangedFrame"
           },
           {
@@ -32366,7 +32083,6 @@
             "pulse": "#/components/schemas/PulseFrame",
             "work_item": "#/components/schemas/WorkItemFrame",
             "project_offer": "#/components/schemas/ProjectOfferFrame",
-            "thread.upsert": "#/components/schemas/ThreadUpsertFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "decisions.changed": "#/components/schemas/DecisionsChangedFrame",
             "blocks.changed": "#/components/schemas/BlocksChangedFrame",
@@ -32868,16 +32584,12 @@
             }
           },
           "instanceId": {
-            "description": "The session it goes to, or a Caw thread's view id (`thread:<id>`, core threads.ts `threadTarget`).",
+            "description": "The session it goes to.",
             "type": "string"
           },
           "message": {
             "$ref": "#/components/schemas/SentMessage",
             "description": "The user turn, under the uuid it keeps everywhere it is shown."
-          },
-          "projectId": {
-            "description": "A send to a Caw thread not made yet: the project it is made in, under\nthe id its `thread:<id>` names (the composer mints it as it mints a\nsend's uuid). Absent on every other send.",
-            "type": "string"
           }
         },
         "required": [
@@ -32937,7 +32649,7 @@
           {
             "allOf": [
               {
-                "$ref": "#/components/schemas/NeutralUserMessage"
+                "$ref": "#/components/schemas/NeutralAssistantMessage"
               },
               {
                 "type": "object",
@@ -32953,7 +32665,7 @@
           {
             "allOf": [
               {
-                "$ref": "#/components/schemas/NeutralAssistantMessage"
+                "$ref": "#/components/schemas/NeutralUserMessage"
               },
               {
                 "type": "object",
@@ -40481,8 +40193,8 @@
         "description": "What the hub answers a send on a page: who heard it.",
         "type": "object",
         "properties": {
-          "threadId": {
-            "description": "The thread Caw was woken in, when he was.",
+          "instanceId": {
+            "description": "The project's conversation it went to, when it went there.",
             "type": "string"
           },
           "to": {
@@ -40685,6 +40397,10 @@
       "AcceptResult": {
         "type": "object",
         "properties": {
+          "conversation": {
+            "description": "A new project's conversation, which sets it up; none when the folder joined one, or it could not start.",
+            "type": "string"
+          },
           "joined": {
             "description": "True when the session's folder joined a project that already had its repository.",
             "type": "boolean"
@@ -40710,10 +40426,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "setupThread": {
-            "$ref": "#/components/schemas/ThreadSummary",
-            "description": "A new project's Setup thread, where its Caw sets it up; none when the folder joined one."
           },
           "tasks": {
             "description": "Plan items filed as proposed tasks, and the ones the project refused.",
@@ -40759,53 +40471,6 @@
           "sessions",
           "tasks",
           "unfiled"
-        ]
-      },
-      "ThreadSummary": {
-        "description": "A thread as the project's list and the `thread.upsert` frame carry it.",
-        "type": "object",
-        "properties": {
-          "archivedAt": {
-            "description": "When you archived it, ms epoch: the rails leave it and the sessions\nunder it out, and the project's thread list keeps it under Archived.\nAbsent while it is not archived; a new message in it brings it back.",
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "lastAt": {
-            "description": "When its newest message was added, ms epoch.",
-            "type": "number"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "setup": {
-            "description": "A Setup thread of the project: the one New project opens with your\nprompt, or one you asked Caw to set the project up in, where he shows\nthe setup page and lists what he wrote. Its replies that name files\noffer \"Open the board\".",
-            "type": "boolean"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ThreadStatus"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "lastAt",
-          "projectId",
-          "setup",
-          "status",
-          "title"
-        ]
-      },
-      "ThreadStatus": {
-        "description": "Where a thread stands, derived on every read and never stored: `working`\nwhile the lead session is busy on a turn that thread woke, `needs-you`\nwhile a question the lead asked in it is parked, else `ready`.",
-        "type": "string",
-        "enum": [
-          "needs-you",
-          "ready",
-          "working"
         ]
       },
       "DesignOfferState": {
@@ -41178,6 +40843,13 @@
             "description": "What an attempt may spend where its task and its delegate call say nothing; null: no limit.",
             "$ref": "#/components/schemas/WorkBudget"
           },
+          "conversationInstanceId": {
+            "description": "The project's Caw session, once the hub has started one.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "dispatch": {
             "description": "Whether the hub starts attempts at ready tasks on its own.",
             "type": "boolean"
@@ -41192,13 +40864,6 @@
           "lands": {
             "$ref": "#/components/schemas/LandsMode",
             "description": "Where an attempt lands when its task and type say nothing."
-          },
-          "leadInstanceId": {
-            "description": "The project's Caw session, once the hub has started one.",
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "live": {
             "description": "Attempts starting or running now.",
@@ -41237,10 +40902,10 @@
           }
         },
         "required": [
+          "conversationInstanceId",
           "dispatch",
           "frontier",
           "lands",
-          "leadInstanceId",
           "live",
           "maxAttempts",
           "paused",
@@ -41321,22 +40986,22 @@
           "workspaceId"
         ]
       },
-      "CawView": {
-        "description": "A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it.",
+      "ProjectConversationView": {
+        "description": "A project's conversation, as `GET`/`PATCH /api/projects/:id/caw` answer it.",
         "type": "object",
         "properties": {
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
-          "leadInstanceId": {
-            "description": "Caw's session, once the hub has started one.",
+          "instanceId": {
+            "description": "The conversation's session, once the hub has started one.",
             "type": [
               "null",
               "string"
             ]
           },
           "mode": {
-            "$ref": "#/components/schemas/CawViewMode",
+            "$ref": "#/components/schemas/EventRouteViewMode",
             "description": "The permission mode the hub starts the project's conversation in, the\nproject's own; null: the fleet's, else the one the person last chose\nfor its harness on that machine. A routine's or an event route's own\nwins over it."
           },
           "model": {
@@ -41370,7 +41035,7 @@
         },
         "required": [
           "harness",
-          "leadInstanceId",
+          "instanceId",
           "model",
           "on",
           "problem",
@@ -41390,7 +41055,7 @@
           },
           "kind": {
             "$ref": "#/components/schemas/CawRunningKind",
-            "description": "An attempt at a task, a delegate of his, or his own turn an event started."
+            "description": "An attempt at a task, or a delegate of the conversation's."
           },
           "machineId": {
             "type": "string"
@@ -41433,7 +41098,7 @@
         ]
       },
       "ProjectSpend": {
-        "description": "What a project has spent, as `GET /api/projects/:id/spend` answers it, in\ndollars, read now. Each part has one source: its Caw's turns as they were\nbooked (each turn's cost, from its result), its attempts' and other\nsessions' usage as their machines reported it (a lead's sessions are not\ncounted twice). The parts add up: `monthUsd` is Caw's month, every\nattempt's month and the others' month; Caw's month is its threads' month\nand the turns no thread woke. Days and months are the hub's own (its\nzone, as every \"today\" CawCo shows). What a project's cap counts.",
+        "description": "What a project has spent, as `GET /api/projects/:id/spend` answers it, in\ndollars, read now. Each part is its sessions' usage as their machines\nreported it: its conversations', its attempts' and every other session's.\nThe parts add up: `monthUsd` is the conversations' month, every attempt's\nmonth and the others' month. Days and months are the hub's own (its\nzone, as every \"today\" CawCo shows). What a project's cap counts.",
         "type": "object",
         "properties": {
           "attempts": {
@@ -41502,7 +41167,7 @@
             "$ref": "#/components/schemas/ProjectCap"
           },
           "caw": {
-            "description": "The project's Caw: its booked turns; `unthreadedMonthUsd`, this month's no thread woke.",
+            "description": "The project's conversations: what their sessions reported.",
             "type": "object",
             "properties": {
               "monthUsd": {
@@ -41510,15 +41175,11 @@
               },
               "todayUsd": {
                 "type": "number"
-              },
-              "unthreadedMonthUsd": {
-                "type": "number"
               }
             },
             "required": [
               "monthUsd",
-              "todayUsd",
-              "unthreadedMonthUsd"
+              "todayUsd"
             ]
           },
           "fleetOnCap": {
@@ -41548,37 +41209,6 @@
               "todayUsd"
             ]
           },
-          "threads": {
-            "description": "Each thread that moved this month, newest first: how many times it\nwoke Caw this month (your messages and events) and what those turns\ncost (each turn's cost, booked to the thread that woke it).",
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "lastAt": {
-                  "type": "number"
-                },
-                "title": {
-                  "type": "string"
-                },
-                "usd": {
-                  "type": "number"
-                },
-                "wakes": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "id",
-                "lastAt",
-                "title",
-                "usd",
-                "wakes"
-              ]
-            }
-          },
           "todayStart": {
             "description": "Midnight today, ms epoch.",
             "type": "number"
@@ -41595,7 +41225,6 @@
           "monthStart",
           "monthUsd",
           "others",
-          "threads",
           "todayStart",
           "todayUsd"
         ]
@@ -41660,22 +41289,6 @@
         "enum": [
           "day",
           "month"
-        ]
-      },
-      "ViewAsked": {
-        "description": "\"Ask Caw to change it\" (`POST /api/projects/:id/views/:name/asks`): the\nthread your words and the view went to Caw in, and whether he is on. Off,\nhe still answers your words (off is never \"can't be\nmessaged\"); the page says so.",
-        "type": "object",
-        "properties": {
-          "caw": {
-            "$ref": "#/components/schemas/ViewAskedCaw"
-          },
-          "thread": {
-            "$ref": "#/components/schemas/ThreadSummary"
-          }
-        },
-        "required": [
-          "caw",
-          "thread"
         ]
       },
       "PhoneDone": {
@@ -41793,7 +41406,7 @@
             ]
           },
           "mode": {
-            "$ref": "#/components/schemas/CawViewMode",
+            "$ref": "#/components/schemas/EventRouteViewMode",
             "description": "The mode a conversation run starts the project's conversation in when it has none; null: the project's."
           },
           "name": {
@@ -41831,12 +41444,6 @@
           "target": {
             "$ref": "#/components/schemas/RoutineTarget"
           },
-          "threadId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "timeZone": {
             "type": "string"
           }
@@ -41863,12 +41470,11 @@
           "runs",
           "schedule",
           "target",
-          "threadId",
           "timeZone"
         ]
       },
       "RoutineMadeIn": {
-        "description": "Where a routine was made: the session whose `routine_create` call made\nit, how its notice names that session, and the Caw thread its turn was in.",
+        "description": "Where a routine was made: the session whose `routine_create` call made\nit, and how its notice names that session.",
         "type": "object",
         "properties": {
           "by": {
@@ -41876,18 +41482,11 @@
           },
           "instanceId": {
             "type": "string"
-          },
-          "threadId": {
-            "type": [
-              "null",
-              "string"
-            ]
           }
         },
         "required": [
           "by",
-          "instanceId",
-          "threadId"
+          "instanceId"
         ]
       },
       "RoutineRunView": {
@@ -42838,7 +42437,7 @@
             ]
           },
           "mode": {
-            "$ref": "#/components/schemas/CawViewMode",
+            "$ref": "#/components/schemas/EventRouteViewMode",
             "description": "The mode its event starts the project's conversation in when it has none; null: its routine's."
           },
           "projectId": {
@@ -47521,25 +47120,6 @@
           "cwd": {
             "type": "string"
           },
-          "delegateHandoffs": {
-            "description": "On a Caw thread's delegate row (hub thread-transcript.ts): each hand-off\nits starter sent it after its brief, oldest first, its words without the\nmarker. A session's transcript draws those hand-offs as rows of their\nown and carries none here.",
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "at": {
-                  "type": "string"
-                },
-                "text": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "at",
-                "text"
-              ]
-            }
-          },
           "delegateInstanceId": {
             "description": "The delegate a `tool.handoff` started, read once off its result.",
             "type": "string"
@@ -47549,7 +47129,7 @@
             "type": "string"
           },
           "designOffer": {
-            "description": "A thread's note of Caw asking whether to build a design system: the\nproject it is for, whose Build and Not now the note draws under it\n(EventThreadMessage `designOffer`, as a thread's blocks carry it on the\ndashboard and in the app).",
+            "description": "A project note of Caw asking whether to build a design system: the\nproject it is for, whose Build and Not now the note draws under it.",
             "type": "object",
             "properties": {
               "projectId": {
@@ -47566,13 +47146,6 @@
           },
           "exitCode": {
             "type": "number"
-          },
-          "files": {
-            "description": "A Caw thread's reply: the project folder's files it says he wrote (`stages.md`), drawn as chips under it.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "handoffBrief": {
             "type": "string"
@@ -47609,7 +47182,7 @@
             "type": "boolean"
           },
           "lfsOffer": {
-            "description": "A thread's note that a folder was made a repository with files left out\nfor their size: the offer of Git LFS for them (ThreadEvent `repo`'s\n`lfsOffer`), whose Track with LFS and Not now the note draws under it.",
+            "description": "A project note that a folder was made a repository with files left out\nfor their size: the offer of Git LFS for them (ProjectNoteEvent `repo`'s\n`lfsOffer`), whose Track with LFS and Not now the note draws under it.",
             "type": "object",
             "properties": {
               "id": {
@@ -47696,7 +47269,7 @@
             "type": "string"
           },
           "routineMade": {
-            "description": "A Caw thread's notice that a session made a routine (ThreadEvent\n`routine-made`): the note draws Keep, Turn off and Open beside it.",
+            "description": "A project note that a session made a routine (ProjectNoteEvent\n`routine-made`): the note draws Keep, Turn off and Open beside it.",
             "type": "object",
             "properties": {
               "expiresAt": {
@@ -47899,13 +47472,6 @@
           },
           "subtype": {
             "type": "string"
-          },
-          "tasks": {
-            "description": "A Caw thread's reply: the tasks it is about (`tsk-12`), drawn as cards under it.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "thinking": {
             "type": "string"
@@ -49369,9 +48935,6 @@
             "$ref": "#/components/schemas/FindConversation"
           },
           {
-            "$ref": "#/components/schemas/FindThread"
-          },
-          {
             "$ref": "#/components/schemas/FindTask"
           },
           {
@@ -49516,15 +49079,7 @@
             ]
           },
           "state": {
-            "type": "string",
-            "enum": [
-              "ended",
-              "idle",
-              "needs-you",
-              "sleeping",
-              "unknown",
-              "working"
-            ]
+            "$ref": "#/components/schemas/FindLiveState"
           },
           "task": {
             "description": "The task it is an attempt at (role `attempt`); null otherwise. `id` is `<projectId>:tsk-142`.",
@@ -49547,14 +49102,14 @@
             ]
           },
           "handle": {
-            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, the hostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
             "type": [
               "null",
               "string"
             ]
           },
           "id": {
-            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "description": "The object's own id: an instance id, `project:tsk-142`, a sha, a path.",
             "type": "string"
           },
           "lastActivity": {
@@ -49622,7 +49177,7 @@
         ]
       },
       "FindMoment": {
-        "description": "A moment inside a conversation or thread: a jump target, and why it matched.",
+        "description": "A moment inside a conversation: a jump target, and why it matched.",
         "type": "object",
         "properties": {
           "at": {
@@ -49636,7 +49191,7 @@
             "$ref": "#/components/schemas/MomentAuthor"
           },
           "docId": {
-            "description": "The record to open at: a transcript's record (uuid, opencode message id), or a thread message's id.",
+            "description": "The record to open at: a transcript's record (uuid, opencode message id).",
             "type": "string"
           },
           "excerpt": {
@@ -49672,11 +49227,10 @@
         ]
       },
       "MomentAuthor": {
-        "description": "Who said a moment: a transcript's author, or `caw`, a project's Caw in one\nof his threads (a thread's own messages are kept at the hub).",
+        "description": "Who a transcript's words are (the index's `author`): only `owner` is \"said by me\".",
         "type": "string",
         "enum": [
           "agent",
-          "caw",
           "injected",
           "owner",
           "report"
@@ -49775,102 +49329,6 @@
           }
         }
       },
-      "FindThread": {
-        "type": "object",
-        "properties": {
-          "cwd": {
-            "description": "Where its board row places it: its project's primary checkout, else its\nfirst place, else its folder on the hub (`projects/<id>`), as the\ndashboard's thread row has it: what its mark's hue is seeded from.",
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "thread"
-            ]
-          },
-          "moments": {
-            "description": "Its best messages that matched, best first: present when its words did.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FindMoment"
-            }
-          },
-          "state": {
-            "description": "Caw on it now: working, waiting on you, or ready.",
-            "type": "string",
-            "enum": [
-              "needs-you",
-              "ready",
-              "working"
-            ]
-          },
-          "handle": {
-            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "id": {
-            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
-            "type": "string"
-          },
-          "lastActivity": {
-            "description": "When it last moved, ms epoch; null when nothing says.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "matched": {
-            "description": "Which recognisers matched; empty for a kind word alone.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FindField"
-            }
-          },
-          "project": {
-            "description": "Its project, when it has one.",
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "name"
-            ]
-          },
-          "score": {
-            "description": "Its rank among this answer's results; higher first.",
-            "type": "number"
-          },
-          "secrets": {
-            "$ref": "#/components/schemas/FindSecrets",
-            "description": "The secrets its own words hold; absent when none, or while secrets are not hidden."
-          },
-          "title": {
-            "description": "What it is called, in its own words (a title, a name, a hostname).",
-            "type": "string"
-          }
-        },
-        "required": [
-          "cwd",
-          "handle",
-          "id",
-          "kind",
-          "lastActivity",
-          "matched",
-          "moments",
-          "score",
-          "state",
-          "title"
-        ]
-      },
       "FindTask": {
         "type": "object",
         "properties": {
@@ -49907,14 +49365,14 @@
             ]
           },
           "handle": {
-            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, the hostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
             "type": [
               "null",
               "string"
             ]
           },
           "id": {
-            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "description": "The object's own id: an instance id, `project:tsk-142`, a sha, a path.",
             "type": "string"
           },
           "lastActivity": {
@@ -49996,22 +49454,15 @@
             "description": "Its next run, ms epoch.",
             "type": "number"
           },
-          "threadId": {
-            "description": "The thread its runs are noted in, where it opens; null before its first note.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "handle": {
-            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, the hostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
             "type": [
               "null",
               "string"
             ]
           },
           "id": {
-            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "description": "The object's own id: an instance id, `project:tsk-142`, a sha, a path.",
             "type": "string"
           },
           "lastActivity": {
@@ -50067,7 +49518,6 @@
           "matched",
           "nextRun",
           "score",
-          "threadId",
           "title"
         ]
       },
@@ -50081,14 +49531,14 @@
             ]
           },
           "handle": {
-            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, the hostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
             "type": [
               "null",
               "string"
             ]
           },
           "id": {
-            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "description": "The object's own id: an instance id, `project:tsk-142`, a sha, a path.",
             "type": "string"
           },
           "lastActivity": {
@@ -50157,14 +49607,14 @@
             "type": "boolean"
           },
           "handle": {
-            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, the hostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
             "type": [
               "null",
               "string"
             ]
           },
           "id": {
-            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "description": "The object's own id: an instance id, `project:tsk-142`, a sha, a path.",
             "type": "string"
           },
           "lastActivity": {
@@ -50263,14 +49713,14 @@
             "type": "boolean"
           },
           "handle": {
-            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, the hostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
             "type": [
               "null",
               "string"
             ]
           },
           "id": {
-            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "description": "The object's own id: an instance id, `project:tsk-142`, a sha, a path.",
             "type": "string"
           },
           "lastActivity": {
@@ -50373,14 +49823,14 @@
             "type": "string"
           },
           "handle": {
-            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
+            "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, the hostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
             "type": [
               "null",
               "string"
             ]
           },
           "id": {
-            "description": "The object's own id: an instance id, thread id, `project:tsk-142`, a sha, a path.",
+            "description": "The object's own id: an instance id, `project:tsk-142`, a sha, a path.",
             "type": "string"
           },
           "lastActivity": {
@@ -50757,6 +50207,13 @@
               "words"
             ]
           },
+          "conversationInstanceId": {
+            "description": "Its project's conversation, a co-parent of the item, whose tray lists it\nbeside its parent's; null when the project has none, or the\nconversation is its parent or its own session.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "number"
           },
@@ -50804,13 +50261,6 @@
           },
           "instanceId": {
             "type": "string"
-          },
-          "leadInstanceId": {
-            "description": "Its project's lead, a co-parent of the item, whose tray lists it beside\nits parent's; null when the project has none, or the lead is its parent\nor its own session.",
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "machinePaused": {
             "description": "While the machine its workspace is on is paused: \"Omars-MacBook-Pro is\npaused until 00:57\". Its session runs no turn until then. Null otherwise.",
@@ -50879,6 +50329,7 @@
           }
         },
         "required": [
+          "conversationInstanceId",
           "createdAt",
           "dismissReason",
           "dismissedAt",
@@ -50886,7 +50337,6 @@
           "firstLines",
           "id",
           "instanceId",
-          "leadInstanceId",
           "machinePaused",
           "parentInstanceId",
           "replacedBy",
@@ -54558,7 +54008,7 @@
             "type": "string"
           },
           "instanceId": {
-            "description": "The session it went to. A send to a Caw thread ({@link threadId}) names\nthe thread's view id (`thread:<id>`) until a lead session was handed it,\nand that lead's id from then on.",
+            "description": "The session it went to.",
             "type": "string"
           },
           "keepAlive": {
@@ -54573,7 +54023,7 @@
             "description": "No permission mode to wake its session on: the page asks for one, and it goes again ({@link ModeAsk})."
           },
           "readAt": {
-            "description": "ISO-8601: when its reader read it; absent until then. A thread's page places it here.",
+            "description": "ISO-8601: when its reader read it; absent until then.",
             "type": "string"
           },
           "reason": {
@@ -54734,10 +54184,6 @@
           },
           "state": {
             "$ref": "#/components/schemas/SendState"
-          },
-          "threadId": {
-            "description": "The Caw thread it was written in (core threads.ts), when it was a thread's.",
-            "type": "string"
           },
           "uuid": {
             "type": "string"
@@ -57577,13 +57023,6 @@
           "status": {
             "$ref": "#/components/schemas/InstanceStatus"
           },
-          "threadId": {
-            "description": "The thread with its project's Caw this session works for, when Caw's\nwork started it: the rail nests it under that thread.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "title": {
             "description": "What the session is called: the owner's rename, else the name the session\ngave itself (`set_title`) or was spawned under, else {@link derivedTitle}.",
             "type": [
@@ -57889,10 +57328,6 @@
             "items": {
               "$ref": "#/components/schemas/PermissionUpdate"
             }
-          },
-          "threadId": {
-            "description": "An ask a project's Caw made (his question, a project setting or a\nmemory proposal he asked about): the thread it was made in (the one\nwhose message woke that turn, else the project's newest). It is drawn\nand answered in that thread, and its answer lands there.",
-            "type": "string"
           },
           "toolName": {
             "type": "string"
@@ -58785,25 +58220,6 @@
           "kind"
         ]
       },
-      "ThreadUpsertFrame": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "description": "Hub-originated: a thread was started, or its last message or status changed.",
-            "type": "string",
-            "enum": [
-              "thread.upsert"
-            ]
-          },
-          "thread": {
-            "$ref": "#/components/schemas/ThreadSummary"
-          }
-        },
-        "required": [
-          "kind",
-          "thread"
-        ]
-      },
       "TasksChangedFrame": {
         "type": "object",
         "properties": {
@@ -59242,7 +58658,6 @@
         "type": "string",
         "enum": [
           "artifact-notice-drawn",
-          "caw-ask-stored-before-sent",
           "live-workspace-judge-answers",
           "owed-send-machine-has-deadline",
           "register-spawned-nothing",
@@ -59817,18 +59232,7 @@
         "type": "string",
         "enum": [
           "attempt",
-          "delegate",
-          "turn"
-        ]
-      },
-      "CawViewMode": {
-        "type": "string",
-        "enum": [
-          "acceptEdits",
-          "bypassPermissions",
-          "default",
-          "fullSend",
-          "plan"
+          "delegate"
         ]
       },
       "ClaudeLimitsErrorKind": {
@@ -59991,6 +59395,16 @@
           "compile",
           "missing",
           "page"
+        ]
+      },
+      "EventRouteViewMode": {
+        "type": "string",
+        "enum": [
+          "acceptEdits",
+          "bypassPermissions",
+          "default",
+          "fullSend",
+          "plan"
         ]
       },
       "ExternalActorKind": {
@@ -60455,13 +59869,6 @@
           "text",
           "thinking",
           "tool"
-        ]
-      },
-      "ViewAskedCaw": {
-        "type": "string",
-        "enum": [
-          "off",
-          "on"
         ]
       },
       "WorkspaceToolNeed": {

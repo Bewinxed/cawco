@@ -15,7 +15,6 @@ import UIKit
 /// narrower than `cBlockRoutines` Last and Next fold into the schedule's line.
 final class RoutinesLedger: UIView {
     var act: (_ work: @escaping (ProjectTasks) async throws -> Void) -> Void = { _ in }
-    var openThread: (String) -> Void = { _ in }
     /// A session by its id: a conversation run's.
     var openSession: (String) -> Void = { _ in }
 
@@ -118,7 +117,6 @@ final class RoutinesLedger: UIView {
                 let mine = actions.filter { $0.routineId == routine.id }
                 row.detail.hold(.init(routine: routine, actions: mine, wide: !isNarrow, minute: minute)) { shown in
                     let detail = RoutineDetailView(routine: shown.routine, actions: shown.actions, wide: shown.wide, whole: whole)
-                    detail.openThread = openThread
                     detail.openSession = openSession
                     detail.onWhole = { [weak self] whole in self?.whole = whole }
                     return detail
@@ -369,10 +367,9 @@ private final class RoutineRow {
 /// A routine opened in place under its row (RoutineDetail.svelte): only
 /// what the row does not say. Its instruction as the markdown it is written
 /// in, four lines at most until More; its newest five runs as a ledger
-/// (When, Outcome, Took, Result, the result a way into the run's thread);
+/// (When, Outcome, Took, Result, the result a way into the run's session);
 /// and the actions its runs proposed.
 final class RoutineDetailView: UIView {
-    var openThread: (String) -> Void = { _ in }
     /// A session by its id: a conversation run's.
     var openSession: (String) -> Void = { _ in }
     /// More or Less pressed: the instruction shown whole or not.
@@ -492,9 +489,8 @@ final class RoutineDetailView: UIView {
             let took = LedgerParts.meta(RoutineSchedule.took(run))
             let failed = status == .failed
             let resultWords = run.state == .skipped || run.outcome == .failed ? (run.reason ?? "") : (run.output ?? run.reason ?? "")
-            // A conversation run opens its session; any other, the routine's thread.
+            // A run opens its session; one no session took opens nothing.
             let open: (() -> Void)? = run.instanceId.map { session in { [weak self] in self?.openSession(session) } }
-                ?? routine.threadId.map { thread in { [weak self] in self?.openThread(thread) } }
             let result: UIView
             if let open {
                 let link = UIButton(configuration: .plain())

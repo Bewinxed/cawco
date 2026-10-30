@@ -66,15 +66,6 @@ export const LAWS = {
   "live-workspace-judge-answers":
     "Every workspace a session's process runs in has a judge of this build answering its hook.",
   /**
-   * At the hub, where a Caw ask is sent to the dashboards: the ask is in the
-   * hub's store (`pending`) before any frame about it goes, so an answer, a
-   * reload or a second screen always finds what it shows.
-   *
-   * Born red: server.ts records its line at the `permission_request` broadcast.
-   */
-  "caw-ask-stored-before-sent":
-    "A Caw ask is in the hub's store before any frame about it is sent.",
-  /**
    * At the hub, where a send is kept for its machine and where a machine's
    * window ends (`failOwedAway`): what waits for its machine waits only
    * while that machine reads reconnecting (its window's deadline ahead) or

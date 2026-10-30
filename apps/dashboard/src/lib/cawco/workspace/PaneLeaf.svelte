@@ -31,10 +31,8 @@
   import type { ServerTail } from "../client.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
-  import { isThreadTab } from "../thread-tabs";
   import Composer, { type TrayRow } from "../transcript/Composer.svelte";
   import { composerFleet } from "../transcript/composer-fleet";
-  import TranscriptSkeleton from "../transcript/TranscriptSkeleton.svelte";
   import {
     type ComposerBinding,
     composerBindings,
@@ -484,10 +482,7 @@
              PaneHost mounts the live pane into the slot. The server has no
              group composer to lend a session to, so its pane paints its own
              in the same place. -->
-        {#if !browser && isThreadTab(paneId)}
-          <!-- A thread's messages are read by its pane, in the browser. -->
-          <TranscriptSkeleton />
-        {:else if !browser}
+        {#if !browser}
           <SessionPane
             active={isActive}
             browsing={ctx?.machine ?? null}

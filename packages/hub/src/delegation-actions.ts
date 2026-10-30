@@ -404,12 +404,6 @@ const waitingAnswer = (
   return `Session ${source} holds work in flight that ending its process would lose (${waiting.why}${ran}), so its continuation waits for it. It goes on by itself in new session ${target} once that work ends, or at ${clockOf(waiting.until)} at the latest, ending it. Nothing to call again.`;
 };
 
-/** A thread's handle (`thread#1a2b3c4d`), as find and a chip carry it. */
-const THREAD_HANDLE = /^thread#([0-9a-f-]{6,36})$/u;
-
-/** What an id is made of, its dashes aside. */
-const HEX = /^[0-9a-f]+$/u;
-
 /**
  * The one session of `peers` the target names by id, as every tool reads
  * one (handles.ts `byId`: its full id, a short id of six or more
@@ -551,44 +545,6 @@ function resolveHandoff(
         movedAt(b) - movedAt(a)
     ),
     sleeping
-  );
-}
-
-/**
- * The thread a target names: `thread#<id>` always names a thread (refused
- * when none or several answer); a full id or a short one of six or more
- * characters names a thread when no session it could name has it.
- */
-function threadOf(
-  threads: HandoffThreads | undefined,
-  target: string,
-  sessions: Peer[]
-): { id: string; title: string } | undefined {
-  const needle = mentioned(target);
-  const handle = THREAD_HANDLE.exec(needle)?.[1];
-  const id = handle ?? needle;
-  if (!handle) {
-    const hex = id.replaceAll("-", "");
-    const sessionHas = byId(target, sessions, (peer) => peer.row.id).length > 0;
-    if (sessionHas || hex.length < 6 || !HEX.test(hex)) {
-      return;
-    }
-  }
-  const found = threads?.byId(id) ?? [];
-  if (found.length === 1) {
-    return found[0];
-  }
-  if (!handle) {
-    return;
-  }
-  if (found.length === 0) {
-    throw new Error(`No thread has the id ${id}. Nothing was handed.`);
-  }
-  throw new Error(
-    `"${target}" matches ${found.length} threads: ${found
-      .slice(0, LISTED_AT_MOST)
-      .map((each) => `“${each.title}” (${each.id})`)
-      .join(", ")}. Name one by its full id.`
   );
 }
 
@@ -834,22 +790,8 @@ export interface HandoffDeps {
    * so the hub stops it if the call's harness cuts the call (call-cuts.ts).
    */
   readonly started?: (thing: Started) => void;
-  /** Threads a mention may name, and the hand-off into one; absent where tools are only listed. */
-  readonly threads?: HandoffThreads;
   /** Delegate role: the session runs a work item, so finish_item and wait_item are offered. */
   readonly workItem?: boolean;
-}
-
-/** The threads a hand-off may name (`thread#1a2b3c4d`, a thread id), and the hand-off into one. */
-export interface HandoffThreads {
-  /** The threads whose id is `id`, or starts with it (six or more characters). */
-  readonly byId: (id: string) => { id: string; title: string }[];
-  /** Hands `message` to Caw in thread `threadId` (caw.ts `handed`); throws the hub's refusal. */
-  readonly hand: (
-    threadId: string,
-    from: { instanceId: string; name: string },
-    message: string
-  ) => Promise<string>;
 }
 
 /** The three hand-off actions, each answering with the text the tool returns. */
@@ -1554,7 +1496,6 @@ export const handoffActions = ({
   shownRefusal,
   fleet,
   instancesByShortId,
-  threads,
 }: HandoffDeps): HandoffActions => {
   /** A running delegate of the caller's that `target` names, through any continuation it was followed by. */
   const runningDelegate = (target: string) => {
@@ -1791,20 +1732,6 @@ export const handoffActions = ({
       inputs?: unknown[]
     ): Promise<string> {
       const { peers, asleep, own, hosts, rows } = roster(fleet, instanceId);
-      // A thread (`thread#1a2b3c4d`, or its id): Caw is handed it there.
-      const thread = threadOf(threads, target, [...peers, ...asleep]);
-      if (thread) {
-        if (!threads) {
-          throw new Error(
-            "Threads are not reachable from here; nothing was handed."
-          );
-        }
-        return threads.hand(
-          thread.id,
-          { instanceId, name: senderName(own, cwd) },
-          message
-        );
-      }
       // A session named by a former id is reached by its id now; one a
       // continuation took the work item of, by its continuation's.
       const followed =

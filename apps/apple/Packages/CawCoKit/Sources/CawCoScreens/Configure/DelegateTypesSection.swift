@@ -181,7 +181,7 @@ final class DelegateTypesSectionController: ConfigSectionController {
                     types.mark(name)
                 }
             } catch {
-                Toast.error(ThreadsStore.failureWords(error), in: view.window)
+                Toast.error(CawStore.failureWords(error), in: view.window)
             }
             busy.remove(name)
             requestRefresh()
@@ -206,7 +206,7 @@ enum ConfigUndo {
                     try await FleetTrash.restore(deleted, hub: hub)
                     await landed()
                 } catch {
-                    Toast.error(ThreadsStore.failureWords(error), in: anchor)
+                    Toast.error(CawStore.failureWords(error), in: anchor)
                 }
             }
         }, id: id, in: view)
@@ -455,7 +455,7 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
             draw()
             return true
         } catch {
-            refusal = ThreadsStore.failureWords(error)
+            refusal = CawStore.failureWords(error)
             draw()
             return false
         }
@@ -476,7 +476,7 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
                     types.mark(name)
                 }
             } catch {
-                refusal = ThreadsStore.failureWords(error)
+                refusal = CawStore.failureWords(error)
                 draw()
             }
         }

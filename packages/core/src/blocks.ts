@@ -10,7 +10,6 @@
  * it stands where it asked to, not as a tab, until the person keeps it
  * (placed there) or removes it (the draft discarded).
  */
-import type { ThreadSummary } from "./threads";
 
 /**
  * The pages that hold blocks: the three tabs every project has, as the
@@ -138,17 +137,6 @@ export interface ViewRemoved {
   /** What went, in the hub's words. */
   said: string;
   view: string;
-}
-
-/**
- * "Ask Caw to change it" (`POST /api/projects/:id/views/:name/asks`): the
- * thread your words and the view went to Caw in, and whether he is on. Off,
- * he still answers your words (off is never "can't be
- * messaged"); the page says so.
- */
-export interface ViewAsked {
-  caw: "on" | "off";
-  thread: ThreadSummary;
 }
 
 /** A view's name as a person reads it: `spend-per-routine` is "Spend per routine". */

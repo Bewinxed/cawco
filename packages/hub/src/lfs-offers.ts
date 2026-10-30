@@ -8,7 +8,7 @@
  *
  * Track with LFS runs on the place's machine (core `CONTROL_PLACE_LFS`):
  * `git lfs track <patterns>`, then a second commit of the left-out files,
- * by git-lfs-migrate(1)'s no-rewrite path, and the thread is told. Not now
+ * by git-lfs-migrate(1)'s no-rewrite path, and the conversation is told. Not now
  * is recorded, and the files stay out. Nothing is tracked before the person
  * says so, and each offer is answered once.
  */
@@ -16,7 +16,7 @@ import {
   CONTROL_PLACE_LFS,
   type LfsOfferState,
   type PlaceLfsMade,
-  type ThreadNote,
+  type ProjectNote,
 } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
@@ -33,12 +33,8 @@ export interface LfsOffersDeps {
     args: unknown[]
   ) => Promise<unknown>;
   readonly db: Pick<DbShape, "lfsOffers" | "project">;
-  /** A note in a project's thread that wakes no one (caw.ts `notice`). */
-  readonly notice: (
-    projectId: string,
-    threadId: string | null,
-    note: ThreadNote
-  ) => string;
+  /** A note to the person in the project's conversation, waking no one (caw.ts `notice`). */
+  readonly notice: (projectId: string, note: ProjectNote) => void;
 }
 
 const stateOf = (row: LfsOfferRow): LfsOfferState => ({
@@ -80,7 +76,7 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
       );
     })) as PlaceLfsMade;
     db.lfsOffers.answer(row.id, "tracked", made.commit);
-    notice(row.projectId, row.threadId, {
+    notice(row.projectId, {
       title: `Committed ${made.files} large ${made.files === 1 ? "file" : "files"} through Git LFS`,
       event: {
         kind: "repo",

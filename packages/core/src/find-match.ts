@@ -28,7 +28,6 @@ const FIELD_WEIGHT: Record<FindField, number> = {
 export const KIND_WORDS = {
   conversation: ["session", "sessions", "conversation", "conversations"],
   delegate: ["delegate", "delegates"],
-  thread: ["thread", "threads", "caw"],
   task: ["task", "tasks"],
   routine: ["routine", "routines"],
   project: ["project", "projects"],
@@ -77,7 +76,7 @@ export const field = (
     : [];
 
 /** A word of the query against the words of a text: whole (1), its start (0.8), or neither (0). */
-export const wordHit = (token: string, words: readonly string[]): number => {
+const wordHit = (token: string, words: readonly string[]): number => {
   let best = 0;
   for (const word of words) {
     if (word === token) {

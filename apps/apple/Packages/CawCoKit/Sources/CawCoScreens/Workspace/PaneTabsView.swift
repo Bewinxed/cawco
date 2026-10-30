@@ -10,7 +10,7 @@ struct PaneTab: Equatable {
     let face: SessionStatusView.Face
     /// Parked on the operator: the label keeps the strong ink chosen or not.
     let needs: Bool
-    /// A thread's or an artifact's tab has no session details: no chevron slot.
+    /// An artifact's tab has no session details: no chevron slot.
     let noDetails: Bool
     let status: String
 }

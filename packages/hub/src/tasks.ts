@@ -393,9 +393,9 @@ export interface TaskStore {
   }) => void;
   readonly project: (id: string) =>
     | {
-        /** Its Caw is on: the lead who takes the reports of attempts nobody asked for. */
-        caw: boolean;
-        /** It starts attempts on its own (dispatch.ts), while its Caw is on. */
+        /** Its events reach its conversation, which takes the reports of attempts nobody asked for. */
+        eventsOn: boolean;
+        /** It starts attempts on its own (dispatch.ts), while its events are on. */
         dispatch: boolean;
         id: string;
         /** Its checkout's normalised origin (`github.com/acme/app`); null when it has none. */
@@ -1820,7 +1820,7 @@ export const createTasks = (store: TaskStore) => {
   /** Whether the project starts attempts on its own: its dispatch and its Caw are on (dispatch.ts). */
   const dispatches = (projectId: string): boolean => {
     const project = store.project(projectId);
-    return !!(project?.dispatch && project.caw);
+    return !!(project?.dispatch && project.eventsOn);
   };
 
   /** Whether an attempt at the task is starting or running. */

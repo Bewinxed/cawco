@@ -1405,12 +1405,13 @@ const messageOf = (
 const reopens = (
   parentInstanceId: string | null,
   origin: NeutralOrigin,
-  leadInstanceId?: string | null
+  conversationInstanceId?: string | null
 ): boolean =>
   byPerson(origin) ||
   (origin.kind === "peer" &&
     (origin.fromSession === parentInstanceId ||
-      (!!leadInstanceId && origin.fromSession === leadInstanceId)));
+      (!!conversationInstanceId &&
+        origin.fromSession === conversationInstanceId)));
 
 /** Why a landed item's follow-up ended, when a stop ended it ({@link WorkItemRow} `error`). */
 const FOLLOW_UP_STOPPED = "Its follow-up was stopped before it landed.";
@@ -2726,7 +2727,9 @@ export const createWorkItems = ({
     projectId: string | null,
     ...not: string[]
   ): InstanceRow | undefined => {
-    const id = projectId ? db.project(projectId)?.leadInstanceId : undefined;
+    const id = projectId
+      ? db.project(projectId)?.conversationInstanceId
+      : undefined;
     const [lead] = id ? db.getInstancesByIds([id]) : [];
     return lead && !not.includes(lead.id) ? lead : undefined;
   };
@@ -2760,7 +2763,7 @@ export const createWorkItems = ({
   const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
     id: item.id,
     parentInstanceId: item.parentInstanceId,
-    leadInstanceId: isHubParent(item.parentInstanceId)
+    conversationInstanceId: isHubParent(item.parentInstanceId)
       ? null
       : (projectLead(item.projectId, item.instanceId, item.parentInstanceId)
           ?.id ?? null),
@@ -2827,7 +2830,7 @@ export const createWorkItems = ({
     return {
       id: queued.id,
       parentInstanceId: queued.parentInstanceId,
-      leadInstanceId:
+      conversationInstanceId:
         projectLead(
           request.task?.projectId ?? parent?.projectId ?? null,
           queued.parentInstanceId
@@ -2864,7 +2867,9 @@ export const createWorkItems = ({
    */
   const cawOff = (item: WorkItemRow): string | null => {
     const led = item.projectId ? db.project(item.projectId) : undefined;
-    return led && !led.caw && item.origin !== "you" ? led.leadInstanceId : null;
+    return led && !led.eventsOn && item.origin !== "you"
+      ? led.conversationInstanceId
+      : null;
   };
 
   /**
@@ -3734,7 +3739,7 @@ export const createWorkItems = ({
       .filter(
         (row) =>
           row.parentInstanceId === caller ||
-          queuedSummaryOf(row).leadInstanceId === caller
+          queuedSummaryOf(row).conversationInstanceId === caller
       );
 
   /** The one workspace `needle` names; refused when it names none or several. */
@@ -10179,7 +10184,7 @@ export const createWorkItems = ({
     trayOf: (sessionId: string): WorkItemSummary[] => {
       const led = db
         .listProjects()
-        .filter((project) => project.leadInstanceId === sessionId)
+        .filter((project) => project.conversationInstanceId === sessionId)
         .map((project) => project.id);
       const items = db
         .trayItemsOf(sessionId, led, new Date(Date.now() - TRAY_HOLD_MS))
@@ -10193,7 +10198,7 @@ export const createWorkItems = ({
         .filter(
           (summary) =>
             summary.parentInstanceId === sessionId ||
-            summary.leadInstanceId === sessionId
+            summary.conversationInstanceId === sessionId
         );
       return [...items, ...queued].sort((a, b) => a.createdAt - b.createdAt);
     },

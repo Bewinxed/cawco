@@ -1,12 +1,12 @@
 <script lang="ts">
   /**
    * Under Caw's note asking whether to build a design system (core
-   * ThreadEvent `design-offer`): Build and Not now while it stands, then
+   * ProjectNoteEvent `design-offer`): Build and Not now while it stands, then
    * what was answered, read from the hub as it is now
    * (`/api/projects/:id/design-offer`). Build files the task; nothing is
    * built before it.
    */
-  import type { DesignOfferState } from "@cawco/core/threads";
+  import type { DesignOfferState } from "@cawco/core/project-conversation";
   import { offerWords } from "@cawco/core/words/offers";
   import { untrack } from "svelte";
   import {

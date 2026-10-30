@@ -2,12 +2,11 @@
  * The session a written word names, wherever it lives: a reference's id
  * (`[title](cawco:session/<id>)`, core references.ts) or a mention's handle
  * (`@<title> <dir#id8>`, find/mention.svelte.ts), by its full id, a short id
- * of six or more characters, or its handle (`<dir>#<id8>`, `thread#<id8>`,
- * hub labels.ts `sessionLabel`), as the hub's own resolver takes a target
+ * of six or more characters, or its handle (`<dir>#<id8>`, hub labels.ts `sessionLabel`), as the hub's own resolver takes a target
  * (delegation-actions.ts: the full id, or a short id that names only one).
  *
  * The rows this browser holds answer first: the instance index (sessions,
- * runs and threads moved within a day, hub db `listedAt`) and the ids the
+ * and runs moved within a day, hub db `listedAt`) and the ids the
  * hub folded into a continuation. A session the index does not hold (ended
  * days ago, on another machine, in another project) is asked of the hub's
  * names (`GET /api/find`), which hold every session it ever started, and
@@ -17,20 +16,19 @@
  * session aged off the board is drawn as itself, never as "Fleet", a bare
  * id or a transcript that never loads.
  */
-import type { FindConversation, FindThread } from "@cawco/core/find";
+import type { FindConversation } from "@cawco/core/find";
 import { SvelteMap } from "svelte/reactivity";
 import { browser } from "$app/env";
 import { cawco } from "./client.svelte";
 import { findNames } from "./find/find-client";
 import { age, rowOf } from "./find/find-rows";
 import { resolveSessionTitle } from "./links";
-import { threadTabId } from "./thread-tabs";
 
 /** The shortest id part that names a session (the hub's resolver's own). */
 const SHORT_ID = 6;
 
 /** A session as the hub's names answered it. */
-export type NamedSession = FindConversation | FindThread;
+export type NamedSession = FindConversation;
 
 /** Each session the hub's names answered for, by the id it is drawn under. */
 const answered = new SvelteMap<string, NamedSession>();
@@ -69,9 +67,6 @@ function heldId(name: string): string | null {
   if (rows.has(name)) {
     return name;
   }
-  if (rows.has(threadTabId(name))) {
-    return threadTabId(name);
-  }
   const folded = former[name];
   if (folded && rows.has(folded)) {
     return folded;
@@ -80,8 +75,7 @@ function heldId(name: string): string | null {
   if (part.length < SHORT_ID) {
     return null;
   }
-  const prefixes = [part, threadTabId(part)];
-  const row = onlyStarting(rows.keys(), prefixes);
+  const row = onlyStarting(rows.keys(), [part]);
   if (row) {
     return row;
   }
@@ -90,9 +84,8 @@ function heldId(name: string): string | null {
   return now && rows.has(now) ? now : null;
 }
 
-/** The id a result is drawn under: a session's instance id, a thread's tab. */
-const drawnId = (result: NamedSession): string =>
-  result.kind === "thread" ? threadTabId(result.id) : result.id;
+/** The id a result is drawn under: its session's instance id. */
+const drawnId = (result: NamedSession): string => result.id;
 
 /** The one result of the hub's answer that `name` names, or undefined. */
 function namedBy(
@@ -126,7 +119,7 @@ function ask(name: string): void {
     return;
   }
   asking.add(name);
-  findNames(name, { limit: 12, kinds: ["conversation", "thread"] })
+  findNames(name, { limit: 12, kinds: ["conversation"] })
     .then((answer) => {
       const read = answer.kind === "answered" ? answer.read : null;
       if (!read || (!read.ok && read.unreached)) {
@@ -135,8 +128,7 @@ function ask(name: string): void {
       const results = read.ok
         ? read.value.results.filter(
             (r): r is NamedSession =>
-              (r.kind === "conversation" && r.instanceId !== null) ||
-              r.kind === "thread"
+              r.kind === "conversation" && r.instanceId !== null
           )
         : [];
       const hit = namedBy(results, name);
@@ -184,16 +176,11 @@ export function sessionAnswer(name: string): NamedSession | undefined {
 }
 
 /**
- * What a session is called, read from its id the one way: a thread's
- * title, a row's (core's order: its title, else its folder), else the hub's
+ * What a session is called, read from its id the one way: a row's (core's order: its title, else its folder), else the hub's
  * answer. Null while the hub is asked and when nothing names it.
  */
 export function sessionTitle(name: string): string | null {
   const id = sessionNamed(name) ?? name;
-  const thread = cawco.threadOf(id);
-  if (thread) {
-    return thread.title;
-  }
   const row = cawco.instanceIndex.byId.get(id);
   if (row) {
     return resolveSessionTitle({ title: row.title, cwd: row.cwd, id: row.id });

@@ -249,8 +249,8 @@ export const picksMade = (
 
 /** What the hub answers a send on a page: who heard it. */
 export interface DecisionSent {
-  /** The thread Caw was woken in, when he was. */
-  threadId?: string;
+  /** The project's conversation it went to, when it went there. */
+  instanceId?: string;
   to: "session" | "caw";
 }
 

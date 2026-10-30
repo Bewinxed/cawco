@@ -330,7 +330,7 @@ final class MemoryEditorController: ConfigEditorController {
                 return false
             }
         } catch {
-            saveProblem = ThreadsStore.failureWords(error)
+            saveProblem = CawStore.failureWords(error)
             return false
         }
     }
@@ -359,7 +359,7 @@ final class MemoryEditorController: ConfigEditorController {
                     await hub.configuration.load()
                 }
             } catch {
-                deleteProblem = ThreadsStore.failureWords(error)
+                deleteProblem = CawStore.failureWords(error)
                 draw()
             }
         }
@@ -374,7 +374,7 @@ final class MemoryEditorController: ConfigEditorController {
             do {
                 versions = try await FleetMemory.history(path, hub: hub)
             } catch {
-                historyError = ThreadsStore.failureWords(error)
+                historyError = CawStore.failureWords(error)
             }
             draw()
         }
@@ -461,7 +461,7 @@ final class MemoryEditorController: ConfigEditorController {
                 contents[version.id] = try await FleetMemory.version(version.id, hub: hub)
             } catch {
                 shown = nil
-                versionProblem[version.id] = ThreadsStore.failureWords(error)
+                versionProblem[version.id] = CawStore.failureWords(error)
             }
             reading.remove(version.id)
             draw()
@@ -483,7 +483,7 @@ final class MemoryEditorController: ConfigEditorController {
                 shown = nil
                 loadHistory()
             } catch {
-                restoreFailed = (version.id, ThreadsStore.failureWords(error))
+                restoreFailed = (version.id, CawStore.failureWords(error))
             }
             restoring = nil
             draw()
@@ -606,7 +606,7 @@ final class MemoryEditorController: ConfigEditorController {
             do {
                 copies[id] = .some(try await FleetMemory.peek(id, path: path, hub: hub))
             } catch {
-                unread[id] = ThreadsStore.failureWords(error)
+                unread[id] = CawStore.failureWords(error)
             }
             peeking.remove(id)
             draw()
@@ -634,7 +634,7 @@ final class MemoryEditorController: ConfigEditorController {
                 comparing = nil
                 copies[id] = nil
             } catch {
-                settleFailed[id] = ThreadsStore.failureWords(error)
+                settleFailed[id] = CawStore.failureWords(error)
             }
             settling[id] = nil
             draw()

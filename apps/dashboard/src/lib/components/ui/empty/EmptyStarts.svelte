@@ -24,7 +24,7 @@
    * can be judged without its page's live store. A press here goes nowhere;
    * on its surface it puts the words where they go.
    */
-  import { CAW_NO_MACHINE } from "@cawco/core/threads";
+  import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
   import { connectWords } from "@cawco/core/words/connect";
   import { delegateTypesWords } from "@cawco/core/words/delegate-types";
   import { mcpWords } from "@cawco/core/words/mcp";

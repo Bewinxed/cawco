@@ -19,7 +19,7 @@
  * default; https lives only at the long name; the clipboard only on https.
  */
 
-import type { CawStatus } from "@cawco/core/threads";
+import type { CawStatus } from "@cawco/core/project-conversation";
 import { DAY_MS } from "@cawco/core/time";
 
 export type Network = "tailscale" | "headscale" | "netbird";

@@ -20,7 +20,7 @@ extension UIView {
 }
 
 extension UIViewController {
-    /// Why nothing can be sent from a session's or a thread's composer now,
+    /// Why nothing can be sent from a session's composer now,
     /// other than an empty field: the composer's action box wears it as its
     /// warning state and explains on a tap. Nothing is said unasked (HIG
     /// Alerts: "Avoid using an alert merely to provide information"). The
@@ -66,85 +66,6 @@ extension UIViewController {
         alert.preferredAction = open
         present(alert, animated: true)
     }
-}
-
-/// The task cards under one of Caw's replies (ThreadPane.svelte
-/// `.thread-tasks`, `repeat(auto-fill, minmax(14rem, 1fr))`): as many
-/// 14rem columns as the row's width holds, each card stretched to its
-/// column. The column count is chosen at the width the row is laid out at,
-/// which the transcript gives it before measuring its height.
-final class TaskGridView: UIView {
-    private let cards: [UIView]
-    private let lines = UIStackView()
-    private var columns = 0
-    private static let column: CGFloat = 14 * 16
-
-    init(_ cards: [UIView]) {
-        self.cards = cards
-        super.init(frame: .zero)
-        lines.axis = .vertical
-        lines.spacing = Space.space2
-        hold(lines)
-        arrange(1)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("TaskGridView is built in code") }
-
-    override func layoutSubviews() {
-        if bounds.width > 0 {
-            arrange(max(1, Int((bounds.width + Space.space2) / (Self.column + Space.space2))))
-        }
-        super.layoutSubviews()
-    }
-
-    private func arrange(_ count: Int) {
-        guard count != columns else { return }
-        columns = count
-        for line in lines.arrangedSubviews { line.removeFromSuperview() }
-        for start in stride(from: 0, to: cards.count, by: count) {
-            let line = UIStackView()
-            line.axis = .horizontal
-            line.spacing = Space.space2
-            line.distribution = .fillEqually
-            line.alignment = .top
-            for at in start ..< start + count {
-                line.addArrangedSubview(at < cards.count ? cards[at] : UIView())
-            }
-            lines.addArrangedSubview(line)
-        }
-    }
-}
-
-/// A thread row's mark (SessionMark.svelte): Caw at what the thread is
-/// doing, on the row's tile; nothing for a session's row.
-@MainActor
-enum ThreadFace {
-    static func portrait(_ id: String, status: MarkStatus, held: UIView?) -> UIView? {
-        guard ThreadTabs.isThread(id) else { return nil }
-        let caw: CawStatus = switch status {
-        case .live: .working
-        case .attn: .needsYou
-        default: .ready
-        }
-        if let held = held as? ThreadPortrait, held.caw == caw { return held }
-        return ThreadPortrait(caw)
-    }
-}
-
-/// Caw, still, at one status: what a thread row's tile wears.
-final class ThreadPortrait: UIView {
-    let caw: CawStatus
-
-    init(_ caw: CawStatus) {
-        self.caw = caw
-        super.init(frame: .zero)
-        hold(CawMark(status: caw, side: SessionMarkView.tile))
-        isAccessibilityElement = false
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("built in code") }
 }
 
 /// How far a conversation's plan has got, as the control that opens it
@@ -275,23 +196,6 @@ final class PlanSheetController: ObservedViewController {
     }
 }
 
-/// The project folder's files a Caw reply names (project/FolderFiles.svelte):
-/// one chip each, its path, which opens the file as it reads on the hub.
-final class FolderFilesView: UIView {
-    init(files: [String], open: @escaping (String) -> Void) {
-        super.init(frame: .zero)
-        let chips: [UIView] = files.map { path in
-            let chip = KitButton.make(path, glyph: .document, variant: .outline, height: .sm) { open(path) }
-            chip.accessibilityLabel = "Open \(path)"
-            return chip
-        }
-        hold(WrapLayout(chips))
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("built in code") }
-}
-
 /// One file of a project's folder, read as it is on the hub: Markdown drawn,
 /// anything else as text (FolderFiles.svelte's sheet).
 final class FolderFileController: UIViewController {
@@ -338,7 +242,7 @@ final class FolderFileController: UIViewController {
     private func read() async {
         let shown: UIView
         do {
-            let content = try await hub.threads.file(projectId, path: path)
+            let content = try await hub.caw.file(projectId, path: path)
             #if DEBUG
             probeShown = content
             #endif

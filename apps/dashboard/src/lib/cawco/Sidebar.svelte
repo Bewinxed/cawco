@@ -86,7 +86,6 @@
   import { sameRow } from "./same-row";
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
-  import { inLists, isThreadTab } from "./thread-tabs";
   import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workspace } from "./workspace/workspace.svelte";
@@ -237,10 +236,9 @@
   }
 
   /**
-   * What is running now: sessions and the threads Caw is on, as every list
-   * shows them (thread-tabs.ts `inLists`).
+   * What is running now, as every list shows it.
    */
-  const running = $derived(cawco.runningRows);
+  const running = $derived(cawco.runningInstances);
 
   const orderedProjects = $derived.by(() =>
     [...cawco.projects].sort((a, b) => {
@@ -254,9 +252,7 @@
   );
 
   /**
-   * Every row the lists hold, as they hold it: a session Caw's work started
-   * under the thread it works for (thread-tabs.ts `inLists`), the threads
-   * you have not archived among them.
+   * Every row the lists hold, as they hold it.
    */
   const railRows = $derived(cawco.listedById);
 
@@ -316,7 +312,7 @@
   const built = $derived.by((): Built => {
     const next: Built = {
       byId: railRows,
-      rows: cawco.listedRows,
+      rows: cawco.listedInstances,
       running,
       notRunning,
     };
@@ -336,13 +332,11 @@
    * Every project's sessions, live and resting, as the rail lists them, in
    * one pass over what runs and what rests: a turn ending re-reads each row
    * once, where testing each project against every row read them all once
-   * per project. A project's top is what a person started there: the
-   * sessions they started and the threads with its Caw they have not
-   * archived (tree.ts `standsAlone`). Everything else (a delegate, Caw's work,
-   * an agent's check) hangs in the tree of the session that started it,
+   * per project. A project's top is what a person started there and its
+   * conversations (tree.ts `standsAlone`). Everything else (a delegate, an
+   * agent's check) hangs in the tree of the session that started it,
    * folded into that one's count until opened, and stands nowhere else: one
-   * whose chain ends at no top (its parent gone, its thread archived) is in
-   * no project's list.
+   * whose chain ends at no top (its parent gone) is in no project's list.
    *
    * A tree lists in the one project the hub wrote on its top
    * (`projectId`), whatever machine and folder each row under it runs on: a
@@ -530,15 +524,11 @@
     trees.reduce((rows, node) => rows + 1 + node.count, 0);
 
   /** What a project says when nothing in it runs: how much of it is resumable. */
-  const notRunning = $derived([
-    ...inLists(
-      cawco.listedInstances.filter(
-        (row) => isResumable(row) || isStale(row) || isFailed(row)
-      ),
-      cawco.conversations
-    ),
-    ...cawco.threadRows.filter((row) => row.status !== "running"),
-  ]);
+  const notRunning = $derived(
+    cawco.listedInstances.filter(
+      (row) => isResumable(row) || isStale(row) || isFailed(row)
+    )
+  );
 
   /* ---- order -----------------------------------------------------------
    *
@@ -587,17 +577,11 @@
     return rows
       .map((row) => ({
         row,
-        thread: Number(isThreadTab(row.id)),
         name: by === "name" ? sessionName(row) : "",
         state: by === "state" ? STATE_ORDER[cawco.activityOf(row.id)] : 0,
         at: lastAt(row),
       }))
       .sort((a, b) => {
-        // A project's threads with Caw come first, then its sessions (picks.md).
-        const thread = b.thread - a.thread;
-        if (thread !== 0) {
-          return thread;
-        }
         if (by === "name") {
           const cmp = a.name.localeCompare(b.name);
           if (cmp !== 0) {
@@ -732,7 +716,9 @@
     row.cwd.split("/").filter(Boolean).pop() ||
     row.id.slice(0, 8);
 
-  const fleetCount = $derived(cawco.blockedCount || cawco.runningRows.length);
+  const fleetCount = $derived(
+    cawco.blockedCount || cawco.runningInstances.length
+  );
 </script>
 
 {#snippet pending(rows: number)}

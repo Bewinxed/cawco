@@ -42,6 +42,7 @@ import type {
   OrphanedComments,
   PermissionMode,
   PlanStep,
+  ProjectNote,
   Rule,
   RuleState,
   RuleStats,
@@ -163,7 +164,6 @@ import {
   agentTools,
   artifacts,
   capabilityUsageDaily,
-  cawTurns,
   chosenModes,
   claudeContextWindows,
   completedTurns,
@@ -219,6 +219,7 @@ import {
   presenceDevices,
   presenceSettings,
   projectAccounts,
+  projectNotes,
   projectOffers,
   projectPlaces,
   projectRepositories,
@@ -227,7 +228,6 @@ import {
   projectTaskFields,
   projectTaskLabels,
   projectTasks,
-  projectThreads,
   pushDevices,
   queuedTaskStarts,
   queuedWorkItemGlobs,
@@ -249,8 +249,6 @@ import {
   spendSettings,
   supervisorConfig,
   taskCommentIds,
-  threadMessages,
-  threadMessageTasks,
   tools,
   upstreamSettings,
   usageBuckets,
@@ -280,7 +278,6 @@ import { type TreeStopsDb, treeStopsDb } from "./tree-stops";
 import { type TurnCutsDb, turnCutsDb } from "./turn-cuts";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 import { closeWal, useWal } from "./wal";
-import { sendWords } from "./words";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
@@ -447,13 +444,6 @@ export type PlanChangeRow = typeof planChanges.$inferSelect;
 export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
   subagents: OpenSubagent[];
 };
-export type ThreadRow = typeof projectThreads.$inferSelect;
-/** A thread's message, with the tasks it is about (`thread_message_tasks`); null for none. */
-export type ThreadMessageRow = typeof threadMessages.$inferSelect & {
-  tasks: string[] | null;
-};
-/** A thread as its project's list shows it: with its newest message. */
-export type ThreadListRow = ThreadRow & { last: string };
 
 export type ContinuationRow = typeof continuations.$inferSelect;
 /** A project move as moves.ts reads it: its state whole, the machines it names put back in it. */
@@ -530,11 +520,6 @@ export const listedAt = (
 export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
 export type SentMessageRow = typeof sentMessages.$inferSelect;
-/** A send a session was handed: every send but a Caw thread's before a lead took it. */
-export type SessionSendRow = SentMessageRow & { instanceId: string };
-/** Whether a send was handed to a session ({@link SessionSendRow}). */
-export const isSessionSend = (row: SentMessageRow): row is SessionSendRow =>
-  row.instanceId !== null;
 
 /** What folding a session's former rows into it did, for the hub's log. */
 interface FoldedSession {
@@ -661,27 +646,6 @@ export interface DbShape {
         }
   ) => { place: PlaceRow; added: boolean };
   /**
-   * Adds a message to a thread, which moves it to the top of its project's
-   * list. `createdAt` is when it was said, for words written in after the
-   * fact (a repair): the thread's own time moves only forward.
-   */
-  readonly addThreadMessage: (
-    message: Pick<ThreadMessageRow, "threadId" | "author" | "body"> &
-      Partial<
-        Pick<
-          ThreadMessageRow,
-          | "id"
-          | "noteTitle"
-          | "event"
-          | "tasks"
-          | "files"
-          | "question"
-          | "answer"
-          | "createdAt"
-        >
-      >
-  ) => { thread: ThreadRow; message: ThreadMessageRow };
-  /**
    * A session continued in a new session (`to`) hands it its live work, in
    * one transaction: its delegates that have not ended, and the sessions of
    * its live items, become `to`'s; so do its live work items, every item of
@@ -699,8 +663,6 @@ export interface DbShape {
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
-  /** Every project's threads, newest first. */
-  readonly allThreads: () => ThreadRow[];
   /** Keeps where one of the hub's lines stands ({@link lineAnchorsOf}); a line placed again keeps its newest place. */
   readonly anchorLine: (
     instanceId: string,
@@ -718,14 +680,6 @@ export interface DbShape {
     machineId: string,
     paths: readonly MachinePath[]
   ) => WorkspaceRow[];
-  /**
-   * Archives a thread (`at`) or brings it back (null); the thread as it
-   * stands then, or undefined when there is none.
-   */
-  readonly archiveThread: (
-    id: string,
-    at: Date | null
-  ) => ThreadRow | undefined;
   /** Artifacts and their documents' update logs (artifacts/). */
   readonly artifacts: ArtifactsDb;
   /** What sessions asked the person, and what the hub carried out (asks.ts). */
@@ -837,16 +791,6 @@ export interface DbShape {
     /** The stage template it is made from. */
     template?: StagesTemplate | null;
   }) => ProjectRow;
-  /** Files a thread with its first message: an event that had no thread to go to. */
-  readonly createThread: (thread: {
-    id: string;
-    projectId: string;
-    title: string;
-    /** The project's Setup thread (caw.ts `setup`). */
-    setup?: boolean;
-    first: Pick<ThreadMessageRow, "author" | "body"> &
-      Partial<Pick<ThreadMessageRow, "id" | "noteTitle" | "event">>;
-  }) => { thread: ThreadRow; message: ThreadMessageRow };
   /** Files a work item as the hub accepted it. */
   /** Files a work item as the hub accepted it, the globs it owns with it in one transaction. */
   readonly createWorkItem: (
@@ -981,7 +925,7 @@ export interface DbShape {
    * Folds a duplicate project into the one it duplicates (project-merge.ts),
    * in one transaction: its checkout and workspace places join `keepId`'s
    * (the same folder once), and every row that names it becomes `keepId`'s
-   * (sessions, work items, threads, Caw's turns and calls, the rules scoped
+   * (sessions, work items, notes, the rules scoped
    * to it, routines with their routes and polls, events, actions, relays,
    * moves, artifacts, notices, fleet rows, offers, granted connections,
    * queued starts), task ids renamed through `taskIds`; then its row goes.
@@ -992,7 +936,7 @@ export interface DbShape {
     dupId: string,
     keepId: string,
     taskIds: ReadonlyMap<string, string>
-  ) => { places: number; sessions: number; threads: number; workItems: number };
+  ) => { places: number; sessions: number; workItems: number };
   /** Forgets every briefer document a session was handed: its context no longer holds them. */
   readonly forgetBriefings: (instanceId: string) => void;
   /** Every former id, by the id its session has now ({@link instanceIdOf}). */
@@ -1151,8 +1095,6 @@ export interface DbShape {
     id: string
   ) => { cwd: MachinePath } | { unknown: true } | undefined;
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
-  /** The sends to a project's conversations (origin `project`) accepted after `after`, oldest first. */
-  readonly leadSends: (projectId: string, after: Date) => SessionSendRow[];
   /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
   readonly lfsOffers: LfsOffersDb;
   /**
@@ -1268,17 +1210,6 @@ export interface DbShape {
     machineId: string,
     raw: string
   ) => MachinePath | MachinePathRefused;
-  /**
-   * Files a thread with no message yet, under the id its first send named
-   * (`thread:<id>`): that send is its first words (caw.ts `sent`).
-   */
-  readonly makeThread: (thread: {
-    id: string;
-    projectId: string;
-    title: string;
-    /** The project's Setup thread (caw.ts `setup`). */
-    setup?: boolean;
-  }) => ThreadRow;
   readonly markAgentOffline: (machineId: string) => void;
   /** The machine answered its welcome (hub fleet-sync.ts): it is online. */
   readonly markAgentReady: (machineId: string) => void;
@@ -1346,20 +1277,6 @@ export interface DbShape {
     name: string,
     rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null
   ) => number | null;
-  /**
-   * Once per database (`data_migrations`), in one transaction: every plain
-   * `you` row of a thread (words, not an answer to Caw's question) becomes
-   * the send it is (`sent_messages` under its id, with its `thread_id`,
-   * read at the time it was written), and the row goes. A row whose id a
-   * send already has (words sent to Caw's own session, kept in a thread
-   * under the send's uuid) marks that send its thread's. `bodyOf` is the
-   * row as a send's record keeps it. How many rows moved; null when it had
-   * run already.
-   */
-  readonly migrateThreadWordsOnce: (
-    name: string,
-    bodyOf: (row: ThreadMessageRow) => NeutralUserMessage
-  ) => number | null;
   /** The move a session started from, as {@link noteMovedHere} kept it; null when none. */
   readonly movedHereOf: (id: string) => MovedHere | null;
   /** What each session's move ended, until it is told (move-endings.ts). */
@@ -1385,14 +1302,6 @@ export interface DbShape {
     | { named: true; row: PublicInstanceRow }
     | { named: false; row: PublicInstanceRow }
     | undefined;
-  /**
-   * A project's newest conversation: the thread whose newest message from
-   * you or Caw is the newest. Event notes (a routine's runs, his call notes)
-   * never rank it, and a routine's own thread (`routines.thread_id`) is never
-   * one, whoever has written in it: it takes only its runs. Undefined when
-   * no other thread has a word from either.
-   */
-  readonly newestConversation: (projectId: string) => ThreadRow | undefined;
   /** Records the window a claude turn reported for its model. */
   readonly noteClaudeContextWindow: (
     model: string,
@@ -1531,8 +1440,6 @@ export interface DbShape {
     role?: InstanceRole;
     /** The delegate type it was started as, and where it came from; set at its first spawn. */
     delegateType?: { name: string; projectId?: string };
-    /** The thread with the project's Caw it works for; set once, at its spawn. */
-    threadId?: string;
     /** The account placement chose; a row that has one keeps it. */
     accountId?: string;
     /**
@@ -1568,7 +1475,7 @@ export interface DbShape {
   /** The sends still owed to their machine ({@link sentMessages.owed}), pending, in the order accepted: a session's, or a machine's. */
   readonly owedSends: (
     of: { instanceId: string } | { machineId: string }
-  ) => SessionSendRow[];
+  ) => SentMessageRow[];
   /** What a machine is owed, in the order it was asked for. */
   readonly owedSpawns: (
     machineId: string
@@ -1646,7 +1553,6 @@ export interface DbShape {
        * changes provider; null when its new model runs on no account.
        */
       accountId?: string | null;
-      threadId?: string;
       projectId?: string;
       /** The continuation its work item moved to: it never runs again. */
       continuedInto?: string;
@@ -1700,13 +1606,6 @@ export interface DbShape {
     machineId: string,
     cwd: string
   ) => string | undefined;
-  /** A session's "make this a project" offer, answered or not (project-offers.ts). */
-  readonly projectOffer: (instanceId: string) => ProjectOfferRow | undefined;
-  /** The project's repository on a machine, as the last workspace cut there recorded it. */
-  readonly projectRepository: (
-    projectId: string,
-    machineId: string
-  ) => MachinePath | undefined;
   /**
    * A project's spend since `todayStart` and `monthStart`, all of it and its
    * Caw's; each attempt at a task with its session's spend (oldest first);
@@ -1718,11 +1617,33 @@ export interface DbShape {
    * attempt's session and every other session from the usage it reported.
    * The parts add up to the totals.
    */
+  /**
+   * The hub's notes to the person about a project (caw.ts `notice`): `add`
+   * keeps one, its conversation's line, or the next one's while it has none
+   * (`instanceId` null); `adopt` makes the waiting ones the conversation's
+   * that just started; `of` reads a conversation's, oldest first.
+   */
+  readonly projectNotes: {
+    add: (
+      projectId: string,
+      instanceId: string | null,
+      note: ProjectNote
+    ) => { at: number; id: string; note: ProjectNote };
+    adopt: (projectId: string, instanceId: string) => void;
+    of: (instanceId: string) => { at: number; id: string; note: ProjectNote }[];
+  };
+  /** A session's "make this a project" offer, answered or not (project-offers.ts). */
+  readonly projectOffer: (instanceId: string) => ProjectOfferRow | undefined;
+  /** The project's repository on a machine, as the last workspace cut there recorded it. */
+  readonly projectRepository: (
+    projectId: string,
+    machineId: string
+  ) => MachinePath | undefined;
   readonly projectSpend: (
     projectId: string,
     since: { monthStart: number; todayStart: number }
   ) => {
-    caw: { monthUsd: number; todayUsd: number; unthreadedMonthUsd: number };
+    caw: { monthUsd: number; todayUsd: number };
     others: { monthUsd: number; todayUsd: number };
     items: {
       at: number;
@@ -1733,13 +1654,6 @@ export interface DbShape {
       usd: number;
     }[];
     monthUsd: number;
-    threads: {
-      id: string;
-      lastAt: number;
-      title: string;
-      usd: number;
-      wakes: number;
-    }[];
     todayUsd: number;
   };
   /**
@@ -1770,8 +1684,6 @@ export interface DbShape {
    * (server.ts `machineFleetItems`).
    */
   readonly projectsWorkedOn: (machineId: string) => string[];
-  /** A project's threads, newest first, each with its newest message. */
-  readonly projectThreads: (projectId: string) => ThreadListRow[];
   /** Every work item of the project, newest first (handed-inputs.ts names one by its handle). */
   readonly projectWorkItems: (projectId: string) => WorkItemRow[];
   /** Drops the fleet MCP relay sessions unused since `before`; answers how many. */
@@ -2129,12 +2041,12 @@ export interface DbShape {
    * The sends among these ids, matched by the send's uuid or by the id its
    * harness stored it under.
    */
-  readonly sendsFor: (ids: string[]) => SessionSendRow[];
+  readonly sendsFor: (ids: string[]) => SentMessageRow[];
   /** A session's sends in these states, oldest accepted first. */
   readonly sendsIn: (
     instanceId: string,
     states: SentMessageRow["state"][]
-  ) => SessionSendRow[];
+  ) => SentMessageRow[];
   /** The changes told to `receiver` by a message still on record (core `PlanChange`, `sent_uuid`). */
   readonly sentPlanChanges: (receiver: string) => PlanChangeRow[];
   /** What a harness session has cost, in dollars, by the usage its machine reported. */
@@ -2233,7 +2145,11 @@ export interface DbShape {
     change: Partial<
       Pick<
         ProjectRow,
-        "caw" | "cawHarness" | "cawMode" | "cawModel" | "leadInstanceId"
+        | "eventsOn"
+        | "cawHarness"
+        | "cawMode"
+        | "cawModel"
+        | "conversationInstanceId"
       >
     >
   ) => void;
@@ -2270,12 +2186,6 @@ export interface DbShape {
   readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
   readonly setSessionLimits: (limits: SessionLimits) => void;
-  /**
-   * Makes a thread its project's Setup thread (`setup`), as the person's ask
-   * for Setup in it does (caw.ts `project_setup`): its row as it now is,
-   * undefined when no thread has the id.
-   */
-  readonly setSetupThread: (id: string) => ThreadRow | undefined;
   /**
    * Switches a stored skill on or off, its source and files as they are: no
    * fetch. Undefined when there is no such skill.
@@ -2392,24 +2302,6 @@ export interface DbShape {
     projectId: string,
     taskId: string
   ) => { id: string; path: string }[];
-  readonly thread: (id: string) => ThreadRow | undefined;
-  /**
-   * The sessions a project's Caw started from a thread (`thread_id`, set at
-   * spawn, with a parent), oldest first: what the thread's transcript draws
-   * as its delegate rows.
-   */
-  readonly threadDelegates: (threadId: string) => PublicInstanceRow[];
-  /** One thread message by its id, in any thread. */
-  readonly threadMessage: (id: string) => ThreadMessageRow | undefined;
-  /** A thread's messages, oldest first. */
-  readonly threadMessages: (threadId: string) => ThreadMessageRow[];
-  /** The newest of a project's threads in which Caw named the task (`thread_reply` with `tasks`). */
-  readonly threadOfTask: (
-    projectId: string,
-    taskId: string
-  ) => ThreadRow | undefined;
-  /** The sends written in a Caw thread, oldest accepted first. */
-  readonly threadSends: (threadId: string) => SentMessageRow[];
   /** Each relayed tool call taken under an idempotency key, and its answer (tool-call-keys.ts). */
   readonly toolCallKeys: ToolCallKeysDb;
   /** The hash of the tools a cawco MCP listing last answered, if it has. */
@@ -2426,11 +2318,6 @@ export interface DbShape {
   readonly touchInstanceActivity: (id: string) => void;
   /** A fleet MCP relay session was used now. */
   readonly touchMcpSession: (id: string) => void;
-  /**
-   * A send was written in a thread at `at`: it moves to the top of its
-   * project's list, and an archived thread comes back.
-   */
-  readonly touchThread: (id: string, at: Date) => ThreadRow | undefined;
   /** Trackers: a project's binding to GitHub Issues or Linear, and what its tasks and their issues agreed on (tracker.ts). */
   readonly trackers: TrackersDb;
   /** Deleted config items, kept whole for their Undo (trash.ts). */
@@ -2544,7 +2431,6 @@ export interface DbShape {
         | "hold"
         | "instanceId"
         | "readAt"
-        | "threadId"
       >
     >
   ) => SentMessageRow | undefined;
@@ -3147,31 +3033,6 @@ const make = async (path: string): Promise<DbShape> => {
     commands: _ownCommands,
     ...ownedColumns
   } = getTableColumns(instances);
-  /** Each message with the tasks it names, in the order it named them. */
-  const withTasks = (
-    rows: (typeof threadMessages.$inferSelect)[]
-  ): ThreadMessageRow[] => {
-    const named = new Map<string, string[]>();
-    if (rows.length > 0) {
-      for (const { messageId, taskId } of db
-        .select({
-          messageId: threadMessageTasks.messageId,
-          taskId: threadMessageTasks.taskId,
-        })
-        .from(threadMessageTasks)
-        .where(
-          inArray(
-            threadMessageTasks.messageId,
-            rows.map((row) => row.id)
-          )
-        )
-        .orderBy(sql`rowid`)
-        .all()) {
-        named.set(messageId, [...(named.get(messageId) ?? []), taskId]);
-      }
-    }
-    return rows.map((row) => ({ ...row, tasks: named.get(row.id) ?? null }));
-  };
   /** The fleet's tool denials, in the order they were added. */
   const listHarnessConfig = (kind?: HarnessConfigKind): FleetHarnessConfig[] =>
     db
@@ -3797,7 +3658,8 @@ const make = async (path: string): Promise<DbShape> => {
     ["delegate_events", "instance_id"],
     ["delegate_events", "parent_instance_id"],
     ["workspaces", "created_by_instance_id"],
-    ["projects", "lead_instance_id"],
+    ["projects", "conversation_instance_id"],
+    ["project_notes", "instance_id"],
     ["limit_events", "instance_id"],
     ["turn_usage", "instance_id"],
     ["artifacts", "instance_id"],
@@ -4130,7 +3992,6 @@ const make = async (path: string): Promise<DbShape> => {
         createdAt: root.createdAt,
         parentInstanceId: parent ?? null,
         workItemId: first("workItemId"),
-        threadId: first("threadId"),
         projectId: first("projectId"),
         role: first("role"),
         delegateType: first("delegateType"),
@@ -5365,7 +5226,6 @@ const make = async (path: string): Promise<DbShape> => {
       workItemId,
       role,
       delegateType,
-      threadId,
       accountId,
       forkedFrom,
       keepTurn = false,
@@ -5440,7 +5300,6 @@ const make = async (path: string): Promise<DbShape> => {
           role,
           delegateType: delegateType?.name,
           delegateTypeProject: delegateType?.projectId,
-          threadId,
           accountId,
           forkedFrom,
           // A fresh conversation has spent nothing; a resumed one's spend so
@@ -5469,7 +5328,6 @@ const make = async (path: string): Promise<DbShape> => {
             ...(model ? { model } : {}),
             // Presence, not truth: a leaf's `false` has to land.
             ...(canDelegate === undefined ? {} : { canDelegate }),
-            ...(threadId ? { threadId } : {}),
             // A session keeps the account it started on: its transcript and
             // its prompt cache are that account's.
             ...(accountId
@@ -5897,57 +5755,6 @@ const make = async (path: string): Promise<DbShape> => {
         }
         tx.insert(dataMigrations).values({ name, at: new Date() }).run();
         return changed;
-      }),
-    migrateThreadWordsOnce: (name, bodyOf) =>
-      db.transaction((tx) => {
-        if (
-          tx
-            .select()
-            .from(dataMigrations)
-            .where(eq(dataMigrations.name, name))
-            .get()
-        ) {
-          return null;
-        }
-        const words = tx
-          .select()
-          .from(threadMessages)
-          .where(
-            and(
-              eq(threadMessages.author, "you"),
-              isNull(threadMessages.question)
-            )
-          )
-          .all();
-        for (const row of words) {
-          const kept = tx
-            .select({ uuid: sentMessages.uuid })
-            .from(sentMessages)
-            .where(eq(sentMessages.uuid, row.id))
-            .get();
-          if (kept) {
-            tx.update(sentMessages)
-              .set({ threadId: row.threadId, readAt: row.createdAt })
-              .where(eq(sentMessages.uuid, row.id))
-              .run();
-          } else {
-            tx.insert(sentMessages)
-              .values({
-                uuid: row.id,
-                instanceId: null,
-                threadId: row.threadId,
-                acceptedAt: row.createdAt,
-                readAt: row.createdAt,
-                body: bodyOf({ ...row, tasks: null }),
-                mode: "turn",
-                state: "read",
-              })
-              .run();
-          }
-          tx.delete(threadMessages).where(eq(threadMessages.id, row.id)).run();
-        }
-        tx.insert(dataMigrations).values({ name, at: new Date() }).run();
-        return words.length;
       }),
     foldFormerSessions: (owedAgain) => {
       const open = db
@@ -7767,19 +7574,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(and(inArray(instances.id, ids), keptInstances()))
         .all();
     },
-    threadDelegates: (threadId) =>
-      db
-        .select(publicColumns)
-        .from(instances)
-        .where(
-          and(
-            eq(instances.threadId, threadId),
-            isNotNull(instances.parentInstanceId),
-            keptInstances()
-          )
-        )
-        .orderBy(asc(instances.createdAt), asc(instances.id))
-        .all(),
     instanceBySessionId: (sessionId) =>
       db
         .select(publicColumns)
@@ -8105,13 +7899,6 @@ const make = async (path: string): Promise<DbShape> => {
     setProjectCap: (id, change) => {
       db.update(projects).set(change).where(eq(projects.id, id)).run();
     },
-    setSetupThread: (id) =>
-      db
-        .update(projectThreads)
-        .set({ setup: true })
-        .where(eq(projectThreads.id, id))
-        .returning()
-        .get(),
     setSpendOnCap: (onCap) => {
       db.insert(spendSettings)
         .values({ id: "spend", onCap })
@@ -8249,102 +8036,16 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .get();
-      // Each thread: the turns it woke this month, and how often it woke Caw
-      // (yours and events). Grouped per thread and merged here: a correlated
-      // sub-select renders its columns unqualified and binds `id` to the
-      // inner table's own.
-      const turnsBy = new Map(
-        db
-          .select({
-            threadId: cawTurns.threadId,
-            usd: sql<number>`coalesce(sum(${cawTurns.usd}), 0)`,
-          })
-          .from(cawTurns)
-          .where(
-            and(
-              eq(cawTurns.projectId, projectId),
-              isNotNull(cawTurns.threadId),
-              sql`${cawTurns.at} >= ${monthStart}`
-            )
-          )
-          .groupBy(cawTurns.threadId)
-          .all()
-          .map((row) => [row.threadId as string, row.usd])
-      );
-      const wakesBy = new Map(
-        db
-          .select({
-            threadId: threadMessages.threadId,
-            wakes: sql<number>`count(*)`,
-          })
-          .from(threadMessages)
-          .innerJoin(
-            projectThreads,
-            eq(projectThreads.id, threadMessages.threadId)
-          )
-          .where(
-            and(
-              eq(projectThreads.projectId, projectId),
-              eq(threadMessages.author, "event"),
-              sql`${threadMessages.createdAt} >= ${monthStart}`
-            )
-          )
-          .groupBy(threadMessages.threadId)
-          .all()
-          .map((row) => [row.threadId, row.wakes])
-      );
-      // The person's words woke him too: each send written in a thread.
-      for (const sent of db
-        .select({
-          threadId: sentMessages.threadId,
-          wakes: sql<number>`count(*)`,
-        })
-        .from(sentMessages)
-        .innerJoin(projectThreads, eq(projectThreads.id, sentMessages.threadId))
-        .where(
-          and(
-            eq(projectThreads.projectId, projectId),
-            sql`${sentMessages.acceptedAt} >= ${monthStart}`
-          )
-        )
-        .groupBy(sentMessages.threadId)
-        .all()) {
-        if (sent.threadId) {
-          wakesBy.set(
-            sent.threadId,
-            (wakesBy.get(sent.threadId) ?? 0) + sent.wakes
-          );
-        }
-      }
-      const threads = db
-        .select({
-          id: projectThreads.id,
-          title: projectThreads.title,
-          lastAt: projectThreads.updatedAt,
-        })
-        .from(projectThreads)
-        .where(eq(projectThreads.projectId, projectId))
-        .orderBy(desc(projectThreads.updatedAt))
-        .all()
-        .map((row) => ({
-          ...row,
-          usd: turnsBy.get(row.id) ?? 0,
-          wakes: wakesBy.get(row.id) ?? 0,
-        }));
       const attemptsToday = items.reduce((sum, item) => sum + item.today, 0);
       const attemptsMonth = items.reduce((sum, item) => sum + item.usd, 0);
       const cawToday = caw.today;
       const cawMonth = caw.month;
-      // Thread turns were booked until the conversation's usage took their
-      // place: what no thread holds is the rest of the month's.
-      const threaded = threads.reduce((sum, row) => sum + row.usd, 0);
       return {
         todayUsd: cawToday + attemptsToday + (others?.today ?? 0),
         monthUsd: cawMonth + attemptsMonth + (others?.month ?? 0),
         caw: {
           todayUsd: cawToday,
           monthUsd: cawMonth,
-          unthreadedMonthUsd: Math.max(0, cawMonth - threaded),
         },
         others: { todayUsd: others?.today ?? 0, monthUsd: others?.month ?? 0 },
         items: items.map((item) => ({
@@ -8355,11 +8056,39 @@ const make = async (path: string): Promise<DbShape> => {
           usd: item.usd,
           at: (item.endedAt ?? item.createdAt).getTime(),
         })),
-        threads: threads.map((row) => ({
-          ...row,
-          lastAt: row.lastAt.getTime(),
-        })),
       };
+    },
+    projectNotes: {
+      add: (projectId, instanceId, note) => {
+        const row = {
+          id: `note-${crypto.randomUUID()}`,
+          projectId,
+          instanceId,
+          at: new Date(),
+          note,
+        };
+        db.insert(projectNotes).values(row).run();
+        return { at: row.at.getTime(), id: row.id, note };
+      },
+      adopt: (projectId, instanceId) => {
+        db.update(projectNotes)
+          .set({ instanceId })
+          .where(
+            and(
+              eq(projectNotes.projectId, projectId),
+              isNull(projectNotes.instanceId)
+            )
+          )
+          .run();
+      },
+      of: (instanceId) =>
+        db
+          .select()
+          .from(projectNotes)
+          .where(eq(projectNotes.instanceId, instanceId))
+          .orderBy(asc(projectNotes.at))
+          .all()
+          .map((row) => ({ at: row.at.getTime(), id: row.id, note: row.note })),
     },
     projectSpendByType: (projectId, since) =>
       db
@@ -8383,125 +8112,6 @@ const make = async (path: string): Promise<DbShape> => {
         .groupBy(workItems.type)
         .orderBy(desc(sql`coalesce(sum(${usageBuckets.costUsd}), 0)`))
         .all(),
-    projectThreads: (projectId) => {
-      const rows = db
-        .select()
-        .from(projectThreads)
-        .where(eq(projectThreads.projectId, projectId))
-        .orderBy(desc(projectThreads.updatedAt), desc(projectThreads.id))
-        .all();
-      return rows.map((row) => {
-        const last = db
-          .select({ body: threadMessages.body, at: threadMessages.createdAt })
-          .from(threadMessages)
-          .where(eq(threadMessages.threadId, row.id))
-          .orderBy(desc(threadMessages.createdAt), desc(threadMessages.id))
-          .limit(1)
-          .get();
-        const sent = db
-          .select({ body: sentMessages.body, at: sentMessages.acceptedAt })
-          .from(sentMessages)
-          .where(eq(sentMessages.threadId, row.id))
-          .orderBy(desc(sentMessages.acceptedAt), desc(sentMessages.uuid))
-          .limit(1)
-          .get();
-        const newest =
-          sent && (!last || sent.at.getTime() > last.at.getTime())
-            ? sendWords(sent.body)
-            : (last?.body ?? "");
-        return { ...row, last: newest };
-      });
-    },
-    // A conversation is a thread someone spoke in: the person's sends there,
-    // Caw's replies and the person's answers to his questions.
-    newestConversation: (projectId) => {
-      const said = db
-        .select({
-          threadId: threadMessages.threadId,
-          at: threadMessages.createdAt,
-        })
-        .from(threadMessages)
-        .where(inArray(threadMessages.author, ["you", "caw"]))
-        .unionAll(
-          db
-            .select({
-              threadId: sql<string>`${sentMessages.threadId}`.as("thread_id"),
-              at: sentMessages.acceptedAt,
-            })
-            .from(sentMessages)
-            .where(isNotNull(sentMessages.threadId))
-        )
-        .as("said");
-      return db
-        .select(getTableColumns(projectThreads))
-        .from(projectThreads)
-        .innerJoin(said, eq(said.threadId, projectThreads.id))
-        .where(
-          and(
-            eq(projectThreads.projectId, projectId),
-            notInArray(
-              projectThreads.id,
-              db
-                .select({ id: routines.threadId })
-                .from(routines)
-                .where(isNotNull(routines.threadId))
-            )
-          )
-        )
-        .groupBy(projectThreads.id)
-        .orderBy(desc(sql`max(${said.at})`), desc(projectThreads.id))
-        .limit(1)
-        .get();
-    },
-    allThreads: () =>
-      db
-        .select()
-        .from(projectThreads)
-        .orderBy(desc(projectThreads.updatedAt), desc(projectThreads.id))
-        .all(),
-    threadOfTask: (projectId, taskId) =>
-      db
-        .select({ thread: projectThreads })
-        .from(threadMessageTasks)
-        .innerJoin(
-          threadMessages,
-          eq(threadMessages.id, threadMessageTasks.messageId)
-        )
-        .innerJoin(
-          projectThreads,
-          eq(projectThreads.id, threadMessages.threadId)
-        )
-        .where(
-          and(
-            eq(threadMessageTasks.projectId, projectId),
-            eq(threadMessageTasks.taskId, taskId)
-          )
-        )
-        .orderBy(desc(threadMessages.createdAt), desc(threadMessages.id))
-        .limit(1)
-        .get()?.thread,
-    thread: (id) =>
-      db.select().from(projectThreads).where(eq(projectThreads.id, id)).get(),
-    archiveThread: (id, at) =>
-      db
-        .update(projectThreads)
-        .set({ archivedAt: at })
-        .where(eq(projectThreads.id, id))
-        .returning()
-        .get(),
-    threadMessages: (threadId) =>
-      withTasks(
-        db
-          .select()
-          .from(threadMessages)
-          .where(eq(threadMessages.threadId, threadId))
-          .orderBy(asc(threadMessages.createdAt), asc(threadMessages.id))
-          .all()
-      ),
-    threadMessage: (id) =>
-      withTasks(
-        db.select().from(threadMessages).where(eq(threadMessages.id, id)).all()
-      )[0],
     taskCommentSaid: (id) =>
       db
         .select({
@@ -8517,111 +8127,6 @@ const make = async (path: string): Promise<DbShape> => {
         .onConflictDoNothing()
         .run();
     },
-    createThread: ({ id, projectId, title, setup, first }) =>
-      db.transaction((tx) => {
-        const at = new Date();
-        const thread = tx
-          .insert(projectThreads)
-          .values({
-            id,
-            projectId,
-            title,
-            setup: setup ?? false,
-            createdAt: at,
-            updatedAt: at,
-          })
-          .returning()
-          .get();
-        const message = tx
-          .insert(threadMessages)
-          .values({
-            ...first,
-            id: first.id ?? crypto.randomUUID(),
-            threadId: id,
-            createdAt: at,
-          })
-          .returning()
-          .get();
-        return { thread, message: { ...message, tasks: null } };
-      }),
-    makeThread: ({ id, projectId, title, setup }) => {
-      const at = new Date();
-      return db
-        .insert(projectThreads)
-        .values({
-          id,
-          projectId,
-          title,
-          setup: setup ?? false,
-          createdAt: at,
-          updatedAt: at,
-        })
-        .returning()
-        .get();
-    },
-    touchThread: (id, at) =>
-      db
-        .update(projectThreads)
-        .set({
-          updatedAt: sql`max(${projectThreads.updatedAt}, ${at.getTime()})`,
-          archivedAt: null,
-        })
-        .where(eq(projectThreads.id, id))
-        .returning()
-        .get(),
-    addThreadMessage: ({ threadId, id, createdAt, tasks, ...said }) =>
-      db.transaction((tx) => {
-        const at = createdAt ?? new Date();
-        const before = tx
-          .select({
-            updatedAt: projectThreads.updatedAt,
-            projectId: projectThreads.projectId,
-          })
-          .from(projectThreads)
-          .where(eq(projectThreads.id, threadId))
-          .get();
-        if (!before) {
-          throw new Error(`thread ${threadId} is not on this hub`);
-        }
-        const row = tx
-          .insert(threadMessages)
-          .values({
-            ...said,
-            id: id ?? crypto.randomUUID(),
-            threadId,
-            createdAt: at,
-          })
-          .returning()
-          .get();
-        const named = [...new Set(tasks ?? [])];
-        if (named.length > 0) {
-          tx.insert(threadMessageTasks)
-            .values(
-              named.map((taskId) => ({
-                messageId: row.id,
-                projectId: before.projectId,
-                taskId,
-              }))
-            )
-            .run();
-        }
-        const message = { ...row, tasks: named.length > 0 ? named : null };
-        const thread = tx
-          .update(projectThreads)
-          .set({
-            updatedAt:
-              at.getTime() > before.updatedAt.getTime() ? at : before.updatedAt,
-            // A new message brings an archived thread back.
-            archivedAt: null,
-          })
-          .where(eq(projectThreads.id, threadId))
-          .returning()
-          .get();
-        if (!thread) {
-          throw new Error(`thread ${threadId} is not on this hub`);
-        }
-        return { thread, message };
-      }),
     projectAttempts: (projectId) =>
       db
         .select()
@@ -8852,7 +8357,13 @@ const make = async (path: string): Promise<DbShape> => {
     createProject: ({ id, name, checkout, remote, caw = false, template }) =>
       db.transaction((tx) => {
         tx.insert(projects)
-          .values({ id, name, remote, caw, template: template ?? null })
+          .values({
+            id,
+            name,
+            remote,
+            eventsOn: caw,
+            template: template ?? null,
+          })
           .run();
         tx.insert(projectPlaces)
           .values({
@@ -9061,7 +8572,7 @@ const make = async (path: string): Promise<DbShape> => {
     removedMachines: () => db.select().from(removedMachines).all(),
     deleteProject: (id) => {
       db.transaction((tx) => {
-        // Its places, tasks, threads, Caw turns and the rules scoped to it go
+        // Its places, tasks, notes and the rules scoped to it go
         // with it (cascade); the sessions started from it outlive it and stop
         // being its (set null).
         tx.delete(queuedTaskStarts)
@@ -9179,38 +8690,10 @@ const make = async (path: string): Promise<DbShape> => {
             .where(eq(workItems.id, item.id))
             .run();
         }
-        const threads = tx
-          .select({ id: projectThreads.id })
-          .from(projectThreads)
-          .where(eq(projectThreads.projectId, dupId))
-          .all().length;
-        tx.update(projectThreads)
+        // Its notes are the kept project's, each where it stands.
+        tx.update(projectNotes)
           .set({ projectId: keepId })
-          .where(eq(projectThreads.projectId, dupId))
-          .run();
-        // Its messages' tasks, by the numbers they have in the kept project.
-        const named = tx
-          .select()
-          .from(threadMessageTasks)
-          .where(eq(threadMessageTasks.projectId, dupId))
-          .orderBy(sql`rowid`)
-          .all();
-        tx.delete(threadMessageTasks)
-          .where(eq(threadMessageTasks.projectId, dupId))
-          .run();
-        for (const link of named) {
-          tx.insert(threadMessageTasks)
-            .values({
-              ...link,
-              projectId: keepId,
-              taskId: renamed(link.taskId) ?? link.taskId,
-            })
-            .onConflictDoNothing()
-            .run();
-        }
-        tx.update(cawTurns)
-          .set({ projectId: keepId })
-          .where(eq(cawTurns.projectId, dupId))
+          .where(eq(projectNotes.projectId, dupId))
           .run();
         // A rule scoped to it fires in the kept project from now on.
         tx.update(rules)
@@ -9355,35 +8838,12 @@ const make = async (path: string): Promise<DbShape> => {
         }
         // Its index rows and the rest of its own rows go with it (cascade).
         tx.delete(projects).where(eq(projects.id, dupId)).run();
-        return { places, sessions, threads, workItems: items.length };
+        return { places, sessions, workItems: items.length };
       }),
     recordSend: (send) =>
       db.insert(sentMessages).values(send).returning().get(),
     sendRecord: (uuid) =>
       db.select().from(sentMessages).where(eq(sentMessages.uuid, uuid)).get(),
-    threadSends: (threadId) =>
-      db
-        .select()
-        .from(sentMessages)
-        .where(eq(sentMessages.threadId, threadId))
-        .orderBy(asc(sentMessages.acceptedAt), asc(sentMessages.uuid))
-        .all(),
-    leadSends: (projectId, after) =>
-      db
-        .select({ send: sentMessages })
-        .from(sentMessages)
-        .innerJoin(instances, eq(instances.id, sentMessages.instanceId))
-        .where(
-          and(
-            eq(instances.projectId, projectId),
-            eq(instances.origin, "project"),
-            gt(sentMessages.acceptedAt, after)
-          )
-        )
-        .orderBy(asc(sentMessages.acceptedAt))
-        .all()
-        .map((row) => row.send)
-        .filter(isSessionSend),
     sendsIn: (instanceId, states) =>
       db
         .select()
@@ -9395,8 +8855,7 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .orderBy(asc(sentMessages.acceptedAt))
-        .all()
-        .filter(isSessionSend),
+        .all(),
     // By the sessions' ids, so SQLite finds each one's pending sends by its
     // index (`sent_messages_state`): joined to its sessions, it read every
     // send the hub ever kept, at each register (hub-restart-load).
@@ -9420,8 +8879,7 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .orderBy(asc(sentMessages.acceptedAt))
-        .all()
-        .filter(isSessionSend),
+        .all(),
     holdSend: (uuid, envelope) =>
       db
         .update(sentMessages)
@@ -9943,7 +9401,7 @@ const make = async (path: string): Promise<DbShape> => {
         .get(),
     // A thread's send no lead was handed is in no session's transcript.
     sendsFor: (ids) => {
-      const rows: SessionSendRow[] = [];
+      const rows: SentMessageRow[] = [];
       // A long transcript names more ids than SQLite binds in one statement.
       for (let at = 0; at < ids.length; at += SENDS_FOR_BATCH) {
         const batch = ids.slice(at, at + SENDS_FOR_BATCH);
@@ -9958,7 +9416,6 @@ const make = async (path: string): Promise<DbShape> => {
               )
             )
             .all()
-            .filter(isSessionSend)
         );
       }
       return rows;

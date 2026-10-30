@@ -16,8 +16,8 @@
   import { IconClose, IconFolder } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { answerProjectOffer, dismissProjectJoin } from "../client.svelte";
+  import { rowHref } from "../links";
   import RowFault from "../RowFault.svelte";
-  import { threadHref } from "../thread-tabs";
 
   let {
     instanceId,
@@ -43,10 +43,10 @@
     refused = "";
     try {
       const accepted = await answerProjectOffer(instanceId, which);
-      if (accepted?.setupThread) {
-        // A new project: Caw sets it up in its Setup thread, with the
-        // session's plan already on its board.
-        await goto(threadHref(accepted.setupThread.id));
+      if (accepted?.conversation) {
+        // A new project: its conversation sets it up, with the session's
+        // plan already on its board.
+        await goto(rowHref(accepted.conversation));
       }
     } catch (error) {
       refused = failureWords(error);

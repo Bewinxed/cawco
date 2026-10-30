@@ -89,6 +89,9 @@ public struct ShellContext {
     let forgetProject: (_ project: ProjectRow, _ from: UIView?) -> Void
     /// Opens the New Session form, at a place when one is given; `spinOff` opens it as a spin-off.
     let startSession: (_ machineId: String?, _ cwd: String?, _ projectId: String?, _ spinOff: Bool) -> Void
+    /// A new conversation in a project: the New Session form at its primary
+    /// checkout, scoped to it, on `prompt` when the caller has first words.
+    let startConversation: (_ projectId: String, _ prompt: String?) -> Void
     /// What a session's context menu needs from the shell.
     let sessionMenus: SessionMenuContext
 }

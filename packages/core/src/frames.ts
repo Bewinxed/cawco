@@ -37,7 +37,6 @@ import {
   type TailnetHttps,
   type TailnetOrigin,
 } from "./tailnet-https";
-import type { ThreadSummary } from "./threads";
 import type { AccountLimits, MachineGoLimits, UsageSpend } from "./usage";
 
 export interface FleetMcpFrame {
@@ -621,13 +620,6 @@ export interface PermissionRequestFrame {
   /** `tool` for a permission, `question` for an AskUserQuestion-shaped prompt. */
   requestKind?: "tool" | "question";
   suggestions?: PermissionUpdate[];
-  /**
-   * An ask a project's Caw made (his question, a project setting or a
-   * memory proposal he asked about): the thread it was made in (the one
-   * whose message woke that turn, else the project's newest). It is drawn
-   * and answered in that thread, and its answer lands there.
-   */
-  threadId?: string;
   toolName: string;
   /** The tool call the ask gates, as its transcript message names it. */
   toolUseId?: string;
@@ -850,13 +842,13 @@ export interface ProjectOfferSummary {
 // the OpenAPI schema's name, which the app's client is generated from, and
 // a doc comment here would become that schema's description.
 export interface AcceptResult {
+  /** A new project's conversation, which sets it up; none when the folder joined one, or it could not start. */
+  conversation?: string;
   /** True when the session's folder joined a project that already had its repository. */
   joined: boolean;
   project: { id: string; name: string };
   /** The sessions moved into it: this one, then its delegates. */
   sessions: string[];
-  /** A new project's Setup thread, where its Caw sets it up; none when the folder joined one. */
-  setupThread?: ThreadSummary;
   /** Plan items filed as proposed tasks, and the ones the project refused. */
   tasks: { id: string; title: string }[];
   unfiled: { title: string; why: string }[];
@@ -872,16 +864,9 @@ export interface ProjectOfferFrame {
   offer: ProjectOfferSummary | null;
 }
 
-export interface ThreadUpsertFrame {
-  instanceId?: undefined;
-  /** Hub-originated: a thread was started, or its last message or status changed. */
-  kind: "thread.upsert";
-  thread: ThreadSummary;
-}
-
 export interface ProjectCapFrame {
   /** Its project's cap as it stands now; null once it has none. */
-  cap: import("./threads").ProjectCap | null;
+  cap: import("./project-conversation").ProjectCap | null;
   instanceId?: undefined;
   /** Hub-originated: a project's spend against its cap moved, or the cap did. */
   kind: "project.cap";

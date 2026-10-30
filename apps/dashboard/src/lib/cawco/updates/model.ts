@@ -14,7 +14,7 @@ import {
   RESTART_WAIT_CAP_MS,
   type RetiringKeeper,
 } from "@cawco/core/binary-updates";
-import type { CawStatus } from "@cawco/core/threads";
+import type { CawStatus } from "@cawco/core/project-conversation";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 

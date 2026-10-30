@@ -218,7 +218,6 @@
       instanceId: over.key,
       cwd: over.cwd,
       origin: null,
-      thread: null,
       machineId: "m1",
       machine: { name: over.machine, os: over.os },
       title: over.title,

@@ -182,6 +182,15 @@ import type {
 } from "./plan";
 import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "./plan";
 import type {
+  DesignOfferEvent as DesignOfferEventType,
+  DesignOfferNote as DesignOfferNoteType,
+  ProjectNoteEvent as ProjectNoteEventType,
+  ProjectNote as ProjectNoteType,
+  RoutineMadeEvent as RoutineMadeEventType,
+  RoutineMadeNote as RoutineMadeNoteType,
+  RoutineSchedule as RoutineScheduleType,
+} from "./project-conversation";
+import type {
   AgentRow as AgentRowType,
   ArtifactThumbnail as ArtifactThumbnailType,
   BuildInfo as BuildInfoType,
@@ -231,18 +240,6 @@ import type {
   RelayReach as RelayReachType,
 } from "./stream-relay";
 import type { WaitWitness as WaitWitnessType } from "./task-views";
-import type {
-  DesignOfferEvent as DesignOfferEventType,
-  DesignOfferThreadEvent as DesignOfferThreadEventType,
-  LeadCallOutcome as LeadCallOutcomeType,
-  RoutineMadeEvent as RoutineMadeEventType,
-  RoutineMadeThreadEvent as RoutineMadeThreadEventType,
-  RoutineSchedule as RoutineScheduleType,
-  ThreadAnswer as ThreadAnswerType,
-  ThreadEvent as ThreadEventType,
-  ThreadImage as ThreadImageType,
-  ThreadQuestion as ThreadQuestionType,
-} from "./threads";
 import type {
   ToolState as ToolStateType,
   ToolStatus as ToolStatusType,
@@ -1147,6 +1144,126 @@ const ReleaseManifestShape = z.object({
 export const ReleaseManifestSchema: z.ZodType<ReleaseManifestType> =
   ReleaseManifestShape;
 
+const RoutineScheduleShape = z.object({
+  cron: z.string(),
+  nextAt: z.number().nullable(),
+  timeZone: z.string(),
+  words: z.string(),
+});
+
+const WorkItemStateShape = z.enum(WORK_ITEM_STATES);
+
+const ItemEndShape = WorkItemStateShape.extract([
+  "done",
+  "failed",
+  "cancelled",
+]);
+
+const RoutineMadeEventShape = z.object({
+  by: z.enum(["delegate", "session"]),
+  expiresAt: z.number().nullable(),
+  instanceId: z.string(),
+  name: z.string(),
+  routineId: z.string(),
+  schedule: RoutineScheduleShape,
+  why: z.string().nullable(),
+});
+
+const RoutineMadeNoteShape = RoutineMadeEventShape.extend({
+  kind: z.literal("routine-made"),
+});
+
+const DesignOfferEventShape = z.object({
+  projectId: z.string(),
+  sources: z.array(z.string()),
+  taskId: z.string(),
+});
+
+const DesignOfferNoteShape = DesignOfferEventShape.extend({
+  kind: z.literal("design-offer"),
+});
+
+const ProjectNoteEventShape = z.union([
+  z.object({
+    kind: z.literal("routine"),
+    name: z.string(),
+    phase: z.enum(["started", "delivered", "failed"]),
+    routineId: z.string(),
+    runId: z.string(),
+    schedule: RoutineScheduleShape,
+    slot: z.string(),
+    slotLabel: z.string(),
+  }),
+  z.object({
+    instanceId: z.string(),
+    kind: z.literal("attempt"),
+    phase: z.enum(["ended", "judge"]),
+    state: ItemEndShape.nullable(),
+    taskId: z.string(),
+    title: z.string(),
+    try: z.number(),
+    workItemId: z.string(),
+  }),
+  z.object({
+    instanceId: z.string(),
+    kind: z.literal("delegate"),
+    state: ItemEndShape,
+    title: z.string(),
+    workItemId: z.string(),
+  }),
+  z.object({
+    kind: z.literal("task"),
+    stage: z.string(),
+    taskId: z.string(),
+    title: z.string(),
+  }),
+  z.object({ kind: z.literal("view"), name: z.string() }),
+  z.object({ kind: z.literal("agents"), sha: z.string() }),
+  z.object({
+    instanceId: z.string(),
+    kind: z.literal("fleet"),
+    name: z.string(),
+  }),
+  z.object({
+    kind: z.literal("phone"),
+    task: z.object({ id: z.string(), title: z.string() }).nullable(),
+  }),
+  z.object({
+    kind: z.literal("project"),
+    from: z.string().optional(),
+    name: z.string(),
+    what: z.enum([
+      "made",
+      "settings-changed",
+      "settings-approved",
+      "settings-declined",
+    ]),
+  }),
+  z.object({
+    kind: z.literal("file"),
+    path: z.string(),
+    sha: z.string().nullable(),
+    what: z.enum(["wrote", "approved", "declined"]),
+  }),
+  z.object({
+    commit: z.string().nullable(),
+    kind: z.literal("repo"),
+    lfsOffer: z.string().optional(),
+    lfsRefused: z.string().optional(),
+    machineId: z.string(),
+    root: z.string(),
+  }),
+  RoutineMadeNoteShape,
+  DesignOfferNoteShape,
+]);
+
+const ProjectNoteShape = z.object({
+  body: z.string().optional(),
+  event: ProjectNoteEventShape,
+  title: z.string(),
+});
+export const ProjectNoteSchema: z.ZodType<ProjectNoteType> = ProjectNoteShape;
+
 const ArtifactThumbnailShape = z.object({
   at: z.string(),
   height: z.number(),
@@ -1507,9 +1624,10 @@ const FileAttachmentShape = z.object({
   size: z.number(),
 });
 
-const SendAttachmentShape = z.union([TextAttachmentShape, FileAttachmentShape]);
-export const SendAttachmentSchema: z.ZodType<SendAttachmentType> =
-  SendAttachmentShape;
+export const SendAttachmentShape = z.union([
+  TextAttachmentShape,
+  FileAttachmentShape,
+]);
 
 const MoveRequestShape = z.object({
   approved: z.string().optional(),
@@ -1762,7 +1880,6 @@ export const SendPayloadShape = z.object({
     .optional(),
   instanceId: z.string(),
   message: SentMessageShape,
-  projectId: z.string().optional(),
 });
 
 const SessionCommandsShape = z.object({
@@ -1857,168 +1974,6 @@ const RunKindShape = z.enum(["merge check", "command"]);
 const StoppedCommandsShape = z.partialRecord(RunKindShape, z.number());
 export const StoppedCommandsSchema: z.ZodType<StoppedCommandsType> =
   StoppedCommandsShape;
-
-const ThreadAnswerShape = z.union([
-  z.object({
-    annotations: z
-      .record(
-        z.string(),
-        z.object({
-          notes: z.string().optional(),
-          preview: z.string().optional(),
-        })
-      )
-      .optional(),
-    answers: UserAnswersShape,
-    outcome: z.literal("answered"),
-  }),
-  z.object({ outcome: z.literal("dismissed") }),
-]);
-export const ThreadAnswerSchema: z.ZodType<ThreadAnswerType> =
-  ThreadAnswerShape;
-
-const RoutineScheduleShape = z.object({
-  cron: z.string(),
-  nextAt: z.number().nullable(),
-  timeZone: z.string(),
-  words: z.string(),
-});
-
-const WorkItemStateShape = z.enum(WORK_ITEM_STATES);
-
-const ItemEndShape = WorkItemStateShape.extract([
-  "done",
-  "failed",
-  "cancelled",
-]);
-
-const LeadCallOutcomeShape = z.enum([
-  "asked",
-  "ran",
-  "refused",
-  "denied",
-  "cut",
-]);
-
-const RoutineMadeEventShape = z.object({
-  by: z.enum(["delegate", "session"]),
-  expiresAt: z.number().nullable(),
-  instanceId: z.string(),
-  name: z.string(),
-  routineId: z.string(),
-  schedule: RoutineScheduleShape,
-  why: z.string().nullable(),
-});
-
-const RoutineMadeThreadEventShape = RoutineMadeEventShape.extend({
-  kind: z.literal("routine-made"),
-});
-
-const DesignOfferEventShape = z.object({
-  projectId: z.string(),
-  sources: z.array(z.string()),
-  taskId: z.string(),
-});
-
-const DesignOfferThreadEventShape = DesignOfferEventShape.extend({
-  kind: z.literal("design-offer"),
-});
-
-const ThreadEventShape = z.union([
-  z.object({
-    kind: z.literal("routine"),
-    name: z.string(),
-    phase: z.enum(["started", "delivered", "failed"]),
-    routineId: z.string(),
-    runId: z.string(),
-    schedule: RoutineScheduleShape,
-    slot: z.string(),
-    slotLabel: z.string(),
-  }),
-  z.object({
-    instanceId: z.string(),
-    kind: z.literal("attempt"),
-    phase: z.enum(["ended", "judge"]),
-    state: ItemEndShape.nullable(),
-    taskId: z.string(),
-    title: z.string(),
-    try: z.number(),
-    workItemId: z.string(),
-  }),
-  z.object({
-    instanceId: z.string(),
-    kind: z.literal("delegate"),
-    state: ItemEndShape,
-    title: z.string(),
-    workItemId: z.string(),
-  }),
-  z.object({
-    kind: z.literal("task"),
-    stage: z.string(),
-    taskId: z.string(),
-    title: z.string(),
-  }),
-  z.object({
-    command: z.string().optional(),
-    kind: z.literal("caw"),
-    what: z.union([
-      LeadCallOutcomeShape.exclude(["asked"]),
-      z.literal("could-not-start"),
-      z.literal("edited"),
-      z.literal("guard"),
-    ]),
-  }),
-  z.object({ kind: z.literal("view"), name: z.string() }),
-  z.object({ kind: z.literal("agents"), sha: z.string() }),
-  z.object({
-    instanceId: z.string(),
-    kind: z.literal("fleet"),
-    name: z.string(),
-  }),
-  z.object({
-    kind: z.literal("phone"),
-    task: z.object({ id: z.string(), title: z.string() }).nullable(),
-  }),
-  z.object({
-    kind: z.literal("project"),
-    from: z.string().optional(),
-    name: z.string(),
-    what: z.enum([
-      "made",
-      "settings-changed",
-      "settings-approved",
-      "settings-declined",
-    ]),
-  }),
-  z.object({
-    kind: z.literal("file"),
-    path: z.string(),
-    sha: z.string().nullable(),
-    what: z.enum(["wrote", "approved", "declined"]),
-  }),
-  z.object({
-    commit: z.string().nullable(),
-    kind: z.literal("repo"),
-    lfsOffer: z.string().optional(),
-    lfsRefused: z.string().optional(),
-    machineId: z.string(),
-    root: z.string(),
-  }),
-  z.object({ kind: z.literal("hub"), what: z.literal("thread-repaired") }),
-  RoutineMadeThreadEventShape,
-  DesignOfferThreadEventShape,
-]);
-export const ThreadEventSchema: z.ZodType<ThreadEventType> = ThreadEventShape;
-
-const ThreadImageShape = z.object({ mediaType: z.string(), src: z.string() });
-export const ThreadImageSchema: z.ZodType<ThreadImageType> = ThreadImageShape;
-
-const ThreadQuestionShape = z.object({
-  questions: z.array(UserQuestionShape),
-  toolUseId: z.string().optional(),
-});
-export const ThreadQuestionSchema: z.ZodType<ThreadQuestionType> =
-  ThreadQuestionShape;
 
 const WaitWitnessShape = z.object({ target: z.string(), value: z.string() });
 export const WaitWitnessSchema: z.ZodType<WaitWitnessType> = WaitWitnessShape;
@@ -2373,6 +2328,15 @@ prove<
     Same<z.output<typeof RelayStateShape>, RelayStateType>,
     Same<z.output<typeof RelayViewShape>, RelayViewType>,
     Same<z.output<typeof ReleaseManifestShape>, ReleaseManifestType>,
+    Same<z.output<typeof RoutineScheduleShape>, RoutineScheduleType>,
+    Same<z.output<typeof WorkItemStateShape>, WorkItemStateType>,
+    Same<z.output<typeof ItemEndShape>, ItemEndType>,
+    Same<z.output<typeof RoutineMadeEventShape>, RoutineMadeEventType>,
+    Same<z.output<typeof RoutineMadeNoteShape>, RoutineMadeNoteType>,
+    Same<z.output<typeof DesignOfferEventShape>, DesignOfferEventType>,
+    Same<z.output<typeof DesignOfferNoteShape>, DesignOfferNoteType>,
+    Same<z.output<typeof ProjectNoteEventShape>, ProjectNoteEventType>,
+    Same<z.output<typeof ProjectNoteShape>, ProjectNoteType>,
     Same<z.output<typeof ArtifactThumbnailShape>, ArtifactThumbnailType>,
     Same<z.output<typeof CompactStageShape>, CompactStageType>,
     Same<z.output<typeof AccountHueShape>, AccountHueType>,
@@ -2446,24 +2410,6 @@ prove<
     Same<z.output<typeof SpawnPayloadShape>, SpawnPayloadType>,
     Same<z.output<typeof RunKindShape>, RunKindType>,
     Same<z.output<typeof StoppedCommandsShape>, StoppedCommandsType>,
-    Same<z.output<typeof ThreadAnswerShape>, ThreadAnswerType>,
-    Same<z.output<typeof RoutineScheduleShape>, RoutineScheduleType>,
-    Same<z.output<typeof WorkItemStateShape>, WorkItemStateType>,
-    Same<z.output<typeof ItemEndShape>, ItemEndType>,
-    Same<z.output<typeof LeadCallOutcomeShape>, LeadCallOutcomeType>,
-    Same<z.output<typeof RoutineMadeEventShape>, RoutineMadeEventType>,
-    Same<
-      z.output<typeof RoutineMadeThreadEventShape>,
-      RoutineMadeThreadEventType
-    >,
-    Same<z.output<typeof DesignOfferEventShape>, DesignOfferEventType>,
-    Same<
-      z.output<typeof DesignOfferThreadEventShape>,
-      DesignOfferThreadEventType
-    >,
-    Same<z.output<typeof ThreadEventShape>, ThreadEventType>,
-    Same<z.output<typeof ThreadImageShape>, ThreadImageType>,
-    Same<z.output<typeof ThreadQuestionShape>, ThreadQuestionType>,
     Same<z.output<typeof WaitWitnessShape>, WaitWitnessType>,
     Same<z.output<typeof WorkspaceHoldingShape>, WorkspaceHoldingType>,
     Same<z.output<typeof MoveLargeFileShape>, MoveLargeFileType>,

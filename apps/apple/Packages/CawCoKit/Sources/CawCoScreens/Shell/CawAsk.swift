@@ -5,15 +5,13 @@ import UIKit
 
 /// The session Composer with words alone, to Caw (ViewRoutines.svelte
 /// `askCaw`, the project page's Ask Caw for a view): its own binding, Caw
-/// named on its field, no Attach. A send goes as the thread composer's does
-/// (ThreadViewController `send`): the field clears at once, a refusal puts
-/// the words back with why over them, and words the hub never answered go
-/// again under the same id, which the hub answers with what it kept. A
-/// starter pressed into the field (`press`) is told to the hub as picked or
-/// edited once its words go (`tellStarterOutcome`).
+/// named on its field, no Attach. The field clears at once and a refusal
+/// puts the words back with why over them. A starter pressed into the field
+/// (`press`) is told to the hub as picked or edited once its words go
+/// (`tellStarterOutcome`).
 final class CawAskComposer: UIView {
-    /// The words, and the id they go under; throws the hub's refusal.
-    var submit: (_ text: String, _ id: String) async throws -> Void = { _, _ in }
+    /// The words; throws the hub's refusal.
+    var submit: (_ text: String) async throws -> Void = { _ in }
     /// Its height changed (a line, a fold, the refusal over it).
     var onHeight: () -> Void = {}
     let binding: SessionComposerBinding
@@ -22,7 +20,6 @@ final class CawAskComposer: UIView {
     private let projectId: String
     private var sending = false
     private var sendError: String?
-    private var unanswered: (words: String, id: String)?
     /// The starter last pressed into the field, its words as the press put them.
     private var pressed: (place: Components.Schemas.StarterPlace, text: String)?
 
@@ -76,7 +73,6 @@ final class CawAskComposer: UIView {
 
     private func send(_ words: String) {
         guard hub.state == .connected, !sending else { return }
-        let id = unanswered.flatMap { $0.words == words ? $0.id : nil } ?? UUID().uuidString.lowercased()
         sending = true
         sendError = nil
         binding.sent()
@@ -84,8 +80,7 @@ final class CawAskComposer: UIView {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await submit(words, id)
-                unanswered = nil
+                try await submit(words)
                 // A starter pressed into the field went, as it stood or changed (Jev's steering).
                 if let pressed {
                     self.pressed = nil
@@ -96,9 +91,7 @@ final class CawAskComposer: UIView {
                 }
             } catch {
                 binding.setDraft(words)
-                let unreached = ThreadsStore.unreachable(error)
-                unanswered = unreached ? (words, id) : nil
-                sendError = unreached ? ThreadsStore.sendUnreached : ThreadsStore.failureWords(error)
+                sendError = CawStore.failureWords(error)
             }
             sending = false
             render()
@@ -109,8 +102,8 @@ final class CawAskComposer: UIView {
 /// Ask Caw for a view (routes/project/[id] `askView`): the session Composer
 /// to Caw, words alone, floating from where it was asked in a popover that
 /// draws nothing of its own (`.view-ask-pop`: the Composer is the surface),
-/// `cPanelW` wide at most. The words go to him as a view request, in a thread
-/// of their own, where he drafts the view; the popover closes once the hub
+/// `cPanelW` wide at most. The words go to the project's conversation as a
+/// view request, where it drafts the view; the popover closes once the hub
 /// has them, and a refusal stays over the words, which come back.
 final class ViewAskController: KitPopoverController {
     private let ask: CawAskComposer
@@ -120,8 +113,8 @@ final class ViewAskController: KitPopoverController {
         self.projectId = projectId
         ask = CawAskComposer(id: "view-ask:\(projectId)", placeholder: Words.Views.placeholder, hub: hub, projectId: projectId)
         super.init(chromeless: true)
-        ask.submit = { [weak self] text, id in
-            let thread = try await hub.threads.requestView(projectId: projectId, text: text, id: id)
+        ask.submit = { [weak self] text in
+            try await hub.caw.requestView(projectId: projectId, text: text)
             self?.dismiss(animated: true)
         }
         ask.onHeight = { [weak self] in self?.fit() }

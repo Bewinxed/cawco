@@ -28,7 +28,7 @@ public final class FleetConnections {
             rows = try ok.body.json.connections
             problem = nil
         } catch {
-            problem = Words.Connections.unread(clause: ThreadsStore.failureWords(error))
+            problem = Words.Connections.unread(clause: CawStore.failureWords(error))
         }
     }
 

@@ -151,8 +151,7 @@ export const notNowId = (id: string, raisedAt: number): string =>
 
 /**
  * The address that opens artifact `id` in its panel at `stop`, in `view`:
- * the session that holds it, or for one a project's Caw made, the thread
- * his turn answered (`thread:<id>`), which shows his panel.
+ * the session that holds it.
  */
 export const artifactStopHref = (
   view: string,

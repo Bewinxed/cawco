@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { CapPeriod, OnCap, ProjectSpend } from "@cawco/core/threads";
+  import type {
+    CapPeriod,
+    OnCap,
+    ProjectSpend,
+  } from "@cawco/core/project-conversation";
   import {
     cawco,
     projectSpend,
@@ -28,18 +32,16 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
-  import { formatAgeShort } from "#lib/utils/time.js";
+
   /**
    * One project's spend (fable-lead-switch.md §2): five tiles — today, this
    * month, its Caw's share this month, its budget (its spend cap for a day
    * or a month, what reaching it does, and the way to set it), and what one
    * attempt may spend — then
-   * a ledger: Caw's threads with how often each woke him, and each task's
-   * attempts with what they cost and how the newest stands. Rows open the
-   * thread or the task. A thread's dollars are the turns it woke: each
-   * turn's share of the lead session's cost, booked by the hub.
+   * a ledger: each task's attempts with what they cost and how the newest
+   * stands, the project's conversations and every other session, as their
+   * sessions reported it. A row opens its task.
    */
-  import { clock } from "../home/home-state.svelte";
 
   let {
     projectId,
@@ -469,10 +471,10 @@
         </StatTile>
       </div>
 
-      {#if spend.monthUsd > 0 || spend.threads.length > 0 || spend.attempts.length > 0}
-        <!-- This month's ledger: Caw's threads (and his turns no thread
-             woke), the attempts, every other session, and their total, which
-             is the This month tile. -->
+      {#if spend.monthUsd > 0 || spend.attempts.length > 0}
+        <!-- This month's ledger: the attempts, the project's
+             conversations, every other session, and their total, which is
+             the This month tile. -->
         <div
           data-slot="ledger"
           class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
@@ -485,85 +487,6 @@
             stacks="phone"
             style="--card-cols: minmax(0, 1fr) auto auto"
           >
-            {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
-              {@render band("Caw", "Wakes", "Last")}
-              <Table.Body>
-                {#each spend.threads as thread (thread.id)}
-                  <Table.Row
-                    data-project-spend-row
-                    class="relative"
-                    variant="stacks"
-                  >
-                    <Table.Cell
-                      variant="ledger-stacks"
-                      class="@max-phone/table:col-span-full"
-                    >
-                      <a
-                        data-slot="name"
-                        class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
-                        href="/session/thread:{thread.id}"
-                        >Thread · {thread.title}</a
-                      >
-                    </Table.Cell>
-                    <Table.Cell
-                      data-num
-                      variant="ledger-stacks"
-                      class="w-c-ledger-count-w"
-                      >{thread.wakes}
-                      {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
-                    >
-                    <Table.Cell
-                      data-num
-                      edge="end"
-                      variant="ledger-stacks"
-                      class="w-c-ledger-usd-w">{usd(thread.usd)}</Table.Cell
-                    >
-                    <Table.Cell
-                      data-num
-                      data-col-last
-                      edge="end"
-                      variant="ledger-stacks"
-                      class="w-c-ledger-when-w"
-                      >{formatAgeShort(thread.lastAt, clock.now)}</Table.Cell
-                    >
-                  </Table.Row>
-                {/each}
-                {#if spend.caw.unthreadedMonthUsd > 0}
-                  <Table.Row
-                    data-project-spend-row
-                    class="relative"
-                    variant="stacks"
-                  >
-                    <Table.Cell
-                      variant="ledger-stacks"
-                      class="@max-phone/table:col-span-full"
-                      ><span
-                        data-slot="name"
-                        class="type-label block truncate text-ink-row no-underline"
-                        >Not in a thread</span
-                      ></Table.Cell
-                    >
-                    <Table.Cell
-                      variant="ledger-stacks"
-                      class="w-c-ledger-count-w"
-                    ></Table.Cell>
-                    <Table.Cell
-                      data-num
-                      edge="end"
-                      variant="ledger-stacks"
-                      class="w-c-ledger-usd-w"
-                      >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
-                    >
-                    <Table.Cell
-                      data-col-last
-                      edge="end"
-                      variant="ledger-stacks"
-                      class="w-c-ledger-when-w"
-                    ></Table.Cell>
-                  </Table.Row>
-                {/if}
-              </Table.Body>
-            {/if}
             {#if spend.attempts.length > 0}
               {@render band("Attempts", "Tries", "Now")}
               <Table.Body>
@@ -617,6 +540,38 @@
               </Table.Body>
             {/if}
             <Table.Body>
+              {#if spend.caw.monthUsd > 0}
+                <Table.Row
+                  data-project-spend-row
+                  class="relative"
+                  variant="stacks"
+                >
+                  <Table.Cell
+                    variant="ledger-stacks"
+                    class="@max-phone/table:col-span-full"
+                    ><span
+                      data-slot="name"
+                      class="type-label block truncate text-ink-row no-underline"
+                      >Conversations</span
+                    ></Table.Cell
+                  >
+                  <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
+                  ></Table.Cell>
+                  <Table.Cell
+                    data-num
+                    edge="end"
+                    variant="ledger-stacks"
+                    class="w-c-ledger-usd-w"
+                    >{usd(spend.caw.monthUsd)}</Table.Cell
+                  >
+                  <Table.Cell
+                    data-col-last
+                    edge="end"
+                    variant="ledger-stacks"
+                    class="w-c-ledger-when-w"
+                  ></Table.Cell>
+                </Table.Row>
+              {/if}
               {#if spend.others.monthUsd > 0}
                 <Table.Row
                   data-project-spend-row

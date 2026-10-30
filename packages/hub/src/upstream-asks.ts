@@ -71,8 +71,6 @@ export interface UpstreamAsksDeps {
    * since the session that asked has usually moved on by then.
    */
   readonly tell: (instanceId: string, text: string) => void;
-  /** The thread a project's Caw asks in; undefined for any other session. */
-  readonly threadOf: (actor: InstanceRow) => string | undefined;
 }
 
 /** Who answered a made post: its forge by name, else its host. */
@@ -156,7 +154,6 @@ export const createUpstreamAsks = (deps: UpstreamAsksDeps) => {
         return heldWords(held.what, held.repo, true);
       }
       const requestId = crypto.randomUUID();
-      const threadId = deps.threadOf(actor);
       deps.park(
         parkedToolAsk(
           actor,
@@ -165,7 +162,6 @@ export const createUpstreamAsks = (deps: UpstreamAsksDeps) => {
           { ...describePost(held.post, held.repo, account) },
           {
             upstreamPost: held,
-            ...(threadId ? { threadId } : {}),
           }
         )
       );

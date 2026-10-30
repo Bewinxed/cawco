@@ -1,5 +1,5 @@
 /**
- * A project's own things as an agent reads them: Caw's threads and folder,
+ * A project's own things as an agent reads them: its folder,
  * its views, memory, routines, inbound routes and polls, approved actions
  * and relays. Each by its name and the handle its tools take back
  * (handles.ts), each time as how long ago or how far ahead.
@@ -9,7 +9,6 @@ import {
   type RelayView,
   type RoutineRunView,
   routineLink,
-  type ThreadSummary,
   taskLink,
 } from "@cawco/core";
 import type {
@@ -30,78 +29,10 @@ import {
   listed,
   quote,
   valueWords,
-  verbatim,
 } from "./words";
 
 /** A list line's mark, which a single answer says as its kind. */
 const LIST_MARK = /^- /u;
-
-/**
- * One thing said in a thread, as `thread_read` reads it: the person's send
- * (`unread` while you have not read it) or answer to your question, your
- * reply, or a note.
- */
-export type ThreadLine =
-  | { answer?: true; at: number; author: "you"; body: string; unread?: true }
-  | {
-      at: number;
-      author: "caw";
-      body: string;
-      files?: string[];
-      tasks?: string[];
-    }
-  | { at: number; author: "event"; body?: string; noteTitle: string };
-
-/** A thread and what was said in it, oldest first. */
-export interface ThreadLines {
-  lines: ThreadLine[];
-  thread: ThreadSummary;
-}
-
-/** One thread of Caw's, a line. */
-const threadLine = (
-  thread: ThreadSummary & { last?: string | null },
-  now: number
-): string =>
-  `- ${quote(thread.title, 120)} ${handle(thread.id)} · ${thread.status}${thread.setup ? " · setup" : ""} · last ${ago(thread.lastAt, now)}${thread.last ? `: ${quote(thread.last, 240)}` : ""}`;
-
-/** One thing said in a thread, a line. */
-const messageLine = (message: ThreadLine, now: number): string => {
-  switch (message.author) {
-    case "you":
-      return `- the person, ${ago(message.at, now)}: ${verbatim(message.body)}${message.answer ? " (answered your question)" : ""}${message.unread ? " (not read yet)" : ""}`;
-    case "caw":
-      return `- you, ${ago(message.at, now)}: ${quote(message.body, 1200)}${message.tasks?.length ? ` (tasks ${listed(message.tasks)})` : ""}${message.files?.length ? ` (files ${listed(message.files)})` : ""}`;
-    case "event":
-      return `- event, ${ago(message.at, now)}: ${message.noteTitle}${message.body ? `: ${quote(message.body, 600)}` : ""}`;
-    default:
-      return String(message);
-  }
-};
-
-/** `thread_read`: every thread, newest first, or one thread's messages. */
-export const threadReadWords = (
-  read: (ThreadSummary & { last?: string | null })[] | ThreadLines
-): string => {
-  const now = Date.now();
-  if (Array.isArray(read)) {
-    return read.length === 0
-      ? "No threads with the person."
-      : lines(
-          `${count(read.length, "thread")}, newest first; thread takes the handle:`,
-          read.map((thread) => threadLine(thread, now))
-        );
-  }
-  return lines(
-    threadLine(read.thread, now),
-    read.lines.length === 0
-      ? "No messages yet."
-      : read.lines.map((message) => messageLine(message, now))
-  );
-};
-
-/** `thread_reply`. */
-export const threadRepliedWords = (): string => "Answered in the thread.";
 
 /** `folder_read`: a file's words, or a folder's entries. */
 export const folderReadWords = (read: FolderFile | FolderListing): string => {

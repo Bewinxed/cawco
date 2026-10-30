@@ -327,16 +327,10 @@ export interface SendPayload {
   from?: string;
   /** Images the turn carries: base64, with no `data:` URI prefix. */
   images?: { mediaType: string; data: string }[];
-  /** The session it goes to, or a Caw thread's view id (`thread:<id>`, core threads.ts `threadTarget`). */
+  /** The session it goes to. */
   instanceId: string;
   /** The user turn, under the uuid it keeps everywhere it is shown. */
   message: import("./harness").SentMessage;
-  /**
-   * A send to a Caw thread not made yet: the project it is made in, under
-   * the id its `thread:<id>` names (the composer mints it as it mints a
-   * send's uuid). Absent on every other send.
-   */
-  projectId?: string;
 }
 
 /**
@@ -1172,11 +1166,6 @@ export interface InstanceRow {
   stalled?: { until?: number; words: string };
   status: InstanceStatus;
   /**
-   * The thread with its project's Caw this session works for, when Caw's
-   * work started it: the rail nests it under that thread.
-   */
-  threadId?: string | null;
-  /**
    * What the session is called: the owner's rename, else the name the session
    * gave itself (`set_title`) or was spawned under, else {@link derivedTitle}.
    */
@@ -1237,6 +1226,12 @@ export interface WorkItemSummary {
    * decode it under this key.
    */
   checkQueue: { words: string; since: number } | null;
+  /**
+   * Its project's conversation, a co-parent of the item, whose tray lists it
+   * beside its parent's; null when the project has none, or the
+   * conversation is its parent or its own session.
+   */
+  conversationInstanceId: string | null;
   createdAt: number;
   dismissedAt: number | null;
   /** Why the reader dismissed it, in their words; null unless dismissed with a reason. */
@@ -1250,12 +1245,6 @@ export interface WorkItemSummary {
   firstLines: { brief: string; result: string; error: string };
   id: string;
   instanceId: string;
-  /**
-   * Its project's lead, a co-parent of the item, whose tray lists it beside
-   * its parent's; null when the project has none, or the lead is its parent
-   * or its own session.
-   */
-  leadInstanceId: string | null;
   /**
    * While the machine its workspace is on is paused: "Omars-MacBook-Pro is
    * paused until 00:57". Its session runs no turn until then. Null otherwise.
@@ -1414,7 +1403,6 @@ export type FramePayload =
   | import("./frames").PulseFrame
   | import("./frames").WorkItemFrame
   | import("./frames").ProjectOfferFrame
-  | import("./frames").ThreadUpsertFrame
   | import("./frames").TasksChangedFrame
   | import("./frames").DecisionsChangedFrame
   | import("./frames").BlocksChangedFrame

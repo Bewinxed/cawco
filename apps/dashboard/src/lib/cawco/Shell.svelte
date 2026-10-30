@@ -71,7 +71,6 @@
   import NewSessionPopover from "./spawn/NewSessionPopover.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { store, stored } from "./storage";
-  import { isThreadTab } from "./thread-tabs";
   import { floor } from "./visible-viewport.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
@@ -865,17 +864,13 @@
   });
 
   /**
-   * Files follows the conversation on screen (a session's, not a thread's):
+   * Files follows the conversation on screen:
    * the bar's item and the phone's sidebar row count it, and its card and
    * its drawer hold it. None closes the drawer.
    */
   $effect(() => {
     const id =
-      onSession &&
-      workspace.activeSessionId &&
-      !isThreadTab(workspace.activeSessionId)
-        ? workspace.activeSessionId
-        : null;
+      onSession && workspace.activeSessionId ? workspace.activeSessionId : null;
     untrack(() => {
       if (files.session !== id) {
         files.sheet = files.sheet && id !== null;
@@ -1248,7 +1243,7 @@
           {:else}
             <!-- Padding, not margin: the crumb leaving is pinned where its
                  border box stands (crossOut), and a margin would carry it
-                 along. A long name (a thread's, a project's) ends in an
+                 along. A long name (a session's, a project's) ends in an
                  ellipsis and keeps clear of the cluster beside it: the bar's
                  own gap plus --space-3 of margin, outside the box its text
                  is clipped to, past the 16px a name needs from a control. -->

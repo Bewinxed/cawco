@@ -77,7 +77,6 @@
   import { carry, waiting } from "../motion/share.svelte";
   import { provideSessionHere } from "../session-here";
   import { readJson, writeJson } from "../storage";
-  import { isThreadTab } from "../thread-tabs";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
@@ -129,7 +128,6 @@
     onlanded,
     onshown,
     firstScreen = false,
-    bare = false,
     parkedHeight = 0,
     latestInset,
 
@@ -166,12 +164,6 @@
      */
     firstScreen?: boolean;
     /**
-     * An empty conversation draws nothing of its own: its composer is the
-     * whole instruction (a thread with a project's Caw, which has no `/` or
-     * `@` to tell of).
-     */
-    bare?: boolean;
-    /**
      * How far what rises past the composer lent to this conversation (an
      * ask it grows into, an offer on its tray row) stands over the foot, px.
      * Set on the two boxes that read it (`.parked-room`, `.dock`), never on
@@ -180,7 +172,7 @@
      * every row in the list each time.
      */
     parkedHeight?: number;
-    /** Where the way back to the tail rests, up from the scroller's foot, when the pane says (a thread). */
+    /** Where the way back to the tail rests, up from the scroller's foot, when the pane says (a docked conversation's). */
     latestInset?: string;
   } = $props();
 
@@ -2153,9 +2145,9 @@
   let wasWarm = false;
   $effect(() => {
     // Both read every time, so a pane warming or `visible` wakes this. A
-    // session's pane goes by the session's id; a thread's by its tab's, read
-    // off the slot it is docked in, which can be none yet as this first runs
-    // (PaneHost moves it there after it mounts).
+    // session's pane goes by the session's id, read off the slot it is
+    // docked in, which can be none yet as this first runs (PaneHost moves it
+    // there after it mounts).
     const warmed = warm.panes();
     const hidden = !visible;
     // PaneLeaf's slot: a side split's own panes (paneforge) carry an empty `data-pane`.
@@ -2912,7 +2904,7 @@
   const unfoundWords = $derived(
     unfound === "unread"
       ? "That moment couldn't be reached: the turns before these couldn't be read."
-      : `That moment isn't in this ${isThreadTab(session.instanceId) ? "thread" : "session"} any more.`
+      : "That moment isn't in this session any more."
   );
   /** The most frames a seek re-centres for while rows around it measure: our own call. */
   const SEEK_FRAMES = 30;
@@ -4808,7 +4800,7 @@
     >
       <LiveDot /><span>Loading transcript…</span>
     </p>
-  {:else if renderedRows.length === 0 && !bare}
+  {:else if renderedRows.length === 0}
     <!-- Only once the read has said the conversation is empty, fading in
          where it stands. The two keys that do anything from the composer
          below. Left-aligned: this surface is a ledger. -->
@@ -4986,8 +4978,8 @@
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back.
        Where it rests, up from the scroller's foot, is the pane's to say
-       (`--latest-inset`): a thread keeps the room Caw's rise takes above its
-       composer; elsewhere it stands at the top of the composer's clearance
+       (`--latest-inset`): a docked conversation's just over its composer's
+       own place; elsewhere it stands at the top of the composer's clearance
        (the foot room less the composer's own dock gap, where the last row
        ends at the tail), and over what rises past it (`--parked-room`):
        never under an ask. A sticky box's inset is measured from the

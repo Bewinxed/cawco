@@ -5,14 +5,13 @@
  * ranking at the hub.
  *
  * Two parts, two speeds. The names part reads what the hub holds (sessions,
- * threads, tasks, routines, projects, machines, artifacts, decisions, the
+ * tasks, routines, projects, machines, artifacts, decisions, the
  * commits and files of delegates' work items) and answers in milliseconds:
  * every word of the query, in any order, has to match one of a result's
  * recognisers (find-names.ts). The transcripts part asks every machine's
  * index (`searchTranscripts`, agent search/index.ts), each within
  * {@link TRANSCRIPT_ANSWER_MS}, and folds what they say into conversations,
- * each with its best moments, and the threads' own messages (kept at the
- * hub) into threads; a machine that did not answer is named in the answer's
+ * each with its best moments; a machine that did not answer is named in the answer's
  * coverage, never dropped in silence.
  *
  * Ranking, one order for both parts: how well the words matched (a title
@@ -20,7 +19,6 @@
  * agent's above what was handed in), then how recently it moved, then its
  * live state (working and waiting on you above idle above asleep above
  * ended), then parentage (your own sessions, today's delegates of them).
- * Caw's own lead session is never a result: his threads stand for him.
  */
 import {
   type AgentRow,
@@ -45,7 +43,6 @@ import {
   noticePartWords,
   reasonLine,
   type StageKind,
-  type ThreadSummary,
   type TranscriptAnswer,
   type TranscriptQuery,
   unparked,
@@ -54,19 +51,16 @@ import {
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import {
-  excerptOf,
   marksOf,
   matchOf,
   matchShape,
   parse,
   type Query,
-  wordHit,
-  wordsOf,
 } from "@cawco/core/find-match";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { status, t } from "elysia";
-import { checkoutOf, type DbShape } from "./db";
+import type { DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
 import {
   AUTHOR_POINTS,
@@ -84,7 +78,6 @@ import {
   routineEntry,
   storedEntry,
   taskEntry,
-  threadEntry,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
 
@@ -98,7 +91,7 @@ const TRANSCRIPT_ANSWER_MS = 1500;
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
- * (work items, tasks, routines, artifacts, plans, projects, machines, threads)
+ * (work items, tasks, routines, artifacts, plans, projects, machines)
  * is read again once it is this old, so a burst of keystrokes reads it once.
  * Sessions are kept by the board's change log and are never stale.
  */
@@ -122,27 +115,17 @@ const MAX_LIMIT = 50;
 const PAGE_KEPT_MS = 60_000;
 const PAGES_KEPT = 16;
 
-/** How many moments of one thread an answer carries. */
-const THREAD_MOMENTS = 3;
-
 /**
  * How many of one author's words a listing (no words, a `by`) reads, newest
- * first: from each machine's index (agent search/index.ts, the same bound),
- * and from the threads kept at the hub. Older words are the next listing's,
+ * first: from each machine's index (agent search/index.ts, the same bound).
+ * Older words are the next listing's,
  * asked `before` the last one read (find-tool.ts pages so).
  */
 const LISTED_DOCS = 200;
 
-/** How many characters of a thread message a listing's moment carries; an agent's find cuts its own from the whole message, which rides as its `context` when asked. */
-const LISTED_CHARS = 240;
-
-const SPACES = /\s+/gu;
-
-/** A conversation's or thread's moments; none for anything else. */
+/** A conversation's moments; none for anything else. */
 const momentsOf = (result: FindResult): FindMoment[] =>
-  result.kind === "conversation" || result.kind === "thread"
-    ? result.moments
-    : [];
+  result.kind === "conversation" ? result.moments : [];
 
 /** A listed result's newest moment, ms epoch. */
 const newestOf = (result: FindResult): number =>
@@ -160,10 +143,10 @@ const WAITING_DAYS = 14;
  * What a find narrows to, beside its words and kinds: what an agent's `find`
  * (find-tool.ts) asks for. A project or a machine keeps the results that are
  * in it (a machine: the sessions on it, and the machine); `since` keeps what
- * moved since then, a conversation's or thread's moments the ones said since;
+ * moved since then, a conversation's moments the ones said since;
  * `before` keeps the evidence at or before it (past.dev's `queryTimestamp`:
  * "Evidence that occurred at or before that instant is eligible, and later
- * evidence is out of scope"), a conversation's or thread's moments said by
+ * evidence is out of scope"), a conversation's moments said by
  * then, anything else only when nothing about it moved after.
  */
 export interface FindWhere {
@@ -219,7 +202,7 @@ export interface FindRequest {
 
 /**
  * A moment as the engine holds it: the words around its excerpt ride along
- * when asked (`FindRequest.context`, and a thread message's whole body), for
+ * when asked (`FindRequest.context`), for
  * the person's secret filter to read (find-secrets.ts), which takes them off
  * before an answer leaves the hub.
  */
@@ -272,7 +255,7 @@ const within = (
     return result;
   }
   const moved = result.lastActivity ?? 0;
-  if (result.kind === "conversation" || result.kind === "thread") {
+  if (result.kind === "conversation") {
     const moments = result.moments.filter((moment) =>
       inWindow(moment.at, where)
     );
@@ -353,18 +336,6 @@ export interface FindDeps {
       title: string;
     }[];
   }>;
-  /** Every project's Caw threads, with Caw's state on each. */
-  threads: () => Record<string, ThreadSummary[]>;
-}
-
-/** A thread message as the names part holds it, for a thread found by its words. */
-interface ThreadLine {
-  at: number;
-  body: string;
-  id: string;
-  threadId: string;
-  who: MomentAuthor;
-  words: string[];
 }
 
 /** A conversation as the names part holds it: its row, its entry and the sessions it started. */
@@ -389,13 +360,9 @@ interface Names {
    * words, and they are hidden from every board and catalog besides.
    */
   hubMade: ReadonlySet<string>;
-  leads: ReadonlySet<string>;
   machines: Map<string, AgentRow>;
   /** Each session a machine keeps that the hub never started, by `machineId:sessionId`. */
   stored: Map<string, Entry>;
-  threadLines: ThreadLine[];
-  /** Each thread's entry, by thread id. */
-  threads: Map<string, Entry>;
 }
 
 /** One machine's part in a find: its coverage, and its answer when it gave one. */
@@ -434,19 +401,6 @@ const stateOf = (
     : "idle";
 };
 
-/** The sessions that are a project's Caw: never results, never targets. */
-const leadsOf = (
-  projects: { leadInstanceId: string | null }[]
-): Set<string> => {
-  const leads = new Set<string>();
-  for (const project of projects) {
-    if (project.leadInstanceId) {
-      leads.add(project.leadInstanceId);
-    }
-  }
-  return leads;
-};
-
 /** Each session's latest work item, each item by id, and each delegating session's newest report. */
 const itemsOf = (items: FindWorkItemRow[]) => {
   const byId = new Map<string, FindWorkItemRow>();
@@ -467,14 +421,13 @@ const itemsOf = (items: FindWorkItemRow[]) => {
   return { byId, latest, reportedTo };
 };
 
-/** Each session's children that find holds, Caw's lead sessions aside. */
+/** Each session's children that find holds. */
 const childrenOf = (
-  rows: Map<string, FindInstanceRow>,
-  leads: ReadonlySet<string>
+  rows: Map<string, FindInstanceRow>
 ): Map<string, string[]> => {
   const children = new Map<string, string[]>();
   for (const row of rows.values()) {
-    if (row.parentInstanceId && !leads.has(row.id)) {
+    if (row.parentInstanceId) {
       const siblings = children.get(row.parentInstanceId) ?? [];
       siblings.push(row.id);
       children.set(row.parentInstanceId, siblings);
@@ -497,19 +450,6 @@ const sessionIdsOf = (
     }
   }
   return bySessionId;
-};
-
-/** How well a thread message holds every one of `words` (0: not all), weighed by whose it is. */
-const lineScore = (line: ThreadLine, words: string[]): number => {
-  let sum = 0;
-  for (const word of words) {
-    const hit = wordHit(word, line.words);
-    if (hit === 0) {
-      return 0;
-    }
-    sum += hit;
-  }
-  return (sum / words.length) * MOMENT_WEIGHT[line.who];
 };
 
 /** What one moment of a machine's answer is in an answer. */
@@ -766,13 +706,11 @@ export const createFind = (deps: FindDeps) => {
       const project = id ? projects.get(id) : undefined;
       return project ? { id: project.id, name: project.name } : null;
     };
-    const leads = leadsOf([...projects.values()]);
     const items = itemsOf(db.find.workItems());
-    const children = childrenOf(held, leads);
+    const children = childrenOf(held);
     const tasks = db.find.tasks();
     const sources = {
       items,
-      leads,
       machineName: (id: string) =>
         machineLabel(machines.get(id)?.hostname ?? id),
       now,
@@ -786,34 +724,19 @@ export const createFind = (deps: FindDeps) => {
     };
     const conversations = new Map<string, Held>();
     for (const row of held.values()) {
-      if (!leads.has(row.id)) {
-        const mine = children.get(row.id) ?? [];
-        conversations.set(row.id, {
-          row,
-          children: mine,
-          entry: conversationEntry(row, sources, mine.length),
-        });
-      }
-    }
-    const threads = new Map<string, Entry>();
-    for (const [projectId, list] of Object.entries(deps.threads())) {
-      // Where its threads' board rows sit (the dashboard's `threadRowOf`):
-      // the primary checkout, else its first place, else its hub folder.
-      const project = projects.get(projectId);
-      const place = project
-        ? (checkoutOf(project) ?? project.places[0])
-        : undefined;
-      const cwd = place?.path ?? `projects/${projectId}`;
-      for (const thread of list) {
-        threads.set(thread.id, threadEntry(thread, projectOf(projectId), cwd));
-      }
+      const mine = children.get(row.id) ?? [];
+      conversations.set(row.id, {
+        row,
+        children: mine,
+        entry: conversationEntry(row, sources, mine.length),
+      });
     }
     const artifacts = db.find.artifacts().flatMap((artifact) => {
       const maker =
         artifact.instanceId === null
           ? undefined
           : held.get(artifact.instanceId);
-      return maker && !leads.has(maker.id)
+      return maker
         ? [
             artifactEntry(
               artifact,
@@ -832,21 +755,10 @@ export const createFind = (deps: FindDeps) => {
       hubMade,
       stored,
       conversations,
-      leads,
       machines,
-      threads,
-      threadLines: db.find.threadWords().map((line) => ({
-        id: line.id,
-        threadId: line.threadId,
-        at: line.at.getTime(),
-        who: line.author === "you" ? "owner" : "caw",
-        body: line.body,
-        words: wordsOf(line.body),
-      })),
       entries: [
         ...[...conversations.values()].map((each) => each.entry),
         ...stored.values(),
-        ...threads.values(),
         ...tasks.map((task) =>
           taskEntry(
             task,
@@ -1047,60 +959,6 @@ export const createFind = (deps: FindDeps) => {
   };
 
   /**
-   * Threads found by their messages' words (yours and Caw's, kept at the
-   * hub): every word of the query, as a word or the start of one, in one
-   * message. Each thread gains its best few messages as moments.
-   */
-  const foldThreads = (
-    found: Map<string, FindResult>,
-    words: string[],
-    author: MomentAuthor | undefined,
-    held: Names,
-    now: number
-  ) => {
-    const byThread = new Map<string, { line: ThreadLine; score: number }[]>();
-    for (const line of held.threadLines) {
-      const score = !author || author === line.who ? lineScore(line, words) : 0;
-      if (score > 0) {
-        byThread.set(line.threadId, [
-          ...(byThread.get(line.threadId) ?? []),
-          { line, score },
-        ]);
-      }
-    }
-    for (const [threadId, lines] of byThread) {
-      const entry = held.threads.get(threadId);
-      if (entry?.result.kind !== "thread") {
-        continue;
-      }
-      const best = lines
-        .toSorted((a, b) => b.score - a.score || b.line.at - a.line.at)
-        .slice(0, THREAD_MOMENTS);
-      const moments = best.map(({ line }): HeldMoment => ({
-        docId: line.id,
-        author: line.who,
-        at: line.at,
-        excerpt: excerptOf(line.body, words),
-        context: line.body,
-      }));
-      const match = 0.15 + 0.35 * (best[0]?.score ?? 0);
-      const key = `thread:${threadId}`;
-      const before = found.get(key);
-      found.set(
-        key,
-        before?.kind === "thread"
-          ? withMoments(before, moments, match)
-          : {
-              ...entry.result,
-              moments,
-              matched: ["transcript"],
-              score: rankOf(match, entry.result, 0, now),
-            }
-      );
-    }
-  };
-
-  /**
    * Folds the machines' moments into conversations: a session the hub holds
    * gains them; one it never started (a stored CLI session) is a
    * conversation of its own, named by its folder; Caw's lead session and a
@@ -1201,7 +1059,7 @@ export const createFind = (deps: FindDeps) => {
     }
   };
 
-  /** The transcripts part: the threads' words, then (unless only Caw's are asked for) every machine's. */
+  /** The transcripts part: every machine's. */
   const findTranscripts = async (
     found: Map<string, FindResult>,
     request: FindRequest,
@@ -1211,13 +1069,6 @@ export const createFind = (deps: FindDeps) => {
     matched: { held: Names; needsYou: ReadonlySet<string> },
     now: number
   ): Promise<FindCoverage> => {
-    if (!kinds || kinds.has("thread")) {
-      foldThreads(found, query.words, request.author, matched.held, now);
-    }
-    // Caw's words are his threads', kept at the hub: no machine is asked for them.
-    if (request.author === "caw") {
-      return { asked: false, machines: [] };
-    }
     const asked = await askMachines(
       query.words.join(" "),
       request.author,
@@ -1293,49 +1144,9 @@ export const createFind = (deps: FindDeps) => {
     );
   };
 
-  /** A listing's thread messages: `author`'s in `where`'s window, the newest {@link LISTED_DOCS}, each thread with its own, newest first. */
-  const listThreads = (
-    found: Map<string, FindResult>,
-    author: MomentAuthor,
-    where: FindWhere,
-    held: Names,
-    context: true | undefined
-  ) => {
-    const lines = held.threadLines
-      .filter((line) => line.who === author && inWindow(line.at, where))
-      .toSorted((a, b) => b.at - a.at)
-      .slice(0, LISTED_DOCS);
-    for (const line of lines) {
-      const entry = held.threads.get(line.threadId);
-      if (entry?.result.kind !== "thread") {
-        continue;
-      }
-      const key = `thread:${line.threadId}`;
-      const before = found.get(key);
-      const moment: HeldMoment = {
-        docId: line.id,
-        author: line.who,
-        at: line.at,
-        excerpt: line.body.replace(SPACES, " ").trim().slice(0, LISTED_CHARS),
-        ...(context ? { context: line.body } : {}),
-      };
-      found.set(
-        key,
-        before?.kind === "thread"
-          ? { ...before, moments: [...before.moments, moment] }
-          : {
-              ...entry.result,
-              moments: [moment],
-              matched: ["transcript"],
-              score: 0,
-            }
-      );
-    }
-  };
-
   /**
    * A listing: no words, one author's (`by`). Their words newest first, the
-   * threads' kept at the hub and each machine's off its index's author and
+   * each machine's off its index's author and
    * time ({@link LISTED_DOCS} of the window from each); each result holds its
    * listed moments, and the results are ordered by their newest.
    */
@@ -1351,16 +1162,10 @@ export const createFind = (deps: FindDeps) => {
     const namesMs = Math.round((performance.now() - started) * 10) / 10;
     const where = request.where ?? {};
     const found = new Map<string, FindResult>();
-    if (!kinds || kinds.has("thread")) {
-      listThreads(found, request.author, where, held, request.context);
-    }
     const askedAt = performance.now();
-    // Caw's words are his threads', kept at the hub: no machine is asked for them.
     const { author } = request;
     const transcripts =
-      request.transcripts &&
-      author !== "caw" &&
-      (!kinds || kinds.has("conversation"));
+      request.transcripts && (!kinds || kinds.has("conversation"));
     const asked = transcripts
       ? await askMachines(
           "",
@@ -1443,8 +1248,7 @@ export const createFind = (deps: FindDeps) => {
     const said = kept(matched.found.values()).filter(
       (result) =>
         !request.author ||
-        ((result.kind === "conversation" || result.kind === "thread") &&
-          result.moments.length > 0)
+        (result.kind === "conversation" && result.moments.length > 0)
     );
     return {
       ranked: said.toSorted((a, b) => b.score - a.score),
@@ -1530,11 +1334,11 @@ export const createFind = (deps: FindDeps) => {
         MAX_LIMIT
       );
       const offset = decodeCursor(request.cursor);
-      // No words: what moved last among sessions and threads, unless kinds say.
+      // No words: what moved last among sessions, unless kinds say.
       const named = request.kinds?.length ? new Set(request.kinds) : null;
       const kinds =
         query.tokens.length === 0 && !named
-          ? new Set<FindKind>(["conversation", "thread"])
+          ? new Set<FindKind>(["conversation"])
           : named;
       // A narrowed find drops what the machines answer outside it: they are
       // asked for as many as a page holds, so a page is not left short.
@@ -1569,7 +1373,7 @@ export const createFind = (deps: FindDeps) => {
       }
     ): Promise<{ coverage: FindCoverage; results: FindResult[] }> {
       const named = request.kinds?.length ? new Set(request.kinds) : null;
-      const kinds = named ?? new Set<FindKind>(["conversation", "thread"]);
+      const kinds = named ?? new Set<FindKind>(["conversation"]);
       const listed = await listAll(request, kinds, performance.now());
       return { results: listed.ranked, coverage: listed.coverage };
     },
@@ -1697,7 +1501,7 @@ const artifactsWaiting = (
  * since: neither the reporting session nor the one it reported to was in
  * front of them after the report came (`instances.seen_at`, the look every
  * device marks). A delegate's report to its parent delegate is that
- * parent's to read, and Caw's go to his threads.
+ * parent's to read.
  */
 const reportsWaiting = (
   items: FindWorkItemRow[],
@@ -1710,10 +1514,7 @@ const reportsWaiting = (
     const ended = item.endedAt?.getTime() ?? 0;
     const reported = item.state === "done" || item.state === "failed";
     const parent = held.conversations.get(item.parentInstanceId)?.row;
-    const yours =
-      parent !== undefined &&
-      parent.parentInstanceId === null &&
-      !held.leads.has(parent.id);
+    const yours = parent !== undefined && parent.parentInstanceId === null;
     const looked = Math.max(
       lookedAt.get(item.instanceId) ?? 0,
       lookedAt.get(item.parentInstanceId) ?? 0
@@ -1748,7 +1549,6 @@ const AUTHOR_OF: Record<FindBy, MomentAuthor> = {
   me: "owner",
   agent: "agent",
   report: "report",
-  caw: "caw",
 };
 
 /** A refusal thrown as its status; anything else as it was. */
@@ -1772,12 +1572,7 @@ export const FIND_QUERY = t.Object({
   cursor: t.Optional(t.String()),
   kinds: t.Optional(t.String()),
   by: t.Optional(
-    t.Union([
-      t.Literal("me"),
-      t.Literal("agent"),
-      t.Literal("report"),
-      t.Literal("caw"),
-    ])
+    t.Union([t.Literal("me"), t.Literal("agent"), t.Literal("report")])
   ),
   transcripts: t.Optional(t.Union([t.Literal("0"), t.Literal("1")])),
 });

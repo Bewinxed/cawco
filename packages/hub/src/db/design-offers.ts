@@ -14,11 +14,7 @@ export interface DesignOffersDb {
   ) => void;
   readonly of: (projectId: string) => DesignOfferRow | undefined;
   /** Files the offer; false when the project was offered already. */
-  readonly offer: (offer: {
-    projectId: string;
-    taskId: string;
-    threadId: string;
-  }) => boolean;
+  readonly offer: (offer: { projectId: string; taskId: string }) => boolean;
 }
 
 export const designOffersDb = (db: BunSQLiteDatabase): DesignOffersDb => ({
@@ -28,10 +24,10 @@ export const designOffersDb = (db: BunSQLiteDatabase): DesignOffersDb => ({
       .where(eq(designOffers.projectId, projectId))
       .run();
   },
-  offer: ({ projectId, taskId, threadId }) =>
+  offer: ({ projectId, taskId }) =>
     db
       .insert(designOffers)
-      .values({ projectId, taskId, threadId, offeredAt: new Date() })
+      .values({ projectId, taskId, offeredAt: new Date() })
       .onConflictDoNothing()
       .returning({ projectId: designOffers.projectId })
       .all().length > 0,

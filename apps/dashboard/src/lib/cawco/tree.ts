@@ -21,7 +21,6 @@
 
 import { type MemberTreeRow, topsIn } from "@cawco/core/project-membership";
 import type { SessionOrigin } from "@cawco/core/protocol";
-import { isThreadTab } from "./thread-tabs";
 
 export type TreeRow = MemberTreeRow;
 
@@ -196,15 +195,19 @@ export function tree<T extends TreeRow>(
 
 /**
  * Whether a row may stand at the top of a list: a session a person started
- * (its `origin`, which the hub stamps as it starts), or a thread with a
- * project's Caw (thread-tabs.ts). It still hangs under a parent the list
+ * (its `origin`, which the hub stamps as it starts), or a project's
+ * conversation (origin `project`), which the project's events reach. It
+ * still hangs under a parent the list
  * holds (a start that named one). Every other session (a delegate, Caw's
  * work, an agent's check) only ever nests under the session that started
  * it: one whose parent no list holds stands nowhere, never at the top.
  */
 export const standsAlone = (
   row: TreeRow & { origin?: SessionOrigin }
-): boolean => isThreadTab(row.id) || (row.origin ?? "person") === "person";
+): boolean => {
+  const origin = row.origin ?? "person";
+  return origin === "person" || origin === "project";
+};
 
 /**
  * The rows of `rows` that hang from a top the list holds: a row that

@@ -20,13 +20,10 @@ import {
   purgedSessions,
   routineRuns,
   routines,
-  sentMessages,
   sessionPlans,
-  threadMessages,
   workItems,
   workspaces,
 } from "./schema";
-import { sendWords } from "./words";
 
 /** An artifact as the find engine reads it: its row, and whether the person changed any of its keys. */
 export type FindArtifactRow = typeof artifacts.$inferSelect & {
@@ -95,8 +92,6 @@ export interface FindRoutineRow {
   nextSlot: Date;
   projectId: string | null;
   prompt: string;
-  /** The thread its runs are noted in; null before its first note. */
-  threadId: string | null;
 }
 
 export interface FindDb {
@@ -136,14 +131,6 @@ export interface FindDb {
   readonly tasks: () => (typeof projectTasks.$inferSelect & {
     labels: string[];
   })[];
-  /** Every thread message of yours or Caw's: the words a thread is found by. */
-  readonly threadWords: () => {
-    at: Date;
-    author: "you" | "caw";
-    body: string;
-    id: string;
-    threadId: string;
-  }[];
   /** Every work item: what it was for and how it ended ({@link BRIEF_OPENING}). */
   readonly workItems: () => FindWorkItemRow[];
   /** Each workspace's branch, by its id. */
@@ -313,7 +300,6 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
           name: row.name,
           prompt: row.prompt,
           projectId: row.projectId,
-          threadId: row.threadId,
           enabled: row.enabled,
           nextSlot: row.nextSlot,
           lastOutcome: run?.outcome ?? null,
@@ -340,44 +326,6 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         labels: labels.get(`${row.projectId}\0${row.path}`) ?? [],
       }));
   },
-  // A thread's words: Caw's replies, and the person's sends written there
-  // (their words, whatever rode with them).
-  threadWords: () => [
-    ...(db
-      .select({
-        id: threadMessages.id,
-        threadId: threadMessages.threadId,
-        author: threadMessages.author,
-        body: threadMessages.body,
-        at: threadMessages.createdAt,
-      })
-      .from(threadMessages)
-      .where(eq(threadMessages.author, "caw"))
-      .all() as {
-      at: Date;
-      author: "you" | "caw";
-      body: string;
-      id: string;
-      threadId: string;
-    }[]),
-    ...db
-      .select({
-        id: sentMessages.uuid,
-        threadId: sentMessages.threadId,
-        body: sentMessages.body,
-        at: sentMessages.acceptedAt,
-      })
-      .from(sentMessages)
-      .where(isNotNull(sentMessages.threadId))
-      .all()
-      .map((row) => ({
-        id: row.id,
-        threadId: row.threadId as string,
-        author: "you" as const,
-        body: sendWords(row.body),
-        at: row.at,
-      })),
-  ],
   workItems: () =>
     db
       .select({

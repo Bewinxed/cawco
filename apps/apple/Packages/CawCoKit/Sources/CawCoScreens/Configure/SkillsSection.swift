@@ -204,7 +204,7 @@ final class SkillsSectionController: ConfigSectionController {
             do {
                 versions[name] = try await FleetSkills.history(name, hub: hub)
             } catch {
-                versionsFailed[name] = ThreadsStore.failureWords(error)
+                versionsFailed[name] = CawStore.failureWords(error)
             }
             requestRefresh()
         }
@@ -222,7 +222,7 @@ final class SkillsSectionController: ConfigSectionController {
                 loadVersions(name)
             } catch {
                 restoreFailed = version.id
-                Toast.error(ThreadsStore.failureWords(error), in: view.window)
+                Toast.error(CawStore.failureWords(error), in: view.window)
             }
             restoring = nil
             requestRefresh()
@@ -239,7 +239,7 @@ final class SkillsSectionController: ConfigSectionController {
             do {
                 try await work()
             } catch {
-                rowFaults[key] = (ThreadsStore.failureWords(error), again)
+                rowFaults[key] = (CawStore.failureWords(error), again)
             }
             busy.remove(key)
             requestRefresh()
@@ -287,7 +287,7 @@ final class SkillsSectionController: ConfigSectionController {
                 await hub.configuration.load()
             } catch {
                 refetchFailed = true
-                refetchFault.text = ThreadsStore.failureWords(error)
+                refetchFault.text = CawStore.failureWords(error)
                 refetchFault.isHidden = false
             }
             refetching = false
@@ -390,7 +390,7 @@ final class SkillsSectionController: ConfigSectionController {
             do {
                 listings[name] = try await FleetSkills.catalog(market, hub: hub)
             } catch {
-                unread[name] = ThreadsStore.failureWords(error)
+                unread[name] = CawStore.failureWords(error)
             }
             reading.remove(name)
             requestRefresh()
@@ -407,7 +407,7 @@ final class SkillsSectionController: ConfigSectionController {
                 try await FleetSkills.install(id, hub: hub)
                 await hub.configuration.load()
             } catch {
-                installFailed[id] = ThreadsStore.failureWords(error)
+                installFailed[id] = CawStore.failureWords(error)
             }
             busy.remove(id)
             requestRefresh()
@@ -617,7 +617,7 @@ final class FetchSkillController: KitPopoverController {
                 dismiss(animated: true)
             } catch {
                 busy = false
-                failure.text = ThreadsStore.failureWords(error)
+                failure.text = CawStore.failureWords(error)
                 failure.isHidden = false
                 draw()
             }
@@ -722,7 +722,7 @@ final class LinkMarketplaceController: KitPopoverController {
                 if (name.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty { name.text = found }
             } catch {
                 guard wanted == at else { return }
-                read = (at, nil, ThreadsStore.failureWords(error))
+                read = (at, nil, CawStore.failureWords(error))
             }
             draw()
         }
@@ -759,7 +759,7 @@ final class LinkMarketplaceController: KitPopoverController {
                 dismiss(animated: true)
             } catch {
                 busy = false
-                failure.text = ThreadsStore.failureWords(error)
+                failure.text = CawStore.failureWords(error)
                 failure.isHidden = false
                 draw()
             }

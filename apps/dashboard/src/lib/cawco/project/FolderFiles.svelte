@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * The project folder's files a Caw reply names (`thread_reply` `files`):
-   * one chip each, its path, a link to the file's address on the project
+   * The project folder's files a delegate's report copied there: one chip
+   * each, its path, a link to the file's address on the project
    * page (`?file=`, FolderFile). The chip of the file that page shows now
    * reads current.
    */
