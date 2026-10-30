@@ -120,46 +120,126 @@ export function silhouette(shapes: PathsD, join: number): string {
 /** The end of a pin away from its card: where its rim wraps. */
 export type FarEnd = "left" | "right" | "top" | "bottom";
 
-/** A rim's line round a pin's far end: its path, its length, where it starts, and the round end's centre and radius (left and right only). */
-export interface RimLine {
-  d: string;
-  end: { r: number; x: number; y: number } | null;
-  length: number;
-  start: { x: number; y: number };
+/** A point and the outward normal there. */
+interface Along {
+  nx: number;
+  ny: number;
+  x: number;
+  y: number;
 }
 
 /**
- * The line a pin's rim runs along: the pin's own outline on its stroke's
- * line (`HALF` in), round its far end, the end away from its card. A round
- * end (`left`, `right`) is its half-circle from its top to its foot; a long
+ * The pin's own outline on its stroke's line (`HALF` in) round its far end,
+ * as a function of the distance along it, and its length. A round end
+ * (`left`, `right`) is its half-circle from its top to its foot; a long
  * side (`top`, `bottom`) runs round both its corners from one end's middle
- * to the other's. It starts at the end nearest the pin's top-end corner,
- * where the status dot stands, so the dot slides into it there.
+ * to the other's.
  */
-export function rimLine(pin: Rect, far: FarEnd): RimLine {
+function farLine(
+  pin: Rect,
+  far: FarEnd
+): { at: (s: number) => Along; length: number } {
   const { x, y, w, h } = pin;
   const r = Math.min(w, h) / 2;
   const a = r - HALF;
-  const n = (v: number) => v.toFixed(PRECISION);
-  const half = Math.PI * a;
-  const quarter = half / 2;
+  const turn = (ox: number, oy: number, angle: number): Along => ({
+    x: ox + a * Math.cos(angle),
+    y: oy + a * Math.sin(angle),
+    nx: Math.cos(angle),
+    ny: Math.sin(angle),
+  });
   if (far === "left" || far === "right") {
     const cx = far === "left" ? x + r : x + w - r;
-    const sweep = far === "left" ? 0 : 1;
+    const way = far === "left" ? -1 : 1;
     return {
-      d: `M${n(cx)} ${n(y + HALF)}A${n(a)} ${n(a)} 0 0 ${sweep} ${n(cx)} ${n(y + h - HALF)}`,
-      length: half,
-      start: { x: cx, y: y + HALF },
-      end: { x: cx, y: y + h / 2, r },
+      length: Math.PI * a,
+      at: (s) => turn(cx, y + r, -Math.PI / 2 + (way * s) / a),
     };
   }
+  const quarter = (Math.PI / 2) * a;
+  const run = Math.max(0, w - 2 * r);
+  const way = far === "top" ? -1 : 1;
+  const cy = far === "top" ? y + r : y + h - r;
   const edge = far === "top" ? y + HALF : y + h - HALF;
-  const mid = far === "top" ? y + r : y + h - r;
-  const sweep = far === "top" ? 0 : 1;
   return {
-    d: `M${n(x + w - HALF)} ${n(mid)}A${n(a)} ${n(a)} 0 0 ${sweep} ${n(x + w - r)} ${n(edge)}L${n(x + r)} ${n(edge)}A${n(a)} ${n(a)} 0 0 ${sweep} ${n(x + HALF)} ${n(mid)}`,
-    length: 2 * quarter + Math.max(0, w - 2 * r),
-    start: { x: x + w - HALF, y: mid },
-    end: null,
+    length: 2 * quarter + run,
+    at: (s) => {
+      if (s <= quarter) {
+        return turn(x + w - r, cy, (way * s) / a);
+      }
+      if (s <= quarter + run) {
+        return { x: x + w - r - (s - quarter), y: edge, nx: 0, ny: way };
+      }
+      return turn(x + r, cy, way * (Math.PI / 2 + (s - quarter - run) / a));
+    },
+  };
+}
+
+/** A rim as drawn: its crescent, its glow's, where its fade runs from and to, and the round end's centre and radius (for the glow's falloff). */
+export interface Rim {
+  core: string;
+  end: { r: number; x: number; y: number } | null;
+  /** The fade: whole at `from`, nothing at `to`, along x; mirrored about `from` on a long side. */
+  fade: { from: number; mirror: boolean; to: number };
+  glow: string;
+  /** The middle of the far end, where the status dot slides in. */
+  mid: { x: number; y: number };
+}
+
+/** Samples along a rim's span: enough that its taper reads as a curve at 3x. */
+const RIM_STEPS = 32;
+
+/**
+ * A pin's rim round its far end, `spread` of the way out from the end's
+ * middle toward both its tips (0 to 1): a crescent on the edge's line,
+ * `width` wide at its middle and narrowing to nothing at its two tips (a
+ * half sine), and its glow, a crescent out from the line `glow` wide at its
+ * middle, narrowing the same way. Both are filled shapes, so the taper is
+ * in the geometry, and the fade along the end (`fade`) is a gradient on x:
+ * every point of a round end lies further from its tips' x the further it
+ * is from them along the curve.
+ */
+export function rimShape(
+  pin: Rect,
+  far: FarEnd,
+  spread: number,
+  width: number,
+  glow: number
+): Rim {
+  const line = farLine(pin, far);
+  const middle = line.length / 2;
+  const reach = (line.length / 2) * Math.max(0, Math.min(1, spread));
+  const n = (v: number) => v.toFixed(PRECISION);
+  const outer: string[] = [];
+  const inner: string[] = [];
+  const onLine: string[] = [];
+  const halo: string[] = [];
+  for (let i = 0; i <= RIM_STEPS; i += 1) {
+    const u = i / RIM_STEPS;
+    const p = line.at(middle - reach + 2 * reach * u);
+    const taper = Math.sin(Math.PI * u);
+    const half = (width * taper) / 2;
+    outer.push(`${n(p.x + p.nx * half)} ${n(p.y + p.ny * half)}`);
+    inner.push(`${n(p.x - p.nx * half)} ${n(p.y - p.ny * half)}`);
+    onLine.push(`${n(p.x)} ${n(p.y)}`);
+    halo.push(
+      `${n(p.x + p.nx * glow * taper)} ${n(p.y + p.ny * glow * taper)}`
+    );
+  }
+  const shape = (out: string[], back: string[]) =>
+    `M${out.join(" ")} ${[...back].reverse().join(" ")}Z`;
+  const mid = line.at(middle);
+  const tip = line.at(middle - reach);
+  const { x, w, h } = pin;
+  const r = Math.min(w, h) / 2;
+  const round = far === "left" || far === "right";
+  return {
+    core: shape(outer, inner),
+    glow: shape(halo, onLine),
+    fade: { from: mid.x, to: tip.x, mirror: !round },
+    mid: { x: mid.x, y: mid.y },
+    end: round
+      ? { x: far === "left" ? x + r : x + w - r, y: pin.y + h / 2, r }
+      : null,
   };
 }
