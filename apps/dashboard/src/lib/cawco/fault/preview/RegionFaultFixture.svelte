@@ -84,7 +84,7 @@
   /** The side card's Close, live: it puts the preview away. */
   let closed = $state(false);
   /** The real rail's boundary was tried again and threw again. */
-  let railTried = $state(false);
+  let railTried = $derived(again);
   const PINS = gooPins as unknown as Pin[];
   const messageOf = (error: unknown): string =>
     error instanceof Error ? error.message : String(error);
