@@ -94,6 +94,9 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 /* The stage (Projects spec §5.10, "The design graph"): a pane with the design graph beside the page stands one state, the one
    kept or the one a hover previews; every frame stays mounted and measured where the canvas laid it out, unseen and out of
    reach. The graph names the state, so no head, label or status line is drawn. */
+/* A pane's page before its graph's first ask stands nothing: every frame mounts and is measured where it stands, unseen,
+   so the grid of every story never shows before the kept state (runtime.ts data-cawco-pane). */
+html[data-cawco-pane]:not([data-cawco-staged]) .cawco-world { visibility: hidden; }
 html[data-cawco-staged] :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status) { visibility: hidden; }
 html[data-cawco-staged] :is(.cawco-frame, .cawco-stand-in):not([data-cawco-on-stage]),
 html[data-cawco-staged] .cawco-section:not([data-cawco-on-stage]) .cawco-section-failed { opacity: 0; pointer-events: none; }

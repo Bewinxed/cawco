@@ -8,13 +8,22 @@
  *
  * One origin carries both, so the preview reaches the owner through the
  * one port the hub proxies: the canvas page's own paths (`/@cawco/`, the
- * stage's Vite modules and its HMR socket) go to the stage, with the
- * overlay on every page it relays, as a machine's preview proxy puts it;
- * everything else to the dashboard. The artifact's document, which the
- * panel and the page's overlay both join, is kept here in memory on the
- * y-websocket protocol, so pins are written and read as on the hub; a
- * stand-in answers the few hub reads the bench makes (its preview pass,
- * its reach check) and refuses the rest, as the probe kit's bench hub does.
+ * stage's Vite modules and its HMR socket) go to the stage, everything else
+ * to the dashboard. The artifact's document, which the panel and the page's
+ * overlay both join, is kept here in memory on the y-websocket protocol, so
+ * pins are written and read as on the hub; a stand-in answers the few hub
+ * reads the bench makes (its preview pass) and refuses the rest, as the
+ * probe kit's bench hub does.
+ *
+ * Behind the hub, the machine's preview proxy puts the hub's overlay on
+ * every page this origin serves, and the hub answers `/__cawco/` itself. An
+ * overlay whose same-origin parent carries one stands down (overlay.ts), so
+ * with the hub's on the panel's page the canvas page's would never run and
+ * the panel would never stand a state. So the hub's tag is left inert on
+ * every page served here (its injection lands inside a comment, {@link
+ * DECOY}), and the canvas page carries the overlay this origin serves
+ * itself, at {@link OVERLAY_HERE}, its document's paths moved out of the
+ * hub's `/__cawco/` ({@link DOC_HERE}).
  * Branch-only: the design graph lands after his picks, and this goes then.
  *
  *   PORT=4300 bun scripts/design-graph-preview.ts
@@ -25,7 +34,6 @@ import { join, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import {
   injectOverlay,
-  OVERLAY_KEY,
   OVERLAY_PATH,
   overlayResponse,
 } from "../packages/core/src/preview-proxy";
@@ -127,112 +135,29 @@ const until = async (
   throw new Error(`${what} didn't come up in ${ms / 1000} s.`);
 };
 
+/* --- Its children end with it, however it ends ------------------------------ */
+
 const children: ChildProcess[] = [];
-const stopAll = () => {
+process.on("exit", () => {
   for (const child of children) {
     child.kill("SIGTERM");
   }
-};
-process.on("SIGTERM", () => {
-  stopAll();
-  process.exit(0);
 });
-process.on("SIGINT", () => {
-  stopAll();
-  process.exit(0);
-});
-
-/* --- The stand-in hub the built dashboard reads through its /api proxy --- */
-
-const hub = Bun.serve({
-  hostname: "127.0.0.1",
-  port: 0,
-  idleTimeout: 0,
-  fetch: (request, server) =>
-    server.upgrade(request)
-      ? undefined
-      : new Response("no hub", { status: 503 }),
-  websocket: {
-    idleTimeout: 0,
-    message: (socket, message) => {
-      socket.send(message);
-    },
-  },
-});
-const HUB = `http://127.0.0.1:${hub.port}`;
-
-/* --- The dashboard, built in its bench mode, and served --------------------- */
-
-console.log("… building the dashboard (bench mode)");
-const built = Bun.spawnSync([VITE, "build", "--mode", "bench"], {
-  cwd: DASHBOARD,
-  env: { ...process.env, CAWCO_DEV_HUB_URL: HUB, CAWCO_HUB_URL: HUB },
-  stdout: "inherit",
-  stderr: "inherit",
-});
-if (built.exitCode !== 0) {
-  throw new Error(`The dashboard's build exited ${built.exitCode}.`);
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  process.on(signal, () => process.exit(0));
 }
-const dashboardPort = await freePort();
-const dashboard = spawn(
-  VITE,
-  [
-    "preview",
-    "--host",
-    "127.0.0.1",
-    "--port",
-    String(dashboardPort),
-    "--strictPort",
-  ],
-  {
-    cwd: DASHBOARD,
-    env: { ...process.env, CAWCO_DEV_HUB_URL: HUB, CAWCO_HUB_URL: HUB },
-    stdio: "inherit",
-  }
-);
-children.push(dashboard);
-
-/* --- The dashboard's own stage, as the daemon starts one ------------------- */
-
-mkdirSync(join(DASHBOARD, ".cawco/stage"), { recursive: true });
-writeFileSync(join(DASHBOARD, ".cawco/stage/host.mjs"), await buildStageHost());
-const stagePort = await freePort();
-const stage = spawn("bun", [join(DASHBOARD, ".cawco/stage/host.mjs")], {
-  cwd: DASHBOARD,
-  env: {
-    ...process.env,
-    CAWCO_STAGE: "1",
-    CAWCO_STAGE_PORT: String(stagePort),
-    CAWCO_STAGE_FRAMEWORK: "svelte",
-    // The dashboard is a SvelteKit app: its root layout's CSS is every frame's, as on its own pages.
-    CAWCO_STAGE_KIT: "1",
-    CAWCO_STAGE_TOOLCHAIN: "vite",
-  },
-  stdio: ["ignore", "pipe", "inherit"],
-});
-children.push(stage);
-// Its stdout is the daemon's line protocol; nothing reads it but this, which keeps the stage alive.
-stage.stdout?.on("data", () => undefined);
-
-await until(
-  "The stage",
-  () =>
-    fetch(`http://127.0.0.1:${stagePort}/@cawco/canvas`).then(
-      (r) => r.status < 500
-    ),
-  240_000
-);
-await until(
-  "The dashboard",
-  () => fetch(`http://127.0.0.1:${dashboardPort}/`).then((r) => r.status < 500),
-  120_000
-);
+for (const event of ["uncaughtException", "unhandledRejection"] as const) {
+  process.on(event, (error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
 
 /* --- The artifact's document, kept here on the y-websocket protocol ------- */
 
 interface DocSocket {
   doc: string;
-  /** The stage's or the dashboard's socket this one relays, for any other upgrade. */
+  /** The stage's or the stand-in hub's socket this one relays, for any other upgrade. */
   path: string;
   protocols?: string[];
   queue: (string | Uint8Array<ArrayBuffer>)[];
@@ -265,37 +190,57 @@ const roomOf = (name: string) => {
   }
   return room;
 };
-/** The artifact's document sockets: the panel's (`/ws/artifact/<session>/<id>`) and the page's (`/__cawco/artifact/<id>`). */
-const DOC_SOCKET = /^\/(?:ws\/artifact\/[^/]+|__cawco\/artifact)\/([^/]+)$/u;
 
 /* --- The one origin ---------------------------------------------------------- */
 
-/** The stage's own paths: its canvas page, its Vite modules, its daemon-side reads. */
+/** Where the canvas page's own overlay is served: out of the hub's `/__cawco/`. */
+const OVERLAY_HERE = "/@cawco-preview/overlay.js";
+/** Where the page's overlay keeps the artifact's document (the pane names `/__cawco/artifact/`, which the hub answers itself). */
+const DOC_HERE = "/@cawco-preview/artifact/";
+/** The artifact's document sockets: the panel's (`/ws/artifact/<session>/<id>`) and the page's (`DOC_HERE<id>`). */
+const DOC_SOCKET =
+  /^\/(?:ws\/artifact\/[^/]+|@cawco-preview\/artifact|__cawco\/artifact)\/([^/]+)$/u;
+/** The stage's own paths: its canvas page and its Vite modules. */
 const STAGE_PATH =
-  /^\/(?:@cawco\/|@vite\/|@fs\/|@id\/|src\/|node_modules\/|\.cawco\/|__cawco\/(?:report|write|stories|weight|components|sheet))/u;
+  /^\/(?:@cawco\/|@vite\/|@fs\/|@id\/|src\/|node_modules\/|\.cawco\/)/u;
+/**
+ * A comment at the head of every page served here: a proxy that puts its
+ * overlay right after the page's `<head>` (core preview-proxy.ts
+ * `overlayAt`) finds this one first, and its tag lands inside the comment,
+ * where it never runs.
+ */
+const DECOY = "<!--<head>-->";
+const DOCTYPE = /^\s*<!doctype[^>]*>/iu;
+/**
+ * The overlay's page realm opens the document's socket and posts its sends
+ * on the paths the pane names: moved to {@link DOC_HERE}, which the hub
+ * leaves to this origin.
+ */
+const DOC_PATHS = `(()=>{const at=(u)=>{try{const x=new URL(String(u),location.href);if(x.pathname.startsWith("/__cawco/artifact/")){x.pathname=${JSON.stringify(DOC_HERE)}+x.pathname.slice(18);return x.href}}catch{}return u};const W=window.WebSocket;window.WebSocket=class extends W{constructor(u,p){super(at(u),p)}};const F=window.fetch.bind(window);window.fetch=(i,o)=>F(typeof i==="string"||i instanceof URL?at(i):i,o);})();`;
 
-const parentsOf = (request: Request): string[] => {
-  const url = new URL(request.url);
-  const host =
-    request.headers.get("x-forwarded-host") ??
-    request.headers.get("host") ??
-    url.host;
-  const proto =
-    request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
-  return [
-    ...new Set([
-      `${proto}://${host}`,
-      `https://${host}`,
-      `http://${host}`,
-      url.origin,
-    ]),
-  ];
+/** A page served here: the hub's overlay left inert; the canvas page with its own. */
+const pageOf = (html: string, canvas: boolean): string => {
+  const own = canvas
+    ? injectOverlay(html).replace(
+        `src="${OVERLAY_PATH}"`,
+        `src="${OVERLAY_HERE}"`
+      )
+    : html;
+  const doctype = own.match(DOCTYPE)?.[0] ?? "";
+  return `${doctype}${DECOY}${own.slice(doctype.length)}`;
+};
+
+/** Where the dashboard, the stage and the stand-in hub listen; 0 until each has started. */
+const ports: Record<"dashboard" | "stage" | "hub", number> = {
+  dashboard: 0,
+  stage: 0,
+  hub: 0,
 };
 
 const relay = async (
   request: Request,
   to: number,
-  overlaid: boolean
+  canvas: boolean
 ): Promise<Response> => {
   const url = new URL(request.url);
   const headers = new Headers(request.headers);
@@ -320,8 +265,8 @@ const relay = async (
   const out = new Headers(answer.headers);
   out.delete("content-encoding");
   out.delete("content-length");
-  if (overlaid && out.get("content-type")?.startsWith("text/html")) {
-    return new Response(injectOverlay(await answer.text()), {
+  if (out.get("content-type")?.startsWith("text/html")) {
+    return new Response(pageOf(await answer.text(), canvas), {
       status: answer.status,
       headers: out,
     });
@@ -329,6 +274,7 @@ const relay = async (
   return new Response(answer.body, { status: answer.status, headers: out });
 };
 
+// Bound before anything starts: a port already taken ends the run before a child is made.
 const front = Bun.serve<DocSocket>({
   hostname: "0.0.0.0",
   port: PORT,
@@ -336,6 +282,12 @@ const front = Bun.serve<DocSocket>({
   async fetch(request, server) {
     const url = new URL(request.url);
     const { pathname } = url;
+    if (!(ports.dashboard && ports.stage)) {
+      return new Response(
+        "The design graph's preview is still starting: its dashboard builds and its stage starts, a few minutes. Reload in a moment.",
+        { status: 503, headers: { "retry-after": "10" } }
+      );
+    }
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       const offered = request.headers.get("sec-websocket-protocol");
       const protocols = offered?.split(",").map((one) => one.trim());
@@ -355,7 +307,7 @@ const front = Bun.serve<DocSocket>({
         302
       );
     }
-    // The hub's answers on a preview origin: its reach check, its pass.
+    // The hub's answers on a preview origin, when no hub stands in front: its reach check, its pass.
     if (pathname === "/__cawco/ping" || pathname === "/__cawco/enter") {
       return new Response(null, {
         status: 204,
@@ -369,20 +321,25 @@ const front = Bun.serve<DocSocket>({
     if (pathname === "/api/preview-ticket") {
       return Response.json({ ticket: "preview" });
     }
-    if (pathname === OVERLAY_PATH) {
-      return await overlayResponse(
-        parentsOf(request),
-        request.headers.get("accept-encoding"),
-        url.searchParams.get(OVERLAY_KEY)
-      );
+    if (pathname === OVERLAY_HERE) {
+      const overlay = await overlayResponse([], null, null);
+      return new Response(`${DOC_PATHS}\n${await overlay.text()}`, {
+        headers: {
+          "content-type": "text/javascript; charset=utf-8",
+          "cache-control": "no-store",
+        },
+      });
     }
     // A page's own send and pictures: kept nowhere, answered as heard.
-    if (pathname.startsWith("/__cawco/artifact/")) {
+    if (
+      pathname.startsWith(DOC_HERE) ||
+      pathname.startsWith("/__cawco/artifact/")
+    ) {
       return Response.json({ ok: true });
     }
     return STAGE_PATH.test(pathname)
-      ? await relay(request, stagePort, true)
-      : await relay(request, dashboardPort, false);
+      ? await relay(request, ports.stage, pathname.startsWith("/@cawco/canvas"))
+      : await relay(request, ports.dashboard, false);
   },
   websocket: {
     idleTimeout: 0,
@@ -398,8 +355,8 @@ const front = Bun.serve<DocSocket>({
       }
       // Vite's HMR goes to the stage; the dashboard's own socket to the stand-in hub, which echoes it.
       const to = ws.data.protocols?.includes("vite-hmr")
-        ? stagePort
-        : (hub.port as number);
+        ? ports.stage
+        : ports.hub;
       const up = new WebSocket(
         `ws://127.0.0.1:${to}${ws.data.path}`,
         ws.data.protocols
@@ -464,6 +421,96 @@ const front = Bun.serve<DocSocket>({
   },
 });
 
+/* --- The stand-in hub the built dashboard reads through its /api proxy --- */
+
+const hub = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  idleTimeout: 0,
+  fetch: (request, server) =>
+    server.upgrade(request)
+      ? undefined
+      : new Response("no hub", { status: 503 }),
+  websocket: {
+    idleTimeout: 0,
+    message: (socket, message) => {
+      socket.send(message);
+    },
+  },
+});
+ports.hub = hub.port as number;
+const HUB = `http://127.0.0.1:${ports.hub}`;
+
+/* --- The dashboard, built in its bench mode, and served --------------------- */
+
+console.log("… building the dashboard (bench mode)");
+const built = Bun.spawnSync([VITE, "build", "--mode", "bench"], {
+  cwd: DASHBOARD,
+  env: { ...process.env, CAWCO_DEV_HUB_URL: HUB, CAWCO_HUB_URL: HUB },
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if (built.exitCode !== 0) {
+  throw new Error(`The dashboard's build exited ${built.exitCode}.`);
+}
+const dashboardAt = await freePort();
+children.push(
+  spawn(
+    VITE,
+    [
+      "preview",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(dashboardAt),
+      "--strictPort",
+    ],
+    {
+      cwd: DASHBOARD,
+      env: { ...process.env, CAWCO_DEV_HUB_URL: HUB, CAWCO_HUB_URL: HUB },
+      stdio: "inherit",
+    }
+  )
+);
+
+/* --- The dashboard's own stage, as the daemon starts one ------------------- */
+
+mkdirSync(join(DASHBOARD, ".cawco/stage"), { recursive: true });
+writeFileSync(join(DASHBOARD, ".cawco/stage/host.mjs"), await buildStageHost());
+const stageAt = await freePort();
+const stage = spawn("bun", [join(DASHBOARD, ".cawco/stage/host.mjs")], {
+  cwd: DASHBOARD,
+  env: {
+    ...process.env,
+    CAWCO_STAGE: "1",
+    CAWCO_STAGE_PORT: String(stageAt),
+    CAWCO_STAGE_FRAMEWORK: "svelte",
+    // The dashboard is a SvelteKit app: its root layout's CSS is every frame's, as on its own pages.
+    CAWCO_STAGE_KIT: "1",
+    CAWCO_STAGE_TOOLCHAIN: "vite",
+  },
+  stdio: ["ignore", "pipe", "inherit"],
+});
+children.push(stage);
+// Its stdout is the daemon's line protocol; nothing reads it but this, which keeps the stage alive.
+stage.stdout?.on("data", () => undefined);
+
+await until(
+  "The stage",
+  () =>
+    fetch(`http://127.0.0.1:${stageAt}/@cawco/canvas`).then(
+      (r) => r.status < 500
+    ),
+  240_000
+);
+await until(
+  "The dashboard",
+  () => fetch(`http://127.0.0.1:${dashboardAt}/`).then((r) => r.status < 500),
+  120_000
+);
+ports.dashboard = dashboardAt;
+ports.stage = stageAt;
+
 console.log(
-  `design graph preview on http://127.0.0.1:${front.port}/ (stage ${stagePort}, dashboard ${dashboardPort})`
+  `design graph preview on http://127.0.0.1:${front.port}/ (stage ${ports.stage}, dashboard ${ports.dashboard})`
 );
