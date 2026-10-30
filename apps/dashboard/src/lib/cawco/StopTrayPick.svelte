@@ -182,6 +182,13 @@
       ? `Turn off, let ${total === 1 ? "it" : total} finish`
       : `Stop ${stopping} and turn off`;
   });
+  /** Coral to turn off with nothing stopped, destructive to stop, plain once he is off. */
+  const confirmLook = $derived.by(() => {
+    if (step === "off") {
+      return "outline";
+    }
+    return step === "pick" && stopping === 0 ? "default" : "destructive";
+  });
   const progress = $derived(
     step === "pick" || stopping === 0
       ? undefined
@@ -496,7 +503,7 @@
         pendingLabel="Stopping {Math.max(left, 1)}…"
         {progress}
         size="sm"
-        variant={step === "pick" && stopping === 0 ? "default" : "destructive"}
+        variant={confirmLook}
       />
     </div>
   </div>
