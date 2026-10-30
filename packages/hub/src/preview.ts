@@ -645,6 +645,60 @@ async function pingSession(
   }
 }
 
+/**
+ * A preview no panel shows, loaded once through its machine's listener `at`
+ * as a pane's load is (a sleeping stage or served server wakes for it): null
+ * when nothing stands in its way, else the hop that failed and why. A page
+ * with no answer within `waitMs` is a server still making it (a first
+ * compile, a build holding its event loop), and no failure: a served server
+ * is up once its port listens, however long its pages take (agent stage.ts
+ * `listens`). The listener's own ping then says whether the way to the server
+ * stands, so `machine` is said only of a listener that answers neither.
+ */
+export async function loadedOnce(
+  at: NonNullable<PreviewTarget["upstream"]>,
+  path: string | undefined,
+  waitMs: number
+): Promise<{ failure: PreviewDown; why: string | null } | null> {
+  const address = at.address.includes(":") ? `[${at.address}]` : at.address;
+  const said = (html: string) => {
+    const down = downOf(html);
+    return down && { failure: down.down, why: down.why };
+  };
+  try {
+    const page = await readWithin(waitMs, async (signal) => {
+      const answer = await fetch(`http://${address}:${at.port}${path ?? "/"}`, {
+        // A pane's load: a sleeping stage or served server wakes for it.
+        headers: { [RELAY_HEADER]: at.token, "sec-fetch-mode": "navigate" },
+        redirect: "manual",
+        signal,
+      });
+      return await answer.text();
+    });
+    if (page.kind === "answered") {
+      return said(page.value);
+    }
+    const pinged = await readWithin(PING_RELAY_MS, async (signal) => {
+      const answer = await fetch(
+        `http://${address}:${at.port}${PREVIEW_PING_PATH}`,
+        { headers: { [RELAY_HEADER]: at.token }, signal }
+      );
+      return await answer.text();
+    });
+    return pinged.kind === "answered"
+      ? said(pinged.value)
+      : {
+          failure: "machine",
+          why: `its listener didn't answer the hub within ${Math.round(pinged.after / 1000)} s`,
+        };
+  } catch (error) {
+    return {
+      failure: "machine",
+      why: `its listener didn't answer the hub: ${causeOf(error)}`,
+    };
+  }
+}
+
 /** `cookie` without the dashboard's own (core `DASHBOARD_COOKIE`). */
 const appCookies = (header: string | null): string | null => {
   if (!header) {

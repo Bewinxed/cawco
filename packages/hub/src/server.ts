@@ -460,10 +460,8 @@ import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import {
   DOWN_WORDS,
-  downOf,
   type FolderWeight,
   isFolderGone,
-  RELAY_HEADER,
 } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import {
@@ -839,6 +837,7 @@ import {
   createPreviewListeners,
   embedKey,
   embedTargets,
+  loadedOnce,
   noteParent,
   type PreviewListenerDeps,
   type PreviewReach,
@@ -14574,36 +14573,14 @@ export const createServer = (
       if (!started.ok) {
         return { failure: started.down, why: started.error };
       }
-      const { address, port, token } = started.upstream;
-      const host = address.includes(":") ? `[${address}]` : address;
       try {
-        const read = await readWithin(SHOWN_WAIT_MS, (signal) =>
-          fetch(`http://${host}:${port}${source.path ?? "/"}`, {
-            // A pane's load: a sleeping stage or served server wakes for it.
-            headers: { [RELAY_HEADER]: token, "sec-fetch-mode": "navigate" },
-            redirect: "manual",
-            signal,
-          })
-        );
-        if (read.kind !== "answered") {
-          return {
-            failure: "machine",
-            why: `its listener didn't answer within ${Math.round(read.after / 1000)} s`,
-          };
-        }
-        const down = downOf(await read.value.text());
-        return down ? { failure: down.down, why: down.why } : null;
-      } catch (error) {
-        return {
-          failure: "machine",
-          why: error instanceof Error ? error.message : String(error),
-        };
+        return await loadedOnce(started.upstream, source.path, SHOWN_WAIT_MS);
       } finally {
         detach(
           callAgent(
             machineId,
             PREVIEW_STOP,
-            [{ instanceId: key, token }],
+            [{ instanceId: key, token: started.upstream.token }],
             BUSY_TIMEOUT_MS
           ),
           "handed preview check stop"

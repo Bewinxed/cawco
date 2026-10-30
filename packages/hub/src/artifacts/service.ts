@@ -1704,8 +1704,9 @@ export interface ArtifactServiceDeps {
   /**
    * A preview no panel shows, loaded once through a listener of its own on
    * machine `machineId` as a pane's load would be, then let go: null when
-   * its page answered, else the hop that didn't and the machine's words for
-   * it. A preview handed to a parent is checked so before it reaches them.
+   * nothing stands in its way (a page its server is still making among that),
+   * else the hop that failed and the machine's words for it. A preview handed
+   * to a parent is checked so before it reaches them.
    */
   reachable: (
     machineId: string,
@@ -3843,7 +3844,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       case "workspace":
         return `${subject} did not answer: the workspace isn't running.`;
       case "machine":
-        return `${subject} did not answer: ${machine} isn't connected to the hub.`;
+        return `${subject} did not answer: ${machine} isn't answering the hub.`;
       case "reach":
         return `${subject} did not answer: ${machine} couldn't open the way to it.`;
       case "closed":
@@ -5668,8 +5669,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * A preview handed to a parent, loaded first: no panel loads it to say it
-   * failed, so one that doesn't answer is refused here, its served server let
-   * go, and it never reaches the parent. Nothing for a page.
+   * failed, so one with a hop down is refused here, its served server let go,
+   * and it never reaches the parent. A page its server is still making goes
+   * up as it does to a panel. Nothing for a page artifact.
    */
   const answersFirst = async (at: Placed): Promise<void> => {
     const { kind, machineId, source } = at;
@@ -6734,7 +6736,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * `to: "parent"` readies it for its parent ({@link ownerFor}) unopened,
      * the parent told once and opening it itself ({@link handOver}).
      * A preview handed so is loaded first ({@link ArtifactServiceDeps.reachable}),
-     * and one that doesn't answer is refused, nothing kept. A page or preview the panel's owner already has under
+     * and one with a hop down is refused, nothing kept. A page or preview the panel's owner already has under
      * the same kind and name is replaced in place: its doc, and so every
      * pick, stays, and the caller becomes its maker. What it is made from (a
      * page's folder, a preview's workspace, a sheet's stage) is the caller's.
