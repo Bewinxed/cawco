@@ -1464,6 +1464,10 @@ export interface TurnWakes {
   scheduled: number;
 }
 
+/** Whether a session whose turn just ended has work of its own that will wake it. */
+export const waitsOnItself = (wakes: TurnWakes | undefined): boolean =>
+  (wakes?.background ?? 0) + (wakes?.scheduled ?? 0) > 0;
+
 /** Claude reports uncached input separately from cache reads and writes. */
 export const promptCacheUsage = (result: NeutralResultMessage) => {
   const { cache = { read: 0, write: 0 } } = result;

@@ -36874,6 +36874,7 @@ export const createServer = (
                   // A failed turn's words, blank ones skipped: a result frame
                   // can carry `result: ""`, and that is no reason.
                   const turn = {
+                    wakes: neutral.wakes,
                     text:
                       text ||
                       harnessError ||

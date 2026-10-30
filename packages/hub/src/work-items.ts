@@ -104,9 +104,11 @@ import {
   OUTPUTS_DIR,
   sessionLink,
   sizeWords,
+  type TurnWakes,
   todoLink,
   WORK_ITEM_ORIGIN,
   type WorkspaceLanding,
+  waitsOnItself,
   withDashboardLine,
   withHostLine,
   withInputsLine,
@@ -1466,7 +1468,8 @@ const DIFFSTAT_LINES = 40;
 /** Quiet turns in a row an item survives: the next one fails it. */
 const QUIET_TURNS = 3;
 
-const QUIET_ERROR = "ended three turns in a row without finish_item";
+const QUIET_ERROR =
+  "did nothing for three turns in a row, with nothing running, and never called finish_item";
 
 /** Runs of whitespace between the counts a git read prints. */
 const SPACES = /\s+/u;
@@ -2441,8 +2444,12 @@ export const createWorkItems = ({
     }
     reportTo(row, body, ...rest);
   };
-  /** Turns in a row each live item's session ended without `finish_item`, by item. */
+  /** Turns in a row each live item's session ended having done nothing, with nothing coming, by item. */
   const quiet = new Map<string, number>();
+  /** The live items whose running turn has called a tool of the session's own ({@link restsInWait}). */
+  const workedThisTurn = new Set<string>();
+  /** The live items told they are still open during this stretch of their session's own background work. */
+  const toldWhileWaiting = new Set<string>();
   /**
    * Wakes of each item's session by the sweep ({@link wakeAsleep}) with no
    * turn of it ending between: the item's turn count at the last wake, and
@@ -6745,6 +6752,8 @@ export const createWorkItems = ({
     }
     // Its landing, if one runs, ends with it: every command of it stops.
     landingStops.get(item.id)?.abort();
+    workedThisTurn.delete(item.id);
+    toldWhileWaiting.delete(item.id);
     const { landed } = db.workItem(item.id) ?? item;
     const kept =
       landed && (change.state === "failed" || change.state === "cancelled")
@@ -6806,15 +6815,18 @@ export const createWorkItems = ({
   };
 
   /**
-   * A live item's turn that ended quietly, with nothing queued for its
-   * session: the "still open" message, and the {@link QUIET_TURNS}th in a
-   * row fails it, its parent told.
+   * A live item's turn that ended with nothing coming for its session: the
+   * "still open" message. A turn that called a tool of its own starts the
+   * count over; one that did nothing adds to it, and the {@link QUIET_TURNS}th
+   * in a row fails the item, its parent told.
    */
   const quietTurn = (
     row: InstanceRow,
-    item: WorkItemRow
+    item: WorkItemRow,
+    worked: boolean
   ): { body: string; failed: boolean } | undefined => {
-    const turns = (quiet.get(item.id) ?? 0) + 1;
+    toldWhileWaiting.delete(item.id);
+    const turns = worked ? 0 : (quiet.get(item.id) ?? 0) + 1;
     if (turns >= QUIET_TURNS) {
       quiet.delete(item.id);
       const ended = finish(item, { state: "failed", error: QUIET_ERROR });
@@ -6830,6 +6842,52 @@ export const createWorkItems = ({
       `Your work item is still open. ${FINISH_LINE} Use wait_item for a bounded wait on a command you started.`
     );
     return undefined;
+  };
+
+  /**
+   * A live item's turn that ended with its session's own background work
+   * running: that work's end wakes it, so the turn counts for nothing. It is
+   * told it is still open once a stretch: a delegate that left a server running
+   * and forgot finish_item is woken by nothing, and its session never sleeps.
+   */
+  const waitsInBackground = (row: InstanceRow, item: WorkItemRow): void => {
+    quiet.delete(item.id);
+    if (toldWhileWaiting.has(item.id)) {
+      return;
+    }
+    toldWhileWaiting.add(item.id);
+    tell(
+      row,
+      `Your work item is still open, with background work of yours running. If you wait on it, end your turn: its end wakes you. If not, ${FINISH_LINE}`
+    );
+  };
+
+  /**
+   * A live item's turn, nothing holding it, ended at `endedAt`: failed, with
+   * something coming for its session, waiting on its own background work, or
+   * none of these. Answers what its parent is sent, or nothing.
+   */
+  const openItemTurnEnded = (
+    row: InstanceRow,
+    item: WorkItemRow,
+    turn: { error?: string; wakes?: TurnWakes },
+    endedAt: Date,
+    worked: boolean
+  ): { body: string; failed: boolean } | undefined => {
+    const busy = busyAfter(row, endedAt);
+    const waits = waitsOnItself(turn.wakes);
+    if (turn.error !== undefined) {
+      return failedTurn(item, turn.error, busy || waits);
+    }
+    if (busy) {
+      quiet.delete(item.id);
+      return undefined;
+    }
+    if (waits) {
+      waitsInBackground(row, item);
+      return undefined;
+    }
+    return quietTurn(row, item, worked);
   };
 
   /** A word from the hub about an item, to the item's session: how its send went. */
@@ -9210,18 +9268,20 @@ export const createWorkItems = ({
 
     /**
      * The tools a session's model called in one message: one that is work of
-     * its own ({@link restsInWait} is false for it) ends a wait at rest, so
-     * a session working again is not shown waiting and its turns count
-     * again. The declaring turn's own calls end nothing.
+     * its own ({@link restsInWait} is false for it) makes its turn no quiet
+     * one, and ends a wait at rest, so a session working again is not shown
+     * waiting. The declaring turn's own calls end nothing.
      */
     worked(instanceId: string, tools: readonly string[]): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (
-        item?.waitUntil &&
-        waitsAtRest.has(item.id) &&
-        tools.some((tool) => !restsInWait(tool))
-      ) {
+      if (!(item && tools.some((tool) => !restsInWait(tool)))) {
+        return;
+      }
+      if (LIVE.has(item.state)) {
+        workedThisTurn.add(item.id);
+      }
+      if (item.waitUntil && waitsAtRest.has(item.id)) {
         clearWait(item);
       }
     },
@@ -9567,6 +9627,7 @@ export const createWorkItems = ({
       }
       db.carryWorkItem(item.id, item.instanceId, to);
       quiet.delete(item.id);
+      toldWhileWaiting.delete(item.id);
       if (LIVE.has(item.state)) {
         update(item.id, { heldAt: null, heldAsleepAt: null });
         if (item.heldAsleepAt) {
@@ -9594,22 +9655,25 @@ export const createWorkItems = ({
      * error when the turn failed. Answers what the parent is sent, or nothing.
      *
      * An item ends only through {@link finishItem}, or here when its turn
-     * failed. A turn that ends it quietly, with nothing queued for the
-     * session, nothing handed to it since, and none of its own delegated work
-     * live, gets the "still open" message; the third in a row fails it and
+     * failed. A turn with something coming (a send, its own delegated work)
+     * or with its own background work running, which its harness says on the
+     * result (`wakes`), is not quiet, and starts the count over. Any other
+     * gets the "still open" message ({@link quietTurn}), and the third in a
+     * row that did nothing fails the item, whoever started those turns, and
      * reports that failure to the parent. A declared wait stays on the tray
      * and is summarized only with the next actionable message. A session
      * that runs no item reports nothing.
      */
     turnEnded(
       row: InstanceRow,
-      turn: { text: string; error?: string },
+      turn: { text: string; error?: string; wakes?: TurnWakes },
       endedAt: Date
     ): { body: string; failed: boolean } | undefined {
       const item = itemOf(row);
       if (!item) {
         return;
       }
+      const worked = workedThisTurn.delete(item.id);
       // The plan's completed to-do ids tick their to-dos, off the turn's path.
       syncSoon(item);
       // The turn an interrupt cut: nothing goes back, nothing fails it and
@@ -9630,16 +9694,12 @@ export const createWorkItems = ({
         quiet.delete(item.id);
         return undefined;
       }
-      const busy = busyAfter(row, endedAt);
       // A finished item has reported; one whose landing is running reports
       // when it settles (its session's own call may have died with the hub).
       if (!LIVE.has(item.state) || item.landingSince) {
         return undefined;
       }
-      if (turn.error !== undefined) {
-        return failedTurn(item, turn.error, busy);
-      }
-      return busy ? undefined : quietTurn(row, item);
+      return openItemTurnEnded(row, item, turn, endedAt, worked);
     },
 
     /**
