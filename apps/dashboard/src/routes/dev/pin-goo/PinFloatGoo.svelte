@@ -119,6 +119,7 @@
     open,
     onclosed,
     float = $bindable(),
+    area = $bindable(null),
     pill,
     joined = true,
     focused = false,
@@ -144,6 +145,8 @@
     /** The thread's pin, by its number (`data-pin-card`). */
     pin?: number;
     float?: HTMLElement;
+    /** The card's box in the well, px, where it stands: what it covers. */
+    area?: Box | null;
     /** The pill as the page draws it, stood crisp over the shape (the demo's trigger). */
     pill?: Snippet;
     /** It stands `--space-2` from its pin, joined to it by a bridge as tall as the pin, the pin wearing the card's surface: one shape. */
@@ -267,6 +270,9 @@
   /** The card's box at rest, the float's own. */
   const cardW = $derived(Math.max(0, placed.width));
   const cardH = $derived(Math.max(0, placed.height));
+  $effect(() => {
+    area = { x: place.left, y: place.top, w: cardW, h: cardH };
+  });
 
   /** The pill where it stands now, in the card's own coordinates; null while it is out of view. */
   const pinHere = $derived(
@@ -851,7 +857,7 @@
       </div>
       <!-- mark-line: the dot stands on the pin's top-end corner, absolutely, not beside its figure -->
       <span
-        class="absolute inset-0 flex items-center justify-center whitespace-nowrap rounded-pill type-caps num leading-none text-action-solid data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-goo-content group-data-[face=joined]/goo:opacity-100 group-data-[face=joined]/goo:duration-(--dur-goo-content) motion-reduce:transition-none"
+        class="absolute inset-0 flex items-center justify-center whitespace-nowrap rounded-pill type-label num text-action-solid data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-goo-content group-data-[face=joined]/goo:opacity-100 group-data-[face=joined]/goo:duration-(--dur-goo-content) motion-reduce:transition-none"
         data-focused={focused || undefined}
         data-slot="pin-joined-face"
         ><span data-figure>{pin}</span>{#if dot}<PinDot {dot} />{/if}</span

@@ -146,6 +146,26 @@
   const shownPin = $derived(pins.find((one) => one.id === shown) ?? null);
   /** A pill the goo draws as part of its shape while its card is on the page and it is on screen: it steps back, its edge and its ring with it. */
   const held = (id: string) => shown === id && !!at[id]?.mark;
+  /** The open card's box in the well. */
+  let cardArea = $state<Box | null>(null);
+  /**
+   * Another pin that stands under the card on the page is covered by it
+   * whole, its ring and its dot with it: the card stands over every pin
+   * but its own, and a pin under it never shows through or past its edge.
+   */
+  const covered = (id: string) => {
+    const mark = at[id]?.mark;
+    const over = cardArea;
+    if (!(shown && shown !== id && mark && over)) {
+      return false;
+    }
+    return (
+      mark.x < over.x + over.w &&
+      mark.x + mark.w > over.x &&
+      mark.y < over.y + over.h &&
+      mark.y + mark.h > over.y
+    );
+  };
   const drafts = new Map<string, ComposerDraft>();
   const draftOf = (id: string) => {
     const kept = drafts.get(id) ?? new ComposerDraft();
@@ -213,7 +233,7 @@
     type="button"
   >
     <!-- Held, the card's goo draws the pin as part of itself: the page's own pill steps back. -->
-    <span class={["flex", held(pin.id) && "opacity-0"]}>
+    <span class={["flex", (held(pin.id) || covered(pin.id)) && "opacity-0"]}>
       {@render pillOf(pin, keyed === pin.id)}
     </span>
   </button>
@@ -333,7 +353,7 @@
               <p class="m-0 text-ink-muted type-meta">{card.why}</p>
             </div>
             {#each card.options as [name, line], i (name)}
-              {@const pinned = card.q === parents[2] && i === 0}
+              {@const pinned = card.q === parents[PINS[1].id] && i === 0}
               {#if pinned}
                 <div
                   bind:this={targets[pins[1].id]}
@@ -374,6 +394,7 @@
             {@render pillOf(pin, keyed === pin.id)}
           {/snippet}
           <PinFloatGoo
+            bind:area={cardArea}
             bind:float={card}
             box={where?.box ?? null}
             dot={dotOf}

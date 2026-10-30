@@ -620,7 +620,7 @@ export function startPins(deps: PinsDeps): Pins {
       shadow: ["--shadow-tint"],
       dot: ["--status-live-glyph"],
       attn: ["--status-attn-glyph"],
-      font: ["--type-caps", "font"],
+      font: ["--type-label", "font"],
       height: ["--c-pin", "width"],
       deck: ["--deck-step", "width"],
       gap: ["--space-1", "width"],
