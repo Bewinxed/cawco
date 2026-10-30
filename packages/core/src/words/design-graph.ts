@@ -104,6 +104,20 @@ export const designGraphWords = {
   graphView: "Graph",
   /** The step slider, to a reader; its thumb's value is the kept state's name. */
   slider: "Steps",
+  /** The steps bar folds to its pill and grows back out of it. */
+  hideSteps: "Hide steps",
+  showSteps: "Show steps",
+  /** The kept stop's place in the sequence: compact in a field or a pill, in words beside dots (Apple Books' "150 of 483"). */
+  stepFigure: (at: number, of: number) => `${at}/${of}`,
+  stepOf: (at: number, of: number) => `${at} of ${of}`,
+  /** The player's transport. */
+  previousStep: "Previous step",
+  nextStep: "Next step",
+  playSteps: "Play the steps",
+  pauseSteps: "Pause",
+  /** A wide window's row: a state's page beside the kept one, its press keeps it. */
+  rowTitle: (name: string) => `${name}, beside the kept state`,
+  keepState: (name: string) => `Keep ${name}`,
   /** The preview's switches for the owner's open taste calls (graph options.svelte.ts), until he picks. */
   options: "Options",
   foldOptions: "Fold the options",
@@ -116,8 +130,6 @@ export const designGraphWords = {
   noStates: (name: string) => `${name} has no states yet.`,
   /** A count dial's figure: how many records stand of the kept story's list (The Readable Labels rule). */
   countOf: (count: number, of: number) => `${count} of ${of}`,
-  /** The list's length alone, at the count's track end (call 5's other side). */
-  ofCount: (of: number) => `of ${of}`,
   /** A longest dial's switch. */
   longestFirst: "Longest names first",
   /** A record dial with nothing to range over on the kept story (its arg no list, or an empty one): its title. */

@@ -30,12 +30,8 @@
 
   const isRecord = (dial: CanvasDial) =>
     dial.kind === "count" || dial.kind === "longest";
-  /** Call 8's other side: the record controls alone. */
-  const dials = $derived(
-    (graph.dials?.dials ?? []).filter(
-      (dial) => graphOptions.sides.dials === "keep" || isRecord(dial)
-    )
-  );
+  /** Every dial: the record controls beside the agent's others (settled: Dessn's controls keep Data beside Layout). */
+  const dials = $derived(graph.dials?.dials ?? []);
   const values = $derived<DialsModel["values"]>(graph.dials?.values ?? {});
   const numberOf = (dial: CanvasDial): number => {
     const value = values[dial.name];
@@ -68,6 +64,10 @@
           graph.keptHere ? humanize(graph.keptHere.story) : ""
         );
   };
+  /** Call 3's first side (Dessn's controls): a count or a number as one field, its name and figure inside it. */
+  const asField = (dial: CanvasDial) =>
+    graphOptions.sides.countFigure === "field" &&
+    (dial.kind === "count" || dial.kind === "number");
   /** A dial's name: the agent's label, else its name in words ("Rows", "Longest names"). */
   const nameOf = (dial: CanvasDial) =>
     dial.label ??
@@ -100,116 +100,173 @@
         data-dial={dial.kind}
         title={disabled ?? undefined}
       >
-        <!-- In the row, the name keeps its words and the control gives way first; a long name truncates past the graph labels' measure. -->
-        <span
-          class={[
-            "min-w-0 truncate type-meta text-ink-row",
-            layout === "row" && "max-w-c-graph-label-max-w flex-none",
-          ]}
-          title={disabled ?? name}>{name}</span
-        >
-        {#if dial.kind === "count"}
+        {#if asField(dial)}
           {@const list = countOf(dial)}
-          {@const end = graphOptions.sides.countFigure === "end"}
+          {@const count = dial.kind === "count"}
+          {@render field(
+            dial,
+            name,
+            count ? Math.max(1, list.count) : numberOf(dial),
+            count ? 1 : (dial.min ?? 0),
+            count ? Math.max(1, list.of) : maxOf(dial),
+            disabled
+          )}
+        {:else}
+          <!-- In the row, the name keeps its words and the control gives way first; a long name truncates past the graph labels' measure. -->
           <span
             class={[
-              "flex min-w-0 items-center gap-space-2",
-              layout === "row" && "shrink grow-0 basis-c-graph-node-w",
+              "min-w-0 truncate type-meta text-ink-row",
+              layout === "row" && "max-w-c-graph-label-max-w flex-none",
             ]}
+            title={disabled ?? name}>{name}</span
           >
+          {#if dial.kind === "count"}
+            {@const list = countOf(dial)}
+            <span
+              class={[
+                "flex min-w-0 items-center gap-space-2",
+                layout === "row" && "shrink grow-0 basis-c-graph-node-w",
+              ]}
+            >
+              <input
+                aria-label={name}
+                aria-valuetext={words.countOf(list.count, list.of)}
+                class="min-w-0 flex-1 accent-ink-strong disabled:opacity-50"
+                disabled={!!disabled}
+                max={Math.max(1, list.of)}
+                min={1}
+                oninput={(event) =>
+                  graph.dial(dial.name, Number(event.currentTarget.value))}
+                step={1}
+                type="range"
+                value={Math.max(1, list.count)}
+              />
+            </span>
+            <!-- The Measured figure, never cut: tabular figures at a width that holds "999 of 999". -->
+            <output
+              class="min-w-c-count-figure-w whitespace-nowrap text-end type-code text-ink-strong tabular-nums"
+              data-count>{words.countOf(list.count, list.of)}</output
+            >
+          {:else if dial.kind === "longest"}
+            <Switch
+              aria-label={name}
+              checked={values[dial.name] === true}
+              class={layout === "column" ? "col-span-2 justify-self-start" : ""}
+              disabled={!!disabled}
+              onCheckedChange={(on) => graph.dial(dial.name, on)}
+              size="sm"
+            />
+          {:else if dial.kind === "number"}
             <input
               aria-label={name}
-              aria-valuetext={words.countOf(list.count, list.of)}
-              class="min-w-0 flex-1 accent-ink-strong disabled:opacity-50"
-              disabled={!!disabled}
-              max={Math.max(1, list.of)}
-              min={1}
+              class={[
+                "min-w-0 accent-ink-strong",
+                layout === "row" && "shrink grow-0 basis-c-graph-node-w",
+              ]}
+              max={maxOf(dial)}
+              min={dial.min ?? 0}
               oninput={(event) =>
                 graph.dial(dial.name, Number(event.currentTarget.value))}
-              step={1}
+              step={dial.step ?? "any"}
               type="range"
-              value={Math.max(1, list.count)}
+              value={numberOf(dial)}
             />
-            {#if end}
-              <!-- Call 5's other side: the list's length at the track's end. -->
-              <span class="flex-none type-meta text-ink-muted tabular-nums"
-                >{words.ofCount(list.of)}</span
-              >
-            {/if}
-          </span>
-          <!-- The Measured figure, never cut: tabular figures at a width that holds "999 of 999". -->
-          <output
-            class="min-w-c-count-figure-w whitespace-nowrap text-end type-code text-ink-strong tabular-nums"
-            data-count
-            >{#if end}{list.count}{:else}{words.countOf(
-                list.count,
-                list.of
-              )}{/if}</output
-          >
-        {:else if dial.kind === "longest"}
-          <Switch
-            aria-label={name}
-            checked={values[dial.name] === true}
-            class={layout === "column" ? "col-span-2 justify-self-start" : ""}
-            disabled={!!disabled}
-            onCheckedChange={(on) => graph.dial(dial.name, on)}
-            size="sm"
-          />
-        {:else if dial.kind === "number"}
-          <input
-            aria-label={name}
-            class={[
-              "min-w-0 accent-ink-strong",
-              layout === "row" && "shrink grow-0 basis-c-graph-node-w",
-            ]}
-            max={maxOf(dial)}
-            min={dial.min ?? 0}
-            oninput={(event) =>
-              graph.dial(dial.name, Number(event.currentTarget.value))}
-            step={dial.step ?? "any"}
-            type="range"
-            value={numberOf(dial)}
-          />
-          <output class="type-code text-ink-strong tabular-nums"
-            >{numberOf(dial)}<span class="type-meta text-ink-muted"
-              >{dial.unit ?? ""}</span
-            ></output
-          >
-        {:else if dial.kind === "color"}
-          <input
-            aria-label={name}
-            class="h-c-btn-h-xs w-full min-w-0 rounded-xs border border-border-control bg-transparent"
-            oninput={(event) =>
-              graph.dial(dial.name, event.currentTarget.value)}
-            type="color"
-            value={String(values[dial.name] ?? "#000000")}
-          />
-          <output class="type-code text-ink-muted"
-            >{String(values[dial.name] ?? "")}</output
-          >
-        {:else if dial.kind === "select"}
-          <select
-            aria-label={name}
-            class="col-span-2 h-c-btn-h-sm min-w-0 rounded-md border border-border-button-outline bg-surface-raised px-space-2 type-body text-ink-strong"
-            onchange={(event) =>
-              graph.dial(dial.name, event.currentTarget.value)}
-            value={String(values[dial.name] ?? dial.options?.[0] ?? "")}
-          >
-            {#each dial.options ?? [] as option (option)}
-              <option value={option}>{option}</option>
-            {/each}
-          </select>
-        {:else}
-          <input
-            aria-label={name}
-            checked={values[dial.name] === true || values[dial.name] === "true"}
-            class="col-span-2 size-icon-md justify-self-start accent-ink-strong"
-            onchange={(event) =>
-              graph.dial(dial.name, event.currentTarget.checked)}
-            type="checkbox"
-          />
+            <output class="type-code text-ink-strong tabular-nums"
+              >{numberOf(dial)}<span class="type-meta text-ink-muted"
+                >{dial.unit ?? ""}</span
+              ></output
+            >
+          {:else if dial.kind === "color"}
+            <input
+              aria-label={name}
+              class="h-c-btn-h-xs w-full min-w-0 rounded-xs border border-border-control bg-transparent"
+              oninput={(event) =>
+                graph.dial(dial.name, event.currentTarget.value)}
+              type="color"
+              value={String(values[dial.name] ?? "#000000")}
+            />
+            <output class="type-code text-ink-muted"
+              >{String(values[dial.name] ?? "")}</output
+            >
+          {:else if dial.kind === "select"}
+            <select
+              aria-label={name}
+              class="col-span-2 h-c-btn-h-sm min-w-0 rounded-md border border-border-button-outline bg-surface-raised px-space-2 type-body text-ink-strong"
+              onchange={(event) =>
+                graph.dial(dial.name, event.currentTarget.value)}
+              value={String(values[dial.name] ?? dial.options?.[0] ?? "")}
+            >
+              {#each dial.options ?? [] as option (option)}
+                <option value={option}>{option}</option>
+              {/each}
+            </select>
+          {:else}
+            <input
+              aria-label={name}
+              checked={values[dial.name] === true ||
+                values[dial.name] === "true"}
+              class="col-span-2 size-icon-md justify-self-start accent-ink-strong"
+              onchange={(event) =>
+                graph.dial(dial.name, event.currentTarget.checked)}
+              type="checkbox"
+            />
+          {/if}
         {/if}
       </div>
     {/each}
   </fieldset>
 {/if}
+
+{#snippet field(
+  dial: CanvasDial,
+  name: string,
+  value: number,
+  min: number,
+  max: number,
+  disabled: string | null
+)}
+  <!-- Dessn's field: its name at the start and its figure at the end, inside it, its fill up to the value; the range under it all takes the hand and the keys. -->
+  <label
+    class={[
+      "relative flex h-c-btn-h-sm min-w-0 items-center overflow-hidden rounded-pill bg-surface-fill has-[input:focus-visible]:outline-(length:--focus-ring-width) has-[input:focus-visible]:outline-focus-ring has-[input:focus-visible]:outline-offset-(--focus-ring-offset) has-disabled:opacity-50",
+      layout === "column" ? "col-span-full" : "grow basis-c-graph-node-w",
+    ]}
+    data-field={dial.kind}
+  >
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-y-0 start-0 w-(--to) rounded-pill bg-surface-fill-strong"
+      style:--to={`calc(var(--c-btn-h-sm) + (100% - var(--c-btn-h-sm)) * ${max > min ? (value - min) / (max - min) : 1})`}
+    ></span>
+    <span
+      class="relative min-w-0 flex-1 truncate ps-space-3 type-meta text-ink-row"
+      >{name}</span
+    >
+    <output
+      class="relative flex-none pe-space-3 ps-space-2 type-code text-ink-strong tabular-nums"
+      data-count={dial.kind === "count" || undefined}
+      >{#if dial.kind === "count"}{words.countOf(
+          countOf(dial).count,
+          countOf(dial).of
+        )}{:else}{value}<span class="type-meta text-ink-muted"
+          >{dial.unit ?? ""}</span
+        >{/if}</output
+    >
+    <input
+      aria-label={name}
+      aria-valuetext={dial.kind === "count"
+        ? words.countOf(countOf(dial).count, countOf(dial).of)
+        : undefined}
+      class="absolute inset-0 size-full cursor-ew-resize opacity-0 disabled:cursor-not-allowed"
+      disabled={!!disabled}
+      {max}
+      {min}
+      oninput={(event) =>
+        graph.dial(dial.name, Number(event.currentTarget.value))}
+      step={dial.kind === "count" ? 1 : (dial.step ?? "any")}
+      title={disabled ?? undefined}
+      type="range"
+      {value}
+    />
+  </label>
+{/snippet}
