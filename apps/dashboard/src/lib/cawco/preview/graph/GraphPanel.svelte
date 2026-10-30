@@ -19,12 +19,18 @@
    * Rule). It tells the page the room it takes, so the component stands
    * clear of it and never moves as it folds.
    */
-  import { canvasEmbedUrl } from "@cawco/core/stage";
+  import {
+    CANVAS_EMBED_FETCHED,
+    CANVAS_EMBED_GO,
+    CANVAS_EMBED_GRAPH,
+    CANVAS_EMBED_READY,
+    canvasEmbedUrl,
+  } from "@cawco/core/stage";
   import { designGraphWords as words } from "@cawco/core/words/design-graph";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import {
     TabItem,
     Tabs,
@@ -215,11 +221,48 @@
   });
   /** The pair's page, made on the first hover and kept for the session: its embed of the hovered state alone. */
   let pairSeen = $state<string | null>(null);
+  let pairFrame = $state<HTMLIFrameElement>();
+  // A hover that rests: the pair's page stands the hovered state; one passed over on the way stands none.
   $effect(() => {
     const { peek } = graph;
-    if (pairing && address && peek) {
-      pairSeen = canvasEmbedUrl(address, [peek.story]);
+    if (!(pairing && address && peek)) {
+      return;
     }
+    const next = canvasEmbedUrl(address, [peek.story]);
+    const rest = setTimeout(() => {
+      pairSeen = next;
+    }, dur("--dur-peek"));
+    return () => clearTimeout(rest);
+  });
+  // The embed asks for its graph before it fetches any of it (core CANVAS_EMBED_GRAPH): the pair is the one embed, so it takes it all at once.
+  $effect(() => {
+    const frame = pairFrame;
+    if (!frame) {
+      return;
+    }
+    const heard = (event: MessageEvent) => {
+      const said = event.data as { type?: unknown; urls?: unknown } | null;
+      if (event.source !== frame.contentWindow || !said) {
+        return;
+      }
+      const { origin } = new URL(frame.src);
+      if (said.type === CANVAS_EMBED_GRAPH) {
+        frame.contentWindow?.postMessage(
+          {
+            type: CANVAS_EMBED_GO,
+            urls: Array.isArray(said.urls) ? said.urls : [],
+          },
+          origin
+        );
+      } else if (said.type === CANVAS_EMBED_FETCHED) {
+        frame.contentWindow?.postMessage(
+          { type: CANVAS_EMBED_READY, urls: [] },
+          origin
+        );
+      }
+    };
+    addEventListener("message", heard);
+    return () => removeEventListener("message", heard);
   });
 
   /* --- Hide and Show: one box folding into its tab and back --------------- */
@@ -713,6 +756,7 @@
         style:--top={`${onSteps && stepsBox.h > 0 ? stepsBox.h + 2 * inset : inset}px`}
       >
         <iframe
+          bind:this={pairFrame}
           class="size-full border-0"
           inert
           sandbox="allow-scripts allow-same-origin"

@@ -112,6 +112,8 @@ export default {
         "golar.config.ts",
         // scripts/check.ts:458
         "scripts/lint/golar-lint.ts",
+        // The design graph's preview, run by hand or by a workspace's serve command (branch only, until the owner picks).
+        "scripts/design-graph-preview.ts",
         // scripts/check.ts:570
         "scripts/lint/biome-plugins.ts",
         // scripts/check.ts:533
