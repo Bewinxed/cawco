@@ -453,7 +453,7 @@ export const listRoleTools = (): RoleTools[] => {
         blocks: {} as never,
         caps: {} as never,
         // Caw reads back the turns his leads are in as he is made: none here.
-        db: { leadTurns: () => [] } as never,
+        db: {} as never,
         proposeType: () => Promise.reject(new Error("measuring")),
         end: () => undefined,
         inTurn: () => false,
@@ -475,7 +475,7 @@ export const listRoleTools = (): RoleTools[] => {
         stops: { running: () => [], stop: () => undefined },
         spawn: () => Promise.resolve(),
         task: () => Promise.reject(new Error("measuring")),
-        triage: () => Promise.resolve(undefined),
+        conversationStarted: () => undefined,
         turnEnded: () => undefined,
         views: {} as never,
       }).tools(actor),
@@ -505,6 +505,7 @@ export const listRoleTools = (): RoleTools[] => {
         jevAccess: () => undefined,
         lifetime,
         routines: {} as never,
+        tell: () => Promise.reject(new Error("measuring")),
       }).tools(actor),
     actionTools: (actor) =>
       createActions({
@@ -569,7 +570,7 @@ export const listRoleTools = (): RoleTools[] => {
         send: () => undefined,
         spawn: () => Promise.reject(new Error("measuring")),
         stop: () => undefined,
-        wakeCaw: () => Promise.reject(new Error("measuring")),
+        tell: () => Promise.reject(new Error("measuring")),
       }).tools(actor),
     // The hub's own tools, from the one list the server gives sessions.
     hubTools: createHubTools({

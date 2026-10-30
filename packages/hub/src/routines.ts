@@ -69,13 +69,17 @@ import type {
   SessionRole,
   ThreadEvent,
 } from "@cawco/core";
+
 import {
   LANDS_MODES,
   MADE_ROUTINE_TARGETS,
+  type OfferedMode,
   type RoutineOutcome,
-  type RoutineRunState,
+  type RoutineRunView,
   type RoutineTarget,
+  routineLink,
   routineToolWords,
+  SESSION_CHOSEN_MODES,
 } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -105,7 +109,7 @@ import { handle } from "./presenters/words";
 import type { Push } from "./push";
 import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import { budgetParameter } from "./task-tools";
-import { BUDGET, LANDS } from "./tasks";
+import { BUDGET, LANDS, MODE } from "./tasks";
 import {
   budgetProblem,
   DEFAULT_DELEGATE_TYPE,
@@ -179,30 +183,6 @@ class RoutineRefusal extends StatusRefusal {}
 const refuse = refuser(RoutineRefusal);
 
 /**
- * One run, as the routes and tools answer it (times in ms), with what
- * actually ran it: a delegate run's work item, or a lead run's Caw session
- * and the thread its wake went to.
- */
-export interface RoutineRunView {
-  attempt: number;
-  endedAt: number | null;
-  id: string;
-  /** A lead run's Caw session, once his harness read its wake; null for a delegate run. */
-  leadInstanceId: string | null;
-  outcome: RoutineOutcome | null;
-  output: string | null;
-  reason: string | null;
-  slot: string;
-  startedAt: number;
-  state: RoutineRunState;
-  /** A lead run's thread: where its slot was noted and Caw woken; null for a delegate run. */
-  threadId: string | null;
-  usd: number | null;
-  /** A delegate run's work item; null for a lead run, and before its work began. */
-  workItemId: string | null;
-}
-
-/**
  * Where a routine was made: the session whose `routine_create` call made
  * it, how its notice names that session, and the Caw thread its turn was in.
  */
@@ -231,6 +211,8 @@ export interface RoutineView {
   madeIn: RoutineMadeIn | null;
   /** What the making turn said just before its call, one paragraph; null when it said nothing or a session did not make it. */
   madeWhy: string | null;
+  /** The mode a conversation run starts the project's conversation in when it has none; null: the project's. */
+  mode: OfferedMode | null;
   name: string;
   /**
    * Its runs ahead, as the scheduler will start them (`nextRunsOf`): the next
@@ -256,6 +238,8 @@ export interface RoutineInput {
   delegateType?: string | null;
   keep?: boolean;
   lands?: LandsMode;
+  /** The mode a conversation run starts the project's conversation in; null: the project's. */
+  mode?: OfferedMode | null;
   name: string;
   projectId: string | null;
   prompt: string;
@@ -272,6 +256,8 @@ export interface RoutinePatch {
   enabled?: boolean;
   keep?: boolean;
   lands?: LandsMode;
+  /** The mode a conversation run starts the project's conversation in; null: the project's. */
+  mode?: OfferedMode | null;
   name?: string;
   prompt?: string;
   /** What each run starts; the memory curator routine's stays the hub's. */
@@ -287,6 +273,7 @@ type Fields = Pick<
   | "dailyCapUsd"
   | "delegateType"
   | "lands"
+  | "mode"
   | "name"
   | "projectId"
   | "prompt"
@@ -308,6 +295,7 @@ const merged = (row: RoutineRow, patch: RoutinePatch): Fields => ({
   budget: patch.budget === undefined ? row.budget : patch.budget,
   dailyCapUsd:
     patch.dailyCapUsd === undefined ? row.dailyCapUsd : patch.dailyCapUsd,
+  mode: patch.mode === undefined ? row.mode : patch.mode,
 });
 
 /** Who acts: you (the dashboard), or a session through its tools. */
@@ -317,7 +305,7 @@ export interface RoutineDeps {
   /** Whether any machine is connected now. */
   readonly anyOnline: () => boolean;
   /** Caw's routine notes and wakes, and the thread his turn is in (caw.ts). */
-  readonly caw: Pick<Caw, "notice" | "turnThread" | "wake">;
+  readonly caw: Pick<Caw, "notice" | "tell" | "turnThread">;
   /**
    * A curator run's inbox, made ready (memory.ts): `none` when no note is
    * left to curate, else the brief it reads; Jev failing throws.
@@ -502,8 +490,7 @@ const runView = (run: RoutineRunRow): RoutineRunView => ({
   attempt: run.attempt,
   state: run.state,
   workItemId: run.workItemId,
-  leadInstanceId: run.leadInstanceId,
-  threadId: run.threadId,
+  instanceId: run.leadInstanceId,
   outcome: run.outcome,
   output: run.output,
   reason: run.reason,
@@ -545,7 +532,7 @@ const clipReason = (words: string): string => {
 /** What a delegate run is told about its output, after the routine's prompt. */
 const CONTRACT = `## Your answer\n\nWhen you are done, call finish_item. Its headline is this run's output, read by the hub: ${ANSWERS}`;
 
-/** What Caw is told about a lead run's output, after the routine's prompt. */
+/** What the project's conversation is told about a run's output, after the routine's prompt. */
 const leadContract = (runId: string): string =>
   `## Your answer\n\nWhen you are done, call routine_result with run "${runId}". Its result is this run's output, read by the hub: ${ANSWERS} Call it before your turn ends: a turn that ends without it fails the run.`;
 
@@ -606,7 +593,7 @@ export const createRoutines = ({
   const store = db.routines;
   /**
    * Sessions whose turn read a lead run's wake that has no result yet: the
-   * idle pulses worth a look ({@link leadTurnEnded}), read back from the
+   * idle pulses worth a look ({@link turnEnded}), read back from the
    * runs as the hub starts.
    */
   const armed = new Set<string>();
@@ -659,6 +646,7 @@ export const createRoutines = ({
     lands: row.lands,
     budget: row.budget,
     dailyCapUsd: row.dailyCapUsd,
+    mode: row.mode,
     enabled: row.enabled,
     disabledReason: row.disabledReason,
     createdBy: row.createdBy,
@@ -873,10 +861,9 @@ export const createRoutines = ({
 
   /** A run's note's line, by what it says of the run. */
   const NOTE_WHAT: Record<
-    Extract<ThreadEvent, { kind: "routine" }>["phase"],
+    Exclude<Extract<ThreadEvent, { kind: "routine" }>["phase"], "started">,
     (label: string) => string
   > = {
-    started: (label) => ` · ${label}`,
     delivered: () => "",
     failed: () => " failed twice · needs you",
   };
@@ -1043,9 +1030,10 @@ export const createRoutines = ({
     });
 
   /**
-   * A lead run: the slot noted in the routine's thread, and Caw woken there.
-   * It runs until Caw's `routine_result` for it, or until the turn that took
-   * its wake ends without one ({@link leadTurnEnded}).
+   * A conversation run: one send to the project's conversation (caw.ts
+   * `tell`), starting it in the run's mode when it has none. It runs until
+   * the conversation's `routine_result` for it, or until the turn that took
+   * it ends without one ({@link turnEnded}).
    */
   const fireLead = async (
     routine: RoutineRow,
@@ -1059,15 +1047,19 @@ export const createRoutines = ({
       await lifetime.sleep(PLACE_POLL_MS);
     }
     const label = slotLabel(run.slot, routine.timeZone);
-    const threadId = note(routine, run, "started");
-    store.setRun(run.id, { threadId: threadId ?? null });
-    const woke = await caw.wake(projectId, {
+    // An event's run takes the mode of the route that delivered it.
+    const route = run.slot.startsWith(EVENT_SLOT)
+      ? db.ingress.event(run.slot.slice(EVENT_SLOT.length))?.routeId
+      : undefined;
+    const woke = await caw.tell(projectId, {
       by: "event",
+      kind: "routine-run",
       routine: routine.id,
-      threadId,
-      text: `Routine “${routine.name}” (routine ${routine.id}), its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\nHandle it now.\n\n${leadContract(run.id)}`,
+      ...(route ? { route } : {}),
+      trigger: `the routine ${routineLink(routine.id, routine.name)}, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}`,
+      text: `Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${leadContract(run.id)}`,
     });
-    if (woke) {
+    if (woke.woke) {
       store.setRun(run.id, { state: "running" });
       return;
     }
@@ -1598,7 +1590,7 @@ export const createRoutines = ({
    * is over: its runs whose wake was not read yet fail too, as no session
    * will read it.
    */
-  const leadTurnEnded = (
+  const turnEnded = (
     instanceId: string,
     why: string = NO_RESULT,
     gone?: string
@@ -2159,6 +2151,7 @@ export const createRoutines = ({
       lands: input.lands ?? "none",
       budget: input.budget ?? null,
       dailyCapUsd: input.dailyCapUsd ?? null,
+      mode: input.mode ?? null,
     };
     checked(fields);
     const now = new Date();
@@ -2311,6 +2304,7 @@ export const createRoutines = ({
       lands: "none",
       budget: null,
       dailyCapUsd: null,
+      mode: null,
       enabled: true,
       disabledReason: null,
       createdBy: "hub",
@@ -2420,6 +2414,12 @@ export const createRoutines = ({
             .boolean()
             .optional()
             .describe("Keep past 7 days: only on the owner's word."),
+          mode: z
+            .enum(SESSION_CHOSEN_MODES)
+            .optional()
+            .describe(
+              "A conversation run's start mode; the project's when left out."
+            ),
         },
         (input) => {
           const caller = me();
@@ -2437,6 +2437,7 @@ export const createRoutines = ({
                 budget: input.budget ?? null,
                 dailyCapUsd: input.daily_cap_usd ?? null,
                 keep: input.keep ?? false,
+                ...(input.mode ? { mode: input.mode } : {}),
               },
               caller,
               toolUseId
@@ -2466,6 +2467,7 @@ export const createRoutines = ({
           delegate_type: z.string().nullable().optional(),
           lands: z.enum(LANDS_MODES).optional(),
           budget: budgetParameter("Per run; null: none.").nullable().optional(),
+          mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
         },
         // Left out, a field stays: the patch's own rule (`merged`).
         ({ id, time_zone, delegate_type, ...fields }) =>
@@ -2517,7 +2519,7 @@ export const createRoutines = ({
     inboxPassed,
     itemEnded,
     sendLeft,
-    leadTurnEnded,
+    turnEnded,
     list,
     remove,
     runForEvent,
@@ -2552,6 +2554,7 @@ const RUN_FIELDS = {
   lands: t.Optional(LANDS),
   budget: t.Optional(t.Nullable(BUDGET)),
   dailyCapUsd: t.Optional(t.Nullable(t.Number())),
+  mode: t.Optional(t.Nullable(MODE)),
 };
 
 const TARGET = t.Union([

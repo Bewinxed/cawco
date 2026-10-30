@@ -10994,6 +10994,19 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "mode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "default",
+                      "acceptEdits",
+                      "plan",
+                      "bypassPermissions",
+                      "fullSend"
+                    ]
                   }
                 }
               }
@@ -11068,6 +11081,76 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fleet/caw-mode": {
+      "get": {
+        "operationId": "getApiFleetCawMode",
+        "responses": {
+          "200": {
+            "description": "getApiFleetCawMode 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFleetCawMode200"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "default",
+                      "acceptEdits",
+                      "plan",
+                      "bypassPermissions",
+                      "fullSend"
+                    ]
+                  }
+                },
+                "required": [
+                  "mode"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiFleetCawMode",
+        "responses": {
+          "200": {
+            "description": "putApiFleetCawMode 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiFleetCawMode200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiFleetCawMode 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -12006,6 +12089,19 @@
                       "null"
                     ]
                   },
+                  "mode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "default",
+                      "acceptEdits",
+                      "plan",
+                      "bypassPermissions",
+                      "fullSend"
+                    ]
+                  },
                   "keep": {
                     "type": "boolean"
                   }
@@ -12227,6 +12323,19 @@
                     "type": [
                       "number",
                       "null"
+                    ]
+                  },
+                  "mode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "default",
+                      "acceptEdits",
+                      "plan",
+                      "bypassPermissions",
+                      "fullSend"
                     ]
                   },
                   "enabled": {
@@ -13496,6 +13605,19 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "mode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "default",
+                      "acceptEdits",
+                      "plan",
+                      "bypassPermissions",
+                      "fullSend"
+                    ]
                   }
                 },
                 "required": [
@@ -13629,6 +13751,19 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "mode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "default",
+                      "acceptEdits",
+                      "plan",
+                      "bypassPermissions",
+                      "fullSend"
+                    ]
                   }
                 }
               }
@@ -27460,6 +27595,22 @@
           "seen"
         ]
       },
+      "getApiFleetCawMode200": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/CawViewMode"
+          }
+        }
+      },
+      "putApiFleetCawMode200": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/CawViewMode"
+          }
+        }
+      },
       "getApiThreads200": {
         "type": "object"
       },
@@ -29615,6 +29766,9 @@
             "cawHarness": {
               "$ref": "#/components/schemas/HarnessKind"
             },
+            "cawMode": {
+              "$ref": "#/components/schemas/CawViewMode"
+            },
             "cawModel": {
               "type": [
                 "null",
@@ -29633,9 +29787,6 @@
             },
             "lands": {
               "$ref": "#/components/schemas/LandsMode"
-            },
-            "leadCostSeen": {
-              "type": "number"
             },
             "leadInstanceId": {
               "type": [
@@ -29754,7 +29905,6 @@
             "dispatch",
             "id",
             "lands",
-            "leadCostSeen",
             "leadInstanceId",
             "lfsConnection",
             "lfsUrl",
@@ -29801,6 +29951,9 @@
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
+          "cawMode": {
+            "$ref": "#/components/schemas/CawViewMode"
+          },
           "cawModel": {
             "type": [
               "null",
@@ -29819,9 +29972,6 @@
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
-          },
-          "leadCostSeen": {
-            "type": "number"
           },
           "leadInstanceId": {
             "type": [
@@ -29982,7 +30132,6 @@
           "dispatch",
           "id",
           "lands",
-          "leadCostSeen",
           "leadInstanceId",
           "lfsConnection",
           "lfsUrl",
@@ -30058,6 +30207,9 @@
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
+          "cawMode": {
+            "$ref": "#/components/schemas/CawViewMode"
+          },
           "cawModel": {
             "type": [
               "null",
@@ -30076,9 +30228,6 @@
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
-          },
-          "leadCostSeen": {
-            "type": "number"
           },
           "leadInstanceId": {
             "type": [
@@ -30197,7 +30346,6 @@
           "dispatch",
           "id",
           "lands",
-          "leadCostSeen",
           "leadInstanceId",
           "lfsConnection",
           "lfsUrl",
@@ -30254,6 +30402,9 @@
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
+          "cawMode": {
+            "$ref": "#/components/schemas/CawViewMode"
+          },
           "cawModel": {
             "type": [
               "null",
@@ -30272,9 +30423,6 @@
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
-          },
-          "leadCostSeen": {
-            "type": "number"
           },
           "leadInstanceId": {
             "type": [
@@ -30432,7 +30580,6 @@
           "dispatch",
           "id",
           "lands",
-          "leadCostSeen",
           "leadInstanceId",
           "lfsConnection",
           "lfsUrl",
@@ -30480,6 +30627,9 @@
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
+          "cawMode": {
+            "$ref": "#/components/schemas/CawViewMode"
+          },
           "cawModel": {
             "type": [
               "null",
@@ -30498,9 +30648,6 @@
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
-          },
-          "leadCostSeen": {
-            "type": "number"
           },
           "leadInstanceId": {
             "type": [
@@ -30619,7 +30766,6 @@
           "dispatch",
           "id",
           "lands",
-          "leadCostSeen",
           "leadInstanceId",
           "lfsConnection",
           "lfsUrl",
@@ -41179,13 +41325,6 @@
         "description": "A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it.",
         "type": "object",
         "properties": {
-          "answering": {
-            "description": "What his turn answers when no thread woke it (\"Answering a report from\nsite#4f2a\"): shown on his panel, as no thread is working on it; null\nwhen he is at rest or a thread's turn.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -41195,6 +41334,10 @@
               "null",
               "string"
             ]
+          },
+          "mode": {
+            "$ref": "#/components/schemas/CawViewMode",
+            "description": "The permission mode the hub starts the project's conversation in, the\nproject's own; null: the fleet's, else the one the person last chose\nfor its harness on that machine. A routine's or an event route's own\nwins over it."
           },
           "model": {
             "description": "The model Caw's session runs; null: its harness's default.",
@@ -41207,7 +41350,7 @@
             "type": "boolean"
           },
           "problem": {
-            "description": "Why Caw could not start now, on or off; null when he could.",
+            "description": "Why Caw could not start now, on or off, or why its last start failed; null when he could.",
             "type": [
               "null",
               "string"
@@ -41226,7 +41369,6 @@
           }
         },
         "required": [
-          "answering",
           "harness",
           "leadInstanceId",
           "model",
@@ -41650,6 +41792,10 @@
               "string"
             ]
           },
+          "mode": {
+            "$ref": "#/components/schemas/CawViewMode",
+            "description": "The mode a conversation run starts the project's conversation in when it has none; null: the project's."
+          },
           "name": {
             "type": "string"
           },
@@ -41745,7 +41891,7 @@
         ]
       },
       "RoutineRunView": {
-        "description": "One run, as the routes and tools answer it (times in ms), with what\nactually ran it: a delegate run's work item, or a lead run's Caw session\nand the thread its wake went to.",
+        "description": "One run, as the hub's routes and tools answer it (times in ms), with what\nactually ran it: a delegate run's work item, or a conversation run's\nsession.",
         "type": "object",
         "properties": {
           "attempt": {
@@ -41760,8 +41906,8 @@
           "id": {
             "type": "string"
           },
-          "leadInstanceId": {
-            "description": "A lead run's Caw session, once his harness read its wake; null for a delegate run.",
+          "instanceId": {
+            "description": "A conversation run's session, once its harness read the run; null for a delegate run.",
             "type": [
               "null",
               "string"
@@ -41791,13 +41937,6 @@
           "state": {
             "$ref": "#/components/schemas/RoutineRunState"
           },
-          "threadId": {
-            "description": "A lead run's thread: where its slot was noted and Caw woken; null for a delegate run.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "usd": {
             "type": [
               "null",
@@ -41805,7 +41944,7 @@
             ]
           },
           "workItemId": {
-            "description": "A delegate run's work item; null for a lead run, and before its work began.",
+            "description": "A delegate run's work item; null for a conversation run, and before its work began.",
             "type": [
               "null",
               "string"
@@ -41816,13 +41955,12 @@
           "attempt",
           "endedAt",
           "id",
-          "leadInstanceId",
+          "instanceId",
           "output",
           "reason",
           "slot",
           "startedAt",
           "state",
-          "threadId",
           "usd",
           "workItemId"
         ]
@@ -42698,6 +42836,10 @@
               "null",
               "number"
             ]
+          },
+          "mode": {
+            "$ref": "#/components/schemas/CawViewMode",
+            "description": "The mode its event starts the project's conversation in when it has none; null: its routine's."
           },
           "projectId": {
             "type": "string"
@@ -59677,6 +59819,16 @@
           "attempt",
           "delegate",
           "turn"
+        ]
+      },
+      "CawViewMode": {
+        "type": "string",
+        "enum": [
+          "acceptEdits",
+          "bypassPermissions",
+          "default",
+          "fullSend",
+          "plan"
         ]
       },
       "ClaudeLimitsErrorKind": {

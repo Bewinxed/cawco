@@ -20,6 +20,7 @@
    * 3. Actions, when its runs proposed any: the Approved actions table
    *    (ActionsTable), without the routine's name, which is the row's.
    */
+  import { rowHref } from "#lib/cawco/links.js";
   import { since } from "#lib/cawco/rules.js";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -49,10 +50,12 @@
   /** The runs shown: the newest five. */
   const SHOWN = 5;
   const recent = $derived(routine.runs.slice(0, SHOWN));
-  /** Where a run is read whole: its own thread, else the routine's, where its result is noted. */
+  /** Where a run is read whole: its session, else the routine's thread, where its result is noted. */
   const runHref = (run: RoutineRun): string | null => {
-    const thread = run.threadId ?? routine.threadId;
-    return thread ? threadHref(thread) : null;
+    if (run.instanceId) {
+      return rowHref(run.instanceId);
+    }
+    return routine.threadId ? threadHref(routine.threadId) : null;
   };
 
   /** A run's outcome, in the page's status vocabulary. */

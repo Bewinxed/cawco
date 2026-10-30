@@ -366,9 +366,6 @@ const TRIAGE = {
 } as const;
 export type TriageState = keyof typeof TRIAGE;
 
-/** The most open tasks one triage batch lists to the lead. */
-const TRIAGE_BATCH_MAX = 30;
-
 /** Triage with Jev on: one choice over the four states, about one task. */
 export async function jevTriage(
   access: JevAccess,
@@ -397,29 +394,6 @@ export async function jevTriage(
   );
   return picked(result.answers.triage);
 }
-
-/**
- * Triage with Jev off: the lead, one batch per wake. The words his wake
- * carries for the project's open tasks no one has triaged yet.
- */
-export const triageBatch = (
-  tasks: { id: string; title: string }[]
-): string | undefined => {
-  if (tasks.length === 0) {
-    return;
-  }
-  const shown = tasks.slice(0, TRIAGE_BATCH_MAX);
-  const more = tasks.length - shown.length;
-  return `Tasks no one has triaged yet (Jev is off, so triage is yours, one batch per wake): set each one's \`fields: { ${TRIAGE_FIELD}: … }\` with task_update to one of ${Object.keys(
-    TRIAGE
-  )
-    .map((state) => `\`${state}\``)
-    .join(
-      ", "
-    )}. Only \`ready-for-agent\` tasks are dispatched.${more > 0 ? ` ${more} more wait for your next wake.` : ""}\n\n${shown
-    .map((task) => `- ${task.id} “${head(task.title, 200)}”`)
-    .join("\n")}`;
-};
 
 // --- Duplicates (yes/no) ---------------------------------------------------------
 

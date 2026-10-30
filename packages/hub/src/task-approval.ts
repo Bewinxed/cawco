@@ -25,15 +25,15 @@
  * - A task you filed, or the hub, a routine or a hand edit did, has no
  *   agent to hear it: you decide what comes next yourself.
  */
-import type { InstanceRow } from "@cawco/core";
+import { type InstanceRow, taskLink } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { TaskEvent, Tasks } from "./tasks";
 
 export interface TaskApprovalDeps {
-  readonly caw: Pick<Caw, "wakeOnce">;
-  readonly db: Pick<DbShape, "getInstancesByIds" | "project" | "threadOfTask">;
+  readonly caw: Pick<Caw, "tell">;
+  readonly db: Pick<DbShape, "getInstancesByIds" | "project">;
   /** Why a session takes none of your words now (server.ts `inputRefusal`), or nothing. */
   readonly refused: (row: InstanceRow) => string | undefined;
   /** Your words to a session, as the composer sends them. */
@@ -92,10 +92,11 @@ export const createTaskApproval = ({
       return;
     }
     const filer = `which ${by.name} filed and which comes to you because that session takes no input now (${silent})`;
-    const woke = await caw.wakeOnce(projectId, {
+    const woke = await caw.tell(projectId, {
       by: "event",
+      kind: "task-move",
+      trigger: `the owner approved ${taskLink(projectId, id, task.title)}, moving it from ${approval.from} to ${approval.to}`,
       text: approvalText(approval, task.title, filer),
-      threadId: db.threadOfTask(projectId, id)?.id,
     });
     console.log(
       `[tasks] ${id} in ${projectId}: approved; ${why}: Caw ${woke.woke ? "hears it" : `was not woken: ${woke.why}`}`

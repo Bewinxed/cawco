@@ -29,13 +29,15 @@
  *   project's enabled routes whose every condition holds (source pattern,
  *   kinds, author, label, branch, a regex over title and body, both matched
  *   on RE2 in linear time). Jev on: Jev chooses among their routines, or
- *   none, which is the lead's; a Jev that does not answer leaves the event
+ *   none, which is the project's conversation's; a Jev that does not answer leaves the event
  *   stored and unrouted, and says so in the log. Jev off: the oldest
  *   matching route takes it. The routine runs with the event as the run's
  *   input (routines.ts `runForEvent`; behind a run still going it queues,
- *   and is handled when it starts). An event no route took goes to the
- *   lead's next wake as an inbox line (caw.ts); with the lead off it is
- *   stored, and nothing is woken.
+ *   and is handled when it starts). An event no route took is one send to
+ *   the project's conversation (caw.ts `tell`) while its switch is on; while
+ *   it is off, or no conversation can start, it waits in the inbox, and the
+ *   inbox goes to the conversation as one send when it next starts
+ *   ({@link Ingress.drain}).
  * - **Data, never instructions.** An event reaches a model only inside a
  *   delimited block ({@link eventData}, {@link inboxText}) whose JSON cannot
  *   close it, after a sentence that says it is untrusted content.
@@ -60,7 +62,9 @@ import {
   configurePage,
   githubTarget,
   type InstanceRow,
+  type OfferedMode,
   readsGitHubApi,
+  SESSION_CHOSEN_MODES,
   taskLinkWords,
   type WaitTarget,
 } from "@cawco/core";
@@ -69,6 +73,7 @@ import { HOUR_MS } from "@cawco/core/time";
 import { Elysia, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
+import type { ProjectEvent } from "./caw";
 import { readsOnly } from "./connection-writes";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -97,6 +102,7 @@ import {
 import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import type { Routines } from "./routines";
 import type { GitHubWaitState } from "./task-waits";
+import { MODE } from "./tasks";
 
 /** One event as every path normalises it before the store. */
 export interface InboundEvent {
@@ -134,7 +140,7 @@ const KEY_PART_MAX = 200;
 /** What a route's regex reads at most, and how long it may be. */
 const MATCH_TEXT_MAX = 16 * 1024;
 const REGEX_MAX = 200;
-/** The most inbox lines one wake carries; the rest are counted. */
+/** The most inbox lines one send carries; the rest are counted. */
 const INBOX_SHOWN = 30;
 /** Events an ingress view lists. */
 const EVENTS_SHOWN = 50;
@@ -210,8 +216,8 @@ const INBOX_SHOWS = z.object({
   url: z.string().nullable().optional(),
 });
 
-/** The lead's inbox as one wake carries it: newest {@link INBOX_SHOWN}, the rest counted. */
-export const inboxText = (rows: InboundEventRow[]): string => {
+/** The inbox as one send carries it: newest {@link INBOX_SHOWN}, the rest counted. */
+const inboxText = (rows: InboundEventRow[]): string => {
   const shown = rows.slice(-INBOX_SHOWN);
   const lines = shown.map((row) => {
     const event = INBOX_SHOWS.parse(JSON.parse(row.payload));
@@ -225,8 +231,12 @@ export const inboxText = (rows: InboundEventRow[]): string => {
     };
   });
   const more = rows.length - shown.length;
-  return `Inbound events no route took, since your last wake (${rows.length}${more > 0 ? `; the oldest ${more} are not shown` : ""}). Make a route (event_route_create) when a kind of event should run a routine. ${UNTRUSTED}\n\n<inbound-events>\n${sealedJson(lines)}\n</inbound-events>`;
+  return `Inbound events no route took (${rows.length}${more > 0 ? `; the oldest ${more} are not shown` : ""}). ${UNTRUSTED}\n\n<inbound-events>\n${sealedJson(lines)}\n</inbound-events>`;
 };
+
+/** Which kind of event a stored one is, as the project's conversation hears it (caw.ts `EVENT_SKILLS`). */
+const kindOf = (row: InboundEventRow): "github-event" | "inbound-event" =>
+  row.source.startsWith("github") ? "github-event" : "inbound-event";
 
 /** A value at a dot path (`fields.version`); the whole value for an empty path. */
 export const valueAt = (value: unknown, path: string): unknown =>
@@ -341,6 +351,8 @@ export interface RouteInput {
   enabled?: boolean;
   kinds?: string[];
   label?: string | null;
+  /** The mode its event starts the project's conversation in when it has none; null: its routine's. */
+  mode?: OfferedMode | null;
   regex?: string | null;
   routineId: string;
   source: string;
@@ -369,6 +381,8 @@ export interface EventRouteView {
   label: string | null;
   /** When it last delivered an event to its routine; null when it never has. */
   lastDeliveryAt: number | null;
+  /** The mode its event starts the project's conversation in when it has none; null: its routine's. */
+  mode: OfferedMode | null;
   projectId: string;
   regex: string | null;
   routineId: string;
@@ -443,6 +457,14 @@ export interface IngressDeps {
   readonly lifetime: HubLifetimeShape;
   /** Runs a routine once with an event as its input (routines.ts). */
   readonly routines: Pick<Routines, "runForEvent">;
+  /**
+   * One send to a project's conversation (caw.ts `tell`): whether it took
+   * it. Read late: the conversation is made after ingress.
+   */
+  readonly tell: (
+    projectId: string,
+    event: ProjectEvent
+  ) => Promise<{ woke: boolean }>;
   /** A run a project waits on changed state: its tasks look again (tasks.ts `waitsMoved`). */
   readonly waitsMoved?: (projectId: string) => void;
 }
@@ -474,6 +496,7 @@ const routeView = (
   regex: row.regex,
   routineId: row.routineId,
   enabled: row.enabled,
+  mode: row.mode,
   createdBy: row.createdBy,
   createdAt: row.createdAt.getTime(),
 });
@@ -520,6 +543,7 @@ export const createIngress = ({
   jevAccess,
   lifetime,
   routines,
+  tell,
   waitsMoved,
 }: IngressDeps) => {
   const store = db.ingress;
@@ -621,7 +645,7 @@ export const createIngress = ({
     }
   };
 
-  /** Where a stored event goes: a routine, the lead's inbox, or nowhere. */
+  /** Where a stored event goes: a routine, the project's conversation, or nowhere. */
   const route = async (
     row: InboundEventRow,
     event: InboundEvent
@@ -651,8 +675,52 @@ export const createIngress = ({
       );
       return;
     }
-    if (db.project(row.projectId)?.caw) {
-      store.setEvent(row.id, { routedTo: TO_CONVERSATION });
+    store.setEvent(row.id, { routedTo: TO_CONVERSATION });
+    await toConversation(row, event.url);
+  };
+
+  /**
+   * An event no route took, one send to the project's conversation while
+   * its switch is on; handled once it went, else it waits in the inbox.
+   */
+  const toConversation = async (
+    row: InboundEventRow,
+    url: string | null | undefined
+  ): Promise<void> => {
+    if (!db.project(row.projectId)?.caw) {
+      return;
+    }
+    const told = await tell(row.projectId, {
+      by: "event",
+      kind: kindOf(row),
+      trigger: `${row.source} sent ${row.kind}${url ? ` (${url})` : ""}, and no route took it`,
+      text: eventData(row),
+    });
+    if (told.woke) {
+      store.setEvent(row.id, { handledAt: new Date() });
+    }
+  };
+
+  /**
+   * The project's conversation started while its switch is on: the inbound
+   * events that waited for it (its switch was off, or none could start) go
+   * to it as one send. Taken first; given back when the send does not go.
+   */
+  const drain = async (projectId: string): Promise<void> => {
+    const inbox = store.claimInbox(projectId, new Date());
+    if (inbox.length === 0) {
+      return;
+    }
+    const told = await tell(projectId, {
+      by: "event",
+      kind: inbox.every((row) => kindOf(row) === "github-event")
+        ? "github-event"
+        : "inbound-event",
+      trigger: `${inbox.length} inbound event${inbox.length === 1 ? "" : "s"} no route took waited for the conversation to start`,
+      text: inboxText(inbox),
+    }).catch(() => ({ woke: false }));
+    if (!told.woke) {
+      store.releaseInbox(inbox.map((each) => each.id));
     }
   };
 
@@ -1218,6 +1286,7 @@ export const createIngress = ({
       regex: input.regex || null,
       routineId: input.routineId,
       enabled: input.enabled ?? true,
+      mode: input.mode ?? null,
       createdBy: by === "owner" ? "owner" : by.id,
       createdAt: new Date(),
     });
@@ -1246,6 +1315,7 @@ export const createIngress = ({
       regex: patch.regex === undefined ? row.regex : patch.regex || null,
       routineId: patch.routineId ?? row.routineId,
       enabled: patch.enabled ?? row.enabled,
+      mode: patch.mode === undefined ? row.mode : patch.mode,
     };
     checkedRoute(row.projectId, next);
     return routeView(
@@ -1496,7 +1566,14 @@ export const createIngress = ({
       tool(
         "event_route_create",
         "Send your project's matching inbound events (GitHub PRs, issues, comments; connector poll items) to one of its routines as that run's input; the oldest matching route takes an event.",
-        { ...conditions, routine: z.string().describe("The routine's id.") },
+        {
+          ...conditions,
+          routine: z.string().describe("The routine's id."),
+          mode: z
+            .enum(SESSION_CHOSEN_MODES)
+            .optional()
+            .describe("Its run's start mode; the routine's when left out."),
+        },
         ({ routine, ...rest }) =>
           run(() => createRoute({ ...rest, routineId: routine }, me())),
         routeWords
@@ -1517,6 +1594,7 @@ export const createIngress = ({
           source: conditions.source.optional(),
           routine: z.string().optional(),
           enabled: z.boolean().optional(),
+          mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
         },
         ({ id, routine, ...rest }) =>
           run(() =>
@@ -1638,6 +1716,7 @@ export const createIngress = ({
     createPoll,
     createRoute,
     deletePoll,
+    drain,
     deleteRoute,
     followConnection,
     ingest,
@@ -1676,6 +1755,7 @@ const ROUTE_FIELDS = {
   regex: t.Optional(t.Nullable(t.String())),
   routineId: t.String(),
   enabled: t.Optional(t.Boolean()),
+  mode: t.Optional(t.Nullable(MODE)),
 };
 
 const POLL_FIELDS = {

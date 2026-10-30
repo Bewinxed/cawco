@@ -957,11 +957,6 @@ export interface WorkItemDeps {
     machineId: string,
     instanceId: string
   ) => string | undefined;
-  /**
-   * The origin of the turn a project's Caw is in (caw.ts `turnOrigin`), when
-   * `instanceId` is a project's lead; undefined for any other session.
-   */
-  readonly leadTurn?: (instanceId: string) => WorkOrigin | undefined;
   /** Runs the budget sweep and every wait's timer until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /** Resolves once `machineId`'s pause is over; at once when it is not paused. */
@@ -2405,7 +2400,6 @@ export const createWorkItems = ({
   between,
   missingFor,
   unblocked,
-  leadTurn,
   machineFree,
   machinePaused,
   modelRefusal,
@@ -6342,8 +6336,9 @@ export const createWorkItems = ({
    */
   /**
    * Whose work a new item is ({@link WorkItemRequest.origin}): the request's,
-   * else its parent's. A routine's run is an event's; Caw's, the turn he is
-   * in; a work item's session's, its own item's; anyone else's, yours.
+   * else its parent's. A routine's run is an event's; a work item's
+   * session's, its own item's; anyone else's, the project's conversation's
+   * among them, yours.
    */
   const originOf = (request: WorkItemRequest, parent: Parent): WorkOrigin => {
     if (request.origin) {
@@ -6351,10 +6346,6 @@ export const createWorkItems = ({
     }
     if (isRoutineParent(parent.id)) {
       return "event";
-    }
-    const turn = leadTurn?.(parent.id);
-    if (turn) {
-      return turn;
     }
     const [row] = db.getInstancesByIds([parent.id]);
     return (row?.workItemId && db.workItem(row.workItemId)?.origin) || "you";

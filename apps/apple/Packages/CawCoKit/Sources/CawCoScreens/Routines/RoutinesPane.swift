@@ -13,6 +13,8 @@ import UIKit
 /// a thread with him. Held as a skeleton until the hub's first read.
 final class RoutinesPane: UIView {
     var openThread: (String) -> Void = { _ in }
+    /// A session by its id: a conversation run's.
+    var openSession: (String) -> Void = { _ in }
     /// The custom views placed on this page, as blocks, by block id (B3e).
     var viewItems: () -> [String: BlockItem] = { [:] }
 
@@ -106,6 +108,7 @@ final class RoutinesPane: UIView {
             }
         }
         ledger.openThread = { [weak self] id in self?.openThread(id) }
+        ledger.openSession = { [weak self] id in self?.openSession(id) }
         // His words open a thread with him in the project, and the page goes there.
         ask.submit = { [weak self] text, id in
             guard let self else { return }

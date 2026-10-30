@@ -16,6 +16,8 @@ import UIKit
 final class RoutinesLedger: UIView {
     var act: (_ work: @escaping (ProjectTasks) async throws -> Void) -> Void = { _ in }
     var openThread: (String) -> Void = { _ in }
+    /// A session by its id: a conversation run's.
+    var openSession: (String) -> Void = { _ in }
 
     private let stack = UIStackView()
     private var routines: [Routine] = []
@@ -117,6 +119,7 @@ final class RoutinesLedger: UIView {
                 row.detail.hold(.init(routine: routine, actions: mine, wide: !isNarrow, minute: minute)) { shown in
                     let detail = RoutineDetailView(routine: shown.routine, actions: shown.actions, wide: shown.wide, whole: whole)
                     detail.openThread = openThread
+                    detail.openSession = openSession
                     detail.onWhole = { [weak self] whole in self?.whole = whole }
                     return detail
                 }
@@ -370,6 +373,8 @@ private final class RoutineRow {
 /// and the actions its runs proposed.
 final class RoutineDetailView: UIView {
     var openThread: (String) -> Void = { _ in }
+    /// A session by its id: a conversation run's.
+    var openSession: (String) -> Void = { _ in }
     /// More or Less pressed: the instruction shown whole or not.
     var onWhole: (Bool) -> Void = { _ in }
     private let routine: Routine
@@ -487,9 +492,11 @@ final class RoutineDetailView: UIView {
             let took = LedgerParts.meta(RoutineSchedule.took(run))
             let failed = status == .failed
             let resultWords = run.state == .skipped || run.outcome == .failed ? (run.reason ?? "") : (run.output ?? run.reason ?? "")
-            let thread = run.threadId ?? routine.threadId
+            // A conversation run opens its session; any other, the routine's thread.
+            let open: (() -> Void)? = run.instanceId.map { session in { [weak self] in self?.openSession(session) } }
+                ?? routine.threadId.map { thread in { [weak self] in self?.openThread(thread) } }
             let result: UIView
-            if let thread {
+            if let open {
                 let link = UIButton(configuration: .plain())
                 link.configuration?.contentInsets = .zero
                 link.configuration?.attributedTitle = AttributedString(resultWords.isEmpty ? Words.Routines.readRun : resultWords,
@@ -497,7 +504,7 @@ final class RoutineDetailView: UIView {
                 link.configuration?.titleLineBreakMode = .byTruncatingTail
                 link.contentHorizontalAlignment = .leading
                 link.accessibilityTraits = .link
-                link.addAction(UIAction { [weak self] _ in self?.openThread(thread) }, for: .primaryActionTriggered)
+                link.addAction(UIAction { _ in open() }, for: .primaryActionTriggered)
                 result = link
             } else {
                 result = LedgerParts.meta(resultWords, ink: failed ? Palette.statusFailInk : Palette.inkRow)

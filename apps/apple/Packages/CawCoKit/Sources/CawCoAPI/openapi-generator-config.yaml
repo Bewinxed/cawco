@@ -43,6 +43,7 @@ typeOverrides:
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawRunningKind: OpenEnums.CawRunningKind
+    CawViewMode: OpenEnums.CawViewMode
     ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage

@@ -385,6 +385,7 @@ import {
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
+  taskLink,
   threadTarget,
   threadTargetOf,
   tokenWords,
@@ -593,12 +594,13 @@ import {
 } from "./browsers";
 import { createCallKeys } from "./call-keys";
 import {
-  attemptTry,
   type Caw,
   cawRoutes,
   createCaw,
+  eventContext,
   fencedSpawn,
   isProjectConversation,
+  PROJECT_ORIGIN,
   stagePlaceRef,
 } from "./caw";
 import {
@@ -1028,6 +1030,15 @@ const HARNESS_CONFIG_BODY = t.Object({
 });
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
+/** `text` with `line` after its marker (core `markerTag`, its first line), when there is a line. */
+const withContext = (text: string, line: string | undefined): string => {
+  if (!line) {
+    return text;
+  }
+  const at = text.indexOf("]\n") + 2;
+  return `${text.slice(0, at)}${line}\n\n${text.slice(at)}`;
+};
+
 /** A project's page source in its folder (`decisions/<name>/page.oui` or its built `index.html`), its name at 1. */
 const PAGE_SOURCE =
   /^decisions\/([a-z0-9][a-z0-9-]{0,62})\/(?:page\.oui|index\.html)$/u;
@@ -1696,8 +1707,8 @@ const WAKES_AT_REST: ReadonlySet<string> = new Set([
   LIMIT_ORIGIN,
   // The turn a restart or a kill cut, handed back once (`resumeCutTurn`).
   "restore",
-  // A project's Caw, woken by his project's events (caw.ts).
-  "caw",
+  // A project's conversation, sent its project's events (caw.ts `tell`).
+  PROJECT_ORIGIN,
   // Its looping delegate, for it as that delegate's lead (fleet-watch.ts).
   "fleet-watch",
 ]);
@@ -5859,6 +5870,23 @@ export const createServer = (
    * turn ends and answers with the `answer_delegate` tool. The final line is
    * machine-readable so the parent's model can copy the ids verbatim.
    */
+  /**
+   * The context line a send for a delegate's report or question opens with
+   * when `parent` is its project's conversation (caw.ts `eventContext`):
+   * where it runs, what `trigger` happened, the skill. Undefined for any
+   * other session.
+   */
+  const conversationContext = (
+    parent: { id: string },
+    trigger: string
+  ): string | undefined => {
+    const [row] = db.getInstancesByIds([parent.id]);
+    const project = row?.projectId ? db.project(row.projectId) : undefined;
+    return row && project && isProjectConversation(row, db.project)
+      ? eventContext(project, row.cwd, "delegate-report", trigger)
+      : undefined;
+  };
+
   const deliverDelegateAsk = (
     delegate: InstanceRow,
     parent: { id: string; machineId: string },
@@ -5870,7 +5898,7 @@ export const createServer = (
       "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
       "answers are keyed by the exact question text and the value is the chosen option label " +
       "(pass deny=true to refuse it).";
-    const sent = deliverSend({
+    deliverSend({
       verb: "send",
       machineId: parent.machineId,
       instanceId: parent.id,
@@ -5881,13 +5909,19 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: {
             role: "user",
-            content: delegateAskText({
-              label,
-              body,
-              instance: delegate.id,
-              request: String(ask.requestId),
-              instruction,
-            }),
+            content: withContext(
+              delegateAskText({
+                label,
+                body,
+                instance: delegate.id,
+                request: String(ask.requestId),
+                instruction,
+              }),
+              conversationContext(
+                parent,
+                `${sessionLink(delegate.id, boardTitle(delegate))} asked a question`
+              )
+            ),
           },
           parent_tool_use_id: null,
           origin: {
@@ -5900,15 +5934,6 @@ export const createServer = (
         },
       },
     });
-    // To a project's Caw: the turn that reads it is the delegate's work's
-    // (caw.ts `heard`).
-    lead?.heard(
-      parent.id,
-      delegate,
-      `a question from ${label}`,
-      sent?.state === "pending" ? sent.uuid : undefined,
-      false
-    );
     const toolName = peek(ask.payload, "toolName");
     publishDelegateEvent(
       delegate.machineId,
@@ -5964,7 +5989,7 @@ export const createServer = (
     { completion, notice = false, headline, outputs }: ReportTold
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
-    const sent = deliverSend({
+    deliverSend({
       verb: "send",
       machineId: parent.machineId,
       instanceId: parent.id,
@@ -5976,8 +6001,9 @@ export const createServer = (
           message: {
             role: "user",
             // The delegate as a link (core references.ts) heads the body:
-            // the form the parent copies when it names the delegate.
-            content: `${reportMarker(label, failed, notice, headline)}From ${sessionLink(delegate.id, boardTitle(delegate))}.\n\n${body}`,
+            // the form the parent copies when it names the delegate. To a
+            // project's conversation it is the event's context line.
+            content: `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}`,
           },
           parent_tool_use_id: null,
           origin: {
@@ -5990,16 +6016,6 @@ export const createServer = (
         },
       },
     });
-    // To a project's Caw: the turn that reads it is the delegate's work's,
-    // and answers this report: an attempt's in its task's thread, else on
-    // his panel (caw.ts `heard`).
-    lead?.heard(
-      parent.id,
-      delegate,
-      `a report from ${label}`,
-      sent?.state === "pending" ? sent.uuid : undefined,
-      true
-    );
     publishDelegateEvent(
       delegate.machineId,
       db.recordDelegateEvent({
@@ -14037,9 +14053,11 @@ export const createServer = (
     { text, images, attachments }: MarksDelivery
   ): Promise<MarksOutcome> => {
     const woke = await their
-      .wakeOnce(projectId, {
+      .tell(projectId, {
         by: "you",
-        text: `${text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${why.replace(CLOSING_STOP, "")}), so these come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
+        kind: "person-request",
+        trigger: `the person marked an artifact ${sessionName(instance)} made, and that session takes no input now (${why.replace(CLOSING_STOP, "")})`,
+        text: `${text}\n\nThese come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
         ...(images.length > 0 || attachments.length > 0
           ? {
               carried: {
@@ -24566,9 +24584,6 @@ export const createServer = (
     designHeld: (itemId) => designVerify.held(itemId),
     hubMachineId: () => ownMachineIdRead,
     lifetime,
-    // Whose turn a project's Caw is in, for what he starts in it. Caw is
-    // made further down; nothing starts an item before the hub is up.
-    leadTurn: (instanceId) => lead?.turnOrigin(instanceId),
     modelRefusal: opencodeModelRefusal,
     online: (machineId) => Boolean(registry.agent(machineId)),
     // A routine run's turn makes the sessions it starts the run's (memory.ts).
@@ -24604,7 +24619,6 @@ export const createServer = (
       soon(() => {
         dispatcher.itemEnded(item);
         push.itemEnded(item);
-        caw.itemEnded(item);
         routines.itemEnded(item);
         projectStarters.itemEnded(item);
         designVerify.itemEnded(item);
@@ -24799,9 +24813,9 @@ export const createServer = (
   };
   /** Set once approved actions exist (below): until then no `action` move goes. */
   let actionMoves: NonNullable<TaskStore["actionMove"]> = () => false;
-  /** The Actions runs a project's tasks wait on, as its GitHub poll reads them (ingress.ts); set once ingress is made. */
+  /** The Actions runs a project's tasks wait on, as its GitHub poll reads them, and its inbox (ingress.ts); set once ingress is made. */
   let githubWaits:
-    Pick<Ingress, "githubWait" | "githubWaitRefusal"> | undefined;
+    Pick<Ingress, "drain" | "githubWait" | "githubWaitRefusal"> | undefined;
   /** A session a wait names by its handle (`cockpit#5a167bde`): the one whose id its handle begins, among every session the hub holds. */
   const sessionByHandle = (
     handle: string
@@ -25283,7 +25297,15 @@ export const createServer = (
         }
       },
     },
-    // Caw's own session, started as any session is: in the mode you last
+    // A conversation's start drains the inbound events that waited for it.
+    // Ingress is made further down; nothing starts one before the hub is up.
+    conversationStarted: (projectId) => {
+      if (githubWaits) {
+        detach(githubWaits.drain(projectId), "drain a project's inbox");
+      }
+    },
+    // The project's conversation, started as any session is: in the mode
+    // its payload names (caw.ts `modeFor`), else the one you last
     // chose for its harness on that machine (settleMode's fallback), or
     // refused, saying so, when you never chose one there.
     spawn: async (machineId, payload) => {
@@ -25308,10 +25330,9 @@ export const createServer = (
     end: (instanceId) =>
       endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
     task: (projectId, id) => tasks.get(projectId, id),
-    triage: (projectId) => jevTasks.triageFor(projectId),
     // The routines are made further down; a turn ends only once the hub is up.
     turnEnded: (instanceId, why, gone) =>
-      routines.leadTurnEnded(instanceId, why, gone),
+      routines.turnEnded(instanceId, why, gone),
     views,
   });
   lead = caw;
@@ -25473,7 +25494,7 @@ export const createServer = (
         kind: "hub",
         why: "fleet watch's triage stopped it",
       }),
-    wakeCaw: (projectId, event) => caw.wake(projectId, event),
+    tell: async (projectId, event) => (await caw.tell(projectId, event)).woke,
   });
   const dispatcher = createDispatcher({
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
@@ -25490,7 +25511,7 @@ export const createServer = (
     db,
     lifetime,
     tasks,
-    lead: (projectId, by) => caw.lead(projectId, by),
+    conversationFor: (projectId, by) => caw.conversationFor(projectId, by),
     online: (machineId) => Boolean(registry.agent(machineId)),
     pauses: (projectId) => caps.pauses(projectId),
     placement: {
@@ -25498,23 +25519,11 @@ export const createServer = (
       typesFor: (projectId) => projectTypes.typesFor(projectId),
       judgeByLead: (projectId, task, item, text) => {
         caw
-          .wake(projectId, {
+          .tell(projectId, {
             by: "event",
+            kind: "attempt-judgement",
+            trigger: `${sessionLink(item.instanceId, item.title)}, an attempt at ${taskLink(projectId, task.id, task.title)}, passed its checks`,
             text,
-            threadId: db.threadOfTask(projectId, task.id)?.id,
-            note: {
-              title: `Attempt · ${task.title}'s acceptance criteria wait for Caw`,
-              event: {
-                kind: "attempt",
-                phase: "judge",
-                taskId: task.id,
-                title: task.title,
-                workItemId: item.id,
-                instanceId: item.instanceId,
-                state: null,
-                try: attemptTry(db.projectAttempts(projectId), item),
-              },
-            },
           })
           .catch((error: unknown) =>
             console.warn(
@@ -25920,7 +25929,12 @@ export const createServer = (
     },
     tell: tellPlan,
     wakeCaw: async (projectId, text) => {
-      const woke = await caw.wakeOnce(projectId, { by: "you", text });
+      const woke = await caw.tell(projectId, {
+        by: "you",
+        kind: "person-request",
+        trigger: "the person changed the project's plan",
+        text,
+      });
       return woke.woke ? undefined : woke.why;
     },
   });
@@ -26468,6 +26482,8 @@ export const createServer = (
     jevAccess: () => jevAccess(db),
     lifetime,
     routines,
+    // An event no route took, one send to the project's conversation.
+    tell: (projectId, event) => caw.tell(projectId, event),
     // A pull request or run a task waits on moved: its project looks again.
     waitsMoved: (projectId) => {
       detach(tasks.waitsMoved(projectId), "task waits moved");
@@ -36403,10 +36419,6 @@ export const createServer = (
                             : undefined
                         )
                       );
-                      // A keep-alive's cost is the session's, not a thread's.
-                      if (typeof neutral.total_cost_usd === "number") {
-                        caw.turnCost(row.id, neutral.total_cost_usd, false);
-                      }
                       const usage = keepAliveUsage(neutral);
                       console.info(
                         `[keepalive] ${row.id}: result ${neutral.uuid} input=${usage.input} read=${usage.read} write=${usage.write} at ${new Date().toISOString()}`
@@ -36465,10 +36477,6 @@ export const createServer = (
                     turnOver(message.instanceId);
                   }
                   workedTurns.delete(message.instanceId);
-                  // Claimed once: a lead's turn books its cost to its thread.
-                  if (typeof neutral.total_cost_usd === "number") {
-                    caw.turnCost(message.instanceId, neutral.total_cost_usd);
-                  }
                 }
                 const named = peekSessionKey(message.payload);
                 if (named) {

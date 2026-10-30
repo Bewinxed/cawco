@@ -9,29 +9,12 @@
 import type { ApprovedActionView } from "@cawco/core/actions";
 import type { ConnectionView } from "@cawco/core/connections";
 import type { RelayView } from "@cawco/core/relays";
-import type {
-  RoutineOutcome,
-  RoutineRunState,
-  RoutineTarget,
-} from "@cawco/core/routine-kinds";
+import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
 import { json, send } from "#lib/cawco/project-tasks.js";
 
 /** One run, as the hub answers it (times in ms). */
-export interface RoutineRun {
-  attempt: number;
-  endedAt: number | null;
-  id: string;
-  outcome: RoutineOutcome | null;
-  output: string | null;
-  reason: string | null;
-  slot: string;
-  startedAt: number;
-  state: RoutineRunState;
-  /** A lead run's thread; null for a delegate run. */
-  threadId: string | null;
-  workItemId: string | null;
-}
+export type RoutineRun = RoutineRunView;
 
 /** A routine, as the hub answers it (times in ms), with its newest runs. */
 export interface Routine {

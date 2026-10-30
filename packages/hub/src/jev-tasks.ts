@@ -8,7 +8,7 @@
  *   at the dashboard, the hub), an open task with exactly its files and
  *   checks makes it a duplicate.
  * - **Triage** (choice), as a task is filed while Jev is on: its `triage`
- *   field. Off: the lead, one batch per wake (caw.ts reads {@link triageFor}).
+ *   field. Off: a session triages when asked (the triage skill).
  * - **Attach or fresh** (yes/no), as you comment on a task whose newest
  *   attempt has ended (§5.3, Attach or spawn), one of three: its session
  *   takes your words (attach, its cache warm); its history is compressed
@@ -22,7 +22,7 @@
  *   when cold, else fresh. A live attempt simply reads your comment.
  * - **Phone requests** (choice + fill): a sentence from the phone about the
  *   project. Jev on: Jev picks the action and fills it (the task, the
- *   stage). Off: the lead reads the sentence. The push's own buttons are
+ *   stage). Off: the project's conversation reads the sentence. The push's own buttons are
  *   not this and always work.
  */
 import { taskLink } from "@cawco/core";
@@ -46,7 +46,6 @@ import {
   type PhoneAction,
   sameFilesAndChecks,
   TRIAGE_FIELD,
-  triageBatch,
 } from "./jev-placement";
 import { FolderRefusal } from "./project-folder";
 import {
@@ -62,7 +61,7 @@ import { isLive } from "./work-items";
 type SessionRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 export interface JevTasksDeps {
-  readonly caw: Pick<Caw, "wake">;
+  readonly caw: Pick<Caw, "tell">;
   /**
    * An ended attempt's cold session compressed and continued in a new
    * session in its workspace, which takes on the attempt and opens on
@@ -323,30 +322,6 @@ export const createJevTasks = ({
   };
 
   /**
-   * Triage with Jev off: the batch the lead's wake carries, the project's
-   * open tasks in a `todo` stage with no `triage` yet; nothing while Jev is
-   * on, or when every one has one.
-   */
-  const triageFor = async (projectId: string): Promise<string | undefined> => {
-    if (key()) {
-      return;
-    }
-    const { tasks: all } = await tasks.list(projectId);
-    const untriaged = all.filter(
-      (task) => task.kind === "todo" && !task.fields[TRIAGE_FIELD]
-    );
-    const batch = triageBatch(untriaged);
-    if (batch) {
-      offLine(
-        "triage",
-        projectId,
-        `the lead's wake carries ${untriaged.length === 1 ? "1 untriaged task" : `${untriaged.length} untriaged tasks`}: ${untriaged.map((task) => task.id).join(", ")}`
-      );
-    }
-    return batch;
-  };
-
-  /**
    * Attach or fresh with Jev on: Jev says whether the session's history
    * matters; when it does, a warm session takes your words as it is and a
    * cold one is compressed and continued, never woken whole.
@@ -597,26 +572,22 @@ export const createJevTasks = ({
     return picked;
   };
 
-  /** Your sentence from the phone, to the lead as your words, noted in the task's thread. */
+  /** Your sentence from the phone, to the project's conversation as your words. */
   const toLead = async (
     projectId: string,
     sentence: string,
     about: string | undefined
   ): Promise<void> => {
     const task = about ? await tasks.get(projectId, about) : undefined;
-    await caw.wake(projectId, {
+    const woke = await caw.tell(projectId, {
       by: "you",
-      text: `From your phone${about ? `, about ${about}` : ""}:\n\n${sentence}`,
-      threadId: about ? db.threadOfTask(projectId, about)?.id : undefined,
-      note: {
-        title: "Phone · your request",
-        body: sentence,
-        event: {
-          kind: "phone",
-          task: task ? { id: task.id, title: task.title } : null,
-        },
-      },
+      kind: "person-request",
+      trigger: `the person wrote from their phone${task ? `, about ${taskLink(projectId, task.id, task.title)}` : ""}`,
+      text: sentence,
     });
+    if (!woke.woke && woke.thrown !== undefined) {
+      throw woke.thrown;
+    }
   };
 
   /** Jev's reading of a phone sentence, over the project's stages and open tasks. */
@@ -770,7 +741,7 @@ export const createJevTasks = ({
     );
   };
 
-  return { filed, taskChanged, triageFor, phoneRequest };
+  return { filed, taskChanged, phoneRequest };
 };
 
 export type JevTasks = ReturnType<typeof createJevTasks>;

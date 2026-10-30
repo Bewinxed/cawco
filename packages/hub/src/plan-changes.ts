@@ -90,7 +90,7 @@ export interface PlanChangesDeps {
   sendUnread: (uuid: string) => boolean;
   /** The person's words to a session, through the one send path (`PLAN_ORIGIN`). */
   tell: (instanceId: string, text: string) => PlanTold;
-  /** The person's words to a project's Caw (caw.ts `wakeOnce`, by you): undefined once he has them, else why not. */
+  /** The person's words to a project's conversation (caw.ts `tell`, by you): undefined once it has them, else why not. */
   wakeCaw: (projectId: string, text: string) => Promise<string | undefined>;
 }
 

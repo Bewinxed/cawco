@@ -69,6 +69,7 @@ import {
   type LandsMode,
   type Mover,
   markdownLink,
+  PERMISSION_MODES,
   type ProjectStarter,
   type ResultArtifact,
   refOfUrl,
@@ -4705,6 +4706,8 @@ const KIND = t.Union([
 const TEMPLATE = t.Union(STAGES_TEMPLATES.map((name) => t.Literal(name)));
 /** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
 export const LANDS = t.Union(LANDS_MODES.map((mode) => t.Literal(mode)));
+/** A permission mode CawCo offers (core `PERMISSION_MODES`), as a route takes it. */
+export const MODE = t.Union(PERMISSION_MODES.map((mode) => t.Literal(mode)));
 /** What a work item may spend (`WorkBudget`): dollars, turns, minutes. */
 export const BUDGET = t.Object({
   usd: t.Optional(t.Number()),

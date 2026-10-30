@@ -189,12 +189,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    was `caw`: the session a project's events reach is a worker like any
  *    other, scoped to its project. A page built for 37 finds that session
  *    by a role the hub no longer sends, so it reloads first.
+ * 39: events are sends: a project's Caw view no longer carries `answering`
+ *    and carries the `mode` its conversation starts in, and a routine's run
+ *    names its session as `instanceId` and no thread. A page built for 38
+ *    reads an `answering` and a run's `threadId` the hub no longer sends, so
+ *    it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 38;
+export const WIRE_PROTOCOL = 39;
 
 /**
  * What a session's stream carries: the changes each frame made to its

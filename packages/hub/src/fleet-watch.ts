@@ -60,6 +60,7 @@ import {
   type PermissionMode,
   type SendPayload,
   type SpawnPayload,
+  sessionLink,
   signalLine,
   TRIAGE_DECISIONS,
   type TriageDecision,
@@ -68,7 +69,7 @@ import { Gone, readWithin } from "@cawco/core/bounded";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
-import { type CawEvent, isProjectConversation } from "./caw";
+import { isProjectConversation, type ProjectEvent } from "./caw";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
@@ -258,8 +259,8 @@ export interface FleetWatchDeps {
   ) => Promise<void>;
   /** Stops a session's process. */
   stop: (instanceId: string) => void;
-  /** Wakes a project's Caw with an event (caw.ts `wake`); false when he is off. */
-  wakeCaw: (projectId: string, event: CawEvent) => Promise<boolean>;
+  /** One send to a project's conversation (caw.ts `tell`); false when it did not take it (its switch is off). */
+  tell: (projectId: string, event: ProjectEvent) => Promise<boolean>;
 }
 
 export const createFleetWatch = (deps: FleetWatchDeps) => {
@@ -788,14 +789,11 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       return;
     }
     deps
-      .wakeCaw(lead.projectId, {
+      .tell(lead.projectId, {
         by: "event",
+        kind: "fleet-watch",
+        trigger: `fleet watch judged ${sessionLink(row.id, name)}: ${line}`,
         text: content,
-        note: {
-          title: `Fleet watch · ${name}`,
-          body: words,
-          event: { kind: "fleet", instanceId: row.id, name },
-        },
       })
       .then((woken) => {
         if (!woken) {

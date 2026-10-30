@@ -94,7 +94,7 @@ final class ProjectCawLead {
             let finishing = (view?.running ?? []).filter { $0.kind != .turn }.count
             return finishing > 0 ? "Off · \(finishing) of his still finishing" : "Off · answers when you write"
         case .working:
-            return "Awake · \(view?.answering ?? words?.text ?? "working")"
+            return "Awake · \(words?.text ?? "working")"
         case .needsYou:
             return "Awake · waiting on you"
         case .loading:

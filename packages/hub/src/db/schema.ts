@@ -28,6 +28,7 @@ import type {
   MemoryRole,
   ModeAsk,
   MoveStage,
+  OfferedMode,
   OnCap,
   PermissionMode,
   PresenceClient,
@@ -447,11 +448,11 @@ export const projects = sqliteTable("projects", {
   /** The model Caw's session runs; null: the harness's own default. */
   cawModel: text("caw_model"),
   /**
-   * What the lead session had cost when its last turn was booked to a
-   * thread: its results carry the session's cumulative cost, so a turn's own
-   * is the difference. Back to 0 with each new lead session.
+   * The permission mode the hub starts the project's conversation in, over
+   * the fleet's (`supervisor_config.caw_mode`); a routine's or an event
+   * route's own is more specific still (caw.ts `modeFor`). Null: the fleet's.
    */
-  leadCostSeen: real("lead_cost_seen").notNull().default(0),
+  cawMode: text("caw_mode").$type<OfferedMode>(),
   /**
    * Whether the hub starts attempts at ready tasks on its own (dispatch.ts).
    * Off until you turn it on, and inert without a lead.
@@ -3089,6 +3090,12 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
    * finished afterwards.
    */
   relayAskedAt: timestamp("relay_asked_at"),
+  /**
+   * The permission mode the hub starts a project's conversation in, for
+   * every project that names none (caw.ts `modeFor`). Null: the mode the
+   * person last chose for its harness on its machine.
+   */
+  cawMode: text("caw_mode").$type<OfferedMode>(),
   updatedAt: stampedNow("updated_at"),
 });
 
@@ -4441,67 +4448,6 @@ export const artifactUpdates = sqliteTable(
   (table) => [primaryKey({ columns: [table.artifactId, table.seq] })]
 );
 
-/**
- * The turn a project's Caw is in, one row per lead session while it lasts
- * (caw.ts `turns`, its working copy): whose it is, so what he starts in it
- * after a hub restart is still that work's (work_items.origin). Written when
- * the turn is woken and when its first frame is noted, cleared at its end;
- * read back as the hub starts. (`caw_turns` is what each turn cost.)
- */
-export const leadTurns = sqliteTable("lead_turns", {
-  /** The lead session. */
-  instanceId: text("instance_id").primaryKey(),
-  projectId: projectKey(),
-  /** Whose turn it is: `you`, `kept` or `event`. */
-  origin: text("origin").$type<WorkOrigin>().notNull(),
-  /** The thread it answers; null for a turn no thread woke. */
-  threadId: text("thread_id").references(() => projectThreads.id, {
-    onDelete: "set null",
-  }),
-  /** What it answers when no thread does: "a report from site#4f2a1c". */
-  what: text("what"),
-  /** The turn under way read a send: the idle after it ends that turn. */
-  started: integer("started", { mode: "boolean" }).notNull().default(false),
-});
-
-/** Threads whose wake a lead's turn under way read: `working` until it ends. In the order read (rowid). */
-export const leadTurnReading = sqliteTable(
-  "lead_turn_reading",
-  {
-    instanceId: text("instance_id")
-      .notNull()
-      .references(() => leadTurns.instanceId, { onDelete: "cascade" }),
-    threadId: text("thread_id")
-      .notNull()
-      .references(() => projectThreads.id, { onDelete: "cascade" }),
-  },
-  (table) => [primaryKey({ columns: [table.instanceId, table.threadId] })]
-);
-
-/**
- * Wakes sent to a lead and not yet read, by send uuid: the thread each woke
- * (null for none), `working` until read and answered.
- */
-export const leadTurnWaiting = sqliteTable(
-  "lead_turn_waiting",
-  {
-    instanceId: text("instance_id")
-      .notNull()
-      .references(() => leadTurns.instanceId, { onDelete: "cascade" }),
-    /** The wake's send: a send that goes is never read, and its wake goes with it. */
-    sendUuid: text("send_uuid")
-      .notNull()
-      .references(() => sentMessages.uuid, { onDelete: "cascade" }),
-    threadId: text("thread_id").references(
-      (): AnySQLiteColumn => projectThreads.id,
-      {
-        onDelete: "set null",
-      }
-    ),
-  },
-  (table) => [primaryKey({ columns: [table.instanceId, table.sendUuid] })]
-);
-
 /** A harness subagent a session started and that has not ended: its task, and the call that started it. */
 export interface OpenSubagent {
   call: string | null;
@@ -4743,6 +4689,12 @@ export const routines = sqliteTable(
     budget: storedJson(WorkBudgetSchema)("budget"),
     /** Dollars its runs may spend in a day of its time zone; null: no cap. */
     dailyCapUsd: real("daily_cap_usd"),
+    /**
+     * The permission mode a `conversation` run starts the project's
+     * conversation in when it has none, over the project's (caw.ts
+     * `modeFor`). Null: the project's.
+     */
+    mode: text("mode").$type<OfferedMode>(),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     /** Why it is off, when the hub turned it off (it expired). */
     disabledReason: text("disabled_reason"),
@@ -4816,12 +4768,11 @@ export const routineRuns = sqliteTable(
     state: text("state").$type<RoutineRunState>().notNull(),
     workItemId: text("work_item_id"),
     /**
-     * A lead run's Caw session, once its harness read the run's wake: the
-     * turn that took it ends the run, with Caw's `routine_result` or failed.
+     * A conversation run's session, once its harness read the run's wake:
+     * the turn that took it ends the run, with its `routine_result` or
+     * failed.
      */
     leadInstanceId: text("lead_instance_id"),
-    /** A lead run's thread: where its slot was noted and Caw was woken. */
-    threadId: text("thread_id"),
     outcome: text("outcome").$type<RoutineOutcome>(),
     /** What its delegate said, when it said more than the contract's words. */
     output: text("output"),
@@ -4967,7 +4918,7 @@ export const inboundEvents = sqliteTable(
     payload: text("payload").notNull(),
     receivedAt: timestamp("received_at").notNull(),
     via: text("via").$type<InboundVia>().notNull(),
-    /** The routine a route sent it to, `conversation` for the project conversation's inbox, or null (stored only: it was off). */
+    /** The routine a route sent it to, `conversation` for the project's conversation (handled once sent, else waiting in its inbox), or null while unrouted. */
     routedTo: text("routed_to"),
     /** The route it was delivered by: the oldest matching route to the routine it went to; null otherwise. */
     routeId: text("route_id").references(() => eventRoutes.id, {
@@ -5007,6 +4958,12 @@ export const eventRoutes = sqliteTable(
       .notNull()
       .references(() => routines.id, { onDelete: "cascade" }),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /**
+     * The permission mode an event it routes starts the project's
+     * conversation in when it has none, over its routine's (caw.ts
+     * `modeFor`). Null: its routine's.
+     */
+    mode: text("mode").$type<OfferedMode>(),
     /** `owner`, or the id of the session that made it. */
     createdBy: text("created_by").notNull(),
     createdAt: timestamp("created_at").notNull(),

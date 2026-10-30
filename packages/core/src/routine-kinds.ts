@@ -49,3 +49,25 @@ export const ROUTINE_OUTCOMES = [
  * ending without a result), `cancelled` (someone stopped it).
  */
 export type RoutineOutcome = (typeof ROUTINE_OUTCOMES)[number];
+
+/**
+ * One run, as the hub's routes and tools answer it (times in ms), with what
+ * actually ran it: a delegate run's work item, or a conversation run's
+ * session.
+ */
+export interface RoutineRunView {
+  attempt: number;
+  endedAt: number | null;
+  id: string;
+  /** A conversation run's session, once its harness read the run; null for a delegate run. */
+  instanceId: string | null;
+  outcome: RoutineOutcome | null;
+  output: string | null;
+  reason: string | null;
+  slot: string;
+  startedAt: number;
+  state: RoutineRunState;
+  usd: number | null;
+  /** A delegate run's work item; null for a conversation run, and before its work began. */
+  workItemId: string | null;
+}

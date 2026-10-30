@@ -9,6 +9,7 @@
 
 import type {
   HarnessKind,
+  OfferedMode,
   PlaceLfsRow,
   UserAnswers,
   UserQuestion,
@@ -27,19 +28,20 @@ export const CAW_NO_MACHINE =
 
 /** A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
 export interface CawView {
-  /**
-   * What his turn answers when no thread woke it ("Answering a report from
-   * site#4f2a"): shown on his panel, as no thread is working on it; null
-   * when he is at rest or a thread's turn.
-   */
-  answering: string | null;
   harness: HarnessKind;
   /** Caw's session, once the hub has started one. */
   leadInstanceId: string | null;
+  /**
+   * The permission mode the hub starts the project's conversation in, the
+   * project's own; null: the fleet's, else the one the person last chose
+   * for its harness on that machine. A routine's or an event route's own
+   * wins over it.
+   */
+  mode: OfferedMode | null;
   /** The model Caw's session runs; null: its harness's default. */
   model: string | null;
   on: boolean;
-  /** Why Caw could not start now, on or off; null when he could. */
+  /** Why Caw could not start now, on or off, or why its last start failed; null when he could. */
   problem: string | null;
   /**
    * What Caw started that still runs, as his off control lists it, each lead

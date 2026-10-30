@@ -36,6 +36,7 @@ import type {
   MemoryScope,
   MemoryVersion,
   NeutralUserMessage,
+  OfferedMode,
   OnCap,
   OpenCodeGoLimits,
   OrphanedComments,
@@ -196,9 +197,6 @@ import {
   instanceConversations,
   instances,
   jevSettings,
-  leadTurnReading,
-  leadTurns,
-  leadTurnWaiting,
   limitCompactions,
   limitEvents,
   limitHolds,
@@ -448,15 +446,6 @@ export type PlanChangeRow = typeof planChanges.$inferSelect;
 /** What a session has done that taints its memory notes (memory.ts), its open subagents with it. */
 export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
   subagents: OpenSubagent[];
-};
-/**
- * A lead's turn (caw.ts `turns`): the threads its turn under way read
- * (`lead_turn_reading`), and its unread wakes by send uuid, each the thread
- * it woke or `""` for none (`lead_turn_waiting`).
- */
-type LeadTurnRow = typeof leadTurns.$inferSelect & {
-  reading: string[];
-  waiting: Record<string, string>;
 };
 export type ThreadRow = typeof projectThreads.$inferSelect;
 /** A thread's message, with the tasks it is about (`thread_message_tasks`); null for none. */
@@ -753,13 +742,6 @@ export interface DbShape {
    * listings never show (discarded, being deleted, a removed machine's).
    */
   readonly boardAncestors: (ids: string[]) => BoardInstanceRow[];
-  /** Books what one Caw turn cost, to the thread that woke it (null: none did). */
-  readonly bookCawTurn: (turn: {
-    harness: string;
-    projectId: string;
-    threadId: string | null;
-    usd: number;
-  }) => void;
   /** The briefer documents a session has been handed, path → the hash it read (briefings.ts). */
   readonly briefingsHanded: (instanceId: string) => Map<string, string>;
   /** The fleet's browsers, per machine (browsers.ts). */
@@ -776,6 +758,9 @@ export interface DbShape {
    * `from`'s row no longer names it.
    */
   readonly carryWorkItem: (itemId: string, from: string, to: string) => void;
+  /** The fleet's choices row (`supervisor_config`) and its tool denials. */
+  /** The permission mode the fleet starts a project's conversation in (`supervisor_config.caw_mode`); null for none. */
+  readonly cawMode: () => OfferedMode | null;
   /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
   /** Dollars the project's Caw turns have cost since `since` (ms epoch). */
   readonly cawSpentSince: (projectId: string, since: number) => number;
@@ -915,8 +900,6 @@ export interface DbShape {
   readonly designChecks: DesignChecksDb;
   /** Caw's one design-system offer per project (design-offers.ts). */
   readonly designOffers: DesignOffersDb;
-  /** His turn is over: its row goes. */
-  readonly dropLeadTurn: (instanceId: string) => void;
   /** A cancelled move's held row leaves the board, while no spawn has taken it on. True when it went. */
   readonly dropMovingInstance: (id: string) => boolean;
   /** Forgets a task's queued start, if it had one. */
@@ -1062,7 +1045,6 @@ export interface DbShape {
     { apiKey: string; connectedAt: Date } | undefined;
   /** One rule, or nothing when it has been deleted out from under a caller. */
   readonly getRule: (id: string) => Rule | undefined;
-  /** The fleet's choices row (`supervisor_config`) and its tool denials. */
   readonly getSupervisorConfig: () => {
     deniedTools: string[];
     choicesSetAt: Date | null;
@@ -1171,8 +1153,6 @@ export interface DbShape {
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
   /** The sends to a project's conversations (origin `project`) accepted after `after`, oldest first. */
   readonly leadSends: (projectId: string, after: Date) => SessionSendRow[];
-  /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
-  readonly leadTurns: () => LeadTurnRow[];
   /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
   readonly lfsOffers: LfsOffersDb;
   /**
@@ -1839,9 +1819,6 @@ export interface DbShape {
   }) => MemoryDocRow;
   /** A row stored whole, as `harnessConfigProblem` passed it; answers it as stored. */
   readonly putHarnessConfig: (row: FleetHarnessConfig) => FleetHarnessConfig;
-  /** Stores the turn a project's Caw is in, replacing what his session had. */
-  /** Stores a lead's turn as it stands, replacing what it had, its threads with it, in one transaction. */
-  readonly putLeadTurn: (turn: LeadTurnRow) => void;
   readonly putMarketplace: (marketplace: FleetMarketplace) => FleetMarketplace;
   readonly putMcpOauth: (row: typeof fleetMcpOauth.$inferInsert) => void;
   /**
@@ -2215,6 +2192,8 @@ export interface DbShape {
     outcome: FleetSyncOutcome
   ) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
+  /** Sets {@link DbShape.cawMode}; null clears it. */
+  readonly setCawMode: (mode: OfferedMode | null) => void;
   /** Stores the document and the hash the machines compare against. */
   readonly setFleetMemory: (content: string) => {
     content: string;
@@ -2254,7 +2233,7 @@ export interface DbShape {
     change: Partial<
       Pick<
         ProjectRow,
-        "caw" | "cawHarness" | "cawModel" | "leadCostSeen" | "leadInstanceId"
+        "caw" | "cawHarness" | "cawMode" | "cawModel" | "leadInstanceId"
       >
     >
   ) => void;
@@ -3223,13 +3202,30 @@ const make = async (path: string): Promise<DbShape> => {
     }
     return row;
   };
-  /** Dollars the project's booked Caw turns cost since `since` (ms epoch). */
+  /** Writes a change to a project's row; nothing for an empty one. */
+  const setProject = (
+    id: string,
+    change: Partial<typeof projects.$inferInsert>
+  ): void => {
+    if (Object.keys(change).length > 0) {
+      db.update(projects).set(change).where(eq(projects.id, id)).run();
+    }
+  };
+  /**
+   * Dollars the project's conversations (sessions of origin `project`) cost
+   * since `since` (ms epoch), from the usage buckets every session reports.
+   */
   const cawSince = (projectId: string, since: number): number =>
     db
-      .select({ usd: sql<number>`coalesce(sum(${cawTurns.usd}), 0)` })
-      .from(cawTurns)
+      .select({ usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)` })
+      .from(usageBuckets)
+      .innerJoin(instances, eq(instances.sessionId, usageBuckets.sessionId))
       .where(
-        and(eq(cawTurns.projectId, projectId), sql`${cawTurns.at} >= ${since}`)
+        and(
+          eq(instances.projectId, projectId),
+          eq(instances.origin, "project"),
+          sql`${usageBuckets.start} >= ${since}`
+        )
       )
       .get()?.usd ?? 0;
   /** A row its machine still holds: not removed, not discarded, not being ended (a stop keeps it). */
@@ -8104,21 +8100,8 @@ const make = async (path: string): Promise<DbShape> => {
         }
       });
     },
-    setProjectDispatch: (id, change) => {
-      if (Object.keys(change).length > 0) {
-        db.update(projects).set(change).where(eq(projects.id, id)).run();
-      }
-    },
-    setProjectCaw: (id, change) => {
-      // A new lead session counts its cost from zero.
-      const set =
-        change.leadInstanceId === undefined
-          ? change
-          : { leadCostSeen: 0, ...change };
-      if (Object.keys(set).length > 0) {
-        db.update(projects).set(set).where(eq(projects.id, id)).run();
-      }
-    },
+    setProjectDispatch: (id, change) => setProject(id, change),
+    setProjectCaw: (id, change) => setProject(id, change),
     setProjectCap: (id, change) => {
       db.update(projects).set(change).where(eq(projects.id, id)).run();
     },
@@ -8165,8 +8148,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(spendSettings.id, "spend"))
         .get()?.onCap ?? "both",
     projectSpentSince: (projectId, since) =>
-      cawSince(projectId, since) +
-      (db
+      db
         .select({
           usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
         })
@@ -8175,106 +8157,10 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(instances.projectId, projectId),
-            ne(instances.origin, "project"),
             sql`${usageBuckets.start} >= ${since}`
           )
         )
-        .get()?.usd ?? 0),
-    leadTurns: () => {
-      const reading = new Map<string, string[]>();
-      for (const { instanceId, threadId } of db
-        .select()
-        .from(leadTurnReading)
-        .orderBy(sql`rowid`)
-        .all()) {
-        reading.set(instanceId, [...(reading.get(instanceId) ?? []), threadId]);
-      }
-      const waiting = new Map<string, Record<string, string>>();
-      for (const { instanceId, sendUuid, threadId } of db
-        .select()
-        .from(leadTurnWaiting)
-        .orderBy(sql`rowid`)
-        .all()) {
-        waiting.set(instanceId, {
-          ...waiting.get(instanceId),
-          [sendUuid]: threadId ?? "",
-        });
-      }
-      return db
-        .select()
-        .from(leadTurns)
-        .all()
-        .map((row) => ({
-          ...row,
-          reading: reading.get(row.instanceId) ?? [],
-          waiting: waiting.get(row.instanceId) ?? {},
-        }));
-    },
-    putLeadTurn: ({ reading, waiting, ...turn }) => {
-      const { instanceId, ...rest } = turn;
-      db.transaction((tx) => {
-        tx.insert(leadTurns)
-          .values(turn)
-          .onConflictDoUpdate({ target: leadTurns.instanceId, set: rest })
-          .run();
-        tx.delete(leadTurnReading)
-          .where(eq(leadTurnReading.instanceId, instanceId))
-          .run();
-        tx.delete(leadTurnWaiting)
-          .where(eq(leadTurnWaiting.instanceId, instanceId))
-          .run();
-        // The working copy may still name a thread or a send that has gone
-        // since (its project, its session): a gone thread is none, a gone
-        // send a wake nobody will read.
-        const named = [
-          ...new Set([...reading, ...Object.values(waiting)].filter(Boolean)),
-        ];
-        const threads = new Set(
-          named.length === 0
-            ? []
-            : tx
-                .select({ id: projectThreads.id })
-                .from(projectThreads)
-                .where(inArray(projectThreads.id, named))
-                .all()
-                .map(({ id }) => id)
-        );
-        const uuids = Object.keys(waiting);
-        const sends = new Set(
-          uuids.length === 0
-            ? []
-            : tx
-                .select({ uuid: sentMessages.uuid })
-                .from(sentMessages)
-                .where(inArray(sentMessages.uuid, uuids))
-                .all()
-                .map(({ uuid }) => uuid)
-        );
-        const read = [...new Set(reading)].filter((id) => threads.has(id));
-        if (read.length > 0) {
-          tx.insert(leadTurnReading)
-            .values(read.map((threadId) => ({ instanceId, threadId })))
-            .run();
-        }
-        const unread = Object.entries(waiting).filter(([uuid]) =>
-          sends.has(uuid)
-        );
-        if (unread.length > 0) {
-          tx.insert(leadTurnWaiting)
-            .values(
-              unread.map(([sendUuid, threadId]) => ({
-                instanceId,
-                sendUuid,
-                threadId: threads.has(threadId) ? threadId : null,
-              }))
-            )
-            .run();
-        }
-      });
-    },
-    dropLeadTurn: (instanceId) => {
-      db.delete(leadTurns).where(eq(leadTurns.instanceId, instanceId)).run();
-    },
+        .get()?.usd ?? 0,
     sessionTaint: (instanceId) => {
       const row = db
         .select()
@@ -8312,30 +8198,13 @@ const make = async (path: string): Promise<DbShape> => {
         }
       });
     },
-    bookCawTurn: ({ harness, projectId, threadId, usd }) => {
-      db.insert(cawTurns)
-        .values({
-          id: crypto.randomUUID(),
-          projectId,
-          threadId,
-          harness,
-          usd,
-          at: new Date(),
-        })
-        .run();
-    },
     cawSpentSince: (projectId, since) => cawSince(projectId, since),
     projectSpend: (projectId, { todayStart, monthStart }) => {
-      // Caw: his booked turns.
-      const caw = db
-        .select({
-          today: sql<number>`coalesce(sum(case when ${cawTurns.at} >= ${todayStart} then ${cawTurns.usd} else 0 end), 0)`,
-          month: sql<number>`coalesce(sum(case when ${cawTurns.at} >= ${monthStart} then ${cawTurns.usd} else 0 end), 0)`,
-          unthreaded: sql<number>`coalesce(sum(case when ${cawTurns.at} >= ${monthStart} and ${cawTurns.threadId} is null then ${cawTurns.usd} else 0 end), 0)`,
-        })
-        .from(cawTurns)
-        .where(eq(cawTurns.projectId, projectId))
-        .get();
+      // Caw: what the project's conversations reported.
+      const caw = {
+        today: cawSince(projectId, todayStart),
+        month: cawSince(projectId, monthStart),
+      };
       // Each attempt with what its session reported this month.
       const items = db
         .select({
@@ -8358,8 +8227,8 @@ const make = async (path: string): Promise<DbShape> => {
         .groupBy(workItems.id)
         .orderBy(asc(workItems.createdAt))
         .all();
-      // Every other session of the project (not its conversation, whose
-      // turns are booked above, and not an attempt).
+      // Every other session of the project (not its conversation, counted
+      // above, and not an attempt).
       const attemptSessions = items.flatMap((item) =>
         item.instanceId ? [item.instanceId] : []
       );
@@ -8464,15 +8333,18 @@ const make = async (path: string): Promise<DbShape> => {
         }));
       const attemptsToday = items.reduce((sum, item) => sum + item.today, 0);
       const attemptsMonth = items.reduce((sum, item) => sum + item.usd, 0);
-      const cawToday = caw?.today ?? 0;
-      const cawMonth = caw?.month ?? 0;
+      const cawToday = caw.today;
+      const cawMonth = caw.month;
+      // Thread turns were booked until the conversation's usage took their
+      // place: what no thread holds is the rest of the month's.
+      const threaded = threads.reduce((sum, row) => sum + row.usd, 0);
       return {
         todayUsd: cawToday + attemptsToday + (others?.today ?? 0),
         monthUsd: cawMonth + attemptsMonth + (others?.month ?? 0),
         caw: {
           todayUsd: cawToday,
           monthUsd: cawMonth,
-          unthreadedMonthUsd: caw?.unthreaded ?? 0,
+          unthreadedMonthUsd: Math.max(0, cawMonth - threaded),
         },
         others: { todayUsd: others?.today ?? 0, monthUsd: others?.month ?? 0 },
         items: items.map((item) => ({
@@ -9384,7 +9256,6 @@ const make = async (path: string): Promise<DbShape> => {
           actions,
           relays,
           moves,
-          leadTurns,
           artifacts,
           fleetWatchNotices,
         ]) {
@@ -10499,6 +10370,14 @@ const make = async (path: string): Promise<DbShape> => {
       return { rows, totals, missingPricing };
     },
 
+    cawMode: () => supervisorChoices().cawMode,
+    setCawMode: (mode) => {
+      supervisorChoices();
+      db.update(supervisorConfig)
+        .set({ cawMode: mode, updatedAt: new Date() })
+        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+        .run();
+    },
     getSupervisorConfig: () => {
       const row = supervisorChoices();
       return {

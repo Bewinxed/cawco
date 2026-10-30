@@ -175,6 +175,16 @@ export interface DispatchDeps {
    * `contextFor`): AGENTS.md and the knowledge files it needs, or "".
    */
   readonly context: (projectId: string, task: TaskView) => Promise<string>;
+  /**
+   * The project's conversation, started now if it has none (caw.ts
+   * `conversationFor`): for your ask on or off, for the dispatcher's own
+   * (`event`) only while its switch is on; undefined otherwise. The attempts
+   * the hub starts report to it, as any delegate's do to its parent.
+   */
+  readonly conversationFor: (
+    projectId: string,
+    by: Origin
+  ) => Promise<InstanceRow | undefined>;
   readonly db: Pick<
     DbShape,
     | "dropQueuedTaskStart"
@@ -196,15 +206,6 @@ export interface DispatchDeps {
    * `needsDesignSystem`).
    */
   readonly designSection: (clone: CloneRef) => Promise<string>;
-  /**
-   * The project's lead: its Caw session, started now if it has none (caw.ts
-   * `lead`): for your ask on or off, for the dispatcher's own (`event`) only
-   * while Caw is on; undefined otherwise.
-   */
-  readonly lead: (
-    projectId: string,
-    by: Origin
-  ) => Promise<InstanceRow | undefined>;
   /** Runs the safety net until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /** Whether a machine is connected now. */
@@ -692,7 +693,7 @@ export const createDispatcher = ({
   context,
   db,
   designSection,
-  lead,
+  conversationFor,
   lifetime,
   online,
   pauses,
@@ -733,13 +734,15 @@ export const createDispatcher = ({
   const instance = (id: string): InstanceRow | undefined =>
     db.getInstancesByIds([id])[0] as InstanceRow | undefined;
 
-  /** The project's lead, its Caw, started now when it has none; undefined while Caw is off. */
+  /** The project's conversation, started now when it has none; undefined while its switch is off. */
   const leadOf = async (
     project: ProjectRow,
     by: Origin = "event"
   ): Promise<InstanceRow | undefined> => {
     const row =
-      by === "you" || project.caw ? await lead(project.id, by) : undefined;
+      by === "you" || project.caw
+        ? await conversationFor(project.id, by)
+        : undefined;
     return row && !parentProblem(row, project.id) ? row : undefined;
   };
 

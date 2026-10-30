@@ -7,7 +7,8 @@
  *   (what the person does with anything opened in their panel, before any
  *   kind's skill), `decision-page` (§5.8), the planning skills and the design skills,
  *   `design-explore` and `component-canvas` among them: every agent's
- *   component canvas is built by them.
+ *   component canvas is built by them, and one skill per kind of event the
+ *   project's conversation hears (caw.ts `EVENT_SKILLS`).
  * - {@link TEMPLATE_SKILLS} are each project template's starter skills: bound
  *   to every project made from that template (`projects.template`) and
  *   placed at each of its checkouts and workspaces, as a project's own skills
@@ -36,6 +37,17 @@ export const BUNDLED_SKILLS = [
   "design-explore",
   "design-system",
   "component-canvas",
+  // One per kind of event the project's conversation hears, named in each
+  // send's context line (caw.ts `EVENT_SKILLS`).
+  "project-routine-run",
+  "project-delegate-report",
+  "project-attempt-judgement",
+  "project-task-move",
+  "project-github-event",
+  "project-inbound-event",
+  "project-person-request",
+  "project-fleet-watch",
+  "project-connection",
 ] as const;
 
 /**

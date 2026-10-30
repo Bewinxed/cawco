@@ -421,6 +421,7 @@ final class ProjectViewController: ObservedViewController {
         routinesPane = RoutinesPane(hub: context.hub, projectId: projectId, blocks: blocks)
         routinesPane.onChange = { [weak self] in self?.requestRefresh() }
         routinesPane.openThread = { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) }
+        routinesPane.openSession = { [weak self] id in self?.context.openSession(id) }
         routinesPane.viewItems = { [weak self] in self?.viewItems(on: .routines) ?? [:] }
         routinesPane.isHidden = true
         pane.addSubview(routinesPane)

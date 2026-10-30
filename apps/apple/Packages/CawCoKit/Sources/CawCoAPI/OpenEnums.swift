@@ -1453,6 +1453,53 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/CawViewMode`.
+    public enum CawViewMode: OpenEnum {
+        case acceptEdits
+        case bypassPermissions
+        case _default
+        case fullSend
+        case plan
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "acceptEdits": self = .acceptEdits
+            case "bypassPermissions": self = .bypassPermissions
+            case "default": self = ._default
+            case "fullSend": self = .fullSend
+            case "plan": self = .plan
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .acceptEdits: "acceptEdits"
+            case .bypassPermissions: "bypassPermissions"
+            case ._default: "default"
+            case .fullSend: "fullSend"
+            case .plan: "plan"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.acceptEdits, .bypassPermissions, ._default, .fullSend, .plan]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ClaudeLimitsErrorKind`.
     public enum ClaudeLimitsErrorKind: OpenEnum {
         case noReading

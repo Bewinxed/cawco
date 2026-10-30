@@ -7,6 +7,7 @@
 import {
   type ApprovedActionView,
   type RelayView,
+  type RoutineRunView,
   routineLink,
   type ThreadSummary,
   taskLink,
@@ -18,7 +19,7 @@ import type {
 } from "../ingress";
 import type { FolderFile, FolderListing } from "../project-folder";
 import type { RelayCreated } from "../relay";
-import { type RoutineRunView, type RoutineView, slotLabel } from "../routines";
+import { type RoutineView, slotLabel } from "../routines";
 import {
   ago,
   ahead,

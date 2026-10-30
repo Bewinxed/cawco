@@ -235,7 +235,7 @@ const fromStarter = (
  * there (its `thread_id`, set at spawn, with a parent). The card says how
  * it ended, so nothing else in that thread need (caw.ts `endNoteIn`).
  */
-export const cardOn = (
+const cardOn = (
   row: { parentInstanceId?: string | null; threadId?: string | null },
   threadId: string
 ): boolean => row.threadId === threadId && Boolean(row.parentInstanceId);
