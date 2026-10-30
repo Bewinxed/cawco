@@ -1,8 +1,7 @@
 /**
  * Tabs stopped on a render error (Component Story Format 3, live
- * components): the failure-state proposal (fault/RegionFault) inside the
- * shell that outlives it, at every width. The face, Stopped again and Ask
- * Caw are the canvas's switches; Try again on any frame throws again on the
+ * components): the failure-state proposal (fault/) inside the
+ * shell that outlives it, at every width. Try again on any frame throws again on the
  * same data, as a duplicate key does.
  */
 import { at } from "./frames";
@@ -11,7 +10,7 @@ import RegionFaultFixture from "./RegionFaultFixture.svelte";
 export default {
   title: "Failure states/Tabs",
   component: RegionFaultFixture,
-  args: { region: "tabs", face: "region", again: false, askCaw: false },
+  args: { region: "tabs", again: false },
 };
 
 /** A group's tab strip on a phone, 390 wide. */
@@ -28,3 +27,5 @@ export const TabsWide = at(2560);
 export const TabsStoppedAgain = at(1440, { again: true });
 /** Try again threw again at once, on a phone. */
 export const TabsStoppedAgainPhone = at(390, { again: true });
+/** Show details open: it stands over the pane, which stays where it is, 1440 wide. */
+export const TabsDetails = at(1440, { open: true });

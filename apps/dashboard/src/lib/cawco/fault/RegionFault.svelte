@@ -1,165 +1,165 @@
+<script lang="ts" module>
+  /** Each named after the reference it comes from (design/fault-references.md). */
+  export type Composition = "contractbook" | "bitepal";
+</script>
+
 <script lang="ts">
   /**
-   * What a part of the dashboard shows in its own place when it stops on a
-   * render error (RegionBoundary's `failed`), standing inside the chrome that
-   * outlives it: a design proposal, drawn on its canvas (fault/preview).
+   * What a part with a body of its own shows in that body when it stops on a
+   * render error (RegionBoundary's `failed`), inside the chrome that outlives
+   * it: a design proposal, drawn on its canvas (fault/preview). One composed
+   * thing with one lead: the action, in the house's coral, since the fault is
+   * the whole of this view, and everything else steps back from it.
    *
-   * - `region`: a part with a body of its own (the preview's well, a page,
-   *   the sessions): the house empty recipe with the alert glyph, as the
-   *   browser view's failures stand (DESIGN.md, Browser view › Failures):
-   *   what couldn't be drawn, why and what happens next, what is kept, then
-   *   its ways on in a row and Show details over the error word for word.
-   * - `line`: a part that is one list or one strip (the comments, the
-   *   project tree, the tabs): the house fault line (RowFault) in the list's
-   *   place, the rest of its surface still working.
-   * - `today`: the alert that ships, for comparison.
+   * - `contractbook`: Caw looks over the top edge of a raised sheet that holds
+   *   the words and the actions. He and the sheet are one object, and his eyes
+   *   lead down to it. `peek`, then `climb` once it has stopped again.
+   * - `bitepal`: Caw stands whole on the axis over the words and the actions.
+   *   `needs-you`, then `trying` once it has stopped again.
    *
    * `again`: the rebuild threw again at once on the same data, so Try again
-   * can't help: the way on is Reload page, which reads everything fresh
-   * from the hub (a reload is safe: DESIGN.md, Update toast).
+   * can't help: the way on is Reload page, which reads everything fresh from
+   * the hub (a reload is safe: DESIGN.md, Update toast). His new pose says it
+   * before the words do.
+   *
+   * He comes in by his own drawn enter once and holds his drawing, so a part
+   * that stands failed for hours plays nothing (emil-design-eng: rare moment,
+   * one authored motion, nothing looping). If his file does not load his box
+   * stays empty and the fault still reads.
    */
   import { commonWords } from "@cawco/core/words/common";
   import { regionFaultWords } from "@cawco/core/words/region-fault";
   import { shellWords } from "@cawco/core/words/shell";
-  import RowFault from "#lib/cawco/RowFault.svelte";
-  import {
-    Alert,
-    AlertAction,
-    AlertDescription,
-  } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { IconBug, IconRefresh } from "#lib/icons.js";
+  import Caw from "../home/Caw.svelte";
+  import { appearOnMount } from "../motion/curves.svelte";
+  import FaultDetails from "./FaultDetails.svelte";
+  import LedgeCaw from "./LedgeCaw.svelte";
 
   let {
-    face = "region",
+    composition = "contractbook",
     what,
     kept,
     again = false,
     details,
-    askCaw = false,
-    todayName = "side panel",
+    open = false,
+    room = "panel",
     onretry = () => undefined,
     onreload = () => undefined,
-    onask = () => undefined,
   }: {
-    face?: "region" | "line" | "today";
-    /** The part, as a sentence names it: "the preview", "these tabs". */
+    composition?: Composition;
+    /** The part, as a sentence names it: "the preview", "your sessions". */
     what: string;
-    /** What is safe, where the person would fear for it: "Its page and comments are kept on the hub." */
+    /** What is safe, where the person would fear for it. */
     kept?: string;
     again?: boolean;
     /** The error word for word, under Show details. */
     details: string;
-    /** Ask Caw to fix it stands beside the way on. */
-    askCaw?: boolean;
-    /** The region's name as the shipping alert says it. */
-    todayName?: string;
+    /** Show details starts open. */
+    open?: boolean;
+    /** How much the part gives him: a panel or a sheet, or a whole page. */
+    room?: "panel" | "page";
     onretry?: () => void;
     onreload?: () => void;
-    onask?: () => void;
   } = $props();
 
-  let shown = $state(false);
+  /** Side of his still's box. The whole of him stands taller than his peek. */
+  const SIZES = {
+    contractbook: { panel: 192, page: 240 },
+    bitepal: { panel: 136, page: 176 },
+  } as const;
+  const size = $derived(SIZES[composition][room]);
+
+  // svelte-ignore state_referenced_locally: `open` only says how it starts.
+  let shown = $state(open);
   const detailsId = $props.id();
 </script>
 
-{#if face === "today"}
-  <div class="min-w-0 p-space-3">
-    <Alert class="w-fit max-w-full" variant="destructive">
-      <AlertDescription
-        >The {todayName} stopped after an error. The rest of the page still works.
-        Try again to rebuild it.</AlertDescription
-      >
-      <AlertAction>
-        <Button
-          label={commonWords.tryAgain}
-          onclick={onretry}
-          size="xs"
-          variant="outline"
-        />
-      </AlertAction>
-    </Alert>
-  </div>
-{:else if face === "line"}
-  <RowFault
-    again={again ? onreload : onretry}
-    againLabel={again ? regionFaultWords.reloadPage : commonWords.tryAgain}
-    againPending={again ? regionFaultWords.reloading : "Trying again…"}
-    {details}
-    end="0px"
-    indent="var(--space-2)"
-    reason={again
-      ? regionFaultWords.lineAgain(what)
-      : regionFaultWords.line(what)}
+{#snippet words()}
+  <h2 class="m-0 text-center text-balance text-ink-strong type-title">
+    {again
+      ? regionFaultWords.stillCantShow(what)
+      : regionFaultWords.couldntShow(what)}
+  </h2>
+  {#if again || kept}
+    <p class="m-0 mt-space-1 text-center text-pretty text-ink-muted type-body">
+      {again ? regionFaultWords.reloadKeeps : kept}
+    </p>
+  {/if}
+{/snippet}
+
+{#snippet lead()}
+  <Button
+    data-lead
+    label={again ? regionFaultWords.reloadPage : commonWords.tryAgain}
+    onclick={again ? onreload : onretry}
   />
-{:else}
-  <div class="min-w-0" data-slot="region-fault" role="alert">
-    <EmptyState pad="pane" title={regionFaultWords.couldntDraw(what)}>
-      {#snippet mark()}
-        <!-- The empty recipe's 20px mark, in the failed status's glyph ink:
-             what stands here ended badly (DESIGN.md, Tertiary: status). The
-             bug says the why the line says; the bare exclamation read as a
-             stray 2px tick at 20px. -->
-        <IconBug
-          aria-hidden="true"
-          class="mb-space-1 size-icon-lg text-status-fail-glyph"
-          data-slot="empty-mark"
-        />
-      {/snippet}
-      {#snippet line()}
-        {again ? regionFaultWords.again : regionFaultWords.why}
-        {#if kept && !again}{kept}{/if}
-      {/snippet}
-      {#snippet action()}
-        <div class="flex flex-wrap items-center gap-space-2">
-          {#if again}
-            <Button
-              icon={IconRefresh}
-              label={regionFaultWords.reloadPage}
-              onclick={onreload}
-              size="sm"
-              variant="outline"
-            />
-          {:else}
-            <Button
-              icon={IconRefresh}
-              label={commonWords.tryAgain}
-              onclick={onretry}
-              size="sm"
-              variant="outline"
-            />
-          {/if}
-          {#if askCaw}
-            <Button
-              label={regionFaultWords.askCaw}
-              onclick={onask}
-              size="sm"
-              variant="outline"
-            />
-          {/if}
-          <Button
-            aria-controls={detailsId}
-            aria-expanded={shown}
-            data-details
-            label={shown ? shellWords.hideDetails : shellWords.showDetails}
-            onclick={() => {
-              shown = !shown;
-            }}
-            size="sm"
-            variant="ghost"
-          />
+{/snippet}
+
+{#snippet more()}
+  <Button
+    aria-controls={detailsId}
+    aria-expanded={shown}
+    data-details
+    label={shown ? shellWords.hideDetails : shellWords.showDetails}
+    onclick={() => {
+      shown = !shown;
+    }}
+    class={composition === "contractbook" ? "-ms-space-3" : undefined}
+    size="sm"
+    tone="quiet"
+    variant="ghost"
+  />
+{/snippet}
+
+<div
+  data-slot="region-fault"
+  data-composition={composition}
+  role="alert"
+  class="grid min-h-full w-full min-w-0 place-items-center overflow-y-auto overscroll-contain p-space-5 max-phone:p-space-3"
+  {@attach appearOnMount()}
+>
+  {#if composition === "contractbook"}
+    <div class="flex w-full max-w-c-panel-w min-w-0 flex-col items-center">
+      <LedgeCaw {again} {size} />
+      <div
+        data-slot="sheet"
+        class="flex w-full min-w-0 flex-col rounded-lg border border-border-control bg-surface-raised p-space-4 pt-space-5 shadow-tile"
+      >
+        {@render words()}
+        <!-- One prominent action, trailing (DESIGN.md, Liquid Glass bars); the
+             other steps back to the leading edge in a quiet ghost. -->
+        <div
+          class="mt-space-4 flex flex-wrap items-center justify-between gap-space-2"
+        >
+          {@render more()}
+          {@render lead()}
         </div>
         {#if shown}
-          <p
-            class="m-0 mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
-            data-slot="details"
-            id={detailsId}
-          >
-            {details}
-          </p>
+          <div class="mt-space-3 min-w-0">
+            <FaultDetails {details} id={detailsId} />
+          </div>
         {/if}
-      {/snippet}
-    </EmptyState>
-  </div>
-{/if}
+      </div>
+    </div>
+  {:else}
+    <div
+      class="flex w-full max-w-c-panel-w min-w-0 flex-col items-center"
+      data-slot="stage"
+    >
+      <div class="mb-space-4 flex-none">
+        <Caw status={again ? "trying" : "needs-you"} still {size} />
+      </div>
+      {@render words()}
+      <div class="mt-space-5 flex flex-col items-center gap-space-2">
+        {@render lead()}
+        {@render more()}
+      </div>
+      {#if shown}
+        <div class="mt-space-3 w-full min-w-0">
+          <FaultDetails {details} id={detailsId} />
+        </div>
+      {/if}
+    </div>
+  {/if}
+</div>

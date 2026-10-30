@@ -1,8 +1,7 @@
 /**
  * Side panel stopped on a render error (Component Story Format 3, live
- * components): the failure-state proposal (fault/RegionFault) inside the
- * shell that outlives it, at every width. The face, Stopped again and Ask
- * Caw are the canvas's switches; Try again on any frame throws again on the
+ * components): the failure-state proposal (fault/) inside the
+ * shell that outlives it, at every width. Try again on any frame throws again on the
  * same data, as a duplicate key does.
  */
 import { at } from "./frames";
@@ -11,7 +10,7 @@ import RegionFaultFixture from "./RegionFaultFixture.svelte";
 export default {
   title: "Failure states/Side panel",
   component: RegionFaultFixture,
-  args: { region: "side", face: "region", again: false, askCaw: false },
+  args: { region: "side", again: false },
 };
 
 /** The preview beside a conversation on a phone, 390 wide: the sheet's head and its Close outlive the failure (press it). */
@@ -28,3 +27,7 @@ export const SideWide = at(2560);
 export const SideStoppedAgain = at(1440, { again: true });
 /** Try again threw again at once, on a phone. */
 export const SideStoppedAgainPhone = at(390, { again: true });
+/** Show details open, 1440 wide. */
+export const SideDetails = at(1440, { open: true });
+/** Show details open, on a phone. */
+export const SideDetailsPhone = at(390, { open: true });

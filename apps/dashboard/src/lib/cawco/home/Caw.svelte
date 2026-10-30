@@ -33,11 +33,11 @@
   export type CawHead = "head-beat" | "head-smile" | "head-unsmile";
 
   /**
-   * Every file Caw is drawn from: a status's, `peek`, his ledge peek, a
-   * template pose, or the bar's head, none of which is a status
-   * (assets/mascot/README.md, Contract).
+   * Every file Caw is drawn from: a status's, `peek`, his ledge peek, `climb`,
+   * his climb over it, a template pose, or the bar's head, none of which is a
+   * status (assets/mascot/README.md, Contract).
    */
-  export type CawFile = CawStatus | CawPose | CawHead | "peek";
+  export type CawFile = CawStatus | CawPose | CawHead | "peek" | "climb";
 
   /**
    * Where the ledge runs across peek.riv's 512 still box, as a share of its

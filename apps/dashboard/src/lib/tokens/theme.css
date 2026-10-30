@@ -315,6 +315,7 @@
   --spacing-c-pin: var(--c-pin);
   --spacing-c-pin-pad: var(--c-pin-pad);
   --spacing-c-pin-gone-ring: var(--c-pin-gone-ring);
+  --spacing-c-fault-details-h: var(--c-fault-details-h);
   --spacing-c-comments-w: var(--c-comments-w);
   --spacing-c-pin-card-w: var(--c-pin-card-w);
   --spacing-c-pin-card-reading-w: var(--c-pin-card-reading-w);

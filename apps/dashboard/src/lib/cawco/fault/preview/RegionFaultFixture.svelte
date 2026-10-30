@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * A fixture for the failure-state proposal (fault/RegionFault): the
-   * dashboard's shell at one width, drawn from the tokens, with one part
+   * A fixture for the failure-state proposal (fault/RegionFault, LineFault,
+   * DecisionFault): the dashboard's shell at one width, drawn from the tokens, with one part
    * stopped on a render error and everything outside that part standing
    * and working. The side card is the real SideSurface (its head, switch,
    * Expand and Close) and its Close works; the rest of the shell is a
@@ -20,7 +20,9 @@
    * 900px (a desk's narrow column, a phone), `sidebar` the project tree in
    * the rail or its sheet, `tabs` a group's strip, `page` a route's page,
    * `workspace` the sessions' surface, `list` one list inside the side card
-   * (the Comments rail's rows, where the duplicate key threw).
+   * (the Comments rail's rows, where the duplicate key threw), `decision` one
+   * card of a decision page (caw-off-calls, as the hub keeps it), which draws
+   * in a frame of its own with none of the shell round it.
    */
   import type { Pin } from "@cawco/core/comments";
   import { sideWords } from "@cawco/core/words/side";
@@ -47,31 +49,41 @@
     IconUsage,
   } from "#lib/icons.js";
   import SideSurface from "../../side/SideSurface.svelte";
-  import RegionFault from "../RegionFault.svelte";
+  import DecisionFault from "../DecisionFault.svelte";
+  import LineFault from "../LineFault.svelte";
+  import RegionFault, { type Composition } from "../RegionFault.svelte";
   import gooPins from "./goo-card.pins.json";
   import gooCard from "./goo-card.png";
 
   type Region =
-    "side" | "sheet" | "sidebar" | "tabs" | "page" | "workspace" | "list";
+    | "side"
+    | "sheet"
+    | "sidebar"
+    | "tabs"
+    | "page"
+    | "workspace"
+    | "list"
+    | "decision";
 
   let {
     region,
     width,
     height,
-    face = "region",
+    composition = "contractbook",
     again = false,
-    askCaw = false,
+    open = false,
     columns = 1,
   }: {
     region: Region;
     /** The window's width, as the story's viewport. */
     width: number;
     height: number;
-    /** `region` / `line`: the proposal's two faces; `today`: what ships. */
-    face?: "region" | "line" | "today";
+    /** The two compositions a part with a body of its own can take. */
+    composition?: Composition;
     /** The rebuild threw again on the same data. */
     again?: boolean;
-    askCaw?: boolean;
+    /** Show details starts open. */
+    open?: boolean;
     /** Columns in the workspace: a desk's narrow pane gets the sheet. */
     columns?: number;
   } = $props();
@@ -80,6 +92,11 @@
   let stopped = $derived(again);
   const retry = () => {
     stopped = true;
+  };
+  /** A reload reads the same data, so the part fails afresh. */
+  const reload = () => {
+    stopped = false;
+    railTried = false;
   };
   /** The side card's Close, live: it puts the preview away. */
   let closed = $state(false);
@@ -96,7 +113,6 @@
     ((desk ? width - 228 : width) - (columns - 1) * 1) / columns
   );
   const split = $derived(pane >= 900);
-  const today = $derived(face === "today");
 
   /**
    * What each part says under Show details. The side card's is the error he
@@ -111,6 +127,8 @@
     page: "TypeError: Cannot read properties of null (reading 'nextRun')\n    in RoutineRow.svelte\n    in routines/+page.svelte",
     workspace:
       "RangeError: Invalid time value\n    at formatAge (age.ts:14)\n    in SessionSurface.svelte",
+    decision:
+      "TypeError: Cannot read properties of undefined (reading 'label')\n    in Option.svelte\n    in Decision.svelte",
   };
 
   /** Cawco-Dev's sessions that night, as the rail named them. */
@@ -142,14 +160,17 @@
 {#snippet tree()}
   <div class="flex flex-col gap-space-1 px-space-2">
     <p class="m-0 px-space-2 py-space-1 type-meta text-ink-muted">Projects</p>
-    {#if region === "sidebar" && !today}
-      <RegionFault
-        again={stopped}
-        details={DETAILS.sidebar}
-        face="line"
-        onretry={retry}
-        what="the projects"
-      />
+    {#if region === "sidebar"}
+      <div class="px-space-2">
+        <LineFault
+          again={stopped}
+          details={DETAILS.sidebar}
+          onreload={reload}
+          onretry={retry}
+          {open}
+          what="your projects"
+        />
+      </div>
     {:else}
       {#each ["Cawco-Dev"] as project, at (project)}
         <div
@@ -184,17 +205,8 @@
         <IconSearch class="size-icon-md" /><span>Jump to session</span>
       </div>
     </div>
-    {#if region === "sidebar" && today}
-      <RegionFault
-        details={DETAILS.sidebar}
-        face="today"
-        todayName="sidebar"
-        what="the sidebar"
-      />
-    {:else}
-      {@render spokes()}
-      {@render tree()}
-    {/if}
+    {@render spokes()}
+    {@render tree()}
   </div>
 {/snippet}
 
@@ -246,19 +258,21 @@
 {/snippet}
 
 {#snippet strip()}
-  <!-- A strip that failed grows to hold its details, moving the pane down. -->
+  <!-- A strip that failed keeps the row's height while its words fit it; on a
+       phone they take a second line. Its details open over the pane. -->
   <div
     data-failed={region === "tabs" || undefined}
-    class="flex h-c-tab-row-h flex-none items-end gap-space-1 bg-surface-shelf px-space-3 data-failed:h-auto data-failed:min-h-c-tab-row-h"
+    class="relative flex h-c-tab-row-h flex-none items-end gap-space-1 bg-surface-shelf px-space-3 data-failed:z-1 data-failed:h-auto data-failed:min-h-c-tab-row-h"
   >
     {#if region === "tabs"}
       <div class="min-w-0 flex-1 self-center">
-        <RegionFault
+        <LineFault
           again={stopped}
           details={DETAILS.tabs}
-          face={today ? "today" : "line"}
+          onreload={reload}
           onretry={retry}
-          todayName="tabs"
+          {open}
+          strip
           what="these tabs"
         />
       </div>
@@ -420,14 +434,15 @@
         class="flex min-w-0 flex-1 flex-col gap-space-2 p-space-2 data-beside:w-c-comments-w data-beside:flex-none"
       >
         {@render railHead()}
-        <RegionFault
+        <LineFault
           again={railTried}
           details={messageOf(thrown)}
-          face="line"
+          onreload={reload}
           onretry={() => {
             railTried = true;
             reset();
           }}
+          {open}
           what="the comments"
         />
       </div>
@@ -437,51 +452,39 @@
 
 {#snippet sideCard(sheet: boolean)}
   {@const listOnly = region === "list"}
-  {#if today}
-    <!-- What ships: the boundary stands outside the card, so the card's
-         head and Close go with what failed. -->
-    <div class="h-full min-h-0">
+  <SideSurface
+    label="Preview"
+    onclose={() => {
+      closed = true;
+    }}
+    {switcher}
+    title="goo-card"
+    beside={listOnly && !sheet ? railBeside : undefined}
+  >
+    {#if listOnly}
+      {@render page()}
+      {#if sheet}
+        <!-- The rail is the well's foot sheet on a narrow pane, at most
+             60% of the well, a layer over the page. -->
+        <div
+          class="absolute inset-x-0 bottom-0 z-2 flex max-h-3/5 rounded-t-lg border-t border-border-hairline bg-surface-raised"
+        >
+          {@render rail("sheet")}
+        </div>
+      {/if}
+    {:else}
       <RegionFault
+        again={stopped}
+        {composition}
         details={DETAILS.side}
-        face="today"
-        todayName="side panel"
+        kept="Its page and comments are safe."
+        onreload={reload}
+        onretry={retry}
+        {open}
         what="the preview"
       />
-    </div>
-  {:else}
-    <SideSurface
-      label="Preview"
-      onclose={() => {
-        closed = true;
-      }}
-      {switcher}
-      title="goo-card"
-      beside={listOnly && !sheet ? railBeside : undefined}
-    >
-      {#if listOnly}
-        {@render page()}
-        {#if sheet}
-          <!-- The rail is the well's foot sheet on a narrow pane, at most
-               60% of the well, a layer over the page. -->
-          <div
-            class="absolute inset-x-0 bottom-0 z-2 flex max-h-3/5 rounded-t-lg border-t border-border-hairline bg-surface-raised"
-          >
-            {@render rail("sheet")}
-          </div>
-        {/if}
-      {:else}
-        <RegionFault
-          again={stopped}
-          {askCaw}
-          details={DETAILS.side}
-          {face}
-          kept="Its page and comments are kept."
-          onretry={retry}
-          what="the preview"
-        />
-      {/if}
-    </SideSurface>
-  {/if}
+    {/if}
+  </SideSurface>
 {/snippet}
 
 {#snippet railBeside()}
@@ -537,12 +540,13 @@
     <div class="min-h-0 flex-1 overflow-auto bg-surface-recess">
       <RegionFault
         again={stopped}
-        {askCaw}
+        {composition}
         details={DETAILS.workspace}
-        {face}
-        kept="Your sessions keep running on their machines."
+        kept="They keep running on their machines."
+        onreload={reload}
         onretry={retry}
-        todayName="workspace"
+        {open}
+        room="page"
         what="your sessions"
       />
     </div>
@@ -568,13 +572,93 @@
   <div class="min-h-0 flex-1 overflow-auto">
     <RegionFault
       again={stopped}
-      {askCaw}
+      {composition}
       details={DETAILS.page}
-      {face}
+      kept="They still run on schedule."
+      onreload={reload}
       onretry={retry}
-      todayName="page"
+      {open}
+      room="page"
       what="Routines"
     />
+  </div>
+{/snippet}
+
+<!-- ---------- a decision page ---------- -->
+
+{#snippet decisionCard(card: {
+  question: string;
+  why: string;
+  picked: string;
+  other: string;
+})}
+  <!-- A card that stands, as the host draws it (decisions/host/Decision). -->
+  <article
+    class="flex min-w-0 flex-col gap-space-5 rounded-panel bg-surface-raised p-(--card-in) shadow-tile"
+  >
+    <h2 class="m-0 max-w-c-measure text-balance text-ink-strong type-title">
+      {card.question}
+    </h2>
+    <p class="m-0 max-w-c-measure text-pretty text-ink-muted type-body">
+      {card.why}
+    </p>
+    <div class="grid gap-space-3 @min-[28rem]/page:grid-cols-2">
+      <div
+        class="rounded-md border border-brand-solid bg-selected-bg px-space-3 py-space-2 type-label text-ink-strong"
+      >
+        {card.picked}
+      </div>
+      <div
+        class="rounded-md border border-border-control px-space-3 py-space-2 type-label text-ink-strong"
+      >
+        {card.other}
+      </div>
+    </div>
+  </article>
+{/snippet}
+
+{#snippet decisionPage()}
+  <!-- caw-off-calls, as the hub keeps it: its second card throws, its other
+       cards and the page's Send go on working. -->
+  <div
+    class="@container/page flex min-h-0 min-w-0 flex-1 flex-col bg-surface-recess"
+    style:--card-in="var(--space-5)"
+  >
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div
+        class="mx-auto flex w-full max-w-c-page-column-w min-w-0 flex-col gap-space-5 p-space-4"
+      >
+        <h1 class="m-0 py-space-2 text-balance text-ink-strong type-title">
+          Turning Caw off: the tray you asked for
+        </h1>
+        {@render decisionCard({
+          question: "Build this tray for turning Caw off?",
+          why: "From your pin: when you turn Caw off, it lists every session and task Caw started, all checked. You uncheck what should keep running, then confirm once.",
+          picked: "Yes, build it",
+          other: "Not yet",
+        })}
+        <DecisionFault
+          again={stopped}
+          {composition}
+          details={DETAILS.decision}
+          onreload={reload}
+          onretry={retry}
+          {open}
+          question="With many sessions running, does the list stop at about ten rows?"
+        />
+        {@render decisionCard({
+          question: "Does an unchecked row say 'Keeps running'?",
+          why: "An unchecked row is one you let finish.",
+          picked: "No, the empty box says it",
+          other: "Yes, 'Keeps running' replaces its status",
+        })}
+      </div>
+    </div>
+    <footer
+      class="flex flex-none items-center justify-end border-t border-border-hairline bg-surface-raised p-space-3"
+    >
+      <Button label="Send" />
+    </footer>
   </div>
 {/snippet}
 
@@ -586,21 +670,25 @@
   style:--frame-w="{width}px"
   style:--frame-h="{height}px"
 >
-  {#if desk}
+  {#if region === "decision"}
+    {@render decisionPage()}
+  {:else if desk}
     <aside
       class="flex w-c-sidebar-w flex-none flex-col border-e border-e-border-hairline bg-(--sidebar)"
     >
       {@render railBody()}
     </aside>
   {/if}
-  <div class="flex min-w-0 flex-1 flex-col">
-    {@render bar()}
-    {#if region === "page"}
-      {@render pageBody()}
-    {:else}
-      {@render workspaceBody()}
-    {/if}
-  </div>
+  {#if region !== "decision"}
+    <div class="flex min-w-0 flex-1 flex-col">
+      {@render bar()}
+      {#if region === "page"}
+        {@render pageBody()}
+      {:else}
+        {@render workspaceBody()}
+      {/if}
+    </div>
+  {/if}
   {#if !desk && region === "sidebar"}
     <!-- The rail's sheet, open from the burger, its Close the kit's. -->
     <div class="absolute inset-0 bg-scrim"></div>
