@@ -45,6 +45,8 @@ const KNOWN_INTERACTIONS: ReadonlySet<unknown> = new Set(INTERACTIONS);
 
 /** What a session keeps of its graph: the tab, each file's kept state, the panel's and dock's sizes, and the person's edits. */
 interface Kept {
+  /** The steps bar folded to its pill. */
+  barHidden: boolean;
   dockH: number | null;
   edits: Record<string, ClipTiming[]>;
   file: string | null;
@@ -60,6 +62,7 @@ interface Kept {
 export type Index = "steps" | "graph";
 
 const NOTHING_KEPT: Kept = {
+  barHidden: false,
   file: null,
   index: null,
   kept: {},
@@ -97,6 +100,7 @@ function keptOf(key: string): Kept {
       ).filter((entry): entry is [string, StagePoint] => isPoint(entry[1]))
     );
     return {
+      barHidden: raw?.barHidden === true,
       file: typeof raw?.file === "string" ? raw.file : null,
       index:
         raw?.index === "steps" || raw?.index === "graph" ? raw.index : null,
@@ -157,6 +161,8 @@ export class DesignGraph {
   peek = $state.raw<StagePoint | null>(null);
   /** The panel shown, or folded into its tab. */
   open = $state(true);
+  /** The steps bar folded to its pill, kept per session as the panel's fold is. */
+  barHidden = $state(false);
   /** A narrow pane's drawer: the face it shows. */
   face = $state<"graph" | "move">("graph");
   /** The person's sizes: the panel's width, the graph's height, the dock's height; null is the default. */
@@ -253,6 +259,7 @@ export class DesignGraph {
     this.file = kept.file;
     this.kept = kept.kept;
     this.open = kept.open;
+    this.barHidden = kept.barHidden;
     this.#index = kept.index;
     this.panelW = kept.panelW;
     this.graphH = kept.graphH;
@@ -333,6 +340,12 @@ export class DesignGraph {
   /** The panel folded into its tab, or grown back out of it. */
   setOpen(open: boolean): void {
     this.open = open;
+    this.#keep();
+  }
+
+  /** The steps bar folded to its pill, or grown back out of it. */
+  setBarHidden(hidden: boolean): void {
+    this.barHidden = hidden;
     this.#keep();
   }
 
@@ -754,6 +767,7 @@ export class DesignGraph {
 
   #keep(): void {
     const kept: Kept = {
+      barHidden: this.barHidden,
       file: this.file,
       index: this.#index,
       kept: this.kept,

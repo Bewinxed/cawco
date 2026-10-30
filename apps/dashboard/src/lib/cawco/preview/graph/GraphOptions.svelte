@@ -2,7 +2,7 @@
   /**
    * The open taste calls' switches (options.svelte.ts), drawn only on a
    * page opened with `?graph-options`: one floating card at the pane's
-   * leading foot, each call a row with its two sides, the recommended one
+   * leading foot, each open call a row with its sides, the recommended one
    * first and chosen until flipped. Folded to its button, it stands out of
    * the way of what it changes. Not product chrome: it goes once he picks.
    */
@@ -15,7 +15,7 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { IconChevronDown, IconTuning } from "#lib/icons.js";
   import GlassGroup from "./GlassGroup.svelte";
-  import { GRAPH_CALLS, type GraphCall, graphOptions } from "./options.svelte";
+  import { graphOptions, OPEN_CALLS } from "./options.svelte";
   import { RING, SYMBOL } from "./symbol";
 
   let { bottom = 0 }: { bottom?: number } = $props();
@@ -23,10 +23,7 @@
   /** Folded to its labelled pill until pressed, so it stands over none of what it changes. */
   let open = $state(false);
   let toggle = $state<HTMLButtonElement>();
-  const calls = Object.entries(GRAPH_CALLS) as [
-    GraphCall,
-    (typeof GRAPH_CALLS)[GraphCall],
-  ][];
+  const calls = OPEN_CALLS;
   async function setOpen(next: boolean): Promise<void> {
     open = next;
     await tick();

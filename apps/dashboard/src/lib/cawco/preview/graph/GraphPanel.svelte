@@ -24,6 +24,7 @@
     CANVAS_EMBED_GO,
     CANVAS_EMBED_GRAPH,
     CANVAS_EMBED_READY,
+    CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
   } from "@cawco/core/stage";
   import { designGraphWords as words } from "@cawco/core/words/design-graph";
@@ -54,7 +55,7 @@
   import ResizeHandle, { type HandleState } from "./ResizeHandle.svelte";
   import StateGraph from "./StateGraph.svelte";
   import type { NodePin } from "./StateNode.svelte";
-  import StepSlider from "./StepSlider.svelte";
+  import StepsBar from "./StepsBar.svelte";
   import { RING, SYMBOL } from "./symbol";
 
   let {
@@ -81,6 +82,7 @@
     graph: DesignGraph;
   } = $props();
 
+  let host = $state<HTMLElement>();
   let hostWidth = $state(0);
   let hostHeight = $state(0);
   let panel = $state<HTMLElement>();
@@ -107,8 +109,10 @@
   const onSteps = $derived(graph.index === "steps");
   /** The panel shown: open, and the graph the index standing. */
   const panelOpen = $derived(graph.open && !onSteps);
-  /** The slider's stack (its bar, the dials' row under it) as tall as it stands: the page starts under it. */
-  let stepsBox = $state({ w: 0, h: 0 });
+  /** The steps bar's stack (its bar, the dials' row with it) as tall as it stands; 0 folded or peeked. */
+  let barHeight = $state(0);
+  /** Where the steps bar stands: Dessn's field over the page's top, the scrubber and the player at its foot (call 1). */
+  const barAtTop = $derived(graphOptions.sides.bar === "field");
 
   /* --- Sizes: the panel's width, the graph's height, the dock's height ---- */
 
@@ -177,53 +181,125 @@
       )
     );
   };
+  /** On Steps with no move the bar holds the switch, so the drawer stands nowhere. */
+  const drawerShown = $derived(!(onSteps && !hasMove));
   const drawerHeight = $derived(
-    dragged ?? stopHeight(graph.open && !(onSteps && !hasMove) ? stop : "head")
+    drawerShown ? (dragged ?? stopHeight(graph.open ? stop : "head")) : 0
   );
 
-  // The room it takes, said to the page: a desk's panel its width at the inline end whether folded or not (the
-  // component never moves as it folds) and the dock its height at the foot; a drawer its height at the foot.
-  $effect(() => {
-    if (hostWidth === 0) {
-      return;
-    }
-    const endRoom = desk ? panelWidth + 2 * inset : 0;
-    let bottom = 0;
-    if (!desk) {
-      bottom = drawerHeight;
-    } else if (hasMove) {
-      bottom = dockBox.h + 2 * inset;
-    }
-    // The slider's stack and a gap under it: the page starts there, so it never moves as the bar comes or goes.
-    const top = onSteps && stepsBox.h > 0 ? stepsBox.h + inset + inset : 0;
-    // The pair: the kept page in the first half of the room, the hovered state's page in the second.
-    const half = pairing ? Math.floor((hostWidth - endRoom) / 2) : 0;
-    untrack(() => graph.room(endRoom + half, bottom, top));
-  });
-
-  /* --- The ultrawide pair (the owner's pick "pair") ------------------------ */
-
-  /** Room enough beside the panel for two pages, on the index call 3 lets pair. */
-  const pairing = $derived(
-    desk &&
-      !!address &&
-      hostWidth - (panelWidth + 2 * inset) >= numberOf("--c-pair-min-w") &&
-      (!onSteps || graphOptions.sides.pairSteps === "yes")
-  );
-  $effect(() => {
-    const on = pairing;
-    untrack(() => graph.setPairing(on));
-  });
-  /** What the Options card stands clear of at the pane's foot: the dock on a desk, the drawer on a narrow pane. */
-  const optionsFoot = $derived.by(() => {
+  /** What stands at the pane's foot under the page: the drawer on a narrow pane, the dock beside the panel on a desk. */
+  const footRoom = $derived.by(() => {
     if (!desk) {
       return drawerHeight;
     }
     return hasMove ? dockBox.h + 2 * inset : 0;
   });
+  /** The steps bar's room, with a gap past it, at the edge it stands at. */
+  const barRoom = $derived(
+    onSteps && barHeight > 0 ? barHeight + 2 * inset : 0
+  );
+
+  // The room it takes, said to the page: a desk's panel its width at the inline end whether folded or not (the
+  // component never moves as it folds), the dock its height at the foot, a drawer its height at the foot; the steps bar
+  // its height at its edge; on a wide window, every column beside the kept page's.
+  $effect(() => {
+    if (hostWidth === 0) {
+      return;
+    }
+    const endRoom = desk ? panelWidth + 2 * inset : 0;
+    const top = barAtTop ? barRoom : 0;
+    const bottom = footRoom + (barAtTop ? 0 : barRoom);
+    const endAll = endRoom + (columns - 1) * columnWidth;
+    untrack(() => graph.room(endAll, bottom, top));
+  });
+
+  /* --- A wide window (call 2): the row of states beside the kept page, or the pair --- */
+
+  /** The room beside the panel for pages, on a desk with a page to embed. */
+  const wideRoom = $derived(
+    desk && address ? hostWidth - (panelWidth + 2 * inset) : 0
+  );
+  /** The width a state's page takes: its widest story as an embed said it, with a gutter each side; null until one has. */
+  let storyWidth = $state<number | null>(null);
+  const stateWidth = $derived(
+    storyWidth === null ? null : storyWidth + 2 * numberOf("--space-6")
+  );
+  const rowing = $derived(graphOptions.sides.wide === "row");
+  /** The pages across: the kept one and the states beside it, as many as the component's width lets stand. */
+  const columns = $derived.by(() => {
+    if (wideRoom <= 0 || graph.steps.length < 2) {
+      return 1;
+    }
+    if (!rowing) {
+      return wideRoom >= numberOf("--c-pair-min-w") ? 2 : 1;
+    }
+    if (stateWidth === null) {
+      return 1;
+    }
+    return Math.max(
+      1,
+      Math.min(graph.steps.length, Math.floor(wideRoom / stateWidth))
+    );
+  });
+  const columnWidth = $derived(
+    columns > 1 ? Math.floor(wideRoom / columns) : 0
+  );
+  /** A page beside the kept one hugs its story, so its edge, lit by a hover, draws round the state and not the column. */
+  const pageWidth = $derived(
+    Math.min(
+      columnWidth - inset,
+      (storyWidth ?? columnWidth) + 2 * numberOf("--space-1")
+    )
+  );
+  /** The pair (the owner's pick "pair"): the hovered state's page beside the kept one, once a hover rests. */
+  const pairing = $derived(!rowing && columns === 2);
+  // Any page beside the kept one stands the hover there, so the kept page is never asked to preview it.
+  $effect(() => {
+    const on = columns > 1;
+    untrack(() => graph.setPairing(on));
+  });
+  /**
+   * The row (Dessn's flow, Unfold's slots): the stops after the kept one,
+   * in order, as many as the columns hold; the stop a pointer rests on
+   * stands beside the kept page when it isn't in the row already.
+   */
+  const rowSteps = $derived.by(() => {
+    if (!rowing || columns < 2) {
+      return [];
+    }
+    const at = Math.max(0, graph.at);
+    const row = graph.steps
+      .slice(at + 1)
+      .filter((one) => !one.missing)
+      .slice(0, columns - 1);
+    const { peek } = graph;
+    const hovered = peek
+      ? graph.steps.find((one) => one.point.story === peek.story)
+      : undefined;
+    if (
+      hovered &&
+      hovered.point.story !== graph.keptHere?.story &&
+      !row.includes(hovered)
+    ) {
+      if (row.length === columns - 1) {
+        row.pop();
+      }
+      row.unshift(hovered);
+    }
+    return row;
+  });
+  /** The row's first page is measured before the columns are known: one embed of the kept state, unseen. */
+  const measuring = $derived(
+    rowing &&
+      wideRoom > 0 &&
+      stateWidth === null &&
+      !!address &&
+      !!graph.keptHere
+  );
+  /** What the Options card stands clear of at the pane's foot. */
+  const optionsFoot = $derived(footRoom + (barAtTop ? 0 : barRoom));
   /** The pair's page, made on the first hover and kept for the session: its embed of the hovered state alone. */
   let pairSeen = $state<string | null>(null);
-  let pairFrame = $state<HTMLIFrameElement>();
   // A hover that rests: the pair's page stands the hovered state; one passed over on the way stands none.
   $effect(() => {
     const { peek } = graph;
@@ -236,15 +312,23 @@
     }, dur("--dur-peek"));
     return () => clearTimeout(rest);
   });
-  // The embed asks for its graph before it fetches any of it (core CANVAS_EMBED_GRAPH): the pair is the one embed, so it takes it all at once.
+  // Each embed asks for its graph before it fetches any of it (core CANVAS_EMBED_GRAPH): each takes its share at once,
+  // is told when it has arrived, and says its shape, which sets the row's columns.
   $effect(() => {
-    const frame = pairFrame;
-    if (!frame) {
+    if (!(pairing || rowing)) {
       return;
     }
     const heard = (event: MessageEvent) => {
-      const said = event.data as { type?: unknown; urls?: unknown } | null;
-      if (event.source !== frame.contentWindow || !said) {
+      const said = event.data as {
+        type?: unknown;
+        urls?: unknown;
+        width?: unknown;
+      } | null;
+      const frame = [
+        ...(host?.querySelectorAll<HTMLIFrameElement>("iframe[data-embed]") ??
+          []),
+      ].find((one) => one.contentWindow === event.source);
+      if (!(frame && said)) {
         return;
       }
       const { origin } = new URL(frame.src);
@@ -261,6 +345,12 @@
           { type: CANVAS_EMBED_READY, urls: [] },
           origin
         );
+      } else if (
+        said.type === CANVAS_EMBED_SIZE &&
+        typeof said.width === "number" &&
+        said.width > 0
+      ) {
+        storyWidth = Math.ceil(said.width);
       }
     };
     addEventListener("message", heard);
@@ -555,6 +645,7 @@
 </script>
 
 <div
+  bind:this={host}
   {@attach frameSize((node: HTMLElement) => {
     hostWidth = node.clientWidth;
     hostHeight = node.clientHeight;
@@ -618,32 +709,35 @@
         </GlassGroup>
       {/if}
     {/snippet}
-    {#snippet indexSwitch()}
-      {#if graphOptions.sides.switchAt === "bar"}
-        <!-- The two indexes over one stage (the primitives spec §0): two glyphs, the kit's segmented control. -->
-        <GlassGroup>
-          <Tabs
-            onValueChange={(index) =>
-              graph.setIndex(index === "steps" ? "steps" : "graph")}
-            size="compact"
-            value={graph.index}
-          >
-            <TabsList aria-label={words.views}>
-              <TabItem
-                glyphOnly
-                icon={IconSteps}
-                label={words.steps}
-                value="steps"
-              />
-              <TabItem
-                glyphOnly
-                icon={IconStructure}
-                label={words.graphView}
-                value="graph"
-              />
-            </TabsList>
-          </Tabs>
-        </GlassGroup>
+    {#snippet indexSwitch(glass = true)}
+      <!-- The two indexes over one stage (the primitives spec §0): two glyphs, the kit's segmented control; bare where the bar it stands in is the glass. -->
+      {#snippet segments()}
+        <Tabs
+          onValueChange={(index) =>
+            graph.setIndex(index === "steps" ? "steps" : "graph")}
+          size="compact"
+          value={graph.index}
+        >
+          <TabsList aria-label={words.views}>
+            <TabItem
+              glyphOnly
+              icon={IconSteps}
+              label={words.steps}
+              value="steps"
+            />
+            <TabItem
+              glyphOnly
+              icon={IconStructure}
+              label={words.graphView}
+              value="graph"
+            />
+          </TabsList>
+        </Tabs>
+      {/snippet}
+      {#if glass}
+        <GlassGroup>{@render segments()}</GlassGroup>
+      {:else}
+        {@render segments()}
       {/if}
     {/snippet}
     {#snippet zoomGroup()}
@@ -727,47 +821,118 @@
     {/snippet}
 
     {#if onSteps && graph.steps.length > 0}
-      <!-- The step slider over the page's top (the primitives spec §1.2), the dials' row under it: from the page's start to its end less the panel's room, over the kept page alone in the pair. -->
-      <div
-        {@attach frameSize((node: HTMLElement) => {
-          stepsBox = { w: node.offsetWidth, h: node.offsetHeight };
-        })}
-        class="pointer-events-auto absolute top-(--inset) start-(--inset) end-(--se) flex flex-col gap-space-1"
-        data-steps
-        style:--inset={`${inset}px`}
-        style:--se={`${desk ? panelWidth + 2 * inset + (pairing ? Math.floor((hostWidth - panelWidth - 2 * inset) / 2) : 0) : inset}px`}
-      >
-        <StepSlider {graph} phone={!desk}>
-          {#snippet trailing()}
-            {#if desk}{@render indexSwitch()}{/if}
-          {/snippet}
-        </StepSlider>
-        <GraphDials {graph} layout="row" />
-      </div>
-    {/if}
-    {#if pairing && pairSeen}
-      <!-- The pair's second page: the hovered state's embed alone, beside the kept page, made on the first hover and kept; it takes no input and carries no pins. -->
+      <!-- The steps bar (call 1) with the dials: across the page's room, less the panel's, at the edge its side stands at; over the drawer or the dock at the foot. -->
       <div
         class={[
-          "absolute top-(--top) bottom-(--bottom) start-(--start) end-(--end) overflow-hidden rounded-panel border border-border-hairline bg-surface-page transition-opacity duration-(--dur-fade) ease-out",
-          graph.peek ? "opacity-100" : "opacity-0",
+          "pointer-events-none absolute start-(--inset) end-(--se) z-1 flex",
+          barAtTop ? "top-(--inset)" : "bottom-(--foot) justify-center",
         ]}
-        data-pair
-        style:--bottom={`${hasMove ? dockBox.h + 2 * inset : inset}px`}
-        style:--end={`${panelWidth + 2 * inset}px`}
-        style:--start={`${Math.floor((hostWidth - panelWidth - 2 * inset) / 2) + inset}px`}
-        style:--top={`${onSteps && stepsBox.h > 0 ? stepsBox.h + 2 * inset : inset}px`}
+        data-steps-host
+        style:--foot={`${footRoom + inset}px`}
+        style:--inset={`${inset}px`}
+        style:--se={`${desk ? panelWidth + 2 * inset : inset}px`}
       >
-        <iframe
-          bind:this={pairFrame}
-          class="size-full border-0"
-          inert
-          sandbox="allow-scripts allow-same-origin"
-          src={pairSeen}
-          tabindex="-1"
-          title={words.pairTitle}
-        ></iframe>
+        <StepsBar
+          {graph}
+          onbox={(height) => {
+            barHeight = height;
+          }}
+          phone={!desk}
+        >
+          {#snippet switcher()}{@render indexSwitch(false)}{/snippet}
+          {#snippet dials()}<GraphDials {graph} layout="row" />{/snippet}
+        </StepsBar>
       </div>
+    {/if}
+    {#snippet pageAt(
+      start: number,
+      width: number,
+      src: string,
+      title: string,
+      lit: boolean
+    )}
+      <!-- A page beside the kept one: its state's embed alone, at rest; it takes no input and carries no pins. -->
+      <iframe
+        class={[
+          "absolute top-(--top) bottom-(--bottom) start-(--start) w-(--w) rounded-panel border bg-surface-page transition-[border-color,opacity] duration-(--dur-fade) ease-out",
+          lit ? "border-border-control-strong" : "border-border-hairline",
+        ]}
+        data-embed
+        inert
+        sandbox="allow-scripts allow-same-origin"
+        {src}
+        style:--bottom={`${footRoom + (barAtTop ? 0 : barRoom) + inset}px`}
+        style:--start={`${start}px`}
+        style:--top={`${(barAtTop ? barRoom : 0) + inset}px`}
+        style:--w={`${width}px`}
+        tabindex="-1"
+        {title}
+      ></iframe>
+    {/snippet}
+    {#if measuring && address && graph.keptHere}
+      <!-- The kept state's embed, unseen, until it says how wide the component stands: the row's columns follow from it. -->
+      <iframe
+        aria-hidden="true"
+        class="invisible absolute top-0 start-0 h-px w-(--w) border-0"
+        data-embed
+        inert
+        sandbox="allow-scripts allow-same-origin"
+        src={canvasEmbedUrl(address, [graph.keptHere.story])}
+        style:--w={`${wideRoom}px`}
+        tabindex="-1"
+        title={words.pairTitle}
+      ></iframe>
+    {/if}
+    {#if address && columns > 1}
+      {#if rowing}
+        {#each rowSteps as step, at (step.point.story)}
+          {@const start = (at + 1) * columnWidth + inset}
+          {@render pageAt(
+            start,
+            pageWidth,
+            canvasEmbedUrl(address, [step.point.story]),
+            words.rowTitle(step.name),
+            graph.peek?.story === step.point.story
+          )}
+          <!-- Its name over its top edge, and the page's press, which keeps it: the row is a sequence to step along. -->
+          <button
+            aria-label={words.keepState(step.name)}
+            class="group/page pointer-events-auto absolute top-(--top) bottom-(--bottom) start-(--start) w-(--w) rounded-panel {RING}"
+            data-row-page={step.point.story}
+            onclick={() => graph.keepAt(step.point)}
+            onpointerenter={() => graph.preview(step.point)}
+            onpointerleave={() => graph.preview(null)}
+            style:--bottom={`${footRoom + (barAtTop ? 0 : barRoom) + inset}px`}
+            style:--start={`${start}px`}
+            style:--top={`${(barAtTop ? barRoom : 0) + inset}px`}
+            style:--w={`${pageWidth}px`}
+            title={words.keepState(step.name)}
+            type="button"
+          >
+            <!-- Its name on the page's top edge, as a legend stands on a fieldset's, clear of what the page draws. -->
+            <span
+              class="absolute -top-space-2 start-space-3 max-w-full truncate rounded-xs bg-surface-page px-space-1 type-meta text-ink-muted group-hover/page:text-ink-strong"
+              >{step.name}</span
+            >
+          </button>
+        {/each}
+      {:else if pairSeen}
+        <div
+          class={[
+            "transition-opacity duration-(--dur-fade) ease-out",
+            graph.peek ? "opacity-100" : "opacity-0",
+          ]}
+          data-pair
+        >
+          {@render pageAt(
+            columnWidth + inset,
+            pageWidth,
+            pairSeen,
+            words.pairTitle,
+            false
+          )}
+        </div>
+      {/if}
     {/if}
     {#if desk}
       <!-- The panel: its shell is its surface, which Hide folds into the tab and Show grows back out of. -->
@@ -940,7 +1105,7 @@
           />
         </section>
       {/if}
-    {:else}
+    {:else if drawerShown}
       <!-- The drawer: one surface, its head the faces' switch and Hide, its height at its stop. -->
       <aside
         aria-label={words.graph}
@@ -968,7 +1133,7 @@
             onclick={grabberPress}
             type="button"
           ></button>
-          {@render indexSwitch()}
+          {#if !onSteps}{@render indexSwitch()}{/if}
           {#if !onSteps && hasMove}
             <GlassGroup>
               <Tabs
