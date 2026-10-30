@@ -30,6 +30,10 @@
  *    the renderer once a later move displaces such an effect
  *    (scripts/lint/design/clip-move.mjs, which holds scripts to the same).
  *    Read whole, not by line: a block spans lines.
+ *  - a `kit-nest` list without `ps-(--nest-pad)`: a nested tree is inset by
+ *    the house nesting pad, as SessionTree, WorkTabs and Sidebar write it;
+ *    without it a child row stands flush with its parent. Read from each
+ *    `class="…"` attribute whole, so it may span lines.
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
@@ -124,7 +128,38 @@ const keyframeHits = (
   )
 ).flat();
 
+/** Each class attribute in `text` naming kit-nest without the house inset. */
+const CLASS_ATTR = /\bclass="([^"]*)"/gu;
+const SPACES = /\s+/u;
+function flushNests(text: string): number[] {
+  const lines: number[] = [];
+  for (const attr of text.matchAll(CLASS_ATTR)) {
+    const names = (attr[1] as string).split(SPACES);
+    if (names.includes("kit-nest") && !names.includes("ps-(--nest-pad)")) {
+      lines.push(text.slice(0, attr.index).split("\n").length);
+    }
+  }
+  return lines;
+}
+const nestHits = (
+  await Promise.all(
+    styled
+      .filter((file) => file.endsWith(".svelte"))
+      .map(async (file) =>
+        flushNests(await Bun.file(resolve(ROOT, file)).text()).map(
+          (line) => `${file}:${line}`
+        )
+      )
+  )
+).flat();
+
 let found = 0;
+if (nestHits.length > 0) {
+  found += nestHits.length;
+  console.log(
+    `a kit-nest list is inset by the house nesting pad: give it ps-(--nest-pad) (SessionTree's classes):\n${nestHits.map((hit) => `  ${hit}`).join("\n")}`
+  );
+}
 if (keyframeHits.length > 0) {
   found += keyframeHits.length;
   console.log(
@@ -145,7 +180,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no @keyframes that cuts and moves"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no @keyframes that cuts and moves, no kit-nest without ps-(--nest-pad)"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

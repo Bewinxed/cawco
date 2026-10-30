@@ -71,7 +71,7 @@
       {#if kids.length > 0}
         <ul
           data-nest
-          class="kit-nest m-0 list-none p-0"
+          class="kit-nest flex flex-col gap-(--tree-gap) m-0 pt-(--tree-gap) pb-0 ps-(--nest-pad) pe-0 list-none"
           {@attach nestFrom("[data-tree-mark]")}
         >
           {@render branch(item.id)}

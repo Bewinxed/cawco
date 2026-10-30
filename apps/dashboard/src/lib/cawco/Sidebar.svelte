@@ -825,7 +825,7 @@
            copies or uncovers what is inside (`data-flip-anchor`). -->
       <ul
         data-nest
-        class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
+        class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) ps-(--nest-pad)"
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
@@ -1186,7 +1186,7 @@
                     )}
                     <ul
                       data-nest
-                      class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
+                      class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) ps-(--nest-pad)"
                       data-flip-anchor
                       data-sidebar="menu-sub"
                       data-slot="sidebar-menu-sub"
