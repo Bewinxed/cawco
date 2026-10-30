@@ -4,6 +4,7 @@
 // by its path from apps/dashboard, as the ESLint config named it.
 import path from "node:path";
 import { defineRule } from "golar/unstable";
+import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
@@ -287,6 +288,7 @@ const FIND = {
   "house/no-raw-duration-read": rawDurationReads,
   "house/no-dimension-binding": dimensionBindings,
   "house/no-clip-with-move": clipWithMove,
+  "house/no-class-join": classJoins,
   "house/no-raw-class-values": rawClassValues,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,

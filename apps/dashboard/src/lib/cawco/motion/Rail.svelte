@@ -10,6 +10,7 @@
 <script generics="Item extends RailItem" lang="ts">
   import type { Snippet } from "svelte";
   import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
+  import { cn } from "#lib/utils.js";
   /**
    * A designed radio group: a thumb that slides under the chosen item, and
    * one label that travels to whichever item is under the pointer or the
@@ -194,7 +195,7 @@
   data-rail-class={className}
   data-slot="rail"
   aria-label={label}
-  class="group/rail relative {className}"
+  class={cn("group/rail relative", className)}
   data-axis={axis}
   onfocusout={() => {
     tip = -1;
@@ -223,7 +224,10 @@
     <button
       aria-checked={entry.id === value}
       aria-label={entry.label}
-      class="press-tint relative select-none rounded-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong {itemClass}"
+      class={cn(
+        "press-tint relative select-none rounded-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong",
+        itemClass
+      )}
       data-rail-item-class={itemClass}
       data-rail-item={entry.id}
       disabled={entry.disabled}
