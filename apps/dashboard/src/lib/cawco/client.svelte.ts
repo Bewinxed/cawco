@@ -140,7 +140,6 @@ import type {
 } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import type { UpstreamPosts, WriteMethod } from "@cawco/core/upstream-guard";
-import { UPSTREAM_POST_TOOL } from "@cawco/core/upstream-post";
 import type {
   ClaudeLimits,
   OpenCodeGoLimits,
@@ -1775,12 +1774,10 @@ function applyFacts(
     target.mcp = null;
     // The process behind a relaunch is up: this is the frame it opens with.
     target.relaunching = false;
-    // Anything still parked belongs to a process that is gone: a permission
-    // blocks the turn that asked it, so an `init` on top of pending questions
-    // means the process holding their resolvers died.
-    if (target.pending.length > 0) {
-      target.pending = [];
-    }
+    // What is parked stays: an `init` opens every turn, and an ask the hub
+    // owns (a question `ask` put) outlives the turn and the process. An ask
+    // leaves on the hub's word alone (`permission_settled`, `/api/pending`):
+    // the hub settles a dead process's asks itself (hub pending.ts `forget`).
   }
   // The turn or the compaction just changed how full the window is; ask
   // rather than guess, when something in this tab draws it
@@ -6526,9 +6523,8 @@ function settleStopped(instanceId: string): void {
   target.busy = false;
   target.currentTool = null;
   clearTurnPhase(target);
-  // The agent denies whatever was parked as it tears the session down, so these
-  // answer to nobody — leaving them would pin a dead session to the fleet rail.
-  target.pending = [];
+  // Its parked asks leave on the hub's word (`permission_settled`): the hub
+  // settles a stopped process's asks, and keeps a relaunch's own.
   trackWorking(target);
 }
 
@@ -8938,15 +8934,13 @@ const blocked = $derived.by((): BlockedRequest[] => {
     if (target.pending.length === 0) {
       continue;
     }
-    // A session the hub says has ended (stopped, discarded, asleep,
-    // failed) answers to nobody; its asks are not the operator's. One whose
-    // machine the hub cannot reach (`unknown`) may still be running and
-    // waiting: its asks stay, marked stale, so "needs you" is never a false
-    // negative (PRODUCT.md) while a machine or the hub is away. Across a
-    // reconnect the asks themselves hold as last read until the hub's
-    // snapshot replaces them (`adoptPending`).
+    // Every ask the hub holds is listed, whatever its session's row says:
+    // the hub settles the asks of a process that ended, and keeps the ones
+    // that outlive it (a question `ask` put, a post held for you) until they
+    // are answered or the session ends for good. One whose machine the hub
+    // cannot reach (`unknown`) is marked stale. Across a reconnect the asks
+    // hold as last read until the hub's read replaces them (`adoptPending`).
     const row = rowsById.get(target.instanceId);
-    const ended = row !== undefined && !(isLive(row) || isStale(row));
     const machine = state.machines.find(
       (one) => one.machineId === target.machineId
     );
@@ -8954,11 +8948,6 @@ const blocked = $derived.by((): BlockedRequest[] => {
       // A delegate's ask is the parent's to answer, not the user's: it stays on
       // the delegate's own transcript but never lands in this queue.
       if (routedToParent(request)) {
-        continue;
-      }
-      // A post to another person's repository held for you outlives its
-      // session (hub upstream-asks.ts): the hub makes it once you approve.
-      if (ended && request.toolName !== UPSTREAM_POST_TOOL) {
         continue;
       }
       rows.push({
