@@ -57838,10 +57838,6 @@
       "PermissionPresentation": {
         "type": "object",
         "properties": {
-          "askedBecause": {
-            "description": "A shell or edit call its turn's provenance put to the person (core\nturn-provenance.ts): what made the turn outside, in one line (\"Asked\nbecause this turn was started by a report from Retro.\"), drawn under the\ncommand or the change. Absent on any other ask.",
-            "type": "string"
-          },
           "asker": {
             "description": "The session that asked, by the name the board gives it (\"Caw\" for a project's lead).",
             "type": "string"

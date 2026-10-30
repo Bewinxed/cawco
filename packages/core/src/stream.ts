@@ -180,12 +180,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    person's permission mode and his turn's provenance, as every session
  *    does (one-session design slice 3). A page built for 35 reads a
  *    `cawEdits` the hub no longer sends, so it reloads first.
+ * 37: a permission's presentation no longer carries `askedBecause`: a
+ *    session's calls run under its harness's permission mode alone, and
+ *    CawCo puts none to the person on a rule of its own. A page built for
+ *    36 reads an `askedBecause` the hub no longer sends, so it reloads
+ *    first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 36;
+export const WIRE_PROTOCOL = 37;
 
 /**
  * What a session's stream carries: the changes each frame made to its

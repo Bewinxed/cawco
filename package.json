@@ -38,7 +38,6 @@
     "signal:check": "bun scripts/signal-check.ts",
     "token-alias:check": "bun scripts/token-alias-check.ts",
     "token-contrast:check": "bun scripts/token-contrast-check.ts",
-    "turn-provenance:check": "bun scripts/turn-provenance-check.ts",
     "typecheck:coverage": "bun scripts/typecheck-coverage.ts",
     "words": "bun scripts/words-swift.ts",
     "words:check": "bun scripts/words-swift.ts --check"

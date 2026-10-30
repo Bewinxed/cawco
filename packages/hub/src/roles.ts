@@ -17,7 +17,7 @@
  * - **lead**: a project's Caw, a plain session (one-session design §6,
  *   slice 3): the worker's tools, and its project's threads until a thread
  *   is a session. Its harness's shell and edit calls are decided by its
- *   mode and its turn's provenance, as every session's are.
+ *   mode, as every session's are.
  * - **overseer**: fleet-watch triage (fleet-watch.ts): it reads the fleet
  *   and the session's task, and decides once with `triage_decide` (nudge the
  *   lead, interrupt, stop, tell you, or leave it), which the hub carries

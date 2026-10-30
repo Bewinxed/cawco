@@ -11,8 +11,7 @@
  *
  * - **Only your act travels as yours.** The message says what you did (the
  *   task, its move, your reason) and nothing an agent wrote: the filer
- *   reads the task's result itself with `task_read`, as content it read,
- *   which makes the filer's turn outside (core turn-provenance.ts).
+ *   reads the task's result itself with `task_read`, as content it read.
  * - **The filer** is the session whose commit first added the task's file
  *   (task-history.ts `createdBy`). It is sent your approval as your words
  *   are (the composer's send path, as jev-tasks.ts sends your comments): a

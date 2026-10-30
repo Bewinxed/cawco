@@ -487,7 +487,6 @@ export const listRoleTools = (): RoleTools[] => {
         triage: () => Promise.resolve(undefined),
         turnEnded: () => undefined,
         views: {} as never,
-        wakeSent: () => undefined,
       }).tools(actor),
     routineTools: (actor) =>
       createRoutines({

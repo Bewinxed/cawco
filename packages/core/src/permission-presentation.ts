@@ -49,13 +49,6 @@ export interface PermissionField {
 }
 
 export interface PermissionPresentation {
-  /**
-   * A shell or edit call its turn's provenance put to the person (core
-   * turn-provenance.ts): what made the turn outside, in one line ("Asked
-   * because this turn was started by a report from Retro."), drawn under the
-   * command or the change. Absent on any other ask.
-   */
-  askedBecause?: string;
   /** The session that asked, by the name the board gives it ("Caw" for a project's lead). */
   asker: string;
   /** The changes the call makes, each drawn as a diff. Empty when it changes no text. */
@@ -141,8 +134,6 @@ export interface SourceFacts {
 }
 
 export interface PresentationContext {
-  /** Why its turn's provenance put the call to the person ({@link PermissionPresentation.askedBecause}). */
-  askedBecause?: string;
   /** The asking session's name. */
   asker: string;
   /**
@@ -1569,13 +1560,12 @@ const shellCall = (input: Record<string, unknown>): Presented => {
 export const commandOf = (input: Record<string, unknown>): string | null =>
   typeof input.command === "string" ? input.command : null;
 
-/** Who asks, where, and why the gate put it to the person, as every ask's head and reason say. */
+/** Who asks, and where, as every ask's head says. */
 const whoOf = (
   context: PresentationContext
-): Pick<PermissionPresentation, "askedBecause" | "asker" | "project"> => ({
+): Pick<PermissionPresentation, "asker" | "project"> => ({
   asker: context.asker,
   ...(context.project ? { project: context.project } : {}),
-  ...(context.askedBecause ? { askedBecause: context.askedBecause } : {}),
 });
 
 /**

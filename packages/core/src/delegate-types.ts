@@ -249,10 +249,8 @@ const harnessToolsOf = (
     )
   );
 
-/** The shell tools, by every harness's name: what a session's turn runs commands with (core turn-provenance.ts), and what web-reads.ts reads a command of. */
+/** The shell tools, by every harness's name: what a session's turn runs commands with, and what web-reads.ts reads a command of. */
 export const SHELL_TOOLS = harnessToolsOf("shell", "powershell");
-/** The tools that write files, by every harness's name ({@link HARNESS_TOOLS}' `edit`). */
-export const EDIT_TOOLS = harnessToolsOf("edit");
 /** The PowerShell tools, by every harness's name: shells whose lines a POSIX reader cannot read. */
 export const POWERSHELL_TOOLS = harnessToolsOf("powershell");
 /** The harnesses' own web fetch tools, by every harness's name: a URL argument decides whether one read the web. */

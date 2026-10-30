@@ -226,7 +226,6 @@ import {
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_SLEEP,
   CONTROL_TRANSCRIPT_TURNS,
-  CONTROL_TURN_PROVENANCE,
   CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -973,7 +972,6 @@ import {
   type TranscriptPayload,
 } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
-import { createTurnProvenance } from "./turn-provenance";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
 import { upstreamRuleOf, upstreamRules } from "./upstream";
@@ -3959,48 +3957,6 @@ export const createServer = (
     },
     put: (row) => db.putSessionTaint(row),
   });
-  /**
-   * Every session's turn provenance (turn-provenance.ts): whose its turn is,
-   * read from the sends its harness reads and the web content its turn
-   * reads, its machine told each time it turns outside or back, so its
-   * harness asks the person before a shell or edit call in an outside turn.
-   */
-  const turnProvenance = createTurnProvenance({
-    tell: (session, outside) => {
-      const agent = registry.agent(session.machineId);
-      if (!agent) {
-        // Told again when the machine connects (`connected`).
-        return;
-      }
-      const requestId = crypto.randomUUID();
-      sendFrame(agent, {
-        verb: "control",
-        machineId: session.machineId,
-        instanceId: session.id,
-        requestId,
-        payload: {
-          instanceId: session.id,
-          requestId,
-          method: CONTROL_TURN_PROVENANCE,
-          args: [outside],
-        },
-      });
-    },
-    webContext: () => ({
-      fleet: new Set(
-        [
-          osHostname(),
-          ...db
-            .listAgents()
-            .flatMap((agent) => [agent.hostname, agent.machineId]),
-        ].map((host) => host.toLowerCase())
-      ),
-      mcpUrl: (server) => {
-        const config = db.getMcpServer(server)?.config;
-        return config && "url" in config ? config.url : undefined;
-      },
-    }),
-  });
   pending.onSettled((parked, outcome, said) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
@@ -5700,9 +5656,6 @@ export const createServer = (
       // its agent may still be in its turn, which its adoption says.
       transcripts.processGone(instanceId);
       workItems.turnOver(instanceId);
-      // Its turn's provenance with it; one that outlived its agent keeps
-      // its turn, and the machine is told it again as it connects.
-      turnProvenance.ended(instanceId);
     }
     // A lead's turn ends with its process: its thread is no longer working.
     lead?.sessionEnded(instanceId);
@@ -7113,17 +7066,12 @@ export const createServer = (
       .sendsFor(ids)
       .filter((row) => row.instanceId === instanceId && row.state === "pending")
       .sort((a, b) => order(a) - order(b));
-    const [reader] = db.getInstancesByIds([instanceId]);
     for (const row of read) {
       if (!isKeepAlive(row.body)) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: null });
       }
       // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
       memoryWatch.read(instanceId, row.body?.origin);
-      // Whose the session's turn is: its principal's, or outside (turn-provenance.ts).
-      if (reader && !isKeepAlive(row.body)) {
-        turnProvenance.read(reader, row.uuid, row.body);
-      }
       readSend(row, true);
     }
     const latest = Math.max(...read.map((row) => row.acceptedAt.getTime()));
@@ -23928,11 +23876,7 @@ export const createServer = (
   // than folded into the routes below.
   const { delegateTypes } = db;
   // What each ask says on every surface, read as it parks (ask-presentation.ts).
-  pending.presentWith(
-    createAskPresenter(db, delegateTypes, (instanceId) =>
-      turnProvenance.outside(instanceId)
-    )
-  );
+  pending.presentWith(createAskPresenter(db, delegateTypes));
   // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.
   const projectTypes = makeProjectDelegateTypes(delegateTypes);
   /**
@@ -25381,7 +25325,6 @@ export const createServer = (
     turnEnded: (instanceId, why, gone) =>
       routines.leadTurnEnded(instanceId, why, gone),
     views,
-    wakeSent: (uuid, kind) => turnProvenance.woke(uuid, kind),
   });
   lead = caw;
   // The fleet's one finding engine (find.ts): the names the hub holds, and
@@ -35492,16 +35435,6 @@ export const createServer = (
               // Behind its ack, which it waits for to take requests: what
               // was held for it while it was away goes again.
               resendHeld(message.machineId);
-              // Each outside turn of its sessions, which it may have
-              // forgotten; on its first connect to this hub, each turn
-              // under way across the restart is outside until it ends.
-              turnProvenance.connected(
-                message.machineId,
-                db
-                  .ownedByIds(message.machineId, peekInstances(message.payload))
-                  .filter((row) => row.turnOpenAt !== null)
-                  .map((row) => row.id)
-              );
               handAgain(message.machineId, peekInstances(message.payload));
               for (const row of toEnd) {
                 endSession(row.id, "stop", {
@@ -36410,11 +36343,10 @@ export const createServer = (
                   admitted.message,
                   admitted.harness
                 );
-                // A session's web reads and its turn's end
-                // (turn-provenance.ts): none of a stream's deltas carry them. A
-                // routine run's session's words, for a failure that gives no
-                // reason (routines.ts `said`): a lead's from before his wake's
-                // read receipt too.
+                // A routine run's session's words, for a failure that gives
+                // no reason (routines.ts `said`): a lead's from before his
+                // wake's read receipt too. None of a stream's deltas carry
+                // them.
                 if (admitted.message.type !== "stream_event") {
                   const [framed] = db.getInstancesByIds([message.instanceId]);
                   routines.said(
@@ -36422,11 +36354,6 @@ export const createServer = (
                     admitted.message,
                     framed?.role === "lead"
                   );
-                  // Every session's web reads and turn's end move its
-                  // provenance (turn-provenance.ts).
-                  if (framed) {
-                    turnProvenance.frame(framed, admitted.message);
-                  }
                 }
               }
               // Pings share admission and send receipts, then leave before every

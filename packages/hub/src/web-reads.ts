@@ -359,7 +359,7 @@ const commandReadsWeb = (
 };
 
 /** The URLs a tool's input names: `url`, `urls`, `uri`, `href`. */
-export const urlsOf = (input: Record<string, unknown>): string[] =>
+const urlsOf = (input: Record<string, unknown>): string[] =>
   ["url", "urls", "uri", "href"].flatMap((key) => {
     const value = input[key];
     if (typeof value === "string") {

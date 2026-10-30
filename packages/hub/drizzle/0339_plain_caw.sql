@@ -1,6 +1,6 @@
 -- A project's Caw is a plain spawn (one-session design §6, slice 3): no gate
--- decides his shell and edit calls, so nothing keeps them. His mode and his
--- turn's provenance decide each, as every session's (core turn-provenance.ts).
+-- decides his shell and edit calls, so nothing keeps them. His mode decides
+-- each, as every session's does.
 DROP TABLE `lead_calls`;--> statement-breakpoint
 -- Every Caw session started under the gate ends: it runs with the gate's ask
 -- rules and its place's boundary, which no launch gives any more. Its end is

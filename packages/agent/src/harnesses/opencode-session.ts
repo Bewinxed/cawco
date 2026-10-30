@@ -68,12 +68,10 @@ import {
   offeredMode,
   PROVIDER_RETRY,
   pricedRequest,
-  provenanceKindOf,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   SERVER_STOPPED_MID_TURN,
   SPAWNING_TOOLS,
-  turnCall,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -1966,18 +1964,10 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     this.#seenGates.add(asked.id);
-    // OpenCode asks; the daemon is where a session's mode is enforced. A
-    // shell or edit call in a turn that is not the session's principal's is
-    // the person's (core turn-provenance.ts), whatever the mode would answer.
-    const provenance = turnCall(
-      this.#ctx.outside?.() ?? null,
-      this.#permissionMode,
-      provenanceKindOf(asked.action)
-    );
+    // OpenCode asks; the daemon is where a session's mode is enforced.
     if (
-      provenance.kind === "mode" &&
-      (autoAllows(this.#permissionMode, "tool") ||
-        (this.#permissionMode === "acceptEdits" && asked.action === "edit"))
+      autoAllows(this.#permissionMode, "tool") ||
+      (this.#permissionMode === "acceptEdits" && asked.action === "edit")
     ) {
       this.#replyPermission(asked.id, "once");
       return;

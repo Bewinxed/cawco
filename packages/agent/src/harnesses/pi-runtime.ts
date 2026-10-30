@@ -3,7 +3,6 @@ import type {
   FleetMcpChange,
   HookEvent,
   ModelTurnUsage,
-  PermissionResult,
   SentMessage,
   SpawnPayload,
   SupportedCommands,
@@ -24,8 +23,6 @@ import {
   MESSAGES_READ,
   piToolsFor,
   pricedRequest,
-  provenanceKindOf,
-  turnCall,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -61,8 +58,6 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
-  type ToolCallEvent,
-  type ToolCallEventResult,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type Boundary, boundaryCommand } from "../boundary";
@@ -90,7 +85,7 @@ import {
   textOf,
   toBlocks,
 } from "./pi-services";
-import { type PiGateAsk, piOpenTurns } from "./pi-sessiond";
+import { piOpenTurns } from "./pi-sessiond";
 
 type BashExec = BashOperations["exec"];
 
@@ -544,9 +539,6 @@ const resultText = (content: readonly { type: string; text?: string }[]) =>
  * - Stop on `agent_end`: a block sends its reason as a message that starts
  *   another turn, whose Stop hooks are told `stop_hook_active`, as Claude
  *   Code tells them.
- *
- * It comes before the session's gate ({@link PiGate}), so a call a hook
- * refuses is never put to the hub.
  */
 class FleetHooks {
   readonly #place: HookPlace;
@@ -712,10 +704,6 @@ class FleetHooks {
   }
 }
 
-/** Why a gated call did not run when its turn was aborted before the hub answered. */
-const INTERRUPTED =
-  "The turn was interrupted before the hub answered this call.";
-
 /**
  * A fenced session's extensions (`SpawnPayload.fence`: a fleet-watch triage
  * run, a memory curator): CawCo's inline ones alone, as Claude Code's and
@@ -738,128 +726,6 @@ const cawcosExtensionsAlone = (
     extension.path.startsWith("<inline:")
   ),
 });
-
-/**
- * Every pi session's per-call permission point. pi has no permission modes,
- * so a session's calls run; but in a turn that is not its principal's (core
- * turn-provenance.ts, the flag the hub last told its machine, read on every
- * call since "Tool calls from one assistant message can run in parallel",
- * pi docs extensions.md) each shell and edit call is put to the person as a
- * permission ask before it runs, saying why. pi's own point for it:
- * "`tool_call` can mutate input or block execution" (pi docs
- * extensions.md); pi awaits each handler before the call runs
- * (agent-session.js `_beforeToolCall`), a script's calls included ("Nested
- * calls go through argument validation and the `tool_call` and `tool_result`
- * handlers like model-issued calls"), and a handler that fails blocks the
- * call ("A `tool_call` handler failure blocks the tool as a fail-safe"). It
- * is the session's last extension, so no other handler changes a call's
- * input after the hub judged it ("Later `tool_call` handlers see earlier
- * mutations", types.d.ts `ToolCallEvent`; inline extensions load after the
- * person's own, resource-loader.js `loadFinalExtensionSet`).
- */
-class PiGate {
-  readonly #ctx: HarnessContext;
-  /** The asks the hub has not answered, by request: each with its call's answer. */
-  readonly #waiting = new Map<
-    string,
-    {
-      ask: PiGateAsk;
-      settle: (answer: ToolCallEventResult | undefined) => void;
-    }
-  >();
-
-  constructor(ctx: HarnessContext) {
-    this.#ctx = ctx;
-  }
-
-  /** The inline extension: every gated call waits on the hub. */
-  extension(): ExtensionFactory {
-    return (pi) => {
-      pi.on("tool_call", (event, context) =>
-        this.#gated(event.toolName)
-          ? this.#put(event, context.signal)
-          : undefined
-      );
-    };
-  }
-
-  /** Whether a call of `tool` is put to the hub: a shell or edit call in an outside turn. */
-  #gated(tool: string): boolean {
-    return (
-      turnCall(this.#ctx.outside?.() ?? null, undefined, provenanceKindOf(tool))
-        .kind === "ask"
-    );
-  }
-
-  /**
-   * A gated call, put to the hub. The call's own id names its transcript
-   * row; a call a script made has none there ("These ids do not appear as
-   * tool calls or tool results in the transcript"). An abort of the turn
-   * takes the ask back.
-   */
-  #put(
-    event: ToolCallEvent,
-    signal: AbortSignal | undefined
-  ): Promise<ToolCallEventResult | undefined> {
-    if (signal?.aborted) {
-      return Promise.resolve({ block: true, reason: INTERRUPTED });
-    }
-    const ask: PiGateAsk = {
-      requestId: crypto.randomUUID(),
-      toolName: event.toolName,
-      input: event.input,
-      requestKind: "tool",
-      ...(event.parentToolCallId ? {} : { toolUseId: event.toolCallId }),
-    };
-    return new Promise((resolve) => {
-      const interrupted = () =>
-        this.#settle(
-          ask.requestId,
-          { block: true, reason: INTERRUPTED },
-          "cancelled"
-        );
-      signal?.addEventListener("abort", interrupted, { once: true });
-      this.#waiting.set(ask.requestId, {
-        ask,
-        settle: (answer) => {
-          signal?.removeEventListener("abort", interrupted);
-          resolve(answer);
-        },
-      });
-      this.#ctx.permission(ask);
-    });
-  }
-
-  #settle(
-    requestId: string,
-    answer: ToolCallEventResult | undefined,
-    outcome: "answered" | "cancelled"
-  ): void {
-    const waiting = this.#waiting.get(requestId);
-    if (!waiting) {
-      return;
-    }
-    this.#waiting.delete(requestId);
-    waiting.settle(answer);
-    this.#ctx.permissionResolved?.(requestId, outcome);
-  }
-
-  /** The hub's answer: an allowed call runs; a denied one is blocked with the hub's words, which pi hands the model as the call's error. */
-  answer(requestId: string, result: PermissionResult): void {
-    this.#settle(
-      requestId,
-      result.behavior === "allow"
-        ? undefined
-        : { block: true, reason: result.message },
-      "answered"
-    );
-  }
-
-  /** An ask nobody could be shown, taken back: its call does not run. */
-  withdraw(requestId: string, message: string): void {
-    this.#settle(requestId, { block: true, reason: message }, "cancelled");
-  }
-}
 
 /**
  * The HTTP status of the provider's last answer to a session, read off the
@@ -922,8 +788,6 @@ class PiSession implements HarnessSession {
   readonly #runtime: ModelRuntime;
   /** Its shell commands, which a send moves to the background. */
   readonly #shells: PiShells;
-  /** Its per-call gate: a shell or edit call in an outside turn, put to the hub. */
-  readonly #gate: PiGate;
   readonly #unread: string[] = [];
   #reading: string | undefined;
   /** What the turn's requests spent so far: its answers' and any compaction's. */
@@ -994,11 +858,9 @@ class PiSession implements HarnessSession {
     tools: CawcoTools,
     runtime: ModelRuntime,
     shells: PiShells,
-    fleetMcp: FleetMcp | undefined,
-    gate: PiGate
+    fleetMcp: FleetMcp | undefined
   ) {
     this.#ctx = ctx;
-    this.#gate = gate;
     this.#session = session;
     this.#credential = credential;
     this.#tools = tools;
@@ -1458,11 +1320,12 @@ class PiSession implements HarnessSession {
         return undefined;
     }
   }
-  resolvePermission(requestId: string, result: PermissionResult): void {
-    this.#gate.answer(requestId, result);
+  /** pi has no permission modes and puts no call to the hub: there is no ask to answer. */
+  resolvePermission(): void {
+    // Nothing waits on an answer.
   }
-  withdrawPermission(requestId: string, message: string): void {
-    this.#gate.withdraw(requestId, message);
+  withdrawPermission(): void {
+    // Nothing waits on an answer.
   }
   /**
    * Cuts the turn and ends the commands it moved to the background, each
@@ -1602,7 +1465,6 @@ export async function startPiHost(
         ),
       ]
     : [];
-  const gate = new PiGate(ctx);
   // The fleet's hooks, and its folder's project's (`FleetHooks`); a fenced
   // session runs none, as it takes no fleet MCP server.
   const hooks = fenced
@@ -1632,8 +1494,6 @@ export async function startPiHost(
       tools.extension(await piHandoffTools(ctx.instanceId, credential)),
       ...mcp,
       ...(hooks ? [hooks.extension()] : []),
-      // Last, so its verdict is on the input the call runs with.
-      gate.extension(),
     ],
     ...(fenced ? { extensionsOverride: cawcosExtensionsAlone } : {}),
     agentsFilesOverride: (base) => ({
@@ -1680,7 +1540,6 @@ export async function startPiHost(
     tools,
     runtime,
     shells,
-    fleetMcp,
-    gate
+    fleetMcp
   );
 }

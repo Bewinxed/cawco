@@ -1025,16 +1025,6 @@
           {/if}
         </div>
       {/if}
-      <!-- Why this call asks you, not runs: what made its turn outside, in
-           one line under the command (core turn-provenance.ts). -->
-      {#if presentation.askedBecause}
-        <p
-          data-slot="asked-because"
-          class="text-size-label font-normal text-ink-muted mb-space-2 max-w-c-measure wrap-anywhere text-pretty"
-        >
-          {presentation.askedBecause}
-        </p>
-      {/if}
       <!-- The change itself, open: each diff stands to the token's share of
            the screen and scrolls inside it, so the answer row stays in
            reach. -->

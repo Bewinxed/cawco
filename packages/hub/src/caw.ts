@@ -18,8 +18,8 @@
  *   event, on a checkout of the project on a machine that is online, with
  *   the role `lead`, which keeps his threads his (roles.ts). It is a plain
  *   spawn otherwise: on the place's folder, in the permission mode you last
- *   chose for its harness on that machine, every call decided by that mode
- *   and his turn's provenance, as any session's is (core turn-provenance.ts).
+ *   chose for its harness on that machine, every call decided by that mode,
+ *   as any session's is.
  * - **Woken by your words and, while on, by events**, never a timer: your
  *   message in a thread, your ask for a view; an attempt at a task landing
  *   or failing (its report, or a line from here while the project has no Caw
@@ -152,7 +152,6 @@ import {
 import { readStages, templateText } from "./stages";
 import type { TaskEvent, TaskView } from "./tasks";
 import { cardOn } from "./thread-transcript";
-import type { WakeSource } from "./turn-provenance";
 import type { Views } from "./views";
 
 /** A thread's handle as find and a chip write it: `thread#1a2b3c4d`. */
@@ -275,21 +274,6 @@ export interface CawEvent {
   /** Its thread: the note goes there, and that thread is `working` while the turn it wakes runs. */
   threadId?: string;
 }
-
-/**
- * Whose a wake is, for his turn's provenance (turn-provenance.ts): your
- * words alone are yours; an event, a routine, or outside events riding on
- * it make it outside, and an ask in its turn names which.
- */
-const sourceOf = (event: CawEvent, inboxed: number): WakeSource => {
-  if (event.routine) {
-    return "routine";
-  }
-  if (event.by !== "you") {
-    return "event";
-  }
-  return inboxed === 0 ? "owner" : "inbox";
-};
 
 /** What a send carries besides its words: pictures (base64) and attachments. */
 export type Carried = Pick<SendPayload, "attachments" | "images">;
@@ -485,7 +469,7 @@ const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
     "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, decisions/, and delegates/, where a type you write is a proposal the person approves or declines before it is committed), decision pages (the decision-page skill: write decisions/<name>/page.oui, a program over the decision library, or decisions/<name>/page.html when a pick is not an option (a machine and folder from cawco.pickPlace, a field they edit), then artifact_create with kind page, the name, does: pick and an ask (one line in the person's words) builds and shows it; artifact_read has the picks; artifact_update's statements revise it; a decision's after naming another page's decision (page#id) links the two pages on the Decisions tab), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
-    "You have shell and edit tools in this folder, under the permission mode the person chose for this harness on this machine, as any of their sessions does. In a turn that read anything but the person's own words (an event, a routine, a report, another session's message, web content), each shell or edit call asks them first, saying why.",
+    "You have shell and edit tools in this folder, and they run under the permission mode the person chose for this harness on this machine, as any of their sessions' do.",
     "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must. Whenever the person asks you to set the project up, in any thread and in their own words (the first time, again, or one part of it), call project_setup with that thread and follow its steps there.",
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
     "Your project's settings are yours to read and change with project_settings (no changes reads them): rename it, grant it a connection, link its GitHub repository, set where its work lands and runs, whether attempts start on their own, how many run at once, where dispatch pauses for review and what each may spend, turn yourself on or off (set_caw), publish its place to a new private GitHub repository (create_repo), or turn Review before done on or off (set_review: whether every task waits for the person before done is theirs to choose, so it and create_repo are always an Approve card first). Each other change applies at once and is noted in the thread. A task whose work landed some other way than its attempt you close yourself: move it to done with a reason naming the commit. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
@@ -649,12 +633,6 @@ export interface CawDeps {
    * kept view to change (views.ts).
    */
   readonly views: Pick<Views, "draft" | "kept" | "query" | "view">;
-  /**
-   * A wake went out as send `uuid`: your words alone (`owner`), or outside
-   * text: an event's, a routine's, or outside events riding on your words.
-   * His turn's provenance reads it when his harness reads the send (turn-provenance.ts).
-   */
-  readonly wakeSent: (uuid: string, source: WakeSource) => void;
 }
 
 export const createCaw = ({
@@ -686,7 +664,6 @@ export const createCaw = ({
   triage,
   turnEnded,
   views,
-  wakeSent,
 }: CawDeps) => {
   /**
    * Leads whose turn an event started was cut as Caw was turned off, by
@@ -1366,7 +1343,7 @@ export const createCaw = ({
     const inbox = db.ingress.claimInbox(projectId, new Date());
     const text =
       inbox.length > 0 ? `${words}\n\n---\n\n${inboxText(inbox)}` : words;
-    return deliver(projectId, event, threadId, text, inbox.length, (why) => {
+    return deliver(projectId, event, threadId, text, (why) => {
       db.ingress.releaseInbox(inbox.map((each) => each.id));
       settle(threadId);
       return why;
@@ -1384,7 +1361,6 @@ export const createCaw = ({
     event: CawEvent,
     threadId: string | undefined,
     text: string,
-    inboxed: number,
     notOut: (why: Woke & { woke: false }) => Woke
   ): Promise<Woke> => {
     const failed = (why: string, thrown?: unknown): Woke =>
@@ -1410,7 +1386,6 @@ export const createCaw = ({
       // His session refused it: nothing woke him, and the thread is not his.
       return failed("His session didn't take the message.");
     }
-    wakeSent(sent, sourceOf(event, inboxed));
     if (threadId) {
       followWake(lead.row.id, projectId, event.by, sent, threadId);
     }

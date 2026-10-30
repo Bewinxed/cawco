@@ -55,8 +55,6 @@ export type PiHostCommand =
       door?: BrowserDoor;
       /** A workspace session's MCP gate (mcp-gate.ts), which its fleet servers with a command go through. */
       mcpGate?: McpGate;
-      /** Why its turn is outside as it starts (core turn-provenance.ts); null or absent: its principal's. */
-      outside?: string | null;
     }
   | {
       type: "send";
@@ -66,14 +64,12 @@ export type PiHostCommand =
   | { type: "control"; id: string; method: string; args: unknown[] }
   | { type: "snapshot"; id: string }
   | { type: "stop"; id: string }
-  /** The hub's answer to one of the calls its gate put to it (pi-runtime `PiGate`). */
+  /** The hub's answer to one of the calls the host put to it. */
   | { type: "permission"; requestId: string; result: PermissionResult }
   /** One of them taken back, unshown: its call does not run. */
-  | { type: "withdraw"; requestId: string; message: string }
-  /** Whether its turn is outside now, as the hub said ({@link HarnessContext.outside}): its gate reads it on every call. */
-  | { type: "outside"; why: string | null };
+  | { type: "withdraw"; requestId: string; message: string };
 
-/** One of the calls a pi host's gate put to the hub (pi-runtime `PiGate`), as its agent parks it. */
+/** One of the calls a pi host put to the hub, as its agent parks it. */
 export type PiGateAsk = Parameters<HarnessContext["permission"]>[0];
 
 export interface PiHostState {
@@ -128,7 +124,6 @@ const PI_HOST_COMMANDS: ReadonlySet<unknown> = new Set<PiHostCommand["type"]>([
   "stop",
   "permission",
   "withdraw",
-  "outside",
 ]);
 export const PI_HOST_COMMAND = z.custom<PiHostCommand>(
   (value) =>
@@ -593,15 +588,6 @@ class PiRemoteSession implements HarnessSession {
   withdrawPermission(requestId: string, message: string): void {
     this.#answer({ type: "withdraw", requestId, message });
   }
-  /** Its turn's provenance moved: the host, whose gate reads it on every call, is told. */
-  outsideChanged(): void {
-    const why = this.#ctx.outside?.() ?? null;
-    this.write({ type: "outside", why }).catch((error: unknown) =>
-      console.warn(
-        `[pi] ${this.#ctx.instanceId}: its turn's provenance did not reach its host: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
-  }
   #answer(
     command: Extract<PiHostCommand, { type: "permission" | "withdraw" }>
   ): void {
@@ -677,7 +663,6 @@ export async function spawnPi(
     ...(ctx.boundary ? { boundary: ctx.boundary, gateForm: form } : {}),
     ...(door ? { door } : {}),
     ...(ctx.mcpGate ? { mcpGate: ctx.mcpGate } : {}),
-    outside: ctx.outside?.() ?? null,
   });
   await session.request({ type: "snapshot" });
   const stale = staleHosts.get(ctx.instanceId);

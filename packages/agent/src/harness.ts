@@ -155,13 +155,6 @@ export interface HarnessContext {
    * servers itself.
    */
   readonly mcpGate?: import("./mcp-gate").McpGate;
-  /**
-   * Why the session's turn is outside now, as the hub last said it (core
-   * turn-provenance.ts, `turnProvenance`); null while it is its principal's.
-   * Read by the harness's per-call permission point on every call: a shell
-   * or edit call in an outside turn asks the person, whatever its mode.
-   */
-  readonly outside?: () => string | null;
   /** Park a permission request; the supervisor forwards it and tracks the reply. */
   permission: (request: {
     requestId: string;
@@ -268,12 +261,6 @@ export interface HarnessSession {
    * floor no session starts on (a sleep would leave it nothing to wake on).
    */
   outdated?: () => Promise<{ uuid: string; words: string } | undefined>;
-  /**
-   * Its turn's provenance moved ({@link HarnessContext.outside}): a harness
-   * whose permission point runs in another process (pi's host) tells it.
-   * One that reads the context in this process has none.
-   */
-  outsideChanged?: () => void;
   /**
    * The process the session's commands run under: its CLI's (Claude Code,
    * pi's host) or its server's (OpenCode). Undefined while there is none

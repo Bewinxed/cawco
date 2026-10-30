@@ -33,10 +33,8 @@ const state: PiHostState = {
   gatewayPort: mcpGatewayPort(),
 };
 let session: HarnessSession | undefined;
-/** Why its turn is outside, as its agent last said (core turn-provenance.ts); null: its principal's. */
-let outside: string | null = null;
 let starting: Promise<void> | undefined;
-/** The gate's calls put to the hub and not answered yet, by request ({@link PiHostState.asks}). */
+/** The calls put to the hub and not answered yet, by request ({@link PiHostState.asks}). */
 const asks = new Map<string, PiGateAsk>();
 
 function start(
@@ -48,11 +46,8 @@ function start(
   if (command.gateForm) {
     state.gateForm = command.gateForm;
   }
-  outside = command.outside ?? null;
   const ctx: HarnessContext = {
     instanceId: command.spec.instanceId,
-    // Read by its gate on every call (pi-runtime `PiGate`).
-    outside: () => outside,
     cwd: command.spec.cwd,
     ...(command.boundary ? { boundary: command.boundary } : {}),
     // Its workspace's MCP gate, which its agent named: its fleet servers
@@ -91,8 +86,8 @@ function start(
       state.held = state.held.filter((held) => held !== uuid);
       output({ type: "rejected", uuid, error: String(error) });
     },
-    // The calls its gate puts to the hub (pi-runtime `PiGate`): each to its
-    // agent, which parks it with the hub, and kept until it is over.
+    // The calls its session puts to the hub: each to its agent, which parks
+    // it with the hub, and kept until it is over.
     permission: (request) => {
       asks.set(request.requestId, request);
       state.asks = [...asks.values()];
@@ -124,10 +119,6 @@ function start(
 async function handle(command: PiHostCommand): Promise<void> {
   if (command.type === "start") {
     await start(command);
-    return;
-  }
-  if (command.type === "outside") {
-    outside = command.why;
     return;
   }
   await starting;

@@ -50,9 +50,8 @@
  *   - `on-fail: stop`: a failure of this step leaves the steps after it
  *     unrun (an install the rest depend on). Without it every step runs, and
  *     each failure is reported.
- * - **`Caw edits:`** is read no more: Caw edits under your permission mode
- *   and his turn's provenance, as every session does (core
- *   turn-provenance.ts). A gate.md that still has the section does not
+ * - **`Caw edits:`** is read no more: Caw edits under your permission mode,
+ *   as every session does. A gate.md that still has the section does not
  *   read, saying so, rather than running it as a step.
  * - **`Ship:`**, a line at the margin with a command beside it: how the
  *   project ships. An item whose `finish_item` asks to ship (`ship`, with its

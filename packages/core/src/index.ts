@@ -145,8 +145,6 @@ export {
   transcriptUserText,
 } from "./transcript-rules";
 export * from "./transcript-types";
-// Whose a session's turn is, and the one decision it makes of a call.
-export * from "./turn-provenance";
 // Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only.
 export * from "./usage";
 // A project's custom views: their files, and the view tools' inputs and
@@ -226,7 +224,6 @@ export * from "./words/task-links";
 export * from "./words/task-review";
 export * from "./words/threads";
 export * from "./words/transcript";
-export * from "./words/turn-provenance";
 export * from "./words/updates";
 export * from "./words/views";
 export * from "./words/work";

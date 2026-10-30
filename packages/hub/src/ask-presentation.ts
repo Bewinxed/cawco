@@ -12,11 +12,9 @@ import {
   type PermissionRequestFrame,
   type PermissionResult,
   presentPermission,
-  provenanceKindOf,
   questionsOf,
   redact,
   type SourceFacts,
-  turnCall,
 } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
@@ -76,9 +74,7 @@ export const answeredWithOriginal = (
 
 export const createAskPresenter = (
   db: DbShape,
-  delegateTypes: DelegateTypesShape,
-  /** Why a session's turn is outside now, as a card's clause says it; null while it is its principal's (turn-provenance.ts). */
-  outside: (instanceId: string) => string | null
+  delegateTypes: DelegateTypesShape
 ) => {
   /**
    * The session that asked, as the board names it (a project's lead is Caw;
@@ -196,17 +192,8 @@ export const createAskPresenter = (
       proposer?: unknown;
       sourceFacts?: SourceFacts;
     };
-    // A shell or edit call in a turn that is not its principal's says what
-    // made the turn so (core turn-provenance.ts).
-    const asker = envelope.instanceId ?? payload.instanceId;
-    const provenance = turnCall(
-      asker ? outside(asker) : null,
-      undefined,
-      provenanceKindOf(payload.toolName)
-    );
     payload.presentation = presentPermission(payload.toolName, payload.input, {
-      ...askerOf(asker, payload),
-      ...(provenance.kind === "ask" ? { askedBecause: provenance.why } : {}),
+      ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
       memory,
       current,
       projectName,
