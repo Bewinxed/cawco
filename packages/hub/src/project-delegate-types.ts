@@ -48,11 +48,8 @@ import type { DelegateTypesShape } from "./delegate-types";
 import { FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
 import { listOf, scalarOf } from "./task-file";
 
-/**
- * The toolsets a type may run in (§5.3's roles): every role but `lead`, which
- * is the project's Caw, a session the hub starts (caw.ts), never a type's.
- */
-const TYPE_ROLES = SESSION_ROLES.filter((role) => role !== "lead");
+/** The toolsets a type may run in (§5.3's roles). */
+const TYPE_ROLES = SESSION_ROLES;
 
 const BUDGET_PERIODS = ["attempt", "task", "day", "week", "month"] as const;
 

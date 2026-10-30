@@ -131,8 +131,8 @@ const briefOf = (task: TaskView): DuplicateBrief => ({
 
 /** What the hub did for a phone request. */
 export interface PhoneDone {
-  action: PhoneAction | "lead";
-  decidedBy: "jev" | "lead";
+  action: PhoneAction | "conversation";
+  decidedBy: "jev" | "conversation";
   stage?: string;
   task?: string;
   text: string;
@@ -546,8 +546,7 @@ export const createJevTasks = ({
   /** What runs after a change to a project's tasks: Duplicates and Triage on filing, Attach or fresh on your comment. */
   const taskChanged = (event: TaskEvent): void => {
     if (event.kind === "created") {
-      const bySession =
-        event.actor.mover === "session" || event.actor.mover === "lead";
+      const bySession = event.actor.mover === "session";
       const work = async () => {
         // A session's filing is compared in task_create, where it reads the answer.
         if (!bySession) {
@@ -753,10 +752,14 @@ export const createJevTasks = ({
       offLine(
         "phone",
         projectId,
-        `the lead reads the sentence${task ? ` about ${task.id}` : ""}`
+        `the project's conversation reads the sentence${task ? ` about ${task.id}` : ""}`
       );
       await toLead(projectId, sentence, task?.id);
-      return { decidedBy: "lead", action: "lead", text: "Caw reads it." };
+      return {
+        decidedBy: "conversation",
+        action: "conversation",
+        text: "Caw reads it.",
+      };
     }
     const decided = await phoneByJev(jev, projectId, sentence, task);
     return await PHONE_DOES[decided.action](

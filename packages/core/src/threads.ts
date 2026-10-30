@@ -349,8 +349,8 @@ export type ThreadEvent =
  * through `/api/routines/:id`.
  */
 export interface RoutineMadeEvent {
-  /** `caw`: the project's Caw made it; `delegate` or `session`: another session. */
-  by: "caw" | "delegate" | "session";
+  /** `delegate`: a delegated session made it; `session`: any other, the project's conversation among them. */
+  by: "delegate" | "session";
   /** When it turns itself off unless kept, ms epoch; null when it was kept as it was made. */
   expiresAt: number | null;
   /** The session that made it. */

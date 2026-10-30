@@ -83,7 +83,7 @@ import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
-import type { Caw } from "./caw";
+import { type Caw, isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
 import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
@@ -686,8 +686,8 @@ export const createRoutines = ({
 
   /** Why its target cannot run where the routine is, or nothing. */
   const targetProblem = (routine: Fields): string | undefined => {
-    if (routine.target === "lead" && !routine.projectId) {
-      return "A lead routine messages its project's Caw, so it needs a project.";
+    if (routine.target === "conversation" && !routine.projectId) {
+      return "A conversation routine messages its project's conversation, Caw, so it needs a project.";
     }
     if (routine.target === "curator" && !routine.projectId) {
       return "The memory curator reads its project's inbox, so it needs a project.";
@@ -763,7 +763,7 @@ export const createRoutines = ({
     if (!project) {
       return "its project is gone";
     }
-    if (routine.target !== "lead") {
+    if (routine.target !== "conversation") {
       return pauses(project.id);
     }
     if (!project.caw) {
@@ -1115,7 +1115,7 @@ export const createRoutines = ({
   /** Starts a run filed `starting`; one that cannot start ends failed, as any failure. */
   const fire = (routine: RoutineRow, run: RoutineRunRow): void => {
     let go: Promise<void>;
-    if (routine.target === "lead") {
+    if (routine.target === "conversation") {
       go = fireLead(routine, run);
     } else if (routine.target === "curator") {
       go = fireCurator(routine, run);
@@ -1619,7 +1619,7 @@ export const createRoutines = ({
       run.leadInstanceId === null &&
       run.workItemId === null &&
       store.get(run.routineId)?.projectId === gone &&
-      store.get(run.routineId)?.target === "lead";
+      store.get(run.routineId)?.target === "conversation";
     for (const run of store.liveRuns()) {
       if (
         run.state === "running" &&
@@ -1653,7 +1653,7 @@ export const createRoutines = ({
         `Run ${runId} is not a run of this project's routines.`
       );
     }
-    if (routine.target !== "lead") {
+    if (routine.target !== "conversation") {
       return refuse(
         409,
         `Run ${runId} is a delegate run: its delegate answers with finish_item.`
@@ -1729,14 +1729,10 @@ export const createRoutines = ({
     { callId: string | undefined; routineId: string }[]
   >();
 
-  /** Who made a routine, as its notice names them: Caw, a delegate, or another session. */
+  /** Who made a routine, as its notice names them: a delegate, or another session. */
   type MadeBy = RoutineMadeEvent["by"];
-  const madeByOf = (actor: InstanceRow): MadeBy => {
-    if (actor.role === "lead") {
-      return "caw";
-    }
-    return actor.parentInstanceId || actor.workItemId ? "delegate" : "session";
-  };
+  const madeByOf = (actor: InstanceRow): MadeBy =>
+    actor.parentInstanceId || actor.workItemId ? "delegate" : "session";
 
   /** One paragraph of what a turn said: the last, clipped to {@link REASON_MAX}. */
   const paragraphOf = (words: string): string | null => {
@@ -1891,9 +1887,10 @@ export const createRoutines = ({
     lasts: string | null
   ): string => {
     const schedule = scheduleOf(routine);
-    const who = { caw: "Caw", delegate: "A delegate", session: "A session" }[
-      by
-    ];
+    // The project's conversation is Caw by name; any other maker by its kind.
+    const who = isProjectConversation({ id: maker, projectId }, db.project)
+      ? "Caw"
+      : { delegate: "A delegate", session: "A session" }[by];
     const next = schedule.nextAt
       ? ` · next ${nextWords(schedule.nextAt, routine.timeZone)}`
       : "";
@@ -2400,7 +2397,7 @@ export const createRoutines = ({
     return [
       tool(
         "routine_create",
-        `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'orchestrator': a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. target 'lead' messages Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first.`,
+        `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'orchestrator': a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. target 'conversation' messages the project's conversation, Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first.`,
         {
           name: z.string().describe("3–6 plain words."),
           prompt: z.string().describe("What each run does."),
@@ -2560,7 +2557,7 @@ const RUN_FIELDS = {
 const TARGET = t.Union([
   t.Literal("delegate"),
   t.Literal("orchestrator"),
-  t.Literal("lead"),
+  t.Literal("conversation"),
 ]);
 
 /** The dashboard's routes for routines (its Routines view and its routine form). */

@@ -805,12 +805,13 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         rail.requestRefresh()
     }
 
-    /// What opens for `id`: itself, but a project's Caw session is never a
-    /// tab of its own (thread-tabs.ts `inLists`): it opens his newest
-    /// thread, else a new one, so what is said there reaches the thread the
-    /// web shows.
+    /// What opens for `id`: itself, but a project's conversation, the
+    /// session its row names, is never a tab of its own (thread-tabs.ts
+    /// `inLists`): it opens its newest thread, else a new one, so what is
+    /// said there reaches the thread the web shows.
     static func tabId(_ id: String, hub: HubConnection) -> String {
-        guard let row = hub.fleet.byId[id]?.session, row.role == .lead, let projectId = row.projectId else { return id }
+        guard let row = hub.fleet.byId[id]?.session, let projectId = row.projectId,
+              hub.fleet.projects.contains(where: { $0.id == projectId && $0.leadInstanceId == id }) else { return id }
         return hub.threads.of(projectId).first.map { ThreadTabs.tabId($0.id) } ?? ThreadTabs.newTabId(projectId)
     }
 

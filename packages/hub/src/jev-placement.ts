@@ -502,8 +502,8 @@ export const sameFilesAndChecks = (
 
 // --- Event routing (choice) --------------------------------------------------------
 
-/** The option that sends an event to the lead's next wake. */
-export const TO_LEAD = "lead";
+/** The option that sends an event to the project conversation's next wake. */
+export const TO_CONVERSATION = "conversation";
 
 /**
  * Event routing with Jev on: among the routines whose routes' conditions
@@ -528,8 +528,8 @@ export async function jevRoute(
       `The routine “${head(routine.name, 100)}”: ${head(routine.prompt, 500)}`,
     ])
   );
-  criteria[TO_LEAD] =
-    "None of these routines is for this event: the project's lead reads it on his next wake.";
+  criteria[TO_CONVERSATION] =
+    "None of these routines is for this event: the project's conversation reads it on its next wake.";
   const result = await askRow(
     "routing",
     projectId,

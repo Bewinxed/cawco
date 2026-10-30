@@ -11,7 +11,6 @@ import { HOUR_MS } from "@cawco/core/time";
 import type { DbShape, WorkItemRow } from "./db";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
-import { roleOf } from "./roles";
 import { type HeldWork, isHubParent, type QueuedDelegate } from "./work-items";
 
 /** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
@@ -228,11 +227,9 @@ export const treeSessions = (
 export const createDelegationTree = (deps: DelegationTreeDeps) => {
   const { db } = deps;
 
-  /** The project `row` leads, if it is that project's Caw. */
+  /** The project whose conversation `row` is, if it is one. */
   const ledProject = (row: InstanceRow): string | undefined =>
-    roleOf(row) === "lead" &&
-    row.projectId &&
-    db.project(row.projectId)?.leadInstanceId === row.id
+    row.projectId && db.project(row.projectId)?.leadInstanceId === row.id
       ? row.projectId
       : undefined;
 

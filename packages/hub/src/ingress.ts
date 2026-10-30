@@ -84,7 +84,7 @@ import type { ExternalItems } from "./external-items";
 import { githubRepoOf, pollRepo, readRunWait } from "./github";
 import { byHandle } from "./handles";
 import type { JevAccess } from "./jev";
-import { JevFailed, jevRoute, offLine, TO_LEAD } from "./jev-placement";
+import { JevFailed, jevRoute, offLine, TO_CONVERSATION } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
 import {
@@ -629,11 +629,13 @@ export const createIngress = ({
     const routes = matching(row.projectId, event);
     const routineIds = [...new Set(routes.map((each) => each.routineId))];
     const to =
-      routineIds.length > 0 ? await chosen(row, event, routineIds) : TO_LEAD;
+      routineIds.length > 0
+        ? await chosen(row, event, routineIds)
+        : TO_CONVERSATION;
     if (to === undefined) {
       return;
     }
-    if (to !== TO_LEAD) {
+    if (to !== TO_CONVERSATION) {
       // Routed first: a queued run is handled when it starts (routines.ts
       // `drain`). It was delivered by the oldest matching route to its routine.
       store.setEvent(row.id, {
@@ -650,7 +652,7 @@ export const createIngress = ({
       return;
     }
     if (db.project(row.projectId)?.caw) {
-      store.setEvent(row.id, { routedTo: "lead" });
+      store.setEvent(row.id, { routedTo: TO_CONVERSATION });
     }
   };
 

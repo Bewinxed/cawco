@@ -1901,7 +1901,7 @@ const LeadCallOutcomeShape = z.enum([
 ]);
 
 const RoutineMadeEventShape = z.object({
-  by: z.enum(["caw", "delegate", "session"]),
+  by: z.enum(["delegate", "session"]),
   expiresAt: z.number().nullable(),
   instanceId: z.string(),
   name: z.string(),

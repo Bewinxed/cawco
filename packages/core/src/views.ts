@@ -31,8 +31,8 @@ export const STAGES_TEMPLATES = [
 ] as const;
 export type StagesTemplate = (typeof STAGES_TEMPLATES)[number];
 
-/** Who moves a task (stages.md): you, the project's lead, a session, an approved action, a routine. */
-export const MOVERS = ["you", "lead", "session", "action", "routine"] as const;
+/** Who moves a task (stages.md): you, a session, an approved action, a routine. */
+export const MOVERS = ["you", "session", "action", "routine"] as const;
 export type Mover = (typeof MOVERS)[number];
 
 /**

@@ -16,11 +16,12 @@
  *   (task-history.ts `createdBy`). It is sent your approval as your words
  *   are (the composer's send path, as jev-tasks.ts sends your comments): a
  *   stopped or sleeping session starts again.
- * - **Caw** hears it when he filed it, or when its filer takes no input now
- *   (gone, its conversation gone, its finished work's workspace archived or
- *   taken over), as an event: only while he is on for the project. Off,
- *   nobody is woken, and the task waits in the stage you moved it to, where
- *   the board shows it.
+ * - **Caw** hears it when its filer takes no input now (gone, its
+ *   conversation gone, its finished work's workspace archived or taken
+ *   over), as an event: only while he is on for the project. Off, nobody is
+ *   woken, and the task waits in the stage you moved it to, where the board
+ *   shows it. The project's conversation files as any session does, and
+ *   hears it as its filer.
  * - A task you filed, or the hub, a routine or a hand edit did, has no
  *   agent to hear it: you decide what comes next yourself.
  */
@@ -71,30 +72,26 @@ export const createTaskApproval = ({
     const { projectId, id } = approval;
     const task = await tasks.get(projectId, id);
     const by = task.createdBy;
-    if (!(by && (by.mover === "session" || by.mover === "lead"))) {
+    if (by?.mover !== "session") {
       return;
     }
     const [row] = by.id ? db.getInstancesByIds([by.id]) : [];
-    const silent = by.mover === "session" && (row ? refused(row) : "gone");
-    if (by.mover === "session" && row && !silent) {
+    const silent = row ? refused(row) : "gone";
+    if (row && !silent) {
       sendYours(row, approvalText(approval, task.title, "the task you filed"));
       console.log(
         `[tasks] ${id} in ${projectId}: approved; its filer ${row.id} hears it`
       );
       return;
     }
-    const why = silent
-      ? `its filer takes no input now (${silent})`
-      : "Caw filed it";
+    const why = `its filer takes no input now (${silent})`;
     if (!db.project(projectId)?.caw) {
       console.log(
         `[tasks] ${id} in ${projectId}: approved; ${why}, and Caw is off: nobody is woken, and it waits in ${approval.to}`
       );
       return;
     }
-    const filer = silent
-      ? `which ${by.name} filed and which comes to you because that session takes no input now (${silent})`
-      : "the task you filed";
+    const filer = `which ${by.name} filed and which comes to you because that session takes no input now (${silent})`;
     const woke = await caw.wakeOnce(projectId, {
       by: "event",
       text: approvalText(approval, task.title, filer),

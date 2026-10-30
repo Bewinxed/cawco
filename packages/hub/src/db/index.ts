@@ -517,7 +517,7 @@ const sleepKeeps = (row: {
   origin: SessionOrigin;
   workLive: boolean | null;
 }): boolean =>
-  row.origin === "person" || row.origin === "caw" || row.workLive === true;
+  row.origin === "person" || row.origin === "project" || row.workLive === true;
 
 /**
  * The listings' one clock-bound rule, for a row already read: running,
@@ -1169,7 +1169,7 @@ export interface DbShape {
     id: string
   ) => { cwd: MachinePath } | { unknown: true } | undefined;
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
-  /** The sends to a project's Caw sessions (role `lead`) accepted after `after`, oldest first. */
+  /** The sends to a project's conversations (origin `project`) accepted after `after`, oldest first. */
   readonly leadSends: (projectId: string, after: Date) => SessionSendRow[];
   /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
   readonly leadTurns: () => LeadTurnRow[];
@@ -8175,7 +8175,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(instances.projectId, projectId),
-            sql`coalesce(${instances.role}, '') <> 'lead'`,
+            ne(instances.origin, "project"),
             sql`${usageBuckets.start} >= ${since}`
           )
         )
@@ -8358,7 +8358,8 @@ const make = async (path: string): Promise<DbShape> => {
         .groupBy(workItems.id)
         .orderBy(asc(workItems.createdAt))
         .all();
-      // Every other session of the project (not a lead, not an attempt).
+      // Every other session of the project (not its conversation, whose
+      // turns are booked above, and not an attempt).
       const attemptSessions = items.flatMap((item) =>
         item.instanceId ? [item.instanceId] : []
       );
@@ -8372,7 +8373,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(instances.projectId, projectId),
-            sql`coalesce(${instances.role}, '') <> 'lead'`,
+            ne(instances.origin, "project"),
             attemptSessions.length > 0
               ? notInArray(instances.id, attemptSessions)
               : undefined
@@ -9504,7 +9505,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(instances.projectId, projectId),
-            eq(instances.role, "lead"),
+            eq(instances.origin, "project"),
             gt(sentMessages.acceptedAt, after)
           )
         )

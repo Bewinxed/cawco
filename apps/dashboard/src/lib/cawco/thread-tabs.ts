@@ -126,12 +126,28 @@ const underThread = (row: InstanceRow): InstanceRow => {
 };
 
 /**
- * Sessions as every list of them shows them — the rail, Home's tabs and
- * Recent, the jump palette, a machine's count: a project's Caw is its
- * threads, so his lead session is never a row of its own, and a session his
- * work started hangs under the thread it works for. The client's
- * `runningRows` and `listedRows` add the threads themselves; a list that
- * filters sessions first passes what it kept through here.
+ * The sessions that are a project's conversation: the one each project's row
+ * names (`leadInstanceId`), which the project's events reach.
  */
-export const inLists = (rows: InstanceRow[]): InstanceRow[] =>
-  rows.filter((row) => row.role !== "lead").map(underThread);
+export const conversationsOf = (
+  projects: readonly { leadInstanceId: string | null }[]
+): ReadonlySet<string> =>
+  new Set(
+    projects.flatMap((project) =>
+      project.leadInstanceId ? [project.leadInstanceId] : []
+    )
+  );
+
+/**
+ * Sessions as every list of them shows them — the rail, Home's tabs and
+ * Recent, the jump palette, a machine's count: a project's conversation
+ * ({@link conversationsOf}) is its threads, so it is never a row of its
+ * own, and a session its work started hangs under the thread it works for.
+ * The client's `runningRows` and `listedRows` add the threads themselves; a
+ * list that filters sessions first passes what it kept through here.
+ */
+export const inLists = (
+  rows: InstanceRow[],
+  conversations: ReadonlySet<string>
+): InstanceRow[] =>
+  rows.filter((row) => !conversations.has(row.id)).map(underThread);

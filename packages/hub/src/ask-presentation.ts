@@ -97,13 +97,13 @@ export const createAskPresenter = (
     return { asker: instanceId ? instanceId.slice(0, 8) : "A session" };
   };
 
-  /** A session as an ask names it: Caw for a project's lead, else as the board does; with its project. */
+  /** A session as an ask names it: as the board does, with its project. */
   const sessionAsker = (
     row: ReturnType<DbShape["getInstancesByIds"]>[number]
   ): { asker: string; project?: string } => {
     const project = row.projectId ? db.project(row.projectId)?.name : undefined;
     return {
-      asker: row.role === "lead" ? "Caw" : boardTitle(row),
+      asker: boardTitle(row),
       ...(project ? { project } : {}),
     };
   };

@@ -14,9 +14,10 @@
  *   `active`), as `hub`.
  * - **Who it reports to.** A work item needs a parent session. `task_start`
  *   from a session you started (or Caw) makes that session the parent; the
- *   project's lead, its Caw (caw.ts), takes the reports of every attempt
+ *   project's conversation, Caw (caw.ts), takes the reports of every attempt
  *   nobody asked for, its session started for the first one while Caw is
- *   on. With Caw off there is no lead: such an attempt does not start.
+ *   on. With Caw off there is no conversation to take them: such an attempt
+ *   does not start.
  * - **The frontier** (tasks.ts `onFrontier`): the ready tasks (in a `todo`
  *   stage, every wait of theirs and their `part_of` chain settled, no live
  *   attempt, no coordinator holding them; task-waits.ts settles each) that
@@ -296,7 +297,6 @@ const HOOK_ORIGIN: Record<TaskMover, Origin | undefined> = {
   action: "you",
   routine: "event",
   hub: "event",
-  lead: undefined,
   session: undefined,
 };
 
@@ -1822,8 +1822,8 @@ export const createDispatcher = ({
     const taskId = task.id;
     const criteria = criteriaOf(task.acceptance);
     const judged = await kindAfterJudged(projectId, task, criteria, item);
-    // The lead judges: the task stays where it is until he moves it.
-    if (judged === "lead") {
+    // The project's conversation judges: the task stays where it is until it moves it.
+    if (judged === "conversation") {
       return;
     }
     const kind = judged === "done" && reviewsFirst(stages) ? "you" : judged;
@@ -1897,7 +1897,7 @@ export const createDispatcher = ({
     task: TaskView,
     criteria: string[],
     item: WorkItemRow
-  ): Promise<"done" | "lead" | "todo" | "you"> => {
+  ): Promise<"conversation" | "done" | "todo" | "you"> => {
     const kind = kindAfter(item);
     return kind === "done" && criteria.length > 0
       ? await judgeCriteria(projectId, task, criteria, item)
@@ -1956,7 +1956,7 @@ export const createDispatcher = ({
     task: TaskView,
     criteria: string[],
     item: WorkItemRow
-  ): Promise<"done" | "lead" | "you"> => {
+  ): Promise<"conversation" | "done" | "you"> => {
     const report = attemptReport(item);
     const access = placement.access();
     const about = hubActor(`attempt ${short(item.id)} judged`);
@@ -2007,7 +2007,7 @@ export const createDispatcher = ({
         item,
         `Judge ${taskLink(projectId, task.id, task.title)}: ${attemptNamed(item, task)} passed its checks and its work is in, and its acceptance criteria wait for your judgment (Jev is off; you did not do this work). Move the task to its done stage when the report shows every criterion met; else move it back to its todo stage with a task_comment naming what is missing.\n\nCriteria:\n${criteria.map((each) => `- ${each}`).join("\n")}\n\nThe attempt's report:\n\n${tailOf(report, 4000)}`
       );
-      return "lead";
+      return "conversation";
     }
     offLine(
       "judged",

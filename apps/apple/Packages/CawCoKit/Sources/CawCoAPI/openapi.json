@@ -11962,7 +11962,7 @@
                     "enum": [
                       "delegate",
                       "orchestrator",
-                      "lead"
+                      "conversation"
                     ]
                   },
                   "prompt": {
@@ -12188,7 +12188,7 @@
                     "enum": [
                       "delegate",
                       "orchestrator",
-                      "lead"
+                      "conversation"
                     ]
                   },
                   "delegateType": {
@@ -32457,7 +32457,6 @@
             "enum": [
               "curator",
               "delegate",
-              "lead",
               "overseer",
               "web-facing",
               "worker"
@@ -41870,12 +41869,12 @@
         ]
       },
       "RoutineTarget": {
-        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's Caw, or the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes.",
+        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, or the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes.",
         "type": "string",
         "enum": [
+          "conversation",
           "curator",
           "delegate",
-          "lead",
           "orchestrator"
         ]
       },
@@ -46483,13 +46482,13 @@
         ]
       },
       "SessionOrigin": {
-        "description": "Who started a session, stamped by the hub as it starts from who asked,\nnever from what the start carried: `person`, a person's own start (the\nNew session form, a move); `delegate`, a `delegate` call (a work item,\na routine's run and a design check among them); `caw`, a project's Caw\nand what his turns start; `check`, an agent's `start_session`, a start\nfrom a page in an agent's own browser, and the hub's own workers. Only a\nperson's sessions stand at a project's top in the rails; every other one\nnests under the session that started it.",
+        "description": "Who started a session, stamped by the hub as it starts from who asked,\nnever from what the start carried: `person`, a person's own start (the\nNew session form, a move); `delegate`, a `delegate` call (a work item,\na routine's run and a design check among them); `project`, started by\nits project's events (the session they reach); `check`, an agent's `start_session`, a start\nfrom a page in an agent's own browser, and the hub's own workers. Only a\nperson's sessions stand at a project's top in the rails; every other one\nnests under the session that started it.",
         "type": "string",
         "enum": [
-          "caw",
           "check",
           "delegate",
-          "person"
+          "person",
+          "project"
         ]
       },
       "MachinePath": {
@@ -59804,7 +59803,6 @@
         "enum": [
           "curator",
           "delegate",
-          "lead",
           "overseer",
           "web-facing",
           "worker"
@@ -60123,7 +60121,7 @@
         "enum": [
           "caw",
           "comment",
-          "lead",
+          "conversation",
           "move",
           "retry",
           "start"
@@ -60132,8 +60130,8 @@
       "PhoneDoneDecidedBy": {
         "type": "string",
         "enum": [
-          "jev",
-          "lead"
+          "conversation",
+          "jev"
         ]
       },
       "PinKind": {
@@ -60200,7 +60198,6 @@
       "RoutineMadeInBy": {
         "type": "string",
         "enum": [
-          "caw",
           "delegate",
           "session"
         ]
@@ -60252,7 +60249,6 @@
         "type": "string",
         "enum": [
           "action",
-          "lead",
           "routine",
           "session",
           "you"
@@ -60278,7 +60274,6 @@
         "enum": [
           "action",
           "hub",
-          "lead",
           "routine",
           "session",
           "you"

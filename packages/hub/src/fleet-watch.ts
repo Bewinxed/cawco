@@ -68,7 +68,7 @@ import { Gone, readWithin } from "@cawco/core/bounded";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
-import type { CawEvent } from "./caw";
+import { type CawEvent, isProjectConversation } from "./caw";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
@@ -390,8 +390,8 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
 
   /** Its parent, else the project's Caw when the parent is Caw or it has none in the project, else you. */
   const leadOf = (row: InstanceRow): Lead => {
-    // Caw himself: a session never judges itself, so his lead is you.
-    if (row.role === "lead") {
+    // The project's conversation: a session never judges itself, so its lead is you.
+    if (isProjectConversation(row, db.project)) {
       return { kind: "you", name: "you" };
     }
     const project = row.projectId ? db.project(row.projectId) : undefined;
@@ -407,7 +407,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       ? rowOf(row.parentInstanceId)
       : undefined;
     if (parent && parent.status !== "discarded") {
-      if (parent.role === "lead" && caw) {
+      if (caw && isProjectConversation(parent, db.project)) {
         return caw;
       }
       return { kind: "session", id: parent.id, name: deps.name(parent) };
@@ -1152,7 +1152,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
             const said = words?.trim() ?? "";
             if ((decision === "nudge" || decision === "tell") && !said) {
               throw new Error(
-                `A ${decision} needs \`words\`: what the ${decision === "nudge" ? "lead" : "person"} reads.`
+                `A ${decision} needs \`words\`: what ${decision === "nudge" ? "the session's parent" : "the person"} reads.`
               );
             }
             return Promise.resolve(decide(triage, decision, said, reason));

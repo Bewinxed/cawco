@@ -436,18 +436,12 @@ const stateOf = (
 
 /** The sessions that are a project's Caw: never results, never targets. */
 const leadsOf = (
-  projects: { leadInstanceId: string | null }[],
-  rows: Map<string, FindInstanceRow>
+  projects: { leadInstanceId: string | null }[]
 ): Set<string> => {
   const leads = new Set<string>();
   for (const project of projects) {
     if (project.leadInstanceId) {
       leads.add(project.leadInstanceId);
-    }
-  }
-  for (const row of rows.values()) {
-    if (row.role === "lead") {
-      leads.add(row.id);
     }
   }
   return leads;
@@ -772,7 +766,7 @@ export const createFind = (deps: FindDeps) => {
       const project = id ? projects.get(id) : undefined;
       return project ? { id: project.id, name: project.name } : null;
     };
-    const leads = leadsOf([...projects.values()], held);
+    const leads = leadsOf([...projects.values()]);
     const items = itemsOf(db.find.workItems());
     const children = childrenOf(held, leads);
     const tasks = db.find.tasks();

@@ -15,11 +15,11 @@
  *   work does (work-items.ts `reportees`); he may answer, steer and stop the
  *   project's items. Only the hub sets
  *   it: it starts the session on your words or, while Caw is on, the first
- *   event, on a checkout of the project on a machine that is online, with
- *   the role `lead`, which keeps his threads his (roles.ts). It is a plain
- *   spawn otherwise: on the place's folder, in the permission mode you last
- *   chose for its harness on that machine, every call decided by that mode,
- *   as any session's is.
+ *   event, on a checkout of the project on a machine that is online. It is
+ *   a plain spawn: a worker in the project ({@link isProjectConversation}),
+ *   on the place's folder, in the permission mode you last chose for its
+ *   harness on that machine, every call decided by that mode, as any
+ *   session's is.
  * - **Woken by your words and, while on, by events**, never a timer: your
  *   message in a thread, your ask for a view; an attempt at a task landing
  *   or failing (its report, or a line from here while the project has no Caw
@@ -150,7 +150,7 @@ import {
   setupEvent,
 } from "./setup";
 import { readStages, templateText } from "./stages";
-import type { TaskEvent, TaskView } from "./tasks";
+import { stagesFileOf, type TaskEvent, type TaskView } from "./tasks";
 import { cardOn } from "./thread-transcript";
 import type { Views } from "./views";
 
@@ -200,6 +200,17 @@ const curatorDenied = (harness: string): readonly string[] => {
   }
   return CURATOR_DENIED_TOOLS[harness as HarnessKind];
 };
+
+/**
+ * Whether `row` is its project's conversation: the session the project's
+ * events reach, which its project's row names (`lead_instance_id`). In every
+ * other way it is a worker like any other.
+ */
+export const isProjectConversation = (
+  row: Pick<InstanceRow, "id" | "projectId">,
+  project: (id: string) => { leadInstanceId: string | null } | undefined
+): boolean =>
+  !!row.projectId && project(row.projectId)?.leadInstanceId === row.id;
 
 /**
  * A spawn as it reaches a machine: an overseer row's (a fleet-watch triage
@@ -463,24 +474,6 @@ const lineOf = (message: ThreadMessageRow): ThreadLine => {
 class CawRefusal extends StatusRefusal {}
 
 const refuse = refuser(CawRefusal);
-
-/** What Caw reads first, before the event that started it. */
-const briefOf = (projectName: string): string =>
-  [
-    `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, decisions/, and delegates/, where a type you write is a proposal the person approves or declines before it is committed), decision pages (the decision-page skill: write decisions/<name>/page.oui, a program over the decision library, or decisions/<name>/page.html when a pick is not an option (a machine and folder from cawco.pickPlace, a field they edit), then artifact_create with kind page, the name, does: pick and an ask (one line in the person's words) builds and shows it; artifact_read has the picks; artifact_update's statements revise it; a decision's after naming another page's decision (page#id) links the two pages on the Decisions tab), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, ask, and the fleet's MCP tools every session has (web search and fetch among them).",
-    "You have shell and edit tools in this folder, and they run under the permission mode the person chose for this harness on this machine, as any of their sessions' do.",
-    "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must. Whenever the person asks you to set the project up, in any thread and in their own words (the first time, again, or one part of it), call project_setup with that thread and follow its steps there.",
-    "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
-    "Your project's settings are yours to read and change with project_settings (no changes reads them): rename it, grant it a connection, link its GitHub repository, set where its work lands and runs, whether attempts start on their own, how many run at once, where dispatch pauses for review and what each may spend, turn yourself on or off (set_caw), publish its place to a new private GitHub repository (create_repo), or turn Review before done on or off (set_review: whether every task waits for the person before done is theirs to choose, so it and create_repo are always an Approve card first). Each other change applies at once and is noted in the thread. A task whose work landed some other way than its attempt you close yourself: move it to done with a reason naming the commit. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
-    "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
-    "When the person writes in a thread, answer them in plain text: what you say in the turn after reading their words is posted in that thread as your reply when the turn ends, and they watch it in the thread as you write it, so say nothing in plain text you would not say to them. When a reply names tasks (its `tasks`, shown as cards) or files you wrote, or belongs in another thread, send it with thread_reply instead: a thread_reply to their thread is your reply there, and what you say in plain text after it stays in your session.",
-    'Every design or product choice that reaches the person is a decision card on a page; any other question for them (a fact only they know, a go-ahead) goes through ask, which answers at once and brings their answer back as a message. Ask a choice as a decision page with one card, or a few for one topic (the decision-page skill): write decisions/<name>/page.oui with folder_write, give each Decision its kind from Who decides (look, behaviour, scope, approach, rules, tools), then artifact_create with kind page, the name, does: pick and an ask. Name each card in your reply by the link artifact_create answers for it: the thread draws it as the card\'s chip. Then end your turn; the card waits. One routed to the person waits on them; an advisor\'s or common practice\'s is settled by the delegate the hub starts; one routed to you, settle yourself. When the picks come ("The page … has new responses"), read them with artifact_read and answer: your turn answers the thread you asked in. Work that rests on a card waits on it (waits_on: "<page>#<card>"). Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with a card.',
-    "A view-request event is the person asking for a view of the project: it carries how to write one, and the page to stand it on when they asked from one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it. A view-change event is the person asking to change a kept view: it carries the view's program; draft the change under the same name.",
-    "When the person asks for a design system, file one task with task_create, its title “Build the design system” and nothing else (a stage only if they named one): the hub writes its description and acceptance, the design-system skill's steps with its decision page among them, and refuses it when the project already has a system or a build is open. Refused because it has one, answer: \"This project has one; say what to change.\" Filed, say what the build will read (the repository's styles and components, the site named in knowledge/, the brand kit in knowledge/brand/, the fonts and pictures in assets/: the ones the project has) and that you filed it. Never build one yourself, and never start one the person did not ask for: the hub asks them once when the work needs one.",
-    "A project with no code yet starts as real code from its first screen. When the person asks for a screen, a component or a design to look at and the repository has no app, name the stack: the one they named, or ask once with a one-card decision page (SvelteKit, Vite with React or Vue, Astro, Nuxt). Then file one task that scaffolds it with that framework's own creator and builds the first screen as a real component with its sheet, its description naming the stack and the screen skill.",
-    'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
-  ].join("\n\n");
 
 export interface CawDeps {
   /** The asks parked on the hub now (pending.ts). */
@@ -1103,7 +1096,6 @@ export const createCaw = ({
       ? row(project.leadInstanceId)
       : undefined;
     return lead &&
-      lead.role === "lead" &&
       lead.projectId === project.id &&
       !GONE.has(lead.status) &&
       online(lead.machineId)
@@ -1184,9 +1176,9 @@ export const createCaw = ({
   };
 
   /**
-   * Starts the project's Caw session, makes it the lead, and sends it its
-   * brief with the event that started it: a session is only ever started by
-   * an event.
+   * Starts the project's Caw session, makes it the project's conversation,
+   * and sends it the event that started it: a session is only ever started
+   * by an event.
    */
   const startLead = async (
     project: ReturnType<typeof projectOf>,
@@ -1206,7 +1198,6 @@ export const createCaw = ({
       ...(project.cawModel ? { model: project.cawModel } : {}),
       projectId: project.id,
       title: "Caw",
-      role: "lead",
       requestId: crypto.randomUUID(),
     });
     setLead(project.id, instanceId);
@@ -1214,13 +1205,7 @@ export const createCaw = ({
     if (!lead) {
       throw new Error(`Caw's session ${instanceId} has no row on this hub.`);
     }
-    const sent = message(
-      lead,
-      `${briefOf(project.name)}\n\n${event}`,
-      by,
-      routine,
-      carry
-    );
+    const sent = message(lead, event, by, routine, carry);
     console.log(
       `[caw] ${project.name}: started Caw on ${project.cawHarness} (${instanceId})`
     );
@@ -1229,7 +1214,7 @@ export const createCaw = ({
 
   /**
    * The project's Caw session: the one it has, or one started now for
-   * `event` (its first message, after its brief): for your words on or off,
+   * `event` (its first message): for your words on or off,
    * for an event while Caw is on. Undefined for an event while he is off.
    * Callers at once share one start; `started` says whether this call's
    * event went out with it, as the send `sent`.
@@ -2067,18 +2052,6 @@ export const createCaw = ({
     );
   };
 
-  /** The project's stages.md as it stands; undefined while it has none. */
-  const stagesOf = async (projectId: string): Promise<string | undefined> => {
-    try {
-      return (await readFolderFile(projectId, STAGES_FILE)).content;
-    } catch (error) {
-      if (error instanceof FolderRefusal && error.status === 404) {
-        return;
-      }
-      throw error;
-    }
-  };
-
   /**
    * The template the project's stages.md is, word for word; null when it is
    * its own. With no stages.md, the code template when the project was made
@@ -2087,7 +2060,7 @@ export const createCaw = ({
   const templateOf = async (
     projectId: string
   ): Promise<StagesTemplate | null> => {
-    const content = await stagesOf(projectId);
+    const content = await stagesFileOf(projectId);
     if (content === undefined) {
       return db.project(projectId)?.template === "code" ? "code" : null;
     }
@@ -2096,14 +2069,11 @@ export const createCaw = ({
     );
   };
 
-  /** The lead session `actor` is, when it is its project's lead. */
+  /** The project whose conversation `actor` is ({@link isProjectConversation}). */
   const leadOf = (actor: InstanceRow | undefined) => {
     const projectId = actor?.projectId;
     const project = projectId ? db.project(projectId) : undefined;
-    return actor &&
-      actor.role === "lead" &&
-      project &&
-      project.leadInstanceId === actor.id
+    return actor && project && project.leadInstanceId === actor.id
       ? project
       : undefined;
   };
@@ -2789,9 +2759,12 @@ export const createCaw = ({
     taskChanged(event: TaskEvent): void {
       if (
         event.kind === "changed" ||
-        event.actor.mover === "lead" ||
         event.actor.mover === "you" ||
-        !db.project(event.projectId)?.caw
+        !db.project(event.projectId)?.caw ||
+        isProjectConversation(
+          { id: event.actor.instanceId ?? "", projectId: event.projectId },
+          db.project
+        )
       ) {
         return;
       }
@@ -3011,15 +2984,15 @@ export const createCaw = ({
     /**
      * Caw's threads, and the project's views, folder and Setup's steps, for
      * the session `actor` and its call `toolUseId` (where a proposal it
-     * parks is drawn). Threads are its project's lead's alone; the rest are
-     * any session's its scope lists them to (roles.ts `allows`).
+     * parks is drawn). Threads are its project's conversation's alone; the
+     * rest are any session's its scope lists them to (roles.ts `allows`).
      */
     tools(actor: InstanceRow | undefined, toolUseId?: string) {
       const mine = (): string => {
         const project = leadOf(actor);
         if (!project) {
           throw new Error(
-            "Threads are the project lead's: this session is not its project's Caw."
+            "Threads belong to the project's conversation, Caw, and this session is not it."
           );
         }
         return project.id;
@@ -3218,7 +3191,7 @@ export const createCaw = ({
             const projectId = ours();
             const thread = threadNamed(projectId, asked);
             threadIn(projectId, thread);
-            const stages = await folderCall(() => stagesOf(projectId));
+            const stages = await folderCall(() => stagesFileOf(projectId));
             const template = await folderCall(() => templateOf(projectId));
             // Awaited above: the thread again, in the step that marks it.
             threadIn(projectId, thread);

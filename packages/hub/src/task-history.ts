@@ -91,7 +91,6 @@ export const NO_STAGE = "(none)";
 /** The commit author names tasks.ts's actors write under (sessions write under their title). */
 export const AUTHOR = {
   you: "you",
-  lead: "Caw",
   hub: "hub",
   action: "approved action",
   routine: "routine",

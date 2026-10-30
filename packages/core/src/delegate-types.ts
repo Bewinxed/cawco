@@ -183,8 +183,8 @@ export const QUESTION_TOOL_DENIED: readonly string[] =
 /**
  * The toolsets a session runs in (Projects spec §5.3: one `cawco` server, a
  * toolset per role). A session's credential names its row, and the row its
- * role: `lead` is a project's Caw, `web-facing` a session that reads the
- * outside world and so gets no posting or admin tools, `overseer` fleet-watch
+ * role: `web-facing` a session that reads the outside world and so gets no
+ * posting or admin tools, `overseer` fleet-watch
  * triage, `curator` a project's memory curator run (the hub starts it, never
  * a type). A row with none is a `delegate` when something delegated it, else
  * a `worker` (a session you started).
@@ -192,7 +192,6 @@ export const QUESTION_TOOL_DENIED: readonly string[] =
 export const SESSION_ROLES = [
   "worker",
   "delegate",
-  "lead",
   "overseer",
   "web-facing",
   "curator",

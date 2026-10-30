@@ -260,8 +260,8 @@ export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
   const eventsOf = (projectId: string, limit = 20): ViewEventsOutput => {
     known(projectId);
     const names = new Map<string, string>([
-      // A route to the project's lead (ingress.ts `routedTo: "lead"`) is Caw's.
-      ["lead", "Caw"],
+      // A route to the project's conversation (ingress.ts `TO_CONVERSATION`) is Caw's.
+      ["conversation", "Caw"],
       ...db.routines
         .list(projectId)
         .map((row): [string, string] => [row.id, row.name]),

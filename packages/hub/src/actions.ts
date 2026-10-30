@@ -81,8 +81,8 @@ const LISTED = 50;
 /** How far up a proposer's parents its routine run is looked for. */
 const ROUTINE_DEPTH = 8;
 
-/** The roles that propose: a session you started, and a project's Caw. */
-const PROPOSERS: ReadonlySet<SessionRole> = new Set(["worker", "lead"]);
+/** The roles that propose: a session you started, its project's conversation among them. */
+const PROPOSERS: ReadonlySet<SessionRole> = new Set(["worker"]);
 
 /** The states that wait on you: Needs you shows these. */
 const WAITING: readonly ActionState[] = ["proposed", "failed", "unknown"];

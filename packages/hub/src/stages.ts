@@ -12,8 +12,8 @@
  * posted     done      after: 48h
  * measured   done
  * moves
- *   idea → draft         lead, session
- *   scheduled → posted   lead, session
+ *   idea → draft         session
+ *   scheduled → posted   session
  * views
  *   board      by stage
  *   calendar   by post_at
@@ -34,11 +34,11 @@
  *   moves it on. `by: <who>` says who alone may move a task into the stage.
  * - **Moves** are `from → to  who, who` (`->` works too; `*` is any
  *   stage, so `* → *  you` lets you make every move).
- *   Who is `you` (the dashboard), `lead` (the project's lead, Caw), `session`
- *   (a session working in the project), `action` (an approved action) or
+ *   Who is `you` (the dashboard), `session` (a session working in the
+ *   project, its conversation among them), `action` (an approved action) or
  *   `routine`. A move is allowed when a line covers it and the stage it goes
  *   to has no `by:` naming someone else. A file without `moves` lets you and
- *   the lead make any move.
+ *   a session make any move.
  * - **Views** are a name and, optionally, `by <field>`.
  *
  * A project without stages.md uses the code template. "Needs you" is not a
@@ -85,6 +85,10 @@ const HOOK = /([A-Za-z_]+):\s*(\S+)/gu;
 const MOVE_LINE = /^(\S+?)\s*(?:→|->)\s*(\S+)\s+(.+)$/u;
 const VIEW_LINE = /^(\S+)(?:\s+by\s+(\S+))?$/u;
 const WHO_SPLIT = /[\s,]+/u;
+/** A move line's from → to and its spacing, then its who up to a comment. */
+const MOVE_WHO = /^(\s*\S+?\s*(?:→|->)\s*\S+\s+)([^#]*?)(?=\s*(?:#|$))/u;
+/** A stage line's `by:` hook and its value. */
+const BY_HOOK = /\bby:\s*(\S+)/u;
 const INDENTED = /^\s/u;
 const STAGES_LIMIT = 32;
 
@@ -106,11 +110,10 @@ const listed = (words: string[], joiner = "or"): string =>
     ? (words[0] ?? "")
     : `${words.slice(0, -1).join(", ")} ${joiner} ${words.at(-1)}`;
 
-/** Who a sentence names: “you”, “the project lead”, “an approved action”. */
+/** Who a sentence names: “you”, “a session”, “an approved action”. */
 const moverPhrase = (who: Mover): string =>
   ({
     you: "you",
-    lead: "the project lead",
     session: "a session",
     action: "an approved action",
     routine: "a routine",
@@ -375,7 +378,7 @@ export const readStages = (content: string): StagesReading => {
       stages: reader.stages,
       moves: reader.hasMoves
         ? reader.moves
-        : [{ from: "*", to: "*", who: ["you", "lead"] }],
+        : [{ from: "*", to: "*", who: ["you", "session"] }],
       views: reader.views,
     },
   };
@@ -591,7 +594,7 @@ const NOTES = `Each line above is a stage and its kind: todo, active, waiting, y
 dropped. Hooks: \`runs: <delegate type>\` starts that type as a task enters an
 active stage; \`until: <field>\` and \`after: <duration>\` hold a task until a
 routine moves it on; \`by: <who>\` says who alone moves a task in. \`moves\`
-lists who may make each move (you, lead, session, action, routine; \`*\` is
+lists who may make each move (you, session, action, routine; \`*\` is
 any stage). Tasks in a stage of kind \`you\` show in Needs you.
 `;
 
@@ -607,15 +610,15 @@ done       done
 dropped    dropped
 moves
   * → *                you
-  ready → working      lead, session
-  ready → review       lead, session
-  ready → done         lead, session
-  working → review     lead, session
-  working → done       lead, session
-  review → working     lead
-  review → ready       lead, session
-  review → done        lead, session
-  * → dropped          lead
+  ready → working      session
+  ready → review       session
+  ready → done         session
+  working → review     session
+  working → done       session
+  review → working     session
+  review → ready       session
+  review → done        session
+  * → dropped          session
 views
   board      by stage
   table      by rank`,
@@ -632,14 +635,14 @@ measured   done
 dropped    dropped
 moves
   * → *                you
-  plan → make          lead, session
-  plan → review        lead, session
-  make → review        lead, session
-  review → make        lead
-  review → plan        lead, session
-  scheduled → live     lead, session, action
+  plan → make          session
+  plan → review        session
+  make → review        session
+  review → make        session
+  review → plan        session
+  scheduled → live     session, action
   live → measured      routine
-  * → dropped          lead
+  * → dropped          session
 views
   board      by stage
   calendar   by launch_at`,
@@ -654,12 +657,12 @@ kit        done
 dropped    dropped
 moves
   * → *                you
-  source → extract     lead, session
-  source → review      lead, session
-  extract → review     lead, session
-  review → extract     lead
-  review → source      lead, session
-  * → dropped          lead
+  source → extract     session
+  source → review      session
+  extract → review     session
+  review → extract     session
+  review → source      session
+  * → dropped          session
 views
   board      by stage`,
     },
@@ -675,14 +678,14 @@ measured   done
 dropped    dropped
 moves
   * → *                you
-  idea → draft         lead, session
-  idea → review        lead, session
-  draft → review       lead, session
-  review → draft       lead
-  review → idea        lead, session
-  scheduled → posted   lead, session, action
+  idea → draft         session
+  idea → review        session
+  draft → review       session
+  review → draft       session
+  review → idea        session
+  scheduled → posted   session, action
   posted → measured    routine
-  * → dropped          lead
+  * → dropped          session
 views
   board      by stage
   calendar   by post_at`,
@@ -698,14 +701,14 @@ won        done
 lost       dropped
 moves
   * → *                  you
-  prospect → contacted   lead, session, action
-  prospect → meeting     lead, session
-  prospect → lost        lead
-  contacted → replied    routine, lead, session
+  prospect → contacted   session, action
+  prospect → meeting     session
+  prospect → lost        session
+  contacted → replied    routine, session
   contacted → lost       routine
-  replied → meeting      lead, session
-  replied → lost         lead, session
-  meeting → prospect     lead, session
+  replied → meeting      session
+  replied → lost         session
+  meeting → prospect     session
 views
   board      by stage
   table      by rank`,
@@ -723,15 +726,15 @@ measured   done
 dropped    dropped
 moves
   * → *                  you
-  topic → brief          lead, session
-  topic → review         lead, session
-  brief → draft          lead, session
-  draft → review         lead, session
-  review → draft         lead
-  review → topic         lead, session
-  approved → published   lead, session, action
+  topic → brief          session
+  topic → review         session
+  brief → draft          session
+  draft → review         session
+  review → draft         session
+  review → topic         session
+  approved → published   session, action
   published → measured   routine
-  * → dropped            lead
+  * → dropped            session
 views
   board      by stage
   table      by rank`,
@@ -748,14 +751,14 @@ shipped    done
 dropped    dropped
 moves
   * → *                you
-  brief → explore      lead, session
-  brief → review       lead, session
-  explore → review     lead, session
-  review → explore     lead
-  review → brief       lead, session
-  picked → build       lead, session
-  build → shipped      lead, session
-  * → dropped          lead
+  brief → explore      session
+  brief → review       session
+  explore → review     session
+  review → explore     session
+  review → brief       session
+  picked → build       session
+  build → shipped      session
+  * → dropped          session
 views
   board      by stage
   canvas     by stage`,
@@ -823,7 +826,7 @@ export const templateOf = (
 /**
  * A project's stages as the hub applies them: its stages.md (or the code
  * template) with the project's Review before done on top. On, every stage of
- * kind done is entered by you alone (`by: you`), so lead and sessions reach
+ * kind done is entered by you alone (`by: you`), so sessions reach
  * no further than review; a done stage whose own `by:` names someone keeps
  * it. Off, the stages are as written.
  */
@@ -853,12 +856,12 @@ done       done
 dropped    dropped
 moves
   * → *                you
-  ready → working      lead, session
-  ready → review       lead, session
-  working → review     lead, session
-  review → working     lead
-  review → ready       lead, session
-  * → dropped          lead
+  ready → working      session
+  ready → review       session
+  working → review     session
+  review → working     session
+  review → ready       session
+  * → dropped          session
 views
   board      by stage
   table      by rank
@@ -894,6 +897,55 @@ export const isCodeTemplate = (content: string): boolean => {
     shape === shapeOf(templateStages("code")) ||
     (former.ok && shape === shapeOf(former.stages))
   );
+};
+
+/**
+ * The mover stages.md named the project's Caw by, before the session its
+ * events reach became a worker like any other (wire 38): each such move and
+ * `by:` is a session's now.
+ */
+const RETIRED_MOVER = /^lead$/u;
+
+/**
+ * stages.md with its retired mover ({@link RETIRED_MOVER}) read as
+ * `session`: in each move's who and each stage's `by:`, inside the block,
+ * notes untouched. Null when it names none, so the file stays as it is.
+ */
+export const withRetiredMoverAsSession = (content: string): string | null => {
+  const lines = content.split("\n");
+  const open = lines.findIndex((line) => line.trim() !== "");
+  if (open === -1 || !FENCE.test(lines[open])) {
+    return null;
+  }
+  const close = lines.findIndex((line, at) => at > open && FENCE.test(line));
+  let section: "stages" | "moves" | "views" = "stages";
+  let changed = false;
+  for (let index = open + 1; index < (close === -1 ? 0 : close); index += 1) {
+    const raw = lines[index];
+    const text = raw.replace(COMMENT, "").trim();
+    const header = INDENTED.test(raw) ? undefined : SECTION.exec(text);
+    if (header) {
+      section = header[1] as "moves" | "views";
+      continue;
+    }
+    const next =
+      section === "moves"
+        ? raw.replace(MOVE_WHO, (_, head: string, who: string) => {
+            const named = who.split(WHO_SPLIT).filter(Boolean);
+            const said = named.map((word) =>
+              RETIRED_MOVER.test(word) ? "session" : word
+            );
+            return `${head}${[...new Set(said)].join(", ")}`;
+          })
+        : raw.replace(BY_HOOK, (hook: string, value: string) =>
+            RETIRED_MOVER.test(value) ? hook.replace(value, "session") : hook
+          );
+    if (next !== raw) {
+      lines[index] = next;
+      changed = true;
+    }
+  }
+  return changed ? lines.join("\n") : null;
 };
 
 /** A template, read: every template reads cleanly, or the hub would not start. */

@@ -598,6 +598,7 @@ import {
   cawRoutes,
   createCaw,
   fencedSpawn,
+  isProjectConversation,
   stagePlaceRef,
 } from "./caw";
 import {
@@ -1033,8 +1034,6 @@ const PAGE_SOURCE =
 const NOT_NAME = /[^a-z0-9]+/gu;
 const NAME_ENDS = /^-+|-+$/gu;
 const NAME_TAIL = /-+$/u;
-/** A folder's trailing slashes, which a place's path never keeps. */
-const TRAILING_SLASHES = /\/+$/u;
 /** A URL's IPv6 host in its brackets, as `URL.hostname` keeps it. */
 const IPV6_BRACKETS = /^\[|\]$/gu;
 
@@ -16346,22 +16345,6 @@ export const createServer = (
   };
 
   /**
-   * Who a start is (core `SessionOrigin`), as its row records it: what its
-   * caller asked it as, and `caw` for one a project's Caw started, whatever
-   * tool he started it with. A person's start is a person's.
-   */
-  const originOfStart = (
-    asked: SessionOrigin,
-    parentInstanceId: string | undefined
-  ): SessionOrigin => {
-    if (asked === "person" || !parentInstanceId) {
-      return asked;
-    }
-    const [parent] = db.getInstancesByIds([parentInstanceId]);
-    return parent?.role === "lead" ? "caw" : asked;
-  };
-
-  /**
    * The one project a start's row opens in: its parent's, whatever started
    * it under one (a delegate, Caw's work, a check, a person's start under a
    * session), none included, since it is listed under that parent; else
@@ -16391,7 +16374,7 @@ export const createServer = (
   const issueSpawn = (
     machineId: string,
     asked: NamedSpawn,
-    /** Who asked for it: what its row's origin is (`originOfStart`). */
+    /** Who asked for it: its row's origin. */
     by: SessionOrigin,
     workItemId?: string,
     fallbackMode?: string | null,
@@ -16407,7 +16390,6 @@ export const createServer = (
       throw new WorkItemRefusal(400, settled.refusal);
     }
     const { parentInstanceId } = peekParent(settled.payload);
-    const origin = originOfStart(by, parentInstanceId);
     // Its machine is handed the project its row opens in, as every revive
     // hands it the row's (`revivePayloadOf`).
     const payload = {
@@ -16429,7 +16411,7 @@ export const createServer = (
       cwd: payload.cwd,
       sessionId: peekResume(payload),
       harness: payload.harness,
-      origin,
+      origin: by,
       projectId: payload.projectId,
       title: payload.title,
       kind: peekKind(payload),
@@ -16519,7 +16501,7 @@ export const createServer = (
   const spawnSession = async (
     machineId: string,
     payload: SpawnPayload,
-    /** Who asked for it: what its row's origin is (`originOfStart`). */
+    /** Who asked for it: its row's origin. */
     by: SessionOrigin,
     fallbackMode?: string
   ): Promise<MachinePath> => {
@@ -24256,33 +24238,6 @@ export const createServer = (
   };
 
   /**
-   * Whether `row`'s folder is its project's own place, the scope a project's
-   * own tools follow (roles.ts `allows`): one of its checkouts itself, on its
-   * machine; its folder on the hub, on the hub's machine; or Caw's own folder
-   * for it ({@link leadHome}). A folder under a checkout is not: a project
-   * placed at a broad folder (a home) would make every folder under it the
-   * project's place.
-   */
-  const worksInPlace = (row: InstanceRow): boolean => {
-    const { projectId } = row;
-    const project = projectId ? db.project(projectId) : undefined;
-    if (!(projectId && project)) {
-      return false;
-    }
-    const cwd = row.cwd.replace(TRAILING_SLASHES, "");
-    return (
-      project.places.some(
-        (place) =>
-          place.kind === "checkout" &&
-          place.machineId === row.machineId &&
-          place.path.replace(TRAILING_SLASHES, "") === cwd
-      ) ||
-      (row.machineId === ownMachineIdRead && cwd === projectRoot(projectId)) ||
-      cwd.endsWith(`/${cawHome(projectId)}`)
-    );
-  };
-
-  /**
    * One repository is one project: a folder whose remote a project already
    * has joins it as a checkout place (`placeAdded`), and the answer is that
    * project, not a second one. Else a new project, its places its folder on
@@ -25335,7 +25290,7 @@ export const createServer = (
       await spawnSession(
         machineId,
         payload,
-        "caw",
+        "project",
         db.chosenMode(machineId, payload.harness ?? "claude")
       );
     },
@@ -26865,7 +26820,6 @@ export const createServer = (
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   const delegationMcp = createDelegationMcp({
     lifetime,
-    inPlace: worksInPlace,
     // Kept with the relayed calls' keys, whose table tool-call-keys prunes.
     callKeys: createCallKeys({ db: db.toolCallKeys }),
     tasks,
@@ -36386,15 +36340,15 @@ export const createServer = (
                   admitted.harness
                 );
                 // A routine run's session's words, for a failure that gives
-                // no reason (routines.ts `said`): a lead's from before his
-                // wake's read receipt too. None of a stream's deltas carry
-                // them.
+                // no reason (routines.ts `said`): a project conversation's
+                // from before its wake's read receipt too. None of a stream's
+                // deltas carry them.
                 if (admitted.message.type !== "stream_event") {
                   const [framed] = db.getInstancesByIds([message.instanceId]);
                   routines.said(
                     message.instanceId,
                     admitted.message,
-                    framed?.role === "lead"
+                    !!framed && isProjectConversation(framed, db.project)
                   );
                 }
               }

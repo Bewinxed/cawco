@@ -244,7 +244,7 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         .where(
           and(
             eq(inboundEvents.projectId, projectId),
-            eq(inboundEvents.routedTo, "lead"),
+            eq(inboundEvents.routedTo, "conversation"),
             isNull(inboundEvents.handledAt)
           )
         )

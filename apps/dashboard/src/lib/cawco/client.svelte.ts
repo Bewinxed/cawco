@@ -225,7 +225,13 @@ import {
   subscribeSession,
   sweepCommands,
 } from "./stream";
-import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
+import {
+  conversationsOf,
+  inLists,
+  isThreadTab,
+  threadIdOf,
+  threadRowOf,
+} from "./thread-tabs";
 import { warmCompactionMark } from "./transcript/compaction-mark";
 import {
   answeredNote,
@@ -1088,6 +1094,8 @@ function keepsLast<T>(list: () => T[]): () => T[] {
   };
 }
 
+/** Each project's conversation, by its session's id: what lists show as its threads. */
+const conversations = $derived.by(() => conversationsOf(state.projects));
 const runningInstances = $derived.by(keepsLast(() => instances.filter(isLive)));
 /**
  * What a list shows running: sessions (a lead is its threads, thread-tabs.ts
@@ -1095,7 +1103,7 @@ const runningInstances = $derived.by(keepsLast(() => instances.filter(isLive)));
  */
 const runningRows = $derived.by(
   keepsLast(() => [
-    ...inLists(runningInstances),
+    ...inLists(runningInstances, conversations),
     ...threadRows.filter((row) => row.status === "running"),
   ])
 );
@@ -1104,18 +1112,18 @@ const listedInstances = $derived.by(
 );
 /** What a list shows of every listed session: as `runningRows`, with every thread. */
 const listedRows = $derived.by(
-  keepsLast(() => [...inLists(listedInstances), ...threadRows])
+  keepsLast(() => [...inLists(listedInstances, conversations), ...threadRows])
 );
 /** `listedRows` by id, built once per change for every list that walks their trees. */
 const listedById = $derived(
   new Map(listedRows.map((row) => [row.id, row] as const))
 );
-/** The sessions of every lead the hub knows: a list leaves their transcripts out too. */
+/** The sessions of every project's conversation the hub knows: a list leaves their transcripts out too. */
 let leadsWere: ReadonlySet<string> = new Set();
 const leadSessions = $derived.by<ReadonlySet<string>>(() => {
   const leads = new Set(
     instances.flatMap((row) =>
-      row.role === "lead" && row.sessionId ? [row.sessionId] : []
+      conversations.has(row.id) && row.sessionId ? [row.sessionId] : []
     )
   );
   if (
@@ -9512,9 +9520,13 @@ export const cawco = {
   get listedById(): ReadonlyMap<string, BoardRow> {
     return listedById;
   },
-  /** Sessions that are a project's lead: never listed, nor their stored transcripts. */
+  /** The sessions of projects' conversations: never listed, nor their stored transcripts. */
   get leadSessions() {
     return leadSessions;
+  },
+  /** Each project's conversation by its session's id (thread-tabs.ts `conversationsOf`). */
+  get conversations(): ReadonlySet<string> {
+    return conversations;
   },
   /** Sessions the hub lost track of — shown apart, never as live work. */
   get staleInstances(): InstanceRow[] {

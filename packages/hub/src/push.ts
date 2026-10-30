@@ -108,6 +108,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
+import { isProjectConversation } from "./caw";
 import type {
   DbShape,
   PushDeviceRow,
@@ -374,7 +375,8 @@ interface Notification {
 
 /** What an ask's visible name reads of its session's row. */
 interface AskRow {
-  readonly role?: string | null;
+  readonly id: string;
+  readonly projectId?: string | null;
   readonly title: string | null;
   readonly titleSource: string | null;
 }
@@ -1565,13 +1567,16 @@ export const createPush = ({
     return host ? `${harness} on ${machineLabel(host)}` : harness;
   };
 
-  /** An ask's visible name: Caw for a project's lead, the owner's title for its session, else {@link sessionName}. */
+  /** An ask's visible name: the owner's title for its session, Caw for a project's conversation, else {@link sessionName}. */
   const askName = (row: AskRow | undefined, instanceId: string): string => {
-    if (row?.role === "lead") {
+    const owned = row?.titleSource === "owner" ? row.title?.trim() : undefined;
+    if (owned) {
+      return owned;
+    }
+    if (row && isProjectConversation(row, db.project)) {
       return "Caw";
     }
-    const owned = row?.titleSource === "owner" ? row.title?.trim() : undefined;
-    return owned || sessionName(instanceId) || "A session";
+    return sessionName(instanceId) || "A session";
   };
 
   /**
@@ -1915,7 +1920,7 @@ export const createPush = ({
           row.parentInstanceId ||
           row.workItemId ||
           row.kind === "summariser" ||
-          row.role === "lead"
+          isProjectConversation(row, db.project)
         ) {
           return;
         }
@@ -2235,7 +2240,7 @@ export const createPush = ({
         row.parentInstanceId ||
         row.workItemId ||
         row.kind === "summariser" ||
-        row.role === "lead"
+        isProjectConversation(row, db.project)
       ) {
         return;
       }

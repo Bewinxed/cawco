@@ -534,7 +534,8 @@
     ...inLists(
       cawco.listedInstances.filter(
         (row) => isResumable(row) || isStale(row) || isFailed(row)
-      )
+      ),
+      cawco.conversations
     ),
     ...cawco.threadRows.filter((row) => row.status !== "running"),
   ]);

@@ -2330,7 +2330,6 @@ public enum OpenEnums {
     public enum DelegateTypeRole: OpenEnum {
         case curator
         case delegate
-        case lead
         case overseer
         case webFacing
         case worker
@@ -2341,7 +2340,6 @@ public enum OpenEnums {
             switch rawValue {
             case "curator": self = .curator
             case "delegate": self = .delegate
-            case "lead": self = .lead
             case "overseer": self = .overseer
             case "web-facing": self = .webFacing
             case "worker": self = .worker
@@ -2353,7 +2351,6 @@ public enum OpenEnums {
             switch self {
             case .curator: "curator"
             case .delegate: "delegate"
-            case .lead: "lead"
             case .overseer: "overseer"
             case .webFacing: "web-facing"
             case .worker: "worker"
@@ -2365,7 +2362,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.curator, .delegate, .lead, .overseer, .webFacing, .worker]
+        public static let allCases: [Self] = [.curator, .delegate, .overseer, .webFacing, .worker]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5860,7 +5857,7 @@ public enum OpenEnums {
     public enum PhoneDoneAction: OpenEnum {
         case caw
         case comment
-        case lead
+        case conversation
         case move
         case retry
         case start
@@ -5871,7 +5868,7 @@ public enum OpenEnums {
             switch rawValue {
             case "caw": self = .caw
             case "comment": self = .comment
-            case "lead": self = .lead
+            case "conversation": self = .conversation
             case "move": self = .move
             case "retry": self = .retry
             case "start": self = .start
@@ -5883,7 +5880,7 @@ public enum OpenEnums {
             switch self {
             case .caw: "caw"
             case .comment: "comment"
-            case .lead: "lead"
+            case .conversation: "conversation"
             case .move: "move"
             case .retry: "retry"
             case .start: "start"
@@ -5895,7 +5892,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.caw, .comment, .lead, .move, .retry, .start]
+        public static let allCases: [Self] = [.caw, .comment, .conversation, .move, .retry, .start]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5908,23 +5905,23 @@ public enum OpenEnums {
 
     /// `#/components/schemas/PhoneDoneDecidedBy`.
     public enum PhoneDoneDecidedBy: OpenEnum {
+        case conversation
         case jev
-        case lead
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
+            case "conversation": self = .conversation
             case "jev": self = .jev
-            case "lead": self = .lead
             default: self = .unrecognized(rawValue)
             }
         }
 
         public var rawValue: String {
             switch self {
+            case .conversation: "conversation"
             case .jev: "jev"
-            case .lead: "lead"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -5933,7 +5930,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.jev, .lead]
+        public static let allCases: [Self] = [.conversation, .jev]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -6882,7 +6879,6 @@ public enum OpenEnums {
 
     /// `#/components/schemas/RoutineMadeInBy`.
     public enum RoutineMadeInBy: OpenEnum {
-        case caw
         case delegate
         case session
         /// A value this app does not know: a newer hub's.
@@ -6890,7 +6886,6 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
-            case "caw": self = .caw
             case "delegate": self = .delegate
             case "session": self = .session
             default: self = .unrecognized(rawValue)
@@ -6899,7 +6894,6 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
-            case .caw: "caw"
             case .delegate: "delegate"
             case .session: "session"
             case let .unrecognized(rawValue): rawValue
@@ -6910,7 +6904,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.caw, .delegate, .session]
+        public static let allCases: [Self] = [.delegate, .session]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -7014,18 +7008,18 @@ public enum OpenEnums {
 
     /// `#/components/schemas/RoutineTarget`.
     public enum RoutineTarget: OpenEnum {
+        case conversation
         case curator
         case delegate
-        case lead
         case orchestrator
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
+            case "conversation": self = .conversation
             case "curator": self = .curator
             case "delegate": self = .delegate
-            case "lead": self = .lead
             case "orchestrator": self = .orchestrator
             default: self = .unrecognized(rawValue)
             }
@@ -7033,9 +7027,9 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .conversation: "conversation"
             case .curator: "curator"
             case .delegate: "delegate"
-            case .lead: "lead"
             case .orchestrator: "orchestrator"
             case let .unrecognized(rawValue): rawValue
             }
@@ -7045,7 +7039,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.curator, .delegate, .lead, .orchestrator]
+        public static let allCases: [Self] = [.conversation, .curator, .delegate, .orchestrator]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -7307,29 +7301,29 @@ public enum OpenEnums {
 
     /// `#/components/schemas/SessionOrigin`.
     public enum SessionOrigin: OpenEnum {
-        case caw
         case check
         case delegate
         case person
+        case project
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
-            case "caw": self = .caw
             case "check": self = .check
             case "delegate": self = .delegate
             case "person": self = .person
+            case "project": self = .project
             default: self = .unrecognized(rawValue)
             }
         }
 
         public var rawValue: String {
             switch self {
-            case .caw: "caw"
             case .check: "check"
             case .delegate: "delegate"
             case .person: "person"
+            case .project: "project"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -7338,7 +7332,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.caw, .check, .delegate, .person]
+        public static let allCases: [Self] = [.check, .delegate, .person, .project]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -7563,7 +7557,6 @@ public enum OpenEnums {
     /// `#/components/schemas/StageHooksBy`.
     public enum StageHooksBy: OpenEnum {
         case action
-        case lead
         case routine
         case session
         case you
@@ -7573,7 +7566,6 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "action": self = .action
-            case "lead": self = .lead
             case "routine": self = .routine
             case "session": self = .session
             case "you": self = .you
@@ -7584,7 +7576,6 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .action: "action"
-            case .lead: "lead"
             case .routine: "routine"
             case .session: "session"
             case .you: "you"
@@ -7596,7 +7587,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.action, .lead, .routine, .session, .you]
+        public static let allCases: [Self] = [.action, .routine, .session, .you]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -8167,7 +8158,6 @@ public enum OpenEnums {
     public enum TaskHistoryActorMover: OpenEnum {
         case action
         case hub
-        case lead
         case routine
         case session
         case you
@@ -8178,7 +8168,6 @@ public enum OpenEnums {
             switch rawValue {
             case "action": self = .action
             case "hub": self = .hub
-            case "lead": self = .lead
             case "routine": self = .routine
             case "session": self = .session
             case "you": self = .you
@@ -8190,7 +8179,6 @@ public enum OpenEnums {
             switch self {
             case .action: "action"
             case .hub: "hub"
-            case .lead: "lead"
             case .routine: "routine"
             case .session: "session"
             case .you: "you"
@@ -8202,7 +8190,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.action, .hub, .lead, .routine, .session, .you]
+        public static let allCases: [Self] = [.action, .hub, .routine, .session, .you]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

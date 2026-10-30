@@ -211,9 +211,9 @@ public final class FleetStore {
         threads = next
         reindex()
     }
-    /// The projects; a thread's row stands at its project's primary checkout, so they are indexed again with it.
+    /// The projects; a thread's row stands at its project's primary checkout, and each names its conversation, so they are indexed again with it.
     public internal(set) var projects: [Components.Schemas.GetApiProjects200Payload] = [] {
-        didSet { if !threads.isEmpty { reindex() } }
+        didSet { reindex() }
     }
     /// The continuations the hub is carrying, settled ones for a few minutes after.
     public internal(set) var continuations: [Components.Schemas.ContinuationJob] = []
@@ -416,8 +416,9 @@ public final class FleetStore {
     }
 
     private func reindex() {
-        let all = hubRows.map(underThread)
-        rows = all.filter { $0.role != .lead }
+        let conversations = Set(projects.compactMap(\.leadInstanceId))
+        let all = hubRows.map { underThread($0, conversations: conversations) }
+        rows = all.filter { !conversations.contains($0.id) }
         let places = Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         threadRows = threads.sorted { $0.lastAt > $1.lastAt }.compactMap { thread in
             places[thread.projectId].map { threadRow(thread, project: $0) }
@@ -438,8 +439,9 @@ public final class FleetStore {
 
     /// A session Caw's work started hangs under the thread it works for
     /// (thread-tabs.ts `underThread`): that thread is where the work was asked for.
-    private func underThread(_ row: InstanceRow) -> InstanceRow {
-        guard let threadId = row.threadId, row.role != .lead else { return row }
+    /// A project's conversation (`conversations`, by each project's row) never does.
+    private func underThread(_ row: InstanceRow, conversations: Set<String>) -> InstanceRow {
+        guard let threadId = row.threadId, !conversations.contains(row.id) else { return row }
         var row = row
         row.parentInstanceId = ThreadTabs.tabId(threadId)
         return row

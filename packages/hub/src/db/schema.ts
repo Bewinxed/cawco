@@ -912,7 +912,7 @@ export const instances = sqliteTable(
     /**
      * Who started it (core `SessionOrigin`), stamped once as its row opens
      * from who asked for the start, never from the start's payload: `person`,
-     * `delegate`, `caw` or `check`. Only a person's sessions stand at the top
+     * `delegate`, `project` or `check`. Only a person's sessions stand at the top
      * of a project in the rails; the rest nest under their parent, and one
      * whose work item has ended is listed a day, asleep or not.
      */
@@ -1035,8 +1035,8 @@ export const instances = sqliteTable(
     canDelegate: integer("can_delegate", { mode: "boolean" }),
     /**
      * The toolset the session runs in (§5.3), written once by its first spawn:
-     * `lead` for a project's Caw, a delegate type's `role` for its work item's
-     * session. Null: derived from how it started (roles.ts `roleOf`).
+     * a delegate type's `role` for its work item's session. Null: derived
+     * from how it started (roles.ts `roleOf`).
      */
     role: text("role").$type<import("@cawco/core").SessionRole>(),
     /**
@@ -4760,7 +4760,7 @@ export const routines = sqliteTable(
      * paragraph; null when it said nothing, or the routine is not an agent's.
      */
     madeWhy: text("made_why"),
-    /** How that session is named in its notice: Caw, a delegate, or another session. */
+    /** How that session is named in its notice: a delegate, or another session. */
     madeBy: text("made_by").$type<RoutineMadeEvent["by"]>(),
     /**
      * When its notice went to you (routines.ts `announce`); null while it
@@ -4967,7 +4967,7 @@ export const inboundEvents = sqliteTable(
     payload: text("payload").notNull(),
     receivedAt: timestamp("received_at").notNull(),
     via: text("via").$type<InboundVia>().notNull(),
-    /** The routine a route sent it to, `lead` for the lead's inbox, or null (stored only: the lead was off). */
+    /** The routine a route sent it to, `conversation` for the project conversation's inbox, or null (stored only: it was off). */
     routedTo: text("routed_to"),
     /** The route it was delivered by: the oldest matching route to the routine it went to; null otherwise. */
     routeId: text("route_id").references(() => eventRoutes.id, {

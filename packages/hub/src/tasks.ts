@@ -108,6 +108,7 @@ import type {
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget } from "./db/schema";
+import { boardTitle } from "./labels";
 import {
   deleteFolderFile,
   type Exclusive,
@@ -154,6 +155,7 @@ import {
   startProblem,
   templateStages,
   templateText,
+  withRetiredMoverAsSession,
 } from "./stages";
 import {
   ARCHIVE_DIR,
@@ -254,23 +256,14 @@ export const actionActor = (actionId: string, reason: string): TaskActor => ({
 });
 
 /**
- * A session calling the task tools: it moves stages as a `session` and
- * commits under its name; the project's Caw (its row's role `lead`) moves as
- * the `lead` and commits as Caw.
+ * A session calling the task tools, its project's conversation among them:
+ * it moves stages as a `session` and commits under its board name.
  */
-export const sessionActor = (row: InstanceRow): TaskActor =>
-  row.role === "lead"
-    ? { mover: "lead", instanceId: row.id, author: { name: AUTHOR.lead } }
-    : {
-        mover: "session",
-        instanceId: row.id,
-        author: {
-          name:
-            row.title?.trim() ||
-            row.derivedTitle?.trim() ||
-            `session ${row.id.slice(0, 8)}`,
-        },
-      };
+export const sessionActor = (row: InstanceRow): TaskActor => ({
+  mover: "session",
+  instanceId: row.id,
+  author: { name: boardTitle(row) },
+});
 
 /**
  * What a task's newest finished attempt handed back, read whole on a task's
@@ -689,6 +682,20 @@ const LINE_BREAK = /[\r\n]/u;
 /** The project folder's stages file, and the template that stands in while there is none. */
 /** A project's stages, in its folder (§5.2). */
 export const STAGES_FILE = "stages.md";
+
+/** The project's stages.md as it stands; undefined while it has none. */
+export const stagesFileOf = async (
+  projectId: string
+): Promise<string | undefined> => {
+  try {
+    return (await readFolderFile(projectId, STAGES_FILE)).content;
+  } catch (error) {
+    if (error instanceof FolderRefusal && error.status === 404) {
+      return;
+    }
+    throw error;
+  }
+};
 const DEFAULT_TEMPLATE: StagesTemplate = "code";
 
 /** Takes stages.md away, so the project reads the code template; one without it has nothing to take. */
@@ -1406,12 +1413,8 @@ const stagesView = (
 
 /** Why the hub cannot put a task in `stage`: only that the project has no such stage. */
 /** The mover a plain create by a folder commit's author would be checked as. */
-const moverOf = (author: string): Mover => {
-  if (author === "Caw") {
-    return "lead";
-  }
-  return author === YOU.name ? "you" : "session";
-};
+const moverOf = (author: string): Mover =>
+  author === YOU.name ? "you" : "session";
 
 /**
  * Why the hub's own code may not put a task in `stage`: it is not a stage,
@@ -2685,22 +2688,36 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
+   * A stages.md that names the retired mover (stages.ts
+   * `withRetiredMoverAsSession`) is written again with a session in its
+   * place, once, as the hub: the project's conversation moves as a session.
+   */
+  const retireMover = async (projectId: string): Promise<void> => {
+    const content = await stagesFileOf(projectId);
+    const next =
+      content === undefined ? null : withRetiredMoverAsSession(content);
+    if (next === null) {
+      return;
+    }
+    await writeFolderFile(projectId, STAGES_FILE, next, {
+      author: { name: AUTHOR.hub },
+      message:
+        "stages: the project's conversation moves as a session, so its moves are a session's",
+    });
+    console.info(
+      `[tasks] project ${projectId}'s stages.md named the project's conversation as a mover of its own; a session makes those moves now.`
+    );
+  };
+
+  /**
    * A stages.md that is the code template, now or as it was before review
    * was a project's choice, goes: the project reads the hub's code template,
    * so it follows the template and its Review before done. A project's own
    * stages stay.
    */
   const dropTemplateCopy = async (projectId: string): Promise<void> => {
-    let content: string;
-    try {
-      ({ content } = await readFolderFile(projectId, STAGES_FILE));
-    } catch (error) {
-      if (error instanceof FolderRefusal && error.status === 404) {
-        return;
-      }
-      throw error;
-    }
-    if (!isCodeTemplate(content)) {
+    const content = await stagesFileOf(projectId);
+    if (!(content !== undefined && isCodeTemplate(content))) {
       return;
     }
     await deleteFolderFile(projectId, STAGES_FILE, {
@@ -4646,14 +4663,16 @@ export const createTasks = (store: TaskStore) => {
 
     /**
      * Catches up the index of every project that has a folder: what the hub
-     * does as it starts. A stages.md that is only the code template goes
-     * first, so the project reads the template as the hub has it.
+     * does as it starts. A stages.md that names the retired mover is
+     * written again first, and one that is only the code template then goes,
+     * so the project reads the template as the hub has it.
      */
     async syncAll(): Promise<void> {
       for (const projectId of store.projectIds()) {
         if (await hasProjectFolder(projectId)) {
           try {
             await inTurn(projectId, async () => {
+              await retireMover(projectId);
               await dropTemplateCopy(projectId);
               await fillTypes(projectId);
               await migrateLinks(projectId);

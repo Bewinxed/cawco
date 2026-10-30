@@ -251,7 +251,7 @@ export type Taint = "routine" | "heartbeat" | "subagent" | "web";
 export type Verdict =
   "lasting" | "scaffolding" | "secret" | "untrusted" | "duplicate";
 /** What kind of session wrote a note. */
-type Source = "session" | "delegate" | "attempt" | "lead" | "routine";
+type Source = "session" | "delegate" | "attempt" | "routine";
 
 const NOT_LASTING = [
   "scaffolding",
@@ -1819,9 +1819,6 @@ export const createMemory = ({
   };
 
   const sourceOf = (actor: InstanceRow): Source => {
-    if (actor.role === "lead") {
-      return "lead";
-    }
     if (routineRun(actor)) {
       return "routine";
     }

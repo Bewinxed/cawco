@@ -2,13 +2,13 @@
 export const ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",
-  "lead",
+  "conversation",
   "curator",
 ] as const;
 /**
  * What a run starts: a fresh delegate, a fresh orchestrator (a session that
  * may delegate, in the project's checkout: routines.ts `fireOrchestrator`),
- * a message to the project's Caw, or the project's memory curator
+ * a message to the project's conversation, Caw, or the project's memory curator
  * (memory.ts), a delegate in the `curator` role that only the hub makes.
  */
 export type RoutineTarget = (typeof ROUTINE_TARGETS)[number];
@@ -17,7 +17,7 @@ export type RoutineTarget = (typeof ROUTINE_TARGETS)[number];
 export const MADE_ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",
-  "lead",
+  "conversation",
 ] as const satisfies readonly RoutineTarget[];
 
 /** Every {@link RoutineRunState}. */

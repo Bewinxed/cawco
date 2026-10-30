@@ -1,18 +1,12 @@
 import type { DbShape } from "./db";
-import { roleOf } from "./roles";
 import { isHubParent } from "./work-items";
 
 type ProjectRow = NonNullable<ReturnType<DbShape["project"]>>;
 type Row = ReturnType<DbShape["getInstancesByIds"]>[number];
 
-/**
- * Whether `root`, the top of a delegation chain, is `project`'s Caw: its
- * lead now, or a lead session of the project from before (a move of harness
- * or model clears `leadInstanceId`, the row keeps its role).
- */
+/** Whether `root`, the top of a delegation chain, is `project`'s conversation. */
 const isLead = (root: Row, project: ProjectRow): boolean =>
-  project.leadInstanceId === root.id ||
-  (roleOf(root) === "lead" && root.projectId === project.id);
+  project.leadInstanceId === root.id;
 
 /**
  * Whether the delegation chain above a session whose parent is

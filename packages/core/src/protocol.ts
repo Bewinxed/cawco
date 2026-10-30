@@ -1021,19 +1021,19 @@ export interface SessionCommands {
  * Who started a session, stamped by the hub as it starts from who asked,
  * never from what the start carried: `person`, a person's own start (the
  * New session form, a move); `delegate`, a `delegate` call (a work item,
- * a routine's run and a design check among them); `caw`, a project's Caw
- * and what his turns start; `check`, an agent's `start_session`, a start
+ * a routine's run and a design check among them); `project`, started by
+ * its project's events (the session they reach); `check`, an agent's `start_session`, a start
  * from a page in an agent's own browser, and the hub's own workers. Only a
  * person's sessions stand at a project's top in the rails; every other one
  * nests under the session that started it.
  */
-export type SessionOrigin = "person" | "delegate" | "caw" | "check";
+export type SessionOrigin = "person" | "delegate" | "project" | "check";
 
 /** Every {@link SessionOrigin}, in the order the type names them. */
 export const SESSION_ORIGINS = [
   "person",
   "delegate",
-  "caw",
+  "project",
   "check",
 ] as const satisfies readonly SessionOrigin[];
 

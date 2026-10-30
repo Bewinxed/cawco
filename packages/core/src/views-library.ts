@@ -118,7 +118,7 @@ const run = z.object({
 const routine = z.object({
   id: z.string(),
   name: z.string(),
-  target: z.enum(["delegate", "lead"]),
+  target: z.enum(["delegate", "conversation"]),
   delegateType: z.string().nullable(),
   enabled: z.boolean(),
   cron: z.string(),

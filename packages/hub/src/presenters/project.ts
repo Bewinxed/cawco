@@ -228,8 +228,8 @@ const keptWords = (routine: RoutineView, now: number): string => {
 const targetWords = (routine: RoutineView): string => {
   const typed = routine.delegateType ? ` of type ${routine.delegateType}` : "";
   switch (routine.target) {
-    case "lead":
-      return "messages Caw";
+    case "conversation":
+      return "messages Caw, the project's conversation";
     case "orchestrator":
       return `an orchestrator${typed} in the project's checkout, which delegates its work`;
     case "delegate":

@@ -185,12 +185,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    CawCo puts none to the person on a rule of its own. A page built for
  *    36 reads an `askedBecause` the hub no longer sends, so it reloads
  *    first.
+ * 38: a session's role is never `lead` and its origin is `project` where it
+ *    was `caw`: the session a project's events reach is a worker like any
+ *    other, scoped to its project. A page built for 37 finds that session
+ *    by a role the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 37;
+export const WIRE_PROTOCOL = 38;
 
 /**
  * What a session's stream carries: the changes each frame made to its
