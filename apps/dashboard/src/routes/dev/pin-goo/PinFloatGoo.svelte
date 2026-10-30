@@ -20,7 +20,8 @@
      the card's), and the frame computes and sets the path, the thread's
      clip and the rim. Its drop (`drop-shadow-drop-near`) is a `<use>` of that
      one path, with no geometry of its own, faded out over a run (grown.ts's
-     rule) since no transition may carry `filter`. What stands on it fades as
+     rule) since no transition may carry `filter`; it mounts in a run, so the
+     pin it pours from never wears it. What stands on it fades as
      the demo's icons do: the thread in over `--dur-goo-content` after
      `--dur-goo-content-delay`, out over `--dur-goo-content-exit`, on
      `--ease-goo-content`, without their blur; clipped to the card's box as
@@ -410,7 +411,11 @@
       frame = requestAnimationFrame(tick);
     }
   }
-  /** It stands still: its drop back, and the thread unclipped once it is open. */
+  /**
+   * It stands still: its drop back (it mounts in a run, so its first
+   * stillness is the first it shows), and the thread unclipped once it is
+   * open.
+   */
   function still() {
     if (float) {
       delete float.dataset.run;
@@ -498,7 +503,8 @@
     if (besideEdge) {
       bridgeEdge = besideEdge;
     }
-    if (p && joined && bridgeEdge) {
+    // Levelled only while a bridge is drawn: drained, the card keeps its own edges.
+    if (p && joined && bridgeEdge && grown > 0) {
       level(card, p, bridgeEdge);
     }
     const shapes = [roundedBox(card, radii)];
@@ -522,8 +528,9 @@
   }
 
   /**
-   * Joined, a card edge across the bridge from the pin's own edge by less
-   * than a join stands level with it: the card held whole in the well can
+   * Joined, while the bridge is drawn, a card edge across it from the
+   * pin's own edge by less than a join stands level with it: the card held
+   * whole in the well can
    * stand a fraction of a px (or a few) off its pin, and a closing rounds
    * a step that small into a long slope, never a fillet. So the card's
    * drawn edge takes the pin's, and the bridge's edges run level from the
@@ -800,6 +807,7 @@
   class="group/goo pointer-events-auto absolute z-2 flex flex-col max-h-(--float-max) start-(--float-x) top-(--float-y) w-(--float-w)"
   data-face={opened && besideEdge !== null ? "joined" : "own"}
   data-open="false"
+  data-run=""
   data-side={place.side}
   data-slot="pin-card"
   data-pin-card={pin}
