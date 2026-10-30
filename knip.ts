@@ -146,6 +146,8 @@ export default {
         "scripts/probe-groups-check.ts",
         // scripts/check.ts:632
         "scripts/resolution-check.ts",
+        // scripts/check.ts:634
+        "scripts/call-cuts-check.ts",
         // scripts/ship.sh:86
         "scripts/release.ts",
         // scripts/ship.sh:36

@@ -26876,6 +26876,28 @@ export const createServer = (
       dispatcher.startAttempt(projectId, ref, parent),
     retryAttempt: (projectId, ref, parent) =>
       dispatcher.retryAttempt(projectId, ref, parent),
+    // What a call its harness cut had started (call-cuts.ts): its session
+    // and tree stopped, or its queued start withdrawn before it starts.
+    stopStarted: (actor, started, tool) => {
+      const why = turnCutWords.startedStopped(tool);
+      try {
+        switch (started.kind) {
+          case "session":
+            treeStops.stop(started.instanceId, { kind: "hub", why });
+            return;
+          case "queued-delegate":
+            workItems.withdrawQueued(actor.id, started.queued);
+            return;
+          case "queued-task":
+            db.dropQueuedTaskStart(started.projectId, started.taskId);
+            return;
+        }
+      } catch (error) {
+        console.warn(
+          `[delegation-mcp] ${actor.id}'s cut ${tool} started a ${started.kind} that could not be stopped: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
     writePlan: (actor, written) => changesOfPlans.written(actor, written),

@@ -43,6 +43,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
+import type { Started } from "./call-cuts";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateList, DelegateListQuery } from "./delegation-tree";
 import { byId, handleId, isHandle, mentioned } from "./handles";
@@ -828,6 +829,11 @@ export interface HandoffDeps {
       SpawnPayload & { fallbackPermissionMode?: PermissionMode }
     >
   ) => Promise<MachinePath>;
+  /**
+   * Told what this call started (a delegate, a queued delegate, a session),
+   * so the hub stops it if the call's harness cuts the call (call-cuts.ts).
+   */
+  readonly started?: (thing: Started) => void;
   /** Threads a mention may name, and the hand-off into one; absent where tools are only listed. */
   readonly threads?: HandoffThreads;
   /** Delegate role: the session runs a work item, so finish_item and wait_item are offered. */
@@ -1539,6 +1545,7 @@ export const handoffActions = ({
   spawn,
   authorization,
   callId,
+  started: startedBy,
   projectId,
   ledBy,
   forkOrigins = () => [],
@@ -1917,6 +1924,7 @@ export const handoffActions = ({
         instanceId: id,
         payload,
       });
+      startedBy?.({ kind: "session", instanceId: id });
       // The marker prefix survives SDK storage (which strips `origin`) so that
       // the transcript builder (`sentRow`, @cawco/core) can still detect the
       // opening prompt as a peer message and render it as `user.peer` instead of
@@ -1965,6 +1973,11 @@ export const handoffActions = ({
         throw new Error(await response.text());
       }
       const started = (await response.json()) as DelegateResult;
+      startedBy?.(
+        started.state === "started"
+          ? { kind: "session", instanceId: started.instanceId }
+          : { kind: "queued-delegate", queued: started.queued }
+      );
       return target
         ? {
             ...started,

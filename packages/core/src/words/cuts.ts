@@ -8,6 +8,9 @@ export const turnCutWords = {
   /** A tool call the cut ended mid-run: what it read in its harness's words was no refusal. */
   call: (cause: string) =>
     `Cut by ${cause} while it ran. Nobody refused it: whatever it did before the cut stands.`,
+  /** Why the hub stopped what a cut call had started (hub call-cuts.ts), as "Stopped by the hub (…)" reads it. */
+  startedStopped: (tool: string) =>
+    `the ${tool} call that started it was cut before it answered`,
   /** The line the turn's cut leaves. */
   line: (cause: string) => `Interrupted by ${cause}`,
   /** The owner's own Stop, from a dashboard or the app. */

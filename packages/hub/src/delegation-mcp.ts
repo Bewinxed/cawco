@@ -18,12 +18,14 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import {
   CallToolRequestSchema,
   type CallToolResult,
+  CancelledNotificationSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
 import { ASK_TOOLS, type Asks } from "./asks";
 import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
+import { createCallCuts, type Started, whenCut } from "./call-cuts";
 import { type CallKeys, CLAUDE_CALL_META, mcpCallKey } from "./call-keys";
 import type { Caw } from "./caw";
 import { CONNECT_TOOLS, type ConnectAsks } from "./connect-asks";
@@ -274,6 +276,11 @@ export function createDelegationMcp(options: {
   duplicates?: TaskToolContext["duplicates"];
   /** A project's own `runs_on`, for `task_create`'s suggestion (runs-on.ts). */
   projectRunsOn?: TaskToolContext["projectRunsOn"];
+  /**
+   * Stops what a call started once its harness cut it (call-cuts.ts): the
+   * session, a queued delegate or a queued task start. `tool` names the call.
+   */
+  stopStarted?: (actor: InstanceRow, started: Started, tool: string) => void;
   /** Starts an attempt at a task for `task_start` (dispatch.ts). */
   startAttempt?: (
     projectId: string,
@@ -662,12 +669,44 @@ export function createDelegationMcp(options: {
     return await entry.call(bound);
   };
 
+  /**
+   * What the call `name` of `actor` started, stopped if its harness cuts the
+   * call (call-cuts.ts): at once when it was cut already, else when it is.
+   */
+  const startedBy =
+    (actor: InstanceRow, name: string, cut: AbortSignal | undefined) =>
+    (started: Started): void =>
+      whenCut(cut, () => {
+        console.log(
+          `[delegation-mcp] ${actor.id}'s ${name} was cut before it answered: stopping the ${started.kind} it started`
+        );
+        options.stopStarted?.(actor, started, name);
+      });
+
+  /** An attempt's start, its session or its queued start stopped if the call is cut ({@link startedBy}). */
+  const attemptCut = (
+    start: TaskToolContext["startAttempt"],
+    started: (thing: Started) => void
+  ): TaskToolContext["startAttempt"] =>
+    start &&
+    (async (projectId, ref, parent) => {
+      const attempt = await start(projectId, ref, parent);
+      if (attempt.instanceId) {
+        started({ kind: "session", instanceId: attempt.instanceId });
+      } else if (attempt.queued) {
+        started({ kind: "queued-task", projectId, taskId: attempt.task });
+      }
+      return attempt;
+    });
+
   /** A task tool, for its caller's project, its role already checked. */
   const taskCall = async (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    cut?: AbortSignal
   ): Promise<CallToolResult> => {
+    const started = startedBy(actor, name, cut);
     // A session whose role files tasks names any task's to-dos; one that
     // does not writes only its own work item's.
     const mainline = allows(actor, "task_create");
@@ -679,11 +718,11 @@ export function createDelegationMcp(options: {
         designBuild: options.designBuild,
         duplicates: options.duplicates,
         projectRunsOn: options.projectRunsOn,
-        startAttempt: options.startAttempt,
+        startAttempt: attemptCut(options.startAttempt, started),
         artifactNamed: options.artifactNamed
           ? (asked) => options.artifactNamed?.(actor.id, asked) ?? asked
           : undefined,
-        retryAttempt: options.retryAttempt,
+        retryAttempt: attemptCut(options.retryAttempt, started),
         tasks: options.tasks,
         writePlan: options.writePlan,
         workItemTask: actor.workItemId
@@ -793,7 +832,9 @@ export function createDelegationMcp(options: {
     authorization?: string,
     toolUseId?: string,
     /** The harness's key for the call (call-keys.ts): a delegate, handoff or page call runs once per key. */
-    callKey?: string
+    callKey?: string,
+    /** Aborts when the harness cuts the call (call-cuts.ts): what it started is stopped. */
+    cut?: AbortSignal
   ): Promise<CallToolResult> => {
     const admitted = admitToolCall(name, binding ?? "unbound");
     if ("refused" in admitted) {
@@ -810,7 +851,8 @@ export function createDelegationMcp(options: {
           args,
           authorization,
           toolUseId,
-          callIdOf(args, toolUseId, callKey)
+          callIdOf(args, toolUseId, callKey),
+          cut
         )
       );
     } finally {
@@ -823,7 +865,8 @@ export function createDelegationMcp(options: {
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
-    toolUseId: string | undefined
+    toolUseId: string | undefined,
+    cut: AbortSignal | undefined
   ): Promise<CallToolResult | undefined> => {
     if (adminNames.has(name)) {
       return await administer(actor, name, input, toolUseId);
@@ -835,7 +878,7 @@ export function createDelegationMcp(options: {
       return await projectCall(actor, name, input);
     }
     if (options.tasks && TASK_TOOLS.has(name)) {
-      return await taskCall(actor, name, input);
+      return await taskCall(actor, name, input, cut);
     }
     if (CAWS.has(name) && options.cawTools) {
       return await cawCall(actor, name, input, toolUseId);
@@ -902,7 +945,8 @@ export function createDelegationMcp(options: {
     args: Record<string, unknown>,
     authorization?: string,
     toolUseId?: string,
-    callId?: string
+    callId?: string,
+    cut?: AbortSignal
   ): Promise<CallToolResult> => {
     try {
       // Routing context belongs to the bridge, not to a tool's input schema.
@@ -941,8 +985,8 @@ export function createDelegationMcp(options: {
         throw new Error(refusal(actor, name));
       }
       return (
-        (await route(actor, name, input, toolUseId)) ??
-        (await sessionCall(actor, name, input, authorization, callId))
+        (await route(actor, name, input, toolUseId, cut)) ??
+        (await sessionCall(actor, name, input, authorization, callId, cut))
       );
     } catch (error) {
       return {
@@ -963,7 +1007,8 @@ export function createDelegationMcp(options: {
     name: string,
     input: Record<string, unknown>,
     authorization?: string,
-    callId?: string
+    callId?: string,
+    cut?: AbortSignal
   ): Promise<CallToolResult> => {
     const emitted: Envelope[] = [];
     const tree = options.delegationTree;
@@ -991,11 +1036,16 @@ export function createDelegationMcp(options: {
       deliver: (envelope) => options.deliver(envelope, actor),
       emit: (envelope) => emitted.push(envelope),
       spawn: (envelope) => options.spawn(envelope, actor),
+      started: startedBy(actor, name, cut),
     }).find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Tool ${name} is unavailable to this session`);
     }
     const result = await entry.call(input);
+    // A cut call's session is being stopped: its opening words would start it again.
+    if (cut?.aborted) {
+      return result;
+    }
     for (const envelope of emitted) {
       await options.forward(envelope, actor);
     }
@@ -1153,6 +1203,9 @@ export function createDelegationMcp(options: {
       listableOf(bound)
     );
 
+  /** Every MCP call running now, or answered a moment ago, that its harness can still cut (call-cuts.ts). */
+  const cuts = createCallCuts();
+
   /** Whether a POST's body is (or, batched, holds) an `initialize`. */
   const initializes = (body: unknown): boolean =>
     (Array.isArray(body) ? body : [body]).some(
@@ -1183,6 +1236,21 @@ export function createDelegationMcp(options: {
       sessionIdGenerator: undefined,
       // Send headers immediately; image generation must not sit behind HTTP first-byte deadlines.
       enableJsonResponse: false,
+    });
+    // A cancel names a call another POST's server runs: the hub-wide
+    // registry finds it by caller and id (call-cuts.ts). This replaces the
+    // SDK's own handler, which looks only in this server's requests.
+    server.setNotificationHandler(CancelledNotificationSchema, (message) => {
+      const { requestId, reason } = message.params;
+      if (
+        requestId !== undefined &&
+        cuts.cancel(listingOf(binding), requestId, reason)
+      ) {
+        console.log(
+          `[delegation-mcp] ${listingOf(binding)} cut its call ${requestId}${reason ? `: ${reason}` : ""}`
+        );
+      }
+      return Promise.resolve();
     });
     // A session's role is fixed across items/checks. Shared OpenCode discovery
     // lists the superset; each invocation resolves its actor and enforces role.
@@ -1221,6 +1289,7 @@ export function createDelegationMcp(options: {
       // (`claudecode/toolUseId`): an ask it parks is drawn at that call.
       const toolUseId = message.params._meta?.[TOOL_USE_META];
       const args = message.params.arguments ?? {};
+      const cut = cuts.begin(listingOf(binding), extra.requestId);
       try {
         return await call(
           binding,
@@ -1230,9 +1299,11 @@ export function createDelegationMcp(options: {
             ? extra.requestInfo.headers.authorization
             : undefined,
           typeof toolUseId === "string" ? toolUseId : undefined,
-          mcpCallKey(message.params._meta, message.params.name, args)
+          mcpCallKey(message.params._meta, message.params.name, args),
+          cut.signal
         );
       } finally {
+        cut.answered();
         options.lifetime.cancel(heartbeat);
       }
     });
