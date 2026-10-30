@@ -561,6 +561,8 @@ public enum Size {
     public static let cPinPad: Double = 6
     /// A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (DESIGN.md, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form).
     public static let cPinGoneRing: Double = 1
+    /// The tallest a fault's Show details stands before it scrolls inside, so a long stack never pushes the fault's own action out of reach; a dozen lines of code type, as Peek's plan is capped.
+    public static let cFaultDetailsH: Double = 192
     /// The Comments rail beside the page (DESIGN.md, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot.
     public static let cCommentsW: Double = 320
     /// A pin's peek and a chip's peek at most (DESIGN.md, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph.

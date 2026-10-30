@@ -1,8 +1,7 @@
 /**
  * Preview sheet stopped on a render error (Component Story Format 3, live
- * components): the failure-state proposal (fault/RegionFault) inside the
- * shell that outlives it, at every width. The face, Stopped again and Ask
- * Caw are the canvas's switches; Try again on any frame throws again on the
+ * components): the failure-state proposal (fault/) inside the
+ * shell that outlives it, at every width. Try again on any frame throws again on the
  * same data, as a duplicate key does.
  */
 import { at } from "./frames";
@@ -11,7 +10,7 @@ import RegionFaultFixture from "./RegionFaultFixture.svelte";
 export default {
   title: "Failure states/Preview sheet",
   component: RegionFaultFixture,
-  args: { region: "sheet", face: "region", again: false, askCaw: false },
+  args: { region: "sheet", again: false },
 };
 
 /** The preview sheet on a phone, 390 wide: its head and its Close outlive the failure (press it). */

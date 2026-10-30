@@ -4205,6 +4205,14 @@
       },
       "$description": "A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (DESIGN.md, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form)."
     },
+    "c-fault-details-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 192,
+        "unit": "px"
+      },
+      "$description": "The tallest a fault's Show details stands before it scrolls inside, so a long stack never pushes the fault's own action out of reach; a dozen lines of code type, as Peek's plan is capped."
+    },
     "c-comments-w": {
       "$type": "dimension",
       "$value": {

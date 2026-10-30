@@ -1832,6 +1832,9 @@ public enum Words {
 
     public enum Decisions {
         // packages/core/src/words/decisions.ts `decisionsWords`
+        /// A decision card that stopped, as a sentence names it (fault/DecisionFault).
+        public static let thisDecision = "this decision"
+
         /// The tab's name in the project's strip, and ‹ back to its list.
         public static let tab = "Decisions"
 
