@@ -57,6 +57,8 @@
     /** A hover or a held press previews a state; null lets it go. */
     onpreview: (point: StagePoint | null) => void;
     peek: StagePoint | null;
+    /** A drawer's pinned slab name (call 9's first side), for the drawer's bar over the well, where it covers no state; null while none is pinned. */
+    pinned?: string | null;
     /** The pins placed on each story's node, by story. */
     pins?: Map<string, NodePin[]>;
     /** The section's name: the slab of its own stories is its tab's, so it is said only to a reader. */
@@ -77,6 +79,7 @@
     onpin,
     onpreview,
     peek,
+    pinned = $bindable(null),
     pins = new Map(),
     sectionName,
     zoom = $bindable(1),
@@ -407,10 +410,18 @@
     );
     return machine ? (machine.name ?? sectionName) : null;
   });
-  /** The section named over a phone's graph (call 9): a slab's name while its top has scrolled out, or a band always naming the one in view. */
+  /** Call 9's first side in a drawer: the pinned slab name stands in the drawer's bar over the well, never over a state. */
+  const inBar = $derived(drawer && graphOptions.sides.phoneBand === "pinned");
+  $effect(() => {
+    pinned = inBar ? pinnedName : null;
+  });
+  /** The section named over the graph: on a desk a slab's name while its top has scrolled out; in a drawer, call 9's other side, a band always naming the one in view. */
   const band = $derived.by(() => {
-    if (!drawer || graphOptions.sides.phoneBand === "pinned") {
+    if (!drawer) {
       return pinnedName;
+    }
+    if (inBar) {
+      return null;
     }
     const [first] = graph.machines;
     return pinnedName ?? (first ? (first.name ?? sectionName) : null);
@@ -481,6 +492,7 @@
       />
       <GraphView
         bind:this={view}
+        clear={!inBar}
         keptNode={keptState === null ? null : stateId(keptState)}
         layout={laidOut ? layoutKey : ""}
         minZoom={ZOOM_FLOOR}

@@ -88,6 +88,8 @@
   let dockBox = $state({ w: 0, h: 0 });
   let headHeight = $state(0);
   let zoom = $state(1);
+  /** A drawer's pinned slab name (call 9's first side): its bar over the well says it, so it covers no state. */
+  let pinnedSection = $state<string | null>(null);
   let stateGraph = $state<ReturnType<typeof StateGraph>>();
   let hide = $state<HTMLButtonElement>();
   let shell = $state<HTMLButtonElement>();
@@ -580,6 +582,7 @@
       {:else if graph.section && graph.graph}
         <StateGraph
           bind:this={stateGraph}
+          bind:pinned={pinnedSection}
           bind:zoom
           {commenting}
           drawer={!desk}
@@ -1014,6 +1017,16 @@
           {:else if !onSteps}
             <div class="flex min-w-0 items-center gap-space-2">
               {@render tabs()}
+              {#if pinnedSection}
+                <!-- The section the well's top stands in, while its slab's own name has scrolled out: in the bar, over no state. -->
+                <p
+                  class="m-0 min-w-0 truncate ps-space-1 type-label text-ink-row"
+                  data-pinned="pinned"
+                  title={pinnedSection}
+                >
+                  {pinnedSection}
+                </p>
+              {/if}
               <div class="ms-auto flex-none">{@render zoomGroup()}</div>
             </div>
             <div class="flex min-h-0 flex-1 flex-col">
