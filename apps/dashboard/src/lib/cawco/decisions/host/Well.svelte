@@ -18,7 +18,9 @@
   action's refusal stands under them in the error formula's ink. Standing
   alone in its card on a phone a pictured well reaches the screen's edges as
   far as its piece does, with no side, edge or corner of its own, its words
-  kept on the page's text edge.
+  kept on the page's text edge. A picture (Image.svelte) says no width: it
+  fits its well, and says its shape instead (`ratio`), by which a Row grows
+  its well beside the others so they stand at one height (`picture-row`).
 -->
 <script lang="ts">
   import { getContext, type Snippet } from "svelte";
@@ -31,6 +33,7 @@
     children,
     fills = false,
     picture,
+    ratio,
     said = "",
     shown,
     stage = $bindable(),
@@ -42,6 +45,8 @@
     fills?: boolean;
     /** Its piece's own width, px, at 1 CSS px per px: the well hugs it, scrolls it sideways where it is narrower, and under the phone's line, alone in its card (`data-bleeds`), reaches the screen's edges as far as it does. */
     picture?: number;
+    /** Its picture's width over its height, once known: in a Row its well grows by it, so the Row's pictures stand at one height. */
+    ratio?: number;
     /** The width its piece stands at in the stage, px, where it is scaled to fit (a page-sized Preview); its `picture` where it is not. It scrolls sideways only where this is wider than the stage. */
     shown?: number;
     /** A refusal of the action, in the hub's words. */
@@ -89,11 +94,13 @@
   class={[
     "m-0 flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well p-space-3",
     picture !== undefined && "well-hug max-phone:in-data-bleeds:well-bleed",
+    ratio !== undefined && "picture-row",
   ]}
   data-fills={fills || undefined}
   data-picture={picture}
   data-slot="media"
   style:--picture-w={picture === undefined ? undefined : `${picture}px`}
+  style:--ratio={ratio}
 >
   <div
     bind:this={stage}

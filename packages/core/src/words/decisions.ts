@@ -71,6 +71,10 @@ export const decisionsWords = {
   current: "Current",
   /** A Preview of a page-sized design: it at the front of the session's panel, at the panel's whole size. */
   openFull: "Open full size",
+  /** A picture's press, fitting its slot: it stands at its full size in its card, `alt` its writer's words for what it shows, its closing stop dropped. */
+  pictureFull: (alt: string) => `Show ${alt} at full size`,
+  /** A picture's press at its full size: it fits its slot again. */
+  pictureFit: "Show smaller",
   /**
    * A Preview that can't show its design, said where it would stand
    * (dashboard Preview.svelte): what happened, then why and the way back.

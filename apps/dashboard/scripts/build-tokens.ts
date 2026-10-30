@@ -346,6 +346,10 @@ const CONTAINERS = {
   // A decision card's media side by side once its body holds two at a
   // readable width each (decisions/host Decision.svelte).
   "media-split": "640px",
+  // A decision card's options, every one carrying pictures, in one equal
+  // column each once its body holds them at a judgeable width; one under
+  // another below (decisions/host Decision.svelte).
+  "pictures-split": "680px",
   "decisions-900px": "900px",
   // The project page holds Caw's docked panel beside the page: the panel
   // (c-panel-w and its space-6 end margin), the pane's inline padding

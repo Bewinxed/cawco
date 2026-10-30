@@ -85,6 +85,18 @@
     };
   } | null;
 
+  /** Whether `value` holds an Image, in a Row or Column too. */
+  const holdsImage = (value: unknown): boolean => {
+    if (Array.isArray(value)) {
+      return value.some(holdsImage);
+    }
+    const node = value as {
+      typeName?: unknown;
+      props?: { children?: unknown };
+    } | null;
+    return node?.typeName === "Image" || holdsImage(node?.props?.children);
+  };
+
   const id = $derived(String(props.id ?? ""));
   const question = $derived(String(props.question ?? ""));
   const multiple = $derived(props.multiple === true);
@@ -100,6 +112,7 @@
         builds: !!held?.builds,
         recommended: held?.recommended === true,
         media: Array.isArray(held?.media) && held.media.length > 0,
+        picture: holdsImage(held?.media),
       };
     })
   );
@@ -152,6 +165,16 @@
   setContext(MEDIA_WIDTHS, cardMedia.hear);
   setContext("decision-option-widths", optionMedia.hear);
   const storyWidth = $derived(optionMedia.widest());
+  /**
+   * Every option carries pictures and none a piece of a real width: the
+   * options stand side by side in one equal column each, their pictures at
+   * one scale, one under another under `@pictures-split`.
+   */
+  const comparing = $derived(
+    storyWidth === 0 &&
+      options.length > 1 &&
+      options.every((option) => option.picture)
+  );
   /** The card's own media's widest real width: two pictures stand side by side only where both fit at it. */
   const mediaWidth = $derived(cardMedia.widest());
   /** The card's own media's columns: two pictures on their widest's pitch, or, saying no width, two equal columns once the body holds them; else one. */
@@ -162,6 +185,15 @@
     return mediaWidth > 0
       ? "grid-cols-fit-story max-phone:grid-cols-1"
       : "grid-cols-1 @media-split:grid-cols-2";
+  });
+  /** The options' columns: on their widest piece's pitch, one equal column each when comparing pictures, else as many words as fit. */
+  const optionColumns = $derived.by(() => {
+    if (storyWidth > 0) {
+      return "grid-cols-fit-story max-phone:grid-cols-1";
+    }
+    return comparing
+      ? "grid-cols-1 @pictures-split:grid-cols-options"
+      : "grid-cols-fit-c-decision-option-min";
   });
   let optionsGrid = $state<HTMLDivElement>();
   /**
@@ -423,10 +455,10 @@
       </p>
     {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}
-      <!-- Two pictures side by side where the card's body holds both at their real width (each well its pictures' pitch, `grid-cols-fit-story`), or, where neither says its width (a page that takes the room it is given), in equal columns once the body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
+      <!-- A picture pressed to its full size spans the media's columns (`has-data-full`, Image.svelte). Two pictures side by side where the card's body holds both at their real width (each well its pictures' pitch, `grid-cols-fit-story`), or, where neither says its width (a page that takes the room it is given), in equal columns once the body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
       <div
         class={[
-          "grid min-w-0 gap-space-3 has-data-fills:grid-cols-1",
+          "grid min-w-0 gap-space-3 has-data-fills:grid-cols-1 *:has-data-full:col-span-full",
           mediaColumns,
         ]}
         data-bleeds={pictures ? undefined : ""}
@@ -445,18 +477,17 @@
       disabled={!bridge()}
       {multiple}
     >
-      <!-- Options with pictures stand on their widest picture's pitch, each at its real size in a well that hugs it, as many abreast as the card holds, one under another at the card's full width where one is wider than a column (it scrolls sideways in its well), one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its picture does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. An option holding a page-sized Preview that names no width (a whole screen that lays itself out to its frame, `data-fills`) stands its card's options one to a row, so it has the card's whole width. -->
+      <!-- Options whose every one carries pictures (Image, which fits its slot) stand in one equal column each where the body holds them (`@pictures-split`), one under another below; a picture pressed to its full size spans its option across the card (Option.svelte). Options with a piece of a real width (a Preview's, a drawing's, a diagram's) stand on their widest picture's pitch, each at its real size in a well that hugs it, as many abreast as the card holds, one under another at the card's full width where one is wider than a column (it scrolls sideways in its well), one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its picture does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. An option holding a page-sized Preview that names no width (a whole screen that lays itself out to its frame, `data-fills`) stands its card's options one to a row, so it has the card's whole width. -->
       <div
         bind:this={optionsGrid}
         class={[
           "group/options grid w-full min-w-0 gap-space-3 has-data-fills:grid-cols-1",
-          storyWidth > 0
-            ? "grid-cols-fit-story max-phone:grid-cols-1"
-            : "grid-cols-fit-c-decision-option-min",
+          optionColumns,
         ]}
         data-bleeds={storyWidth > 0 ? "" : undefined}
         data-lone={lone ? "" : undefined}
         data-slot="options"
+        style:--options={comparing ? options.length : undefined}
         style:--story-w={storyWidth > 0 ? `${storyWidth}px` : undefined}
       >
         {@render renderNode(props.options)}

@@ -1155,6 +1155,24 @@
     min(100%, calc(var(--story-w) + 2 * var(--well-in)))
   );
 }
+/* A card's options when every one carries pictures: one equal column each
+   (`--options`, decisions/host Decision.svelte), so their pictures stand
+   side by side at one scale. */
+@utility grid-cols-options {
+  grid-template-columns: repeat(var(--options), minmax(0, 1fr));
+}
+/* A picture's well in a Row (decisions/host Image.svelte): it grows by its
+   picture's width over its height (`--ratio`) from its own insets, so the
+   Row's pictures share its width at one height. Pressed to its full size,
+   it takes the Row's whole line. */
+@utility picture-row {
+  [data-axis="row"] > & {
+    flex: var(--ratio) 1 calc(2 * var(--well-in));
+  }
+  [data-axis="row"] > &:has([data-full]) {
+    flex-basis: 100%;
+  }
+}
 /* A picture's well hugging its picture (`--picture-w`, its real width,
    decisions/host Well.svelte): the picture at 1:1 and the well's own
    insets, never wider than what holds it, where a picture too wide for it

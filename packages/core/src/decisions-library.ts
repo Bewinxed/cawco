@@ -100,7 +100,7 @@ export const decisionLibrary = <C>(
   );
   const Image = define(
     "Image",
-    "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result), shown at its own pixel size.",
+    "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result). It fits the width of its slot, never past its own size; pressed, it opens at its full size in its card. When every option carries pictures, the options stand side by side at one scale, and the pictures in a Row stand at one height.",
     z.object({
       file: z.string().describe('Like "shots/hero.png".'),
       alt: z.string().describe("What it shows, in one sentence."),

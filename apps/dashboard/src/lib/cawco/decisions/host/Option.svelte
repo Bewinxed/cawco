@@ -13,8 +13,10 @@
   their words picks too; the pick is named by its label alone, and its line,
   cost, builds and badges are its description. Its media (its design, drawn live)
   stands in its own row, outside the pick, so a click, a hover or a scroll in
-  it is the embed's own and never picks; it stands at its real size, and its
-  well tells the card its width, which lays the options out by it.
+  it is the embed's own and never picks; a Preview, drawing or diagram
+  stands at its real size and its well tells the card its width, which lays
+  the options out by it; a picture fits the option's column, and pressed to
+  its full size it spans the option across the card (`has-data-full`).
 -->
 <script lang="ts">
   import { decisionsWords as words } from "@cawco/core/words/decisions";
@@ -95,7 +97,7 @@
 
 <div
   class={[
-    "grid min-w-0 grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full",
+    "grid min-w-0 grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full has-data-full:col-span-full",
     SPAN[at.span as keyof typeof SPAN],
   ]}
   data-slot="option-cell"

@@ -1935,6 +1935,14 @@ public enum Words {
         /// A Preview of a page-sized design: it at the front of the session's panel, at the panel's whole size.
         public static let openFull = "Open full size"
 
+        /// A picture's press, fitting its slot: it stands at its full size in its card, `alt` its writer's words for what it shows, its closing stop dropped.
+        public static func pictureFull(alt: String) -> String {
+            "Show \(alt) at full size"
+        }
+
+        /// A picture's press at its full size: it fits its slot again.
+        public static let pictureFit = "Show smaller"
+
         /// A Preview that can't show its design, said where it would stand (dashboard Preview.svelte): what happened, then why and the way back.
         public static func previewFailed(why: String) -> String {
             "This preview didn't load: \(why)"
