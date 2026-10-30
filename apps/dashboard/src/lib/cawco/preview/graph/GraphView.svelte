@@ -19,6 +19,7 @@
   import { FIT } from "#lib/components/features/flow/fit.js";
 
   let {
+    clear = true,
     keptNode,
     layout,
     minZoom,
@@ -26,6 +27,8 @@
     onmeasured,
     onroom,
   }: {
+    /** The pinned name stands over the well, so it never stands on a state; false where it stands in a bar of its own, outside it. */
+    clear?: boolean;
     /** The kept state's node id; null when none stands in this graph. */
     keptNode: string | null;
     /** The placement as a key: laid out again, the kept state is brought into view again. */
@@ -139,8 +142,8 @@
         pinned = machine.id;
       }
     }
-    // A pinned name never stands on a state (round 29): where its band would cover one, it scrolls away with its slab.
-    if (pinned) {
+    // A pinned name over the well never stands on a state (round 29): where its band would cover one, it scrolls away with its slab.
+    if (pinned && clear) {
       const band = numberOf("--c-row-h");
       const mid = store.width / 2;
       const reach = numberOf("--c-graph-node-w");
