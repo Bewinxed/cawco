@@ -6093,6 +6093,14 @@
       },
       "$description": "The narrowest a decision card's option column stands before the options stand one under another."
     },
+    "c-picture-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 160,
+        "unit": "px"
+      },
+      "$description": "The narrowest a picture stands beside others in a decision page's Row before the Row's pictures wrap, one to a line. A 390px-wide phone shot at 160px is drawn at 41%: its layout, its headings and its controls still read, where at the 70px it fell to (18%) nothing on it could be judged."
+    },
     "c-decision-meter-h": {
       "$type": "dimension",
       "$value": {

@@ -1161,13 +1161,20 @@
 @utility grid-cols-options {
   grid-template-columns: repeat(var(--options), minmax(0, 1fr));
 }
-/* A picture's well in a Row (decisions/host Image.svelte): it grows by its
-   picture's width over its height (`--ratio`) from its own insets, so the
-   Row's pictures share its width at one height. Pressed to its full size,
-   it takes the Row's whole line. */
+/* A picture's well in a Row (decisions/host Image.svelte): it asks the
+   width that stands the Row's narrowest picture (`--ratio-min`, Row.svelte)
+   at `--c-picture-min` with every picture at one height, and grows by its
+   own width over its height (`--ratio`), so the Row's pictures share a line
+   at one height. A line that can't give them that wraps them, one to a
+   line, each shrunk to fit it. Pressed to its full size, it takes the Row's
+   whole line. */
 @utility picture-row {
   [data-axis="row"] > & {
-    flex: var(--ratio) 1 calc(2 * var(--well-in));
+    flex: var(--ratio) 1
+      calc(
+        var(--ratio) / var(--ratio-min, var(--ratio)) * var(--c-picture-min) +
+          2 * var(--well-in)
+      );
   }
   [data-axis="row"] > &:has([data-full]) {
     flex-basis: 100%;

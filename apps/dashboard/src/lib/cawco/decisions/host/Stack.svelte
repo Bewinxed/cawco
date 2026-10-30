@@ -11,11 +11,14 @@
     children,
     justify,
     align,
+    ratioMin,
   }: {
     axis: "row" | "column";
     children: Snippet;
     justify?: unknown;
     align?: unknown;
+    /** A Row's narrowest picture's width over its height (Row.svelte): its pictures' widths start from it. */
+    ratioMin?: number;
   } = $props();
 
   const JUSTIFY = {
@@ -47,6 +50,7 @@
   ]}
   data-axis={axis}
   data-slot="stack"
+  style:--ratio-min={ratioMin}
 >
   {@render children()}
 </div>

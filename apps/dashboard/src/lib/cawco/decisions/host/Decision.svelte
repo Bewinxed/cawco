@@ -481,7 +481,7 @@
       <div
         bind:this={optionsGrid}
         class={[
-          "group/options grid w-full min-w-0 gap-space-3 has-data-fills:grid-cols-1",
+          "group/options grid w-full min-w-0 grid-flow-row-dense gap-space-3 has-data-fills:grid-cols-1",
           optionColumns,
         ]}
         data-bleeds={storyWidth > 0 ? "" : undefined}

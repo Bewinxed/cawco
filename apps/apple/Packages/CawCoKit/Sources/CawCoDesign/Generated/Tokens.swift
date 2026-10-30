@@ -975,6 +975,8 @@ public enum Size {
     public static let cDecisionMeterW: Double = 120
     /// The narrowest a decision card's option column stands before the options stand one under another.
     public static let cDecisionOptionMin: Double = 190
+    /// The narrowest a picture stands beside others in a decision page's Row before the Row's pictures wrap, one to a line. A 390px-wide phone shot at 160px is drawn at 41%: its layout, its headings and its controls still read, where at the 70px it fell to (18%) nothing on it could be judged.
+    public static let cPictureMin: Double = 160
     /// The thickness of a decision page's count bar (c-decision-meter-w).
     public static let cDecisionMeterH: Double = 4
     /// The narrowest a decision card's title stands before its state chip wraps under it.

@@ -484,6 +484,7 @@
   --spacing-c-decision-page-max: var(--c-decision-page-max);
   --spacing-c-decision-meter-w: var(--c-decision-meter-w);
   --spacing-c-decision-option-min: var(--c-decision-option-min);
+  --spacing-c-picture-min: var(--c-picture-min);
   --spacing-c-decision-meter-h: var(--c-decision-meter-h);
   --spacing-c-decision-title-min: var(--c-decision-title-min);
   --spacing-c-decision-keycap: var(--c-decision-keycap);

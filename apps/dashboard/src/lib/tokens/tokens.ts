@@ -521,6 +521,7 @@ export type TokenSize =
   | "size.c-decision-page-max"
   | "size.c-decision-meter-w"
   | "size.c-decision-option-min"
+  | "size.c-picture-min"
   | "size.c-decision-meter-h"
   | "size.c-decision-title-min"
   | "size.c-decision-keycap"

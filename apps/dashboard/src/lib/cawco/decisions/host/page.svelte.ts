@@ -19,6 +19,11 @@ export type MediaWidths = (key: object, width: number | null) => void;
 /** The context a well finds its hearer under (Decisions, Decision and Option set it). */
 export const MEDIA_WIDTHS = "decision-media-widths";
 
+/** Who hears a picture's width over its height (Image.svelte), by the picture's own key, null once it is gone: the Row it stands in. */
+export type PictureRatios = (key: object, ratio: number | null) => void;
+/** The context a picture finds its Row's ear under (Row sets it; Column clears it). */
+export const PICTURE_RATIOS = "decision-picture-ratios";
+
 /** Wells' real widths heard, each passed on to `on` (the page, from a card); the widest of them, 0 with none. */
 export function hearWidths(on?: MediaWidths): {
   hear: MediaWidths;

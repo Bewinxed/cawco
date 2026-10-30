@@ -15,13 +15,15 @@
   hears (motion/morph), so the card grows and settles on the kit's clock.
 
   In a Row its well grows by its picture's aspect ratio (`picture-row`,
-  design.css), so pictures side by side stand at one height. One the page
+  design.css), so pictures side by side stand at one height, the narrowest
+  never under `--c-picture-min`: it tells the Row its shape (Row.svelte). One the page
   does not hold says so in words where it would stand.
 -->
 <script lang="ts">
   import { decisionsWords as words } from "@cawco/core/words/decisions";
+  import { getContext } from "svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { served } from "./page.svelte.js";
+  import { PICTURE_RATIOS, type PictureRatios, served } from "./page.svelte.js";
   import Well from "./Well.svelte";
 
   let {
@@ -44,6 +46,13 @@
       ratio = picture.naturalWidth / picture.naturalHeight;
     }
   };
+  /** The Row it stands in, which stands its pictures by the narrowest's shape. */
+  const row = getContext<PictureRatios | undefined>(PICTURE_RATIOS);
+  const key = {};
+  $effect(() => {
+    row?.(key, ratio ?? null);
+    return () => row?.(key, null);
+  });
   $effect(() => {
     // A picture the browser had already loaded fires no load of its own.
     if (picture?.complete) {
