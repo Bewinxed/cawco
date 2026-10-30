@@ -2,10 +2,13 @@ import { Elysia, ElysiaStatus, ParseError, status, t } from "elysia";
 
 const BODY_LIMIT = 64 * 1024;
 
+/** Where the dashboard sends its errors, on its own origin (dashboard lib/cawco/error-report.ts). */
+const DASHBOARD_ERRORS_PATH = "/api/dashboard-errors";
+
 /** Bounded telemetry ingestion; the journal is the only record. */
 export const dashboardErrorsRoutes = () =>
   new Elysia().post(
-    "/api/dashboard-errors",
+    DASHBOARD_ERRORS_PATH,
     {
       error: ({ error }) => {
         // Elysia wraps custom-parser exceptions; retain our explicit refusal statuses.
@@ -73,4 +76,16 @@ export const dashboardErrorsRoutes = () =>
       console.warn(`dashboard error: ${JSON.stringify(body)}`);
       return status(204);
     }
+  );
+
+const errorLog = dashboardErrorsRoutes();
+
+/**
+ * A page's error report on a preview origin (core `PREVIEW_ERRORS_PATH`, a
+ * decision page's host): taken exactly as the dashboard's is, by the same
+ * route, so both land in the journal alike.
+ */
+export const takeErrorReport = (request: Request): Promise<Response> =>
+  errorLog.handle(
+    new Request(new URL(DASHBOARD_ERRORS_PATH, request.url), request)
   );

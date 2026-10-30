@@ -192,6 +192,14 @@ export const previewRoute = (
 export const PREVIEW_PING_PATH = "/__cawco/ping";
 
 /**
+ * Where a page on a preview origin sends its errors (a decision page's host,
+ * dashboard lib/cawco/error-report.ts): the hub's own path there, answered as
+ * its `/api/dashboard-errors` is (hub dashboard-errors.ts), since every path
+ * outside `/__cawco/` on a preview origin is the previewed page's.
+ */
+export const PREVIEW_ERRORS_PATH = "/__cawco/errors";
+
+/**
  * The way into a preview (hub preview-access.ts). Every request to a
  * preview origin, a host-mode name or an origin's own port, needs the
  * browser's pass ({@link PREVIEW_PASS_COOKIE}, {@link PREVIEW_PORT_PASS_COOKIE}),

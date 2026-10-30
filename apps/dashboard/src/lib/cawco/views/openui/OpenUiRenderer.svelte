@@ -80,6 +80,7 @@
     ToolNotFoundError,
   } from "@openuidev/lang-core";
   import { untrack } from "svelte";
+  import { reportError } from "../../error-report.js";
   import { afterSkeleton, revealOut } from "../../motion/curves.svelte";
   import RegionHeld from "../../RegionHeld.svelte";
 
@@ -155,10 +156,11 @@
   const loggedThrows = new Set<string>();
   /**
    * A throw at `where` ("Decision bar", "the parser"), logged with its own
-   * stack, the throw site, and the program's name. Under SvelteKit a
-   * boundary is handed the error its `handleError` made of the throw
-   * (hooks.client.ts), which has logged the throw whole just before: that
-   * line is pointed to instead of logging the stand-in.
+   * stack, the throw site, and the program's name, and sent to the hub's
+   * error log (error-report.ts). Under SvelteKit a boundary is handed the
+   * error its `handleError` made of the throw (hooks.client.ts), which has
+   * logged and sent the throw whole just before: that line is pointed to
+   * instead of logging the stand-in.
    */
   function logThrown(where: string, error: unknown) {
     const key = `${where}\n${said(error)}`;
@@ -168,6 +170,7 @@
     loggedThrows.add(key);
     if (error instanceof Error) {
       console.error(`[openui] ${where} in ${label} threw:`, error);
+      reportError(error, { about: `${where} in ${label}` });
     } else {
       console.error(`[openui] ${where} in ${label} threw the error above`);
     }
@@ -351,6 +354,44 @@
   });
 
   // ─── A component that throws: reported, and tried again with the next props ───
+  /**
+   * Each element's nearest named statement, itself where it has one
+   * ("Decision bad"): an inline element that throws (a Badge in a card's
+   * media) is named by the card it stands in.
+   */
+  const owners = $derived.by(() => {
+    const named = new WeakMap<ElementNode, string>();
+    const walk = (value: unknown, owner: string) => {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          walk(item, owner);
+        }
+        return;
+      }
+      if (!isElement(value)) {
+        return;
+      }
+      const own = value.statementId
+        ? `${value.typeName} ${value.statementId}`
+        : owner;
+      named.set(value, own);
+      for (const prop of Object.values(value.props)) {
+        walk(prop, own);
+      }
+    };
+    walk(evaluated, "");
+    return named;
+  });
+  /** Where an element stands, as its throw is logged: its own statement, else the inline piece in its nearest named one. */
+  const placeOf = (node: ElementNode): string => {
+    if (node.statementId) {
+      return `${node.typeName} ${node.statementId}`;
+    }
+    const owner = owners.get(node);
+    return owner
+      ? `an inline ${node.typeName} in ${owner}`
+      : `an inline ${node.typeName}`;
+  };
   let renderErrors: OpenUIError[] = [];
   let renderFailures = $state(0);
   let retries: (() => void)[] = [];
@@ -361,19 +402,13 @@
     }
     const component = node.typeName;
     renderErrors.push(
-      fromThrow(
-        node.statementId
-          ? `${component} ${node.statementId}`
-          : `an inline ${component}`,
-        error,
-        {
-          source: "runtime",
-          code: "render-error",
-          component,
-          statementId: node.statementId,
-          message: `Component ${component} render failed: ${said(error)}`,
-        }
-      )
+      fromThrow(placeOf(node), error, {
+        source: "runtime",
+        code: "render-error",
+        component,
+        statementId: node.statementId,
+        message: `Component ${component} render failed: ${said(error)}`,
+      })
     );
     renderFailures += 1;
   }

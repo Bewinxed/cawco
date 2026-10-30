@@ -28,6 +28,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
 import { agentReact } from "./agent-react";
+import { readBuildInfo } from "./build-info";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
@@ -259,6 +260,9 @@ async function tailwindHostSheet(): Promise<string> {
  */
 export async function buildDecisionHost(): Promise<Map<string, Blob>> {
   const vendor: string[] = [];
+  // The commit the host is built from, which its error reports name
+  // (host.ts `CAWCO_HOST_BUILD`), as the dashboard's name its own.
+  const { commit } = await readBuildInfo(async () => "");
   const result = await bundled("The decision host", {
     entrypoints: [join(HOST_DIR, "host.ts")],
     target: "browser",
@@ -272,7 +276,10 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
       svelteStylesApart(vendor),
       agentReact,
     ],
-    define: { "process.env.NODE_ENV": '"production"' },
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      CAWCO_HOST_BUILD: JSON.stringify(commit ?? "unknown"),
+    },
     publicPath: PUBLIC_PATH,
     // Stills as files of their own, kept for good at their hashed names.
     loader: { ".webp": "file" },

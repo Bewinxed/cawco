@@ -6,6 +6,7 @@ import {
   CAWCO_ENV,
   DASHBOARD_COOKIE,
   PREVIEW_ENTER_PATH,
+  PREVIEW_ERRORS_PATH,
   PREVIEW_PING_PATH,
   type PreviewAddress,
   type PreviewDown,
@@ -69,6 +70,7 @@ import {
   PREVIEW_PORTS,
   PREVIEW_PORTS_TEXT,
 } from "./config";
+import { takeErrorReport } from "./dashboard-errors";
 import type { ArtifactRow } from "./db/artifacts";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import {
@@ -896,6 +898,9 @@ async function serveSession(
       request.headers.get("accept-encoding"),
       url.searchParams.get(OVERLAY_KEY)
     );
+  }
+  if (pathname === PREVIEW_ERRORS_PATH) {
+    return takeErrorReport(request);
   }
   const told = artifactAsked(request, server, pathname, instanceId, deps);
   if (told !== null) {
