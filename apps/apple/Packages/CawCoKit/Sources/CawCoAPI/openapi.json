@@ -45296,13 +45296,13 @@
           "pages": {
             "type": "object",
             "properties": {
-              "board": {
+              "routines": {
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/BlockPlace"
                 }
               },
-              "routines": {
+              "board": {
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/BlockPlace"

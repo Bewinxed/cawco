@@ -70,6 +70,7 @@ import {
   type DesignCard,
   type DesignMap,
   type DesignQuery,
+  FIXTURE_FILE,
   HEALTH_PATH,
   REPORT_PATH,
   type ReportAnswer,
@@ -528,6 +529,17 @@ const storyPath = (tree: Tree, file: string): string => {
   if (!STORY_FILE.test(abs)) {
     throw new StageRefusal(
       `${file} is no story file: a sheet is a CSF 3 file named like Card.stories.ts beside its component.`
+    );
+  }
+  return abs;
+};
+
+/** A fixture module's path in the tree: a `.fixtures.ts` file (core `FIXTURE_FILE`), else refused with the shape. */
+const fixturePath = (tree: Tree, file: string): string => {
+  const abs = inTree(tree, file, "a fixture module is a file in it.");
+  if (!FIXTURE_FILE.test(abs)) {
+    throw new StageRefusal(
+      `${file} is no fixture module: records_fixture writes a file named like tasks.fixtures.ts beside the component whose story imports it.`
     );
   }
   return abs;
@@ -1454,7 +1466,11 @@ export async function writeSheet(
   write: SheetWrite
 ): Promise<SheetWritten> {
   const tree = await treeOf(workspace);
-  const story = storyPath(tree, write.file);
+  // A fixture module (records_fixture) is written by the stage its folder runs on, as a story file is.
+  const story =
+    "text" in write
+      ? fixturePath(tree, write.file)
+      : storyPath(tree, write.file);
   const stage = await storyStage(tree, story, "a write");
   const rel = relative(stage.root, story);
   const written = () =>
