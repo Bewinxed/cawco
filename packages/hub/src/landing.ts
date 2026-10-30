@@ -50,8 +50,8 @@
  * (work-items.ts `pullRequestFor`, agent forges/).
  *
  * Every commit either landing puts on origin carries one `Agent-Logs-Url`
- * trailer, the link to the session that made it ({@link LandingDeps.logsUrl},
- * {@link stampCommand}): the key GitHub's Copilot coding agent writes ("the
+ * trailer, the link to the session that made it at the moment it was made
+ * ({@link LandingDeps.logsUrl}, {@link stampCommand}): the key GitHub's Copilot coding agent writes ("the
  * agent's commits link back to the agent session logs by including an
  * `Agent-Logs-Url` trailer in the commit message",
  * github.blog/changelog/2026-03-20-trace-any-copilot-coding-agent-commit-to-its-session-logs).
@@ -339,15 +339,21 @@ export const LOGS_TRAILER = "Agent-Logs-Url";
 /**
  * The shell `git rebase --exec` runs after each commit it makes: HEAD's
  * message through `git interpret-trailers --if-exists replace` with
- * `Agent-Logs-Url: <url>`, and HEAD amended only when that changed it. So a
+ * `Agent-Logs-Url: <url>?at=<HEAD's author date>`, its session's link at the
+ * moment the commit was made, and HEAD amended only when that changed it.
+ * The date is git's strict ISO 8601 (`%aI`) with its `+` written `%2B`, as
+ * a query string reads `+` as a space; the dashboard opens the session at
+ * the first record stored at or after it (open-at.svelte.ts `rowAt`). So a
  * commit without the trailer gains one; one carrying another link has it
- * replaced; one already carrying `url` as its last is left as it is, the
- * same commit, so stamping again (a later gate's rebase, a second landing)
- * adds nothing and moves nothing. Every other trailer stays where it was.
- * The amend is the commit's message alone: author, tree and parents kept.
+ * replaced; one already carrying this link as its last is left as it is,
+ * the same commit, since neither a rebase nor an amend changes the author
+ * date (`git help rebase`: only `--ignore-date` does), so stamping again (a
+ * later gate's rebase, a second landing) adds nothing and moves nothing.
+ * Every other trailer stays where it was. The amend is the commit's message
+ * alone: author, tree and parents kept.
  */
 const stampCommand = (url: string): string =>
-  `m=$(git log -1 --format=%B) && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${quote(`${LOGS_TRAILER}: ${url}`)}) && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
+  `m=$(git log -1 --format=%B) && t=$(git log -1 --format=%aI | sed 's/+/%2B/') && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${quote(`${LOGS_TRAILER}: ${url}?at=`)}"$t") && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
 
 /**
  * HEAD's own commits rebased onto `upstream`, each stamped with `url`

@@ -100,7 +100,7 @@
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
   import NoticeRun from "./NoticeRun.svelte";
-  import { blockOf, openAt, rowHolding } from "./open-at.svelte";
+  import { blockOf, openAt, rowAt, rowHolding } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
   import {
@@ -2658,7 +2658,9 @@
     if (!resume || resume.tail) {
       return -1;
     }
-    return rowHolding(renderedRows, "at" in resume ? resume.at : resume.block);
+    return "at" in resume
+      ? rowAt(renderedRows, resume.at, paged()?.cursor === null)
+      : rowHolding(renderedRows, resume.block);
   }
 
   /**
@@ -2883,7 +2885,8 @@
   /**
    * THE RECORD ASKED FOR IS READ BACK TO, CENTRED AND MARKED.
    *
-   * `?at=` names a record of this conversation (open-at.svelte.ts). It is a
+   * `?at=` names a record of this conversation, or a time in it: the first
+   * record stored at or after it (open-at.svelte.ts `rowAt`). It is a
    * landing like a kept place (`resume`), centred rather than at the view's
    * top: before the list is drawn, the reveal reads the pages before the
    * rows held, one at a time, until one holds it, and draws the list there;
@@ -2944,7 +2947,7 @@
     // Said once, here, where the seek ends: a landing is a state change and
     // a record not held is a refusal (PRODUCT.md, screen readers), and
     // nothing after it (a scroll, a live row) says it again.
-    const index = rowHolding(renderedRows, docId);
+    const index = rowAt(renderedRows, docId, paged()?.cursor === null);
     if (index < 0) {
       marked = null;
       unfound = paged()?.olderFault ? "unread" : "gone";

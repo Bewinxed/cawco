@@ -5,19 +5,22 @@
  * same `git` shell function the hub's commands start with (core safe-git.ts
  * `SAFE_GIT_SHELL`).
  *
- * A branch of four commits (one with a `Co-Authored-By` trailer, one with
+ * A branch of four commits, each with its own author date, (one with a `Co-Authored-By` trailer, one with
  * another session's link above one, one whose subject starts with `#`, one
  * with no body) is stamped, stamped again, rebased onto a newer upstream
  * and stamped, and a second branch is stamped where it stands
  * (`keepBase`). After each, the laws:
  *
- * - Law A: each commit carries exactly one `Agent-Logs-Url`, the session's
- *   link.
+ * - Law A: each commit carries exactly one `Agent-Logs-Url`, a link into
+ *   the session.
  * - Law B: every other line of each message is kept, its other trailers
  *   among them, and each commit's tree is the one it had.
  * - Law C: a stamp of stamped commits changes nothing: HEAD stays the same
  *   commit.
  * - Law D: `keepBase` leaves the commits on the commit they started from.
+ * - Law E: that link is exactly the session's, at the commit's own author
+ *   date: `<url>?at=<%aI, its + as %2B>`, the moment it was made, kept
+ *   through every stamp, the rebase onto a newer upstream among them.
  *
  * Run by `bun run check` (scripts/check.ts); it fails on any law broken.
  */
@@ -39,7 +42,13 @@ const env = {
   GIT_AUTHOR_EMAIL: "session@example.com",
   GIT_COMMITTER_NAME: "Hub",
   GIT_COMMITTER_EMAIL: "hub@example.com",
+  // Set by each `commit`.
+  GIT_AUTHOR_DATE: "",
 };
+
+/** Each commit's author date, a minute apart in two zones, so each link names its own moment. */
+let authored = Date.parse("2026-10-30T09:00:00Z");
+const ZONES = ["+03:00", "-05:00"] as const;
 
 /** One shell line in the scratch repository, as the hub runs it; its stdout, or a throw with git's words. */
 const sh = (cmd: string): string => {
@@ -57,12 +66,15 @@ const sh = (cmd: string): string => {
 
 const commit = (file: string, message: string): void => {
   writeFileSync(join(dir, file), `${file} ${message}\n`);
+  authored += 60_000;
+  env.GIT_AUTHOR_DATE = `${new Date(authored).toISOString().slice(0, 19)}${ZONES[(authored / 60_000) % 2]}`;
   sh(
     `git add -A && printf '%s\\n' ${JSON.stringify(message)} | git commit -q --cleanup=verbatim -F -`
   );
 };
 
 interface Shape {
+  date: string;
   message: string;
   tree: string;
 }
@@ -73,6 +85,7 @@ const shapes = (range: string): Shape[] =>
     .split("\n")
     .filter(Boolean)
     .map((sha) => ({
+      date: sh(`git log -1 --format=%aI ${sha}`).trim(),
       message: sh(`git log -1 --format=%B ${sha}`).trimEnd(),
       tree: sh(`git rev-parse ${sha}^{tree}`).trim(),
     }));
@@ -108,8 +121,17 @@ const stampedAsBefore = (when: string, range: string, before: Shape[]) => {
       .filter(Boolean);
     law(
       `Law A (${when}, commit ${at + 1})`,
-      links.length === 1 && links[0] === URL_NOW,
+      links.length === 1 && links[0]?.startsWith(`${URL_NOW}?at=`) === true,
       `its ${LOGS_TRAILER} trailers are ${JSON.stringify(links)}`
+    );
+    const date = sh(
+      `git log -1 --format=%aI $(git rev-list --reverse ${range} | sed -n ${at + 1}p)`
+    ).trim();
+    const moment = `${URL_NOW}?at=${date.replace("+", "%2B")}`;
+    law(
+      `Law E (${when}, commit ${at + 1})`,
+      links[0] === moment && date === was?.date,
+      `its link is ${JSON.stringify(links[0])}, its author date ${date} (was ${was?.date}), not ${moment}`
     );
     law(
       `Law B (${when}, commit ${at + 1})`,
@@ -166,6 +188,7 @@ try {
     "rebased",
     "main..ws",
     rebased.map((one, at) => ({
+      date: before[at]?.date ?? "",
       message: before[at]?.message ?? "",
       tree: one.tree,
     }))
@@ -201,5 +224,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  "logs-trailer-check: laws A–D held over 4 stamps of 6 commits (first, again, rebased onto a newer upstream, kept on its base)"
+  "logs-trailer-check: laws A–E held over 4 stamps of 6 commits (first, again, rebased onto a newer upstream, kept on its base)"
 );

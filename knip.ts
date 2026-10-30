@@ -150,6 +150,8 @@ export default {
         "scripts/call-cuts-check.ts",
         // scripts/check.ts:635
         "scripts/logs-trailer-check.ts",
+        // scripts/check.ts:639
+        "scripts/open-at-check.ts",
         // scripts/ship.sh:86
         "scripts/release.ts",
         // scripts/ship.sh:36

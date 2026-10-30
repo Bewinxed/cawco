@@ -636,6 +636,10 @@ const gated: Gated[] = [
     "packages/hub/src/landing.ts",
     "packages/core/src/safe-git.ts",
   ]),
+  bun("scripts/open-at-check.ts", [
+    "apps/dashboard/src/lib/cawco/transcript/open-at.svelte.ts",
+    "apps/dashboard/src/lib/cawco/transcript/rows.ts",
+  ]),
   {
     ...bun("scripts/typecheck-coverage.ts", []),
     // Which files there are, and the projects that hold them.
