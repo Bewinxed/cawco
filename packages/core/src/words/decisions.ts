@@ -88,7 +88,9 @@ export const decisionsWords = {
   previewWorkspaceDown:
     "its workspace isn't running. Once a session runs there again, try again.",
   previewMachineDown:
-    "its machine isn't connected to the hub. Once it's back, try again.",
+    "its machine isn't answering the hub. Once it answers, try again.",
+  previewMachineDownWhy: (why: string) =>
+    `its machine isn't answering the hub (${why}). Once it answers, try again.`,
   previewReachDown:
     "the way to its server didn't open. Try again; if it fails again, start the server again from its session.",
   previewReachDownWhy: (why: string) =>

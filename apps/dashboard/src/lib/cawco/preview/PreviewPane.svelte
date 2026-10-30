@@ -4458,8 +4458,9 @@
             Its session shows something else now, or has ended, so there is no
             page here. Open its session to show it again.
           {:else}
-            The preview comes from {ownerMachine}, which isn't connected to the
-            hub right now. Once it's back, try again.
+            The preview comes from {ownerMachine}, which isn't answering the hub{shownWhy
+              ? `: ${shownWhy}`
+              : "."} Once it answers, try again.
           {/if}
           {#if !down && docDown}
             <span

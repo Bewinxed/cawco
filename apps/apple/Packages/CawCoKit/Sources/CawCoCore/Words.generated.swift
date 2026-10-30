@@ -1954,7 +1954,11 @@ public enum Words {
 
         public static let previewWorkspaceDown = "its workspace isn't running. Once a session runs there again, try again."
 
-        public static let previewMachineDown = "its machine isn't connected to the hub. Once it's back, try again."
+        public static let previewMachineDown = "its machine isn't answering the hub. Once it answers, try again."
+
+        public static func previewMachineDownWhy(why: String) -> String {
+            "its machine isn't answering the hub (\(why)). Once it answers, try again."
+        }
 
         public static let previewReachDown = "the way to its server didn't open. Try again; if it fails again, start the server again from its session."
 

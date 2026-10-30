@@ -424,7 +424,9 @@
       case "workspace":
         return decisionsWords.previewWorkspaceDown;
       case "machine":
-        return decisionsWords.previewMachineDown;
+        return why === null
+          ? decisionsWords.previewMachineDown
+          : decisionsWords.previewMachineDownWhy(why);
       case "reach":
         return why === null
           ? decisionsWords.previewReachDown
