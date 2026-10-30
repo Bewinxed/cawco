@@ -81,7 +81,7 @@
       "m-0 border-0 p-0",
       layout === "column"
         ? "grid max-h-(--most) flex-none grid-cols-(--cols) items-center gap-x-space-3 gap-y-space-1 overflow-y-auto overscroll-contain pt-space-2"
-        : "flex flex-wrap items-center gap-x-space-4 gap-y-space-1 self-start rounded-panel px-space-3 py-space-1 before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop contrast-more:before:bg-surface-raised reduced-transparency:before:bg-surface-raised relative max-w-full",
+        : "flex flex-wrap items-center gap-x-space-4 gap-y-space-1 self-start rounded-panel px-space-3 py-space-1 before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop contrast-more:before:bg-surface-raised reduced-transparency:before:bg-surface-raised relative min-w-0 max-w-full",
     ]}
     data-dials={layout}
     style:--cols="max-content minmax(0, 1fr) max-content"
@@ -100,8 +100,12 @@
         data-dial={dial.kind}
         title={disabled ?? undefined}
       >
+        <!-- In the row, the name keeps its words and the control gives way first; a long name truncates past the graph labels' measure. -->
         <span
-          class="min-w-0 truncate type-meta text-ink-row"
+          class={[
+            "min-w-0 truncate type-meta text-ink-row",
+            layout === "row" && "max-w-c-graph-label-max-w flex-none",
+          ]}
           title={disabled ?? name}>{name}</span
         >
         {#if dial.kind === "count"}
@@ -110,7 +114,7 @@
           <span
             class={[
               "flex min-w-0 items-center gap-space-2",
-              layout === "row" && "w-c-graph-node-w",
+              layout === "row" && "shrink grow-0 basis-c-graph-node-w",
             ]}
           >
             <input
@@ -156,7 +160,7 @@
             aria-label={name}
             class={[
               "min-w-0 accent-ink-strong",
-              layout === "row" && "w-c-graph-node-w",
+              layout === "row" && "shrink grow-0 basis-c-graph-node-w",
             ]}
             max={maxOf(dial)}
             min={dial.min ?? 0}
