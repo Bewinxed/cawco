@@ -2,6 +2,7 @@
   // Native port of fluidfunctionalism.com/r/base/thinking-steps.json.
   import { Collapsible } from "bits-ui";
   import { untrack } from "svelte";
+  import { cn } from "#lib/utils.js";
   import { provideRootOpen } from "../collapsible/opened";
   import {
     getSizeContext,
@@ -32,7 +33,10 @@
 
 <Collapsible.Root
   {...rest}
-  class="min-w-0 max-w-full font-family-inherit text-size-body font-normal leading-body text-ink-muted size-compact:text-size-meta {className}"
+  class={cn(
+    "min-w-0 max-w-full font-family-inherit text-size-body font-normal leading-body text-ink-muted size-compact:text-size-meta",
+    className
+  )}
   data-size={resolvedSize}
   data-slot="thinking-steps"
   bind:open={

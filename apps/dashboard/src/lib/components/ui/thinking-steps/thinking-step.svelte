@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
-  import { tv } from "#lib/utils.js";
+  import { cn, tv } from "#lib/utils.js";
 
   /**
    * `pending` is not drawn; `ahead` is drawn muted, a step still to come in
@@ -112,7 +112,10 @@
   <!-- The icon column is the icon's own width (the transcript's 16px glyph
        cell); the icon's box is at least that square and a line tall. -->
   <div
-    class="flex min-w-0 gap-space-2 text-size-body font-normal leading-body size-compact:text-size-meta {className}"
+    class={cn(
+      "flex min-w-0 gap-space-2 text-size-body font-normal leading-body size-compact:text-size-meta",
+      className
+    )}
     data-size={size?.() ?? "default"}
     data-slot="thinking-step"
     data-status={status}
