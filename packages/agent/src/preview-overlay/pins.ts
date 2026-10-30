@@ -594,6 +594,56 @@ export function startPins(deps: PinsDeps): Pins {
     return found ? standingOn(found.el, pin.point) : null;
   };
 
+  /** `el`'s place in its story frame `holder`: the index among its parent's children of each element from the frame down to it; null outside it. */
+  const placeIn = (holder: Element, el: Element): number[] | null => {
+    const path: number[] = [];
+    for (let at = el; at !== holder;) {
+      const parent = at.parentElement;
+      if (!parent) {
+        return null;
+      }
+      path.unshift([...parent.children].indexOf(at));
+      at = parent;
+    }
+    return path;
+  };
+  /** The element at `path` in story frame `holder` ({@link placeIn}), when there is one. */
+  const atPlace = (holder: Element, path: number[]): Element | null => {
+    let at: Element | null = holder;
+    for (const index of path) {
+      at = at?.children[index] ?? null;
+    }
+    return at;
+  };
+  /**
+   * The design graph's other side of call 6: where a pin on a state not
+   * standing stands on the state that is, at the same element: the one at
+   * its element's place in the standing frame, reading the same words. Null
+   * where the standing state holds no such element: the pin is not drawn on
+   * the page then (its frame is unseen), and the rail still lists it.
+   */
+  const onStandingState = (pin: Pin): Standing | null => {
+    const el = anchoredEl(pin);
+    const own = el?.closest("[data-cawco-story]");
+    const path = el && own ? placeIn(own, el) : null;
+    if (!(el && path)) {
+      return null;
+    }
+    const words = el.textContent?.trim() ?? "";
+    for (const standingFrame of document.querySelectorAll(
+      "[data-cawco-story][data-cawco-on-stage]"
+    )) {
+      const same = atPlace(standingFrame, path);
+      if (same && (same.textContent?.trim() ?? "") === words) {
+        const where = standingOn(same, pin.point);
+        if (where.shown) {
+          return where;
+        }
+      }
+    }
+    return null;
+  };
+
   /**
    * The anchors whose element is found under another selector or text now
    * (a revision moved or reworded it), written back so the next look finds
@@ -1005,7 +1055,8 @@ export function startPins(deps: PinsDeps): Pins {
     const drawn: DrawnPill[] = [];
     const drawnFixed: DrawnPill[] = [];
     for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
-      const where = standing(pin);
+      const here = onState(pin.anchor, stageKept, stagePeek);
+      const where = (here ? null : onStandingState(pin)) ?? standing(pin);
       if (!where) {
         missing.push(pin);
         continue;
@@ -1015,8 +1066,8 @@ export function startPins(deps: PinsDeps): Pins {
       // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
       if (where.shown) {
         const group = pinPill(pin, where, pill, paint);
-        // The design graph's other side of call 6: a pin on a state not standing, dimmed where it would stand.
-        if (!onState(pin.anchor, stageKept, stagePeek)) {
+        // The design graph's other side of call 6: a pin on a state not standing, dimmed on its element there.
+        if (!here) {
           group.style.opacity = "0.4";
         }
         (where.page ? drawnFixed : drawn).push({
