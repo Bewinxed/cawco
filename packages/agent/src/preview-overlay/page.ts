@@ -3101,6 +3101,8 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         previewMode(message.mode) ?? "interact",
         typeof message.place === "string" ? message.place : null
       ),
+    // Pins on states not standing dimmed, or hidden (the design graph's open call 6).
+    "cawco:other-pins": (message) => pins.dimOthers(message.dimmed === true),
     // ⇧C: every pin hidden from the page, or shown again.
     "cawco:pins-shown": (message) => pins.show(message.shown !== false),
     // The host's Try again on a lost link: the doc's socket opened again now.
