@@ -9,6 +9,9 @@
   to the well's width (`embed-scale`), never so far that its own least
   words (as its overlay tells them, core `EMBED_WORDS`) stand under
   `--c-media-words-floor`, past which it scrolls sideways at that scale.
+  Naming a phone's or a tablet's width it stands upright at that device's
+  whole shape (core `uprightHeight`), the media cap aside, and is never
+  scaled: wider than its well it scrolls sideways, as a story does.
   Open full size brings it to the front of the session's panel,
   as Canvas's Open to draw does. A page stands at its own address on this
   page's origin (`/__cawco/page/<id>/`), as wide as its `width` says (the
@@ -70,6 +73,7 @@
     EMBED_WORDS,
     type EmbedShape,
     storiesKey,
+    uprightHeight,
   } from "@cawco/core/stage";
   import { commonWords } from "@cawco/core/words/common";
   import { decisionsWords } from "@cawco/core/words/decisions";
@@ -161,6 +165,16 @@
    * component canvas is its stories at their own sizes.
    */
   const pageSized = $derived(!!held && held.kind !== "component");
+  /**
+   * A page-sized design's height, px, where its own width is a phone's or a
+   * tablet's: that device's shape, upright (core `uprightHeight`), real px
+   * whatever the page's window, so a phone is judged at a phone's height;
+   * null where it names no width, or a desk's or wider, which stands at a
+   * screen's 16:10 under the media cap.
+   */
+  const upright = $derived(
+    pageSized && picture !== undefined ? uprightHeight(picture) : null
+  );
   /** The well's stage: the room its piece has (Well.svelte). */
   let stage = $state<HTMLDivElement>();
   /** The stage's width, px, as layout has it. */
@@ -193,10 +207,12 @@
    * which it scrolls sideways in its well at that scale; a design whose
    * words are already at the floor is never scaled. Until its words are
    * told it stands at 1. With no width of its own it takes the card's whole
-   * width and lays itself out to it, at 1.
+   * width and lays itself out to it, at 1. A phone or a tablet ({@link upright})
+   * stands at 1 always, scrolling sideways where its well is narrower.
    */
   const scale = $derived(
     pageSized &&
+      upright === null &&
       picture !== undefined &&
       words !== null &&
       room > 0 &&
@@ -207,6 +223,11 @@
   const scaled = $derived(scale < 1 && picture !== undefined);
   /** The frame's own height on a scaled design: its box's height over its scale, so its first view fills the box. */
   const scaledHeight = $derived(scaled ? `calc(100% / ${scale})` : undefined);
+  /** The frame's height unscaled: a phone's or a tablet's upright, or as tall as it says it is; none until then, its class's 16:10. */
+  const framedHeight = $derived.by(() => {
+    const height = upright ?? tall;
+    return height === null ? undefined : `${height}px`;
+  });
   /** What a press on Open full size was refused, in the hub's words. */
   let refusal = $state("");
   let opening = $state(false);
@@ -671,12 +692,13 @@
    * The box's least height where a fault stands in it: the picture's own as
    * its wait held it (its said height, else its stories' as the media knows
    * them, `--space-3` between), so the card keeps its place and shape when
-   * the picture fails; null for a screen's 16:10, or a canvas never drawn
-   * anywhere, which hold the kit picture's.
+   * the picture fails, or a phone's or a tablet's upright height; null for a
+   * screen's 16:10, or a canvas never drawn anywhere, which hold the kit
+   * picture's.
    */
   const heldHeight = $derived.by(() => {
     if (screen) {
-      return null;
+      return upright === null ? null : `${upright}px`;
     }
     if (tall !== null) {
       return `${tall}px`;
@@ -688,6 +710,14 @@
     return `calc(${sum}px + ${known.parts.length - 1} * var(--space-3))`;
   });
 </script>
+
+{#snippet screenWait()}
+  <Skeleton
+    class="w-full"
+    height={upright === null ? "picture" : undefined}
+    style={upright === null ? undefined : `block-size: ${upright}px`}
+  />
+{/snippet}
 
 {#snippet full()}
   <Button
@@ -735,9 +765,9 @@
           scaled
             ? "absolute start-0 top-0 origin-top-left scale-(--frame-scale) rtl:origin-top-right"
             : [
-                "max-h-c-media-max-h",
+                upright === null && "max-h-c-media-max-h",
                 picture === undefined ? "w-full" : "flex-none",
-                tall === null && "aspect-16/10",
+                tall === null && upright === null && "aspect-16/10",
               ],
         ]}
         data-cawco-artifact={id}
@@ -752,8 +782,7 @@
         style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
         style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
         style:--frame-scale={scaled ? String(scale) : undefined}
-        style:block-size={scaledHeight ??
-          (tall === null ? undefined : `${tall}px`)}
+        style:block-size={scaledHeight ?? framedHeight}
         style:inline-size={picture === undefined ? undefined : `${picture}px`}
         title={held.name}
       ></iframe>
@@ -832,6 +861,7 @@
                   : [
                       "w-full",
                       tall === null &&
+                        upright === null &&
                         (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),
                     ],
                 !(drawn && shaped) && "opacity-0",
@@ -849,8 +879,7 @@
               }}
               src={ready}
               style:--frame-scale={scaled ? String(scale) : undefined}
-              style:block-size={scaledHeight ??
-                (tall === null ? undefined : `${tall}px`)}
+              style:block-size={scaledHeight ?? framedHeight}
               style:inline-size={scaled ? `${picture}px` : undefined}
               title={held.name}
               {@attach (node) => {
@@ -866,14 +895,20 @@
           {#if !(shaped || slow) && screen}
             <!-- Inside the grace, the screen's skeleton over the frame still loading; it goes in its reveal. -->
             <div class="absolute inset-0" out:reveal>
-              <Skeleton class="w-full" height="picture" />
+              {@render screenWait()}
             </div>
           {/if}
         {:else if screen}
           {#if slow}
-            <div class="aspect-16/10 max-h-c-media-max-h w-full"></div>
+            <div
+              class={[
+                "w-full",
+                upright === null && "aspect-16/10 max-h-c-media-max-h",
+              ]}
+              style:block-size={upright === null ? undefined : `${upright}px`}
+            ></div>
           {:else}
-            <Skeleton class="w-full" height="picture" />
+            {@render screenWait()}
           {/if}
         {/if}
         {#if !(screen || (shaped && drawn))}

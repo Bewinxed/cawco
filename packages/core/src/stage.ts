@@ -244,6 +244,24 @@ export type Scheme = "light" | "dark";
 export const FORMS = { phone: 390, tablet: 768, desk: 1280 } as const;
 export type FormName = keyof typeof FORMS;
 
+/** A phone's and a tablet's shape, upright: an iPhone's 390×844, an iPad's 768×1024. Ours. */
+const UPRIGHT = {
+  phone: 844 / FORMS.phone,
+  tablet: 1024 / FORMS.tablet,
+} as const;
+
+/**
+ * A whole screen's height at its layout `width`, px, where that width is a
+ * device held upright: a phone's under {@link FORMS}' tablet, a tablet's under
+ * its desk. Null from a desk's width up, where a screen stands on its side.
+ */
+export const uprightHeight = (width: number): number | null => {
+  if (width < FORMS.tablet) {
+    return Math.round(width * UPRIGHT.phone);
+  }
+  return width < FORMS.desk ? Math.round(width * UPRIGHT.tablet) : null;
+};
+
 /** A story's form: a preset's name and width, or a width of its own (`custom`). */
 export interface Form {
   name: FormName | "custom";
