@@ -87,8 +87,8 @@
     againLabel={again ? regionFaultWords.reloadPage : commonWords.tryAgain}
     againPending={again ? regionFaultWords.reloading : "Trying again…"}
     {details}
-    end="var(--space-3)"
-    indent="var(--space-3)"
+    end="0px"
+    indent="var(--space-2)"
     reason={again
       ? regionFaultWords.lineAgain(what)
       : regionFaultWords.line(what)}

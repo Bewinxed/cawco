@@ -13,8 +13,12 @@ export const regionFaultWords = {
   /** The rebuild threw again at once on the same data: Try again can't help. */
   again:
     "It stopped again the same way. Reload the page; everything you had open comes back.",
-  /** The line face's words, one sentence: "Couldn't draw the comments: a bug in the dashboard." */
-  line: (what: string) => `Couldn't draw ${what}: a bug in the dashboard.`,
+  /**
+   * The line face's words, one line in a 320px rail beside its actions'
+   * trailing group: what couldn't be drawn. The why and the error stand
+   * under Show details, as the house fault line keeps them (RowFault).
+   */
+  line: (what: string) => `Couldn't draw ${what}.`,
   /** The line face once the rebuild threw again. */
   lineAgain: (what: string) => `Couldn't draw ${what} again.`,
   reloadPage: "Reload page",
