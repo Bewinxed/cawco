@@ -76,17 +76,25 @@
   /** A stop's centre along the track, as a share of its width. */
   const centre = (at: number) => `${((at + 0.5) / Math.max(1, count)) * 100}%`;
 
-  // The kept stop centred in a track that scrolls (call 4: the scroll).
+  // The kept stop centred in a track that scrolls (call 4: the scroll). The track's own scroll alone: scrollIntoView
+  // scrolls every scrollable ancestor too, the page and a same-site frame around it among them.
   $effect(() => {
     const { at } = graph;
     if (!(scroller && overflows && !dots) || at < 0) {
       return;
     }
     const stop = scroller.querySelector<HTMLElement>(`[data-stop="${at}"]`);
-    stop?.scrollIntoView({
+    if (!stop) {
+      return;
+    }
+    const box = scroller.getBoundingClientRect();
+    const one = stop.getBoundingClientRect();
+    scroller.scrollTo({
+      left:
+        scroller.scrollLeft +
+        (one.left + one.width / 2) -
+        (box.left + box.width / 2),
       behavior: motionOk.current ? "smooth" : "instant",
-      block: "nearest",
-      inline: "center",
     });
   });
 
