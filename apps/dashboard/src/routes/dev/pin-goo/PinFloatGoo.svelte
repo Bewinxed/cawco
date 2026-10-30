@@ -45,16 +45,20 @@
      narrower than their resting gap, so it lets go as the card comes to
      rest.
      The pin's status dot (the owner: "shouldn't the status dot morph into a
-     glowing rim on the left side of the comment smoothly when open? and
-     vice versa?") travels and stretches into a rim along the card's side
-     that faces its pin, round that side's corners, in the dot's hue and on
-     the open's clock; it gathers back into the dot on the close's, landing
-     on its last frame. The rim is the session tab's (DESIGN.md, Session tab
-     status rim): a `tab-rim-width` line on the edge, its `tab-rim-glow`
-     glow at `tab-rim-mix-subtle`, drawn as strokes stacked wider and
-     fainter (no filter), breathing on the shared breath while the agent
-     works. Without motion it opens and closes at once, the dot and the rim
+     glowing rim"; "the rim i meant on the shape, just a subtle rim on the
+     opposite side of where the comment panel opens") slides into the
+     shape's own edge at the pin's far end, the end away from its card, and
+     spreads round its curve, in the dot's hue and on the open's clock; it
+     gathers back into the dot on the close's, landing on its last frame.
+     The rim is the session tab's (DESIGN.md, Session tab status rim): a
+     `tab-rim-width` tint on the edge at `tab-rim-mix-chosen`, a
+     `tab-rim-glow` glow out from it at `tab-rim-mix-subtle` (a gradient,
+     no filter), breathing on the shared breath while the agent works.
+     Without motion it opens and closes at once, the dot and the rim
      cross-fading.
+     Joined, the pin's top and foot run level into the card: a card edge
+     less than a join off the pin's is drawn at the pin's, since a closing
+     turns a step that small into a slope.
   2. It holds still while the page scrolls (the owner: "only letting it move
      when it reaches the spot where it will move from one spot to the next,
      it should animate THEN, not animate WHILE i'm scrolling"), and moves
@@ -91,12 +95,12 @@
   import { inStep } from "#lib/components/ui/live-dot/index.js";
   import { besideTop, stackedSpot } from "./hold";
   import {
+    type FarEnd,
     plainBox,
     type Radii,
     type Rect,
     rimLine,
     roundedBox,
-    type Side,
     silhouette,
   } from "./silhouette";
 
@@ -144,10 +148,13 @@
   /** The tokens a frame draws with, read once. */
   const JOIN = numberOf("--goo-join");
   const CARD_R = numberOf("--radius-lg");
-  const HAIR = numberOf("--radius-hair");
   const DOT = numberOf("--status-dot-size");
   const DOT_OUT = numberOf("--space-row");
-  const RIM = numberOf("--tab-rim-width") * 2;
+  /** The rim: the edge's own width, its tint at the chosen tab rim's strength. */
+  const RIM = numberOf("--tab-rim-width");
+  const RIM_MIX = numberOf("--tab-rim-mix-chosen");
+  /** Half a css px: the edge's line stands this far in from the shape's. */
+  const HALF_PX = 0.5;
   const GLOW = numberOf("--tab-rim-glow");
   const GLOW_MIX = numberOf("--tab-rim-mix-subtle");
   /**
@@ -166,7 +173,7 @@
   let rimGroup = $state<SVGGElement>();
   let rimGlow = $state<SVGPathElement>();
   let rimCore = $state<SVGPathElement>();
-  let rimFade = $state<SVGLinearGradientElement>();
+  let rimFade = $state<SVGRadialGradientElement>();
   const uid = $props.id();
   let pinLayer = $state<HTMLElement>();
   let pinShift = $state<HTMLElement>();
@@ -293,10 +300,21 @@
   });
   /** The edge the bridge last ran into, kept while it drains once the pin has left it. */
   let bridgeEdge: PopSide | null = null;
-  /** The side the rim runs along: the one facing the pin. */
-  const rimSide = $derived<Side>(
-    pinHere && pinHere.x + pinHere.w / 2 > cardW / 2 ? "right" : "left"
-  );
+  /** The pin's end away from its card, where its rim wraps: the edge it is joined beside, else the way it stands from the card's middle. */
+  const farEnd = $derived.by((): FarEnd => {
+    if (besideEdge) {
+      return besideEdge;
+    }
+    if (!(pinHere && cardW > 0 && cardH > 0)) {
+      return "left";
+    }
+    const dx = (pinHere.x + pinHere.w / 2 - cardW / 2) / cardW;
+    const dy = (pinHere.y + pinHere.h / 2 - cardH / 2) / cardH;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      return dx < 0 ? "left" : "right";
+    }
+    return dy < 0 ? "top" : "bottom";
+  });
 
   // ---- The clock -------------------------------------------------------
 
@@ -450,8 +468,10 @@
     const p = pinHere
       ? { ...pinHere, x: pinHere.x + back.x, y: pinHere.y + back.y }
       : null;
+    // The pin's own shape: round on every corner, a circle at one figure
+    // and a pill past it.
     const pinRadii: Radii = p
-      ? [p.h / 2, p.h / 2, p.h / 2, HAIR]
+      ? [p.h / 2, p.h / 2, p.h / 2, p.h / 2]
       : [CARD_R, CARD_R, CARD_R, CARD_R];
     const from: Rect = p ?? { x: 0, y: 0, w: cardW, h: cardH };
     const card: Rect = {
@@ -461,12 +481,15 @@
       h: lerp(from.h, cardH, poured),
     };
     const radii = pinRadii.map((r) => lerp(r, CARD_R, k)) as Radii;
+    if (besideEdge) {
+      bridgeEdge = besideEdge;
+    }
+    if (p && joined && bridgeEdge) {
+      level(card, p, bridgeEdge);
+    }
     const shapes = [roundedBox(card, radii)];
     if (p) {
       shapes.push(roundedBox(p, pinRadii));
-      if (besideEdge) {
-        bridgeEdge = besideEdge;
-      }
       const span = bridgeEdge ? bridgeOf(p, card, radii, bridgeEdge) : null;
       if (span) {
         shapes.push(plainBox(span));
@@ -481,7 +504,39 @@
       const edge = (n: number) => `${Math.max(0, n).toFixed(2)}px`;
       clipWrap.style.clipPath = `inset(${edge(card.y)} ${edge(cardW - card.x - card.w)} ${edge(cardH - card.y - card.h)} ${edge(card.x)} round ${edge(tl)} ${edge(tr)} ${edge(br)} ${edge(bl)})`;
     }
-    drawRim(p, card, radii, k);
+    drawRim(p, k);
+  }
+
+  /**
+   * Joined, a card edge across the bridge from the pin's own edge by less
+   * than a join stands level with it: the card held whole in the well can
+   * stand a fraction of a px (or a few) off its pin, and a closing rounds
+   * a step that small into a long slope, never a fillet. So the card's
+   * drawn edge takes the pin's, and the bridge's edges run level from the
+   * pin into it; a step of a join or more keeps its fillet.
+   */
+  function level(card: Rect, p: Rect, edge: PopSide) {
+    if (edge === "left" || edge === "right") {
+      const top = p.y - card.y;
+      if (Math.abs(top) < JOIN) {
+        card.y += top;
+        card.h -= top;
+      }
+      const foot = p.y + p.h - (card.y + card.h);
+      if (Math.abs(foot) < JOIN) {
+        card.h += foot;
+      }
+      return;
+    }
+    const start = p.x - card.x;
+    if (Math.abs(start) < JOIN) {
+      card.x += start;
+      card.w -= start;
+    }
+    const end = p.x + p.w - (card.x + card.w);
+    if (Math.abs(end) < JOIN) {
+      card.w += end;
+    }
   }
 
   /** The bridge at this frame: from the pin's centre into the card's edge, past its corner, as far as it has grown; null with nothing to draw. */
@@ -512,12 +567,15 @@
   }
 
   /**
-   * The rim as the card stands: the status dot (where PinDot stands, on the
-   * pin's top-end corner) carried to the side facing the pin and stretched
-   * along it as the card pours out; gathered back into the dot as it
-   * drains. The pins' own dots stand hidden while it is drawn.
+   * The rim as the card stands: a tint of the status hue on the shape's own
+   * 1px edge, round the pin's far end (the end away from its card), and a
+   * faint glow out from it. As the card pours out, the status dot (where
+   * PinDot stands, on the pin's top-end corner) slides into the edge at
+   * that end and spreads round it, narrowing to the edge's width; as it
+   * drains, it gathers back into the dot, on the same clock. The pins' own
+   * dots stand hidden while it is drawn.
    */
-  function drawRim(p: Rect | null, card: Rect, radii: Radii, k: number) {
+  function drawRim(p: Rect | null, k: number) {
     const group = rimGroup;
     const showing = !!(group && dot && p && k > 0);
     for (const one of pinLayer?.querySelectorAll<HTMLElement>("[data-dot]") ??
@@ -536,37 +594,33 @@
       x: p.x + p.w + DOT_OUT - DOT / 2,
       y: p.y - DOT_OUT + DOT / 2,
     };
-    // Joined, the rim flows out of the join's flare, never through it.
-    const mouth =
-      grown > 0 && (bridgeEdge === "left" || bridgeEdge === "right")
-        ? { from: p.y - JOIN, to: p.y + p.h + JOIN }
-        : null;
-    const line = rimLine(card, radii, rimSide, RIM / 2, at, mouth);
-    const length = line.length * k;
-    const start = line.s * (1 - k);
+    const line = rimLine(p, farEnd);
     group.setAttribute(
       "transform",
-      `translate(${((at.x - line.at.x) * (1 - k)).toFixed(2)} ${((at.y - line.at.y) * (1 - k)).toFixed(2)})`
+      `translate(${((at.x - line.start.x) * (1 - k)).toFixed(2)} ${((at.y - line.start.y) * (1 - k)).toFixed(2)})`
     );
-    const core = lerp(DOT, RIM, k);
-    const glow = core + 2 * GLOW * k;
-    for (const [stroke, width] of [
-      [rimGlow, glow],
-      [rimCore, core],
-    ] as const) {
+    const dash = `${(line.length * k).toFixed(2)} ${(line.length + DOT).toFixed(2)}`;
+    for (const stroke of [rimCore, rimGlow]) {
       stroke?.setAttribute("d", line.d);
-      stroke?.setAttribute(
-        "stroke-dasharray",
-        `${length} ${line.length + DOT}`
-      );
-      stroke?.setAttribute("stroke-dashoffset", String(-start));
-      stroke?.setAttribute("stroke-width", String(width));
+      stroke?.setAttribute("stroke-dasharray", dash);
     }
-    // The glow's fade runs across the side's line, so where the rim turns
-    // round a corner it runs out of its glow: the tab rim's taper.
-    rimFade?.setAttribute("x1", String(line.at.x - glow / 2));
-    rimFade?.setAttribute("x2", String(line.at.x + glow / 2));
-    rimGlow?.setAttribute("stroke-opacity", String(GLOW_MIX * k));
+    rimCore?.setAttribute("stroke-width", String(lerp(DOT, RIM, k)));
+    // The glow: out from the edge only, falling off over `tab-rim-glow`,
+    // round a round end; a long side keeps the tint alone.
+    const { end } = line;
+    rimGlow?.setAttribute("visibility", end ? "visible" : "hidden");
+    if (end && rimFade) {
+      const reach = end.r + GLOW;
+      rimFade.setAttribute("cx", String(end.x));
+      rimFade.setAttribute("cy", String(end.y));
+      rimFade.setAttribute("r", String(reach));
+      const [inside, line_, out] = rimFade.querySelectorAll("stop");
+      inside?.setAttribute("offset", String((end.r - 2 * HALF_PX) / reach));
+      line_?.setAttribute("offset", String((end.r - HALF_PX) / reach));
+      out?.setAttribute("offset", "1");
+      rimGlow?.setAttribute("stroke-width", String(2 * GLOW));
+      rimGlow?.setAttribute("stroke-opacity", String(GLOW_MIX * k));
+    }
     if (!(motionOk.current || rimFaded)) {
       // Without motion, the dot and the rim cross-fade.
       rimFaded = true;
@@ -789,10 +843,9 @@
       </div>
       <!-- mark-line: the dot stands on the pin's top-end corner, absolutely, not beside its figure -->
       <span
-        class="absolute inset-0 flex items-center justify-center whitespace-nowrap rounded-pill data-tail:rounded-es-hair type-caps num leading-none text-action-solid data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-goo-content group-data-[face=joined]/goo:opacity-100 group-data-[face=joined]/goo:duration-(--dur-goo-content) motion-reduce:transition-none"
+        class="absolute inset-0 flex items-center justify-center whitespace-nowrap rounded-pill type-caps num leading-none text-action-solid data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-goo-content group-data-[face=joined]/goo:opacity-100 group-data-[face=joined]/goo:duration-(--dur-goo-content) motion-reduce:transition-none"
         data-focused={focused || undefined}
         data-slot="pin-joined-face"
-        data-tail
         ><span data-figure>{pin}</span>{#if dot}<PinDot {dot} />{/if}</span
       >
     </div>
@@ -807,23 +860,17 @@
     data-slot="pin-goo-rim"
   >
     <defs>
-      <!-- The glow across the rim's line: its hue at the line, none at its
-           reach, falling off as a blur does. -->
-      <linearGradient
+      <!-- The glow round the pin's far end: none inside its edge, its hue
+           at the edge, nothing at `tab-rim-glow` out, as a blur falls off. -->
+      <radialGradient
         bind:this={rimFade}
         gradientUnits="userSpaceOnUse"
         id="{uid}-rim-fade"
-        x1="0"
-        x2="1"
-        y1="0"
-        y2="0"
       >
         <stop class="stop-rim-ink" offset="0" stop-opacity="0" />
-        <stop class="stop-rim-ink" offset="0.3" stop-opacity="0.25" />
         <stop class="stop-rim-ink" offset="0.5" stop-opacity="1" />
-        <stop class="stop-rim-ink" offset="0.7" stop-opacity="0.25" />
         <stop class="stop-rim-ink" offset="1" stop-opacity="0" />
-      </linearGradient>
+      </radialGradient>
     </defs>
     <g
       bind:this={rimGroup}
@@ -836,7 +883,11 @@
       {#key dot}
         <g class={[dot === "live" && "breathe"]} {@attach inStep}>
           <path bind:this={rimGlow} stroke="url(#{uid}-rim-fade)" />
-          <path bind:this={rimCore} class="stroke-(--rim-ink)" />
+          <path
+            bind:this={rimCore}
+            class="stroke-(--rim-ink)"
+            stroke-opacity={RIM_MIX}
+          />
         </g>
       {/key}
     </g>

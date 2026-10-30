@@ -117,73 +117,49 @@ export function silhouette(shapes: PathsD, join: number): string {
     .join("");
 }
 
-/** The side of a card a rim runs along. */
-export type Side = "left" | "right";
+/** The end of a pin away from its card: where its rim wraps. */
+export type FarEnd = "left" | "right" | "top" | "bottom";
 
-/** A rim's line: its path, its length, and its point and length along it nearest `near`. */
+/** A rim's line round a pin's far end: its path, its length, where it starts, and the round end's centre and radius (left and right only). */
 export interface RimLine {
-  at: { x: number; y: number };
   d: string;
+  end: { r: number; x: number; y: number } | null;
   length: number;
-  /** How far along the line `at` stands, px. */
-  s: number;
+  start: { x: number; y: number };
 }
 
 /**
- * The line a rim runs along on one side of a rounded box, `inset` px in:
- * round the side's corners on their own radius and straight between them.
- * Where something joins the side (`mouth`, the span of its edge the bridge
- * and its flare meet), the rim runs on the longer stretch either side of
- * it, from the mouth's end, so it flows out of the join and never through
- * it. `near` is the point it gathers at (the status dot): the point on its
- * straight run nearest it.
+ * The line a pin's rim runs along: the pin's own outline on its stroke's
+ * line (`HALF` in), round its far end, the end away from its card. A round
+ * end (`left`, `right`) is its half-circle from its top to its foot; a long
+ * side (`top`, `bottom`) runs round both its corners from one end's middle
+ * to the other's. It starts at the end nearest the pin's top-end corner,
+ * where the status dot stands, so the dot slides into it there.
  */
-export function rimLine(
-  card: Rect,
-  radii: Radii,
-  side: Side,
-  inset: number,
-  near: { y: number },
-  mouth: { from: number; to: number } | null
-): RimLine {
-  const { x, y, w, h } = card;
-  const most = Math.max(0, Math.min(w, h) / 2);
-  const [tl, tr, br, bl] = radii.map((r) => Math.max(inset, Math.min(r, most)));
-  const edge = side === "left" ? x + inset : x + w - inset;
-  const toward = side === "left" ? 1 : -1;
-  const sweep = side === "left" ? 0 : 1;
-  const r2 = (n: number) => n.toFixed(PRECISION);
-  const quarter = (r: number) => (Math.PI / 2) * r;
-  let arcTop = (side === "left" ? tl : tr) - inset;
-  let arcFoot = (side === "left" ? bl : br) - inset;
-  let runFrom = y + arcTop + inset;
-  let runTo = Math.max(runFrom, y + h - arcFoot - inset);
-  if (mouth) {
-    const above = mouth.from - runFrom;
-    const below = runTo - mouth.to;
-    if (below >= above) {
-      arcTop = 0;
-      runFrom = Math.min(runTo, Math.max(runFrom, mouth.to));
-    } else {
-      arcFoot = 0;
-      runTo = Math.max(runFrom, Math.min(runTo, mouth.from));
-    }
+export function rimLine(pin: Rect, far: FarEnd): RimLine {
+  const { x, y, w, h } = pin;
+  const r = Math.min(w, h) / 2;
+  const a = r - HALF;
+  const n = (v: number) => v.toFixed(PRECISION);
+  const half = Math.PI * a;
+  const quarter = half / 2;
+  if (far === "left" || far === "right") {
+    const cx = far === "left" ? x + r : x + w - r;
+    const sweep = far === "left" ? 0 : 1;
+    return {
+      d: `M${n(cx)} ${n(y + HALF)}A${n(a)} ${n(a)} 0 0 ${sweep} ${n(cx)} ${n(y + h - HALF)}`,
+      length: half,
+      start: { x: cx, y: y + HALF },
+      end: { x: cx, y: y + h / 2, r },
+    };
   }
-  const d = [
-    arcTop > 0
-      ? `M${r2(edge + toward * arcTop)} ${r2(y + inset)}A${r2(arcTop)} ${r2(arcTop)} 0 0 ${sweep} ${r2(edge)} ${r2(runFrom)}`
-      : `M${r2(edge)} ${r2(runFrom)}`,
-    `L${r2(edge)} ${r2(runTo)}`,
-    arcFoot > 0
-      ? `A${r2(arcFoot)} ${r2(arcFoot)} 0 0 ${sweep} ${r2(edge + toward * arcFoot)} ${r2(y + h - inset)}`
-      : "",
-  ].join("");
-  const length = quarter(arcTop) + (runTo - runFrom) + quarter(arcFoot);
-  const atY = Math.max(runFrom, Math.min(near.y, runTo));
+  const edge = far === "top" ? y + HALF : y + h - HALF;
+  const mid = far === "top" ? y + r : y + h - r;
+  const sweep = far === "top" ? 0 : 1;
   return {
-    d,
-    length,
-    at: { x: edge, y: atY },
-    s: quarter(arcTop) + (atY - runFrom),
+    d: `M${n(x + w - HALF)} ${n(mid)}A${n(a)} ${n(a)} 0 0 ${sweep} ${n(x + w - r)} ${n(edge)}L${n(x + r)} ${n(edge)}A${n(a)} ${n(a)} 0 0 ${sweep} ${n(x + HALF)} ${n(mid)}`,
+    length: 2 * quarter + Math.max(0, w - 2 * r),
+    start: { x: x + w - HALF, y: mid },
+    end: null,
   };
 }
