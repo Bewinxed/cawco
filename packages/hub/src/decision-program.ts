@@ -40,11 +40,15 @@ import {
 } from "@cawco/core/decisions-library";
 import spec from "@cawco/core/decisions-spec";
 import { named, SANS_FAMILY, undrawn } from "@cawco/core/house-faces";
+import { unhandled } from "@cawco/core/unhandled";
 import {
+  type ASTNode,
   createParser,
   type ElementNode,
   type LibraryJSONSchema,
   mergeStatements,
+  parseExpression,
+  split,
   tokenize,
 } from "@openuidev/lang-core";
 
@@ -653,11 +657,64 @@ const statementsOf = (program: string): Map<string, string> => {
   return found;
 };
 
+/** Where a Decision's kind stands among its arguments, by the library's own order. */
+const KIND_ARG = Object.keys(
+  (
+    spec.schema as unknown as {
+      $defs: { Decision: { properties: Record<string, unknown> } };
+    }
+  ).$defs.Decision.properties
+).indexOf("kind");
+
+/** An expression as openui-lang writes it: the parser's AST printed back, every compound child in parentheses. */
+const printed = (node: ASTNode): string => {
+  const inner = (child: ASTNode): string =>
+    child.k === "BinOp" || child.k === "Ternary" || child.k === "UnaryOp"
+      ? `(${printed(child)})`
+      : printed(child);
+  switch (node.k) {
+    case "Comp":
+      return `${node.fn ? "@" : ""}${node.name}(${node.args.map(printed).join(", ")})`;
+    case "Str":
+      return JSON.stringify(node.v);
+    case "Num":
+    case "Bool":
+      return String(node.v);
+    case "Null":
+      return "null";
+    case "Arr":
+      return `[${node.els.map(printed).join(", ")}]`;
+    case "Obj":
+      return `{${node.entries.map(([key, value]) => `${JSON.stringify(key)}: ${printed(value)}`).join(", ")}}`;
+    case "Ref":
+    case "Ph":
+    case "StateRef":
+    case "RuntimeRef":
+      return node.n;
+    case "BinOp":
+      return `${inner(node.left)} ${node.op} ${inner(node.right)}`;
+    case "UnaryOp":
+      return `${node.op}${inner(node.operand)}`;
+    case "Ternary":
+      return `${inner(node.cond)} ? ${inner(node.then)} : ${inner(node.else)}`;
+    case "Member":
+      return `${inner(node.obj)}.${node.field}`;
+    case "Index":
+      return `${inner(node.obj)}[${printed(node.index)}]`;
+    case "Assign":
+      return `${node.target} = ${printed(node.value)}`;
+    default:
+      return unhandled("program expression", node);
+  }
+};
+
 /**
- * The Decision statements of `program` for cards `cards` with their kind
- * `from` refiled as `to`, as a revision merges them (Who decides, a kind
- * removed): its 9th argument, the last, is the kind. A kind's id is a slug
- * (core decides.ts `DECIDES_ID`), so it goes into the pattern as written.
+ * The statements of `program` that hold a Decision for cards `cards` filed
+ * under kind `from`, each with that Decision's kind written as `to`, as a
+ * revision merges them (Who decides, a kind removed). Read with lang-core's
+ * own statement parser, so the card's id and kind count however they are
+ * written: inline, or through a statement they name. A Decision written
+ * inline in another statement rewrites that statement.
  */
 export const refiledStatements = (
   program: string,
@@ -665,19 +722,49 @@ export const refiledStatements = (
   from: string,
   to: string
 ): string => {
-  const last = new RegExp(`(["'])${from}\\1(\\s*\\)\\s*)$`, "u");
-  return [...statementsOf(program).values()]
-    .filter((text) => {
-      const opens = DECISION_OPENS.exec(text);
-      return !!opens?.[2] && cards.includes(opens[2]) && last.test(text);
+  const statements = new Map(
+    split(tokenize(program)).map((statement) => [
+      statement.id,
+      parseExpression(statement.tokens),
+    ])
+  );
+  /** A node's string, through the statements it names. */
+  const stringOf = (node: ASTNode | undefined, seen = 0): unknown => {
+    if (node?.k === "Ref" && seen < statements.size) {
+      return stringOf(statements.get(node.n), seen + 1);
+    }
+    return node?.k === "Str" ? node.v : undefined;
+  };
+  /** `node` with every Decision of `cards` under `from` refiled; the same node when none is. */
+  const refiled = (node: ASTNode): ASTNode => {
+    if (node.k === "Arr") {
+      const els = node.els.map(refiled);
+      return els.some((el, at) => el !== node.els[at])
+        ? { ...node, els }
+        : node;
+    }
+    if (node.k !== "Comp") {
+      return node;
+    }
+    const args = node.args.map(refiled);
+    const own =
+      node.name === "Decision" &&
+      cards.includes(String(stringOf(args[0]))) &&
+      stringOf(args[KIND_ARG]) === from;
+    if (own) {
+      args[KIND_ARG] = { k: "Str", v: to };
+    }
+    return own || args.some((arg, at) => arg !== node.args[at])
+      ? { ...node, args }
+      : node;
+  };
+  return [...statements]
+    .flatMap(([id, node]) => {
+      const now = refiled(node);
+      return now === node ? [] : [`${id} = ${printed(now)}`];
     })
-    .map((text) => text.replace(last, `"${to}"$2`))
     .join("\n");
 };
-
-/** A Decision statement's opening: its name and the card's id. */
-const DECISION_OPENS =
-  /^([A-Za-z_$][\w$]*)\s*=\s*Decision\(\s*["']([^"']+)["']/u;
 
 /** What a revision changed, by statement name: new ones, rewritten ones, and those it dropped (unreachable now). */
 export interface StatementChange {

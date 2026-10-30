@@ -172,6 +172,8 @@ export interface ArtifactsDb {
   readonly ofInstances: (instanceIds: readonly string[]) => ArtifactRow[];
   /** A project's artifacts, any of its sessions', newest first. */
   readonly ofProject: (projectId: string) => ArtifactRow[];
+  /** Every page whose `state` took a change: the docs that may hold picks. */
+  readonly picked: () => ArtifactRow[];
   /**
    * The artifacts, any session's, that show what a workspace serves: a port
    * preview naming it (`source.workspace`), or a folder preview of its clone
@@ -349,6 +351,23 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .from(artifacts)
       .where(isNull(artifacts.heldFor))
       .orderBy(asc(artifacts.createdAt))
+      .all()
+      .map(artifactOf),
+  picked: () =>
+    db
+      .select()
+      .from(artifacts)
+      .where(
+        and(
+          eq(artifacts.kind, "page"),
+          inArray(
+            artifacts.id,
+            db
+              .selectDistinct({ id: artifactChanges.artifactId })
+              .from(artifactChanges)
+          )
+        )
+      )
       .all()
       .map(artifactOf),
   ofProject: (projectId) =>

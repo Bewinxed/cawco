@@ -914,6 +914,7 @@ import {
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
+import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
 import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
@@ -14804,6 +14805,28 @@ export const createServer = (
   guardFolderFile(DECIDES_FILE, (text) =>
     decidesFileProblems(text, db.decides.fleet())
   );
+  // Picks settled before Who decides had members are named once, in their
+  // pages' docs (settled-names.ts).
+  const settledNamed = nameSettledOnce({
+    dataMigrated: (name) => db.dataMigrated(name),
+    markDataMigrated: (name) => db.markDataMigrated(name),
+    pages: () => db.artifacts.picked(),
+    state: (id) =>
+      artifactDocs.doc(id).getMap("state").toJSON() as Record<
+        string,
+        ChoiceEntry
+      >,
+    write: (id, entries) =>
+      artifactDocs.transact(id, "hub", (doc) => {
+        const state = doc.getMap("state");
+        for (const [key, entry] of Object.entries(entries)) {
+          state.set(key, entry);
+        }
+      }),
+  });
+  if (settledNamed !== null) {
+    console.info(`[hub] ${settledNamed} settled pick(s) named by their member`);
+  }
   /**
    * A project's page lives as long as its source in the project's folder:
    * a commit that takes `decisions/<name>/`'s page.oui or index.html out and

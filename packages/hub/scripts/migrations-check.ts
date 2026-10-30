@@ -35,10 +35,43 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { choiceEntryProblem } from "@cawco/core/choices";
 import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { applyUpdate, Doc } from "yjs";
 import { hubInProcess } from "./hub-in-process";
 import { storedRows, storedRowsReport } from "./stored-rows";
+
+/** Every page doc's picks read as the hub reads them (core `choiceEntryProblem`): how many, and each one that is not a choice. */
+const docChoices = (
+  dbPath: string
+): { checked: number; failures: string[] } => {
+  const sqlite = new Database(dbPath, { readonly: true });
+  const pages = sqlite
+    .query<{ id: string }, []>("SELECT id FROM artifacts WHERE kind = 'page'")
+    .all();
+  const updates = sqlite.query<{ update: Uint8Array }, [string]>(
+    'SELECT "update" FROM artifact_updates WHERE artifact_id = ? ORDER BY seq'
+  );
+  let checked = 0;
+  const failures: string[] = [];
+  for (const { id } of pages) {
+    const doc = new Doc();
+    for (const row of updates.all(id)) {
+      applyUpdate(doc, row.update);
+    }
+    for (const [key, entry] of Object.entries(doc.getMap("state").toJSON())) {
+      checked += 1;
+      const problem = choiceEntryProblem(key, entry);
+      if (problem) {
+        failures.push(`${id}#${key}: ${problem}`);
+      }
+    }
+    doc.destroy();
+  }
+  sqlite.close();
+  return { checked, failures };
+};
 
 const started = performance.now();
 const HUB = resolve(import.meta.dir, "..");
@@ -472,9 +505,17 @@ try {
       `Stored JSON rows that are not their column's shape: a migration is missing.\n${storedRowsReport(shapes).join("\n")}`
     );
   }
+  // Every pick a page's doc keeps reads as one once the hub started: a
+  // choice's shape changed without its docs rewritten fails here.
+  const choices = docChoices(dbPath);
+  if (choices.failures.length > 0) {
+    throw new Error(
+      `Picks in page docs that are not a choice's shape: a pass over the docs is missing.\n${choices.failures.slice(0, 10).join("\n")}`
+    );
+  }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(
-    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${choices.checked} picks in page docs are a choice's shape; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });

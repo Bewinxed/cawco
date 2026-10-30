@@ -801,6 +801,14 @@ export interface DbShape {
     workspace: typeof workspaces.$inferInsert
   ) => WorkspaceRow;
   /**
+   * Runs the one-time migration `name` over every stored send, in one
+   * transaction, unless it has run (`data_migrations`): `rewrite` answers a
+   * send's message as it is to be kept, or null to leave it as it is. How
+   * many sends it changed; null when it had run already.
+   */
+  /** Whether the one-time data migration `name` has run (`data_migrations`). */
+  readonly dataMigrated: (name: string) => boolean;
+  /**
    * A machine's catalog's word on when each stored conversation last changed,
    * written onto its rows that are not live, but for those whose newest send
    * is a keep-alive (read as each chunk is written). Returns how many rows
@@ -1226,6 +1234,8 @@ export interface DbShape {
    * from is history, and history survives a restart. Only reachability is reset.
    */
   readonly markAllAgentsOffline: () => void;
+  /** Marks the one-time data migration `name` run: it never runs again. */
+  readonly markDataMigrated: (name: string) => void;
   /** Where the fleet's marketplace `name` comes from; undefined for none. */
   readonly marketplaceSource: (name: string) => string | undefined;
   /**
@@ -1266,12 +1276,6 @@ export interface DbShape {
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
-  /**
-   * Runs the one-time migration `name` over every stored send, in one
-   * transaction, unless it has run (`data_migrations`): `rewrite` answers a
-   * send's message as it is to be kept, or null to leave it as it is. How
-   * many sends it changed; null when it had run already.
-   */
   readonly migrateSendsOnce: (
     name: string,
     rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null
@@ -5721,6 +5725,18 @@ const make = async (path: string): Promise<DbShape> => {
           asks,
         };
       }),
+    dataMigrated: (name) =>
+      db
+        .select()
+        .from(dataMigrations)
+        .where(eq(dataMigrations.name, name))
+        .get() !== undefined,
+    markDataMigrated: (name) => {
+      db.insert(dataMigrations)
+        .values({ name, at: new Date() })
+        .onConflictDoNothing()
+        .run();
+    },
     migrateSendsOnce: (name, rewrite) =>
       db.transaction((tx) => {
         if (
