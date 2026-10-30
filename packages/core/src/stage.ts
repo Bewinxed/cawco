@@ -932,7 +932,12 @@ export type SheetWrite =
       };
       file: string;
     }
-  | { file: string; story: StoryOp };
+  | { file: string; story: StoryOp }
+  /** A whole fixture module written (records_fixture): refused outside the toolchain root and for a path not ending in `.fixtures.ts`. */
+  | { file: string; text: string };
+
+/** Where a fixture module may be written: a `.fixtures.ts` file (records_fixture). */
+export const FIXTURE_FILE = /\.fixtures\.ts$/u;
 
 /** A story export added, duplicated, removed, or moved before another (`before: null` to the end). */
 export type StoryOp =
@@ -947,7 +952,8 @@ export interface SheetWritten {
   /** The project's formatter that shaped the changed statement, like "prettier 3.9.10"; null when the project has none. */
   formatted: string | null;
   lines: { from: number; to: number };
-  sheet: SheetRead;
+  /** The sheet as it reads after; none for a fixture module's write, which is no sheet. */
+  sheet?: SheetRead;
 }
 
 /** A component the stage found (§6's discovery): its name, its file, and the story files that show it. */

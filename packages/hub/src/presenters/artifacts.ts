@@ -21,6 +21,7 @@ import type {
   ComponentWritten,
   Created,
   DecisionAnswer,
+  FixtureWritten,
   Opened,
   PageBroken,
   Promoted,
@@ -733,6 +734,25 @@ export const commentResolvedWords = (resolved: CommentResolved): string =>
   `Resolved ${resolved.link}. The person can reopen it.`;
 
 /** `design_map`: each component of the library, or one's card. */
+/** `records_fixture`: what it wrote, how many of how many, the fields, and what was redacted as counts. */
+export const recordsFixtureWords = (made: FixtureWritten): string => {
+  const kind = made.kind ?? "records";
+  if (!made.file) {
+    return `No ${kind} in this project yet, so nothing was written.`;
+  }
+  const taken = Object.entries(made.redacted)
+    .filter(([, n]) => n > 0)
+    .map(([what, n]) => `${n} ${what}`);
+  return lines(
+    `Wrote ${made.file}: ${made.written} of ${made.available} ${kind}, newest first${made.formatted ? `, formatted by ${made.formatted}` : ""}.`,
+    `Each carries ${listed(made.fields)}.`,
+    taken.length > 0
+      ? `Redacted: ${listed(taken)} (ids remapped to short ones).`
+      : "Nothing needed redacting.",
+    "Import it in a list story's args, and give that arg a count dial."
+  );
+};
+
 export const designMapWords = (map: DesignMap): string => {
   const linkWords = (links: DesignMap["components"][number]["madeOf"]) =>
     typeof links === "number"
