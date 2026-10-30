@@ -46,8 +46,18 @@ export async function launchChromium(
  * `heardFromHost`: from `window.parent`, on the page's own origin), what the
  * page posts to it reaches `window.__cawcoHeard` when one listens, and
  * `__cawcoDeliver` hands the page a message from it.
+ *
+ * In the top document alone: Playwright runs an init script "whenever the
+ * child frame is attached or navigated ... in the context of the newly
+ * attached frame" (`page.addInitScript`), and a frame whose `parent` is this
+ * stand-in can't hear or reach the page that holds it. A decision page's
+ * Previews, and a dashboard's pane inside a preview, heard nothing from their
+ * frames: a canvas stood as its skeleton, and a pane said its page didn't
+ * load. The app's host script keeps to the top the same way
+ * (`forMainFrameOnly`, ComposerCanvas.swift).
  */
 export const HOST_STAND_IN = `(() => {
+  if (window.parent !== window) return;
   const listeners = new Set();
   const host = { postMessage(data) { window.__cawcoHeard?.(data); } };
   const add = window.addEventListener;

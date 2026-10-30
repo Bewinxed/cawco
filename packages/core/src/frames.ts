@@ -288,6 +288,13 @@ export const PICTURE_VIEW = { width: 640, height: 800 } as const;
  */
 export const ARTIFACT_PICTURE = "artifactPicture";
 
+/**
+ * What scrolls a decision page (dashboard decisions host Decisions.svelte): the
+ * page is the window's height, so its length is this element's, and a picture
+ * opens the window to it (agent artifact-picture.ts).
+ */
+export const PICTURE_PAGE_SCROLLER = '[data-slot="page-scroll"]';
+
 /** How an artifact's picture is bounded ({@link ARTIFACT_PICTURE}). */
 export const PICTURE_LIMITS = {
   /** Widths a read may name, in CSS px: a phone's to a wide desk's. */

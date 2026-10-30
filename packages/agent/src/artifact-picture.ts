@@ -18,16 +18,20 @@
  * whole). Playwright marks `networkidle` DISCOURAGED ("rely on web
  * assertions to assess readiness instead", playwright.dev, `waitUntil`), and
  * a page that syncs its doc never idles, so the page's own signals decide.
+ * Every frame the picture shows is read the same way: a decision page's
+ * Previews draw long after the page around them has settled, and a picture
+ * taken then held their skeletons.
  */
 
 import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core";
 import {
   PICTURE_LIMITS,
+  PICTURE_PAGE_SCROLLER,
   PICTURE_VIEW,
   PREVIEW_LOCKED_MESSAGE,
 } from "@cawco/core/frames";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
-import type { Page } from "playwright-core";
+import type { Frame, Page } from "playwright-core";
 import {
   greet,
   type HelloArtifact,
@@ -115,29 +119,109 @@ const seconds = (ms: number) => `${Math.round(ms / 1000)} s`;
 const timedOut = (error: unknown) =>
   error instanceof Error && error.name === "TimeoutError";
 
+/** How often the page and its frames are read for readiness. Our call. */
+const READY_POLL_MS = 100;
+
 /**
- * Waits up to `within` ms for `page` to be ready ({@link watchReadiness}):
- * its fonts loaded, content painted, nothing of its own in flight, and all
- * of it still for `settleMs`. A page that never says so (one that paints
- * only a canvas, or keeps a request open) is drawn as it stands at the
- * bound.
+ * Whether a document is ready ({@link watchReadiness}): its fonts loaded, its
+ * content painted, nothing of its own in flight, all of it still for `settle`
+ * ms, and no decision page's Preview still waiting in its view: the skeleton
+ * in its well, or Caw over its wait (decisions host Preview.svelte). A
+ * skeleton inside a frame is that design's own, a story of its loading state.
+ * A frame's painted content is its words as well: one that stood at no height
+ * while it painted (a canvas, until it says its shape) is never told a
+ * largest paint.
+ */
+const documentReady = ({
+  framed,
+  settle,
+}: {
+  framed: boolean;
+  settle: number;
+}): boolean => {
+  const doc = globalThis as unknown as Readiness & {
+    document: {
+      body: { textContent: string | null } | null;
+      fonts: { status: string };
+      querySelectorAll: (selector: string) => Iterable<{
+        getBoundingClientRect: () => {
+          bottom: number;
+          height: number;
+          top: number;
+        };
+      }>;
+      readyState: string;
+    };
+    innerHeight: number;
+  };
+  const waiting = [
+    ...doc.document.querySelectorAll(
+      '[data-slot="media"] [data-slot="skeleton"], [data-slot="wait-row"] img'
+    ),
+  ].some((one) => {
+    const box = one.getBoundingClientRect();
+    return box.height > 0 && box.top < doc.innerHeight && box.bottom > 0;
+  });
+  const painted =
+    doc.__cawcoPainted === true ||
+    (framed && !!doc.document.body?.textContent?.trim());
+  return (
+    !waiting &&
+    painted &&
+    doc.document.readyState === "complete" &&
+    doc.document.fonts.status === "loaded" &&
+    doc.__cawcoPending === 0 &&
+    performance.now() - (doc.__cawcoChangedAt ?? 0) >= settle
+  );
+};
+
+/** Whether `frame` stands in what the picture shows: in the window, neither empty nor hidden. One still at no opacity is a frame on its way, and counts. */
+const shownInPicture = async (frame: Frame, page: Page): Promise<boolean> => {
+  const holder = await frame.frameElement();
+  const box = await holder.boundingBox();
+  const view = page.viewportSize();
+  return (
+    !!box &&
+    !!view &&
+    box.width > 0 &&
+    box.height > 0 &&
+    box.y < view.height &&
+    box.y + box.height > 0 &&
+    box.x < view.width &&
+    box.x + box.width > 0 &&
+    (await holder.evaluate((el) =>
+      el.checkVisibility({ visibilityProperty: true })
+    ))
+  );
+};
+
+/** Whether `frame` holds the picture up: one it shows, not yet ready; one that went while it was read holds nothing. */
+const frameReady = async (frame: Frame, page: Page): Promise<boolean> => {
+  try {
+    return (
+      frame === page.mainFrame() ||
+      !(await shownInPicture(frame, page)) ||
+      (await frame.evaluate(documentReady, {
+        framed: true,
+        settle: PICTURE_LIMITS.settleMs,
+      }))
+    );
+  } catch {
+    return !page.frames().includes(frame);
+  }
+};
+
+/**
+ * Waits up to `within` ms for `page` to be ready ({@link documentReady}). A
+ * page that never says so (one that paints only a canvas, or keeps a request
+ * open) is drawn as it stands at the bound.
  */
 const ready = (page: Page, within: number): Promise<void> =>
   page
     .waitForFunction(
-      (settle) => {
-        const doc = globalThis as unknown as Readiness & {
-          document: { fonts: { status: string } };
-        };
-        return (
-          doc.document.fonts.status === "loaded" &&
-          doc.__cawcoPainted === true &&
-          doc.__cawcoPending === 0 &&
-          performance.now() - (doc.__cawcoChangedAt ?? 0) >= settle
-        );
-      },
-      PICTURE_LIMITS.settleMs,
-      { polling: 100, timeout: within }
+      documentReady,
+      { framed: false, settle: PICTURE_LIMITS.settleMs },
+      { polling: READY_POLL_MS, timeout: within }
     )
     .then(
       () => undefined,
@@ -147,6 +231,47 @@ const ready = (page: Page, within: number): Promise<void> =>
         }
       }
     );
+
+/** {@link ready}, then every frame the picture shows, within one bound of `until`. */
+const framesReady = async (page: Page, until: number): Promise<void> => {
+  await ready(page, Math.max(0, until - Date.now()));
+  while (Date.now() < until) {
+    const frames = await Promise.all(
+      page.frames().map((frame) => frameReady(frame, page))
+    );
+    if (frames.every(Boolean)) {
+      return;
+    }
+    await page.waitForTimeout(READY_POLL_MS);
+  }
+};
+
+/**
+ * A decision page's whole length: it is the window's height and scrolls
+ * inside, so a window's picture of it is its first screen. The window opens to
+ * its scroller's length, up to `PICTURE_LIMITS.maxHeight`; any other page's
+ * length is the document's, and its layout stands at the window it asked for.
+ */
+const openToLength = async (page: Page, width: number): Promise<void> => {
+  const hidden = await page.evaluate((selector) => {
+    const { document } = globalThis as unknown as {
+      document: {
+        querySelector: (
+          selector: string
+        ) => { clientHeight: number; scrollHeight: number } | null;
+      };
+    };
+    const scroller = document.querySelector(selector);
+    return scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
+  }, PICTURE_PAGE_SCROLLER);
+  if (hidden > 0) {
+    const view = page.viewportSize()?.height ?? PICTURE_VIEW.height;
+    await page.setViewportSize({
+      width,
+      height: Math.min(view + hidden, PICTURE_LIMITS.maxHeight),
+    });
+  }
+};
 
 /** The picture of `ask.url`, base64 PNG. Throws in words a tool answers when it can't be drawn. */
 export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
@@ -218,6 +343,8 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
       (globalThis as unknown as Readiness).__cawcoChangedAt = performance.now();
     });
     await ready(page, Math.max(0, deadline - Date.now()));
+    await openToLength(page, width);
+    await framesReady(page, deadline);
     const tall = await page.evaluate(async () => {
       const { document } = globalThis as unknown as {
         document: {
