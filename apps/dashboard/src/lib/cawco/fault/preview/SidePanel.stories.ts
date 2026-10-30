@@ -14,7 +14,7 @@ export default {
   args: { region: "side", face: "region", again: false, askCaw: false },
 };
 
-/** The preview beside a conversation on a phone, 390 wide. */
+/** The preview beside a conversation on a phone, 390 wide: the sheet's head and its Close outlive the failure (press it). */
 export const SidePhone = at(390);
 /** The preview beside a conversation on a small tablet or a narrow window, 680 wide. */
 export const SideNarrow = at(680);
