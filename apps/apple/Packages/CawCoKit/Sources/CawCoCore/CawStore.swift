@@ -81,17 +81,19 @@ public final class CawStore {
     }
 
     /// Turns a project's Caw on or off, or moves him to another harness or
-    /// model, `model` nil for his harness's default (`configureCaw`). Written
+    /// model, `model` nil for his harness's default (`configureCaw`);
+    /// `stopping`, turning him off, names what he started that stops now,
+    /// the rest finishing. Written
     /// as the JSON itself: the generated body leaves a null model out, and
     /// null is what names the default.
     public func configureCaw(_ projectId: String, on: Bool? = nil, harness: String? = nil,
-                             model: String?? = nil, initiated: String? = nil) async throws -> ConversationView {
+                             model: String?? = nil, stopping: [String]? = nil) async throws -> ConversationView {
         guard let address = hub.address else { throw TaskRefusal(message: "No hub is connected.") }
         var change: [String: Any] = [:]
         if let on { change["on"] = on }
         if let harness { change["harness"] = harness }
         if let model { change["model"] = model ?? NSNull() }
-        if let initiated { change["initiated"] = initiated }
+        if let stopping { change["initiated"] = ["stop": stopping] }
         var request = URLRequest.hub(address.appending(path: "api/projects").appending(path: projectId).appending(path: "caw"))
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

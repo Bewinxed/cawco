@@ -151,6 +151,7 @@
     "./words/blocks": "./src/words/blocks.ts",
     "./words/browser": "./src/words/browser.ts",
     "./words/caw-head": "./src/words/caw-head.ts",
+    "./words/caw-off": "./src/words/caw-off.ts",
     "./words/comments": "./src/words/comments.ts",
     "./words/connect": "./src/words/connect.ts",
     "./words/connection": "./src/words/connection.ts",

@@ -313,7 +313,7 @@ export class CawLead {
   /** Turns the project's events on or off, or moves them to another harness or model. */
   async configure(change: {
     harness?: HarnessKind;
-    /** Turning events off with what the conversation started still running: it finishes or stops. */
+    /** Turning events off with what the conversation started still running: the ids that stop; the rest finish. */
     initiated?: CawInitiated;
     model?: string | null;
     on?: boolean;

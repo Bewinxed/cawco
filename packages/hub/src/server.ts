@@ -26106,7 +26106,7 @@ export const createServer = (
       hubAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
     // His switch's own path: off, what he started finishes, his turn among them.
     caw: (projectId, on) =>
-      caw.configure(projectId, on ? { on } : { on, initiated: "finish" }),
+      caw.configure(projectId, on ? { on } : { on, initiated: { stop: [] } }),
     connections,
     db,
     dispatch: dispatcher,

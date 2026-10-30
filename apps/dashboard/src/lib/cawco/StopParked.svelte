@@ -15,10 +15,10 @@
   import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import {
+    parkedWords,
     type StopJob,
     stopShare,
     stopWork,
-    wordsOf,
   } from "./stop-work.svelte";
 
   let {
@@ -38,11 +38,14 @@
         job.phase === "fail" ||
         job.phase === "ending")
   );
-  const words = $derived(wordsOf(job));
+  const words = $derived(parkedWords(job));
   const stopped = $derived(
     job.rows.filter((row) => row.state === "stopped").length
   );
-  const total = $derived(Math.max(job.total, job.rows.length));
+  /** What it stops: Caw off's unchecked rows run on, not counted. */
+  const total = $derived(
+    Math.max(job.total, job.rows.filter((row) => row.state !== "kept").length)
+  );
   /** A failure in words: what was left, then each reason the hub gave. */
   const failure = $derived.by(() => {
     if (job.phase !== "fail") {

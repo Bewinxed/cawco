@@ -1,8 +1,11 @@
 /**
  * Stopping a project's running sessions before an end of the caller's (the
  * forget's delete, Caw turned off), kept by the work, not by its tray
- * (DESIGN.md, The Work Outlives Its Surface Rule). The tray (StopTray) shows
- * a job from here: its rows, how far each stop has got, the end, a refusal.
+ * (DESIGN.md, The Work Outlives Its Surface Rule). A tray shows a job from
+ * here: its rows, how far each stop has got, the end, a refusal. A forget's
+ * is StopTray, which stops every row; Caw off's is CawOffTray, whose rows
+ * are each checked to stop (`picked`), the unchecked ones kept running, and
+ * whose one confirm turns him off and stops the checked ones in one request.
  *
  * Cancel, Esc or Stop waiting puts the tray away. Before the stop is pressed
  * that drops the ask, since nothing has started; after it, the job is
@@ -23,6 +26,7 @@ import type {
   CawRunning,
   ProjectConversationView,
 } from "@cawco/core/project-conversation";
+import { cawOffWords } from "@cawco/core/words/caw-off";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
@@ -30,6 +34,7 @@ import { StopJobSchema } from "#lib/cawco/stored-shapes.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import {
+  cawOf,
   configureCaw,
   deleteProject,
   onProjectStop,
@@ -61,10 +66,13 @@ export interface StopRow {
   /** Its machine is away and the hub has recorded its stop for when it is back. */
   owed: boolean;
   s: RunningSession;
-  /** `away`: its machine is not connected; it stops when it is back. */
-  state: "running" | "away" | "stopping" | "stopped" | "failed";
-  /** Its title and link, where the caller names them. */
-  view: { href?: string; title?: string };
+  /**
+   * `away`: its machine is not connected; it stops when it is back. `kept`:
+   * left unchecked as Caw went off, it runs to its end, not this job's.
+   */
+  state: "running" | "away" | "stopping" | "stopped" | "failed" | "kept";
+  /** Its title, link and what it is, where the caller names them. */
+  view: { href?: string; kind?: "attempt" | "delegate"; title?: string };
 }
 
 export interface StopJob {
@@ -76,18 +84,20 @@ export interface StopJob {
   /** The tray stands; false: the job is parked. */
   open: boolean;
   phase: StopPhase;
+  /** Caw off: the rows checked to stop, every one at first. */
+  picked: string[];
   /** When the stop was pressed (Date.now()), for a slow row's seconds. */
   pressedAt: number;
   projectId: string;
   projectName: string;
-  /** The end, or the other way out, refused: the hub's words. */
+  /** The end refused, or Caw off's turning off: the hub's words. */
   refusal: string | null;
   rows: StopRow[];
   /** How many were listed when the stop was pressed: the ring's whole. */
   total: number;
 }
 
-/** What a tray says in each state; its kind's words. */
+/** What a forget's tray says in each state. */
 export interface StopWords {
   /** The second press: "Stop 3 mid-turn and forget". */
   armed: (n: number) => string;
@@ -97,12 +107,6 @@ export interface StopWords {
   ending: string;
   /** The line under the title, in each state; `done` is what the stops did. */
   line: (phase: StopPhase, n: number, done: string) => string;
-  /** The other way out beside the stop, when the kind has one. */
-  other?: (n: number) => string;
-  /** Parked, while the stops land: "Forgetting site: stopped 1 of 3…". */
-  parked: (stopped: number, total: number) => string;
-  /** Parked, a failure: "Stopped 1 of 3; site kept." */
-  partway: (stopped: number, total: number) => string;
   /** The plain question's confirm, with nothing running: "Forget". */
   plain: string;
   /** The first press: "Stop 3 and forget". */
@@ -112,39 +116,8 @@ export interface StopWords {
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-/** A job's words, by its kind. */
-export function wordsOf(job: StopJob): StopWords {
-  const name = job.projectName;
-  if (job.kind === "caw-off") {
-    return {
-      title: `Turn Caw off for ${name || "this project"}?`,
-      plain: "Turn off",
-      stop: (n) => `Stop ${n} and turn Caw off`,
-      armed: (n) => `Stop ${n} mid-turn and turn Caw off`,
-      ending: "Turning Caw off…",
-      ended: "Caw is off",
-      other: (n) => `Let ${plural(n, "it", "them")} finish`,
-      parked: (stopped, total) =>
-        `Caw is off for ${name || "this project"}. Stopped ${stopped} of ${total} he started…`,
-      partway: (stopped, total) =>
-        `Stopped ${stopped} of ${total}; Caw is off.`,
-      line: (phase, n, done) => {
-        switch (phase) {
-          case "list":
-            return `He started ${n} ${plural(n, "thing that is", "things that are")} still running. Let ${plural(n, "it", "them")} finish, or stop ${plural(n, "it", "them")} now.`;
-          case "armed":
-          case "stopping":
-            return "Stopping cuts their turns short. Transcripts stay on disk.";
-          case "fail":
-            return "Caw is off. What couldn't be stopped still runs.";
-          case "none":
-          case "ending":
-          case "done":
-            return `${done} Caw is off.`;
-        }
-      },
-    };
-  }
+/** A forget's words, for the project named `name`. */
+export function forgetWords(name: string): StopWords {
   return {
     title: `Forget ${name}?`,
     plain: "Forget",
@@ -152,10 +125,6 @@ export function wordsOf(job: StopJob): StopWords {
     armed: (n) => `Stop ${n} mid-turn and forget`,
     ending: "Forgetting…",
     ended: "Forgotten",
-    parked: (stopped, total) =>
-      `Forgetting ${name || "the project"}: stopped ${stopped} of ${total} ${plural(total, "session", "sessions")}…`,
-    partway: (stopped, total) =>
-      `Stopped ${stopped} of ${total}; ${name || "the project"} kept.`,
     line: (phase, n, done) => {
       switch (phase) {
         case "none":
@@ -175,13 +144,31 @@ export function wordsOf(job: StopJob): StopWords {
   };
 }
 
-/** A Caw-off row as the tray names it: what it is, and its session. */
+/** A parked job's line, by its kind: the stops landing, then what was left. */
+export function parkedWords(job: StopJob): {
+  parked: (stopped: number, total: number) => string;
+  partway: (stopped: number, total: number) => string;
+} {
+  const name = job.projectName;
+  if (job.kind === "caw-off") {
+    return {
+      parked: (stopped, total) => cawOffWords.parked(name, stopped, total),
+      partway: cawOffWords.partway,
+    };
+  }
+  return {
+    parked: (stopped, total) =>
+      `Forgetting ${name || "the project"}: stopped ${stopped} of ${total} ${plural(total, "session", "sessions")}…`,
+    partway: (stopped, total) =>
+      `Stopped ${stopped} of ${total}; ${name || "the project"} kept.`,
+  };
+}
+
+/** A Caw-off row as the tray names it: what it is, its session, an attempt by its task. */
 function cawView(one: CawRunning): StopRow["view"] {
   const href = `/session/${encodeURIComponent(one.id)}`;
-  if (one.kind === "attempt" && one.taskId) {
-    return { href, title: `${one.taskId} · ${one.title ?? "attempt"}` };
-  }
-  return one.title ? { href, title: one.title } : { href };
+  const title = one.taskTitle ?? one.title;
+  return title ? { href, kind: one.kind, title } : { href, kind: one.kind };
 }
 
 const asRows = (
@@ -253,7 +240,8 @@ class StopWork {
       // A tile in flight as the page went has landed.
       for (const row of job.rows) {
         row.departed = row.state === "stopped";
-        row.arrived = row.state === "stopped" || row.owed;
+        row.arrived =
+          row.state === "stopped" || row.owed || row.state === "kept";
         row.gone = row.state === "stopped";
       }
       job.phase = job.phase === "armed" ? "list" : job.phase;
@@ -296,10 +284,11 @@ class StopWork {
       projectId: project.id,
       projectName: project.name,
       rows: asRows(sessions),
+      picked: [],
     });
   }
 
-  /** Caw turned off while what he started still runs: the tray stands under the switch. */
+  /** Caw turned off while what he started still runs: the tray stands under the switch, every row checked. */
   askCawOff(
     project: { id: string; name: string },
     at: string,
@@ -312,12 +301,21 @@ class StopWork {
       projectId: project.id,
       projectName: project.name,
       rows: asRows(running, (s) => views.get(s.id) ?? {}),
+      picked: running.map((one) => one.id),
     });
+  }
+
+  /** Caw off's boxes: the rows that stop. */
+  pick(job: StopJob, ids: string[]): void {
+    job.picked = ids;
+    job.refusal = null;
+    this.keep();
   }
 
   private ask(job: {
     at: string;
     kind: StopKind;
+    picked: string[];
     projectId: string;
     projectName: string;
     rows: StopRow[];
@@ -361,9 +359,17 @@ class StopWork {
 
   /* ── The tray's presses ─────────────────────────────────────────── */
 
-  /** The confirm: arms, stops them all, tries again, or ends with nothing running. */
+  /**
+   * The confirm: Caw off turns him off and stops the checked rows; a forget
+   * arms, then stops them all; either tries again, or ends with nothing running.
+   */
   press(job: StopJob): void {
-    if (job.phase === "list") {
+    if (
+      job.kind === "caw-off" &&
+      (job.phase === "list" || job.phase === "none")
+    ) {
+      this.turnOff(job);
+    } else if (job.phase === "list") {
       job.phase = "armed";
       this.keep();
     } else if (job.phase === "armed") {
@@ -384,22 +390,43 @@ class StopWork {
     this.stop(job, [id]);
   }
 
-  /** The other way out (Caw off's "Let them finish"): its request, then the tray closes; a refusal stays to be read. */
-  async other(job: StopJob): Promise<void> {
-    if (job.kind !== "caw-off") {
+  /**
+   * Caw off's confirm: the unchecked rows are kept (they run on, counted
+   * as done for this job), and one request turns him off and stops the
+   * checked ones. None checked, he is just turned off.
+   */
+  private turnOff(job: StopJob): void {
+    const picked = new Set(job.picked);
+    const ids = job.rows
+      .filter((row) => picked.has(row.s.id))
+      .map((row) => row.s.id);
+    if (ids.length === 0) {
+      detach(this.finish(job), "finish");
       return;
     }
-    try {
-      this.settled(
-        job.projectId,
-        await configureCaw(job.projectId, { on: false, initiated: "finish" })
-      );
-    } catch (error) {
-      job.refusal = failureWords(error);
-      this.keep();
-      return;
+    for (const row of job.rows) {
+      if (!picked.has(row.s.id)) {
+        row.state = "kept";
+        row.arrived = true;
+      }
     }
-    this.close(job);
+    job.total = ids.length;
+    this.stop(job, ids);
+  }
+
+  /** Caw off refused before anything stopped: the ask again, its boxes as they were, the hub's words in it. */
+  private unpress(job: StopJob, refusal: string | null): void {
+    for (const row of job.rows) {
+      if (row.state !== "stopped") {
+        row.state = row.s.offline ? "away" : "running";
+        row.arrived = false;
+        row.error = null;
+      }
+    }
+    job.total = 0;
+    job.refusal = refusal;
+    job.phase = job.rows.length > 0 ? "list" : "none";
+    this.keep();
   }
 
   /**
@@ -491,6 +518,11 @@ class StopWork {
       },
       (error: unknown) => {
         const reason = failureWords(error);
+        if (job.kind === "caw-off" && !job.off) {
+          // Turning him off was refused: nothing stopped, and he is still on.
+          this.unpress(job, reason);
+          return;
+        }
         for (const id of ids) {
           this.heard(job, id, "failed", reason);
         }
@@ -501,20 +533,16 @@ class StopWork {
   /**
    * The hub asked to stop `ids`; each one's end arrives as `project.stop`.
    * It answers the ids it says had already ended: stopped now. Caw off's
-   * first stop turns him off, and the hub stops what he started.
+   * first stop turns him off, and the hub stops the ones checked.
    */
   private async request(job: StopJob, ids: string[]): Promise<string[]> {
-    if (job.kind === "forget") {
-      await stopProjectSessions(job.projectId, ids);
-      return [];
-    }
-    if (job.off) {
+    if (job.kind === "forget" || job.off) {
       await stopProjectSessions(job.projectId, ids);
       return [];
     }
     const view = await configureCaw(job.projectId, {
       on: false,
-      initiated: "stop",
+      initiated: { stop: ids },
     });
     job.off = true;
     this.keep();
@@ -530,6 +558,13 @@ class StopWork {
       .map((row) => row.s.id);
     if (failedIds.length > 0) {
       this.stop(job, failedIds);
+      return;
+    }
+    if (job.kind === "caw-off") {
+      // What still runs could not be read: read it again; nothing unchecked is stopped.
+      job.refusal = null;
+      job.phase = "stopping";
+      await this.resume(jobKey(job));
       return;
     }
     let again: RunningSession[];
@@ -630,15 +665,22 @@ class StopWork {
       if (job.kind === "forget") {
         await deleteProject(job.projectId);
       } else if (!job.off) {
-        // Nothing he started still ran: he is turned off now.
+        // Nothing checked, or nothing he started still ran: he is turned off now, the rest finishing.
         this.settled(
           job.projectId,
-          await configureCaw(job.projectId, { on: false })
+          await configureCaw(job.projectId, {
+            on: false,
+            initiated: { stop: [] },
+          })
         );
         job.off = true;
       }
     } catch (error) {
       if (this.jobs[key] !== job) {
+        return;
+      }
+      if (job.kind === "caw-off") {
+        this.unpress(job, failureWords(error));
         return;
       }
       job.refusal = failureWords(error);
@@ -720,14 +762,14 @@ class StopWork {
     const running = read;
     const still = new Map(running.map((s) => [s.id, s]));
     if (["none", "list", "armed"].includes(job.phase)) {
-      // The ask, again on what runs now: a session that ended since leaves the list.
-      if (job.kind === "forget") {
-        job.rows = asRows(running);
-      } else {
-        job.rows = job.rows.filter((row) => still.has(row.s.id));
-      }
-      job.phase = job.rows.length > 0 ? "list" : "none";
-      this.keep();
+      this.askAgain(job, running);
+      return;
+    }
+    if (
+      job.kind === "caw-off" &&
+      !job.off &&
+      !(await this.wentOff(job, still))
+    ) {
       return;
     }
     this.listen();
@@ -750,6 +792,47 @@ class StopWork {
     if (job.rows.every((row) => row.arrived)) {
       await this.finish(job);
     }
+  }
+
+  /** The ask, again on what runs now: a session that ended since leaves the list. */
+  private askAgain(job: StopJob, running: RunningSession[]): void {
+    const still = new Set(running.map((s) => s.id));
+    if (job.kind === "forget") {
+      job.rows = asRows(running);
+    } else {
+      job.rows = job.rows.filter((row) => still.has(row.s.id));
+      job.picked = job.picked.filter((id) => still.has(id));
+    }
+    job.phase = job.rows.length > 0 ? "list" : "none";
+    this.keep();
+  }
+
+  /**
+   * Caw off whose page went while he was being turned off: the hub's
+   * answer is whether he is, and so whether the stops went. Still on, the
+   * ask stands again on what still runs; unread, the failure is said.
+   */
+  private async wentOff(
+    job: StopJob,
+    still: Map<string, RunningSession>
+  ): Promise<boolean> {
+    let view: ProjectConversationView;
+    try {
+      view = await cawOf(job.projectId);
+    } catch (error) {
+      job.refusal = failureWords(error);
+      job.phase = "fail";
+      this.keep();
+      return false;
+    }
+    if (view.on) {
+      job.rows = job.rows.filter((row) => still.has(row.s.id));
+      job.picked = job.picked.filter((id) => still.has(id));
+      this.unpress(job, null);
+      return false;
+    }
+    job.off = true;
+    return true;
   }
 
   private after(job: StopJob, ms: number, run: () => void): void {

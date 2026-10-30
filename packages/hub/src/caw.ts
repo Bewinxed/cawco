@@ -347,6 +347,7 @@ export interface CawDeps {
     | "setCawMode"
     | "setProjectCaw"
     | "spendOnCap"
+    | "taskIndex"
     | "updateWorkItem"
     | "workItem"
   >;
@@ -401,7 +402,9 @@ export interface CawDeps {
    * machine confirms it (or deferred to an away machine's next register).
    */
   readonly stops: {
-    running: (projectId: string) => Omit<CawRunning, "kind" | "taskId">[];
+    running: (
+      projectId: string
+    ) => Omit<CawRunning, "kind" | "taskId" | "taskTitle">[];
     stop: (projectId: string, ids: string[]) => void;
   };
   /** A task as its project's files have it. */
@@ -829,6 +832,11 @@ export const createCaw = ({
       );
     });
     const ids = new Set(listed.map((session) => session.id));
+    const titles = new Map(
+      listed.length > 0
+        ? db.taskIndex(project.id).map((indexed) => [indexed.id, indexed.title])
+        : []
+    );
     return listed.map((session): CawRunning => {
       const item = row(session.id)?.workItemId;
       const taskId = item ? (db.workItem(item)?.taskId ?? null) : null;
@@ -840,18 +848,46 @@ export const createCaw = ({
             : null,
         kind: taskId ? "attempt" : "delegate",
         taskId,
+        taskTitle: taskId ? (titles.get(taskId) ?? null) : null,
       };
     });
   };
 
   /**
-   * The switch turned off: what the conversation started that still runs
-   * finishes or stops, as you choose; you are asked whenever something
-   * runs, so nothing is cut, or left running, unseen. `finish` lets it run
-   * to its end, marked `kept`, so it is carried past an account's limit.
-   * `stop` stops those sessions through the forget's stop path, each row
-   * confirmed as its machine ends it. The conversation itself is a session
-   * like any other: it stays, for your next words.
+   * The ids in `ids` the conversation did not start, each named in quotes
+   * by its session's title: one it started that ended since it was listed
+   * is its own, with nothing left to stop.
+   */
+  const foreignOf = (
+    project: ReturnType<typeof projectOf>,
+    running: CawRunning[],
+    ids: string[]
+  ): string[] => {
+    const runs = new Set(running.map((one) => one.id));
+    return ids.flatMap((id) => {
+      if (runs.has(id)) {
+        return [];
+      }
+      const one = row(id);
+      if (
+        one?.parentInstanceId &&
+        topsAtCaw(db, one.parentInstanceId, project)
+      ) {
+        return [];
+      }
+      return [`"${one?.title ?? one?.derivedTitle ?? id}"`];
+    });
+  };
+
+  /**
+   * The switch turned off: you are asked whenever something the
+   * conversation started still runs, so nothing is cut, or left running,
+   * unseen. `stop` names the ones that stop now, through the forget's stop
+   * path, each confirmed as its machine ends it; the rest run to their end,
+   * marked `kept`, so they are carried past an account's limit. An id the
+   * conversation did not start is refused, named, before anything stops. The
+   * conversation itself is a session like any other: it stays, for your
+   * next words.
    */
   const turnOff = (
     project: ReturnType<typeof projectOf>,
@@ -861,17 +897,30 @@ export const createCaw = ({
     if (running.length > 0 && !choice) {
       refuse(
         409,
-        `The project's conversation started ${running.length === 1 ? "1 thing that is" : `${running.length} things that are`} still running. Choose whether they finish or stop, then turn it off.`
+        `The project's conversation started ${running.length === 1 ? "1 thing that is" : `${running.length} things that are`} still running. Name which stop (\`initiated: { stop: [...] }\`, none to let them all finish), then turn it off.`
       );
     }
-    if (choice === "stop") {
+    const foreign = foreignOf(project, running, choice?.stop ?? []);
+    if (foreign.length > 0) {
+      refuse(
+        409,
+        `${foreign.join(", ")} ${foreign.length === 1 ? "wasn't" : "weren't"} started by the project's conversation, so nothing stopped and it is still on.`
+      );
+    }
+    const stopping = new Set(choice?.stop ?? []);
+    const stopped = running.filter((one) => stopping.has(one.id));
+    if (stopped.length > 0) {
       stops.stop(
         project.id,
-        running.map((one) => one.id)
+        stopped.map((one) => one.id)
       );
-      return;
     }
-    for (const one of running) {
+    keep(running.filter((one) => !stopping.has(one.id)));
+  };
+
+  /** What runs on as Caw goes off: its work items marked `kept`, so they are carried past an account's limit. */
+  const keep = (rows: CawRunning[]): void => {
+    for (const one of rows) {
       const itemId = row(one.id)?.workItemId;
       if (itemId && db.workItem(itemId)?.origin === "event") {
         db.updateWorkItem(itemId, { origin: "kept" });
@@ -1146,8 +1195,8 @@ export const createCaw = ({
      * Turns the switch on or off, or moves the conversation to another
      * harness or model, or sets the mode the hub starts it in (`mode`, null:
      * the fleet's). Off, with anything it started still running, needs
-     * `initiated`: it finishes or stops ({@link turnOff}); refused without
-     * it. A move ends the conversation it had. A harness of its own takes
+     * `initiated`: the ids that stop, the rest finish ({@link turnOff});
+     * refused without it. A move ends the conversation it had. A harness of its own takes
      * its own default model unless the change names one. Turned on, the
      * inbound events that waited for it go to the conversation.
      */
@@ -1527,10 +1576,9 @@ export const cawRoutes = (caw: Caw) =>
       {
         body: t.Object({
           on: t.Optional(t.Boolean()),
-          // Turning the switch off with what it started still running: it finishes or stops.
-          initiated: t.Optional(
-            t.Union([t.Literal("finish"), t.Literal("stop")])
-          ),
+          // Turning the switch off with what it started still running: the
+          // ones that stop now; the rest finish.
+          initiated: t.Optional(t.Object({ stop: t.Array(t.String()) })),
           harness: t.Optional(HARNESS),
           model: t.Optional(t.Nullable(t.String())),
           // The mode the hub starts its conversation in; null: the fleet's.

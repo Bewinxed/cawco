@@ -1,34 +1,28 @@
 /**
- * Turning Caw off with a pick (Component Story Format 3, live): the
- * owner's ask on caw-one-session-calls, 10-30, drawn on the tray StopTray
- * already is. Each story is Caw's settings (the ⋯ menu's popover on a
- * desk, its sheet on a phone) with the tray grown under the switch: what
- * Caw's conversation started that still runs, each with a checkbox, all
- * checked; one confirm stops the checked ones and turns him off; Cancel
- * leaves him on. The frames play: flip the switch, uncheck, confirm.
- * Rows are hub caw.ts `initiated` (`CawRunning`), with the task's title
- * and what each is doing as the rail has them.
+ * Turning Caw off with what his conversation started still running (Component
+ * Story Format 3, live): the section under his switch, each row checked to
+ * stop, one confirm. CawOffTray draws it from its job in stop-work.svelte.ts;
+ * these are its steps with rows as the hub's `initiated` lists them
+ * (`CawRunning`, an attempt named by its task's title), and what each is
+ * doing as the rail has it.
  */
 import type { PickRow } from "./StopTrayPick.svelte";
-import CawOffPanel from "./stop-preview/CawOffPanel.svelte";
-
-const CONFIRM = /Stop 5 and turn off/u;
+import StopTrayPick from "./StopTrayPick.svelte";
 
 const row = (
   id: string,
-  over: Partial<PickRow> & Pick<PickRow, "kind">
+  over: Partial<PickRow> & Pick<PickRow, "kind" | "title">
 ): PickRow => ({
   id,
   cwd: `/home/bewinxed/.worktrees/cockpit-${id}`,
-  machineId: "m-obelisk",
   machineName: "obelisk",
   offline: false,
   parentId: null,
-  taskId: null,
-  taskTitle: null,
-  title: null,
   activity: "working",
   ran: "4m",
+  stop: null,
+  landed: false,
+  error: null,
   ...over,
 });
 
@@ -36,8 +30,6 @@ const row = (
 const EIGHT: PickRow[] = [
   row("a41", {
     kind: "attempt",
-    taskId: "tsk-41",
-    taskTitle: "Fix the tray chip overflow",
     title: "Fix the tray chip overflow",
     ran: "14m",
   }),
@@ -49,18 +41,13 @@ const EIGHT: PickRow[] = [
   }),
   row("a44", {
     kind: "attempt",
-    taskId: "tsk-44",
-    taskTitle: "Retry pushes when the hub restarts",
     title: "Retry pushes when the hub restarts",
     activity: "blocked",
     ran: "22m",
   }),
   row("a47", {
     kind: "attempt",
-    taskId: "tsk-47",
-    taskTitle: "Name machines by hostname in the rail",
     title: "Name machines by hostname in the rail",
-    machineId: "m-kestrel",
     machineName: "kestrel",
     offline: true,
     ran: "1h",
@@ -93,8 +80,6 @@ const EIGHT: PickRow[] = [
 const SIXTEEN: PickRow[] = [
   row("a52", {
     kind: "attempt",
-    taskId: "tsk-52",
-    taskTitle: "Show spend per harness on the usage chart",
     title: "Show spend per harness on the usage chart",
     ran: "31m",
   }),
@@ -106,41 +91,31 @@ const SIXTEEN: PickRow[] = [
   }),
   row("a53", {
     kind: "attempt",
-    taskId: "tsk-53",
-    taskTitle: "Keep the composer's draft through a reload",
     title: "Keep the composer's draft through a reload",
     activity: "blocked",
     ran: "48m",
   }),
   row("a55", {
     kind: "attempt",
-    taskId: "tsk-55",
-    taskTitle: "Sign the iOS build with the new team id",
     title: "Sign the iOS build with the new team id",
-    machineId: "m-mini",
     machineName: "mini",
     ran: "12m",
   }),
   row("d55a", {
     kind: "delegate",
     parentId: "a55",
-    machineId: "m-mini",
     machineName: "mini",
     title: "Run xcodebuild archive for Caw&Co",
     ran: "9m",
   }),
   row("a58", {
     kind: "attempt",
-    taskId: "tsk-58",
-    taskTitle: "Fold old routines into their project's page",
     title: "Fold old routines into their project's page",
     activity: "idle",
     ran: "",
   }),
   row("a60", {
     kind: "attempt",
-    taskId: "tsk-60",
-    taskTitle: "Retry a delegate's merge check after a lockfile race",
     title: "Retry a delegate's merge check after a lockfile race",
     ran: "7m",
   }),
@@ -163,7 +138,6 @@ const SIXTEEN: PickRow[] = [
   row("dshot", {
     kind: "delegate",
     title: "Shoot the onboarding flow at 390 and 1440",
-    machineId: "m-kestrel",
     machineName: "kestrel",
     offline: true,
     ran: "1h",
@@ -200,110 +174,109 @@ const SIXTEEN: PickRow[] = [
 /** Twenty-four running. */
 const TWENTY_FOUR = [...EIGHT, ...SIXTEEN];
 
+const ids = (rows: PickRow[]) => rows.map((each) => each.id);
+/** Every row checked but these. */
+const allBut = (rows: PickRow[], off: string[]) =>
+  ids(rows).filter((id) => !off.includes(id));
+const KEPT = ["a44", "dlog", "dprs"];
+
+/** Each checked row's stop, part-way: two landed, kestrel's waits for it. */
+const partway = (rows: PickRow[]): PickRow[] =>
+  rows.map((each): PickRow => {
+    if (KEPT.includes(each.id)) {
+      return each;
+    }
+    if (each.offline) {
+      return { ...each, ran: "", stop: "away", landed: true };
+    }
+    const done = ["d41a", "d812"].includes(each.id);
+    return {
+      ...each,
+      ran: done ? "" : "7s",
+      stop: done ? "stopped" : "stopping",
+      landed: done,
+    };
+  });
+
 export default {
   title: "Caw off/Pick what stops",
-  component: CawOffPanel,
-  args: { rows: EIGHT },
+  component: StopTrayPick,
+  args: { projectName: "cockpit", rows: EIGHT, checked: ids(EIGHT) },
 };
 
 /** One task's attempt still runs: its box checked, the confirm counts one. */
 export const One = {
-  args: { rows: [EIGHT[0]] },
+  args: { rows: [EIGHT[0]], checked: [EIGHT[0]?.id] },
 };
 
-/** Eight running, all checked: tasks and delegates mixed, a delegate under a task. */
+/** Eight running, all checked: tasks and delegates mixed, the one that needs you too. */
 export const Many = {};
 
 /** Three unchecked: the task that needs you and the changelog with its delegate keep running. */
 export const SomeUnchecked = {
-  args: { unchecked: ["a44", "dlog", "dprs"] },
+  args: { checked: allBut(EIGHT, KEPT) },
 };
 
-/** None checked: the confirm becomes "Turn off, let 8 finish". */
+/** None checked: the confirm just turns him off. */
 export const NoneChecked = {
-  args: { unchecked: EIGHT.map((each) => each.id) },
+  args: { checked: [] },
 };
 
-/** The hub refused: its words in the head, the picks kept, the confirm again. */
+/** Turning him off was refused: the hub's words in the head, the picks kept, the confirm again. */
 export const Refused = {
   args: {
-    unchecked: ["a44", "dlog", "dprs"],
-    refusal:
-      "The hub didn't answer (timeout). Nothing stopped and Caw is still on; your picks are kept.",
+    checked: allBut(EIGHT, KEPT),
+    refusal: "The hub didn't answer (timeout). Try again.",
   },
 };
 
-/** Stopping: the kept rows fold into one line; each stop turns as its machine confirms. */
+/** Stopping: only the checked rows stand, each turning as its machine confirms it. */
 export const Stopping = {
   args: {
-    on: false,
     step: "stopping",
-    unchecked: ["a44", "dlog", "dprs"],
-    stops: {
-      a41: "stopping",
-      d41a: "stopped",
-      a47: "away",
-      d812: "stopped",
-      dbun: "stopping",
-    },
-  },
-  from: "SomeUnchecked",
-  play: async ({
-    canvas,
-    userEvent,
-  }: {
-    canvas: { getByRole: (role: string, o: { name: RegExp }) => Element };
-    userEvent: { click: (el: Element) => Promise<void> };
-  }) => {
-    await userEvent.click(canvas.getByRole("button", { name: CONFIRM }));
+    checked: allBut(EIGHT, KEPT),
+    rows: partway(EIGHT),
   },
 };
 
-/** Off: the list folds shut; what stopped, what waits for kestrel, what finishes. */
+/** One stop failed: its row says why with its own Try again; the confirm tries it too. */
+export const Failed = {
+  args: {
+    step: "failed",
+    checked: allBut(EIGHT, KEPT),
+    rows: partway(EIGHT)
+      .map((each) =>
+        each.stop === "stopping"
+          ? { ...each, ran: "", stop: "stopped", landed: true }
+          : each
+      )
+      .map((each) =>
+        each.id === "dbun"
+          ? {
+              ...each,
+              stop: "failed",
+              landed: false,
+              error: "obelisk didn't confirm the stop in 30s.",
+            }
+          : each
+      ),
+  },
+};
+
+/** Off: the list folds shut; what stopped, what waits for kestrel. */
 export const Off = {
   args: {
-    on: false,
     step: "off",
-    unchecked: ["a44", "dlog", "dprs"],
-    stops: {
-      a41: "stopped",
-      d41a: "stopped",
-      a47: "away",
-      d812: "stopped",
-      dbun: "stopped",
-    },
+    checked: allBut(EIGHT, KEPT),
+    rows: partway(EIGHT).map((each) =>
+      each.stop === "stopping"
+        ? { ...each, ran: "", stop: "stopped", landed: true }
+        : each
+    ),
   },
 };
 
-/** Nothing Caw started still runs: the switch just flips, no tray. */
-export const NothingRunning = {
-  args: { rows: [], on: false, open: false },
+/** A long list: 24 rows stand about ten tall and scroll, the edge fading where more is past it. */
+export const Long = {
+  args: { rows: TWENTY_FOUR, checked: ids(TWENTY_FOUR) },
 };
-
-/** Long list, capped: 24 rows stand about ten tall and scroll, the eleventh peeking. */
-export const ManyCapped = {
-  args: { rows: TWENTY_FOUR, cap: true },
-};
-
-/** Long list, uncapped: all 24 rows stand, the tray as tall as they are. */
-export const ManyUncapped = {
-  args: { rows: TWENTY_FOUR },
-};
-
-/** Unchecked rows say "Keeps running" on their second line. */
-export const UncheckedSays = {
-  args: { unchecked: ["a44", "dlog", "dprs"], keptSays: true },
-};
-
-/** Unchecked rows keep their status (as built): only the box says it. */
-export const UncheckedQuiet = {
-  args: { unchecked: ["a44", "dlog", "dprs"] },
-};
-
-/** The session that needs you starts unchecked; everything else starts checked. */
-export const NeedsYouUnchecked = {
-  args: { needsYouStartsOff: true },
-};
-
-/** Everything starts checked, the one that needs you too (as built, his "all selected by default"). */
-export const NeedsYouChecked = {};

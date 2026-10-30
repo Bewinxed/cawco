@@ -1,52 +1,71 @@
 <script lang="ts" module>
   import type { Activity } from "@cawco/core/activity";
-  import type { CawRunning } from "@cawco/core/project-conversation";
 
-  /** One thing Caw started that still runs, as the pick step names it. */
-  export interface PickRow extends CawRunning {
+  /** One thing Caw started that still runs, as the section draws it. */
+  export interface PickRow {
     /** What its turn is doing now, as the rail says it. */
     activity: Activity;
+    /** Its folder: its mark's hue. */
+    cwd: string;
+    /** Its stop failed: the hub's words. */
+    error: string | null;
+    /** Its session's page. */
+    href?: string;
+    id: string;
+    kind: "attempt" | "delegate";
+    /** Its stop has landed, or is recorded for its machine's return: the ring counts it. */
+    landed: boolean;
     /** Its machine's name ("obelisk"). */
     machineName: string;
-    /** How long its turn has run ("4m"). */
+    /** Its machine is away. */
+    offline: boolean;
+    /** The nearest row it is a delegate of; null for a top row. */
+    parentId: string | null;
+    /** How long its turn has run ("4m"), or how long its stop has waited ("7s"). */
     ran: string;
-    /** The task's own title, for an attempt. */
-    taskTitle: string | null;
+    /** How far its stop has got, once the confirm is pressed; null before. */
+    stop: PickStop | null;
+    /** Its name: an attempt's task title, else the session's. */
+    title: string;
   }
 
   /** How far one checked row's stop has got. */
   export type PickStop = "stopping" | "stopped" | "away" | "failed";
 
-  /** The tray's step: choose what stops, the stops landing, Caw off. */
-  export type PickStep = "pick" | "stopping" | "off";
+  /** The section's step: choose what stops, the stops landing, one failed, Caw off. */
+  export type PickStep = "pick" | "stopping" | "failed" | "off";
 </script>
 
 <script lang="ts">
   /**
-   * DESIGN DRAWING, not wired: the Caw-off tray with a pick step (the
-   * owner's pin on caw-one-session-calls, 10-30). It stands where StopTray
-   * stands, under Caw's switch, and grows in place through three steps,
-   * each its own height (Family, benji.org/family-values: "each subsequent
-   * tray is designed to vary in height"):
+   * Caw turned off while what his conversation started still runs: a
+   * section of his settings under the switch, a hairline over it, no card
+   * (CawOffTray wires it to its job in stop-work.svelte.ts). It grows in
+   * place through its steps, each its own height (Family,
+   * benji.org/family-values: "each subsequent tray is designed to vary in
+   * height"):
    *
    * 1. Pick: every session the conversation started that still runs, each
    *    with a checkbox, all checked. One confirm stops the checked ones and
-   *    turns Caw off; the unchecked ones finish on their own. Cancel leaves
-   *    Caw on. Its label carries the count ("Stop 5 and turn off"), and
-   *    with none checked it is the old "Let them finish" ("Turn off, let 8
-   *    finish"), so one button replaces the two and the arming press.
-   * 2. Stopping: the unchecked rows fold away into one line, the checked
-   *    ones turn as each machine confirms, the ring in the button fills.
-   * 3. Off: the list folds shut; what stopped and what still runs, said.
+   *    turns Caw off; the unchecked ones run on, their empty box saying so.
+   *    Cancel leaves Caw on. The confirm counts the checked ("Stop 5 and
+   *    turn off"); with none checked it just turns him off.
+   * 2. Stopping: only the checked rows stand, each turning as its machine
+   *    confirms it, the ring in the confirm filling. A failed row says why
+   *    and offers its own Try again; the confirm tries every failed one.
+   * 3. Off: the list folds shut; what stopped, and what waits for its
+   *    machine, said.
    *
    * The nesting rule (a stopped lead never leaves its delegates running):
    * checking a row checks everything under it; unchecking a row unchecks
    * everything under it and the leads above it.
    *
-   * The title morphs its words ("Turn Caw off for cockpit?" into "Caw is
-   * off for cockpit"), Caw's face goes from ready to sleeping, and each
-   * row's checkbox slot becomes its stop's glyph: what persists stays put.
+   * A long list stands about ten rows tall and scrolls, the house edge fade
+   * (`kit-edge-fade-block`, edge-fade.css) at whichever edge has more past it.
    */
+  import { cawOffWords as words } from "@cawco/core/words/caw-off";
+  import { commonWords } from "@cawco/core/words/common";
+  import type { HTMLAttributes } from "svelte/elements";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -57,9 +76,9 @@
     IconMoonSleep as OffGlyph,
     IconPause as Pause,
     IconStop as StopGlyph,
-    IconRenew as Working,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
+  import { ACTIVITY_LABEL, STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { markHue, sessionSprite } from "./mark";
   import { nestFrom } from "./motion/branch.svelte";
   import { unfold } from "./motion/fold.svelte";
@@ -73,38 +92,35 @@
     rows,
     step = "pick",
     checked = $bindable([]),
-    stops = {},
     refusal = null,
+    onpick,
     oncancel,
     onconfirm,
-    cap = false,
-    keptSays = false,
-  }: {
+    onagain,
+    ...rest
+  }: HTMLAttributes<HTMLElement> & {
     class?: string;
     projectName: string;
     rows: PickRow[];
     step?: PickStep;
-    /** The ids that stop; every row's by default. */
+    /** The ids that stop; every row's at first. */
     checked?: string[];
-    /** Each checked row's stop, from step 2 on. */
-    stops?: Record<string, PickStop>;
-    /** The hub refused the turn-off: its words, in the head. */
+    /** Turning him off was refused: the hub's words, in the head. */
     refusal?: string | null;
+    /** A box changed: the ids now checked. */
+    onpick?: (ids: string[]) => void;
+    /** Cancel, Stop waiting or Close. */
     oncancel?: () => void;
+    /** The confirm: turn off and stop the checked, or try the failed again. */
     onconfirm?: () => void;
-    /** A long list stands about ten rows tall and scrolls, the next row peeking. */
-    cap?: boolean;
-    /** An unchecked row's second line says it keeps running. */
-    keptSays?: boolean;
+    /** One failed row's Try again. */
+    onagain?: (id: string) => void;
   } = $props();
 
   const uid = $props.id();
 
   /** Between the parts of a row's second line. */
   const SEP = " · ";
-
-  const plural = (n: number, one: string, many: string) =>
-    n === 1 ? one : many;
 
   /* ── The checks ─────────────────────────────────────────────────── */
 
@@ -118,6 +134,12 @@
     const lead = rows.find((row) => row.id === id)?.parentId;
     return lead ? [lead, ...leadsOf(lead)] : [];
   };
+
+  /** The boxes now: drawn at once, and handed to the job. */
+  function pick(ids: string[]): void {
+    checked = ids;
+    onpick?.(ids);
+  }
 
   function toggle(id: string, next: boolean): void {
     const set = new Set(checked);
@@ -133,75 +155,49 @@
         set.delete(lead);
       }
     }
-    checked = rows.filter((row) => set.has(row.id)).map((row) => row.id);
+    pick(rows.filter((row) => set.has(row.id)).map((row) => row.id));
   }
 
   const total = $derived(rows.length);
-  const stopping = $derived(rows.filter((row) => on.has(row.id)).length);
-  const kept = $derived(total - stopping);
-  const all = $derived(stopping === total);
-  const tasks = $derived(rows.filter((row) => row.kind === "attempt").length);
-  const delegates = $derived(total - tasks);
+  const picked = $derived(rows.filter((row) => on.has(row.id)));
+  const all = $derived(picked.length === total);
+  const landed = $derived(picked.filter((row) => row.landed).length);
 
   /* ── What each step says ────────────────────────────────────────── */
 
-  const name = $derived(projectName || "this project");
   const title = $derived(
-    step === "pick" ? `Turn Caw off for ${name}?` : `Caw is off for ${name}`
+    step === "pick" ? words.ask(projectName) : words.off(projectName)
   );
 
-  const stopsOf = (state: PickStop) =>
-    rows.filter((row) => on.has(row.id) && stops[row.id] === state);
-  const stoppedCount = $derived(stopsOf("stopped").length);
-  const away = $derived(stopsOf("away"));
-  const left = $derived(stopsOf("stopping").length);
-  const failedCount = $derived(stopsOf("failed").length);
-
-  const finishes = (n: number) =>
-    `${n} ${plural(n, "finishes", "finish")} on ${plural(n, "its", "their")} own.`;
-
+  /** Once he is off: what stopped, and what waits for its machine. */
   const line = $derived.by(() => {
-    if (step === "pick") {
-      if (stopping === 0) {
-        return `He stops taking events now. ${total === 1 ? "It finishes" : `All ${total} finish`} on ${plural(total, "its", "their")} own.`;
-      }
-      return "He stops taking events now. Checked sessions stop mid-turn; the rest finish on their own.";
+    if (step !== "off") {
+      return "";
     }
-    if (step === "stopping") {
-      return "Each stops as its machine confirms it.";
-    }
-    const said = [`Stopped ${stoppedCount}.`];
-    if (away.length > 0) {
-      const machines = [...new Set(away.map((row) => row.machineName))];
-      said.push(
-        `${away.length} ${plural(away.length, "stops", "stop")} when ${machines.length === 1 ? `${machines[0]} is` : "their machines are"} back.`
-      );
-    }
-    if (kept > 0) {
-      said.push(finishes(kept));
-    }
-    return said.join(" ");
+    const away = picked.filter((row) => row.stop === "away");
+    const machines = [...new Set(away.map((row) => row.machineName))];
+    return words.done(
+      picked.filter((row) => row.stop === "stopped").length,
+      away.length,
+      machines.length === 1 ? (machines[0] ?? null) : null
+    );
   });
 
   const confirmLabel = $derived.by(() => {
-    if (step === "off") {
-      return "Caw is off";
+    if (step === "failed") {
+      return commonWords.tryAgain;
     }
-    return stopping === 0
-      ? `Turn off, let ${total === 1 ? "it" : total} finish`
-      : `Stop ${stopping} and turn off`;
+    return picked.length === 0 ? words.turnOff : words.stop(picked.length);
   });
-  /** Coral to turn off with nothing stopped, destructive to stop, plain once he is off. */
-  const confirmLook = $derived.by(() => {
-    if (step === "off") {
-      return "outline";
+  const cancelLabel = $derived.by(() => {
+    if (step === "stopping") {
+      return words.stopWaiting;
     }
-    return step === "pick" && stopping === 0 ? "default" : "destructive";
+    return step === "failed" ? words.close : words.cancel;
   });
+  /** The ring's share, from the press on. */
   const progress = $derived(
-    step === "pick" || stopping === 0
-      ? undefined
-      : (stoppedCount + away.length) / stopping
+    step === "pick" || picked.length === 0 ? undefined : landed / picked.length
   );
 
   /* ── A row ──────────────────────────────────────────────────────── */
@@ -226,47 +222,46 @@
       : rows.filter((row) => shown(row) && leadShown(row) === lead);
 
   const fillOf = (row: PickRow) => `var(--mark-${markHue(row.cwd)})`;
-  const titleOf = (row: PickRow) =>
-    (row.kind === "attempt" ? row.taskTitle : null) ??
-    row.title ??
-    row.cwd.split("/").at(-1) ??
-    row.id;
 
   function statusOf(row: PickRow) {
-    const stop = step === "pick" ? null : stops[row.id];
-    if (stop === "stopping") {
-      return { word: "Stopping…", icon: null, tone: "busy" } as const;
+    if (row.stop === "stopping") {
+      return { word: STOPPING_LABEL, icon: null, tone: "busy" } as const;
     }
-    if (stop === "stopped") {
-      return { word: "Stopped", icon: Pause, tone: "quiet" } as const;
+    if (row.stop === "stopped") {
+      return { word: STOPPED_LABEL, icon: Pause, tone: "quiet" } as const;
     }
-    if (stop === "failed") {
-      return { word: "Couldn't stop", icon: Failed, tone: "failed" } as const;
+    if (row.stop === "failed") {
+      return { word: words.couldntStop, icon: Failed, tone: "failed" } as const;
     }
-    if (step === "pick" && keptSays && !on.has(row.id)) {
-      return { word: "Keeps running", icon: null, tone: "quiet" } as const;
-    }
-    if (row.offline) {
+    if (row.offline || row.stop === "away") {
       return {
         word: on.has(row.id)
-          ? `Stops when ${row.machineName} is back`
-          : `${row.machineName} is away`,
+          ? words.stopsWhenBack(row.machineName)
+          : words.away(row.machineName),
         icon: Away,
         tone: "quiet",
       } as const;
     }
     if (row.activity === "blocked") {
-      return { word: "Needs you", icon: null, tone: "attention" } as const;
+      return {
+        word: commonWords.needsYou,
+        icon: null,
+        tone: "attention",
+      } as const;
     }
     if (row.activity === "working") {
-      return { word: "Working", icon: null, tone: "working" } as const;
+      return {
+        word: ACTIVITY_LABEL.working,
+        icon: null,
+        tone: "working",
+      } as const;
     }
-    return { word: "Idle", icon: Pause, tone: "quiet" } as const;
+    return { word: ACTIVITY_LABEL.idle, icon: Pause, tone: "quiet" } as const;
   }
 
   function markOf(row: PickRow) {
     if (step !== "pick") {
-      return stops[row.id] === "failed" ? ("fail" as const) : undefined;
+      return row.stop === "failed" ? ("fail" as const) : undefined;
     }
     if (row.activity === "blocked") {
       return "attn" as const;
@@ -295,7 +290,6 @@
     {@const status = statusOf(row)}
     {@const kids = branchOf(row.id)}
     {@const Sprite = sessionSprite(row.id)}
-    {@const named = titleOf(row)}
     <li class="relative" data-row={row.id} transition:unfold>
       <!-- Two lines: the title, whole, then what it is and what it is
            doing. The mark and the box stand on the title's first line. -->
@@ -326,16 +320,23 @@
         <span data-slot="words" class="grid min-w-0 flex-auto">
           <span
             data-slot="title"
-            class="text-pretty wrap-anywhere text-ink-strong">{named}</span
+            class="text-pretty wrap-anywhere text-ink-strong"
           >
+            {#if row.href && step !== "pick"}
+              <a
+                class="text-inherit no-underline hover:underline hover:underline-offset-3"
+                href={row.href}>{row.title}</a
+              >
+            {:else}
+              {row.title}
+            {/if}
+          </span>
           <span data-slot="meta" class="type-meta text-ink-muted"
-            >{#if row.kind === "attempt"}Task{SEP}{/if}<span
+            >{#if row.kind === "attempt"}{words.task}{SEP}{/if}<span
               class={toneInk(status.tone)}
               data-stop-tray-tone={status.tone}
               ><MorphText text={status.word} /></span
-            >{#if step === "pick" && row.ran}{SEP}<span class="num"
-                >{row.ran}</span
-              >{/if}</span
+            >{#if row.ran}{SEP}<span class="num">{row.ran}</span>{/if}</span
           >
         </span>
         <!-- The pick's checkbox, then its stop's glyph, in one trailing
@@ -348,7 +349,7 @@
           {#if step === "pick"}
             <Checkbox
               id="{uid}-{row.id}"
-              aria-label="Stop {named}"
+              aria-label={words.stopOne(row.title)}
               checked={on.has(row.id)}
               onCheckedChange={(next) => toggle(row.id, next)}
             />
@@ -372,6 +373,12 @@
           {/if}
         </span>
       </svelte:element>
+      <RowFault
+        again={onagain ? () => onagain(row.id) : undefined}
+        end={"var(--row-compact-pad-end)"}
+        indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"}
+        reason={row.stop === "failed" ? row.error : null}
+      />
       {#if kids.length > 0}
         <ul
           data-nest
@@ -394,6 +401,7 @@
   data-stop-kind="caw-off"
   data-phase={step}
   transition:unfold
+  {...rest}
 >
   <div data-slot="body" class="grid grid-cols-1 gap-space-3">
     <div data-slot="head" class="flex min-w-0 gap-space-2">
@@ -403,16 +411,16 @@
         data-box
         class="grid block-lh flex-none place-items-center type-label text-ink-muted"
       >
-        {#key step === "pick"}
+        {#key step === "off"}
           <span
             class="col-start-1 row-start-1 inline-grid"
             in:glyphIn
             out:glyphOut
           >
-            {#if step === "pick"}
-              <StopGlyph class="size-icon-md" />
-            {:else}
+            {#if step === "off"}
               <OffGlyph class="size-icon-md" />
+            {:else}
+              <StopGlyph class="size-icon-md" />
             {/if}
           </span>
         {/key}
@@ -425,40 +433,36 @@
         >
           <MorphText text={title} wrap />
         </p>
-        <p aria-live="polite" class="m-0 type-meta text-pretty text-ink-muted">
-          <MorphText text={line} wrap />
-        </p>
+        {#if line}
+          <p
+            aria-live="polite"
+            class="m-0 type-meta text-pretty text-ink-muted"
+            transition:unfold
+          >
+            {line}
+          </p>
+        {/if}
         <RowFault reason={refusal} />
       </div>
     </div>
 
-    {#if step !== "off"}
+    {#if step !== "off" && total > 0}
       <div
         data-slot="list"
         class="-mx-(--row-compact-gap) grid min-w-0 grid-cols-1 gap-space-1"
         transition:unfold
       >
         {#if step === "pick" && total > 1}
-          <!-- The count, and which are tasks, over the rows; its box, in
-               the rows' column, checks or clears them all. -->
+          <!-- Its box, in the rows' column, checks or clears them all. -->
           <label
             for="{uid}-all"
             data-slot="all"
             class="mark-line flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) rounded-sm ps-(--row-compact-gap) pe-(--row-compact-pad-end) hover:bg-surface-hover"
             transition:unfold
           >
-            <span
-              data-box
-              class="flex min-w-0 flex-auto flex-wrap items-baseline gap-x-space-2"
+            <span data-box class="min-w-0 flex-auto type-label text-ink-strong"
+              >{words.all(total)}</span
             >
-              <span class="type-label text-ink-strong">All {total} running</span
-              >
-              <span class="num type-meta text-ink-muted"
-                >{tasks}
-                {plural(tasks, "task", "tasks")} · {delegates}
-                {plural(delegates, "delegate", "delegates")}</span
-              >
-            </span>
             <span
               data-box
               class="grid size-icon-md flex-none place-items-center"
@@ -466,71 +470,54 @@
               <Checkbox
                 id="{uid}-all"
                 checked={all}
-                indeterminate={!all && stopping > 0}
+                indeterminate={!all && picked.length > 0}
                 onCheckedChange={(next) => {
-                  checked = next ? rows.map((row) => row.id) : [];
+                  pick(next ? rows.map((row) => row.id) : []);
                 }}
               />
             </span>
           </label>
         {/if}
+        <!-- About ten rows tall, then it scrolls, the next row peeking
+             under the house edge fade. -->
         <ul
           data-slot="sessions"
-          aria-label="Sessions Caw started"
-          class={cn(
-            "m-0 flex list-none flex-col gap-(--tree-gap) overflow-x-clip p-0 clip-margin-space-2",
-            cap &&
-              "max-h-(--list-cap) overflow-y-auto overscroll-contain scrollbar-gutter-stable"
-          )}
-          style:--list-cap={cap
-            ? "calc(10.5 * (2lh + 2 * var(--space-1) + var(--tree-gap)))"
-            : undefined}
+          aria-label={words.list}
+          class="kit-edge-fade-block m-0 flex max-h-(--list-cap) list-none flex-col gap-(--tree-gap) overflow-x-clip overflow-y-auto overscroll-contain p-0 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          style:--list-cap={"calc(10.5 * (2lh + 2 * var(--space-1) + var(--tree-gap)))"}
         >
           {@render branch(null)}
         </ul>
-        {#if step === "stopping" && kept > 0}
-          <!-- Where the unchecked rows went: one line, still true. -->
-          <p
-            data-slot="kept"
-            class="mark-line m-0 flex items-center gap-space-1 ps-(--row-compact-gap) pe-(--row-compact-pad-end) type-meta text-pretty text-ink-muted"
-            transition:unfold
-          >
-            <Working
-              aria-hidden="true"
-              class="size-icon-sm text-status-live-glyph"
-            />
-            {kept}
-            {plural(
-              kept,
-              "keeps running and finishes on its own.",
-              "keep running and finish on their own."
-            )}
-          </p>
-        {/if}
       </div>
     {/if}
 
-    <div data-slot="actions" class="flex flex-wrap justify-end gap-space-2">
-      {#if step !== "off"}
+    {#if step !== "off"}
+      <div
+        data-slot="actions"
+        class="flex flex-wrap justify-end gap-space-2"
+        transition:unfold
+      >
         <Button
           data-stop-cancel
-          label={step === "pick" ? "Cancel" : "Stop waiting"}
+          label={cancelLabel}
           onclick={oncancel}
           size="sm"
           variant="ghost"
         />
-      {/if}
-      <Button
-        data-stop-confirm
-        failed={failedCount > 0 && left === 0}
-        label={confirmLabel}
-        onclick={step === "pick" ? onconfirm : undefined}
-        pending={step === "stopping"}
-        pendingLabel="Stopping {Math.max(left, 1)}…"
-        {progress}
-        size="sm"
-        variant={confirmLook}
-      />
-    </div>
+        <Button
+          data-stop-confirm
+          failed={step === "failed"}
+          label={confirmLabel}
+          onclick={step === "stopping" ? undefined : onconfirm}
+          pending={step === "stopping"}
+          pendingLabel={words.stopping(Math.max(picked.length - landed, 1))}
+          {progress}
+          size="sm"
+          variant={step === "pick" && picked.length === 0
+            ? "default"
+            : "destructive"}
+        />
+      </div>
+    {/if}
   </div>
 </section>

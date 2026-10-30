@@ -10975,9 +10975,16 @@
                     "type": "boolean"
                   },
                   "initiated": {
-                    "type": "string",
-                    "enum": [
-                      "finish",
+                    "type": "object",
+                    "properties": {
+                      "stop": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
                       "stop"
                     ]
                   },
@@ -41022,7 +41029,7 @@
             ]
           },
           "running": {
-            "description": "What Caw started that still runs, as his off control lists it, each lead\nrow followed by its delegates: the sessions his work items run, and his\nown turn while an event started it. Turning him off with any of these\nrunning asks whether they finish or stop; off, what still finishes.",
+            "description": "What Caw started that still runs, as his off control lists it, each lead\nrow followed by its delegates: the sessions his work items run, and his\nown turn while an event started it. Turning him off with any of these\nrunning names which stop; the rest finish.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CawRunning"
@@ -41078,6 +41085,13 @@
               "string"
             ]
           },
+          "taskTitle": {
+            "description": "Its task's title, for an attempt, as the project's index has it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "title": {
             "description": "Its name (a turn's: what it answers); null names it by its folder.",
             "type": [
@@ -41094,6 +41108,7 @@
           "offline",
           "parentId",
           "taskId",
+          "taskTitle",
           "title"
         ]
       },

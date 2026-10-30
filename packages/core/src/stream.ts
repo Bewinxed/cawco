@@ -202,12 +202,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    hub's notes for a project are lines in its conversation's transcript.
  *    A page built for 39 draws threads the hub no longer sends, so it
  *    reloads first.
+ * 41: turning a project's Caw off names which of what it started stop
+ *    (`initiated: { stop: [...] }`, none to let them all finish); the
+ *    whole-set `"finish"` or `"stop"` is gone, and each running row names
+ *    its task's title (`taskTitle`). A page built for 40 sends a choice the
+ *    hub refuses, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 40;
+export const WIRE_PROTOCOL = 41;
 
 /**
  * What a session's stream carries: the changes each frame made to its

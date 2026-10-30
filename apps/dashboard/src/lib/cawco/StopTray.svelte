@@ -1,7 +1,8 @@
 <script lang="ts">
   import { commonWords } from "@cawco/core/words/common";
   /**
-   * The running-sessions tray: one tray that changes shape as a stop goes,
+   * A forget's running-sessions tray (Caw off's is CawOffTray, each row
+   * checked to stop): one tray that changes shape as a stop goes,
    * never a second dialog (Family, benji.org/family-values: trays that
    * "expand, contract, and adapt"). It stands in the page under whatever
    * asked for it, unfolding there (DESIGN.md, The Open Page Rule): no scrim,
@@ -39,14 +40,10 @@
    * it is recorded (`deferred`) the ring counts it, and it neither flies nor
    * folds. A session that keeps such a delegate stays with it.
    *
-   * Caw off has a second way out beside the stop, "Let them finish": its
-   * own request, and the tray closes.
-   *
    * Each state has its own height (the body's morph): the list, one line
    * shorter armed, a row shorter per landing, the short "Stopped 3
    * sessions." at the end, a line taller for a failure.
    */
-  import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -60,9 +57,7 @@
   import { cn } from "#lib/utils.js";
   import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { cawco } from "./client.svelte";
-  import { frameObserver } from "./frame-observer";
-  import CawFace from "./home/CawFace.svelte";
-  import { machineName, span } from "./home/home-state.svelte";
+  import { machineName } from "./home/home-state.svelte";
   import { resolveSessionTitle } from "./links";
   import { markHue, sessionSprite } from "./mark";
   import { nestFrom } from "./motion/branch.svelte";
@@ -72,12 +67,13 @@
   import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import { sessionPlace } from "./session-names.svelte";
+  import { standing, trailOf, trayHere } from "./stop-tray-here.svelte";
   import {
+    forgetWords,
     type StopJob,
     type StopRow,
     stopShare,
     stopWork,
-    wordsOf,
   } from "./stop-work.svelte";
   import TreeMark from "./TreeMark.svelte";
   import { glyphIn, glyphOut } from "./workspace/session-status";
@@ -100,7 +96,7 @@
     id: string;
   }
 
-  const words = $derived(wordsOf(job));
+  const words = $derived(forgetWords(job.projectName));
   const rows = $derived(job.rows);
   const phase = $derived(job.phase);
   const total = $derived(job.total);
@@ -108,9 +104,7 @@
   let arrivals = $state<Arrival[]>([]);
   /** The press that armed it is still settling: no press carries through. */
   let inert = false;
-  let now = $state(Date.now());
-  /** The other way out is on its way to the hub. */
-  let otherPending = $state(false);
+  const stands = standing(() => job);
   let tile = $state<HTMLElement | null>(null);
 
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -127,31 +121,6 @@
     for (const timer of timers) {
       clearTimeout(timer);
     }
-  });
-
-  // While the stops land, the slow rows' seconds count.
-  $effect(() => {
-    if (phase !== "stopping") {
-      return;
-    }
-    now = Date.now();
-    const ticker = setInterval(() => {
-      now = Date.now();
-    }, 1000);
-    return () => clearInterval(ticker);
-  });
-
-  // Taken off the page while its job still stands here (what holds it
-  // closed: Caw's settings put away, the page left): the tray is put away
-  // as Escape puts it, so stops under way park and are said where they
-  // are parked, never left standing in a place no one can see.
-  $effect(() => {
-    const place = untrack(() => job.at);
-    return () => {
-      if (job.open && job.at === place) {
-        stopWork.dismiss(job);
-      }
-    };
   });
 
   // Drawn and standing: its stopped rows fly into its button.
@@ -188,51 +157,6 @@
     n === 1 ? one : many;
 
   /**
-   * In view and in hand as it unfolds: the menu that asked hands focus back
-   * to its trigger as it closes, so the focus moves here a frame later.
-   * While it stands it keeps itself in view as its own size changes (it
-   * opens on its list and grows to each stop as its machine confirms it),
-   * so its foot never rests under what stands over the page's foot (the
-   * scroller's scroll padding). Escape inside it puts it away and goes no
-   * further (a popover it stands in stays open).
-   */
-  function unfoldHere(node: HTMLElement) {
-    const frame = requestAnimationFrame(() => {
-      node.querySelector<HTMLElement>("[data-stop-cancel]")?.focus();
-    });
-    // Its size read in the delivery, and the scroll in the next frame
-    // (frame-observer): nothing resizes inside the delivery.
-    let height = -1;
-    let measured = 0;
-    const sized = frameObserver(
-      () => {
-        if (measured !== height && job.open) {
-          height = measured;
-          node.scrollIntoView({ block: "nearest" });
-        }
-      },
-      {
-        read: ([entry]) => {
-          measured = entry?.borderBoxSize[0]?.blockSize ?? 0;
-        },
-      }
-    );
-    sized.observe(node);
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        leave();
-      }
-    };
-    node.addEventListener("keydown", onEscape);
-    return () => {
-      cancelAnimationFrame(frame);
-      sized.disconnect();
-      node.removeEventListener("keydown", onEscape);
-    };
-  }
-
-  /**
    * Puts the tray away. Stops under way are parked and go on: the tray
    * travels into the place they are parked (The One Object Rule).
    */
@@ -261,19 +185,6 @@
       });
     }
     stopWork.press(job);
-  }
-
-  /** The other way out: its request, then the tray closes; a refusal stays to be read. */
-  async function takeOther(): Promise<void> {
-    if (otherPending) {
-      return;
-    }
-    otherPending = true;
-    try {
-      await stopWork.other(job);
-    } finally {
-      otherPending = false;
-    }
   }
 
   /* ── A stopped row's flight ─────────────────────────────────────── */
@@ -470,16 +381,6 @@
     return activity === "working" ? ("live" as const) : undefined;
   }
 
-  /** Its trail: how long its turn has run, or, stopping past 5s, the seconds waited. */
-  function trailOf(row: StopRow): string {
-    const waited = Math.floor((now - job.pressedAt) / 1000);
-    if (row.state === "stopping" && waited >= 5) {
-      return `${waited}s`;
-    }
-    const since = cawco.turnSince(row.s.id);
-    return row.state === "running" && since ? span(Date.now() - since) : "";
-  }
-
   /** A landed tile fades into the ring, as an old glyph fades. */
   const intoRing = glyphOut;
 </script>
@@ -575,7 +476,7 @@
           <span
             data-slot="num"
             class="num w-c-stop-tray-trail-w flex-none type-meta text-end whitespace-nowrap text-ink-muted"
-            >{trailOf(row)}</span
+            >{trailOf(job, row, stands.now)}</span
           >
         </div>
         <RowFault
@@ -622,7 +523,7 @@
     data-stop-kind={job.kind}
     data-phase={phase}
     transition:unfold
-    {@attach unfoldHere}
+    {@attach trayHere(() => job, leave)}
   >
     <div
       bind:this={tile}
@@ -631,15 +532,6 @@
       {@attach land(() => share)}
     >
       <div data-slot="head" class="flex min-w-0 gap-space-3">
-        <!-- The caller's place in the tray's head: empty, it takes no room. -->
-        <div
-          aria-hidden="true"
-          class="aspect-square flex-none self-stretch empty:hidden"
-        >
-          {#if job.kind === "caw-off"}
-            <CawFace size={36} status="ready" />
-          {/if}
-        </div>
         <div data-slot="words" class="grid min-w-0 flex-auto gap-space-1">
           <p
             data-slot="title"
@@ -655,9 +547,8 @@
           <p aria-live="polite" class="m-0 type-meta text-ink-muted">
             <MorphText text={description} wrap />
           </p>
-          <!-- The end, or the other way out, refused: the hub's words, where
-               the question is; the confirm (Try again) or the other button
-               goes on from here. -->
+          <!-- The end refused: the hub's words, where the question is; the
+               confirm (Try again) goes on from here. -->
           <RowFault reason={job.refusal} />
         </div>
       </div>
@@ -679,16 +570,6 @@
           size="sm"
           variant="ghost"
         />
-        {#if words.other && (phase === "list" || phase === "armed")}
-          <Button
-            data-stop-other
-            label={words.other(listed)}
-            onclick={takeOther}
-            pending={otherPending}
-            size="sm"
-            variant="outline"
-          />
-        {/if}
         <Button
           arrivals={landed}
           data-stop-confirm

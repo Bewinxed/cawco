@@ -39,7 +39,7 @@ export interface ProjectConversationView {
    * What Caw started that still runs, as his off control lists it, each lead
    * row followed by its delegates: the sessions his work items run, and his
    * own turn while an event started it. Turning him off with any of these
-   * running asks whether they finish or stop; off, what still finishes.
+   * running names which stop; the rest finish.
    */
   running: CawRunning[];
   /** Dollars every Caw session of the project has cost. */
@@ -62,12 +62,16 @@ export interface CawRunning {
   parentId: string | null;
   /** Its task, for an attempt. */
   taskId: string | null;
+  /** Its task's title, for an attempt, as the project's index has it. */
+  taskTitle: string | null;
   /** Its name (a turn's: what it answers); null names it by its folder. */
   title: string | null;
 }
 
-/** What happens to what Caw started as you turn him off: it runs to its end, or stops now. */
-export type CawInitiated = "finish" | "stop";
+/** What Caw started, as you turn him off: the ids that stop now; the rest run to their end. */
+export interface CawInitiated {
+  stop: string[];
+}
 
 /**
  * What Caw shows: the product's status words, each drawn as its own file,

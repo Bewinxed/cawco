@@ -38,10 +38,11 @@ final class ProjectCawLead {
     }
 
     /// Turns him on or off, or moves him to another harness or model (nil: the harness's default).
-    func configure(on: Bool? = nil, harness: String? = nil, model: String?? = nil, initiated: String? = nil) async {
+    /// `stopping`: turning him off, the ids of what he started that stop now; the rest finish.
+    func configure(on: Bool? = nil, harness: String? = nil, model: String?? = nil, stopping: [String]? = nil) async {
         moving = true
         do {
-            view = try await hub.caw.configureCaw(projectId, on: on, harness: harness, model: model, initiated: initiated)
+            view = try await hub.caw.configureCaw(projectId, on: on, harness: harness, model: model, stopping: stopping)
             refused = nil
         } catch {
             refused = error.localizedDescription
@@ -221,8 +222,8 @@ final class ProjectCawPanel: KitPopoverController {
         // What he started still runs (CawOffTray): named, then finish or stop.
         offTray.axis = .vertical
         offTray.spacing = Space.space2
-        let letFinish = KitButton.make("Let them finish", variant: .outline, height: .sm) { [weak self] in self?.offWithRunning("finish") }
-        stopAll = KitButton.make("Stop and turn Caw off", variant: .outline, height: .sm) { [weak self] in self?.offWithRunning("stop") }
+        let letFinish = KitButton.make("Let them finish", variant: .outline, height: .sm) { [weak self] in self?.offWithRunning(stopAll: false) }
+        stopAll = KitButton.make("Stop and turn Caw off", variant: .outline, height: .sm) { [weak self] in self?.offWithRunning(stopAll: true) }
         offTray.addArrangedSubview(offWords)
         offTray.addArrangedSubview(row([letFinish, stopAll]))
         offTray.isHidden = true
@@ -380,10 +381,11 @@ final class ProjectCawPanel: KitPopoverController {
         }
     }
 
-    private func offWithRunning(_ initiated: String) {
-        guard asking != nil else { return }
+    private func offWithRunning(stopAll: Bool) {
+        guard let running = asking else { return }
+        let stopping = stopAll ? running.map(\.id) : []
         Task { [weak self, lead] in
-            await lead.configure(on: false, initiated: initiated)
+            await lead.configure(on: false, stopping: stopping)
             if lead.refused == nil { self?.asking = nil }
             self?.render()
         }

@@ -870,8 +870,12 @@ const StopRowShape = z.object({
   gone: z.boolean(),
   owed: z.boolean(),
   s: RunningSessionShape,
-  state: z.enum(["running", "away", "stopping", "stopped", "failed"]),
-  view: z.object({ href: z.string().optional(), title: z.string().optional() }),
+  state: z.enum(["running", "away", "stopping", "stopped", "failed", "kept"]),
+  view: z.object({
+    href: z.string().optional(),
+    kind: z.enum(["attempt", "delegate"]).optional(),
+    title: z.string().optional(),
+  }),
 });
 
 const StopJobShape = z.object({
@@ -880,6 +884,7 @@ const StopJobShape = z.object({
   off: z.boolean(),
   open: z.boolean(),
   phase: StopPhaseShape,
+  picked: z.array(z.string()),
   pressedAt: z.number(),
   projectId: z.string(),
   projectName: z.string(),

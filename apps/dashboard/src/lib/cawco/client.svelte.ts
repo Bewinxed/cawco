@@ -6876,7 +6876,7 @@ export const configureCaw = async (
   projectId: string,
   change: {
     harness?: HarnessKind;
-    /** Turning him off with what he started still running: it finishes or stops. */
+    /** Turning him off with what he started still running: the ids that stop; the rest finish. */
     initiated?: CawInitiated;
     model?: string | null;
     on?: boolean;
