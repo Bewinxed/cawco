@@ -7,69 +7,56 @@
  * he has picked, the losing side of each call and this file go.
  */
 
-/** Each open call and its two sides; the first is the spec's recommendation. */
+/**
+ * Each open call and its sides, each named for the reference it comes
+ * from (design/graph-controls-references.md); the first is the
+ * recommendation. A call the references settled stands at its side with
+ * no switch (`settled`), its reason in the references file.
+ */
 export const GRAPH_CALLS = {
-  slider: {
-    title: "1 · The slider's look",
+  bar: {
+    title: "1 · The steps bar",
     sides: [
-      ["track", "Named stops on a track"],
-      ["segments", "A segmented control of the names"],
+      ["field", "Dessn: one field, the name and 3/6 inside it"],
+      ["scrubber", "Apple Books: dots, the name in a bubble"],
+      ["player", "Sentry replay: ‹ name ›, its line scrubs"],
     ],
   },
-  switchAt: {
-    title: "2 · Where Steps | Graph lives",
+  wide: {
+    title: "2 · A wide window",
     sides: [
-      ["bar", "In the panel's glass bar"],
-      ["menu", "In the head's canvas-view menu"],
-    ],
-  },
-  pairSteps: {
-    title: "3 · Ultrawide pair on Steps",
-    sides: [
-      ["yes", "The hovered stop beside the kept page"],
-      ["no", "The kept page alone"],
-    ],
-  },
-  phoneSteps: {
-    title: "4 · Many steps on a phone",
-    sides: [
-      ["scroll", "The track scrolls, every stop named"],
-      ["dots", "Dots, the kept name alone"],
+      ["row", "Dessn's flow: every state that fits, in order"],
+      ["pair", "The kept state and the hovered one"],
     ],
   },
   countFigure: {
-    title: "5 · The count's figure",
+    title: "3 · The count's figure",
     sides: [
-      ["beside", "“12 of 60” beside the slider"],
-      ["end", "“12”, with “of 60” at the track's end"],
+      ["field", "Dessn: “Cards … 12 of 60” inside the field"],
+      ["beside", "Apple Books: “12 of 60” beside the slider"],
     ],
   },
   otherPins: {
-    title: "6 · Pins on other states",
+    title: "Pins on other states",
+    settled: true,
     sides: [
       ["hidden", "Hidden, grouped in the rail"],
       ["dimmed", "Dimmed on the page"],
     ],
   },
   nodePill: {
-    title: "7 · A node pin's pill",
+    title: "A node pin’s pill",
+    settled: true,
     sides: [
       ["corner", "At the node's top-right"],
       ["name", "At the node's name"],
     ],
   },
-  dials: {
-    title: "8 · Dials beside record controls",
-    sides: [
-      ["keep", "Keep number, colour, select, toggle"],
-      ["records", "Only the record controls"],
-    ],
-  },
   phoneBand: {
-    title: "9 · A phone's graph names its section",
+    title: "4 · A phone's graph names its section",
     sides: [
-      ["pinned", "A slab's name, only while its top is scrolled out"],
-      ["band", "A band always naming the section in view"],
+      ["pinned", "iOS large title: a slab's name in the bar once scrolled out"],
+      ["band", "iOS Contacts: a sticky band naming the section in view"],
     ],
   },
 } as const;
@@ -82,9 +69,25 @@ const RECOMMENDED = Object.fromEntries(
   Object.entries(GRAPH_CALLS).map(([call, one]) => [call, one.sides[0][0]])
 ) as Sides;
 
+/** The sides `?graph-options=call:side,…` names, each one a call holds. */
+function namedSides(): Partial<Sides> {
+  if (typeof location === "undefined") {
+    return {};
+  }
+  const named = new URLSearchParams(location.search).get("graph-options") ?? "";
+  return Object.fromEntries(
+    named.split(",").flatMap((pair) => {
+      const [call, side] = pair.split(":");
+      const one = GRAPH_CALLS[call as GraphCall];
+      return one?.sides.some(([value]) => value === side) ? [[call, side]] : [];
+    })
+  );
+}
+
 /** Each call's side standing now: the recommendation, unless the Options panel flipped it. */
 class GraphOptions {
-  sides = $state<Sides>({ ...RECOMMENDED });
+  /** The recommendation, else the sides the address names (`?graph-options=bar:player,wide:pair`), so a side opens cold. */
+  sides = $state<Sides>({ ...RECOMMENDED, ...namedSides() });
 
   /** The Options panel is drawn: the page was opened with `?graph-options`. */
   get shown(): boolean {
@@ -98,5 +101,10 @@ class GraphOptions {
     this.sides = { ...this.sides, [call]: side };
   }
 }
+
+/** The calls still open, the ones the Options panel draws a switch for. */
+export const OPEN_CALLS = (
+  Object.entries(GRAPH_CALLS) as [GraphCall, (typeof GRAPH_CALLS)[GraphCall]][]
+).filter(([, one]) => !("settled" in one));
 
 export const graphOptions = new GraphOptions();
