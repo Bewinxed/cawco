@@ -192,13 +192,17 @@ export interface PageAnchor {
   frames?: string[];
   selector: string;
   /**
-   * On a component canvas: its states file (from the toolchain root), the
-   * story whose frame holds the element, and the frame's state: the
-   * interaction it is forced into, its scheme and its width (px; null when it
-   * fits its content).
+   * On a component canvas: the state the stage stood when the pin was
+   * placed: its states file (from the toolchain root), its story, and the
+   * interaction forced on it, its scheme and its width (px; null when it fits
+   * its content). The stage always fills `state`; a sheet's own page may not.
+   * For a pin placed on the design graph's node, `node`: the pin stands on the
+   * state as a whole, with no element of its frame. The state's path in words
+   * is derived where it is said (core design-graph.ts `pathOf`), never kept.
    */
   sheet?: {
     file: string;
+    node?: true;
     state?: {
       interaction: Interaction;
       // Indexed off the array, not a named type: the apps' schema names this field's enum.
@@ -326,12 +330,6 @@ export interface Pin {
   seenAt?: string;
   /** When it was first delivered to the session. */
   sentAt?: string;
-  /**
-   * The design graph's kept state when it was placed (Projects spec §5.10,
-   * the owner's pick "pins"): its machine, state and variation in words,
-   * shown under the person's words; none on a page with no graph.
-   */
-  state?: string;
   /** Oldest first. */
   thread: ThreadEntry[];
   /**
@@ -343,10 +341,7 @@ export interface Pin {
 }
 
 /** A pin's head (`pins`): what it is, written once as it is made. */
-type PinHead = Pick<
-  Pin,
-  "at" | "by" | "id" | "kind" | "number" | "state" | "title"
->;
+type PinHead = Pick<Pin, "at" | "by" | "id" | "kind" | "number" | "title">;
 
 /** Where a pin stands (`places`): moved by the page as its anchor finds its element again, or by the person placing it again. */
 export type PinPlace = Pick<
@@ -1028,6 +1023,14 @@ export function pinProblem(value: unknown): string | null {
   if (value.thread.length > COMMENT_LIMITS.entries) {
     return `A pin's thread keeps at most ${COMMENT_LIMITS.entries} entries.`;
   }
+  const sheet = isObject(value.anchor.sheet) ? value.anchor.sheet : null;
+  if (
+    sheet &&
+    "node" in sheet &&
+    !(sheet.node === true && isObject(sheet.state))
+  ) {
+    return "A pin on a state's node names that state: its anchor's sheet has its file, story and state with `node: true`.";
+  }
   for (const entry of value.thread) {
     const problem = entryProblem(entry);
     if (problem) {
@@ -1463,8 +1466,6 @@ export interface CommentTarget {
   ink?: string;
   /** Where on its element the press landed: fractions of the element's box. */
   point?: { x: number; y: number };
-  /** The design graph's kept state as it is placed, in words ({@link Pin} `state`). */
-  state?: string;
   /** What it stands on, in words, as the pin's title (core pin-name.ts `pinName`). */
   title?: string;
 }
@@ -1501,7 +1502,6 @@ export function commentOn(
     ...(target.ink ? { ink: target.ink } : {}),
     ...(target.point ? { point: target.point } : {}),
     ...(target.title ? { title: target.title } : {}),
-    ...(target.state ? { state: target.state } : {}),
     thread: [entry],
   };
   writePin(doc, pin);
@@ -1799,6 +1799,9 @@ export const pinStandsOn = (pin: Pin, url?: string): string[] => {
         ]
       : []),
     ...(chain ? [`- Inside: ${chain}`] : []),
+    ...(anchor.sheet?.node
+      ? ["- On the state as a whole: placed on its node in the design graph"]
+      : []),
     ...(anchor.sheet?.state
       ? [
           `- State: ${anchor.sheet.story} · ${anchor.sheet.state.interaction} · ${anchor.sheet.state.scheme} · ${anchor.sheet.state.width === null ? "fit" : `${anchor.sheet.state.width}px`}`,

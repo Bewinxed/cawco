@@ -20,7 +20,13 @@
  * chooses to use the tokens or adhoc values").
  */
 import { bezier } from "./bezier";
-import type { CanvasDial, CanvasEdge, Interaction } from "./stage";
+import type {
+  CanvasDial,
+  CanvasEdge,
+  CanvasSpec,
+  Interaction,
+  RenderReport,
+} from "./stage";
 import { humanize } from "./tool-presentation";
 
 /** One story as the graph draws it. */
@@ -51,6 +57,8 @@ export interface GraphModel {
   /** Story → the parent story it varies, or the machine's heading it stands under (core `CanvasSpec.group`). */
   group: Record<string, string>;
   sections: GraphSection[];
+  /** The agent's sequence (core `CanvasSpec.steps`), each `Story` or `file:Story`: present, the canvas opens on the step slider. */
+  steps?: string[];
 }
 
 /** One state stood on the page's stage: its states file, its story and the interaction forced on it. */
@@ -62,21 +70,48 @@ export interface StagePoint {
 
 /**
  * What the pane asks the canvas page to stand (`cawco:stage`): the state
- * kept, the one a hover previews over it, the kept state's path in words
- * (its machine, state and variation: what a pin placed now records), and
- * the room the graph's panel and dock leave the page at its inline end and
- * its foot, in CSS px.
+ * kept, the one a hover previews over it, and the room the index (the step
+ * slider at its top, the graph's panel at its inline end) and the dock leave
+ * the page, in CSS px. A pin placed now anchors to the kept point itself
+ * (core comments.ts `PageAnchor.sheet.state`); its path in words is derived
+ * where it is said ({@link pathOf}), never carried.
  */
 export interface StageAsk {
   kept: StagePoint;
-  /** The kept state's path, said under a pin placed while it is kept (the owner's pick "pins"). */
-  path: string;
   peek: StagePoint | null;
-  room: { bottom: number; end: number };
+  room: { bottom: number; end: number; top: number };
 }
 
-/** The longest a kept state's path is said, in characters. Ours: three names. */
-export const STAGE_PATH_MAX = 240;
+/** One stop of the step slider: a state of the sequence, or a step naming a story the file lacks (drawn dashed, skipped by the keys). */
+export interface StepState {
+  /** Set when the step names no story of the section. */
+  missing?: true;
+  /** Its name in words, the stop's label. */
+  name: string;
+  point: StagePoint;
+}
+
+/**
+ * The step slider's stops for a section: the stories `steps` names, in that
+ * order (`file:Story` of another file left out), each at rest; with no
+ * `steps`, every story of the file in file order. A step naming a story the
+ * file lacks stays, `missing`, for the slider's dashed stop.
+ */
+export function stepsOf(
+  section: GraphSection,
+  steps: string[] | undefined
+): StepState[] {
+  const names = new Set(section.stories.map((one) => one.name));
+  const order =
+    steps === undefined
+      ? section.stories.map((one) => one.name)
+      : steps.flatMap((one) => inSection(one, section.file) ?? []);
+  return order.map((story) => ({
+    name: stateName(story),
+    point: { file: section.file, story, interaction: "rest" },
+    ...(names.has(story) ? {} : { missing: true as const }),
+  }));
+}
 
 /** A variation of a state: another story grouped under it, or an interaction its CSS reaches. */
 export interface Variation {
@@ -284,7 +319,7 @@ export const samePoint = (
   a.interaction === b.interaction;
 
 /**
- * A kept state's path in words, as a pin records it: its machine's name
+ * A kept state's path in words, as a pin's card and the agent say it: its machine's name
  * (the region's header; none for the section's own stories, which its tab
  * names), the state's name and the kept variation's, joined by ` › `.
  */
@@ -305,12 +340,108 @@ export function pathOf(
           state.name,
           ...(variation ? [variation.label] : []),
         ];
-        return parts.join(" › ").slice(0, STAGE_PATH_MAX);
+        return parts.join(" › ");
       }
     }
   }
-  return section.name.slice(0, STAGE_PATH_MAX);
+  return section.name;
 }
+
+/**
+ * The graph a render report and the canvas's spec say, for a reader with no
+ * page of its own (the hub's `comment_read`): each section's stories in the
+ * order their rest frames stand, each with its doc comment, the interactions
+ * a frame was forced into, and the story its move starts from. The page's
+ * own `cawco:graph` says the same from the loaded modules.
+ */
+export function graphModelOf(
+  report: RenderReport,
+  spec: CanvasSpec
+): GraphModel {
+  return {
+    edges: spec.edges ?? [],
+    group: spec.group ?? {},
+    ...(spec.steps ? { steps: spec.steps } : {}),
+    sections: report.sections.map((section) => {
+      const stories = new Map<string, GraphStory>();
+      for (const frame of section.frames) {
+        const story = stories.get(frame.story) ?? {
+          name: frame.story,
+          label: frame.label,
+          from:
+            section.moves.find((move) => move.to === frame.story)?.from ?? null,
+          interactions: [],
+        };
+        if (
+          frame.interaction !== "rest" &&
+          !story.interactions.includes(frame.interaction)
+        ) {
+          story.interactions.push(frame.interaction);
+        }
+        stories.set(frame.story, story);
+      }
+      return {
+        file: section.file,
+        name: section.title,
+        state: "drawn" as const,
+        stories: [...stories.values()],
+      };
+    }),
+  };
+}
+
+/**
+ * A pin's state in words, from the graph its canvas drew: its machine ›
+ * state › variation ({@link pathOf}); null when its story is gone from the
+ * file, undefined when the pin names no state or its section isn't drawn.
+ */
+export function pinPathOf(
+  model: GraphModel,
+  sheet: { file: string; state?: { interaction: Interaction }; story: string }
+): string | null | undefined {
+  if (!sheet.state) {
+    return;
+  }
+  const section = model.sections.find((one) => one.file === sheet.file);
+  if (!section) {
+    return;
+  }
+  if (!section.stories.some((one) => one.name === sheet.story)) {
+    return null;
+  }
+  return pathOf(section, graphOf(section, model.group, model.edges), {
+    file: sheet.file,
+    story: sheet.story,
+    interaction: sheet.state.interaction,
+  });
+}
+
+/** The part of a pin's anchor that names the state it was placed on (core comments.ts `PageAnchor.sheet`). */
+interface StateAnchor {
+  sheet?: { file: string; state?: { interaction: Interaction }; story: string };
+}
+
+/**
+ * Whether a pin stands on the page now: one placed on a state shows while
+ * that state is kept or a hover previews it; one with no state (a page pin,
+ * or one placed before the stage stood a state) always shows.
+ */
+export const onState = (
+  anchor: StateAnchor | object,
+  kept: StagePoint | null,
+  peek: StagePoint | null
+): boolean => {
+  const sheet = "sheet" in anchor ? anchor.sheet : undefined;
+  if (!sheet?.state) {
+    return true;
+  }
+  const point: StagePoint = {
+    file: sheet.file,
+    story: sheet.story,
+    interaction: sheet.state.interaction,
+  };
+  return samePoint(point, kept) || samePoint(point, peek);
+};
 
 /* --- The dock: the kept move's clips ----------------------------------- */
 
@@ -803,5 +934,15 @@ export function curvePoints(
 /** The agent's dials as the page says them (`cawco:dials`): each dial and the value its frames draw with. */
 export interface DialsModel {
   dials: CanvasDial[];
-  values: Record<string, boolean | number | string>;
+  /** A `count` dial's value is how many records stand of how many the kept story's arg holds (`of: 0` when it holds no list); a `longest` dial's is on or off. */
+  values: Record<
+    string,
+    boolean | number | string | { count: number; of: number }
+  >;
 }
+
+/** A record dial's value as the page says it. */
+export const isCount = (
+  value: DialsModel["values"][string] | undefined
+): value is { count: number; of: number } =>
+  typeof value === "object" && value !== null;
