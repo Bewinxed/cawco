@@ -15,9 +15,8 @@
    * check (`/__cawco/ping`) itself.
    */
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
-  import type { Bounded } from "@cawco/core/bounded";
-  import type { FsEntry } from "@cawco/core/protocol";
   import { sideWords } from "@cawco/core/words/side";
+  import { benchFleet } from "#lib/cawco/preview/bench-fleet.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
     type PaneFleet,
@@ -79,22 +78,7 @@
       };
     }, after);
   }
-  const fleet: PaneFleet = {
-    browser: () => null,
-    closePreview: () => Promise.resolve(),
-    folders: {
-      list: () =>
-        Promise.resolve({ kind: "answered", value: [] } as Bounded<FsEntry[]>),
-      recent: () => null,
-      unanswered: () => "",
-    },
-    machines: [],
-    preview: (id) => (id === INSTANCE ? preview : undefined),
-    session: (id) =>
-      id === INSTANCE ? { id, cwd: "/", machineId: "bench" } : undefined,
-    sessionHref: () => "/",
-    working: () => false,
-  };
+  const fleet: PaneFleet = benchFleet(INSTANCE, () => preview, "bench");
   setPaneFleet(fleet);
   setSideExpand({
     available: true,

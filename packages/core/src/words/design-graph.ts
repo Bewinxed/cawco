@@ -120,8 +120,8 @@ export const designGraphWords = {
   ofCount: (of: number) => `of ${of}`,
   /** A longest dial's switch. */
   longestFirst: "Longest names first",
-  /** A record dial whose arg is no list on the kept story: its title. */
-  notAList: (arg: string, story: string) => `${arg} isn't a list on ${story}`,
+  /** A record dial with nothing to range over on the kept story (its arg no list, or an empty one): its title. */
+  notAList: (arg: string, story: string) => `${story} holds no ${arg} to count`,
   /** The comments rail's group of pins placed on states not kept now. */
   onOtherStates: "On other states",
   /** A pin's state, under the person's words and in the rail: placed on the stage, or on the graph's node. */
