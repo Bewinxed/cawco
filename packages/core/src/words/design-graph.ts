@@ -30,6 +30,9 @@ export const designGraphWords = {
   faces: "Show",
   faceGraph: "Graph",
   faceTimeline: "Timeline",
+  /** On Steps a phone's timeline rests at its head (the move's name and Play): its toggle opens it and folds it back. */
+  timelineShow: "Show the timeline",
+  timelineHide: "Hide the timeline",
   /** The drawer's grabber: a press steps its height. */
   drawer: "Drawer",
   /** The resize handles, to a reader: the panel's corner, the dock's top edge. */
