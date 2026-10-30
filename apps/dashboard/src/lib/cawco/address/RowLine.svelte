@@ -6,6 +6,7 @@
    * attributes go to the line.
    */
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import { cn } from "#lib/utils.js";
   import Words from "./Words.svelte";
 
   let {
@@ -20,7 +21,7 @@
 
 <span
   {...rest}
-  class={["mark-line flex min-w-0 items-start gap-space-2", look]}
+  class={cn("mark-line flex min-w-0 items-start gap-space-2", look)}
 >
   {#if line.live}
     <span class="mark-cell"><LiveDot /></span>

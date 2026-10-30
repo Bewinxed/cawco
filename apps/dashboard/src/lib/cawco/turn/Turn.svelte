@@ -10,6 +10,7 @@
    */
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
+  import { cn } from "#lib/utils.js";
 
   let {
     you = false,
@@ -34,13 +35,13 @@
   data-slot="turn"
   data-runs-on={runsOn || undefined}
   data-grouped={grouped || undefined}
-  class={[
+  class={cn(
     "group/turn",
     grouped ? "flow-root" : "mt-space-4",
     grouped && (you ? "mt-0" : "mt-space-2"),
     you && "relative",
-    extra,
-  ]}
+    extra
+  )}
   style:--pad={you ? "var(--seam-inset)" : undefined}
   {...rest}
 >

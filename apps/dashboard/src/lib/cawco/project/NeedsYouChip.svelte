@@ -13,6 +13,7 @@
    */
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { IconNeedsYou } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
 
   let {
     count,
@@ -32,10 +33,10 @@
   data-slot="needs"
   aria-label={`Needs you, ${count}`}
   aria-pressed={on}
-  class={[
+  class={cn(
     "select-none mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md border border-transparent bg-transparent px-space-3 in-form-compact:px-space-2 text-status-attn-ink hover:bg-surface-hover transition-[background-color,color,border-color] duration-(--dur-control) ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-status-attn-glyph",
-    className,
-  ]}
+    className
+  )}
   style:--tpress="scale(var(--press-scale))"
   onclick={ontoggle}
   title="Needs you"

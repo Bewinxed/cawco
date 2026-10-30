@@ -7,6 +7,7 @@
    */
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
+  import { cn } from "#lib/utils.js";
 
   let {
     children,
@@ -24,7 +25,7 @@
 
 <div
   data-slot="offer-acts"
-  class={["flex flex-wrap items-center gap-space-2 mt-space-2", className]}
+  class={cn("flex flex-wrap items-center gap-space-2 mt-space-2", className)}
   {...rest}
 >
   {#if said}

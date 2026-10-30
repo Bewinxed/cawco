@@ -35,6 +35,7 @@
     IconNeedsYou as NeedsYou,
     IconServerAlt as Server,
   } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import Segmented from "../spawn/Segmented.svelte";
@@ -897,10 +898,10 @@
 
 <div
   data-slot="finder"
-  class={[
+  class={cn(
     "group/finder flex flex-col min-h-0 max-h-full text-ink-strong",
-    className,
-  ]}
+    className
+  )}
   data-phone={phone || undefined}
   style:--acts-ms="calc(var(--space-3) + var(--icon-md) + var(--space-2))"
 >

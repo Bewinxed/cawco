@@ -126,6 +126,6 @@
     aria-hidden="true"
     data-slot="provider-logo"
     data-ink={INK.has(key) || undefined}
-    class={INK.has(key) ? cn(classes, "text-ink-strong") : classes}
+    class={INK.has(key) ? cn("text-ink-strong", classes) : classes}
   />
 {/if}

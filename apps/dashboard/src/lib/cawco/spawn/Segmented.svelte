@@ -1,5 +1,6 @@
 <script generics="T extends string" lang="ts">
   import type { Snippet } from "svelte";
+  import { cn } from "#lib/utils.js";
   /** Two-or-more tab segmented control with a sliding thumb (§1.5, §1.9). */
   import { arrowStep } from "../roving";
 
@@ -40,10 +41,10 @@
 
 <div
   aria-label={label}
-  class={[
+  class={cn(
     "relative grid grid-cols-(--cols) gap-space-row rounded-md concentric-in r-outer-md r-inset-space-1 bg-surface-recess-deep p-space-1",
-    className,
-  ]}
+    className
+  )}
   data-segmented-size={size}
   onkeydown={keydown}
   role="radiogroup"

@@ -231,12 +231,12 @@
         frame,
         look,
       }),
-      className,
       /* Its least and greatest width both, so whatever width its site
          gives (a width of its own, or the room bits-ui measures) stands at
          this one under the phone line. */
       phoneWide &&
-        "max-phone:min-w-[calc(100vw-2*var(--c-screen-margin))] max-phone:max-w-[calc(100vw-2*var(--c-screen-margin))]"
+        "max-phone:min-w-[calc(100vw-2*var(--c-screen-margin))] max-phone:max-w-[calc(100vw-2*var(--c-screen-margin))]",
+      className
     )}
     collisionPadding={inset}
     data-slot="popover-content"

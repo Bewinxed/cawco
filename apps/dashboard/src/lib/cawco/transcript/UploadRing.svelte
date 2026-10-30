@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { cn } from "#lib/utils.js";
+
   /**
    * How far a file's upload has gone, as a ring that fills over
    * --dur-control: in the sent turn's tile (DocThumb) and the composer's
@@ -16,7 +18,7 @@
 <svg
   data-slot="ring"
   aria-hidden="true"
-  class={["-rotate-90", className]}
+  class={cn("-rotate-90", className)}
   viewBox="0 0 24 24"
 >
   <circle
