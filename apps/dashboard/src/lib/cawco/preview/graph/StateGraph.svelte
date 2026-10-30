@@ -82,8 +82,10 @@
     zoom = $bindable(1),
   }: Props = $props();
 
-  /** The least zoom a fit takes: a state's name stays readable (the r24 ruling's floor). */
+  /** The least zoom Fit all takes: a state's name stays readable (the r24 ruling's floor). */
   const ZOOM_FLOOR = 0.5;
+  /** The least zoom the graph opens and refits at: the kept state's machine held between 0.75 and 1 (the r24 ruling), then panned to the kept state. */
+  const ZOOM_OPEN_FLOOR = 0.75;
   const ZOOM_MOST = 1.6;
   const nodeTypes = { machine: MachineNode, state: StateNode };
   const edgeTypes = { move: MoveEdge };
@@ -419,7 +421,9 @@
   class={[
     "relative min-h-0 overflow-clip rounded-sm border border-border-well bg-surface-well",
     (fades.top || fades.foot) && "graph-edge-fade",
-    height === null ? "flex-1" : "h-(--graph-h) flex-none",
+    // A drawer's face gives the well its room; a desk's panel holds it at the drawer's first stop until the person sizes it.
+    height === null && (drawer ? "flex-1" : "h-c-graph-drawer-stop flex-none"),
+    height !== null && "h-(--graph-h) flex-none",
   ]}
   data-commenting={commenting || undefined}
   data-design-graph={file}
@@ -444,13 +448,14 @@
       {edgeTypes}
       elementsSelectable={false}
       fitView
-      fitViewOptions={{ ...FIT, minZoom: ZOOM_FLOOR }}
+      fitViewOptions={{ ...FIT, minZoom: ZOOM_OPEN_FLOOR }}
       maxZoom={ZOOM_MOST}
       minZoom={ZOOM_FLOOR}
       nodesConnectable={false}
       nodesDraggable={false}
       nodesFocusable={false}
       {nodeTypes}
+      proOptions={{ hideAttribution: true }}
       onmoveend={(event) => {
         if (event) {
           own = true;
@@ -471,12 +476,13 @@
       <FlowAutoFit
         held={own}
         layout={layoutKey}
-        minZoom={ZOOM_FLOOR}
+        minZoom={ZOOM_OPEN_FLOOR}
         nodeCount={nodes.length}
       />
       <GraphView
         bind:this={view}
         keptNode={keptState === null ? null : stateId(keptState)}
+        layout={laidOut ? layoutKey : ""}
         minZoom={ZOOM_FLOOR}
         onfades={(next) => {
           fades = next;
