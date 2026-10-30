@@ -194,6 +194,76 @@ const DECIDES: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
 const HELD = "cawco-held";
 const FOCUSABLE =
   'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable="true"]';
+/** What a key's first Tab lands on in a frame: focusable, not disabled, not taken out of the order. */
+const TABBABLE =
+  'a[href]:not([tabindex="-1"]),button:not([disabled]):not([tabindex="-1"]),input:not([disabled]):not([type="hidden"]):not([tabindex="-1"]),select:not([disabled]):not([tabindex="-1"]),textarea:not([disabled]):not([tabindex="-1"]),summary:not([tabindex="-1"]),[tabindex]:not([tabindex="-1"]),[contenteditable="true"]:not([tabindex="-1"])';
+/** The focus states a frame's one focused element carries as classes (pseudo.ts's `.cawco-focus`), and the one its ancestors carry. */
+const FOCUS_ON = ["cawco-focus", "cawco-focus-visible"];
+const FOCUS_WITHIN = "cawco-focus-within";
+
+/**
+ * Focus forced as the browser draws it: on the one element a key's first
+ * Tab reaches (`:focus`, `:focus-visible`) and on it and its ancestors in
+ * the frame (`:focus-within`), never on everything inside the frame, which
+ * is how hover and press are forced (a page's own `:focus-visible` ring
+ * drew round every descendant). Marked again as the story redraws.
+ */
+const focusWatch = new WeakMap<HTMLElement, MutationObserver>();
+/** `name` on `el` or off it, written only when it changes: a token list's write sets its attribute even when nothing changes, which the watch below would hear as a change. */
+const classTo = (el: Element, name: string, on: boolean): void => {
+  if (el.classList.contains(name) !== on) {
+    el.classList.toggle(name, on);
+  }
+};
+function markFocus(body: HTMLElement): void {
+  const target = body.querySelector<HTMLElement>(TABBABLE);
+  for (const el of body.querySelectorAll<HTMLElement>(
+    ".cawco-focus, .cawco-focus-visible, .cawco-focus-within"
+  )) {
+    for (const name of FOCUS_ON) {
+      classTo(el, name, el === target);
+    }
+    classTo(el, FOCUS_WITHIN, !!target && el.contains(target));
+  }
+  for (let el = target; el && el !== body; el = el.parentElement) {
+    for (const name of FOCUS_ON) {
+      classTo(el, name, el === target);
+    }
+    classTo(el, FOCUS_WITHIN, true);
+  }
+}
+/** `body` holds focus forced (`on`), kept on its focused element as it redraws; or let go. */
+function forceFocus(body: HTMLElement, on: boolean): void {
+  focusWatch.get(body)?.disconnect();
+  focusWatch.delete(body);
+  if (!on) {
+    for (const el of body.querySelectorAll<HTMLElement>(
+      ".cawco-focus, .cawco-focus-visible, .cawco-focus-within"
+    )) {
+      el.classList.remove(...FOCUS_ON, FOCUS_WITHIN);
+    }
+    return;
+  }
+  markFocus(body);
+  const watch = new MutationObserver(() => markFocus(body));
+  watch.observe(body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["class", "disabled", "tabindex"],
+  });
+  focusWatch.set(body, watch);
+}
+/** The forced states a frame's body carries as its `-all` class: focus is its focused element's own ({@link forceFocus}). */
+const ALL_FORCED = (interaction: Exclude<Interaction, "rest">) =>
+  FORCED[interaction].filter(
+    (state) =>
+      !(
+        state === "focus" ||
+        state === "focus-visible" ||
+        state === "focus-within"
+      )
+  );
 
 /** How long a move may play before it is read as stuck. Ours. */
 const PLAY_LIMIT_MS = 6000;
@@ -556,6 +626,11 @@ export function boot(options: BootOptions): void {
   let staged: StageAsk | null = null;
 
   document.documentElement.classList.add("cawco-canvas-page");
+  // A pane's own page (not a map's card, an embed or the stage's render): its design graph asks what to stand, and until it has the page draws no frame (chrome.ts), so the grid never shows.
+  document.documentElement.toggleAttribute(
+    "data-cawco-pane",
+    by === "panel" && !card && !embed
+  );
   document.documentElement.classList.toggle("cawco-embed", embed);
   /** The page's sheet set, and the house tokens it reads its own lengths from. */
   const house = dressPage({ faces: options.faces, tokens: options.tokens });
@@ -1629,10 +1704,11 @@ export function boot(options: BootOptions): void {
       }
     }
     if (column.interaction !== "rest") {
-      for (const state of FORCED[column.interaction]) {
+      for (const state of ALL_FORCED(column.interaction)) {
         body.classList.add(allClass(state));
       }
     }
+    forceFocus(body, column.interaction === "focus");
     frame.el.toggleAttribute(
       "data-cawco-edited",
       overrides.has(`${frame.section.file}|${story.name}`)
@@ -2132,8 +2208,11 @@ export function boot(options: BootOptions): void {
     on: boolean
   ) => {
     for (const one of probes) {
-      for (const state of FORCED[interaction]) {
+      for (const state of ALL_FORCED(interaction)) {
         one.body.classList.toggle(allClass(state), on);
+      }
+      if (interaction === "focus") {
+        forceFocus(one.body, on);
       }
     }
   };
