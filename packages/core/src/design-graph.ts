@@ -149,7 +149,7 @@ export interface Machine {
 }
 
 /** An arrow between two states of one machine: a move (it animates) or the agent's edge. */
-export interface GraphLink {
+interface GraphLink {
   from: string;
   kind: "move" | "edge";
   label: string | null;
@@ -323,7 +323,7 @@ export const samePoint = (
  * (the region's header; none for the section's own stories, which its tab
  * names), the state's name and the kept variation's, joined by ` › `.
  */
-export function pathOf(
+function pathOf(
   section: GraphSection,
   graph: SectionGraph,
   point: StagePoint
