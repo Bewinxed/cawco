@@ -27,6 +27,9 @@
     unchecked = [],
     stops: stopsArg = {},
     refusal = null,
+    cap = false,
+    keptSays = false,
+    needsYouStartsOff = false,
   }: {
     projectName?: string;
     /** What Caw started that still runs (hub caw.ts `initiated`). */
@@ -40,7 +43,19 @@
     unchecked?: string[];
     stops?: Record<string, PickStop>;
     refusal?: string | null;
+    /** The list stands about ten rows tall and scrolls. */
+    cap?: boolean;
+    /** An unchecked row says it keeps running. */
+    keptSays?: boolean;
+    /** A session that needs him starts unchecked; everything else starts checked. */
+    needsYouStartsOff?: boolean;
   } = $props();
+
+  /** Where the boxes start: every row, or every row but those that need him. */
+  const startChecked = () =>
+    rows
+      .filter((row) => !(needsYouStartsOff && row.activity === "blocked"))
+      .map((row) => row.id);
 
   // The story's args set where it starts; the presses move it from there.
   let on = $state(untrack(() => onArg));
@@ -53,7 +68,7 @@
     open = openArg;
     step = stepArg;
     const off = new Set(unchecked);
-    checked = rows.filter((row) => !off.has(row.id)).map((row) => row.id);
+    checked = startChecked().filter((id) => !off.has(id));
     stops = { ...stopsArg };
   });
 
@@ -76,7 +91,7 @@
     pendingTimers.forEach(clearTimeout);
     pendingTimers = [];
     step = "pick";
-    checked = rows.map((row) => row.id);
+    checked = startChecked();
     stops = {};
     open = true;
   }
@@ -143,6 +158,8 @@
       {#if open && rows.length > 0}
         <StopTrayPick
           bind:checked
+          {cap}
+          {keptSays}
           oncancel={() => {
             open = false;
           }}

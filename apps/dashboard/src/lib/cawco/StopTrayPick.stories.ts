@@ -89,6 +89,117 @@ const EIGHT: PickRow[] = [
   }),
 ];
 
+/** Sixteen more, for a long list: 24 in all, as a busy week leaves them. */
+const SIXTEEN: PickRow[] = [
+  row("a52", {
+    kind: "attempt",
+    taskId: "tsk-52",
+    taskTitle: "Show spend per harness on the usage chart",
+    title: "Show spend per harness on the usage chart",
+    ran: "31m",
+  }),
+  row("d52a", {
+    kind: "delegate",
+    parentId: "a52",
+    title: "Read the usage table's query plan",
+    ran: "4m",
+  }),
+  row("a53", {
+    kind: "attempt",
+    taskId: "tsk-53",
+    taskTitle: "Keep the composer's draft through a reload",
+    title: "Keep the composer's draft through a reload",
+    activity: "blocked",
+    ran: "48m",
+  }),
+  row("a55", {
+    kind: "attempt",
+    taskId: "tsk-55",
+    taskTitle: "Sign the iOS build with the new team id",
+    title: "Sign the iOS build with the new team id",
+    machineId: "m-mini",
+    machineName: "mini",
+    ran: "12m",
+  }),
+  row("d55a", {
+    kind: "delegate",
+    parentId: "a55",
+    machineId: "m-mini",
+    machineName: "mini",
+    title: "Run xcodebuild archive for Caw&Co",
+    ran: "9m",
+  }),
+  row("a58", {
+    kind: "attempt",
+    taskId: "tsk-58",
+    taskTitle: "Fold old routines into their project's page",
+    title: "Fold old routines into their project's page",
+    activity: "idle",
+    ran: "",
+  }),
+  row("a60", {
+    kind: "attempt",
+    taskId: "tsk-60",
+    taskTitle: "Retry a delegate's merge check after a lockfile race",
+    title: "Retry a delegate's merge check after a lockfile race",
+    ran: "7m",
+  }),
+  row("d901", {
+    kind: "delegate",
+    title: "Triage #901: pins drift after the canvas zooms",
+    ran: "15m",
+  }),
+  row("d904", {
+    kind: "delegate",
+    title: "Triage #904: tray chip overflows at 200% zoom",
+    activity: "blocked",
+    ran: "26m",
+  }),
+  row("dtok", {
+    kind: "delegate",
+    title: "Check every token's contrast in dark mode",
+    ran: "2m",
+  }),
+  row("dshot", {
+    kind: "delegate",
+    title: "Shoot the onboarding flow at 390 and 1440",
+    machineId: "m-kestrel",
+    machineName: "kestrel",
+    offline: true,
+    ran: "1h",
+  }),
+  row("dmdns", {
+    kind: "delegate",
+    title: "Find why mDNS misses the hub after sleep",
+    ran: "18m",
+  }),
+  row("dmdns2", {
+    kind: "delegate",
+    parentId: "dmdns",
+    title: "Capture avahi traffic on obelisk for five minutes",
+    ran: "3m",
+  }),
+  row("ddeps", {
+    kind: "delegate",
+    title: "Bump bits-ui to 2.20 and read its changelog",
+    activity: "idle",
+    ran: "",
+  }),
+  row("drel", {
+    kind: "delegate",
+    title: "Draft release notes for nightly 6191",
+    ran: "5m",
+  }),
+  row("ddocs", {
+    kind: "delegate",
+    title: "Rewrite the self-hosting guide's Tailscale section",
+    ran: "11m",
+  }),
+];
+
+/** Twenty-four running. */
+const TWENTY_FOUR = [...EIGHT, ...SIXTEEN];
+
 export default {
   title: "Caw off/Pick what stops",
   component: CawOffPanel,
@@ -168,3 +279,31 @@ export const Off = {
 export const NothingRunning = {
   args: { rows: [], on: false, open: false },
 };
+
+/** Long list, capped: 24 rows stand about ten tall and scroll, the eleventh peeking. */
+export const ManyCapped = {
+  args: { rows: TWENTY_FOUR, cap: true },
+};
+
+/** Long list, uncapped: all 24 rows stand, the tray as tall as they are. */
+export const ManyUncapped = {
+  args: { rows: TWENTY_FOUR },
+};
+
+/** Unchecked rows say "Keeps running" on their second line. */
+export const UncheckedSays = {
+  args: { unchecked: ["a44", "dlog", "dprs"], keptSays: true },
+};
+
+/** Unchecked rows keep their status (as built): only the box says it. */
+export const UncheckedQuiet = {
+  args: { unchecked: ["a44", "dlog", "dprs"] },
+};
+
+/** The session that needs you starts unchecked; everything else starts checked. */
+export const NeedsYouUnchecked = {
+  args: { needsYouStartsOff: true },
+};
+
+/** Everything starts checked, the one that needs you too (as built, his "all selected by default"). */
+export const NeedsYouChecked = {};
