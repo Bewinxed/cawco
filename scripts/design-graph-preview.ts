@@ -448,14 +448,19 @@ const HUB = `http://127.0.0.1:${ports.hub}`;
 /* --- The dashboard, built in its bench mode, and served --------------------- */
 
 console.log("… building the dashboard (bench mode)");
-const built = Bun.spawnSync([VITE, "build", "--mode", "bench"], {
+// Spawned, not spawnSync: a synchronous build holds the event loop, and the front's "still starting" 503 could never answer.
+// One of its children, so it ends with it however it ends.
+const build = spawn(VITE, ["build", "--mode", "bench"], {
   cwd: DASHBOARD,
   env: { ...process.env, CAWCO_DEV_HUB_URL: HUB, CAWCO_HUB_URL: HUB },
-  stdout: "inherit",
-  stderr: "inherit",
+  stdio: "inherit",
 });
-if (built.exitCode !== 0) {
-  throw new Error(`The dashboard's build exited ${built.exitCode}.`);
+children.push(build);
+const builtExit = await new Promise<number | null>((done) =>
+  build.on("exit", (code) => done(code))
+);
+if (builtExit !== 0) {
+  throw new Error(`The dashboard's build exited ${builtExit}.`);
 }
 const dashboardAt = await freePort();
 children.push(

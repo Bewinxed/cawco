@@ -169,6 +169,3 @@ export const Closed = { args: { cards: FEW, closed: true } };
 
 /** Every task the fixture holds, the long titles among them: the column scrolls its own under the edge fade. */
 export const Many = { args: { cards: ALL } };
-
-/** Its cards couldn't be read: the column has no list to draw, and says so where it stands. */
-export const CardsUnread = { args: { cards: null } };
