@@ -6,7 +6,6 @@
  * come in, and the rest of the pane works on shapes it knows.
  */
 
-import { PREVIEW_REVEAL_RECT } from "@cawco/core/frames";
 import {
   type PaneKey,
   paneKeyOf,
@@ -432,7 +431,6 @@ const PAGE_MESSAGES = [
   "cawco:error",
   "cawco:resolved",
   "cawco:sheet",
-  PREVIEW_REVEAL_RECT,
 ] as const;
 
 /** A message the pane answers by its `type`; each field besides is checked by what reads it. */

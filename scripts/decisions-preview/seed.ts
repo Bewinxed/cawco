@@ -17,6 +17,9 @@
  * Card and option ids are dashed, so no word of the page's prose is one:
  * the probe asserts no element's text holds a card id.
  */
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join as joinPath } from "node:path";
+import { crc32, deflateSync } from "node:zlib";
 import { messageAuth, WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
 import { readWithin } from "../../packages/core/src/bounded";
@@ -24,6 +27,7 @@ import {
   type ChoiceEntry,
   changedEntry,
 } from "../../packages/core/src/choices";
+import type { BuiltInKind } from "../../packages/core/src/decides";
 import { unhandled } from "../../packages/core/src/unhandled";
 import { type Fleet, until } from "../scratch-fleet";
 
@@ -40,6 +44,13 @@ interface SeedCard {
   /** A Mermaid diagram shown between its why and its options. */
   diagram?: string;
   id: string;
+  /**
+   * What sort of choice it is, by what it asks (decision-page skill, Kinds):
+   * `look` for how something looks or reads on screen (layout, copy, colour,
+   * motion, a face), `behaviour` for what the product does, `scope` for how
+   * much is built. A look card's every option carries a picture.
+   */
+  kind: Extract<BuiltInKind, "behaviour" | "look" | "scope">;
   options: SeedOption[];
   question: string;
   /** The Section it stands in, by title. */
@@ -72,6 +83,7 @@ const LANDING: SeedPage = {
   cards: [
     {
       id: "hero-lead",
+      kind: "look",
       section: "The hero",
       after: ["onboarding#caw-intro"],
       question: "Which hero leads the landing page?",
@@ -93,6 +105,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "head-words",
+      kind: "look",
       question: "What does the headline say?",
       why: 'Today: "A control plane for coding agents".',
       options: [
@@ -111,6 +124,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "main-act",
+      kind: "behaviour",
       section: "The hero",
       after: ["hero-lead"],
       question: "What is the primary action?",
@@ -123,6 +137,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "caw-pose",
+      kind: "look",
       question: "Caw's pose in the hero",
       why: "He stands beside the headline.",
       options: [
@@ -132,6 +147,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "hero-motion",
+      kind: "look",
       question: "How does the hero move?",
       why: "The board in the hero is live by default.",
       options: [
@@ -146,6 +162,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "under-hero",
+      kind: "look",
       question: "What stands under the hero?",
       why: "The first section after the fold.",
       options: [
@@ -160,6 +177,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "phone-shot",
+      kind: "look",
       question: "Where does the phone stand?",
       why: "The phone app is half the story.",
       options: [
@@ -174,6 +192,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "lead-theme",
+      kind: "look",
       question: "Which theme leads?",
       why: "The page follows the reader's system today.",
       options: [
@@ -183,6 +202,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "name-harness",
+      kind: "look",
       question: "Name the harnesses?",
       why: "Claude Code, OpenCode and pi run today.",
       options: [
@@ -192,6 +212,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "film-length",
+      kind: "scope",
       question: "How long is the film?",
       why: "Only if the film leads.",
       options: [
@@ -206,6 +227,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "head-face",
+      kind: "look",
       question: "The headline's face",
       why: "The wordmark is Nunito.",
       options: [
@@ -215,6 +237,7 @@ const LANDING: SeedPage = {
     },
     {
       id: "page-voice",
+      kind: "look",
       question: "The page's voice",
       why: "Calm and short, as the product is.",
       options: [
@@ -242,6 +265,7 @@ const PRICING: SeedPage = {
   cards: [
     {
       id: "plan-shape",
+      kind: "behaviour",
       question: "What shape is the plan?",
       why: "Today the hub is self-hosted only.",
       diagram:
@@ -259,6 +283,7 @@ const PRICING: SeedPage = {
     },
     {
       id: "trial-length",
+      kind: "behaviour",
       question: "How long is the trial?",
       why: "A fleet takes a week to set up properly.",
       options: [
@@ -273,6 +298,7 @@ const PRICING: SeedPage = {
     },
     {
       id: "free-tier",
+      kind: "behaviour",
       question: "Is there a free tier?",
       why: "Self-hosting stays free either way.",
       options: [
@@ -291,6 +317,7 @@ const PRICING: SeedPage = {
     },
     {
       id: "pay-when",
+      kind: "behaviour",
       question: "When does the bill land?",
       why: "Usage moves with the fleet's size.",
       options: [
@@ -305,6 +332,7 @@ const PRICING: SeedPage = {
     },
     {
       id: "price-page",
+      kind: "look",
       question: "Pricing in the top bar?",
       why: "The top bar holds four links today.",
       options: [
@@ -314,6 +342,7 @@ const PRICING: SeedPage = {
     },
     {
       id: "spend-cap",
+      kind: "behaviour",
       question: "A spend cap per project?",
       why: "Projects already stop at their own cap.",
       options: [
@@ -366,6 +395,7 @@ const ONBOARDING: SeedPage = {
   cards: [
     {
       id: "first-screen",
+      kind: "behaviour",
       section: "The first ten minutes",
       question: "What is the first screen?",
       why: "Today it is the empty board.",
@@ -381,6 +411,7 @@ const ONBOARDING: SeedPage = {
     },
     {
       id: "join-second",
+      kind: "behaviour",
       section: "The first ten minutes",
       after: ["first-screen"],
       question: "When does the second machine join?",
@@ -392,6 +423,7 @@ const ONBOARDING: SeedPage = {
     },
     {
       id: "first-project",
+      kind: "behaviour",
       section: "The first ten minutes",
       after: ["first-screen"],
       question: "Is there a first project?",
@@ -408,6 +440,7 @@ const ONBOARDING: SeedPage = {
     },
     {
       id: "phone-pair",
+      kind: "behaviour",
       section: "The first ten minutes",
       after: ["join-second"],
       question: "When is the phone paired?",
@@ -424,6 +457,7 @@ const ONBOARDING: SeedPage = {
     },
     {
       id: "caw-intro",
+      kind: "look",
       section: "The first ten minutes",
       after: ["first-project"],
       question: "How does Caw say hello?",
@@ -443,12 +477,69 @@ const ONBOARDING_PICKS: Record<string, { note?: string; options: string[] }> = {
 
 const say = (text: string): string => JSON.stringify(text);
 
+/** A PNG chunk: its length, type, data and CRC (PNG spec §5.3). */
+const chunk = (type: string, data: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(12 + data.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, data.length);
+  out.set(new TextEncoder().encode(type), 4);
+  out.set(data, 8);
+  view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+  return out;
+};
+
+/** The swatches a look card's options stand on, one hue each, so each option's picture differs. */
+const SWATCHES: [number, number, number][] = [
+  [233, 113, 82],
+  [72, 128, 196],
+  [96, 160, 104],
+  [200, 168, 64],
+  [140, 104, 180],
+];
+
+/**
+ * A look option's picture: a 160x100 swatch PNG in `dir`, one hue per place
+ * on its card, written once and named by its absolute path, as an Image names
+ * a file on the writer's machine (decisions library `Image`).
+ */
+const pictureOf = (dir: string, id: string, at: number): string => {
+  const path = joinPath(dir, `${id}.png`);
+  if (existsSync(path)) {
+    return path;
+  }
+  const [width, height] = [160, 100];
+  const [r, g, b] = SWATCHES[at % SWATCHES.length];
+  const rows = new Uint8Array((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      rows.set([r, g, b], y * (width * 3 + 1) + 1 + x * 3);
+    }
+  }
+  const head = new Uint8Array(13);
+  const view = new DataView(head.buffer);
+  view.setUint32(0, width);
+  view.setUint32(4, height);
+  head.set([8, 2, 0, 0, 0], 8);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    path,
+    Buffer.concat([
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      chunk("IHDR", head),
+      chunk("IDAT", deflateSync(rows)),
+      chunk("IEND", new Uint8Array()),
+    ])
+  );
+  return path;
+};
+
 /**
  * The page as a session writes it: a program over the decision library,
- * each card a Decision (its diagram, `after` and Section as written), its
- * options in order, the recommended one marked.
+ * each card a Decision (its diagram, `after`, Section and kind as written),
+ * its options in order, the recommended one marked, each of a look card's
+ * with its picture.
  */
-const pageProgram = (page: SeedPage): string => {
+const pageProgram = (page: SeedPage, pictures: string): string => {
   const lines: string[] = [];
   const top: string[] = [];
   const sections = new Map<string, string[]>();
@@ -461,17 +552,20 @@ const pageProgram = (page: SeedPage): string => {
         .filter((other) => other !== each)
         .map((other) => other.label)
         .join(" and ")}.`;
+      const media =
+        card.kind === "look"
+          ? `[Image(${say(pictureOf(pictures, each.id, at))}, ${say(`${each.label}: ${each.line}`)})]`
+          : "[]";
       lines.push(
-        `${statement} = Option(${say(each.id)}, ${say(each.label)}, ${say(each.line)}, ${each.recommended ? "true" : "false"}, [], ${say(cost)})`
+        `${statement} = Option(${say(each.id)}, ${say(each.label)}, ${say(each.line)}, ${each.recommended ? "true" : "false"}, ${media}, ${say(cost)})`
       );
       return statement;
     });
     const media = card.diagram
       ? `[Diagram(${say(card.diagram)}, "How it would look")]`
-      : "null";
-    const after = card.after ? `, ${JSON.stringify(card.after)}` : "";
+      : "[]";
     lines.push(
-      `${name} = Decision(${say(card.id)}, ${say(card.question)}, [${options.join(", ")}], ${say(card.why)}${card.diagram || after ? `, ${media}` : ""}${after})`
+      `${name} = Decision(${say(card.id)}, ${say(card.question)}, [${options.join(", ")}], ${say(card.why)}, ${media}, ${JSON.stringify(card.after ?? [])}, false, null, ${say(card.kind)})`
     );
     if (card.section) {
       if (!sections.has(card.section)) {
@@ -630,7 +724,8 @@ const publish = async (
   fleet: Fleet,
   writer: string,
   page: SeedPage,
-  picks: SeedPicks
+  picks: SeedPicks,
+  pictures: string
 ): Promise<string> => {
   const made = await hub<{ id: string }>(
     fleet,
@@ -641,7 +736,7 @@ const publish = async (
       name: page.name,
       does: "pick",
       ask: page.ask,
-      program: pageProgram(page),
+      program: pageProgram(page, pictures),
     }
   );
   await pickAsThePerson(fleet, writer, made.id, picks);
@@ -677,14 +772,29 @@ export async function seedDecisions(
       projectId,
     });
   }
+  // The look cards' pictures, beside the project.
+  const pictures = joinPath(project.cwd, ".seed-pictures");
   const artifacts: Record<string, string> = {
-    landing: await publish(fleet, writers.landing, LANDING, LANDING_PICKS),
-    pricing: await publish(fleet, writers.pricing, PRICING, PRICING_PICKS),
+    landing: await publish(
+      fleet,
+      writers.landing,
+      LANDING,
+      LANDING_PICKS,
+      pictures
+    ),
+    pricing: await publish(
+      fleet,
+      writers.pricing,
+      PRICING,
+      PRICING_PICKS,
+      pictures
+    ),
     onboarding: await publish(
       fleet,
       writers.onboarding,
       ONBOARDING,
-      ONBOARDING_PICKS
+      ONBOARDING_PICKS,
+      pictures
     ),
   };
   // The pricing page: I'm done picking, then Make tasks, then its tasks filed.

@@ -32,7 +32,6 @@
  */
 import { bringIntoView } from "@cawco/core/bring-into-view";
 import { type PageAnchor, readPins } from "@cawco/core/comments";
-import { PREVIEW_REVEAL_RECT } from "@cawco/core/frames";
 import {
   type Anchorable,
   anchorable,
@@ -350,14 +349,12 @@ export function startChanges(deps: ChangesDeps): Changes {
       return;
     }
     clearTimeout(flashTimer);
-    // Up and down only, by the scrollers round it (core bring-into-view.ts);
-    // a host's scrollers are its own, asked by where it lands.
+    // Up and down only, by the scrollers round it (core bring-into-view.ts).
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const spot = bringIntoView(el, {
+    bringIntoView(el, {
       at: "third",
       behavior: reduce ? "auto" : "smooth",
     });
-    deps.post(PREVIEW_REVEAL_RECT, spot);
     deps.outline(el);
     const ring = drawn.get(anchor);
     if (ring) {

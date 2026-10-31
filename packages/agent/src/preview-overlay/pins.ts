@@ -75,7 +75,6 @@ import {
   wholePage,
   writePin,
 } from "@cawco/core/comments";
-import { PREVIEW_REVEAL_RECT } from "@cawco/core/frames";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import { absences } from "./absent";
@@ -1232,12 +1231,8 @@ export function startPins(deps: PinsDeps): Pins {
     const r = (where.pill?.box.h ?? 20) / 2;
     const x = where.at[0] - scrollX;
     const y = where.at[1] - scrollY;
-    /** Where it stands now, for the host's scrollers: another origin's, which only it can move. */
-    const tellHost = (at: number) =>
-      deps.post(PREVIEW_REVEAL_RECT, { top: at - r, bottom: at + r });
     const clear = bandsAt(x, covered, r);
     if (where.shown && inBands(y, clear)) {
-      tellHost(y);
       return;
     }
     const chain = scrollersOf(where.el, rectOf);
@@ -1251,7 +1246,6 @@ export function startPins(deps: PinsDeps): Pins {
     if (moves) {
       scrollMoves(moves, motionOk() && !instant ? "smooth" : "auto");
     }
-    tellHost(moves?.at ?? y);
   };
 
   /**

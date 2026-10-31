@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { bringIntoView } from "@cawco/core/bring-into-view";
   import {
     type ActivityLine,
     type ChangedItem,
@@ -15,7 +14,6 @@
   import { detach } from "@cawco/core/detach";
   import {
     PREVIEW_LOCKED_MESSAGE,
-    PREVIEW_REVEAL_RECT,
     type PreviewSettings,
     previewRoute,
     projectPagePlace,
@@ -2198,25 +2196,6 @@
     revision: number;
     timer: ReturnType<typeof setTimeout>;
   }>();
-  /**
-   * The page brought a spot into view inside its frame (`cawco:reveal-rect`,
-   * in the frame's px): the scrollers round the frame show it too, by the
-   * least it takes. They are another origin's to the page, which can't move
-   * them. A phone's project page is one scroller round a task's stage.
-   */
-  function revealInFrame(top: unknown, bottom: unknown) {
-    if (!(iframe && typeof top === "number" && typeof bottom === "number")) {
-      return;
-    }
-    const box = iframe.getBoundingClientRect();
-    const scale =
-      iframe.clientHeight > 0 ? box.height / iframe.clientHeight : 1;
-    bringIntoView(iframe, {
-      behavior: motionOk.current ? "smooth" : "auto",
-      box: { top: box.top + top * scale, bottom: box.top + bottom * scale },
-    });
-  }
-
   /** Every look still waiting on its ping, written now: the doc it goes in is about to be let go. */
   function writeLooks() {
     for (const look of looks) {
@@ -3235,9 +3214,6 @@
         if (failure && failure.again === null) {
           failure = null;
         }
-        break;
-      case PREVIEW_REVEAL_RECT:
-        revealInFrame(message.top, message.bottom);
         break;
       case "cawco:sheet": {
         // A sheet's page said its stories and props: the inspector's controls.

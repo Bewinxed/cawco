@@ -9,8 +9,7 @@
  * What it gives that's worth keeping is kept: a scroller's `scroll-padding`
  * (what stands over its edges: a phone's views bar, `--reveal-foot`) and the
  * element's `scroll-margin` narrow where it lands. Same-origin frames are
- * gone through; another origin's host is asked by the frame's page
- * (`cawco:reveal-rect`, preview-overlay).
+ * gone through.
  */
 
 /** A stretch of the viewport's height. */
@@ -251,29 +250,21 @@ export function scrollMoves(moves: Moves, behavior: ScrollBehavior) {
  * Up and down only. `third`: `el`'s top a third of the way down the first
  * scroller that can move it; every scroller round that one moves by the least
  * that shows it. `nearest`: each by the least, for a row a key or a section
- * walks to, which a jump would lose the place of. `box`: what to show, in the
- * viewport, where it isn't `el`'s own box (a spot inside a frame of another
- * origin). Answers where it lands in the viewport.
+ * walks to, which a jump would lose the place of.
  */
 export function bringIntoView(
   el: Element,
   {
     at = "nearest",
     behavior = "auto",
-    box,
-  }: { at?: "nearest" | "third"; behavior?: ScrollBehavior; box?: Band } = {}
-): Band {
-  let item: Band;
-  if (box) {
-    item = { top: box.top, bottom: box.bottom };
-  } else {
-    const own = el.getBoundingClientRect();
-    const style = getComputedStyle(el);
-    item = {
-      top: own.top - (Number.parseFloat(style.scrollMarginTop) || 0),
-      bottom: own.bottom + (Number.parseFloat(style.scrollMarginBottom) || 0),
-    };
-  }
+  }: { at?: "nearest" | "third"; behavior?: ScrollBehavior } = {}
+) {
+  const own = el.getBoundingClientRect();
+  const style = getComputedStyle(el);
+  let item: Band = {
+    top: own.top - (Number.parseFloat(style.scrollMarginTop) || 0),
+    bottom: own.bottom + (Number.parseFloat(style.scrollMarginBottom) || 0),
+  };
   let placing = at === "third";
   const by: Moves["by"] = [];
   // Read whole, then written: no write between two reads lays the page out.
@@ -295,7 +286,6 @@ export function bringIntoView(
   for (const [scroller, top] of by) {
     scroller.scrollBy({ top, behavior });
   }
-  return item;
 }
 
 /**

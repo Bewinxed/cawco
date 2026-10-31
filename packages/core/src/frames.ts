@@ -214,13 +214,6 @@ export const PREVIEW_ENTER_PATH = "/__cawco/enter";
 
 /** What a preview origin answers without a pass: the page says so to its parent as this, so the frame's host enters again. */
 export const PREVIEW_LOCKED_MESSAGE = "cawco:locked";
-/**
- * A page's word to the dashboard that frames it: it brought a spot into view
- * (a step to a change, a pin brought out) and this is where that spot stands
- * in its frame, `top` and `bottom` px, so the host's scrollers show it too
- * (PreviewPane). A frame of another origin can't move them itself.
- */
-export const PREVIEW_REVEAL_RECT = "cawco:reveal-rect";
 
 /**
  * Host mode's pass: one cookie per browser, set on the domain the names
