@@ -43,6 +43,13 @@
         "value": "probe",
         "createdAt": "2026-10-25T23:50:41.348Z",
         "reason": "agent's call: canvas-cost memory leg's webfont probe names a house face file 'Probe' inside a test page string to read whether a loaded face keeps a frame; no UI uses it"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": ["http://127.0.0.1:5391/dev/bench/arm-a"],
+        "createdAt": "2026-10-31T07:47:30.813Z",
+        "reason": "DESIGN.md Overview: 'The surface is warm paper by day (neutral hue ~85)'; the bench page's ground is the house surface-recess token"
       }
     ]
   }
