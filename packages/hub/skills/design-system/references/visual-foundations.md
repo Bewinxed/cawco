@@ -1,6 +1,6 @@
 # Visual foundations
 
-The fixed list `DESIGN.md` answers, every question, in this order (Claude Design's create-design-system list, "answer ALL these questions", with the roles and scales a token file holds). An answer says what the project does, the tokens it uses, and where you read it (`file:line`, a URL, a brand file). A question the material leaves open goes on the decision page; it is never answered with a default.
+The fixed list `DESIGN.md` answers, every question, in this order, with the roles and scales a token file holds. An answer says what the project does, the tokens it uses, and where you read it (`file:line`, a URL, a brand file). A question the material leaves open goes on the decision page; it is never answered with a default.
 
 1. **Colour roles**: which colours the project has and what each is for (surfaces, ink, the action colour, states, borders); how each changes in the dark scheme.
 2. **Backgrounds**: what fills a page, a panel and a raised surface; flat, tinted, gradient, texture or image.
