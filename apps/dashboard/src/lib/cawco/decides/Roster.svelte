@@ -6,6 +6,7 @@
    * over, a press elsewhere or Escape closes it and still lands. Props in,
    * events out: what a hand-over writes is its owner's.
    */
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import type { Kind, Member } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
   import { untrack } from "svelte";
@@ -126,8 +127,10 @@
       return;
     }
     const list = document.getElementById(listId);
-    list?.scrollIntoView({ block: "nearest" });
-    list?.focus({ preventScroll: true });
+    if (list) {
+      bringIntoView(list);
+      list.focus({ preventScroll: true });
+    }
   });
 </script>
 
