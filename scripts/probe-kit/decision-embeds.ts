@@ -23,6 +23,7 @@ import {
 import { type EmbedShape, storiesKey } from "../../packages/core/src/stage";
 import {
   DECISION_ASSETS,
+  FACE_PRELOADS,
   programHost,
   scriptJson,
 } from "../../packages/hub/src/decision-program";
@@ -379,10 +380,13 @@ function decisionPage(
   ]);
   const title = program.match(TITLE)?.[1] ?? "";
   // The overlay's own pick where it runs; the stand-in bridge's otherwise.
-  const html = programHost(program, title, {}).replace(
-    "</body>",
-    `${scriptJson("cawco-media", named)}\n${withOverlay ? "" : `<script src="${PICK_PATH}"></script>\n`}</body>`
-  );
+  // Its faces' preloads in its head, as the hub serves a page (hub server.ts `program`).
+  const html = programHost(program, title, {})
+    .replace("</head>", `${FACE_PRELOADS}</head>`)
+    .replace(
+      "</body>",
+      `${scriptJson("cawco-media", named)}\n${withOverlay ? "" : `<script src="${PICK_PATH}"></script>\n`}</body>`
+    );
   return new Response(withOverlay ? injectOverlay(html) : html, {
     headers: { "content-type": "text/html; charset=utf-8" },
   });

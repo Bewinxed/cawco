@@ -391,12 +391,12 @@ public enum Shadow {
 
 public enum FontFamily {
     /// Caw&Co wordmark: the approved landing's Nunito Variable face.
-    public static let fontWordmark: [String] = ["Nunito Variable", "ui-rounded", "system-ui", "sans-serif"]
-    /// Figtree for UI and transcript prose, 400 and 500 only.
-    public static let fontSans: [String] = ["Figtree Variable", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"]
-    public static let fontBody: [String] = ["Figtree Variable", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"]
+    public static let fontWordmark: [String] = ["Nunito Variable", "Nunito Variable Fallback", "ui-rounded", "system-ui", "sans-serif"]
+    /// Figtree for UI and transcript prose, 400 and 500 only; until it arrives, its fallback (a local Arial sized to Figtree, core house-faces.ts) lays out the same lines.
+    public static let fontSans: [String] = ["Figtree Variable", "Figtree Variable Fallback", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"]
+    public static let fontBody: [String] = ["Figtree Variable", "Figtree Variable Fallback", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"]
     /// JetBrains Mono for code, paths, IDs and measurements; ligatures off.
-    public static let fontMono: [String] = ["JetBrains Mono Variable", "ui-monospace", "SF Mono", "monospace"]
+    public static let fontMono: [String] = ["JetBrains Mono Variable", "JetBrains Mono Variable Fallback", "ui-monospace", "SF Mono", "monospace"]
     /// Fredoka 600: brand display only.
     public static let fontDisplay: [String] = ["Fredoka", "Figtree Variable", "ui-rounded", "system-ui", "sans-serif"]
 }

@@ -9,19 +9,29 @@
  * every code point it holds, through every layout feature the face keeps:
  * all of Figtree's) that no piece holds; when a face's declared axis is not
  * its file's; and when a piece's axis is not the weight range it serves.
+ * Beside it, each face's local fallback, sized to the face by Capsize's
+ * `createFontStack` from the face's own file (`@capsizecss/unpack`) and the
+ * local face's published metrics (`@capsizecss/metrics`), and the pieces a
+ * decision page preloads: the latin pieces of the faces its first paint sets.
  *
  *   bun scripts/house-faces.ts          write it
  *   bun scripts/house-faces.ts --check  fail when it is stale
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { createFontStack } from "@capsizecss/core";
+import arial from "@capsizecss/metrics/arial";
+import courierNew from "@capsizecss/metrics/courierNew";
+import { fromBuffer } from "@capsizecss/unpack";
 import { create, type Font } from "fontkit";
 import subsetFont from "subset-font";
 import { formatText, formattedAlike } from "../../../scripts/fmt";
 import {
   cutHouseFaces,
   type FaceCoverage,
+  type FaceFallback,
   type FacePiece,
   type FaceRole,
+  FIRST_PAINT_ROLES,
   featuresOf,
   type HouseCoverage,
   heldBy,
@@ -40,6 +50,44 @@ const fail = (line: string): never => {
 };
 
 const fontOf = (bytes: Uint8Array): Font => create(Buffer.from(bytes)) as Font;
+
+const LOCAL_METRICS = { arial, courierNew } as const;
+const CAMEL = /[A-Z]/gu;
+
+/**
+ * `face`'s local fallback: Capsize's font stack of the face (its metrics
+ * read from its own file, named as the page names it) over the local face,
+ * its one fallback rule's descriptors in CSS's own names, the faces drawn
+ * to the local face's metrics added to its `src`.
+ */
+async function fallbackOf(
+  face: ReturnType<typeof readHouseFaces>[number]
+): Promise<FaceFallback> {
+  const own = await fromBuffer(Buffer.from(face.bytes));
+  const { fontFaces } = createFontStack(
+    [{ ...own, familyName: face.family }, LOCAL_METRICS[face.fallback.metrics]],
+    { fontFaceFormat: "styleObject" }
+  );
+  const rule = fontFaces[0]?.["@font-face"];
+  if (!rule) {
+    return fail(`Capsize made no fallback rule for ${face.family}.`);
+  }
+  const { fontFamily, src, ...overrides } = rule as Record<string, string>;
+  return {
+    family: String(fontFamily).replaceAll('"', ""),
+    descriptors: {
+      src: [src, ...face.fallback.alike.map((name) => `local('${name}')`)].join(
+        ", "
+      ),
+      ...Object.fromEntries(
+        Object.entries(overrides).map(([name, value]) => [
+          name.replace(CAMEL, (letter) => `-${letter.toLowerCase()}`),
+          String(value),
+        ])
+      ),
+    },
+  };
+}
 
 /** Each glyph's name in `font`. */
 const glyphNames = (font: Font): Set<string> => {
@@ -64,6 +112,8 @@ const [served, named] = await Promise.all([
 ]);
 
 const faces: Partial<Record<FaceRole, FaceCoverage>> = {};
+const fallbacks: Partial<Record<FaceRole, FaceFallback>> = {};
+const preload: string[] = [];
 const from: Record<string, string> = {};
 const sizes: string[] = [];
 for (const face of readHouseFaces()) {
@@ -145,6 +195,14 @@ for (const face of readHouseFaces()) {
     );
   }
   faces[face.role] = { family: face.family, ranges: pairsOf(drawn.keys()) };
+  fallbacks[face.role] = await fallbackOf(face);
+  if (FIRST_PAINT_ROLES.includes(face.role)) {
+    const latin = pieces.find((piece) => piece.cut === "latin");
+    if (!latin) {
+      fail(`${face.file} has no latin piece for a decision page to preload.`);
+    }
+    preload.push(latin?.name ?? "");
+  }
   // The name table's version string, "Version 2.002" (@types/fontkit says a number).
   from[face.file] = String(whole.version);
   sizes.push(
@@ -154,11 +212,27 @@ for (const face of readHouseFaces()) {
   );
 }
 const { sans, mono, wordmark } = faces;
-if (!(sans && mono && wordmark)) {
+if (!(
+  sans &&
+  mono &&
+  wordmark &&
+  fallbacks.sans &&
+  fallbacks.mono &&
+  fallbacks.wordmark
+)) {
   throw new Error("house faces: a sans, a mono and a wordmark face, each once");
 }
 
-const coverage: HouseCoverage = { faces: { sans, mono, wordmark }, from };
+const coverage: HouseCoverage = {
+  faces: { sans, mono, wordmark },
+  fallbacks: {
+    sans: fallbacks.sans,
+    mono: fallbacks.mono,
+    wordmark: fallbacks.wordmark,
+  },
+  from,
+  preload,
+};
 // Formatted as the repository's formatter writes it; the check formats the committed file alike.
 const text = await formatText(OUT, `${JSON.stringify(coverage)}\n`);
 

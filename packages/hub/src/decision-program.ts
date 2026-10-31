@@ -39,7 +39,12 @@ import {
   type DecisionComponentName,
 } from "@cawco/core/decisions-library";
 import spec from "@cawco/core/decisions-spec";
-import { named, SANS_FAMILY, undrawn } from "@cawco/core/house-faces";
+import {
+  facePreloads,
+  named,
+  SANS_FAMILY,
+  undrawn,
+} from "@cawco/core/house-faces";
 import { unhandled } from "@cawco/core/unhandled";
 import {
   type ASTNode,
@@ -862,6 +867,14 @@ export const scriptJson = (id: string, value: unknown): string =>
 
 /** The house faces' sheet on every preview origin (core decision-host.ts): a program's page links it, an HTML page's kit CSS imports it. */
 export const FACES_SHEET = `${DECISION_ASSETS}faces.css`;
+/**
+ * The faces a decision page's first paint sets, preloaded from its head as
+ * the hub serves it (core house-faces.ts `facePreloads`), every page alike,
+ * whenever it was written: found only once the faces' sheet was applied and
+ * the page's text laid out, they arrived after its first paint, and the
+ * page's words moved 41px as they swapped in.
+ */
+export const FACE_PRELOADS = facePreloads(DECISION_ASSETS);
 /** The plain CawCo icon every decision page names (core decision-host.ts `icon.png`): a page in a tab of its own asks for no `/favicon.ico`, which its origin doesn't serve. */
 export const PAGE_ICON = `${DECISION_ASSETS}icon.png`;
 

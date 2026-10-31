@@ -3461,23 +3461,30 @@
   "font": {
     "font-wordmark": {
       "$type": "fontFamily",
-      "$value": ["Nunito Variable", "ui-rounded", "system-ui", "sans-serif"],
+      "$value": [
+        "Nunito Variable",
+        "Nunito Variable Fallback",
+        "ui-rounded",
+        "system-ui",
+        "sans-serif"
+      ],
       "$description": "Caw&Co wordmark: the approved landing's Nunito Variable face."
     },
     "font-sans": {
       "$type": "fontFamily",
       "$value": [
         "Figtree Variable",
+        "Figtree Variable Fallback",
         "ui-sans-serif",
         "system-ui",
         "-apple-system",
         "Segoe UI",
         "sans-serif"
       ],
-      "$description": "Figtree for UI and transcript prose, 400 and 500 only.",
+      "$description": "Figtree for UI and transcript prose, 400 and 500 only; until it arrives, its fallback (a local Arial sized to Figtree, core house-faces.ts) lays out the same lines.",
       "$extensions": {
         "dev.cawco": {
-          "css": "\"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+          "css": "\"Figtree Variable\", \"Figtree Variable Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
         }
       }
     },
@@ -3489,6 +3496,7 @@
       "$type": "fontFamily",
       "$value": [
         "JetBrains Mono Variable",
+        "JetBrains Mono Variable Fallback",
         "ui-monospace",
         "SF Mono",
         "monospace"

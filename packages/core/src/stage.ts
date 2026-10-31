@@ -118,6 +118,15 @@ export const CANVAS_EMBED_GO = "cawco:embed-go";
 export const CANVAS_EMBED_READY = "cawco:embed-ready";
 
 /**
+ * The page's word that an embed's box has stood in its view, `{ type }`,
+ * once its frame has loaded: the embed's own observer can't see it while its
+ * frame stands at no height, waiting for the shape it says. From then it
+ * waits on its stories' animations only so long before it says its height
+ * (agent canvas runtime `settledHeight`).
+ */
+export const CANVAS_EMBED_SEEN = "cawco:embed-seen";
+
+/**
  * A canvas embed's share of its graph has arrived (every `modulepreload` of
  * it answered; on a page of its own, its whole graph), the message it posts
  * to the page holding it, `{ type }`: those modules are the page's now, so

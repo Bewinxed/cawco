@@ -680,6 +680,7 @@ import {
   type ArtifactNamed,
   type BuiltProgram,
   buildProgram,
+  FACE_PRELOADS,
   type ImageRead,
   PROGRAM_FILE,
   refiledStatements,
@@ -15336,7 +15337,7 @@ export const createServer = (
       }
       return {
         hash: served.hash,
-        media: `${scriptJson("cawco-media", media)}${scriptJson(PICTURES_TAG, served.pictures)}`,
+        media: `${FACE_PRELOADS}${scriptJson("cawco-media", media)}${scriptJson(PICTURES_TAG, served.pictures)}`,
       };
     },
     canvasFrom: (request, instanceId, artifactId) =>

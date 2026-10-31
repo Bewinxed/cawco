@@ -289,9 +289,41 @@
       ]
     }
   },
+  "fallbacks": {
+    "sans": {
+      "family": "Figtree Variable Fallback",
+      "descriptors": {
+        "src": "local('Arial'), local('ArialMT'), local('Liberation Sans'), local('Arimo')",
+        "ascent-override": "95.3853%",
+        "descent-override": "25.1014%",
+        "line-gap-override": "0%",
+        "size-adjust": "99.5961%"
+      }
+    },
+    "mono": {
+      "family": "JetBrains Mono Variable Fallback",
+      "descriptors": {
+        "src": "local('Courier New'), local('CourierNewPSMT'), local('Liberation Mono'), local('Cousine')",
+        "ascent-override": "102.0166%",
+        "descent-override": "30.0049%",
+        "size-adjust": "99.9837%"
+      }
+    },
+    "wordmark": {
+      "family": "Nunito Variable Fallback",
+      "descriptors": {
+        "src": "local('Arial'), local('ArialMT'), local('Liberation Sans'), local('Arimo')",
+        "ascent-override": "103.3726%",
+        "descent-override": "36.0935%",
+        "line-gap-override": "0%",
+        "size-adjust": "97.8015%"
+      }
+    }
+  },
   "from": {
     "Figtree.ttf": "Version 2.002",
     "JetBrainsMono.ttf": "Version 2.305",
     "Nunito.ttf": "Version 3.602"
-  }
+  },
+  "preload": ["face-bd695ce806ea7f47.woff2", "face-03146c8270cc8780.woff2"]
 }

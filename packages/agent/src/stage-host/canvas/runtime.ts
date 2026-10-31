@@ -23,6 +23,7 @@ import {
   awaySaid,
   CANVAS_EMBED_FAILED,
   CANVAS_EMBED_FETCHED,
+  CANVAS_EMBED_SEEN,
   CANVAS_EMBED_SIZE,
   CANVAS_GRAPH_FETCHED,
   CANVAS_PLAN_ID,
@@ -1562,6 +1563,28 @@ export function boot(options: BootOptions): void {
     window.parent.postMessage({ type: CANVAS_EMBED_SIZE, height, width }, "*");
   }
 
+  /**
+   * When the page holding the embed said its box stood in its view
+   * (`CANVAS_EMBED_SEEN`), by `performance.now()`; null until then, and
+   * `seenOnce` settles then.
+   */
+  let seenAt: number | null = null;
+  let heardSeen: () => void = () => undefined;
+  const seenOnce = new Promise<void>((done) => {
+    heardSeen = done;
+  });
+  if (embed) {
+    addEventListener("message", (event) => {
+      if (
+        event.source === window.parent &&
+        (event.data as { type?: unknown } | null)?.type === CANVAS_EMBED_SEEN
+      ) {
+        seenAt ??= performance.now();
+        heardSeen();
+      }
+    });
+  }
+
   /** The page's animations running now that end: a story's transitions (a Svelte `in:`/`out:`, a fold), never a loop. */
   const ending = (): Animation[] =>
     document
@@ -1586,25 +1609,69 @@ export function boot(options: BootOptions): void {
    * screen, 3 transitions mid-flight, and 795 once scrolled to, every
    * Preview under it moving 165px. Here an embed off the page's screen says
    * its shape once it has its frames, and the page holding it stands its
-   * skeleton at the shape it last said until then.
+   * skeleton at the shape it last said until then. Once its box has stood
+   * in that page's view (`CANVAS_EMBED_SEEN`), it waits on its animations at
+   * most {@link longMotionMs}, then says the height that held across a
+   * frame: it never fails for animating.
    */
   async function settledHeight(): Promise<number> {
+    const longest = longMotionMs();
     for (;;) {
-      await Promise.allSettled([
-        document.fonts.ready,
-        ...ending().map((run) => run.finished),
-      ]);
+      const settling = () =>
+        Promise.allSettled([
+          document.fonts.ready,
+          ...ending().map((run) => run.finished),
+        ]);
+      // Unseen, until they end or its box is seen; seen, until they end or the long motion's time is up: measured after either way.
+      await (seenAt === null
+        ? Promise.race([settling(), seenOnce])
+        : readWithin(
+            Math.max(0, seenAt + longest - performance.now()),
+            settling
+          ));
       const before = Math.ceil(world.offsetHeight);
       await frameTick();
       const height = Math.ceil(world.offsetHeight);
-      if (
-        height === before &&
-        document.fonts.status === "loaded" &&
-        ending().length === 0
-      ) {
+      if (!(height === before && document.fonts.status === "loaded")) {
+        continue;
+      }
+      if (ending().length === 0) {
+        return height;
+      }
+      if (seenAt !== null && performance.now() - seenAt >= longest) {
+        console.warn(
+          `[cawco] ${drawnStories().join(", ")} still animating ${longest} ms after coming into view: its height is said as it held across a frame, ${height}px.`
+        );
         return height;
       }
     }
+  }
+
+  /** The stories the embed draws, by name, each once. */
+  const drawnStories = (): string[] => [
+    ...new Set(
+      sections.flatMap((section) =>
+        storiesOf(section).map((story) => story.name)
+      )
+    ),
+  ];
+
+  /**
+   * How long an embed in view waits on its stories' animations before it
+   * says its height anyway ({@link settledHeight}): the house's longest
+   * motion that ends, `--dur-goo-settle` (DESIGN.md's motion tokens, as the
+   * page's own tokens write it). A story that starts one animation after
+   * another (a ticker, a carousel) never settles, and its Preview would
+   * otherwise say it didn't load: the height that held across a frame is
+   * said, and the canvas warns, naming its stories.
+   */
+  function longMotionMs(): number {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue("--dur-goo-settle")
+      .trim();
+    return value.endsWith("ms")
+      ? Number.parseFloat(value)
+      : Number.parseFloat(value) * 1000;
   }
 
   /**

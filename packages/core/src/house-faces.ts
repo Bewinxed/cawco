@@ -31,6 +31,15 @@
  * - A program's words are drawn in the sans face, so {@link undrawn} reads
  *   them against its coverage; the hub refuses a program with a character
  *   it lacks (hub decision-program.ts).
+ * - Each face has a fallback of its own (`<family> Fallback`, next in the
+ *   tokens' font stacks): a face every desk and phone has locally, sized and
+ *   given the face's ascent, descent and line gap by `size-adjust` and its
+ *   kin, so the lines a page lays out before the face arrives are the lines
+ *   it lays out after. The faces script computes them with Capsize
+ *   (`createFontStack`, capsize.dev) from each face's file and the local
+ *   face's published metrics, into `house-faces.json`.
+ * - A decision page preloads the latin pieces of the faces its first paint
+ *   sets ({@link facePreloads}), named in `house-faces.json` too.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -40,10 +49,22 @@ import coverage from "./house-faces.json" with { type: "json" };
 /** Which role a face plays: words, code, paths and IDs, or the wordmark. */
 export type FaceRole = "sans" | "mono" | "wordmark";
 
+/**
+ * The local face a house face falls back to: Capsize's metrics for it
+ * (`@capsizecss/metrics/<metrics>`), and the faces drawn to its metrics
+ * under other names (`alike`: Liberation's and Croscore's, which Linux has
+ * where Arial and Courier New are not), all sized by one set of overrides.
+ */
+interface LocalFallback {
+  alike: readonly string[];
+  metrics: "arial" | "courierNew";
+}
+
 /** A house face: its family as a page's CSS names it, its file and its weight axis. */
 interface HouseFace {
   /** Its file's own `wght` axis as `font-weight` takes it, `300 900`; the faces script holds it to the file's. */
   axis: string;
+  fallback: LocalFallback;
   family: string;
   /** Its file in {@link FONTS_DIR}. */
   file: string;
@@ -70,6 +91,11 @@ interface HouseFace {
  */
 const PICKER_ONLY = ["aalt"] as const;
 
+const ARIAL: LocalFallback = {
+  metrics: "arial",
+  alike: ["Liberation Sans", "Arimo"],
+};
+
 /** The faces, upright, each one variable file. */
 const HOUSE_FACES: readonly HouseFace[] = [
   {
@@ -79,12 +105,14 @@ const HOUSE_FACES: readonly HouseFace[] = [
     axis: "300 900",
     weight: "300 900",
     leaves: PICKER_ONLY,
+    fallback: ARIAL,
   },
   {
     role: "mono",
     family: "JetBrains Mono Variable",
     file: "JetBrainsMono.ttf",
     axis: "100 800",
+    fallback: { metrics: "courierNew", alike: ["Liberation Mono", "Cousine"] },
     // Every weight a house surface sets code in: 400 and 500 from the
     // weight tokens ("Nothing in product UI goes above 500"), and 700 where
     // a `strong` holds code (Tailwind's preflight sets it `bolder`, 400 to
@@ -111,6 +139,7 @@ const HOUSE_FACES: readonly HouseFace[] = [
     axis: "200 1000",
     weight: "200 1000",
     leaves: PICKER_ONLY,
+    fallback: ARIAL,
   },
 ];
 
@@ -466,10 +495,19 @@ const faceRule = (piece: FacePiece, url: string): string =>
   unicode-range: ${unicodeRange(piece.range)};
 }`;
 
+/** A face's fallback rule ({@link FaceFallback}): its local faces, sized to the face. */
+const fallbackRule = (fallback: FaceFallback): string =>
+  `@font-face {
+  font-family: '${fallback.family}';
+${Object.entries(fallback.descriptors)
+  .map(([name, value]) => `  ${name}: ${value};`)
+  .join("\n")}
+}`;
+
 /**
  * The house faces as a surface serves them: a rule per piece, its file at
- * `<at><name>`, and each piece's file by its name; `pieces` when the
- * surface cuts its own ({@link firstPaintPieces}).
+ * `<at><name>`, then each face's fallback rule; and each piece's file by its
+ * name; `pieces` when the surface cuts its own ({@link firstPaintPieces}).
  */
 export async function houseFaceSheet(
   at: string,
@@ -480,7 +518,10 @@ export async function houseFaceSheet(
 }> {
   const sheet = pieces ?? (await houseFacePieces());
   return {
-    css: `${sheet.map((piece) => faceRule(piece, `${at}${piece.name}`)).join("\n")}\n`,
+    css: `${[
+      ...sheet.map((piece) => faceRule(piece, `${at}${piece.name}`)),
+      ...Object.values(COVERAGE.fallbacks).map(fallbackRule),
+    ].join("\n")}\n`,
     files: sheet.map((piece) => [piece.name, piece.bytes]),
   };
 }
@@ -492,16 +533,51 @@ export interface FaceCoverage {
   ranges: number[][];
 }
 
-/** The data file's shape: each face's coverage by role, and each file's own version string. */
+/**
+ * A face's fallback as the data file keeps it: its family (`<face> Fallback`,
+ * as the tokens' font stacks name it) and its `@font-face` descriptors, `src`
+ * its local faces, then the overrides that size them to the face.
+ */
+export interface FaceFallback {
+  descriptors: Record<string, string>;
+  family: string;
+}
+
+/**
+ * The data file's shape: each face's coverage and fallback by role, each
+ * file's own version string, and the pieces a decision page preloads: the
+ * latin pieces of the faces its first paint sets (the sans face's and the
+ * mono face's, as a decision page loads them).
+ */
 export interface HouseCoverage {
   faces: Record<FaceRole, FaceCoverage>;
+  fallbacks: Record<FaceRole, FaceFallback>;
   from: Record<string, string>;
+  preload: string[];
 }
+
+/** The faces whose latin pieces a decision page's first paint sets. */
+export const FIRST_PAINT_ROLES: readonly FaceRole[] = ["sans", "mono"];
 
 const COVERAGE: HouseCoverage = coverage;
 
 /** Line breaks and tabs, which lay out rather than draw, and code points a browser draws nothing for (Unicode's Default_Ignorable_Code_Point: a joiner, a variation selector). */
 const LAYOUT_ONLY = /[\t\n\r]|\p{Default_Ignorable_Code_Point}/u;
+
+/**
+ * A decision page's preloads, at `at` (the pieces' path on its origin): the
+ * pieces its first paint sets ({@link HouseCoverage.preload}), fetched as the
+ * page's head is read rather than once its sheet is applied and its text laid
+ * out. Fonts are fetched in CORS mode, so each says `crossorigin` to be the
+ * fetch the face's rule makes.
+ */
+export const facePreloads = (at: string): string =>
+  COVERAGE.preload
+    .map(
+      (name) =>
+        `<link rel="preload" href="${at}${name}" as="font" type="font/woff2" crossorigin>`
+    )
+    .join("");
 
 /** The sans face's family name, as a page's CSS names it. */
 export const SANS_FAMILY = COVERAGE.faces.sans.family;

@@ -69,6 +69,7 @@
     CANVAS_EMBED_GO,
     CANVAS_EMBED_GRAPH,
     CANVAS_EMBED_READY,
+    CANVAS_EMBED_SEEN,
     CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
     EMBED_DRAWN,
@@ -442,6 +443,12 @@
   let close = $state(false);
   /** Its box stood in the view: a canvas told to draw has its frames from then (runtime.ts `settledHeight`), so its {@link DRAW_MS} runs from then. */
   let seen = $state(false);
+  // A canvas's frame told its box stood in the view, once it has loaded: standing at no height until it says its shape, it can't see that itself.
+  $effect(() => {
+    if (seen && drawn && held?.kind === "component") {
+      frame?.contentWindow?.postMessage({ type: CANVAS_EMBED_SEEN }, "*");
+    }
+  });
   /** Watches its card until it comes within `margin` of its scroller's view, then calls `came` once. */
   const watchNear = (place: Element, margin: string, came: () => void) => {
     const comes = new IntersectionObserver(

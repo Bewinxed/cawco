@@ -588,14 +588,18 @@
       inset 0 0 0 1px var(--neutral-8), 0 1px 3px var(--shadow-tint),
       0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
     /* Caw&Co wordmark: the approved landing's Nunito Variable face. */
-    --font-wordmark: "Nunito Variable", ui-rounded, system-ui, sans-serif;
-    /* Figtree for UI and transcript prose, 400 and 500 only. */
-    --font-sans:
-      "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    --font-wordmark:
+      "Nunito Variable", "Nunito Variable Fallback", ui-rounded, system-ui,
       sans-serif;
+    /* Figtree for UI and transcript prose, 400 and 500 only; until it arrives, its fallback (a local Arial sized to Figtree, core house-faces.ts) lays out the same lines. */
+    --font-sans:
+      "Figtree Variable", "Figtree Variable Fallback", ui-sans-serif, system-ui,
+      -apple-system, "Segoe UI", sans-serif;
     --font-body: var(--font-sans);
     /* JetBrains Mono for code, paths, IDs and measurements; ligatures off. */
-    --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
+    --font-mono:
+      "JetBrains Mono Variable", "JetBrains Mono Variable Fallback",
+      ui-monospace, "SF Mono", monospace;
     /* Fredoka 600: brand display only. */
     --font-display:
       "Fredoka", "Figtree Variable", ui-rounded, system-ui, sans-serif;
