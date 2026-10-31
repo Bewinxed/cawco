@@ -24,15 +24,14 @@
  *    Update now reloads at once, and the reloaded page shows no toast.
  * b. Update when idle puts the toast away and nothing reloads; the tab going
  *    to the background reloads it.
- * c. No choice: the tab going to the background before any input since the
- *    toast went up leaves it standing, as a build that found the person
- *    away leaves it; after an input with the toast in view, the background
- *    reloads it.
+ * c. No choice: nothing reloads while the tab is in front and the person
+ *    here, and the tab going to the background reloads it at once, with no
+ *    input since the toast went up.
  * d. Update when idle, then no input for the away clock (set to its least
  *    through the person's setting, `POST /api/person/away-clock`): the hub
  *    says the person is away and the page reloads.
  * e. No choice, and no input since the toast went up, for the away clock:
- *    the toast was never in front of the person, so nothing reloads.
+ *    the hub says the person is away and the page reloads, as in d.
  *
  * And the build's release notes reach the person whichever way it lands
  * (owner: "idk where the update / release notes has disappeared to"). The
@@ -165,20 +164,6 @@ const toBackground = (page: Page) =>
     Object.defineProperty(document, "hidden", {
       configurable: true,
       get: () => true,
-    });
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
-
-/** The tab back in front ({@link toBackground} undone). */
-const toForeground = (page: Page) =>
-  page.evaluate(() => {
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      get: () => "visible",
-    });
-    Object.defineProperty(document, "hidden", {
-      configurable: true,
-      get: () => false,
     });
     document.dispatchEvent(new Event("visibilitychange"));
   });
@@ -389,7 +374,6 @@ const landsOpen = async ({
   const reloads = update.loads.length;
   await announce(update);
   await toastUp(page);
-  await page.keyboard.press("Shift");
   await toBackground(page);
   const idleAt = await reloaded(update, reloads, SLACK_MS);
   await page.waitForSelector(READY, { timeout: 60_000 });
@@ -542,33 +526,18 @@ const installedHere = async ({
   await page.close();
 };
 
-/**
- * c. No choice, then the background: before any input since the toast went
- * up (a build that found the person away), and after one.
- */
+/** c. No choice, then the background, with no input since the toast went up. */
 const noChoice = async ({ check, fresh, noErrors, toastUp }: Leg) => {
   const { page, update, loaded } = await fresh();
   await announce(update);
   await toastUp(page);
   await page.waitForTimeout(QUIET_MS);
-  await toBackground(page);
-  await page.waitForTimeout(QUIET_MS);
-  const unseen = update.loads.length === loaded;
-  const standing = (await readToast(page)).count === 1;
-  check(
-    "c: with no input since the toast went up, the tab going to the background reloads nothing, and the toast stands",
-    unseen && standing,
-    { loads: update.loads.length - loaded, standing }
-  );
-  await toForeground(page);
-  await page.keyboard.press("Shift");
-  await page.waitForTimeout(QUIET_MS);
+  const quiet = update.loads.length === loaded;
   const hidden = Date.now();
   await toBackground(page);
-  const quiet = update.loads.length === loaded;
   const at = await reloaded(update, loaded, SLACK_MS);
   check(
-    "c: with no choice, nothing reloads while the tab is in front and the person here, and after an input the tab going to the background reloads it",
+    "c: with no choice and no input since the toast went up, nothing reloads while the tab is in front and the person here, and the tab going to the background reloads it",
     quiet && at !== null && at - hidden < SLACK_MS,
     { afterMs: at === null ? null : at - hidden }
   );
@@ -714,8 +683,7 @@ const leg = async (
   await landsClosed(given);
   await installedHere(given);
 
-  // d and e. No input for the away clock, after Update when idle or no choice
-  // (no input since the toast: it was never in front of the person).
+  // d and e. No input for the away clock, after Update when idle or no choice.
   await fleet.api("/api/person/away-clock", { awayAfterMs: AWAY_AFTER_MIN_MS });
   for (const [label, choose] of [
     ["d: after Update when idle", true],
@@ -737,16 +705,6 @@ const leg = async (
       loaded,
       AWAY_AFTER_MIN_MS + SWEEP_MS + 30_000
     );
-    if (!choose) {
-      check(
-        `${label}, and no input since the toast went up: the away clock runs out and nothing reloads, the toast standing`,
-        at === null && (await readToast(page)).count === 1,
-        { reloaded: at !== null }
-      );
-      noErrors(label.slice(0, 1), update);
-      await page.close();
-      continue;
-    }
     // The hub hears an input at once, or on the page's next presence beat
     // (30 s): its away clock runs from the key, or from the press that came
     // after it, whichever it heard last.

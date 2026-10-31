@@ -25,13 +25,14 @@
  * idle reload until the next time the page goes idle: DESIGN.md, "Don't let
  * a reload … cancel or lose work a surface started".
  *
- * The idle reload counts only an idle that begins after the toast has been
- * in front of the person: an input of theirs on this page, in view, while it
- * stands ({@link seen}), and for away, the presence model saying them here
- * since ({@link back}). A build found them away or the tab in the background
- * (nightlies install while he is away): counted then, the page reloaded the
- * moment the toast went up, and he came back to no toast (tsk-66, nightly
- * 5953 → 5958).
+ * The idle reload goes whenever the page is idle while a build is due, the
+ * moment the toast goes up included: a build that lands while he is away
+ * reloads the page under no one, and the landing's notes wait in Caw's
+ * panel on the reloaded page (update-notice.svelte.ts). It used to count
+ * only an idle that began after an input of his on this page while the
+ * toast stood: a page he only looked at, or used from another app on the
+ * same desk, never reloaded, the toast standing over an idle screen for as
+ * long as he was gone (his report, nightly 6314).
  *
  * A page whose wire is older than the hub's is offered it the same way: it
  * has stopped reading the hub (client.svelte.ts `olderThanHub`), and the
@@ -45,13 +46,9 @@ import { AWAY_AFTER_DEFAULT_MS } from "@cawco/core/notifications";
 import { updatesWords } from "@cawco/core/words/updates";
 import { untrack } from "svelte";
 import { createSubscriber } from "svelte/reactivity";
+import { buttonVariants } from "#lib/components/ui/button/index.js";
 import { person } from "../person.svelte";
-import {
-  leaveForBuild,
-  onInput,
-  reloadedFor,
-  unsavedWords,
-} from "../reload.svelte";
+import { leaveForBuild, reloadedFor, unsavedWords } from "../reload.svelte";
 import { newerBuild } from "../served-build.svelte";
 import { toast } from "../toasts";
 
@@ -77,15 +74,6 @@ const away = (): boolean =>
 let going = false;
 /** The toast was put away (Update when idle, or swiped): it is not put up again on this page. */
 let waived = false;
-/** The toast has been in front of the person: an input of theirs on this page, in view, while it stood. */
-let seen = $state(false);
-/**
- * Since {@link seen}, the presence model has said the person here: an away
- * after it is theirs, not the one the build found (the hub hears the input
- * that set `seen` on the page's next beat, so its view says away a moment
- * longer).
- */
-let back = $state(false);
 
 async function go(build: string, chosen: boolean): Promise<void> {
   if (going) {
@@ -103,11 +91,22 @@ function offer(minutes: number): void {
     duration: Number.POSITIVE_INFINITY,
     // The words take the toast's first line whole, the two acts the second
     // at its trailing edge, together: sonner gives each button an auto
-    // leading margin, so the second's is taken back.
+    // leading margin, so the second's is taken back. The acts are the kit's
+    // `sm` buttons (DESIGN.md, Update toast): Update now its primary, Update
+    // when idle its secondary, on the Toast recipe's 8px radius.
     classes: {
       toast: "flex-wrap",
       content: "basis-full",
-      actionButton: "[--toast-button-margin-start:0]",
+      actionButton: buttonVariants({
+        variant: "default",
+        size: "sm",
+        class: "rounded-sm [--toast-button-margin-start:0]",
+      }),
+      cancelButton: buttonVariants({
+        variant: "secondary",
+        size: "sm",
+        class: "rounded-sm",
+      }),
     },
     cancel: {
       label: updatesWords.updateWhenIdle,
@@ -154,29 +153,10 @@ export function watchUpdateToast(): void {
     });
   });
 
-  // The toast in front of the person: their input on the page, in view.
-  $effect(() => {
-    if (due === null || seen) {
-      return;
-    }
-    return onInput(() => {
-      if (document.visibilityState === "visible") {
-        seen = true;
-      }
-    });
-  });
-
-  $effect(() => {
-    if (seen && !away()) {
-      back = true;
-    }
-  });
-
-  // The idle reload: each time the page goes idle, once the toast was seen,
-  // while a build is due.
+  // The idle reload: each time the page goes idle while a build is due.
   $effect(() => {
     const build = due;
-    if (build === null || !seen || !(inBackground() || (back && away()))) {
+    if (build === null || !(inBackground() || away())) {
       return;
     }
     untrack(() => {

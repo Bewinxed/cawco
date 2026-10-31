@@ -6,7 +6,7 @@
  * It acknowledges nothing: the landing's notes stand in Caw's panel on the
  * reloaded page until its ✕ (updates/update-notice.svelte.ts). Its one
  * caller is the update toast (updates/update-toast.svelte.ts): Update now,
- * or the idle reload once the person has seen the toast. A page built for
+ * or the idle reload. A page built for
  * an older wire than the hub's (`WIRE_PROTOCOL`, client.svelte.ts
  * `olderThanHub`) goes the same way: it reads nothing more off the socket
  * while the toast stands, and the connection band says so. It used to reload

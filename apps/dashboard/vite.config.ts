@@ -7,7 +7,7 @@ import {
   crossSiteRefusal,
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
-import { unlayeredRules } from "@cawco/core/css-layers";
+import { unlayeredRules, withLayerOrder } from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
@@ -283,6 +283,13 @@ const runningVersion = (): Plugin => ({
  * house). One unlayered rule fails the build, naming its asset and selector
  * (core css-layers.ts `unlayeredRules`, the guard the decision host's sheet
  * is held to as well).
+ *
+ * Every CSS asset is headed by the house's layer order (core css-layers.ts
+ * `withLayerOrder`): a document places a layer where it first names it, and
+ * a page links its chunks' sheets in no set order. svelte-sonner's, linked
+ * ahead of base.css on every page under `(app)`, named `vendor` first, under
+ * `base`, so Tailwind's preflight stripped every toast of its padding and its
+ * buttons of their fill.
  */
 const VENDOR_COMPONENT_SHEETS = [
   "svelte-sonner",
@@ -350,6 +357,11 @@ export const vendorComponentSheets = (): Plugin => ({
     );
     if (sheets.length === 0) {
       return;
+    }
+    for (const sheet of sheets) {
+      if (sheet.type === "asset") {
+        sheet.source = withLayerOrder(String(sheet.source));
+      }
     }
     const unlayered = (
       await Promise.all(
