@@ -1,16 +1,14 @@
 /**
  * The image settings panel (Component Story Format 3, live): each story is
- * the working panel opened in one state, its controls live. Every story
- * offers Pick from screen unless it says the browser has no EyeDropper, so
- * the canvas draws the same panel in every engine. Drawn at a phone's width,
- * the panel's narrowest home.
+ * the working panel opened in one state, its controls live. Pick from
+ * screen stands where the drawing browser has the EyeDropper, as it does in
+ * the product. Drawn at a phone's width, the panel's narrowest home.
  */
 import ImageSettings from "./ImageSettings.svelte";
 
 export default {
   title: "Image settings",
   component: ImageSettings,
-  args: { eyeDropper: true },
   parameters: { viewport: 390 },
 };
 

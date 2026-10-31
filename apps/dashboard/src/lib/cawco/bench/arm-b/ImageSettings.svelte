@@ -459,7 +459,7 @@
                     class="type-label text-ink-strong tabular-nums"
                     dir="ltr">{ratioOf(valid.w, valid.h)}</span
                   >
-                  <span class="type-meta tabular-nums"
+                  <span class="type-meta tabular-nums" dir="ltr"
                     >{words.megapixels(megapixels(valid.w, valid.h))}</span
                   >
                 </p>
