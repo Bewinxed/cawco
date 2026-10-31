@@ -13,7 +13,8 @@
  * (`UserQuestion`), and whether its work waits on the answer. A `permit` is
  * a harness's own permission prompt whose process went before the person
  * answered: the hub keeps it, and on yes grants that exact call once, for
- * the session's next process to make again.
+ * the session to make again in the turn the answer reaches it in; the turn
+ * ending without it lapses the grant (hub asks.ts `turnEnded`).
  */
 import { z } from "zod";
 import { clockWords, dayWords } from "./accounts";
@@ -61,8 +62,8 @@ const APPROVE = z.object({
 /**
  * What a `permit` ask asks: the tool call a session's harness was halted on
  * when its process went, by the harness's own tool name and input. Approved,
- * it is granted once ({@link sameCall}); nothing runs until the session's
- * next process makes the call again.
+ * it is granted once ({@link sameCall}); nothing runs until the session
+ * makes the call again, in the turn that reads the answer.
  */
 const PERMIT = z.object({
   kind: z.literal("permit"),
@@ -173,6 +174,13 @@ export const ASK_STORED = z.object({
     .optional(),
   /** An approved permit's grant, spent: the hub allowed the same call when the session's harness asked it again. */
   used: z.object({ at: z.number() }).optional(),
+  /**
+   * An approved permit's grant, gone unspent: the turn that read its answer
+   * ended (or its process did, mid-turn) without the call, so the same call
+   * asks the person again (the owner's pick, "Until the turn your answer
+   * starts ends").
+   */
+  lapsed: z.object({ at: z.number() }).optional(),
 });
 
 export type AskRecord = z.infer<typeof ASK_STORED> & {
@@ -234,17 +242,26 @@ export const askStanceLine = (asked: {
 
 /**
  * How an answered ask went, as its message's marker says it: an approve
- * ask's call ran, failed, was declined or cut short; a question was
- * answered or dismissed.
+ * ask's call ran, failed, was declined or cut short; a permit was granted,
+ * and lapsed if its turn ended unspent; a question was answered or
+ * dismissed.
  */
 export type AskOutcome =
-  "ran" | "failed" | "declined" | "cut" | "granted" | "answered" | "dismissed";
+  | "ran"
+  | "failed"
+  | "declined"
+  | "cut"
+  | "granted"
+  | "lapsed"
+  | "answered"
+  | "dismissed";
 
 /** Why a carried call has no end of its own: the hub that ran it went. */
 export const HUB_RESTARTED =
   "the hub restarted while running it; not run again";
 
-const outcomeOf = (ask: AskRecord): AskOutcome => {
+/** How an answered ask went, as its record says it now. */
+export const askOutcome = (ask: AskRecord): AskOutcome => {
   if (ask.asked.kind === "question") {
     return ask.answer?.result.behavior === "allow" ? "answered" : "dismissed";
   }
@@ -252,7 +269,7 @@ const outcomeOf = (ask: AskRecord): AskOutcome => {
     return "declined";
   }
   if (ask.asked.kind === "permit") {
-    return "granted";
+    return ask.lapsed ? "lapsed" : "granted";
   }
   if (ask.carried?.said !== undefined) {
     return "ran";
@@ -267,7 +284,7 @@ const MARKER = "ask-answered";
  * outcome, read back by {@link parseAskAnswered}, then the outcome in words.
  */
 export const askAnsweredText = (ask: AskRecord): string => {
-  const outcome = outcomeOf(ask);
+  const outcome = askOutcome(ask);
   const tag = markerTag(MARKER, { id: ask.id, kind: ask.asked.kind, outcome });
   const { asked } = ask;
   if (asked.kind === "question") {
@@ -292,6 +309,7 @@ export const askAnsweredText = (ask: AskRecord): string => {
       return `${tag}The person declined ${tool}${reason ? `: ${reason}` : ""}. Nothing ran; don't do it another way.`;
     }
     case "granted":
+    case "lapsed":
     case "answered":
     case "dismissed":
       throw new Error(`An approve ask has no ${outcome} outcome.`);
@@ -329,7 +347,7 @@ const permitAnsweredText = (ask: AskRecord, asked: AskedPermit): string => {
     input.length <= PERMIT_INPUT_MAX
       ? `\n\n${input}`
       : " (its input is the cut call's in your conversation).";
-  return `${answeredBy(ask)} approved the ${tool} call your harness asked to make before your last process ended. Make that call again with the same input and it runs without asking, once${shown}`;
+  return `${answeredBy(ask)} approved the ${tool} call your harness asked to make before your last process ended. Make that call again with the same input in this turn and it runs without asking, once; when this turn ends, the approval lapses and the call asks again${shown}`;
 };
 
 /** One answer as its line reads: the labels chosen, joined, or the words typed. */
@@ -372,6 +390,7 @@ const OUTCOMES: ReadonlySet<string> = new Set<AskOutcome>([
   "declined",
   "cut",
   "granted",
+  "lapsed",
   "answered",
   "dismissed",
 ]);

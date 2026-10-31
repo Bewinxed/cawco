@@ -16,7 +16,10 @@
  *   process went before the person answered ({@link keep}). The session
  *   stays halted on the same card; Approve grants that exact call once
  *   ({@link granted}) and tells the session to make it again, Deny tells it
- *   no. Nothing runs on the hub.
+ *   no. Nothing runs on the hub. The grant holds only for the turn that
+ *   reads its answer ({@link turnEnded}): ended unspent, it lapses, and
+ *   the same call asks again (the owner's pick on calls-1031-evening,
+ *   "Until the turn your answer starts ends").
  *
  * Each reaches every screen and push as a `permission_request` (pending.ts
  * `askEnvelope`), so no agent, gateway or hub restart cuts it.
@@ -59,6 +62,7 @@ import {
   askAnsweredText,
   askClosedWords,
   askLink,
+  askOutcome,
   askQuestionWords,
   askRecordedWords,
   HUB_RESTARTED,
@@ -70,9 +74,11 @@ import {
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
 import { settledQuestionResult } from "@cawco/core/question";
+import { noticeWords } from "@cawco/core/words/notices";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import { tool as mcpTool, sentence } from "./mcp-tool";
+import { uuidOf } from "./named-uuid";
 import type { AnswerFrom } from "./pending";
 import { askEnvelope } from "./pending";
 
@@ -139,6 +145,8 @@ const askRefusal = (
 };
 
 export interface AsksDeps {
+  /** Whether the session has read the send `uuid` (its record `read`). */
+  readonly answerRead: (uuid: string) => boolean;
   readonly asks: DbShape["asks"];
   /**
    * A call's input with the caller's place bound in, as it is asked
@@ -162,6 +170,11 @@ export interface AsksDeps {
   readonly instance: (instanceId: string) => InstanceRow | undefined;
   /** Puts an ask on every screen and push (server.ts `parkForPerson`). */
   readonly park: (envelope: Envelope) => void;
+  /**
+   * Writes again the line the person's transcript says of the send `uuid`
+   * (its origin's `line`, core harness.ts); what the agent read stays.
+   */
+  readonly reline: (uuid: string, line: string) => void;
   /** Runs an approved call as the hub for the session that asked; answers what the tool said. */
   readonly run: (
     name: string,
@@ -192,8 +205,13 @@ export interface AsksDeps {
    * with this sentence and is asked again.
    */
   readonly stale: (ask: AskRecord) => Promise<string | undefined>;
-  /** Says something to a session, as the hub, under `origin`. */
-  readonly tell: (instanceId: string, text: string, origin: string) => void;
+  /** Says something to a session, as the hub, under `origin`; `uuid` names the send when it must be found again. */
+  readonly tell: (
+    instanceId: string,
+    text: string,
+    origin: string,
+    uuid?: string
+  ) => void;
   /**
    * Tells a delegate's parent of its question, which it may answer with
    * `answer_delegate` (server.ts `deliverDelegateAsk`); nothing for a
@@ -208,6 +226,12 @@ const ENDED_WHY = "its session ended before you answered";
 /** Why a permit goes when its session's next process asks the same call itself. */
 const ASKED_AGAIN_WHY = "its session asked the same call again";
 
+/**
+ * The send a permit's answer goes as: named by its ask, so the turn that
+ * reads it is found by its record ({@link AsksDeps.answerRead}).
+ */
+const answerSend = (askId: string): string => uuidOf(`${askId}\u0000answer`);
+
 /** A parked prompt's tool call, as its frame carries it. */
 const callOf = (envelope: Envelope): AskedPermit => {
   const { toolName, input } = envelope.payload as {
@@ -220,7 +244,12 @@ const callOf = (envelope: Envelope): AskedPermit => {
 export const createAsks = (deps: AsksDeps) => {
   /** The answer's message, to the session that asked now (a fold moves its row). */
   const tellAnswered = (ask: AskRecord): void =>
-    deps.tell(ask.instanceId, askAnsweredText(ask), ASK_ORIGIN);
+    deps.tell(
+      ask.instanceId,
+      askAnsweredText(ask),
+      ASK_ORIGIN,
+      ask.asked.kind === "permit" ? answerSend(ask.id) : undefined
+    );
 
   /** An approve ask's answer, carried out: run once when approved, and the caller told either way. */
   const carryOut = async (ask: AskRecord, asked: Approve): Promise<void> => {
@@ -511,6 +540,33 @@ export const createAsks = (deps: AsksDeps) => {
         if (deps.ended(ask.instanceId)) {
           withdraw(ask, ENDED_WHY);
         }
+      }
+    },
+
+    /**
+     * A turn of `instanceId` ended, by its result or by its process going
+     * mid-turn: every approved permit whose answer that turn read lapses
+     * unspent. The turn that reads an answer is the one running when its
+     * send is read: the turn the answer started in a session at rest, or
+     * the running turn it reached at its next step. A grant whose answer is
+     * still unread (owed to a process not yet up, or to the turn after)
+     * stays. Its message's line in the person's transcript says it lapsed;
+     * the session is not told, and the call asks the person again.
+     */
+    turnEnded(instanceId: string): void {
+      const lapsed = deps.asks.lapse(
+        instanceId,
+        (ask) => deps.answerRead(answerSend(ask.id)),
+        Date.now()
+      );
+      for (const ask of lapsed) {
+        console.log(
+          `[asks] ${named(ask)} (${ask.id}) lapsed unspent as ${instanceId}'s turn ended`
+        );
+        deps.reline(
+          answerSend(ask.id),
+          noticeWords.askAnswered[askOutcome(ask)]
+        );
       }
     },
 

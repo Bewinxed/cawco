@@ -2111,9 +2111,13 @@ function cawcoRow(
       },
     };
   }
-  // Your answer to one of its asks says how it went.
+  // Your answer to one of its asks says how it went: as its marker said
+  // when it was sent, unless the hub has written its line since (a permit's
+  // grant that lapsed, hub asks.ts `turnEnded`).
   const answered =
-    origin.name === ASK_ORIGIN && typeof said.content === "string"
+    origin.name === ASK_ORIGIN &&
+    !origin.line &&
+    typeof said.content === "string"
       ? parseAskAnswered(said.content)
       : null;
   return {

@@ -958,8 +958,9 @@ export type NeutralOrigin =
    * `rule:Honest caveat`. Kept apart from `peer` so a transcript can say who
    * is really talking — a model that mistakes a rule for the user apologises
    * to nobody. `line` is what the person's transcript says of it in one line
-   * (core words/notices.ts), written where it is made; the agent never reads
-   * it. A transcript draws a `system` send as CawCo's, never as the person's
+   * (core words/notices.ts), written where it is made, or written again on
+   * the send's record when what it tells of changed (an approval that
+   * lapsed, hub asks.ts `turnEnded`); the agent never reads it. A transcript draws a `system` send as CawCo's, never as the person's
    * message ({@link CAWCO_NOTICE}). `live`, on a notice of something that
    * runs on (a leak's processes): whether it still does, which the hub sets
    * again on the send's record as it ends ({@link LEAK_ENDED}).

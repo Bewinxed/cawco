@@ -2,7 +2,9 @@
  * The asks the hub owns (core asks.ts, hub asks.ts): every change is one
  * write, and an answer is taken in one transaction with the start of what
  * it carries (an approved call's; a question carries nothing), so a second
- * answer is refused and an approved call runs at most once.
+ * answer is refused and an approved call runs at most once, and a permit's
+ * grant is spent or lapsed in one write, so it allows a call at most once
+ * and none after it lapsed.
  */
 
 import type { AskAnswer } from "@cawco/core";
@@ -36,14 +38,24 @@ export interface AsksDb {
   readonly cutShort: () => AskRecord[];
   readonly get: (id: string) => AskRecord | undefined;
   /**
-   * Spends `instanceId`'s first approved, unspent permit that `matches`, in
-   * one transaction, so a grant allows one call; undefined when none does.
+   * Spends `instanceId`'s first approved, unspent, unlapsed permit that
+   * `matches`, in one transaction, so a grant allows one call; undefined
+   * when none does.
    */
   readonly grant: (
     instanceId: string,
     matches: (ask: AskRecord) => boolean,
     at: number
   ) => AskRecord | undefined;
+  /**
+   * Lapses `instanceId`'s approved, unspent permits whose answer `seen`
+   * says the session has read, in one transaction; answers the ones lapsed.
+   */
+  readonly lapse: (
+    instanceId: string,
+    seen: (ask: AskRecord) => boolean,
+    at: number
+  ) => AskRecord[];
   /** Every open ask, oldest first. */
   readonly open: () => AskRecord[];
   /** `instanceId`'s open asks. */
@@ -75,6 +87,27 @@ const stored = ({
 }: AskRecord): AskRow["record"] => record;
 
 export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
+  /** `instanceId`'s approved permits neither spent nor lapsed, oldest first. */
+  const grants = (instanceId: string): AskRecord[] =>
+    db
+      .select()
+      .from(asks)
+      .where(
+        and(
+          eq(asks.state, "answered"),
+          eq(asks.instanceId, instanceId),
+          eq(sql`json_extract(${asks.record}, '$.asked.kind')`, "permit"),
+          eq(
+            sql`json_extract(${asks.record}, '$.answer.result.behavior')`,
+            "allow"
+          ),
+          isNull(sql`json_extract(${asks.record}, '$.used')`),
+          isNull(sql`json_extract(${asks.record}, '$.lapsed')`)
+        )
+      )
+      .orderBy(asc(asks.raisedAt))
+      .all()
+      .map(recordOf);
   const read = (id: string) =>
     db.select().from(asks).where(eq(asks.id, id)).get();
   const put = (ask: AskRecord): AskRecord => {
@@ -154,27 +187,15 @@ export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
     },
     grant: (instanceId, matches, at) =>
       db.transaction(() => {
-        const granted = db
-          .select()
-          .from(asks)
-          .where(
-            and(
-              eq(asks.state, "answered"),
-              eq(asks.instanceId, instanceId),
-              eq(sql`json_extract(${asks.record}, '$.asked.kind')`, "permit"),
-              eq(
-                sql`json_extract(${asks.record}, '$.answer.result.behavior')`,
-                "allow"
-              ),
-              isNull(sql`json_extract(${asks.record}, '$.used')`)
-            )
-          )
-          .orderBy(asc(asks.raisedAt))
-          .all()
-          .map(recordOf)
-          .find(matches);
+        const granted = grants(instanceId).find(matches);
         return granted && put({ ...granted, used: { at } });
       }),
+    lapse: (instanceId, seen, at) =>
+      db.transaction(() =>
+        grants(instanceId)
+          .filter(seen)
+          .map((ask) => put({ ...ask, lapsed: { at } }))
+      ),
     unroute: (id) => {
       const row = read(id);
       if (row?.record.routedTo) {

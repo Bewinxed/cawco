@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { networkInterfaces, hostname as osHostname } from "node:os";
@@ -797,6 +797,7 @@ import {
 } from "./memory";
 import { documentFacts, sessionInstructions } from "./memory-scopes";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
+import { uuidOf } from "./named-uuid";
 import { createNoticesSeen } from "./notices";
 import {
   artifactCollapseId,
@@ -1460,17 +1461,6 @@ const cutCommandsWords = (cut: readonly CutCommand[] | undefined): string =>
 
 const killedWords = (signal: string, killedAt: Date): string =>
   `Your process was killed (${signal}) at ${utcClock(killedAt)} while your turn was running, and CawCo started it again. ${CARRY_ON_CUT}`;
-
-/**
- * A uuid `name` alone decides (the version-5 layout, over SHA-256): a send
- * made again under it is the same send, which the hub hands over once.
- */
-const uuidOf = (name: string): string => {
-  const hex = createHash("sha256").update(name).digest("hex");
-  // The RFC 4122 variant: the nibble's top two bits are `10`.
-  const variant = "89ab".charAt(Number.parseInt(hex.charAt(16), 16) % 4);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-};
 
 /**
  * How long a `starting` row is given before a heartbeat that does not list it
@@ -3508,6 +3498,7 @@ export const createServer = (
     return !row || ENDED_STATUSES.has(row.status) || stranded(row);
   };
   const hubAsks = createAsks({
+    answerRead: (uuid) => db.sendRecord(uuid)?.state === "read",
     asks: db.asks,
     ended: endedForGood,
     instance: (instanceId) => db.getInstancesByIds([instanceId])[0],
@@ -3600,8 +3591,21 @@ export const createServer = (
         .join("\n")
         .trim();
     },
-    tell: (instanceId, text, origin) =>
-      tellSession(instanceId, text, { name: origin }),
+    tell: (instanceId, text, origin, uuid) =>
+      tellSession(instanceId, text, {
+        name: origin,
+        ...(uuid ? { uuid } : {}),
+      }),
+    // A notice's line, written again on its record and to every screen.
+    reline: (uuid, line) => {
+      const record = db.sendRecord(uuid);
+      const origin = record?.body.origin;
+      if (record && origin?.kind === "system") {
+        changeSend(record, {
+          body: { ...record.body, origin: { ...origin, line } },
+        });
+      }
+    },
   });
   /**
    * A harness's permission prompt whose process went, kept as a permit
@@ -5592,7 +5596,10 @@ export const createServer = (
     /** What its failed sends offer back, beside `why` (a wake's refusal, {@link wakeOf}). */
     refusal?: StoredSendRefusal
   ): void => {
-    // Its asks the hub owns stay unless it ended for good (asks.ts).
+    // A process gone mid-turn ends that turn: what it read of a grant
+    // lapses with it (asks.ts `turnEnded`). Its asks the hub owns stay
+    // unless it ended for good.
+    hubAsks.turnEnded(instanceId);
     hubAsks.withdrawEnded(instanceId);
     if (!outlived) {
       // If it runs again, a permission prompt it was halted on stays, and
@@ -37062,6 +37069,8 @@ export const createServer = (
                       ? new Date(row.turnEndedAt)
                       : null;
                     db.noteTurnEnded(turnId, endedAt, silent);
+                    // An approval this turn read and didn't use lapses.
+                    hubAsks.turnEnded(turnId);
                     publishInstances(row.machineId);
                     artifacts.turnEnded(turnId, before, endedAt);
                     artifactLeft = unparked(artifactLane.now().needs)
