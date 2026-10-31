@@ -81,7 +81,7 @@ const elements = z
   .max(CANVAS_LIMITS.elementsPerCall)
   .optional()
   .describe(
-    'Excalidraw skeletons, like {"type":"rectangle","id":"api","x":0,"y":0,"width":160,"height":60,"label":{"text":"API"}}; an arrow binds with "start":{"id":"api"}.'
+    'Excalidraw skeletons, like {"type":"rectangle","id":"api","x":0,"y":0,"width":160,"height":60,"label":{"text":"API"}}; an arrow binds with "start":{"id":"api"}; text wraps at its "width"; a childless frame takes what it covers.'
   );
 
 /** A story on a canvas: its export, or `file:Story` across states files. */

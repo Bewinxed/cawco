@@ -4169,6 +4169,12 @@ export const artifacts = sqliteTable(
       .default("judge"),
     /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
     ask: text("ask").notNull().default(""),
+    /**
+     * The person's own canvas, opened in the composer (artifacts service.ts
+     * `createDraft`): no agent's create lands on it, so its name stands
+     * beside the agent's canvas of the same name. False on every other row.
+     */
+    composer: integer("composer", { mode: "boolean" }).notNull().default(false),
     /** The machine a preview's dev server or folder is on; null for a page, which the hub serves. */
     machineId: text("machine_id"),
     /**
@@ -4216,9 +4222,10 @@ export const artifacts = sqliteTable(
     index("artifacts_instance").on(table.instanceId, table.createdAt),
     // A held next version shares its artifact's name. A project's page is
     // the project's by its name, whichever session wrote it; every other
-    // artifact is its session's by kind and name.
+    // artifact is its session's by kind and name, the person's composer
+    // canvases apart from the agent's.
     uniqueIndex("artifacts_instance_name")
-      .on(table.instanceId, table.kind, table.name)
+      .on(table.instanceId, table.kind, table.name, table.composer)
       .where(
         sql`${table.heldFor} is null and (${table.projectId} is null or ${table.kind} <> 'page')`
       ),

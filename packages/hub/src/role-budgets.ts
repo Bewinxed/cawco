@@ -39,9 +39,12 @@ import type { Tasks } from "./tasks";
  * routine_result, memory_propose) are a worker's wherever its folder is in a
  * project, and the conversation tools of a separate role are gone (worker
  * 27,907 measured). The worker's budget is lowered to it.
+ * 2026-10-31: a canvas's elements say that text wraps at its width and a
+ * childless frame takes what it covers, which agents had worked out by hand
+ * (worker 27,968 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 27_950,
+  worker: 28_000,
   delegate: 10_224,
   overseer: 770,
   "web-facing": 3400,

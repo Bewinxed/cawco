@@ -2,7 +2,7 @@
  * A canvas artifact (Projects spec §5.10, D24–D25): its doc's `elements` is
  * an Excalidraw scene as y-excalidraw lays it out, a `Y.Array` of `Y.Map`s
  * `{ el, pos }` (the element, its fractional order), each carrying beside
- * them who last wrote it (`by`) and when (`at`). The agent reads the scene
+ * them who made it (`made`), who last wrote it (`by`) and when (`at`). The agent reads the scene
  * as an {@link canvasOutline}, and writes skeleton elements or Mermaid that
  * a screen showing the canvas converts (the hub cannot: conversion measures
  * text and renders Mermaid's SVG in a DOM). Pure: the hub and the canvas's
@@ -37,6 +37,13 @@ export interface CanvasEntry {
   at?: string;
   by?: CanvasAuthor;
   el: CanvasElement;
+  /**
+   * Who made the element, set once as its entry is made and never after: the
+   * agent's write (`agent`), or the person's stroke, shape, text or image
+   * (`person`, stamped with their first change). Moving or editing one never
+   * changes it, as `by` changes. An entry made before it has none.
+   */
+  made?: CanvasAuthor;
   pos: string;
 }
 
@@ -124,14 +131,21 @@ export const SKELETON_TYPES = [
 ] as const;
 
 /**
- * What a canvas made again under its name keeps: the person's own marks,
- * the kinds no agent writes ({@link SKELETON_TYPES}), their ink (a freedraw)
- * and the images they added. Every other element is the drawing, which the
- * create replaces, as a page made again replaces its HTML and keeps its ink
- * and pins.
+ * What a canvas made again under its name keeps: everything the person made
+ * (`made: "person"`: their ink, shapes, text and images, moved or not), and
+ * on an entry made before `made` the kinds no agent writes
+ * ({@link SKELETON_TYPES}), a freedraw or an image. Everything the agent
+ * made is the drawing, which the create replaces, as a page made again
+ * replaces its HTML and keeps its ink and pins.
  */
-export const keptOnRemake = (element: Pick<CanvasElement, "type">): boolean =>
-  element.type === "freedraw" || element.type === "image";
+export const keptOnRemake = (
+  entry: Pick<CanvasEntry, "by" | "made"> & { el: Pick<CanvasElement, "type"> }
+): boolean =>
+  entry.made === "person" ||
+  // The person's, its stamp not yet written: every write of the agent's says `by`.
+  (entry.made === undefined && entry.by === undefined) ||
+  entry.el.type === "freedraw" ||
+  entry.el.type === "image";
 
 /** The refusal when no screen can convert (DESIGN.md's error formula). */
 export const NO_SCREEN =

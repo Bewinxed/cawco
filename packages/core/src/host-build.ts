@@ -27,6 +27,21 @@ export type HostBuilt = { files: HostFile[] } | { error: string };
 
 const WORKER_URL = new URL("./host-build-worker.ts", import.meta.url);
 
+/**
+ * The modules the process was started with `--preload`, which the build's
+ * thread loads too: Bun runs a process's preloads on its main thread only,
+ * so a plugin one registers (a scratch fleet's stand-ins, scripts/stand-ins
+ * preload.ts) never reached the build, and the fleet's canvas page went
+ * without its probe binding. A Worker's own `preload` option carries them.
+ */
+const preloads = (): string[] =>
+  process.execArgv.flatMap((arg, i, all) => {
+    if (arg === "--preload") {
+      return all[i + 1] === undefined ? [] : [all[i + 1]];
+    }
+    return arg.startsWith("--preload=") ? [arg.slice("--preload=".length)] : [];
+  });
+
 /** Each host's files by name: one build per process; a failure clears its slot so the next request retries. */
 const built = new Map<HostName, Promise<Map<string, Blob>>>();
 
@@ -43,7 +58,7 @@ export const hostFiles = (host: HostName): Promise<Map<string, Blob>> => {
     return kept;
   }
   const building = new Promise<Map<string, Blob>>((done, fail) => {
-    const worker = new Worker(WORKER_URL);
+    const worker = new Worker(WORKER_URL, { preload: preloads() });
     const end = () => worker.terminate();
     worker.onmessage = (event: MessageEvent<HostBuilt>) => {
       end();

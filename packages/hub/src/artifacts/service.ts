@@ -4851,7 +4851,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const { name } = input;
     let free = name;
-    for (let n = 2; db.byName(instance.id, "canvas", free); n += 1) {
+    for (let n = 2; db.byName(instance.id, "canvas", free, true); n += 1) {
       free = `${name.slice(0, 63 - String(n).length - 1)}-${n}`;
     }
     const now = new Date();
@@ -4863,6 +4863,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       projectId: instance.projectId ?? null,
       kind: "canvas",
       name: free,
+      composer: true,
       // The person's own canvas: nothing is asked of them on it.
       does: "draw",
       ask: "",

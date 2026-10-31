@@ -142,10 +142,16 @@ export interface ArtifactsDb {
    * a pin on it can ask.
    */
   readonly asking: () => ArtifactRow[];
+  /**
+   * The session's artifact of that kind and name, not held: an agent's
+   * create's, or with `composer` the person's own composer canvas of it
+   * (schema.ts `artifacts.composer`). Neither finds the other's.
+   */
   readonly byName: (
     instanceId: string,
     kind: ArtifactRow["kind"],
-    name: string
+    name: string,
+    composer?: boolean
   ) => ArtifactRow | undefined;
   /** An artifact's keys' last changes: those after seq `after`, by `by`, when named. */
   readonly changes: (
@@ -156,7 +162,10 @@ export interface ArtifactsDb {
   readonly compact: (id: string, snapshot: Uint8Array) => void;
   /** The component canvases made on machine `machineId`, held next versions too: each one's stage runs there. */
   readonly componentsOn: (machineId: string) => ArtifactRow[];
-  readonly create: (row: ArtifactRow) => ArtifactRow;
+  /** A new row; `composer` only on the person's own composer canvas (schema.ts `artifacts.composer`). */
+  readonly create: (
+    row: Omit<ArtifactRow, "composer"> & { composer?: boolean }
+  ) => ArtifactRow;
   readonly get: (id: string) => ArtifactRow | undefined;
   /** The next version held for artifact `id` (`heldFor`), if one waits. */
   readonly heldOf: (id: string) => ArtifactRow | undefined;
@@ -262,7 +271,7 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
         )
       )
       .all(),
-  byName: (instanceId, kind, name) => {
+  byName: (instanceId, kind, name, composer = false) => {
     const row = db
       .select()
       .from(artifacts)
@@ -271,6 +280,7 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
           eq(artifacts.instanceId, instanceId),
           eq(artifacts.kind, kind),
           eq(artifacts.name, name),
+          eq(artifacts.composer, composer),
           isNull(artifacts.heldFor)
         )
       )

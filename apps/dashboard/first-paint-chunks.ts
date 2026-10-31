@@ -49,6 +49,11 @@ import type { Plugin } from "vite";
 const KIT_RUNTIME =
   /[\\/]@sveltejs[\\/]kit[\\/]src[\\/]runtime[\\/]client[\\/](?:entry|payload)\.js$/u;
 const KIT_APP = /[\\/]client-optimized[\\/]app\.js$/u;
+/** Kit's start entry (`entry/start.js`), which sets the payload and only then imports the runtime. */
+const KIT_START =
+  /[\\/]@sveltejs[\\/]kit[\\/]src[\\/]runtime[\\/]client[\\/]entry\.js$/u;
+/** The chunk of what the start entry imports before `init`: above every page count, so no group's recursive capture takes it. */
+const START_CHUNK = "kit-start";
 /** A route node's entry: Kit writes one per node, re-exporting its route files. */
 const KIT_NODE = /[\\/]client-optimized[\\/]nodes[\\/]\d+\.js$/u;
 /** A route file, by the directory it is in and its kind. */
@@ -243,6 +248,8 @@ const loadersOf = (
 export const firstPaintChunks = (routesDir: string): Plugin => {
   /** Each captured module's chunk: its loaders' names, and how many pages load it. */
   const chunkOf = new Map<string, { name: string; pages: number }>();
+  /** What Kit's start entry imports statically, its own and theirs. */
+  const startOf = new Set<string>();
   let entries = 0;
 
   return {
@@ -261,6 +268,17 @@ export const firstPaintChunks = (routesDir: string): Plugin => {
       }
       const own = typeof split === "object" ? split : {};
       // `base`'s page count is one above every other's: each route loads it.
+      // What Kit's start entry imports statically (the payload, Vite's
+      // preload helper) in a chunk of its own, first. `$app/env` reads
+      // `payload.version` as it is evaluated; in `base`, with the preload
+      // helper, the start entry imported `base` and evaluated it before
+      // `init` set the payload, so `version` was undefined for the page's
+      // life and every page offered a new build (sveltejs/kit#17382).
+      const start = {
+        name: (id: string) => (startOf.has(id) ? START_CHUNK : null),
+        debugName: "Kit's start",
+        priority: entries + 2,
+      };
       const groups = Array.from({ length: entries + 1 }, (_, at) => {
         const pages = entries + 1 - at;
         return {
@@ -274,11 +292,27 @@ export const firstPaintChunks = (routesDir: string): Plugin => {
       });
       return {
         ...options,
-        codeSplitting: { ...own, groups: [...(own.groups ?? []), ...groups] },
+        codeSplitting: {
+          ...own,
+          groups: [...(own.groups ?? []), start, ...groups],
+        },
       };
     },
     buildEnd() {
       chunkOf.clear();
+      startOf.clear();
+      const entry = [...this.getModuleIds()].find((id) => KIT_START.test(id));
+      if (!entry) {
+        this.error("first-paint chunks: Kit's start entry was not found");
+      }
+      const stack = [...(this.getModuleInfo(entry)?.importedIds ?? [])];
+      while (stack.length > 0) {
+        const id = stack.pop() as string;
+        if (!startOf.has(id)) {
+          startOf.add(id);
+          stack.push(...(this.getModuleInfo(id)?.importedIds ?? []));
+        }
+      }
       const { pages, roots } = rootsOf(this, routesDir);
       if (!roots.has(BASE)) {
         this.error("first-paint chunks: Kit's runtime entries were not found");

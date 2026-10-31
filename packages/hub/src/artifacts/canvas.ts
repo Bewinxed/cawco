@@ -204,14 +204,12 @@ export const deleteElements = (
 
 /**
  * A canvas made again with nothing to draw: its drawing deleted on the hub,
- * every element but those {@link keptOnRemake} (the person's ink and
- * images). A create that draws replaces it on its screen, in the write.
+ * every element but those {@link keptOnRemake} (what the person made). A create that draws replaces it on its screen, in the write.
  */
 export const clearDrawing = (docs: ArtifactDocs, artifactId: string): void => {
   const drawing = canvasEntries(docs, artifactId)
-    .map((entry) => entry.el)
-    .filter((el) => !keptOnRemake(el))
-    .map((el) => el.id);
+    .filter((entry) => !keptOnRemake(entry))
+    .map((entry) => entry.el.id);
   if (drawing.length > 0) {
     deleteElements(docs, artifactId, drawing);
   }

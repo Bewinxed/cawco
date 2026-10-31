@@ -35,6 +35,7 @@ import {
   exportToBlob,
   FONT_FAMILY,
   getSceneVersion,
+  restoreElements,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
 import type {
@@ -344,7 +345,9 @@ export function bindScene(
   );
   stops.push(() => binding.destroy());
 
-  // The person's changes are theirs: `by: "person"` and `at`, beside `el`.
+  // The person's changes are theirs: `by: "person"` and `at`, beside `el`;
+  // an entry the person made (none of the agent's lacks `by`) is theirs for
+  // good, `made: "person"` (core `CanvasEntry.made`).
   const unstamped = new Set<Entry>();
   let stampTimer: ReturnType<typeof setTimeout> | undefined;
   const stamp = () => {
@@ -352,6 +355,9 @@ export function bindScene(
     scene.transact(() => {
       for (const map of unstamped) {
         if (map.doc) {
+          if (!(map.has("made") || map.has("by"))) {
+            map.set("made", "person" satisfies CanvasAuthor);
+          }
           map.set("by", "person" satisfies CanvasAuthor);
           map.set("at", at);
         }
@@ -875,17 +881,46 @@ const entriesOf = (live: Doc, kept = false) =>
       .getArray<Entry>("elements")
       .toArray()
       .map((map) => [(map.get("el") as ExcalidrawElement).id, map] as const)
-      .filter(
-        ([, map]) => !kept || keptOnRemake(map.get("el") as ExcalidrawElement)
-      )
+      .filter(([, map]) => !kept || keptOnRemake(entryOf(map)))
   );
 
-/** A remake's drop: every element of the drawing it doesn't write again, so what it writes stands alone beside the person's marks. */
+/** An entry's fields the keep rule reads (core `keptOnRemake`). */
+const entryOf = (map: Entry) => ({
+  el: map.get("el") as ExcalidrawElement,
+  by: map.get("by") as CanvasAuthor | undefined,
+  made: map.get("made") as CanvasAuthor | undefined,
+});
+
+/**
+ * A remake's drop: every element of the drawing it doesn't write again, and
+ * a label of the person's inside one of them, so what it writes stands alone
+ * beside what the person made.
+ */
 const dropDrawing = (live: Doc, ids: Set<string>) => {
+  const array = live.getArray<Entry>("elements");
+  const dropped = new Set(
+    array
+      .toArray()
+      .map(entryOf)
+      .filter((entry) => !(keptOnRemake(entry) || ids.has(entry.el.id)))
+      .map((entry) => entry.el.id)
+  );
+  deleteWhere(
+    live,
+    (el, container) =>
+      dropped.has(el.id) || (container !== null && dropped.has(container))
+  );
+};
+
+/** Deletes every element `drop` says, given it and the container it is bound in (null for none). */
+const deleteWhere = (
+  live: Doc,
+  drop: (el: ExcalidrawElement, container: string | null) => boolean
+) => {
   const array = live.getArray<Entry>("elements");
   for (let index = array.length - 1; index >= 0; index -= 1) {
     const el = array.get(index).get("el") as ExcalidrawElement;
-    if (!(keptOnRemake(el) || ids.has(el.id))) {
+    if (drop(el, "containerId" in el ? el.containerId : null)) {
       array.delete(index, 1);
     }
   }
@@ -972,6 +1007,7 @@ const write = (
             Object.entries({
               el: { ...el, index: keyAfter(last.index, added) },
               pos: keyAfter(last.pos, added),
+              made: "agent" satisfies CanvasAuthor,
               by: "agent" satisfies CanvasAuthor,
               at,
             })
@@ -991,19 +1027,16 @@ const dropOldLabels = (
   live: Doc,
   elements: readonly OrderedExcalidrawElement[]
 ) => {
-  const array = live.getArray<Entry>("elements");
   const entries = entriesOf(live);
   const ids = new Set(elements.map((el) => el.id));
   const replaced = new Set(
     elements.filter((el) => entries.has(el.id)).map((el) => el.id)
   );
-  for (let index = array.length - 1; index >= 0; index -= 1) {
-    const el = array.get(index).get("el") as ExcalidrawElement;
-    const container = "containerId" in el ? el.containerId : null;
-    if (container && replaced.has(container) && !ids.has(el.id)) {
-      array.delete(index, 1);
-    }
-  }
+  deleteWhere(
+    live,
+    (el, container) =>
+      container !== null && replaced.has(container) && !ids.has(el.id)
+  );
 };
 
 /** The agent's element in place of the one of its id: its order kept, the arrows still bound to it kept, a version past the old. */
@@ -1230,6 +1263,133 @@ const fontsLoaded = async (skeletons: readonly Skeleton[]): Promise<void> => {
   );
 };
 
+/** A frame skeleton's box, which one without `children` must carry. */
+interface FrameBox {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Frames sent without `children` (Excalidraw's conversion reads the list
+ * and threw on none): each converts with none and takes, once converted,
+ * every element of the same write its box holds whole ({@link framedBy}).
+ * Such a frame's box is its own, so it must carry it.
+ */
+const childless = (sent: readonly Skeleton[]): Map<string, FrameBox> => {
+  const boxes = new Map<string, FrameBox>();
+  for (const one of sent) {
+    if (one.type !== "frame" || Array.isArray(one.children)) {
+      continue;
+    }
+    const { x, y, width, height } = one;
+    if (!(
+      typeof one.id === "string" &&
+      [x, y, width, height].every((n) => typeof n === "number")
+    )) {
+      throw new Error(
+        "A frame without children needs its id, x, y, width and height: it takes the elements its box holds."
+      );
+    }
+    boxes.set(one.id, { x, y, width, height } as FrameBox);
+  }
+  return boxes;
+};
+
+/**
+ * The write's elements each frame of {@link childless} holds whole, in that
+ * frame (`frameId`), a label going with its container; the frame keeps the
+ * box it was sent with (Excalidraw's conversion sizes a frame to its
+ * children, and a frame at 0 to none).
+ */
+const framedBy = (
+  converted: readonly OrderedExcalidrawElement[],
+  frames: Map<string, FrameBox>
+): OrderedExcalidrawElement[] => {
+  if (frames.size === 0) {
+    return [...converted];
+  }
+  const holds = (frame: FrameBox, el: ExcalidrawElement) => {
+    const box = boxOf(el as Parameters<typeof boxOf>[0]);
+    return (
+      box.x >= frame.x &&
+      box.y >= frame.y &&
+      box.x + box.width <= frame.x + frame.width &&
+      box.y + box.height <= frame.y + frame.height
+    );
+  };
+  const frameOf = new Map<string, string>();
+  for (const el of converted) {
+    if (el.type === "frame" || frameOf.has(el.id)) {
+      continue;
+    }
+    const container = "containerId" in el ? el.containerId : null;
+    if (container) {
+      continue;
+    }
+    const [id] = [...frames].find(([, frame]) => holds(frame, el)) ?? [];
+    if (id) {
+      frameOf.set(el.id, id);
+      for (const bound of el.boundElements ?? []) {
+        if (bound.type === "text") {
+          frameOf.set(bound.id, id);
+        }
+      }
+    }
+  }
+  return converted.map((el) => {
+    const box = frames.get(el.id);
+    if (box) {
+      return { ...el, ...box };
+    }
+    const frameId = frameOf.get(el.id);
+    return frameId ? { ...el, frameId } : el;
+  });
+};
+
+/**
+ * Text sent with a `width` is fixed-width text wrapped to it (Excalidraw's
+ * `autoResize: false`): the conversion measures it as one unwrapped line and
+ * drops the width, so a long line ran past its frame. Excalidraw's own
+ * `restoreElements` with `refreshDimensions` wraps it (its
+ * `refreshTextDimensions`: `wrapText` at the element's width) and measures
+ * the height from the wrapped lines, in the faces already loaded
+ * ({@link fontsLoaded}).
+ */
+const wrappedText = (
+  converted: readonly OrderedExcalidrawElement[],
+  sent: readonly Skeleton[]
+): OrderedExcalidrawElement[] => {
+  const widths = new Map(
+    sent
+      .filter((one) => one.type === "text" && typeof one.width === "number")
+      .map((one) => [one.id, one.width as number])
+  );
+  return converted.map((el) => {
+    const width = widths.get(el.id);
+    if (!(width && el.type === "text") || el.containerId) {
+      return el;
+    }
+    const fixed = { ...el, autoResize: false, width };
+    const [wrapped] = restoreElements([fixed], null, {
+      refreshDimensions: true,
+      repairBindings: true,
+    });
+    if (!(wrapped && wrapped.type === "text")) {
+      return fixed;
+    }
+    return {
+      ...fixed,
+      text: wrapped.text,
+      width: wrapped.width,
+      height: wrapped.height,
+      x: wrapped.x,
+      y: wrapped.y,
+    };
+  });
+};
+
 /**
  * Skeleton elements: added, or replacing the element of the id they carry;
  * on a remake (`replace`), the drawing, which nothing it held fills or binds.
@@ -1261,18 +1421,27 @@ const fromSkeletons = async (
       }
     }
   }
+  const frames = childless(sent);
   const skeletonsOf = [
     ...[...context].map((id) => entries.get(id)?.get("el")),
-    ...sent,
+    ...sent.map((one) =>
+      one.id && frames.has(one.id) ? { ...one, children: [] } : one
+    ),
   ] as Skeleton[];
   await fontsLoaded(skeletonsOf);
   const converted = framed(
-    freeEnds(
-      convertToExcalidrawElements(
-        skeletonsOf as unknown as ExcalidrawElementSkeleton[],
-        { regenerateIds: false }
+    framedBy(
+      wrappedText(
+        freeEnds(
+          convertToExcalidrawElements(
+            skeletonsOf as unknown as ExcalidrawElementSkeleton[],
+            { regenerateIds: false }
+          ),
+          sent
+        ),
+        sent
       ),
-      sent
+      frames
     ),
     entries
   );

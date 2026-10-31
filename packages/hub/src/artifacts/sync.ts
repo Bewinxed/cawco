@@ -66,7 +66,13 @@ import {
   writeSyncStep2,
   writeUpdate,
 } from "y-protocols/sync";
-import { applyUpdate, Doc, encodeStateAsUpdate, Map as YMap } from "yjs";
+import {
+  applyUpdate,
+  Doc,
+  encodeStateAsUpdate,
+  type Array as YArray,
+  Map as YMap,
+} from "yjs";
 import {
   type ArtifactClient,
   type ArtifactDocs,
@@ -188,7 +194,7 @@ const metaProblem = (
   return null;
 };
 
-/** Why one entry of a canvas's elements is not one: a map of `el` (an element with its id), `pos`, and `by` when it says who. */
+/** Why one entry of a canvas's elements is not one: a map of `el` (an element with its id), `pos`, and `by` and `made` when they say who. */
 const entryProblem = (entry: unknown): string | null => {
   if (!(entry instanceof YMap)) {
     return "An element is a map of el, pos and by.";
@@ -202,10 +208,38 @@ const entryProblem = (entry: unknown): string | null => {
   )) {
     return "An element is a map of el, an Excalidraw element with its id, and pos.";
   }
-  const by = entry.get("by");
-  return by === undefined || by === "person" || by === "agent"
+  const author = (value: unknown) =>
+    value === undefined || value === "person" || value === "agent";
+  if (!author(entry.get("by"))) {
+    return "An element's by is person or agent.";
+  }
+  return author(entry.get("made"))
     ? null
-    : "An element's by is person or agent.";
+    : "An element's made is person or agent.";
+};
+
+/**
+ * Why a screen's update changed who made an element (core
+ * `CanvasEntry.made`): set once as its entry is made, it never changes, so
+ * a moved or edited element stays whoever's it was.
+ */
+const madeProblem = (
+  before: YArray<YMap<unknown>>,
+  after: YArray<YMap<unknown>>
+): string | null => {
+  const made = new Map(
+    before
+      .toArray()
+      .map((entry) => [
+        (entry.get("el") as { id: string }).id,
+        entry.get("made"),
+      ])
+  );
+  const changed = after.toArray().find((entry) => {
+    const was = made.get((entry.get("el") as { id: string }).id);
+    return was !== undefined && entry.get("made") !== was;
+  });
+  return changed ? "Who made an element never changes." : null;
 };
 
 /** Why a canvas's image files after a screen's change may not be kept. */
@@ -267,6 +301,7 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
       .toArray()
       .map(entryProblem)
       .find((problem) => problem !== null) ??
+    madeProblem(elementsOf(doc), elements) ??
     filesProblem(doc.getMap("files"), trial.getMap("files")) ??
     requestsProblem(
       doc.getMap("requests") as YMap<YMap<unknown>>,
