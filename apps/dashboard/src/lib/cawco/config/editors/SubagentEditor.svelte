@@ -7,9 +7,13 @@
     parseAgentFrontMatter,
   } from "@cawco/core/fleet";
   import { commonWords } from "@cawco/core/words/common";
+  import { memoryWords } from "@cawco/core/words/memory";
   import { untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import DiffView from "#lib/components/features/DiffView.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconDocument } from "#lib/icons.js";
   import { goto } from "$app/navigation";
@@ -46,21 +50,41 @@ You are a <role>, working in one repository at a time.
 
   let draft = $state(untrack(() => agent?.content ?? TEMPLATE));
   let saving = $state(false);
+  /** The save running is "Save mine anyway", over a conflict. */
+  let forcing = $state(false);
   let deleting = $state(false);
   let refused = $state<string | undefined>(undefined);
+  /** The file the hub has instead, when a save found it moved: a save writes nothing over what it never saw. */
+  let conflict = $state<FleetAgent | null>(null);
 
   const front = $derived(parseAgentFrontMatter(draft));
   const problem = $derived(agentProblem(front, agent?.name));
   /** Where the file goes: the row being edited, or whatever this one calls itself. */
   const target = $derived(agent?.name ?? front.name);
   const dirty = $derived(draft !== (agent?.content ?? TEMPLATE));
+  /**
+   * The version the edit started from, "" for a new file, as the memory
+   * editor keeps it: a save names it, so a file that moved since (another
+   * tab, an agent's admin write, a draft kept across a reload) is refused
+   * and the conflict shows. With nothing unsaved it is the saved version.
+   */
+  let base = $state(untrack(() => agent?.hash ?? ""));
+  $effect.pre(() => {
+    if (!dirty) {
+      base = agent?.hash ?? "";
+    }
+  });
   /** A new subagent was just created: its draft is over, and a second Save would write it again. */
   let created = false;
-  const kept = keepDraft(
+  const kept = keepDraft<{ draft: string; base: string }>(
     page.url.pathname,
-    () => (dirty ? draft : null),
-    (stored: string) => {
-      draft = stored;
+    () => (dirty ? { draft, base } : null),
+    // A draft kept before it carried its base was the bare text: not
+    // brought back, since no save could name what it started from.
+    (stored) => {
+      if (typeof stored === "object") {
+        ({ draft, base } = stored);
+      }
     }
   );
 
@@ -77,15 +101,22 @@ You are a <role>, working in one repository at a time.
    * so in place; a new one shows the same, then returns to the list, where
    * it is marked.
    */
-  async function save() {
+  async function save(expectedHash = base) {
     if (!target || saving || created) {
       return;
     }
     saving = true;
+    forcing = conflict !== null && expectedHash === conflict.hash;
     refused = undefined;
     let made: string | undefined;
     try {
-      const saved = await saveAgent(target, draft);
+      const written = await saveAgent(target, draft, expectedHash);
+      if (!written.ok) {
+        conflict = written.latest;
+        return;
+      }
+      conflict = null;
+      const saved = written.done;
       const fleet = store.fleet.value;
       if (fleet) {
         upsert(fleet.agents, saved, (row) => row.name === saved.name);
@@ -99,12 +130,26 @@ You are a <role>, working in one repository at a time.
       refused = failureWords(error);
     } finally {
       saving = false;
+      forcing = false;
     }
     if (made) {
       await savedShown();
       store.mark(made);
       await goto("/config/subagents");
     }
+  }
+
+  function takeLatest() {
+    if (!conflict) {
+      return;
+    }
+    const latest = conflict;
+    const fleet = store.fleet.value;
+    if (fleet) {
+      upsert(fleet.agents, latest, (row) => row.name === latest.name);
+    }
+    draft = latest.content;
+    conflict = null;
   }
 
   /** Cancel leaves the edits behind: the draft is dropped, not kept. */
@@ -121,7 +166,7 @@ You are a <role>, working in one repository at a time.
     deleting = true;
     refused = undefined;
     try {
-      await deleteAgent(store, agent.name, () => {
+      await deleteAgent(store, agent, () => {
         kept.drop();
         return goto("/config/subagents");
       });
@@ -136,12 +181,12 @@ You are a <role>, working in one repository at a time.
   canSave={Boolean(target) && dirty}
   deleteLabel={agent ? "Remove from the fleet" : undefined}
   {deleting}
-  failed={refused !== undefined}
+  failed={refused !== undefined || conflict !== null}
   oncancel={cancel}
   ondelete={agent ? forget : undefined}
-  onsubmit={save}
+  onsubmit={() => save()}
   saveLabel={agent ? commonWords.saveChanges : "Create subagent"}
-  {saving}
+  saving={saving && !forcing}
   title={agent ? agent.name : "New subagent"}
 >
   {#snippet header()}
@@ -171,6 +216,39 @@ You are a <role>, working in one repository at a time.
         >{claims.join(" · ")}</span
       >
     {/snippet}
+    {#if conflict}
+      <div class="flex flex-col gap-space-2" in:unfold out:unfold>
+        <p class="type-meta text-status-attn-ink">
+          {memoryWords.changedElsewhere}
+        </p>
+        {#key conflict.hash}
+          <DiffView
+            filePath="{conflict.name}.md"
+            newContent={draft}
+            oldContent={conflict.content}
+          />
+        {/key}
+        <div data-slot="acts" class="flex flex-wrap gap-space-2">
+          <Button
+            disabled={saving}
+            onclick={takeLatest}
+            size="sm"
+            variant="outline"
+          >
+            {memoryWords.takeLatest}
+          </Button>
+          <Button
+            disabled={saving && !forcing}
+            label={memoryWords.saveMine}
+            onclick={() => save(conflict?.hash)}
+            pending={saving && forcing}
+            pendingLabel={memoryWords.saving}
+            size="sm"
+            variant="outline"
+          />
+        </div>
+      </div>
+    {/if}
     {#if problem}
       <p class="type-meta text-status-attn-ink">
         Not storable yet — {problem}.

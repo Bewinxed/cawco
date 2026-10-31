@@ -308,6 +308,9 @@ export const configureWords = {
   deleted: (what: string) => `Deleted ${what}`,
   removed: (what: string) => `Removed ${what}`,
   unlinked: (what: string) => `Unlinked ${what}`,
+  /** A write refused because the row changed since the page read it; the latest now shows in its place. */
+  changedSince: (what: string) =>
+    `${what} changed elsewhere since this page read it. The latest is shown now`,
 };
 
 /** A Configure page as a sentence names it, by its slug: `configurePage("accounts")` is "Configure › Accounts". */

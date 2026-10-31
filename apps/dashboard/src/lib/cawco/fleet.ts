@@ -819,25 +819,70 @@ export const versionPair = (
 export const removeSkill = (name: string): Promise<Deleted> =>
   erase(`/api/fleet/skills/${encodeURIComponent(name)}`, `remove ${name}`);
 
+/** What a subagent write came to: what the hub did, or the file it has instead. */
+export type AgentWrite<T> =
+  { ok: true; done: T } | { ok: false; latest: FleetAgent };
+
+/**
+ * A subagent write naming `expectedHash`, the hash of the file the writer had
+ * in front of them ("" for a new one): a file somebody else moved comes back
+ * with what is really there, unwritten, as a memory save does.
+ */
+async function agentWrite<T>(
+  name: string,
+  init: RequestInit,
+  query: string,
+  attempt: string
+): Promise<AgentWrite<T>> {
+  const response = await fetch(
+    `/api/fleet/agents/${encodeURIComponent(name)}${query}`,
+    init
+  );
+  if (response.status === 409) {
+    return { ok: false, latest: (await response.json()) as FleetAgent };
+  }
+  if (!response.ok) {
+    throw new Error(`Could not ${attempt}. ${await hubSaid(response)}.`);
+  }
+  return { ok: true, done: (await response.json()) as T };
+}
+
 /**
  * Stores a subagent's file and writes it to every machine that is online. The
  * markdown is the whole of it: the hub parses the front matter to refuse a
  * broken one and stores what it was given either way.
  */
-export const saveAgent = (name: string, content: string): Promise<FleetAgent> =>
-  put(
-    `/api/fleet/agents/${encodeURIComponent(name)}`,
-    { content },
+export const saveAgent = (
+  name: string,
+  content: string,
+  expectedHash: string
+): Promise<AgentWrite<FleetAgent>> =>
+  agentWrite(
+    name,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, expectedHash }),
+    },
+    "",
     `save ${name}`
   );
 
 /**
- * Forgets it here. The file stays on the machines — the `fs` verb has no
- * delete — so discovery lists it as unmanaged until the daemon can take it
- * away itself.
+ * Forgets it here, if it is still the file at `expectedHash`. The file stays
+ * on the machines — the `fs` verb has no delete — so discovery lists it as
+ * unmanaged until the daemon can take it away itself.
  */
-export const removeAgent = (name: string): Promise<Deleted> =>
-  erase(`/api/fleet/agents/${encodeURIComponent(name)}`, `remove ${name}`);
+export const removeAgent = (
+  name: string,
+  expectedHash: string
+): Promise<AgentWrite<Deleted>> =>
+  agentWrite(
+    name,
+    { method: "DELETE" },
+    `?expectedHash=${encodeURIComponent(expectedHash)}`,
+    `remove ${name}`
+  );
 
 /** Writes the subagents again, at every machine that is online. */
 export const pushAgents = (): Promise<{ unpushable: Record<string, string> }> =>

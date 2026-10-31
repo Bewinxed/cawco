@@ -91,6 +91,11 @@ public enum Words {
             "Unlinked \(what)"
         }
 
+        /// A write refused because the row changed since the page read it; the latest now shows in its place.
+        public static func changedSince(what: String) -> String {
+            "\(what) changed elsewhere since this page read it. The latest is shown now"
+        }
+
         // packages/core/src/words/configure.ts `CONFIG_GROUPS`
         /// The rail's groups, in its order.
         public static let groups: [String] = ["Automation", "Agents", "Tools", "Memory", "Hub"]

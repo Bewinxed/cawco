@@ -3,6 +3,7 @@
   import { type FleetAgent, parseAgentFrontMatter } from "@cawco/core/fleet";
   import { machineLabel } from "@cawco/core/machine-names";
   import { unhandled } from "@cawco/core/unhandled";
+  import { configureWords } from "@cawco/core/words/configure";
   import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
   import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
   import { deleteAgent } from "#lib/cawco/config/deletes.js";
@@ -115,7 +116,7 @@
   /** Remove: at once, with Undo in the toast (deletes.ts). */
   const acts = new RowActs<FleetAgent>("/config/subagents", {
     key: (row) => row.name,
-    remove: (row) => deleteAgent(store, row.name),
+    remove: (row) => deleteAgent(store, row),
   });
 
   async function adopt(machineId: string, row: DiscoveredAgent) {
@@ -124,12 +125,21 @@
     delete adoptFailed[key];
     try {
       // The fleet's row, marked, and this one turning "in sync" are the result.
-      const saved = await saveAgent(row.name, row.content);
+      // Over the fleet's copy as this page read it, none for a new one.
+      const kept = store.fleet.value?.agents.find(
+        (other) => other.name === row.name
+      );
+      const saved = await saveAgent(row.name, row.content, kept?.hash ?? "");
+      const landed = saved.ok ? saved.done : saved.latest;
       const fleet = store.fleet.value;
       if (fleet) {
-        upsert(fleet.agents, saved, (other) => other.name === saved.name);
+        upsert(fleet.agents, landed, (other) => other.name === landed.name);
       }
-      store.mark(saved.name);
+      if (!saved.ok) {
+        adoptFailed[key] = configureWords.changedSince(row.name);
+        return;
+      }
+      store.mark(landed.name);
     } catch (caught) {
       adoptFailed[key] = message(caught);
     } finally {

@@ -23,7 +23,7 @@ import { type FleetHook, removeHook } from "../hooks";
 import { failureClause } from "../hub-read";
 import { removeRule } from "../rules";
 import { MAIN } from "./memory";
-import type { ConfigStore } from "./store.svelte";
+import { type ConfigStore, upsert } from "./store.svelte";
 import { type Deleted, offerUndo } from "./undo";
 
 /**
@@ -168,12 +168,17 @@ export function deleteDelegateType(
   );
 }
 
-/** A subagent: the fleet forgets it; the machines keep the file they were given. */
+/**
+ * A subagent: the fleet forgets it; the machines keep the file they were
+ * given. Only the file at `agent.hash`: one that moved since is refused, and
+ * the latest takes its row's place.
+ */
 export function deleteAgent(
   store: ConfigStore,
-  name: string,
+  agent: Pick<FleetAgent, "hash" | "name">,
   leave?: () => Promise<unknown>
 ): Promise<void> {
+  const { name } = agent;
   const at = (store.fleet.value?.agents ?? []).findIndex(
     (row) => row.name === name
   );
@@ -181,7 +186,17 @@ export function deleteAgent(
   return deleteRow<FleetAgent>(
     store,
     {
-      remove: () => removeAgent(name),
+      remove: async () => {
+        const removed = await removeAgent(name, agent.hash);
+        if (removed.ok) {
+          return removed.done;
+        }
+        const fleet = store.fleet.value;
+        if (fleet) {
+          upsert(fleet.agents, removed.latest, same);
+        }
+        throw new Error(configureWords.changedSince(name));
+      },
       drop: () => {
         const fleet = store.fleet.value;
         if (fleet) {
