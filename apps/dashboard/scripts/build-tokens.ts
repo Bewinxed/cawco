@@ -336,6 +336,9 @@ const CONTAINERS = {
   "decisions-520px": "520px",
   leaf: "620px",
   setup: "640px",
+  // A member's settings (decides/MemberSetup): under it, each folded row's
+  // label stands over its value (build spec §3.3, "under 560px").
+  "member-setup": "35rem",
   // A decision card's media side by side once its body holds two at a
   // readable width each (decisions/host Decision.svelte).
   "media-split": "640px",

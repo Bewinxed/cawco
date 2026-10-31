@@ -25,6 +25,8 @@
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import { listTasks, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
@@ -40,6 +42,31 @@
   $effect(() => {
     untrack(() => who.load());
   });
+
+  /** The project's tasks, for Caw's status in his settings. */
+  let tasks = $state<TaskSummary[]>([]);
+  // Caw's switch, harness and model in his settings are the project's (CawLead).
+  if (untrack(() => projectId) !== null) {
+    who.lead = new CawLead({
+      id: () => projectId ?? "",
+      project: () => project ?? null,
+      machinesOnline: () => cawco.onlineMachines.length > 0,
+      tasks: () => tasks,
+      reading: () => false,
+    });
+    $effect(() => {
+      const id = projectId;
+      if (id !== null) {
+        listTasks(id)
+          .then(({ tasks: listed }) => {
+            tasks = listed;
+          })
+          .catch(() => {
+            // His status reads without them: due work isn't counted.
+          });
+      }
+    });
+  }
 
   const project = $derived(
     projectId === null
@@ -89,6 +116,7 @@
       own={who.own}
       project={projectId === null ? null : name}
       routes={who.routes}
+      {who}
     />
   {/if}
 {/snippet}

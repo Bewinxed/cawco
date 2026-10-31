@@ -30,6 +30,8 @@
    *   Bound, it names the target, the connection, how many tasks are linked
    *   and how its sync stands, the tracker's refusal in its words with Try
    *   again, and the GitHub Project, or GitHub's words for why there is none.
+   * - Who decides: follows the fleet, or how many kinds it handed over
+   *   itself; the link to its Who decides (decides/DecidesRow).
    * - Caw: whether events reach a conversation (CawLeadSwitch), its ways off with it.
    * - Review before done.
    *
@@ -65,6 +67,7 @@
     readConnections,
     removeProjectPlace,
   } from "#lib/cawco/client.svelte.js";
+  import DecidesRow from "#lib/cawco/decides/DecidesRow.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
@@ -1146,6 +1149,9 @@
     </div>
 
     {@render afterChecks?.()}
+
+    <!-- Who decides: follows the fleet, or the kinds it handed over; the link to its page. -->
+    <DecidesRow projectId={project.id} />
 
     <!-- Tasks: where they live; a tracker is picked, then bound with Use. -->
     <div

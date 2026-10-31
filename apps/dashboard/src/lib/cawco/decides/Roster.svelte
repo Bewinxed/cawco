@@ -8,13 +8,19 @@
    * hand-over writes is its owner's.
    */
   import type { Kind, Member } from "@cawco/core/decides";
+  import { decidesWords } from "@cawco/core/words/decides";
   import { tick } from "svelte";
   import { crossfade } from "svelte/transition";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { IconPen } from "#lib/icons.js";
   import { dur, easeOut, motionOk } from "../motion/curves.svelte";
-  import type { Facts, Fault } from "./decides.svelte";
+  import AddCard from "./AddCard.svelte";
+  import type { Facts, Fault, WhoDecides } from "./decides.svelte";
   import HandOver, { handOverWidth } from "./HandOver.svelte";
   import KindTile from "./KindTile.svelte";
   import MemberCard from "./MemberCard.svelte";
+  import SetupPopover from "./SetupPopover.svelte";
+  import { NEW } from "./setup.svelte";
 
   let {
     members,
@@ -29,7 +35,10 @@
     handing = $bindable(null),
     onhand,
     onputback,
+    who = null,
   }: {
+    /** Who decides' state, whose settings and Add a member open from the cards; null draws neither. */
+    who?: WhoDecides | null;
     /** A write the hub has not answered: the kinds it moves, and what it does in words. */
     asking: { kinds: string[]; said: string } | null;
     /** Each member's facts line. */
@@ -53,6 +62,13 @@
     /** This table's member for each kind, by kind id. */
     routes: Record<string, string>;
   } = $props();
+
+  /** Each card, which its settings hang from. */
+  const cards = $state<Record<string, HTMLElement | null>>({});
+  /** Members with settings: all but You and The agent. */
+  const editable = (member: Member) =>
+    member.type !== "you" && member.type !== "asker";
+  const parkedNew = $derived(who?.parked[NEW]);
 
   const kindsOf = (member: string) =>
     kinds.filter((kind) => routes[kind.id] === member);
@@ -150,11 +166,48 @@
         </div>
       {/each}
     {/snippet}
+    {#snippet pencil()}
+      {#if who}
+        <SetupPopover
+          anchor={cards[member.id] ?? null}
+          at={member.id}
+          {project}
+          {who}
+        >
+          {#snippet trigger(props)}
+            <Button
+              {...props}
+              aria-label={decidesWords.edit(member.name)}
+              class="-my-space-1"
+              icon={IconPen}
+              size="icon-sm"
+              variant="ghost"
+            />
+          {/snippet}
+        </SetupPopover>
+      {/if}
+    {/snippet}
     <MemberCard
+      bind:card={cards[member.id]}
+      editing={who?.setup?.from === member.id}
       facts={facts(member)}
       {member}
+      parked={who?.parked[member.id] !== undefined}
+      pencil={who && editable(member) ? pencil : undefined}
       {project}
       tiles={holds.length > 0 ? tiles : undefined}
     />
   {/each}
+  {#if who}
+    <SetupPopover anchor={cards[NEW] ?? null} at={NEW} {project} {who}>
+      {#snippet trigger(props)}
+        <AddCard
+          bind:card={cards[NEW]}
+          open={who.setup?.from === NEW}
+          {props}
+          resume={parkedNew ? parkedNew.draft.name.trim() : null}
+        />
+      {/snippet}
+    </SetupPopover>
+  {/if}
 </div>

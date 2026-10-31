@@ -30,6 +30,7 @@
   --container-decisions-520px: 520px;
   --container-leaf: 620px;
   --container-setup: 640px;
+  --container-member-setup: 35rem;
   --container-media-split: 640px;
   --container-pictures-split: 680px;
   --container-decisions-900px: 900px;
@@ -564,6 +565,9 @@
   --spacing-c-roster-card-min: var(--c-roster-card-min);
   --spacing-c-roster-row-min: var(--c-roster-row-min);
   --spacing-c-roster-face: var(--c-roster-face);
+  --spacing-c-member-setup-max-w: var(--c-member-setup-max-w);
+  --spacing-c-pose-tile: var(--c-pose-tile);
+  --spacing-c-setup-label-w: var(--c-setup-label-w);
   --spacing-c-stat-tile-min: var(--c-stat-tile-min);
   --spacing-c-rings-key-label-w: var(--c-rings-key-label-w);
   --spacing-c-rings-key-value-w: var(--c-rings-key-value-w);

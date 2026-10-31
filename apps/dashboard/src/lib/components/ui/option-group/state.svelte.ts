@@ -4,7 +4,7 @@ import { getContext, setContext, untrack } from "svelte";
 export interface OptionGroupProps {
   disabled: () => boolean;
   /** How the options stand (option-group.svelte `optionGroupVariants`). */
-  layout: () => "chips" | "list";
+  layout: () => "chips" | "list" | "tiles";
   multiple: () => boolean;
   /** Writes the chosen set back to the root's `value`. */
   setValue: (value: string[]) => void;

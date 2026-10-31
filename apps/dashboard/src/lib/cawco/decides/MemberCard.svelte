@@ -17,6 +17,10 @@
     facts,
     project,
     tiles,
+    editing = false,
+    parked = false,
+    card = $bindable(),
+    pencil,
   }: {
     /** What it runs on, or why it can't be reached; null for members with none. */
     facts: Facts | null;
@@ -25,21 +29,46 @@
     project: string | null;
     /** Its kinds' tiles; none when it holds nothing. */
     tiles: Snippet | undefined;
+    /** Its settings stand open, hung from it: it is edged in coral. */
+    editing?: boolean;
+    /** Its settings were closed before saving: the facts line says so. */
+    parked?: boolean;
+    /** The card, which its settings hang from. */
+    card?: HTMLElement | null;
+    /** The pencil that opens its settings; none for members with none. */
+    pencil?: Snippet;
   } = $props();
+
+  const factsLine = $derived(
+    [facts?.text, parked ? decidesWords.unsaved : null]
+      .filter(Boolean)
+      .join(" · ")
+  );
 </script>
 
 <article
+  bind:this={card}
   aria-labelledby="member-{member.id}"
-  class="row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile"
+  class={[
+    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control",
+    editing && "inset-ring-2 inset-ring-brand-solid",
+  ]}
+  data-editing={editing || undefined}
   data-member={member.id}
   style:--stand-in="calc(var(--c-roster-face) + var(--space-3))"
 >
   <div class="flex items-start gap-x-space-3">
     <MemberFace {member} size={48} />
     <div class="flex min-w-0 flex-auto flex-col">
-      <h2 class="type-body font-medium wrap-anywhere" id="member-{member.id}">
-        {member.name}
-      </h2>
+      <div class="flex min-w-0 items-start gap-x-space-1">
+        <h2
+          class="min-w-0 flex-auto type-body font-medium wrap-anywhere"
+          id="member-{member.id}"
+        >
+          {member.name}
+        </h2>
+        {@render pencil?.()}
+      </div>
       <p class="type-meta text-ink-muted text-pretty wrap-anywhere">
         {member.job}
       </p>
@@ -51,7 +80,12 @@
       facts?.attention ? "text-status-attn-ink" : "text-ink-muted",
     ]}
   >
-    {facts?.text ?? ""}
+    {#if parked && facts?.text}
+      {facts.text} ·
+      <span class="text-ink-strong">{decidesWords.unsaved}</span>
+    {:else}
+      {factsLine}
+    {/if}
   </p>
   <div class="flex min-w-0 flex-col gap-space-2">
     {#if tiles}

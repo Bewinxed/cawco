@@ -1342,6 +1342,12 @@
     --c-roster-row-min: 17rem;
     /* A member's face on its card, and how far its name and facts stand in. */
     --c-roster-face: 3rem;
+    /* A member's settings and Add a member, in the popover hung from its card: their greatest width. */
+    --c-member-setup-max-w: 52rem;
+    /* One of Caw's poses, or an identity hue, as a tile in a member's picture picker. */
+    --c-pose-tile: 4rem;
+    /* A member's settings: the column each folded row's label stands in. */
+    --c-setup-label-w: 9rem;
     /* A project spend stat tile's least width. */
     --c-stat-tile-min: 9.5rem;
     /* The usage key's label column, so values line up down a tile and across a row. */

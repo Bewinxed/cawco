@@ -13,13 +13,15 @@
    * label's first line.
    *
    * `digit` is the keycap it wears, which picks it while focus is in its
-   * group. A click runs the option's own `onclick` first; one that prevents
+   * group. In a `tiles` group it is a tile (`tile`): its words, or a
+   * picture on a square. A click runs the option's own `onclick` first; one that prevents
    * the default (an "Other" that opens its field instead) is not a pick.
    */
   let {
     ref = $bindable(null),
     value,
     digit,
+    tile = "words",
     disabled = false,
     class: className,
     onclick,
@@ -32,6 +34,8 @@
   > & {
     value: string;
     digit?: number;
+    /** In a `tiles` group: its name over its note, or a picture filling a square tile. */
+    tile?: "words" | "picture";
   } = $props();
 
   const group = useOptionGroup();
@@ -47,6 +51,10 @@
     "focus-inset",
     group.layout === "list" &&
       "items-box-start grid min-w-0 grid-cols-auto-fluid",
+    group.layout === "tiles" &&
+      (tile === "picture"
+        ? "size-c-pose-tile min-h-0 place-items-center justify-center rounded-lg p-space-1"
+        : "h-full min-w-0 flex-col items-start justify-start gap-0 rounded-md px-space-3 py-space-2 disabled:border-dashed disabled:bg-transparent disabled:text-ink-muted"),
     className
   )}
   aria-checked={chosen}

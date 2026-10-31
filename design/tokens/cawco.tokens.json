@@ -6424,6 +6424,30 @@
       },
       "$description": "A member's face on its card, and how far its name and facts stand in."
     },
+    "c-member-setup-max-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 52,
+        "unit": "rem"
+      },
+      "$description": "A member's settings and Add a member, in the popover hung from its card: their greatest width."
+    },
+    "c-pose-tile": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "rem"
+      },
+      "$description": "One of Caw's poses, or an identity hue, as a tile in a member's picture picker."
+    },
+    "c-setup-label-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 9,
+        "unit": "rem"
+      },
+      "$description": "A member's settings: the column each folded row's label stands in."
+    },
     "c-stat-tile-min": {
       "$type": "dimension",
       "$value": {

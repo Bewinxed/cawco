@@ -1168,6 +1168,12 @@ public enum Size {
     public static let cRosterRowMin: Double = 272
     /// A member's face on its card, and how far its name and facts stand in.
     public static let cRosterFace: Double = 48
+    /// A member's settings and Add a member, in the popover hung from its card: their greatest width.
+    public static let cMemberSetupMaxW: Double = 832
+    /// One of Caw's poses, or an identity hue, as a tile in a member's picture picker.
+    public static let cPoseTile: Double = 64
+    /// A member's settings: the column each folded row's label stands in.
+    public static let cSetupLabelW: Double = 144
     /// A project spend stat tile's least width.
     public static let cStatTileMin: Double = 152
     /// The usage key's label column, so values line up down a tile and across a row.

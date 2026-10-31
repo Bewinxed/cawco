@@ -7,6 +7,17 @@
  */
 import { andList } from "./helpers";
 
+/** A removed member's kinds, coming back to him. */
+const kindsBack = (kinds: readonly string[]): string => {
+  if (kinds.length === 0) {
+    return "It decides no kind now.";
+  }
+  if (kinds.length === 1) {
+    return `Its one kind, ${kinds[0]}, comes back to you.`;
+  }
+  return `Its ${kinds.length} kinds, ${andList(kinds)}, come back to you.`;
+};
+
 export const decidesWords = {
   // ── The built-in members ────────────────────────────────────────────────
   /** Each built-in member's name, its job (the line under the name) and its subject (in a sentence). */
@@ -234,4 +245,151 @@ export const decidesWords = {
     effort
       ? `${harness} · ${model} · ${effort} effort`
       : `${harness} · ${model}`,
+
+  // ── A member's settings, and Add a member ───────────────────────────────
+  /** A card's pencil, as its control is named. */
+  edit: (name: string) => `Change ${name}'s settings`,
+  /** A card whose settings were closed before saving, on its facts line. */
+  unsaved: "Unsaved changes",
+  /** The add card, with a new member's draft closed before adding. */
+  resume: (name: string) => (name ? `Resume ${name}` : "Resume the new member"),
+  /** The add card's title, and the settings' head while adding. */
+  addMember: "Add a member",
+  /** Under it: what can be added now. */
+  addMemberNote:
+    "An agent that runs on your fleet. People and channels come with a Slack or email connection.",
+  /** The settings' close button. */
+  closeSetup: (name: string) => `Close ${name}'s settings`,
+  /** The settings' line under the name, by who it is. */
+  headBuiltIn: "Built in",
+  headAgent: "Your agent",
+  headLead: (project: string) => `Lead of ${project}`,
+  headPractice:
+    "Built in · Picks what established practice does and names at least one source.",
+  /** Caw's on the fleet's page: his harness and model are each project's. */
+  headCawFleet: "Built in · Leads each project he's switched on in",
+  /** The kinds of member Add a member offers. */
+  memberTypes: {
+    agent: { name: "An agent", note: "Runs on your fleet" },
+    person: { name: "A person", note: "Needs a Slack or email connection" },
+    channel: { name: "A channel", note: "Needs a Slack or email connection" },
+  },
+  /** The row labels, in their order. */
+  rows: {
+    does: "What it does",
+    doesCaw: "What he does",
+    lead: "Leads this project",
+    runs: "Runs on",
+    knows: "Knows",
+    decides: "Decides",
+    hear: "How you hear",
+  },
+  /** A folded row's way back in. */
+  change: "Change",
+  changeRow: (row: string) => `Change ${row.toLowerCase()}`,
+  nameLabel: "Name",
+  namePlaceholder: "Release checker",
+  jobLabel: "What it does with a decision",
+  jobPlaceholder: "Checks the changelog and the build, then picks.",
+  /** An added member's name, which can't change. */
+  nameKept: "Its name is its delegate type's, so it stays.",
+  /** Caw's status, under his job. */
+  cawNow: (status: string) => `Now: ${status}`,
+  /** Caw's Runs on, on the fleet's page. */
+  cawRunsFleet:
+    "His harness and model are each project's: change them on its Who decides.",
+  harnessLabel: "Harness",
+  modelLabel: "Model",
+  effortLabel: "Effort",
+  /** A harness tile's note: where it runs. */
+  harnessOn: (machines: readonly string[]) => andList(machines),
+  /** A harness on no online machine. */
+  notOnMachine: "Not on any machine yet",
+  /** The harness's default model, after its name. */
+  defaultModel: "default",
+  delegatesLabel: "May start delegates of its own",
+  skillsLabel: "Skills",
+  noSkills: "The fleet has no skills yet: add them in Configure › Skills.",
+  /** No skill picked, in a folded row. */
+  noSkillsPicked: "No skills",
+  instructionsLabel: "Standing instructions",
+  instructionsHint: "What it reads before every decision.",
+  instructionsPlaceholder:
+    "Read the changelog and the last build's checks. Pick the option that ships safely, and say which check decided it.",
+  /** A folded Knows row: how many skills and the instructions' first line. */
+  knowsLine: (skills: number, instructions: string) =>
+    `${skills === 0 ? "No skills" : `${skills} ${skills === 1 ? "skill" : "skills"}`} · ${instructions || "No standing instructions"}`,
+  /** Caw's Knows. */
+  cawInstructions: (project: string) =>
+    `His instructions are ${project}'s AGENTS.md`,
+  cawSkills: "Change his skills in Configure › Skills",
+  /** Decides' hint; on a project's page its second sentence follows. */
+  decidesHint: "For choices raised from now on.",
+  decidesHintProject: "A kind you clear goes back to the fleet's choice.",
+  /** A kind another member holds now, beside it. */
+  nowHeld: (name: string) => `now ${name}`,
+  /** A folded Decides row that holds nothing. */
+  decidesNothing: "No kind yet",
+  /** How you hear, its two ways. */
+  hears: {
+    each: {
+      name: "Tell me each time",
+      note: "A notification for every answer",
+    },
+    later: {
+      name: "Catch me up later",
+      note: "Read them together in Decisions",
+    },
+  },
+  hearHint: "Every answer is signed with its name either way.",
+  answersIn: "Answers appear in Decisions",
+  /** The foot. */
+  fromNowOn: "Changes apply to choices raised from now on.",
+  toFix: (count: number) =>
+    count === 1 ? "One thing to fix." : `${count} things to fix.`,
+  cancel: "Cancel",
+  save: "Save",
+  saving: "Saving…",
+  continue: "Continue",
+  addMemberAct: "Add member",
+  addingMember: "Adding…",
+  openType: "Open in Delegate types",
+  /** Removing a member he added. */
+  remove: "Remove member",
+  removing: "Removing…",
+  keep: "Keep it",
+  removeAsk: (name: string) => `Remove ${name}?`,
+  removeLine: (kinds: readonly string[], waiting: number) =>
+    [
+      kindsBack(kinds),
+      "Decisions it already settled stay as they are.",
+      ...(waiting === 0
+        ? []
+        : [
+            waiting === 1
+              ? "The one waiting on it stays with it until answered."
+              : `The ${waiting} waiting on it stay with it until answered.`,
+          ]),
+    ].join(" "),
+  /** Kinds named in a line: "Look and words, Scope and Approach". */
+  kindsList: (names: readonly string[]) => andList(names),
+  /** The setup's commit on a project's decides.md. */
+  setupCommit: (name: string) => `${name}'s kinds changed`,
+
+  // ── The project's details: its Who decides row ─────────────────────────
+  detailsLabel: "Who decides",
+  detailsFollows: "Follows the fleet",
+  detailsExcept: (count: number) =>
+    `Follows the fleet, except ${count} ${count === 1 ? "kind" : "kinds"}`,
+  /** decides.md doesn't read: every kind is his. */
+  detailsUnread: "decides.md doesn't read: every choice comes to you",
+
+  // ── Pictures ────────────────────────────────────────────────────────────
+  /** The face's button. */
+  changePicture: (name: string) => `Change ${name}'s picture`,
+  /** The picker's group, as a screen reader names it. */
+  pictureFor: (name: string) => `${name}'s picture`,
+  posesNote: "Caw's poses, drawn from his files.",
+  /** An identity hue's tile. */
+  hueName: (hue: number) => `Mark ${hue}`,
 };
