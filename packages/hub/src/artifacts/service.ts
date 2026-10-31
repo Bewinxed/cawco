@@ -370,6 +370,12 @@ export interface CanvasScreen {
 
 /** Whose panel a create puts the artifact in (`owner`), and whose call it was (`maker`): one session, or a delegate and its parent. */
 interface Making {
+  /**
+   * The artifact the create lands on when the owner's panel holds none of
+   * its name: its delegation tree's preview whose holder acts no more,
+   * taken into the owner's panel (`makingFor` in createArtifacts).
+   */
+  lands?: ArtifactRow;
   maker: InstanceRow;
   owner: InstanceRow;
 }
@@ -1885,8 +1891,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       : undefined) ?? db.byName(owner.id, kind, name);
 
   /**
-   * The session a project's page moved from, when another's create took it
-   * (placed): its panel lets it go, closed when it showed it.
+   * The session a project's page, or a tree's preview its holder left,
+   * moved from when another's create took it (placed): its panel lets it
+   * go, closed when it showed it.
    */
   const letGo = (from: string | undefined, row: ArtifactRow): void => {
     if (from === undefined) {
@@ -2528,15 +2535,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Whether session `instance` will never take a turn on what it holds:
+   * it takes no input ({@link ArtifactServiceDeps.ended}), its work item
+   * ended, or it is stranded.
+   */
+  const actsNoMore = (instance: InstanceRow): boolean =>
+    deps.ended(instance) || deps.itemEnded(instance) || deps.stranded(instance);
+
+  /**
    * Who makes a create and whose panel it lands in: the caller's own, or
    * its parent's with `to: "parent"` ({@link ownerFor}). A preview its own
    * panel has no artifact of that name for lands on its delegation tree's
    * of that name in its project ({@link ofTree}), when several the one
-   * nearest up its line ({@link above}), else the newest: made again where it stands, as a `to: "parent"` create lands on the
-   * parent's, so its id stays, its server moves to the caller's
-   * ({@link keepServed}) and every page embedding it follows. Keyed by the
-   * caller's panel alone, a delegate in another workspace made a second
-   * artifact of the same name (2026-10-31).
+   * nearest up its line ({@link above}), else the newest, so its id stays,
+   * its server moves to the caller's ({@link keepServed}) and every page
+   * embedding it follows. A live holder's is made again where it stands,
+   * as a `to: "parent"` create lands on the parent's: held as its next
+   * version once it opened it, and it is told. One whose holder acts no
+   * more ({@link actsNoMore}) is taken into the caller's panel at once
+   * (`lands`): no version waits on a session that never opens it, its old
+   * server stops now, and nothing wakes it. Keyed by the caller's panel
+   * alone, a delegate in another workspace made a second artifact of the
+   * same name (2026-10-31).
    */
   const makingFor = (maker: InstanceRow, input: ArtifactInput): Making => {
     const owner = ownerFor(maker, input);
@@ -2563,7 +2583,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             : row,
         undefined
       );
-    return { maker, owner: (nearest && holder(nearest)) ?? owner };
+    const held = nearest && holder(nearest);
+    if (!(nearest && held)) {
+      return { maker, owner };
+    }
+    return actsNoMore(held)
+      ? { maker, owner, lands: nearest }
+      : { maker, owner: held };
   };
 
   /**
@@ -2640,15 +2666,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * An owner's own create of an artifact its maker's next version is held
    * for opens that version first, as its artifact_show would ({@link
    * promote}): the create shows it, and lands on it, so neither the maker's
-   * change nor the owner's is written over the other.
+   * change nor the owner's is written over the other. So does a create that
+   * takes a tree's preview its holder left (`lands`, {@link makingFor}).
    */
   const openNextFirst = async (
-    { owner, maker }: Making,
+    { lands, owner, maker }: Making,
     kind: ArtifactRow["kind"],
     name: string
   ): Promise<void> => {
     const found =
-      owner.id === maker.id ? namedFor(owner, kind, name) : undefined;
+      lands ??
+      (owner.id === maker.id ? namedFor(owner, kind, name) : undefined);
     const next = found ? db.heldOf(found.id) : undefined;
     if (found && next) {
       await promote(found, next);
@@ -5761,20 +5789,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * {@link holdNext}). Answers it, and what was there.
    */
   const placed = (
-    { owner, maker }: Making,
+    { lands, owner, maker }: Making,
     input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask">,
     at: { machineId: string | null; source: PreviewSource }
   ): {
     before: ArtifactRow | undefined;
     holding: ReturnType<typeof holdNext>;
-    /** The session whose panel held the project's page this create made again, when it was another's. */
+    /** The session whose panel held what this create made again, when it was another's: a project's page, or a tree's preview its holder left. */
     movedFrom?: string | undefined;
     row: ArtifactRow;
   } => {
     const now = new Date();
-    const found = namedFor(owner, input.kind, input.name);
-    // The project's page another session wrote, or one whose session is
-    // gone: made again here, it is this panel's, its doc and picks kept.
+    // Read again: opening its held version first (openNextFirst) moved it.
+    const found = lands
+      ? db.get(lands.id)
+      : namedFor(owner, input.kind, input.name);
+    // The project's page another session wrote, one whose session is gone,
+    // or a tree's preview whose holder acts no more (lands): made again
+    // here, it is this panel's, its doc and picks kept.
     const moved = found && found.instanceId !== owner.id;
     const before = moved
       ? (db.update(found.id, { instanceId: owner.id }) as ArtifactRow)
