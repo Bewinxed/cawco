@@ -116,9 +116,6 @@ const byStory = new Map(STATES.map((one) => [one.story, one]));
 export const stateOf = (story: string): ProtoState =>
   byStory.get(story) ?? (STATES[0] as ProtoState);
 
-/** The groups in the order their first state stands in the file. */
-export const GROUPS: string[] = [...new Set(STATES.map((one) => one.group))];
-
 /** The moves the file declares, then the agent's links. */
 export const LINKS: ProtoLink[] = [
   ...STATES.flatMap((one) =>

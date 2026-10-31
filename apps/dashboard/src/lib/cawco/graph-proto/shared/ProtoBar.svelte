@@ -45,13 +45,20 @@
 >
   <GlassGroup class="min-w-0" label={words.components}>
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger
-        class="relative flex h-c-bar-item items-center whitespace-nowrap rounded-pill hover:bg-surface-hover"
-        face="title"
-      >
-        <span class="truncate">{COMPONENT_NAME}</span>
-        <IconChevronDown class="size-icon-sm flex-none text-ink-muted" />
-      </DropdownMenu.Trigger>
+      <!-- Its own layer over the group's glass, as the group's symbols stand. -->
+      <span class="relative flex min-w-0">
+        <DropdownMenu.Trigger face="title">
+          <span
+            data-box
+            class="mark-line inline-flex min-w-0 items-center gap-space-1 whitespace-nowrap"
+          >
+            <span class="overflow-clip text-ellipsis whitespace-nowrap"
+              >{COMPONENT_NAME}</span
+            >
+            <IconChevronDown class="size-icon-sm flex-none text-ink-muted" />
+          </span>
+        </DropdownMenu.Trigger>
+      </span>
       <DropdownMenu.Content align="start">
         <DropdownMenu.Label>{words.components}</DropdownMenu.Label>
         <DropdownMenu.Item>
@@ -82,14 +89,20 @@
       type="button"><IconPin /></button
     >
     <Popover.Root>
-      <Popover.Trigger
-        aria-label="{words.remarks}, {words.openRemarks(open)}"
-        class="{SYMBOL} w-auto grid-flow-col gap-space-1 px-space-2"
-        title={words.remarks}
-        ><IconChat />{#if open > 0}<span
-            class="type-label text-ink-strong tabular-nums">{open}</span
-          >{/if}</Popover.Trigger
-      >
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <button
+            {...props}
+            aria-label="{words.remarks}, {words.openRemarks(open)}"
+            class="{SYMBOL} mark-line w-auto grid-flow-col gap-space-1 px-space-2"
+            title={words.remarks}
+            type="button"
+            ><IconChat />{#if open > 0}<span
+                class="type-label text-ink-strong tabular-nums">{open}</span
+              >{/if}</button
+          >
+        {/snippet}
+      </Popover.Trigger>
       <Popover.Content align="end" width="widest">
         <div class="flex flex-col gap-space-2 p-space-1" data-remarks>
           {#if judge.remarks.length === 0}

@@ -77,16 +77,18 @@
       onpointerup={() => clearTimeout(timer)}
       type="button"
     >
-      <span class="flex w-full items-center gap-space-1">
-        <span class="min-w-0 flex-1 truncate type-label text-ink-strong"
+      <span class="mark-line flex w-full items-center gap-space-1">
+        <span
+          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
           >{state.name}</span
         >
         {#if remarks > 0}
           <span
+            data-box
             aria-label={words.openRemarks(remarks)}
             role="img"
-            class="flex items-center gap-px type-meta text-ink-subtle tabular-nums"
-            ><IconChat class="size-icon-sm" />{remarks}</span
+            class="mark-line flex items-center gap-px type-meta text-ink-subtle tabular-nums"
+            ><IconChat class="size-icon-sm" /><span>{remarks}</span></span
           >
         {/if}
         {#if seen}

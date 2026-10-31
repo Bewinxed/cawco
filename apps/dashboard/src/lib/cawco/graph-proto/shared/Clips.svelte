@@ -20,6 +20,8 @@
 
   const runner = $derived(judge.runner);
   const span = $derived(Math.max(1, runner.length));
+  /** A lane's columns: its element and property, its bar, its figures. */
+  const COLUMNS = "minmax(0, var(--c-graph-node-w)) minmax(0, 1fr) max-content";
   const pct = (ms: number) => `${(ms / span) * 100}%`;
 </script>
 
@@ -35,7 +37,7 @@
       <Button
         onclick={() => judge.play(move.from, move.to)}
         size="sm"
-        variant="ghost"><IconRepeat />{words.replay}</Button
+        variant="ghost"><IconRepeat /><span>{words.replay}</span></Button
       >
     </div>
   {/if}
@@ -51,27 +53,29 @@
     >
       {#each runner.clips as clip, index (index)}
         <li
-          class="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_max-content] items-center gap-space-2"
+          class="grid grid-cols-(--cols) items-center gap-space-2"
+          style:--cols={COLUMNS}
           data-clip={clip.kind}
         >
-          <span class="flex min-w-0 items-center gap-space-1">
+          <span class="mark-line flex min-w-0 items-center gap-space-1">
             <KindGlyph kind={clip.kind} />
-            <span class="min-w-0 truncate type-meta text-ink-row"
+            <span
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-row"
               >{clip.element} · {clip.property}</span
             >
           </span>
           <span class="relative h-c-btn-h-xs rounded-xs bg-surface-recess">
             <span
-              class="absolute inset-y-0 rounded-xs border"
-              style:background="var(--c-clip-{clip.kind}-wash)"
-              style:border-color="var(--c-clip-{clip.kind})"
-              style:left={pct(clip.start)}
-              style:width="max(2px, {pct(clip.length)})"
+              class="bg-(--wash) border-(color:--edge) left-(--x) w-(--w) absolute inset-y-0 rounded-xs border"
+              style:--wash="var(--c-clip-{clip.kind}-wash)"
+              style:--edge="var(--c-clip-{clip.kind})"
+              style:--x={pct(clip.start)}
+              style:--w="max(2px, {pct(clip.length)})"
             ></span>
             <!-- The playhead: ink, never coral (DESIGN.md, The playhead). -->
             <span
-              class="absolute inset-y-0 w-px bg-ink-strong"
-              style:left="min({pct(runner.at)}, 100% - 1px)"
+              class="left-(--x) absolute inset-y-0 w-px bg-ink-strong"
+              style:--x="min({pct(runner.at)}, 100% - 1px)"
             ></span>
           </span>
           <span

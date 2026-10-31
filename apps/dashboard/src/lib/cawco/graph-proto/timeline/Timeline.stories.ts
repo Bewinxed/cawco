@@ -18,7 +18,10 @@ export default {
 export const Desk = {};
 
 /** On a phone, 390 wide: the track under the thumb, the kept keyframe centred, the settings at its foot. */
-export const Phone = { args: { height: 844 }, parameters: { viewport: 390 } };
+export const Phone = {
+  args: { height: 844 },
+  parameters: { viewport: 390 },
+};
 
 /** The owner's 2529-wide window: a held keyframe stands beside the kept one at its own width. */
 export const Wide = {

@@ -149,13 +149,17 @@
         type="button"><IconPlay /></button
       >
       <Popover.Root>
-        <Popover.Trigger
-          aria-label={words.clips(edge.judge.runner.clips.length)}
-          class="rounded-pill px-space-2 type-meta text-ink-strong tabular-nums hover:bg-surface-hover"
-          >{length === null
-            ? words.notMeasured
-            : words.ms(length)}</Popover.Trigger
-        >
+        <Popover.Trigger>
+          {#snippet child({ props })}
+            <button
+              {...props}
+              aria-label={words.clips(edge.judge.runner.clips.length)}
+              class="rounded-pill px-space-2 type-meta text-ink-strong tabular-nums hover:bg-surface-hover"
+              type="button"
+              >{length === null ? words.notMeasured : words.ms(length)}</button
+            >
+          {/snippet}
+        </Popover.Trigger>
         <Popover.Content align="center" width="widest">
           <Clips judge={edge.judge} />
         </Popover.Content>

@@ -13,7 +13,6 @@
    * a press stands a state in Next. Done is the bar's one prominent action:
    * the owner says he has finished judging, with the open count.
    */
-  import { designGraphWords } from "@cawco/core/words/design-graph";
   import { graphProtoWords as words } from "@cawco/core/words/graph-proto";
   import GlassGroup from "#lib/cawco/preview/graph/GlassGroup.svelte";
   import StateGraph from "#lib/cawco/preview/graph/StateGraph.svelte";
@@ -21,8 +20,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconChevronDown,
-    IconChevronLeft,
-    IconChevronRight,
     IconChevronUp,
     IconLayers,
     IconPlay,
@@ -32,9 +29,8 @@
   import Clips from "../shared/Clips.svelte";
   import { FILE, pointAt, SECTION_GRAPH } from "../shared/graph";
   import { Judge } from "../shared/judge.svelte";
-  import ProtoBar from "../shared/ProtoBar.svelte";
+  import ProtoFrame from "../shared/ProtoFrame.svelte";
   import {
-    ASK,
     COMPONENT_NAME,
     linkBetween,
     linksFrom,
@@ -43,6 +39,7 @@
     stateOf,
   } from "../shared/review.svelte";
   import Stage from "../shared/Stage.svelte";
+  import Stepper from "../shared/Stepper.svelte";
   import ViewSettings from "../shared/ViewSettings.svelte";
 
   let {
@@ -121,29 +118,22 @@
   const seamLink = $derived(next ? linkBetween(seamHere, next) : null);
   let clipsOpen = $state(false);
 
+  /** ← and →: back a step, or Next promoted into Here. */
+  const stepPair = (delta: -1 | 1) => {
+    if (delta === 1) {
+      if (next) {
+        promote(next);
+      }
+      return;
+    }
+    chosen = null;
+    judge.step(-1);
+  };
+
   /* --- Done: the one verdict word ------------------------------------------ */
 
   let done = $state<"open" | "handing" | "handed">("open");
   const openCount = $derived(judge.remarks.length);
-
-  const keyed = (event: KeyboardEvent) => {
-    if (
-      (event.target as HTMLElement).closest("input, textarea, [role=slider]")
-    ) {
-      return;
-    }
-    if (event.key === "ArrowRight" && next) {
-      promote(next);
-    } else if (event.key === "ArrowLeft") {
-      chosen = null;
-      judge.step(-1);
-    } else if (event.key === "c") {
-      judge.commenting = !judge.commenting;
-    } else {
-      return;
-    }
-    event.preventDefault();
-  };
 </script>
 
 {#snippet head(story: string, role: "here" | "next")}
@@ -160,7 +150,7 @@
         <button
           aria-label={words.differences}
           aria-pressed={diff}
-          class="{SYMBOL} w-auto grid-flow-col gap-space-1 px-space-2"
+          class="{SYMBOL} mark-line w-auto grid-flow-col gap-space-1 px-space-2"
           onclick={() => {
             diff = !diff;
           }}
@@ -182,51 +172,36 @@
   </div>
 {/snippet}
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the surface's keys (← → step, C comments) answer wherever focus stands inside it, as an application region's do. -->
-<div
-  aria-label={COMPONENT_NAME}
-  bind:clientWidth={width}
-  class="relative flex flex-col overflow-hidden bg-surface-recess text-ink-strong"
-  data-proto="pair"
-  onkeydown={keyed}
-  role="application"
-  style:height="{height}px"
->
-  <ProtoBar compact={width < 640} {judge}>
-    {#snippet action()}
-      {#if done === "handed"}
-        <span class="flex min-w-0 items-center gap-space-2" data-done>
-          <span class="truncate type-meta text-ink-muted"
-            >{words.handedOver(COMPONENT_NAME, openCount)}</span
-          >
-          <Button
-            onclick={() => {
-              done = "open";
-            }}
-            size="sm"
-            variant="ghost">{words.undo}</Button
-          >
-        </span>
-      {:else}
+<ProtoFrame bind:width {height} {judge} onstep={stepPair} proto="pair">
+  {#snippet action()}
+    {#if done === "handed"}
+      <span class="flex min-w-0 items-center gap-space-2" data-done>
+        <span class="truncate type-meta text-ink-muted"
+          >{words.handedOver(COMPONENT_NAME, openCount)}</span
+        >
         <Button
-          data-done
-          disabled={done === "handing"}
           onclick={() => {
-            done = "handing";
-            setTimeout(() => {
-              done = "handed";
-            }, 600);
+            done = "open";
           }}
           size="sm"
-          >{openCount > 0 ? words.doneOpen(openCount) : words.done}</Button
+          variant="ghost">{words.undo}</Button
         >
-      {/if}
-    {/snippet}
-  </ProtoBar>
-  <p class="m-0 flex-none px-space-4 pb-space-2 type-body text-ink-strong">
-    {ASK}
-  </p>
+      </span>
+    {:else}
+      <Button
+        data-done
+        disabled={done === "handing"}
+        onclick={() => {
+          done = "handing";
+          setTimeout(() => {
+            done = "handed";
+          }, 600);
+        }}
+        size="sm"
+        >{openCount > 0 ? words.doneOpen(openCount) : words.done}</Button
+      >
+    {/if}
+  {/snippet}
 
   <div class="min-h-0 flex-1 overflow-auto px-space-4 pt-space-2 pb-space-4">
     {#if twoUp}
@@ -245,11 +220,12 @@
         </div>
         <!-- The seam is the move: its knob scrubs down the seam, its play runs it. -->
         <div
-          class="flex w-c-touch-floor flex-none flex-col items-center gap-space-2 self-stretch pt-space-7"
+          class="mark-line flex w-c-touch-floor flex-none flex-col items-center gap-space-2 self-stretch pt-space-7"
           data-seam
         >
           {#if next && seamLink?.kind === "move"}
             <button
+              data-box
               aria-label={words.playMove(
                 stateOf(seamHere).name,
                 stateOf(next).name
@@ -260,6 +236,7 @@
               type="button"><IconPlay /></button
             >
             <div
+              data-box
               aria-label={words.holdMove(
                 stateOf(seamHere).name,
                 stateOf(next).name
@@ -309,11 +286,11 @@
               tabindex="0"
             >
               <span
-                class="absolute inset-y-0 left-1/2 w-[calc(3*var(--c-graph-edge))] -translate-x-1/2 border-x-(length:--c-graph-edge) border-(color:--c-graph-edge-ink)"
+                class="absolute inset-y-0 left-1/2 w-space-1 -translate-x-1/2 border-x border-(color:--c-graph-edge-ink)"
               ></span>
               <span
-                class="absolute left-1/2 size-space-4 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-solid shadow-xs"
-                style:top="{seamKnob * 100}%"
+                class="top-(--y) absolute left-1/2 size-space-4 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-solid shadow-xs"
+                style:--y="{seamKnob * 100}%"
               ></span>
             </div>
             <span class="type-meta text-ink-subtle tabular-nums"
@@ -323,6 +300,7 @@
                 : words.ms(judge.runner.length)}</span
             >
             <button
+              data-box
               aria-expanded={clipsOpen}
               aria-label={words.clips(judge.runner.clips.length)}
               class={SYMBOL}
@@ -335,9 +313,12 @@
                 />{/if}</button
             >
           {:else if next && seamLink}
-            <span class="w-px flex-1 bg-(--c-graph-edge-ink)" aria-hidden="true"
+            <span
+              data-box
+              class="w-px flex-1 bg-c-graph-edge-ink"
+              aria-hidden="true"
             ></span>
-            <span class="type-meta text-ink-subtle [writing-mode:vertical-rl]"
+            <span class="text-center type-meta text-ink-subtle"
               >{seamLink.label}</span
             >
           {/if}
@@ -354,8 +335,8 @@
             />
           {:else}
             <p
-              class="m-0 type-body text-ink-muted"
-              style:width="{judge.width}px"
+              class="w-(--w) m-0 type-body text-ink-muted"
+              style:--w="{judge.width}px"
             >
               {words.nothingFollows(stateOf(judge.kept).name)}
             </p>
@@ -383,7 +364,7 @@
         {#if next}
           <button
             aria-label={words.showNext(stateOf(next).name)}
-            class="sticky end-0 flex w-c-touch-floor flex-none cursor-pointer touch-none flex-col items-center gap-space-2 rounded-lg bg-surface-raised py-space-3 inset-ring inset-ring-border-hairline select-none hover:bg-surface-hover aria-pressed:bg-surface-pressed"
+            class="mark-line sticky end-0 flex w-c-touch-floor flex-none touch-none flex-col items-center gap-space-2 rounded-lg bg-surface-raised py-space-3 inset-ring inset-ring-border-hairline select-none not-aria-pressed:hover:bg-surface-hover aria-pressed:bg-surface-pressed"
             aria-pressed={over}
             data-next-edge
             onkeydown={(event) => {
@@ -410,9 +391,18 @@
             type="button"
           >
             <span class="type-caps text-ink-subtle">{words.next}</span>
-            <span class="type-label text-ink-strong [writing-mode:vertical-rl]"
-              >{stateOf(next).name}</span
+            <!-- The name stood letter over letter down the edge, as the 44px edge holds it. -->
+            <span
+              data-box
+              aria-hidden="true"
+              class="flex flex-col items-center type-label text-ink-strong"
             >
+              {#each [...stateOf(next).name] as letter, at (at)}
+                <span class="leading-none"
+                  >{letter === " " ? "\u00a0" : letter}</span
+                >
+              {/each}
+            </span>
             <IconPlay class="mt-auto size-icon-md text-ink-muted" />
           </button>
         {/if}
@@ -425,7 +415,7 @@
     aria-label={words.setSheet}
     class={[
       "flex flex-none flex-col gap-space-2 rounded-t-panel border-t border-border-control bg-surface-raised px-space-3 pt-space-2 pb-space-3 shadow-drawer",
-      setOpen && "h-[55%]",
+      setOpen && "h-c-graph-drawer-stop",
     ]}
     data-sheet={setOpen ? "set" : "steps"}
   >
@@ -517,33 +507,13 @@
       {/if}
     {/if}
     <div class="flex flex-wrap items-center gap-space-2">
-      <GlassGroup label={designGraphWords.slider}>
-        <button
-          aria-label={designGraphWords.previousStep}
-          class={SYMBOL}
-          disabled={judge.at <= 0}
-          onclick={() => {
-            chosen = null;
-            judge.step(-1);
-          }}
-          title={designGraphWords.previousStep}
-          type="button"><IconChevronLeft /></button
-        >
-        <span
-          class="relative min-w-c-steps-stop-min-w px-space-1 text-center type-label tabular-nums"
-          >{judge.at >= 0
-            ? designGraphWords.stepOf(judge.at + 1, SEQUENCE.length)
-            : stateOf(judge.kept).name}</span
-        >
-        <button
-          aria-label={designGraphWords.nextStep}
-          class={SYMBOL}
-          disabled={!next}
-          onclick={() => next && promote(next)}
-          title={designGraphWords.nextStep}
-          type="button"><IconChevronRight /></button
-        >
-      </GlassGroup>
+      <Stepper
+        canNext={!!next}
+        ends={false}
+        {judge}
+        onnext={() => stepPair(1)}
+        onprev={() => stepPair(-1)}
+      />
       <span class="flex-1"></span>
       <GlassGroup>
         {#if width < 640}
@@ -563,4 +533,4 @@
       </GlassGroup>
     </div>
   </section>
-</div>
+</ProtoFrame>

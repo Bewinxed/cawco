@@ -25,6 +25,7 @@
     ViewportPortal,
   } from "@xyflow/svelte";
   import { tick, untrack } from "svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import GlassGroup from "#lib/cawco/preview/graph/GlassGroup.svelte";
   import { SYMBOL } from "#lib/cawco/preview/graph/symbol.js";
@@ -33,26 +34,14 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import {
-    IconChevronLeft,
-    IconChevronRight,
-    IconEye,
-    IconZoomIn,
-    IconZoomOut,
-  } from "#lib/icons.js";
+  import { IconEye, IconZoomIn, IconZoomOut } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import Adjust from "../shared/Adjust.svelte";
   import { Judge } from "../shared/judge.svelte";
-  import ProtoBar from "../shared/ProtoBar.svelte";
-  import {
-    ASK,
-    COMPONENT_NAME,
-    LINKS,
-    SEQUENCE,
-    STATES,
-    stateOf,
-  } from "../shared/review.svelte";
+  import ProtoFrame from "../shared/ProtoFrame.svelte";
+  import { LINKS, SEQUENCE, STATES, stateOf } from "../shared/review.svelte";
   import Stage from "../shared/Stage.svelte";
+  import Stepper from "../shared/Stepper.svelte";
   import ViewSettings from "../shared/ViewSettings.svelte";
   import CardNode, { type CardData } from "./CardNode.svelte";
   import FieldCamera from "./FieldCamera.svelte";
@@ -241,24 +230,6 @@
   );
   /** The live card's own height cap: the panel's room under the bar and over the walk head. */
   const cap = $derived(Math.round(height * (phone ? 0.42 : 0.62)));
-
-  const keyed = (event: KeyboardEvent) => {
-    if (
-      (event.target as HTMLElement).closest("input, textarea, [role=slider]")
-    ) {
-      return;
-    }
-    if (event.key === "ArrowRight") {
-      judge.step(1);
-    } else if (event.key === "ArrowLeft") {
-      judge.step(-1);
-    } else if (event.key === "c") {
-      judge.commenting = !judge.commenting;
-    } else {
-      return;
-    }
-    event.preventDefault();
-  };
 </script>
 
 {#snippet liveCard(story: string, live: boolean)}
@@ -282,8 +253,9 @@
       >
     </div>
     <div
-      class="nowheel overflow-y-auto overscroll-contain"
-      style:max-height="{cap}px"
+      class="max-h-(--max-h) overflow-y-auto overscroll-contain"
+      onwheel={(event) => event.stopPropagation()}
+      style:--max-h="{cap}px"
     >
       {#if live}
         <Stage
@@ -309,40 +281,31 @@
   </div>
 {/snippet}
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the surface's keys (← → step, C comments) answer wherever focus stands inside it, as an application region's do. -->
-<div
-  aria-label={COMPONENT_NAME}
-  bind:clientWidth={width}
-  class="relative flex flex-col overflow-hidden bg-surface-recess text-ink-strong"
-  data-proto="field"
-  onkeydown={keyed}
-  role="application"
-  style:height="{height}px"
+<ProtoFrame
+  bind:width
+  {height}
+  {judge}
+  onstep={(delta) => judge.step(delta)}
+  proto="field"
 >
-  <ProtoBar compact={phone} {judge}>
-    {#snippet centre()}
-      {#if !phone}
-        <GlassGroup label={words.waysOfSeeing}>
-          <Tabs
-            onValueChange={(value) => {
-              mode = value === "fit" ? "fit" : "walk";
-            }}
-            size="compact"
-            value={mode}
-          >
-            <TabsList aria-label={words.waysOfSeeing}>
-              <TabItem label={words.walk} value="walk" />
-              <TabItem label={words.fit} value="fit" />
-            </TabsList>
-          </Tabs>
-        </GlassGroup>
-      {/if}
-    {/snippet}
-  </ProtoBar>
-  <p class="m-0 flex-none px-space-4 pb-space-2 type-body text-ink-strong">
-    {ASK}
-  </p>
+  {#snippet centre()}
+    {#if !phone}
+      <GlassGroup label={words.waysOfSeeing}>
+        <Tabs
+          onValueChange={(value) => {
+            mode = value === "fit" ? "fit" : "walk";
+          }}
+          size="compact"
+          value={mode}
+        >
+          <TabsList aria-label={words.waysOfSeeing}>
+            <TabItem label={words.walk} value="walk" />
+            <TabItem label={words.fit} value="fit" />
+          </TabsList>
+        </Tabs>
+      </GlassGroup>
+    {/if}
+  {/snippet}
 
   <div
     class="relative min-h-0 flex-1"
@@ -372,30 +335,23 @@
       <ViewportPortal target="front">
         <!-- The live card: one object, gliding to the kept card's place (The One Object Rule). -->
         <div
-          bind:offsetHeight={
-            () => liveSize.h,
-            (h) => {
-              liveSize = { ...liveSize, h };
-            }
-          }
-          bind:offsetWidth={
-            () => liveSize.w,
-            (w) => {
-              liveSize = { ...liveSize, w };
-            }
-          }
-          class="nopan nodrag absolute top-0 left-0 z-10 transition-transform duration-(--dur-panel) ease-drawer motion-reduce:transition-none"
+          {@attach frameSize((node: HTMLElement) => {
+            liveSize = { w: node.offsetWidth, h: node.offsetHeight };
+          })}
+          class="nopan nodrag absolute top-0 left-0 z-10 translate-x-(--tx) translate-y-(--ty) transition-transform duration-(--dur-panel) ease-drawer motion-reduce:transition-none"
           data-live-card={shown}
-          style:transform="translate({keptBox.x}px, {keptBox.y}px)"
+          style:--tx="{keptBox.x}px"
+          style:--ty="{keptBox.y}px"
         >
           {@render liveCard(shown, true)}
         </div>
         {#if heldBox && held}
           <!-- A wide window: the held card grows live where it stands, beside the kept one (T4). -->
           <div
-            class="nopan nodrag pointer-events-none absolute top-0 left-0 z-20"
+            class="nopan nodrag pointer-events-none absolute top-0 left-0 z-20 translate-x-(--tx) translate-y-(--ty)"
             data-beside={held}
-            style:transform="translate({heldBox.x}px, {heldBox.y}px)"
+            style:--tx="{heldBox.x}px"
+            style:--ty="{heldBox.y}px"
           >
             {@render liveCard(held, false)}
           </div>
@@ -413,56 +369,16 @@
           <Adjust {judge} />
         </GlassGroup>
       {/if}
-      <GlassGroup class="pointer-events-auto" label={designGraphWords.slider}>
-        <button
-          aria-label={words.firstStep}
-          class="{SYMBOL} grid-flow-col"
-          disabled={judge.at <= 0}
-          onclick={() => judge.end("first")}
-          title={words.firstStep}
-          type="button"
-          ><IconChevronLeft /><IconChevronLeft class="-ms-space-3" /></button
-        >
-        <button
-          aria-label={designGraphWords.previousStep}
-          class={SYMBOL}
-          disabled={judge.at <= 0}
-          onclick={() => judge.step(-1)}
-          title={designGraphWords.previousStep}
-          type="button"><IconChevronLeft /></button
-        >
+      <Stepper class="pointer-events-auto" {judge}>
         <span
-          class="relative min-w-c-steps-stop-min-w px-space-1 text-center type-label tabular-nums"
-          >{judge.at >= 0
-            ? designGraphWords.stepOf(judge.at + 1, SEQUENCE.length)
-            : stateOf(judge.kept).name}</span
-        >
-        <button
-          aria-label={designGraphWords.nextStep}
-          class={SYMBOL}
-          disabled={judge.at >= SEQUENCE.length - 1}
-          onclick={() => judge.step(1)}
-          title={designGraphWords.nextStep}
-          type="button"><IconChevronRight /></button
-        >
-        <button
-          aria-label={words.lastStep}
-          class="{SYMBOL} grid-flow-col"
-          disabled={judge.at === SEQUENCE.length - 1}
-          onclick={() => judge.end("last")}
-          title={words.lastStep}
-          type="button"
-          ><IconChevronRight /><IconChevronRight class="-ms-space-3" /></button
-        >
-        <span
-          class="relative flex items-center gap-space-1 pe-space-2 ps-space-1 type-meta text-ink-muted tabular-nums"
+          data-box
+          class="relative mark-line flex items-center gap-space-1 pe-space-2 ps-space-1 type-meta text-ink-muted tabular-nums"
           data-stood-on
-          ><IconEye class="size-icon-sm" />{words.stoodOn(
-            stoodOn,
-            STATES.length
-          )}</span
+          ><IconEye class="size-icon-sm" /><span
+            >{words.stoodOn(stoodOn, STATES.length)}</span
+          ></span
         >
-      </GlassGroup>
+      </Stepper>
       <GlassGroup class="pointer-events-auto" label={designGraphWords.zoom}>
         <button
           aria-label={designGraphWords.zoomOut}
@@ -492,4 +408,4 @@
       </GlassGroup>
     </div>
   </div>
-</div>
+</ProtoFrame>

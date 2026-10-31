@@ -12,9 +12,17 @@
 </script>
 
 <Popover.Root>
-  <Popover.Trigger aria-label={words.adjust} class={SYMBOL} title={words.adjust}
-    ><IconTuning /></Popover.Trigger
-  >
+  <Popover.Trigger>
+    {#snippet child({ props })}
+      <button
+        {...props}
+        aria-label={words.adjust}
+        class={SYMBOL}
+        title={words.adjust}
+        type="button"><IconTuning /></button
+      >
+    {/snippet}
+  </Popover.Trigger>
   <Popover.Content align="end" width="wide">
     <div class="flex flex-col gap-space-3 p-space-1" data-adjust>
       <span class="type-meta text-ink-muted"

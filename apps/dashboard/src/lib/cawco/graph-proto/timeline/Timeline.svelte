@@ -11,9 +11,9 @@
    * all at once, the stage never moving under it. The live component is one
    * TaskColumn whose args change, so every move is its own motion.
    */
-  import { designGraphWords } from "@cawco/core/words/design-graph";
   import { graphProtoWords as words } from "@cawco/core/words/graph-proto";
   import { tick } from "svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import GlassGroup from "#lib/cawco/preview/graph/GlassGroup.svelte";
   import StateGraph from "#lib/cawco/preview/graph/StateGraph.svelte";
@@ -26,8 +26,6 @@
   import {
     IconChat,
     IconChevronDown,
-    IconChevronLeft,
-    IconChevronRight,
     IconChevronUp,
     IconPause,
     IconPlay,
@@ -37,9 +35,8 @@
   import Clips from "../shared/Clips.svelte";
   import { FILE, pointAt, SECTION_GRAPH } from "../shared/graph";
   import { Judge } from "../shared/judge.svelte";
-  import ProtoBar from "../shared/ProtoBar.svelte";
+  import ProtoFrame from "../shared/ProtoFrame.svelte";
   import {
-    ASK,
     COMPONENT_NAME,
     linkBetween,
     noWayIn,
@@ -48,6 +45,7 @@
     stateOf,
   } from "../shared/review.svelte";
   import Stage from "../shared/Stage.svelte";
+  import Stepper from "../shared/Stepper.svelte";
   import ViewSettings from "../shared/ViewSettings.svelte";
 
   let {
@@ -160,27 +158,6 @@
     });
   });
 
-  const keyed = (event: KeyboardEvent) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("input, textarea, [role=slider]")) {
-      return;
-    }
-    if (event.key === "ArrowRight" || event.key === "k") {
-      judge.step(1);
-    } else if (event.key === "ArrowLeft" || event.key === "j") {
-      judge.step(-1);
-    } else if (event.key === "Home") {
-      judge.end("first");
-    } else if (event.key === "End") {
-      judge.end("last");
-    } else if (event.key === "c") {
-      judge.commenting = !judge.commenting;
-    } else {
-      return;
-    }
-    event.preventDefault();
-  };
-
   const remarksOn = (story: string) => judge.remarksOn(story).length;
 </script>
 
@@ -227,8 +204,8 @@
         <span
           aria-label={words.openRemarks(count)}
           role="img"
-          class="flex flex-none items-center gap-px type-meta tabular-nums"
-          ><IconChat class="size-icon-sm" />{count}</span
+          class="mark-line flex flex-none items-center gap-px type-meta tabular-nums"
+          ><IconChat class="size-icon-sm" /><span>{count}</span></span
         >
       {/if}
     </span>
@@ -247,10 +224,11 @@
     {@const thumb = thumbOn(from, to)}
     {@const length = judge.lengthOf(from, to)}
     <div
-      class="relative flex h-c-btn-h-sm w-[calc(2*var(--c-steps-stop-min-w))] flex-none flex-col items-center justify-center self-start"
+      class="mark-line relative flex h-c-btn-h-sm w-c-btn-min-w flex-none flex-col items-center justify-center self-start"
       data-gap="{from}>{to}"
     >
       <div
+        data-box
         aria-label={words.holdMove(stateOf(from).name, stateOf(to).name)}
         aria-valuemax={100}
         aria-valuemin={0}
@@ -312,7 +290,7 @@
         <!-- The move's double line: told from a link's single one (T5). -->
         <span
           class={[
-            "absolute inset-x-0 top-1/2 h-[calc(3*var(--c-graph-edge))] -translate-y-1/2 border-y-(length:--c-graph-edge)",
+            "absolute inset-x-0 top-1/2 h-space-1 -translate-y-1/2 border-y",
             judge.kept === to
               ? "border-(color:--c-graph-edge-chosen)"
               : "border-(color:--c-graph-edge-ink)",
@@ -320,12 +298,15 @@
         ></span>
         {#if thumb !== null}
           <span
-            class="absolute top-1/2 h-c-btn-h-xs w-px -translate-y-1/2 bg-ink-strong"
-            style:left="{thumb * 100}%"
+            class="left-(--x) absolute top-1/2 h-c-btn-h-xs w-px -translate-y-1/2 bg-ink-strong"
+            style:--x="{thumb * 100}%"
           ></span>
         {/if}
       </div>
-      <span class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+      <span
+        data-box
+        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+      >
         <button
           aria-label={words.playMove(stateOf(from).name, stateOf(to).name)}
           class={[SYMBOL, "bg-surface-raised shadow-xs"]}
@@ -340,10 +321,10 @@
     </div>
   {:else if link}
     <div
-      class="relative flex h-c-btn-h-sm w-[calc(2*var(--c-steps-stop-min-w))] flex-none items-center self-start"
+      class="relative flex h-c-btn-h-sm w-c-btn-min-w flex-none items-center self-start"
       data-gap="{from}>{to}"
     >
-      <span class="h-px w-full bg-(--c-graph-edge-ink)"></span>
+      <span class="h-px w-full bg-c-graph-edge-ink"></span>
       <span
         class="absolute top-full w-full truncate text-center type-meta text-ink-subtle"
         >{link.label}</span
@@ -354,43 +335,34 @@
   {/if}
 {/snippet}
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the surface's keys (← → step, C comments) answer wherever focus stands inside it, as an application region's do. -->
-<div
-  bind:clientWidth={width}
-  class="relative flex flex-col overflow-hidden bg-surface-recess text-ink-strong"
-  data-proto="timeline"
-  onkeydown={keyed}
-  role="application"
-  aria-label={COMPONENT_NAME}
-  style:height="{height}px"
+<ProtoFrame
+  bind:width
+  {height}
+  {judge}
+  onstep={(delta) => judge.step(delta)}
+  proto="timeline"
 >
-  <ProtoBar compact={phone} {judge}>
-    {#snippet centre()}
-      {#if !phone}
-        <GlassGroup label={words.waysOfSeeing}>
-          <Tabs
-            onValueChange={(value) => seeAll(value === "all")}
-            size="compact"
-            value={mapOpen ? "all" : "order"}
-          >
-            <TabsList aria-label={words.waysOfSeeing}>
-              <TabItem label={words.inOrder} value="order" />
-              <TabItem label={words.allAtOnce} value="all" />
-            </TabsList>
-          </Tabs>
-        </GlassGroup>
-      {/if}
-    {/snippet}
-  </ProtoBar>
-  <p class="m-0 flex-none px-space-4 pb-space-2 type-body text-ink-strong">
-    {ASK}
-  </p>
+  {#snippet centre()}
+    {#if !phone}
+      <GlassGroup label={words.waysOfSeeing}>
+        <Tabs
+          onValueChange={(value) => seeAll(value === "all")}
+          size="compact"
+          value={mapOpen ? "all" : "order"}
+        >
+          <TabsList aria-label={words.waysOfSeeing}>
+            <TabItem label={words.inOrder} value="order" />
+            <TabItem label={words.allAtOnce} value="all" />
+          </TabsList>
+        </Tabs>
+      </GlassGroup>
+    {/if}
+  {/snippet}
 
   <!-- The stage: it holds still while the sheet over it rises, rests or goes (T14). -->
   <div
-    class="min-h-0 flex-1 overflow-auto px-space-4 pt-space-2"
-    style:padding-bottom="calc({away ? 0 : restH}px + var(--space-4))"
+    class="pb-(--pb) min-h-0 flex-1 overflow-auto px-space-4 pt-space-2"
+    style:--pb="calc({away ? 0 : restH}px + var(--space-4))"
   >
     <div class="relative mx-auto w-max">
       <Stage
@@ -424,9 +396,9 @@
   <!-- The track's sheet: a sheet over the stage, its top edge its size (DESIGN.md, Dialog, sheet and drawer). -->
   <section
     aria-label={words.inOrder}
-    class="absolute inset-x-0 bottom-0 z-20 flex flex-col rounded-t-panel border-t border-border-control bg-surface-raised shadow-drawer"
+    class="h-(--sheet-h) absolute inset-x-0 bottom-0 z-20 flex flex-col rounded-t-panel border-t border-border-control bg-surface-raised shadow-drawer"
     data-sheet={sheetFace}
-    style:height={sheetH === null ? undefined : `${Math.max(sheetH, 0)}px`}
+    style:--sheet-h={sheetH === null ? undefined : `${Math.max(sheetH, 0)}px`}
   >
     <button
       aria-label={away ? words.showStates : words.resizeStates}
@@ -477,14 +449,11 @@
 
     {#if !away}
       <div
-        bind:offsetHeight={
-          () => restH,
-          (value) => {
-            if (sheetH === null) {
-              restH = value;
-            }
+        {@attach frameSize((node: HTMLElement) => {
+          if (sheetH === null) {
+            restH = node.offsetHeight;
           }
-        }
+        })}
         class={[
           "flex min-h-0 flex-col gap-space-2 px-space-3 pb-space-3",
           mapOpen && "flex-1",
@@ -541,7 +510,7 @@
           </div>
           {#if clipsOpen}
             <div
-              class="max-h-[calc(8*var(--c-row-h))] overflow-y-auto border-t border-border-hairline pt-space-2"
+              class="max-h-c-folder-list-max-h overflow-y-auto border-t border-border-hairline pt-space-2"
             >
               <Clips {judge} />
             </div>
@@ -550,56 +519,14 @@
 
         <!-- The transport: ends, one step, the position, Play the steps; then the clips, folded. -->
         <div class="flex flex-wrap items-center gap-space-2">
-          <GlassGroup label={designGraphWords.slider}>
-            <button
-              aria-label={words.firstStep}
-              class={[SYMBOL, "grid-flow-col"]}
-              disabled={judge.at <= 0}
-              onclick={() => judge.end("first")}
-              title={words.firstStep}
-              type="button"
-              ><IconChevronLeft /><IconChevronLeft
-                class="-ms-space-3"
-              /></button
-            >
-            <button
-              aria-label={designGraphWords.previousStep}
-              class={SYMBOL}
-              disabled={judge.at <= 0}
-              onclick={() => judge.step(-1)}
-              title={designGraphWords.previousStep}
-              type="button"><IconChevronLeft /></button
-            >
-            <span
-              class="relative min-w-c-steps-stop-min-w px-space-1 text-center type-label tabular-nums"
-              >{judge.at >= 0
-                ? designGraphWords.stepOf(judge.at + 1, SEQUENCE.length)
-                : stateOf(judge.kept).name}</span
-            >
-            <button
-              aria-label={designGraphWords.nextStep}
-              class={SYMBOL}
-              disabled={judge.at >= SEQUENCE.length - 1}
-              onclick={() => judge.step(1)}
-              title={designGraphWords.nextStep}
-              type="button"><IconChevronRight /></button
-            >
-            <button
-              aria-label={words.lastStep}
-              class={[SYMBOL, "grid-flow-col"]}
-              disabled={judge.at === SEQUENCE.length - 1}
-              onclick={() => judge.end("last")}
-              title={words.lastStep}
-              type="button"
-              ><IconChevronRight /><IconChevronRight
-                class="-ms-space-3"
-              /></button
-            >
-          </GlassGroup>
+          <Stepper {judge} />
           <GlassGroup>
             <button
               aria-label={judge.walking ? words.pause : words.playSteps}
-              class={[SYMBOL, "w-auto grid-flow-col gap-space-1 px-space-2"]}
+              class={[
+                SYMBOL,
+                "mark-line w-auto grid-flow-col gap-space-1 px-space-2",
+              ]}
               onclick={() =>
                 judge.walking ? judge.stopWalk() : judge.walkAll()}
               type="button"
@@ -628,7 +555,10 @@
             <GlassGroup>
               <button
                 aria-expanded={clipsOpen}
-                class={[SYMBOL, "w-auto grid-flow-col gap-space-1 px-space-2"]}
+                class={[
+                  SYMBOL,
+                  "mark-line w-auto grid-flow-col gap-space-1 px-space-2",
+                ]}
                 onclick={() => {
                   clipsOpen = !clipsOpen;
                 }}
@@ -652,4 +582,4 @@
       >
     {/if}
   </section>
-</div>
+</ProtoFrame>

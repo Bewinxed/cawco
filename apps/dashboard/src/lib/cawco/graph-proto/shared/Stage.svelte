@@ -203,17 +203,16 @@
 <div
   class={[
     "relative mx-auto w-max max-w-full",
-    judge.scheme === "dark" && "dark",
+    judge.scheme === "dark" ? "dark scheme-dark" : "scheme-light",
     className,
   ]}
   data-proto-stage={story}
-  style:color-scheme={judge.scheme}
 >
   <div
     bind:this={box}
     class="relative rounded-lg bg-surface-page p-space-3 text-ink-strong inset-ring inset-ring-border-hairline"
   >
-    <div class="relative" style:width="{judge.width}px">
+    <div class="w-(--w) relative" style:--w="{judge.width}px">
       <div
         bind:this={root}
         class={["flex flex-col", peek && "invisible"]}
@@ -234,17 +233,18 @@
         {#each marks as mark, index (index)}
           <span
             class={[
+              "rounded-(--r) h-(--h) left-(--x) top-(--y) w-(--w)",
               "absolute outline-1 outline-solid",
               mark.kind === "came"
                 ? "bg-diff-add-bg outline-(color:--diff-add-emphasis)"
                 : "bg-diff-del-bg outline-dashed outline-(color:--diff-del-emphasis)",
             ]}
             data-mark={mark.kind}
-            style:border-radius="{mark.radius}px"
-            style:height="{mark.h}px"
-            style:left="{mark.x}px"
-            style:top="{mark.y}px"
-            style:width="{mark.w}px"
+            style:--r="{mark.radius}px"
+            style:--h="{mark.h}px"
+            style:--x="{mark.x}px"
+            style:--y="{mark.y}px"
+            style:--w="{mark.w}px"
           ></span>
         {/each}
       </div>
@@ -253,24 +253,24 @@
           <button
             aria-expanded={open === remark.id}
             aria-label="{words.remarks} {remark.id}: {remark.words}"
-            class="absolute z-10 -translate-y-full rounded-pill touch-hit focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+            class="left-(--x) top-(--y) absolute z-10 -translate-y-full rounded-pill touch-hit focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
             data-remark={remark.id}
             onclick={() => {
               open = open === remark.id ? null : remark.id;
             }}
-            style:left="{remark.at.x * 100}%"
-            style:top="{remark.at.y * 100}%"
+            style:--x="{remark.at.x * 100}%"
+            style:--y="{remark.at.y * 100}%"
             type="button"
           >
             <PinMark focused={open === remark.id} number={remark.id} />
           </button>
           {#if open === remark.id}
             <div
-              class="absolute z-20 w-c-pin-card-w max-w-[calc(100vw-2*var(--space-3))] rounded-lg border border-border-control bg-surface-raised p-space-3 shadow-overlay"
+              class="left-(--x) top-(--y) absolute z-20 w-c-pin-card-w max-w-full rounded-lg border border-border-control bg-surface-raised p-space-3 shadow-overlay"
               data-thread={remark.id}
-              style:left="min({remark.at.x * 100}% + var(--space-4), 100% -
+              style:--x="min({remark.at.x * 100}% + var(--space-4), 100% -
               var(--c-pin-card-w) + var(--space-6))"
-              style:top="{remark.at.y * 100}%"
+              style:--y="{remark.at.y * 100}%"
             >
               <p class="m-0 type-label text-ink-row">{remark.element}</p>
               <p class="m-0 mt-space-1 type-body text-ink-strong">
@@ -302,11 +302,11 @@
       >
         {#if target && !draft}
           <span
-            class="pointer-events-none absolute rounded-xs bg-c-target-tint"
-            style:height="{target.h}px"
-            style:left="{target.x}px"
-            style:top="{target.y}px"
-            style:width="{target.w}px"
+            class="h-(--h) left-(--x) top-(--y) w-(--w) pointer-events-none absolute rounded-xs bg-c-target-tint"
+            style:--h="{target.h}px"
+            style:--x="{target.x}px"
+            style:--y="{target.y}px"
+            style:--w="{target.w}px"
           >
             <span
               class="absolute start-0 bottom-full mb-space-1 rounded-xs border border-border-control bg-surface-raised px-space-1 type-meta whitespace-nowrap text-ink-strong"
@@ -318,21 +318,21 @@
     {/if}
     {#if draft}
       <span
-        class="pointer-events-none absolute z-40 -translate-y-full"
-        style:left="{draft.px.x}px"
-        style:top="{draft.px.y}px"
+        class="left-(--x) top-(--y) pointer-events-none absolute z-40 -translate-y-full"
+        style:--x="{draft.px.x}px"
+        style:--y="{draft.px.y}px"
       >
         <PinMark state="provisional" />
       </span>
       <form
-        class="absolute z-40 flex w-c-pin-card-w max-w-[calc(100vw-2*var(--space-3))] flex-col gap-space-2 rounded-lg border border-border-control bg-surface-raised p-space-3 shadow-overlay"
+        class="left-(--x) top-(--y) absolute z-40 flex w-c-pin-card-w max-w-full flex-col gap-space-2 rounded-lg border border-border-control bg-surface-raised p-space-3 shadow-overlay"
         data-composer
         onsubmit={(event) => {
           event.preventDefault();
           send();
         }}
-        style:left="clamp(0px, {draft.px.x + 16}px, 100% - var(--c-pin-card-w))"
-        style:top="{draft.px.y}px"
+        style:--x="clamp(0px, {draft.px.x + 16}px, 100% - var(--c-pin-card-w))"
+        style:--y="{draft.px.y}px"
       >
         <span class="type-label text-ink-row">{draft.element}</span>
         <!-- svelte-ignore a11y_autofocus -->

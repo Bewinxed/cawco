@@ -20,11 +20,17 @@
 </script>
 
 <Popover.Root>
-  <Popover.Trigger
-    aria-label={words.viewSettings}
-    class={SYMBOL}
-    title={words.viewSettings}><IconMonitor /></Popover.Trigger
-  >
+  <Popover.Trigger>
+    {#snippet child({ props })}
+      <button
+        {...props}
+        aria-label={words.viewSettings}
+        class={SYMBOL}
+        title={words.viewSettings}
+        type="button"><IconMonitor /></button
+      >
+    {/snippet}
+  </Popover.Trigger>
   <Popover.Content align="end" width="wide">
     <div class="flex flex-col gap-space-3 p-space-1" data-view-settings>
       <div class="flex flex-col gap-space-1">
