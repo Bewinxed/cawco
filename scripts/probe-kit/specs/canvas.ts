@@ -18,8 +18,9 @@
  *    exists and A's replacement stands.
  * 5. The export answers a PNG over 1 KB within 3 s of the last change, and
  *    `artifact_read(png: true)` answers the same bytes.
- * 6. With every page closed, `artifact_update(mermaid)` is refused with
- *    "No screen is showing this canvas. …".
+ * 6. With every page closed, `artifact_update(mermaid)` is drawn on the
+ *    hub machine's headless screen: its answer's outline reads the new
+ *    nodes.
  * 7. Throughout, every request the pages make is to the dashboard's own
  *    origin.
  * 9. No canvas page load logs "Yjs was already imported", and no console
@@ -71,8 +72,6 @@ const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
 const COMMAND = /PROBE-CALL:(\d+)/gu;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
-const NO_SCREEN =
-  "No screen is showing this canvas. Open it on a dashboard (artifact_show), then try again.";
 /** The panel's canvas: its one iframe, on the stage over the panel's well (dashboard canvas/). */
 const PANEL_CANVAS =
   '[data-slot="canvas-stage"][data-canvas-stages-docked] iframe';
@@ -267,17 +266,20 @@ const runSpec = async (kit: Kit) => {
     [...twice, ...on.said].slice(0, 6).join(" | ") || "none"
   );
 
-  // 6. Nothing shows the canvas: the agent's Mermaid is refused.
+  // 6. Nothing shows the canvas: the hub's own screen draws the agent's Mermaid.
   await on.page.close();
   await Bun.sleep(1000);
-  const refused = await on.call(UPDATE, {
+  const drawn = await on.call(UPDATE, {
     id: made.id,
-    mermaid: "flowchart LR; C[Refused] --> D[Here]",
+    mermaid: "flowchart LR; C[Unseen] --> D[Here]",
   });
+  const unseen = rects((await reader(on, made.id)()).outline ?? "").map(
+    (box) => box.text
+  );
   kit.check(
-    "6: with every page closed, artifact_update(mermaid) is refused with the sentence",
-    refused.includes(NO_SCREEN),
-    refused.slice(0, 300)
+    "6: with every page closed, artifact_update(mermaid) is drawn and its outline reads the new nodes",
+    unseen.includes("Unseen") && unseen.includes("Here"),
+    `${unseen.join(", ")} | ${drawn.slice(0, 200)}`
   );
 
   // 7. Every request any page made, by host: the dashboard's, or the

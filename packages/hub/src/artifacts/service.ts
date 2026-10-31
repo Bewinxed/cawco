@@ -62,7 +62,6 @@ import {
   type CanvasEntry,
   canvasOutline,
   excalidrawFile,
-  NO_SCREEN,
 } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
@@ -4693,9 +4692,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * The hub machine's screen on each canvas handed to its parent and not
-   * opened ({@link isHanded}), by artifact: opened by the first write that
-   * finds no screen joined, kept while any write on it runs (`writing`), and
+   * The hub machine's screen on each canvas no other screen shows (a
+   * delegate's handed up, a held next version, one whose panel no dashboard
+   * has open), by artifact: opened by the first write that finds no screen
+   * joined, kept while any write on it runs (`writing`), and
    * let go once a picture has followed the last of them (the page posts one
    * after a quiet 2 s), or `screenHoldMs` after it. `joined` answers once its
    * page has joined the canvas's doc; `settle` stops a let-go that waits.
@@ -4787,9 +4787,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * What a canvas's create or update draws: skeleton elements or Mermaid,
    * converted on a screen; the ids written. A create's (`replace`) replaces
    * the drawing in the same write (core `keptOnRemake`); an update's adds,
-   * or replaces by id. A canvas handed to its parent and not opened is
-   * drawn on the hub machine's headless screen ({@link headlessScreen}), so
-   * the parent reads it before anyone sees it.
+   * or replaces by id. On a screen showing it when one has joined;
+   * otherwise on the hub machine's headless screen ({@link headlessScreen}),
+   * so a canvas no one has open is drawn and read back all the same.
    */
   const draw = async (
     row: ArtifactRow,
@@ -4820,10 +4820,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             mermaid: change.mermaid,
             ...replacing,
           });
-    if (!(
-      isHanded(row) &&
-      (headless.has(row.id) || docs.screens(row.id) === 0)
-    )) {
+    if (docs.screens(row.id) > 0 && !headless.has(row.id)) {
       return await convert();
     }
     try {
@@ -4951,27 +4948,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A create's drawing on canvas `row`, replacing what it held: on its
-   * panel's screen once one joins, or, handed up, on its headless screen
-   * ({@link draw}); the ids written.
-   */
-  const drawnOn = async (
-    row: ArtifactRow,
-    change: { elements: SkeletonElement[] } | { mermaid: string }
-  ): Promise<string[]> => {
-    if (!(
-      isHanded(row) ||
-      (await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs))
-    )) {
-      throw new ArtifactRefusal(
-        503,
-        `The canvas ${row.name} is made (id ${row.id}) and empty. ${NO_SCREEN}`
-      );
-    }
-    return await draw(row, change, true);
-  };
-
-  /**
    * A handed canvas that couldn't be readied, refused: one the parent
    * never had is not kept, so nothing of it reaches them.
    */
@@ -4993,7 +4969,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * Makes a canvas in `owner`'s panel, or makes the one of that name
    * again: its drawing replaced by this one's elements or Mermaid
-   * ({@link drawnOn}), or by nothing ({@link clearDrawing}), the person's
+   * ({@link draw}), or by nothing ({@link clearDrawing}), the person's
    * ink, images and pins kept, as a page made again keeps them. Shows it, or
    * hands it to its parent unopened ({@link handOver}), drawn before the
    * parent hears of it. `maker` is whose call it was.
@@ -5023,7 +4999,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           row,
           async () => {
             if (change) {
-              wrote = await drawnOn(row, change);
+              wrote = await draw(row, change, true);
             } else {
               clearDrawing(docs, row.id);
             }

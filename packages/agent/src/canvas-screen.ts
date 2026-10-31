@@ -4,7 +4,8 @@
  * of ours), on the hub's machine, where a session's preview origin answers
  * on loopback: the page joins the canvas's doc as a screen and converts the
  * agent's writes (hub artifacts/canvas.ts) where no person's screen shows
- * the canvas, a delegate's canvas handed to its parent and not opened yet.
+ * the canvas: a delegate's handed to its parent, a held next version, or one
+ * whose panel no dashboard has open.
  *
  * No dashboard frames it, so a stand-in for one (chromium.ts
  * `HOST_STAND_IN`) speaks to it from inside the page and says the hello the

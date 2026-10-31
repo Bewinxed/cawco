@@ -4,9 +4,9 @@
  * `{ el, pos }` (the element, its fractional order), each carrying beside
  * them who made it (`made`), who last wrote it (`by`) and when (`at`). The agent reads the scene
  * as an {@link canvasOutline}, and writes skeleton elements or Mermaid that
- * a screen showing the canvas converts (the hub cannot: conversion measures
- * text and renders Mermaid's SVG in a DOM). Pure: the hub and the canvas's
- * host page both use it.
+ * a screen showing the canvas converts, the hub machine's headless one when
+ * no other is (conversion measures text and renders Mermaid's SVG in a
+ * DOM). Pure: the hub and the canvas's host page both use it.
  */
 
 /** Who last wrote an element: the person on a screen, or the agent through a tool. */
@@ -101,8 +101,9 @@ export const CANVAS_LIMITS = {
 /**
  * The daemon's control methods that hold a canvas's host page open in its
  * machine's Chromium (agent canvas-screen.ts), so it joins the canvas's doc
- * as a screen and converts the agent's writes where no person's screen shows
- * it: a delegate's canvas handed to its parent, not opened yet. Open takes
+ * as a screen and converts the agent's writes where no other screen shows
+ * it: a delegate's canvas handed to its parent, a held next version, or one
+ * whose panel no dashboard has open. Open takes
  * `{ url, token, canvas: { id, name, sync } }` and answers once the page
  * has loaded and been told which canvas it is; an open naming a token
  * already open holds that page on. Close takes `{ token }`.
@@ -147,9 +148,9 @@ export const keptOnRemake = (
   entry.el.type === "freedraw" ||
   entry.el.type === "image";
 
-/** The refusal when no screen can convert (DESIGN.md's error formula). */
+/** The refusal when the screen a write was handed to left before it drew (DESIGN.md's error formula). */
 export const NO_SCREEN =
-  "No screen is showing this canvas. Open it on a dashboard (artifact_show), then try again.";
+  "The canvas wasn't changed: the screen drawing it closed first. Try again.";
 
 /** An element's box in scene coordinates, from its points when it has them. */
 export const boxOf = (

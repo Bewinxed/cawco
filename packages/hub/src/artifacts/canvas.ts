@@ -8,9 +8,10 @@
  * canvas host page, its socket marked `?screen=1`) sees it and claims it,
  * the first claim the hub hears wins (sync.ts `holdClaims`), and the holder
  * converts, writes the elements (`by: "agent"`) and writes the result on
- * the request. The tool waits {@link CANVAS_LIMITS.convertMs} for it. With
- * no screen joined it is refused with {@link NO_SCREEN}: there is no other
- * path.
+ * the request. The tool waits {@link CANVAS_LIMITS.convertMs} for it. A
+ * canvas no screen shows is drawn by the hub machine's own headless screen
+ * (service `draw`): the published Excalidraw does not load outside a browser
+ * (`window is not defined` as its module loads), and Mermaid renders SVG.
  */
 
 import { readWithin } from "@cawco/core/bounded";
@@ -99,8 +100,9 @@ export const screenJoined = async (
 
 /**
  * Hands the agent's write to a screen and waits for it: the ids it wrote.
- * Refused with {@link NO_SCREEN} when no screen is joined, when none takes
- * it in time, or with the screen's own word when it could not convert.
+ * Refused with {@link NO_SCREEN} when the screen it was handed to has left,
+ * when none takes it in time, or with the screen's own word when it could
+ * not convert.
  */
 export const convertOnScreen = async (
   docs: ArtifactDocs,
@@ -148,7 +150,7 @@ export const convertOnScreen = async (
       case "unanswered":
         throw new ArtifactRefusal(
           504,
-          `The canvas wasn't changed: no screen drew it within ${Math.round(drawn.after / 1000)} s. Open it on a dashboard (artifact_show), then try again.`
+          `The canvas wasn't changed: no screen drew it within ${Math.round(drawn.after / 1000)} s. Try again.`
         );
       default:
         unhandled("read", drawn);
