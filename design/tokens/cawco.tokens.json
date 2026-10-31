@@ -844,10 +844,6 @@
       "$value": "{color.neutral-1}",
       "$description": "shadcn bridge: the kit's own names, resolved to the ramps."
     },
-    "card-foreground": {
-      "$type": "color",
-      "$value": "{color.neutral-12}"
-    },
     "muted": {
       "$type": "color",
       "$value": "{color.neutral-2}"
@@ -885,14 +881,6 @@
       "$type": "color",
       "$value": "{color.background}"
     },
-    "sidebar-foreground": {
-      "$type": "color",
-      "$value": "{color.neutral-12}"
-    },
-    "sidebar-border": {
-      "$type": "color",
-      "$value": "{color.border}"
-    },
     "surface-page": {
       "$type": "color",
       "$value": "{color.background}",
@@ -901,10 +889,6 @@
     "surface-raised": {
       "$type": "color",
       "$value": "{color.neutral-1}"
-    },
-    "surface-card": {
-      "$type": "color",
-      "$value": "{color.surface-raised}"
     },
     "surface-recess": {
       "$type": "color",
@@ -1098,56 +1082,7 @@
     "surface-1": {
       "$type": "color",
       "$value": "{color.neutral-2}",
-      "$description": "Surface ladder: eight levels that nest; each container lifts one step off what it sits on. Light flattens to warm white after step 2 (shadow carries depth); dark lightens ~3.2% L per step."
-    },
-    "surface-2": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.993, 0.004, 85]
-      }
-    },
-    "surface-3": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.996, 0.003, 85]
-      }
-    },
-    "surface-4": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.996, 0.003, 85]
-      }
-    },
-    "surface-5": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.996, 0.003, 85]
-      }
-    },
-    "surface-6": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.996, 0.003, 85]
-      }
-    },
-    "surface-7": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.996, 0.003, 85]
-      }
-    },
-    "surface-8": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.996, 0.003, 85]
-      }
+      "$description": "One step off the page."
     },
     "border": {
       "$type": "color",
@@ -1267,10 +1202,6 @@
           "css": "color-mix(in oklab, {color.neutral-8} 6%, {color.neutral-11})"
         }
       }
-    },
-    "text-strong": {
-      "$type": "color",
-      "$value": "{color.ink-strong}"
     },
     "text-muted": {
       "$type": "color",
@@ -3013,217 +2944,12 @@
           "unit": "px"
         }
       },
-      "$description": "Shadow per surface level, paired with --surface-1…8.",
+      "$description": "The shadow paired with --surface-1.",
       "$extensions": {
         "dev.cawco": {
           "css": "none"
         }
       }
-    },
-    "surface-shadow-2": {
-      "$type": "shadow",
-      "$value": "{shadow.shadow-tile}"
-    },
-    "surface-shadow-3": {
-      "$type": "shadow",
-      "$value": [
-        {
-          "color": "{color.shadow-tint}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 1,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 3,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": "{color.shadow-tint}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 1,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 1,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": "{color.night-ring}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 0,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 0,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 1,
-            "unit": "px"
-          },
-          "inset": true
-        }
-      ]
-    },
-    "surface-shadow-4": {
-      "$type": "shadow",
-      "$value": "{shadow.shadow-md}"
-    },
-    "surface-shadow-5": {
-      "$type": "shadow",
-      "$value": [
-        {
-          "color": "{color.shadow-tint-2}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 6,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 18,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": "{color.shadow-tint}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 2,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 4,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": "{color.night-ring}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 0,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 0,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 1,
-            "unit": "px"
-          },
-          "inset": true
-        }
-      ]
-    },
-    "surface-shadow-6": {
-      "$type": "shadow",
-      "$value": "{shadow.shadow-lg}"
-    },
-    "surface-shadow-7": {
-      "$type": "shadow",
-      "$value": [
-        {
-          "color": "{color.shadow-tint-3}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 14,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 40,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": "{color.shadow-tint}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 2,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 6,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": "{color.night-ring}",
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 0,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 0,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 1,
-            "unit": "px"
-          },
-          "inset": true
-        }
-      ]
-    },
-    "surface-shadow-8": {
-      "$type": "shadow",
-      "$value": "{shadow.shadow-overlay}"
     },
     "action-ring": {
       "$type": "shadow",
@@ -3339,37 +3065,6 @@
       "$extensions": {
         "dev.cawco": {
           "css": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.10))"
-        }
-      }
-    },
-    "selected-shadow": {
-      "$type": "shadow",
-      "$value": {
-        "color": {
-          "colorSpace": "srgb",
-          "components": [0, 0, 0],
-          "alpha": 0
-        },
-        "offsetX": {
-          "value": 0,
-          "unit": "px"
-        },
-        "offsetY": {
-          "value": 0,
-          "unit": "px"
-        },
-        "blur": {
-          "value": 0,
-          "unit": "px"
-        },
-        "spread": {
-          "value": 0,
-          "unit": "px"
-        }
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "none"
         }
       }
     },
@@ -4056,14 +3751,6 @@
         "value": 999,
         "unit": "px"
       }
-    },
-    "well-r": {
-      "$type": "dimension",
-      "$value": {
-        "value": 7,
-        "unit": "px"
-      },
-      "$description": "The reader's well."
     },
     "row-mark-r": {
       "$type": "dimension",
@@ -7684,7 +7371,7 @@
     "ease-out": {
       "$type": "cubicBezier",
       "$value": [0.23, 1, 0.32, 1],
-      "$description": "Entrances and exits ease out; on-screen movement eases in-out; drawers, popovers and page swaps use the drawer curve. No ease-in."
+      "$description": "Entrances, exits, colour and any change in place ease out, the default; what is already on screen moving eases in-out; floating surfaces, sheets, page swaps and flights take the drawer curve; constant motion is linear. No ease-in."
     },
     "ease-in-out": {
       "$type": "cubicBezier",
@@ -7697,17 +7384,7 @@
     "ease-crossfade": {
       "$type": "cubicBezier",
       "$value": [0.42, 0, 0.58, 1],
-      "$description": "Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
-    },
-    "ease-arrive": {
-      "$type": "cubicBezier",
-      "$value": [0.2, 0, 0, 1],
-      "$description": "A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap."
-    },
-    "ease-figure": {
-      "$type": "cubicBezier",
-      "$value": [0.2, 0.8, 0.2, 1],
-      "$description": "A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths)."
+      "$description": "Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%), which reads as the change lurching."
     },
     "ease-goo": {
       "$type": "cubicBezier",
@@ -7719,35 +7396,10 @@
         }
       }
     },
-    "ease-goo-exit": {
-      "$type": "cubicBezier",
-      "$value": [0.22, 1, 0.36, 1],
-      "$description": "A comment's card drawn back into its pill as one silhouette, over --dur-goo-exit, and the dip its pin takes as it closes, over --dur-goo-settle. transitions.dev Gooey plus menu, its close curve and its anticipation's (--pv34, --pv2n).",
-      "$extensions": {
-        "dev.cawco": {
-          "platforms": ["web"]
-        }
-      }
-    },
-    "ease-goo-content": {
-      "$type": "cubicBezier",
-      "$value": [0.25, 0.1, 0.25, 1],
-      "$description": "What stands on a goo shape (a comment card's thread, its pin's figure) fading in and out as the shape pours and drains, over --dur-goo-content and --dur-goo-content-exit. CSS ease, the curve transitions.dev Gooey plus menu gives its items' icons.",
-      "$extensions": {
-        "dev.cawco": {
-          "platforms": ["web"]
-        }
-      }
-    },
-    "ease-glide-in": {
-      "$type": "cubicBezier",
-      "$value": [0.3333, 0, 0.6667, 0.3333],
-      "$description": "A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at."
-    },
     "ease-glide-out": {
       "$type": "cubicBezier",
       "$value": [0.3333, 0.6667, 0.6667, 1],
-      "$description": "A glide's last stretch: from the steady pace, speed falling evenly to rest."
+      "$description": "The last stretch of a steady glide; the glide starts at speed. From the steady pace, speed falling evenly to rest. Only glide() in motion/curves.svelte.ts writes it; no component picks it."
     },
     "dur-stagger": {
       "$type": "duration",
@@ -7912,7 +7564,7 @@
         "value": 250,
         "unit": "ms"
       },
-      "$description": "A comment's card drawn back into its pill as one silhouette, on --ease-goo-exit, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g).",
+      "$description": "A comment's card drawn back into its pill as one silhouette, on --ease-out, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -7925,7 +7577,7 @@
         "value": 180,
         "unit": "ms"
       },
-      "$description": "What stands on a goo shape fading in, on --ease-goo-content after --dur-goo-content-delay. transitions.dev Gooey plus menu, its items' icons in (180ms; their 2px blur is left out: a transitioned filter can hang WebKit).",
+      "$description": "What stands on a goo shape fading in, on --ease-out after --dur-goo-content-delay. transitions.dev Gooey plus menu, its items' icons in (180ms; their 2px blur is left out: a transitioned filter can hang WebKit).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -7951,7 +7603,7 @@
         "value": 120,
         "unit": "ms"
       },
-      "$description": "What stands on a goo shape fading out as the shape drains, at once, on --ease-goo-content. transitions.dev Gooey plus menu, its items' icons out (120ms).",
+      "$description": "What stands on a goo shape fading out as the shape drains, at once, on --ease-out. transitions.dev Gooey plus menu, its items' icons out (120ms).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -7964,7 +7616,7 @@
         "value": 700,
         "unit": "ms"
       },
-      "$description": "The dip a goo shape's anchor takes as what poured out of it drains back: down --goo-dip at 30% and home, on --ease-goo-exit. A comment's pin as its card closes. transitions.dev Gooey plus menu, its anticipation (--pv2w).",
+      "$description": "The dip a goo shape's anchor takes as what poured out of it drains back: down --goo-dip at 30% and home, on --ease-out. A comment's pin as its card closes. transitions.dev Gooey plus menu, its anticipation (--pv2w).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
@@ -7995,13 +7647,13 @@
       },
       "$description": "The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, \"Slow · 400ms\")."
     },
-    "dur-reveal": {
+    "dur-glide": {
       "$type": "duration",
       "$value": {
-        "value": 240,
+        "value": 300,
         "unit": "ms"
       },
-      "$description": "A disclosure growing open (collapsible-content); it folds shut over --dur-exit."
+      "$description": "A tab track's glide under a mouse wheel: the second spring's response."
     },
     "dur-hold": {
       "$type": "duration",
@@ -8035,23 +7687,11 @@
       },
       "$description": "A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms."
     },
-    "c-500": {
-      "$type": "duration",
-      "$value": {
-        "value": 500,
-        "unit": "ms"
-      }
-    },
     "breath": {
       "$type": "duration",
       "$value": {
         "value": 2000,
         "unit": "ms"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "calc({motion.c-500} * 4)"
-        }
       }
     },
     "press-scale": {

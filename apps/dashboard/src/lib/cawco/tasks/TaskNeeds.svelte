@@ -250,6 +250,7 @@
               data-deny
               aria-label="Deny {action.tool} on {action.connection}"
               answer="deny"
+              hit="always"
               disabled={deciding !== null}
               onclick={() => decide(action, "deny")}
               size="sm"
@@ -262,6 +263,7 @@
               data-approve
               aria-label="Approve {action.tool} on {action.connection}"
               answer="approve"
+              hit="always"
               disabled={deciding !== null}
               onclick={() => decide(action, "approve")}
               size="sm"

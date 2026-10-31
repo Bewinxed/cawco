@@ -246,7 +246,7 @@
    * rate, is past two breaths says so after its bytes, read once a breath.
    */
   const RATE_WINDOW_MS = 10_000;
-  /** `--breath` as the browser resolves it (tokens: 4 × `--c-500`), in ms. */
+  /** `--breath` as the browser resolves it, in ms. */
   function breathMs(): number {
     const probe = document.createElement("div");
     probe.style.transitionDuration = "var(--breath)";

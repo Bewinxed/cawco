@@ -2045,7 +2045,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         dirty = true
     }
 
-    /// A body grows open (--dur-reveal) or folds shut (--dur-exit) on
+    /// A body grows open (--dur-pop) or folds shut (--dur-exit) on
     /// --ease-out: its height and its row's are stepped together a frame at a
     /// time (Reveal, `stepReveals`); what fades with it fades on the same
     /// curve and clock. At once under Reduce Motion.
@@ -2061,7 +2061,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard !UIAccessibility.isReduceMotionEnabled, window != nil else {
             fade(); done(); return
         }
-        let animator = Motion.easeOut.animator(open ? Motion.durReveal : Motion.durExit) { fade() }
+        let animator = Motion.easeOut.animator(open ? Motion.durPop : Motion.durExit) { fade() }
         animator.addCompletion { _ in done() }
         animator.startAnimation()
     }

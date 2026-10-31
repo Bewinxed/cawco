@@ -112,7 +112,6 @@ const TOKENS = [
   "--pop-scale",
   "--pop-rise",
   "--space-1",
-  "--space-3",
   // Read through here as well: each one missing from this pass styled the
   // page on its own the first time it was asked (a turn's first echo,
   // `--echo-scale` from echo.svelte.ts, laid the page out for 6.6ms).
@@ -120,8 +119,8 @@ const TOKENS = [
   "--dur-mark-hold",
   "--dur-peek",
   "--dur-settle",
+  "--dur-glide",
   "--dur-wait-grace",
-  "--ease-figure",
   "--echo-opacity",
   "--echo-scale",
   "--deck-shrink",
@@ -191,7 +190,6 @@ export const CURVE = {
   out: "cubic-bezier(0.23, 1, 0.32, 1)",
   inOut: "cubic-bezier(0.77, 0, 0.175, 1)",
   drawer: "cubic-bezier(0.32, 0.72, 0, 1)",
-  glideIn: "cubic-bezier(0.3333, 0, 0.6667, 0.3333)",
   glideOut: "cubic-bezier(0.3333, 0.6667, 0.6667, 1)",
 } as const;
 
@@ -210,43 +208,35 @@ export function glideSpeed(
   distance: number,
   stops: number
 ): { least: number; speed: number } {
-  const ends = space("--space-3") + space("--space-1");
-  const least = (distance + ends) / dur("--dur-cascade");
+  const end = space("--space-1");
+  const least = (distance + end) / dur("--dur-cascade");
   const own =
     stops > 0
       ? distance / stops / dur("--dur-stagger")
-      : (distance + ends) / dur("--dur-panel");
+      : (distance + end) / dur("--dur-panel");
   return { least, speed: Math.max(own, least) };
 }
 
 /**
- * A glide: a distance travelled at one steady speed (px a ms), its speed
- * rising evenly from rest over the first --space-3 and falling evenly to
- * rest over the last --space-1 (--ease-glide-in, --ease-glide-out), steady
- * between. A tree's line runs its length this way, so the rows it reaches
- * are revealed at even times, and the room it opens and the rows under it
- * travel the same way at the same speed, so they keep step with it. A
- * distance too short for both ends shares it between them.
+ * A glide: a distance travelled at one steady speed (px a ms), linear from
+ * its first frame, so it starts at its speed, and falling evenly to rest over
+ * the last --space-1 (--ease-glide-out). A tree's line runs its length this
+ * way, so the rows it reaches are revealed at even times, and the room it
+ * opens and the rows under it travel the same way at the same speed, so they
+ * keep step with it. A distance too short for the fall is all fall.
  */
 export function glide(distance: number, speed: number) {
-  const ends = space("--space-3") + space("--space-1");
-  const share = ends > 0 ? Math.min(1, distance / ends) : 0;
-  const into = space("--space-3") * share;
-  const outOf = space("--space-1") * share;
-  const rising = (2 * into) / speed;
-  const steady = Math.max(0, distance - into - outOf) / speed;
+  const outOf = Math.min(distance, space("--space-1"));
+  const steady = (distance - outOf) / speed;
   const fall = (2 * outOf) / speed;
-  const duration = rising + steady + fall;
+  const duration = steady + fall;
   /** How far along it is at `t` ms. */
   const covered = (t: number): number => {
     if (t <= 0) {
       return 0;
     }
-    if (t < rising) {
-      return (speed / (2 * rising)) * t * t;
-    }
-    if (t < rising + steady) {
-      return into + speed * (t - rising);
+    if (t < steady) {
+      return speed * t;
     }
     if (t < duration) {
       const left = duration - t;
@@ -262,32 +252,24 @@ export function glide(distance: number, speed: number) {
     if (d >= distance) {
       return duration;
     }
-    if (d < into) {
-      return Math.sqrt((2 * rising * d) / speed);
-    }
     if (d <= distance - outOf) {
-      return rising + (d - into) / speed;
+      return d / speed;
     }
     return duration - Math.sqrt((2 * fall * (distance - d)) / speed);
   };
   /**
-   * The same glide as keyframes, from `from` to `to`: a rising stretch, a
-   * steady one and a falling one, each on its own curve, so it runs off the
-   * main thread like any other animation.
+   * The same glide as keyframes, from `from` to `to`: a steady stretch and a
+   * falling one, each on its own curve, so it runs off the main thread like
+   * any other animation.
    */
   const frames = (from: Keyframe, to: Keyframe): Keyframe[] =>
     duration <= 0 || distance <= 0
       ? [from, to]
       : [
-          { ...from, offset: 0, easing: CURVE.glideIn },
-          {
-            ...between(from, to, into / distance),
-            offset: rising / duration,
-            easing: "linear",
-          },
+          { ...from, offset: 0, easing: "linear" },
           {
             ...between(from, to, (distance - outOf) / distance),
-            offset: (rising + steady) / duration,
+            offset: steady / duration,
             easing: CURVE.glideOut,
           },
           { ...to, offset: 1 },

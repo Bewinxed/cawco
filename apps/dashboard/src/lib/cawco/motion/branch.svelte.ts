@@ -33,7 +33,7 @@
  * of its own: it met the line, it did not arrive on it.
  *
  * Opening. The line leads. Its head glides at one steady speed (curves
- * `glide`: easing in over its first few px and out over its last), so the
+ * `glide`: at speed from its first frame, easing out over its last px), so the
  * children are reached at even times: --dur-stagger apart, or closer
  * together in a tree too tall to open within --dur-cascade. The room opens
  * downward from the parent row's bottom edge at the same speed: the

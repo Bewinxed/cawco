@@ -58,7 +58,7 @@ const PLACEMENT = [
   // `/<name>`, tailwind.mjs `isMarkerClass`), and the hit areas, a transparent box
   // round the part that draws nothing (DESIGN.md, The 44 Touch Rule, The 24
   // Pointer Rule).
-  ...["group", "peer", "touch-hit", "pointer-hit"],
+  ...["group", "peer", "touch-hit", "touch-hit-always", "pointer-hit"],
 ];
 
 // A value that changes while its element is mounted is written inline as
@@ -278,6 +278,7 @@ const PLACEMENT_CLASSES = PLACEMENT.filter(
       "group",
       "peer",
       "touch-hit",
+      "touch-hit-always",
       "pointer-hit",
       "flex-1",
       "flex-auto",

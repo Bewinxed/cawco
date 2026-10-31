@@ -99,7 +99,7 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { msOf } from "#lib/cawco/motion/time.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { cn } from "#lib/utils.js";
@@ -1076,7 +1076,7 @@
    * A vertical wheel over the track moves it sideways on a spring: each
    * notch pushes the target along and the track glides after it, carrying
    * its speed into the next notch, instead of jumping 100px a click.
-   * Critically damped at the app's 0.3s response, so it lands without
+   * Critically damped at --dur-glide's response, so it lands without
    * overshoot. A sideways trackpad swipe is the browser's own scroll and
    * is left alone.
    */
@@ -1086,14 +1086,13 @@
       (rect) => rect.left + rect.width > rects.viewport.width + 0.5
     )
   );
-  const GLIDE = 0.3;
-  const STIFFNESS = ((2 * Math.PI) / GLIDE) ** 2;
-  const DAMPING = (4 * Math.PI) / GLIDE;
   let stopGlide = () => {
     /* replaced once the track is mounted */
   };
 
   function sideways(el: HTMLElement) {
+    let stiffness = 0;
+    let damping = 0;
     let target = 0;
     let at = 0;
     let velocity = 0;
@@ -1111,7 +1110,7 @@
     const step = (now: number) => {
       const dt = Math.min(0.032, (now - last) / 1000);
       last = now;
-      velocity += (STIFFNESS * (target - at) - DAMPING * velocity) * dt;
+      velocity += (stiffness * (target - at) - damping * velocity) * dt;
       at += velocity * dt;
       if (Math.abs(target - at) < 0.5 && Math.abs(velocity) < 10) {
         el.scrollLeft = target;
@@ -1139,6 +1138,9 @@
         return;
       }
       if (frame === null) {
+        const response = dur("--dur-glide") / 1000;
+        stiffness = ((2 * Math.PI) / response) ** 2;
+        damping = (4 * Math.PI) / response;
         at = el.scrollLeft;
         target = at;
         velocity = 0;

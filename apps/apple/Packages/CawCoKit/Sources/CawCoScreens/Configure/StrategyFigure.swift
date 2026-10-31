@@ -61,7 +61,7 @@ struct FigurePolicy: Equatable {
 // MARK: Timeline
 
 /// A key's curve into the next key: `linear`, CSS's `ease-out` keyword, and
-/// the house `--ease-out` and `--ease-figure`.
+/// the house `--ease-out` and `--ease-in-out`.
 enum FigureCurve {
     case linear, cssEaseOut, easeOut, figure
 
@@ -72,7 +72,7 @@ enum FigureCurve {
         case .linear: p
         case .cssEaseOut: Self.css.value(at: p)
         case .easeOut: Motion.easeOut.value(at: p)
-        case .figure: Motion.easeFigure.value(at: p)
+        case .figure: Motion.easeInOut.value(at: p)
         }
     }
 }

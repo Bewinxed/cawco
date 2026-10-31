@@ -758,6 +758,7 @@
       >
         <Button
           answer="approve-strong"
+          hit="always"
           class="flex-none"
           fit="prompt"
           width="shrink"
@@ -774,6 +775,7 @@
         />
         <Button
           answer="deny-strong"
+          hit="always"
           class="flex-none"
           fit="prompt"
           width="shrink"
@@ -1100,6 +1102,7 @@
              move never makes one the more inviting. -->
         <Button
           answer="approve-strong"
+          hit="always"
           class="flex-none"
           fit="prompt"
           width="shrink"
@@ -1116,6 +1119,7 @@
         />
         <Button
           answer="deny-strong"
+          hit="always"
           class="flex-none"
           fit="prompt"
           width="shrink"

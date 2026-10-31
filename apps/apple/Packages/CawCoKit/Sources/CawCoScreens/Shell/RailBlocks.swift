@@ -42,7 +42,7 @@ final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
     let olderRow = RailTextRow()
     let emptyRow = RailTextRow()
     var onMenu: () -> UIMenu = { UIMenu() }
-    private let name = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.sidebarForeground)
+    private let name = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.inkStrong)
     var mark: ProjectMarkView { row.mark }
 
     init(project: ProjectRow) {
@@ -153,7 +153,7 @@ final class SessionRailRow: RailRow, HoverSessionRow {
     let id: String
     var hoverSessionId: String? { id }
     let mark = SessionMarkView()
-    let name = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.sidebarForeground)
+    let name = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.inkStrong)
     private let age = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     var onOpen: (String) -> Void = { _ in }
     var onToggle: (String) -> Void = { _ in }

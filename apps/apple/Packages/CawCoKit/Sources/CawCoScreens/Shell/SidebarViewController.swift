@@ -265,7 +265,7 @@ final class SidebarViewController: ObservedViewController {
         for (row, glyph, title, place) in [(fleetRow, Glyph.box, "Fleet", ShellDestination.fleet)] {
             navConstraint(row)
             let icon = GlyphView(glyph, tint: Palette.foreground)
-            let label = KitLabel(TypeScale.typeBody, ink: Palette.sidebarForeground)
+            let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong)
             label.text = title
             row.content.addArrangedSubview(RailRow.slot(icon))
             row.content.addArrangedSubview(label)
@@ -438,7 +438,7 @@ final class SidebarViewController: ObservedViewController {
     /// The machines, where a phone keeps them: each with its status and its
     /// menu (a long press), then Add machine and Change hub.
     private func buildMachines(_ machinesHost: MachinesHost) -> UIView {
-        let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.sidebarForeground.withAlphaComponent(0.7))
+        let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.inkStrong.withAlphaComponent(0.7))
         label.text = "Machines"
         let head = UIStackView(arrangedSubviews: [label, UIView()])
         head.alignment = .center
@@ -455,7 +455,7 @@ final class SidebarViewController: ObservedViewController {
     // MARK: Projects
 
     private func buildProjects() -> UIView {
-        let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.sidebarForeground.withAlphaComponent(0.7))
+        let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.inkStrong.withAlphaComponent(0.7))
         label.text = "Projects"
         sortButton.showsMenuAsPrimaryAction = true
         sortButton.menu = sortMenu()
@@ -1157,8 +1157,8 @@ final class HeadAction: TapControl {
 /// The theme switch (ThemeSwitcher.svelte): a ghost icon button that flips
 /// the scheme on screen, the moon and the sun swapping in place.
 final class ThemeButton: TapControl {
-    private let moon = GlyphView(.moon, tint: Palette.sidebarForeground)
-    private let sun = GlyphView(.sun, tint: Palette.sidebarForeground)
+    private let moon = GlyphView(.moon, tint: Palette.inkStrong)
+    private let sun = GlyphView(.sun, tint: Palette.inkStrong)
 
     init() {
         super.init(frame: .zero)
@@ -1213,8 +1213,8 @@ final class ThemeButton: TapControl {
 /// its sounds (the composer's recall), off until the reader turns it on.
 /// The speaker and the crossed speaker swap in place as the theme's glyphs do.
 final class SoundButton: TapControl {
-    private let on = GlyphView(.soundOn, tint: Palette.sidebarForeground)
-    private let off = GlyphView(.soundOff, tint: Palette.sidebarForeground)
+    private let on = GlyphView(.soundOn, tint: Palette.inkStrong)
+    private let off = GlyphView(.soundOff, tint: Palette.inkStrong)
     private var watcher: NSObjectProtocol?
 
     init() {
@@ -1274,8 +1274,8 @@ final class SoundButton: TapControl {
 /// whether Caw plays his working loop while a project's conversation works, or
 /// holds its still. Play and pause swap in place as the theme's glyphs do.
 final class CawLoopButton: TapControl {
-    private let playing = GlyphView(.loopOn, tint: Palette.sidebarForeground)
-    private let held = GlyphView(.loopHeld, tint: Palette.sidebarForeground)
+    private let playing = GlyphView(.loopOn, tint: Palette.inkStrong)
+    private let held = GlyphView(.loopHeld, tint: Palette.inkStrong)
     private var watcher: NSObjectProtocol?
 
     init() {

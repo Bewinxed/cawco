@@ -13,14 +13,11 @@
  * thread is doing. The path is kept, so whoever stops it part-way can read
  * where it had got to off the animation's clock (`sampleAt`).
  */
+import { dur } from "./curves.svelte";
 
-/** The perceptual duration, in seconds. */
-const SETTLE = 0.4;
 const BOUNCE = 0;
 
 const MASS = 1;
-const STIFFNESS = ((2 * Math.PI) / SETTLE) ** 2;
-const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
 /**
  * The settle is integrated at this step, in seconds, for at most this long,
  * and thinned to keyframes about this far apart, in ms. At 120Hz a step is
@@ -42,12 +39,16 @@ export interface Sample {
  * Always at least two points, the last exactly at rest.
  */
 export function integrate(x0: number, v0: number): Sample[] {
+  /** The perceptual duration, in seconds. */
+  const settle = dur("--dur-settle") / 1000;
+  const stiffness = ((2 * Math.PI) / settle) ** 2;
+  const damping = (4 * Math.PI * (1 - BOUNCE)) / settle;
   const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
   let x = x0;
   let v = v0;
   let t = 0;
   for (;;) {
-    const a = (-STIFFNESS * x - DAMPING * v) / MASS;
+    const a = (-stiffness * x - damping * v) / MASS;
     v += a * STEP;
     x += v * STEP;
     t += STEP;

@@ -8,7 +8,7 @@
       variant: {
         default: "hover:text-ink-strong",
         outline:
-          "bg-surface-page shadow-[0_0_0_1px_var(--sidebar-border)] hover:text-ink-strong hover:shadow-[0_0_0_1px_var(--border-control)]",
+          "bg-surface-page shadow-[0_0_0_1px_var(--border)] hover:text-ink-strong hover:shadow-[0_0_0_1px_var(--border-control)]",
       },
       size: {
         default: "h-c-nav-h text-label",

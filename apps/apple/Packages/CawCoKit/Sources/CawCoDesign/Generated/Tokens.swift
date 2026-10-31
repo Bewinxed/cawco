@@ -99,7 +99,6 @@ public enum Palette {
     public static let foreground = Palette.named("foreground")
     /// shadcn bridge: the kit's own names, resolved to the ramps.
     public static let card = Palette.named("card")
-    public static let cardForeground = Palette.named("card-foreground")
     public static let muted = Palette.named("muted")
     public static let mutedForeground = Palette.named("muted-foreground")
     /// The subtle hover surface, never brand.
@@ -110,12 +109,9 @@ public enum Palette {
     public static let info = Palette.named("info")
     public static let error = Palette.named("error")
     public static let sidebar = Palette.named("sidebar")
-    public static let sidebarForeground = Palette.named("sidebar-foreground")
-    public static let sidebarBorder = Palette.named("sidebar-border")
     /// Surfaces: the frame recesses, content sits raised on it.
     public static let surfacePage = Palette.named("surface-page")
     public static let surfaceRaised = Palette.named("surface-raised")
-    public static let surfaceCard = Palette.named("surface-card")
     public static let surfaceRecess = Palette.named("surface-recess")
     /// The recess at alpha 0: the far stop of a fade into the recess (the transcript's foot fade, the suggestion row's floor), so the ramp keeps the recess's hue.
     public static let surfaceRecessClear = Palette.named("surface-recess-clear")
@@ -163,15 +159,8 @@ public enum Palette {
     /// Every divider: the transcript's user-message seam, section rules, the seams between machines and lists. The coral ramp at a subtle strength.
     public static let seam = Palette.named("seam")
     public static let codeBg = Palette.named("code-bg")
-    /// Surface ladder: eight levels that nest; each container lifts one step off what it sits on. Light flattens to warm white after step 2 (shadow carries depth); dark lightens ~3.2% L per step.
+    /// One step off the page.
     public static let surface1 = Palette.named("surface-1")
-    public static let surface2 = Palette.named("surface-2")
-    public static let surface3 = Palette.named("surface-3")
-    public static let surface4 = Palette.named("surface-4")
-    public static let surface5 = Palette.named("surface-5")
-    public static let surface6 = Palette.named("surface-6")
-    public static let surface7 = Palette.named("surface-7")
-    public static let surface8 = Palette.named("surface-8")
     /// Borders: graded, never flattened to one value.
     public static let border = Palette.named("border")
     public static let borderHairline = Palette.named("border-hairline")
@@ -198,7 +187,6 @@ public enum Palette {
     public static let inkMuted = Palette.named("ink-muted")
     /// Placeholders and tertiary text: the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on fill, hover and raised (by day 4.55 / 4.55 / 5.66:1 at 6%, hover being the fill's own step; the cool ramp's 8.3% measured 4.47 on the warm fill).
     public static let inkSubtle = Palette.named("ink-subtle")
-    public static let textStrong = Palette.named("text-strong")
     public static let textMuted = Palette.named("text-muted")
     /// Brand: coral for marks, badges and brand moments.
     public static let brandSolid = Palette.named("brand-solid")
@@ -371,20 +359,12 @@ public enum Shadow {
     /// The chosen folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade).
     public static let shadowTabEndChosen: [ShadowLayer] = [ShadowLayer(x: 2, y: 0, blur: 5, spread: -1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2400), dark: P3(0.0000, 0.0000, 0.0000, 0.0000)), inset: false)]
     public static let shadowInsetSel: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: true)]
-    /// Shadow per surface level, paired with --surface-1…8.
+    /// The shadow paired with --surface-1.
     public static let surfaceShadow1: [ShadowLayer] = []
-    public static let surfaceShadow2: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0700), dark: P3(0.0000, 0.0000, 0.0000, 0.3000)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0350), dark: P3(0.9247, 0.9128, 0.8883, 0.0600)), inset: false)]
-    public static let surfaceShadow3: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 3, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
-    public static let surfaceShadow4: [ShadowLayer] = [ShadowLayer(x: 0, y: 3, blur: 10, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
-    public static let surfaceShadow5: [ShadowLayer] = [ShadowLayer(x: 0, y: 6, blur: 18, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 4, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
-    public static let surfaceShadow6: [ShadowLayer] = [ShadowLayer(x: 0, y: 10, blur: 30, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 3, blur: 8, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
-    public static let surfaceShadow7: [ShadowLayer] = [ShadowLayer(x: 0, y: 14, blur: 40, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 6, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
-    public static let surfaceShadow8: [ShadowLayer] = [ShadowLayer(x: 0, y: 18, blur: 48, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 6, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
     /// The action's edge: a white top hairline and a coral-tinted drop.
     public static let actionRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 0, spread: 0, ink: Ink(light: P3(1.0000, 1.0000, 1.0000, 0.1800), dark: P3(1.0000, 1.0000, 1.0000, 0.1800)), inset: true), ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.5066, 0.2338, 0.1694, 0.2500), dark: P3(0.0000, 0.0000, 0.0000, 0.4000)), inset: false)]
     /// Inner vermillion ring and soft inner glow on code blocks.
     public static let codeRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.2800), dark: P3(0.8285, 0.4329, 0.3286, 0.3200)), inset: true), ShadowLayer(x: 0, y: 1, blur: 6, spread: 0, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.0600), dark: P3(0.8285, 0.4329, 0.3286, 0.1000)), inset: true)]
-    public static let selectedShadow: [ShadowLayer] = []
     /// The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (DESIGN.md Effort chip).
     public static let shadowKnob: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.6824, 0.6604, 0.6225, 1.0000), dark: P3(0.3888, 0.3730, 0.3499, 1.0000)), inset: true), ShadowLayer(x: 0, y: 1, blur: 3, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
 }
@@ -521,8 +501,6 @@ public enum Radius {
     /// Dialog tray: 6px pad + 12px body, concentric.
     public static let radiusModal: Double = 18
     public static let radiusPill: Double = 999
-    /// The reader's well.
-    public static let wellR: Double = 7
     /// The reader's row mark.
     public static let rowMarkR: Double = 4.6
     /// The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side.
@@ -1372,19 +1350,13 @@ public enum Effect {
 }
 
 public enum Motion {
-    /// Entrances and exits ease out; on-screen movement eases in-out; drawers, popovers and page swaps use the drawer curve. No ease-in.
+    /// Entrances, exits, colour and any change in place ease out, the default; what is already on screen moving eases in-out; floating surfaces, sheets, page swaps and flights take the drawer curve; constant motion is linear. No ease-in.
     public static let easeOut = TimingCurve(x1: 0.23, y1: 1, x2: 0.32, y2: 1)
     public static let easeInOut = TimingCurve(x1: 0.77, y1: 0, x2: 0.175, y2: 1)
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
-    /// Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
+    /// Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together); a skeleton's pulse and its reveal. CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its skeleton loader's pulse and reveal (--reveal-ease: ease-in-out). At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%), which reads as the change lurching.
     public static let easeCrossfade = TimingCurve(x1: 0.42, y1: 0, x2: 0.58, y2: 1)
-    /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
-    public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)
-    /// A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths).
-    public static let easeFigure = TimingCurve(x1: 0.2, y1: 0.8, x2: 0.2, y2: 1)
-    /// A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at.
-    public static let easeGlideIn = TimingCurve(x1: 0.3333, y1: 0, x2: 0.6667, y2: 0.3333)
-    /// A glide's last stretch: from the steady pace, speed falling evenly to rest.
+    /// The last stretch of a steady glide; the glide starts at speed. From the steady pace, speed falling evenly to rest. Only glide() in motion/curves.svelte.ts writes it; no component picks it.
     public static let easeGlideOut = TimingCurve(x1: 0.3333, y1: 0.6667, x2: 0.6667, y2: 1)
     /// Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger.
     /// In seconds.
@@ -1444,9 +1416,9 @@ public enum Motion {
     /// The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, "Slow · 400ms").
     /// In seconds.
     public static let durSettle: TimeInterval = 0.4
-    /// A disclosure growing open (collapsible-content); it folds shut over --dur-exit.
+    /// A tab track's glide under a mouse wheel: the second spring's response.
     /// In seconds.
-    public static let durReveal: TimeInterval = 0.24
+    public static let durGlide: TimeInterval = 0.3
     /// How long a done state stays up.
     /// In seconds.
     public static let durHold: TimeInterval = 1.2
@@ -1459,8 +1431,6 @@ public enum Motion {
     /// A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms.
     /// In seconds.
     public static let durSkeletonReveal: TimeInterval = 0.4
-    /// In seconds.
-    public static let c500: TimeInterval = 0.5
     /// In seconds.
     public static let breath: TimeInterval = 2
     public static let pressScale: Double = 0.97

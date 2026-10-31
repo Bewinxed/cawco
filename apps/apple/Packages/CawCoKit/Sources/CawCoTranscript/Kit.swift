@@ -352,7 +352,7 @@ protocol RevealDriver: AnyObject {
 }
 
 /// A body that grows open from nothing and folds shut where it stands
-/// (collapsible-content.svelte `reveal`): open over --dur-reveal, shut over
+/// (collapsible-content.svelte `reveal`): open over --dur-pop, shut over
 /// --dur-exit, both on --ease-out, the content fading with it when `fades`.
 /// Its height is its content's when open, nothing when shut.
 ///
@@ -425,7 +425,7 @@ final class Reveal: UIView {
             if open, self.fades { self.content.alpha = 0 }
             if open { self.measure() }
             let still = UIAccessibility.isReduceMotionEnabled || self.window == nil
-            self.motion = (from, CACurrentMediaTime(), still ? 0 : duration ?? (open ? Motion.durReveal : Motion.durExit))
+            self.motion = (from, CACurrentMediaTime(), still ? 0 : duration ?? (open ? Motion.durPop : Motion.durExit))
         }
         if let driver {
             driver.quietly(begin)

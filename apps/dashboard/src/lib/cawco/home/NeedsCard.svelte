@@ -1191,6 +1191,7 @@
             data-deny
             aria-label="Deny {answered}"
             answer="deny"
+            hit="always"
             disabled={held || (answering && pressed !== "deny")}
             failed={answerRefused !== null && pressed === "deny"}
             icon={IconClose}
@@ -1208,6 +1209,7 @@
               ? 'Take over'
               : 'Approve'} {answered}"
             answer="approve"
+            hit="always"
             disabled={held || (answering && pressed !== "allow")}
             failed={answerRefused !== null && pressed === "allow"}
             icon={item.request.browserAsk ? IconInteract : IconTick}
@@ -1328,6 +1330,7 @@
             data-deny
             aria-label="Deny {who}"
             answer="deny"
+            hit="always"
             disabled={held || admitting === true}
             icon={IconClose}
             label="Deny"
@@ -1341,6 +1344,7 @@
             data-approve
             aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
             answer="approve"
+            hit="always"
             disabled={held || admitting === false}
             icon={IconTick}
             label={item.kind === "pairing" ? "Approve" : "Admit"}
@@ -1367,6 +1371,7 @@
               data-deny
               aria-label="Deny {item.action.tool} on {item.action.connection}"
               answer="deny"
+              hit="always"
               disabled={held || deciding}
               onclick={() => decide("deny")}
               {onkeydown}
@@ -1381,6 +1386,7 @@
               aria-label="Approve {item.action.tool} on {item.action
                 .connection}"
               answer="approve"
+              hit="always"
               disabled={held || deciding}
               onclick={() => decide("approve")}
               {onkeydown}

@@ -117,7 +117,6 @@
   --color-accent: var(--accent);
   --color-surface-page: var(--surface-page);
   --color-surface-raised: var(--surface-raised);
-  --color-surface-card: var(--surface-card);
   --color-surface-recess: var(--surface-recess);
   --color-surface-recess-clear: var(--surface-recess-clear);
   --color-mask-opaque: var(--mask-opaque);
@@ -145,13 +144,6 @@
   --color-seam: var(--seam);
   --color-code-bg: var(--code-bg);
   --color-surface-1: var(--surface-1);
-  --color-surface-2: var(--surface-2);
-  --color-surface-3: var(--surface-3);
-  --color-surface-4: var(--surface-4);
-  --color-surface-5: var(--surface-5);
-  --color-surface-6: var(--surface-6);
-  --color-surface-7: var(--surface-7);
-  --color-surface-8: var(--surface-8);
   --color-border: var(--border);
   --color-border-hairline: var(--border-hairline);
   --color-border-well: var(--border-well);
@@ -167,7 +159,6 @@
   --color-ink-stat: var(--ink-stat);
   --color-ink-muted: var(--ink-muted);
   --color-ink-subtle: var(--ink-subtle);
-  --color-text-strong: var(--text-strong);
   --color-text-muted: var(--text-muted);
   --color-brand-solid: var(--brand-solid);
   --color-brand-hover: var(--brand-hover);
@@ -269,16 +260,8 @@
   --color-night-ring: var(--night-ring);
 
   --shadow-surface-shadow-1: var(--surface-shadow-1);
-  --shadow-surface-shadow-2: var(--surface-shadow-2);
-  --shadow-surface-shadow-3: var(--surface-shadow-3);
-  --shadow-surface-shadow-4: var(--surface-shadow-4);
-  --shadow-surface-shadow-5: var(--surface-shadow-5);
-  --shadow-surface-shadow-6: var(--surface-shadow-6);
-  --shadow-surface-shadow-7: var(--surface-shadow-7);
-  --shadow-surface-shadow-8: var(--surface-shadow-8);
   --shadow-action-ring: var(--action-ring);
   --shadow-code-ring: var(--code-ring);
-  --shadow-selected-shadow: var(--selected-shadow);
 
   --drop-shadow-drop: var(--shadow-drop);
   --drop-shadow-drop-near: var(--shadow-drop-near);
@@ -641,7 +624,6 @@
   --spacing-c-skeleton-card-h: var(--c-skeleton-card-h);
   --spacing-c-offer-text-basis: var(--c-offer-text-basis);
 
-  --radius-well-r: var(--well-r);
   --radius-row-mark: var(--row-mark-r);
   --radius-tab-icon: var(--tab-icon-r);
   --radius-glide-row: var(--glide-row-r);
@@ -674,12 +656,11 @@
   --duration-lift: var(--dur-lift);
   --duration-press-hold: var(--dur-press-hold);
   --duration-settle: var(--dur-settle);
-  --duration-reveal: var(--dur-reveal);
+  --duration-glide: var(--dur-glide);
   --duration-hold: var(--dur-hold);
   --duration-loop: var(--dur-loop);
   --duration-skeleton-pulse: var(--dur-skeleton-pulse);
   --duration-skeleton-reveal: var(--dur-skeleton-reveal);
-  --duration-c-500: var(--c-500);
   --duration-breath: var(--breath);
 
   --font-weight-brand: 600;
@@ -1053,12 +1034,7 @@
   --ease-in-out: var(--ease-in-out);
   --ease-drawer: var(--ease-drawer);
   --ease-crossfade: var(--ease-crossfade);
-  --ease-arrive: var(--ease-arrive);
-  --ease-figure: var(--ease-figure);
   --ease-goo: var(--ease-goo);
-  --ease-goo-exit: var(--ease-goo-exit);
-  --ease-goo-content: var(--ease-goo-content);
-  --ease-glide-in: var(--ease-glide-in);
   --ease-glide-out: var(--ease-glide-out);
 }
 

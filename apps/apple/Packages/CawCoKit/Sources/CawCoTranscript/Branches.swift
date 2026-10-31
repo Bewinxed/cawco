@@ -540,7 +540,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         if let block {
             // The lines under the head move on the body's clock.
             let shown = configureBody(block, open: open)
-            let clock = open ? Motion.durReveal : Motion.durExit
+            let clock = open ? Motion.durPop : Motion.durExit
             if shown != statusReveal.isOpen { _ = statusReveal.toggle(open: shown, over: clock) }
             let gap = asksLead(statusShown: shown)
             if gap != asksGap.isOpen { _ = asksGap.toggle(open: gap, over: clock) }

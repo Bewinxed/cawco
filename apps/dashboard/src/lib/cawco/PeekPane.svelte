@@ -495,6 +495,7 @@
           <Button
             data-deny
             answer="deny-edge"
+            hit="always"
             aria-label="Deny {summary}"
             onclick={() => answer(request, "deny")}
             size="sm"
@@ -506,6 +507,7 @@
           <Button
             data-approve
             answer="approve-edge"
+            hit="always"
             aria-label="{request.browserAsk
               ? 'Take over'
               : 'Approve'} {summary}"

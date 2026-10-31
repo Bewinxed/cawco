@@ -1485,7 +1485,6 @@
   &:is(:focus-visible, [aria-expanded="true"]) {
     --chev: 1;
     --chev-dur: var(--dur-toggle);
-    --chev-ease: var(--ease-arrive);
   }
   /* Under the pointer the line and word step to the stronger vermillion and
      the chevron comes in. */
@@ -1494,7 +1493,6 @@
       --line: var(--brand-ink-strong);
       --chev: 1;
       --chev-dur: var(--dur-toggle);
-      --chev-ease: var(--ease-arrive);
     }
   }
   /* A finger has no hover: what opens always shows that it does. */
@@ -1827,6 +1825,39 @@
    area stays 44px on screen there, as pointer-hit's stays 24px. */
 @utility touch-hit {
   @media (pointer: coarse) {
+    :where(&) {
+      position: relative;
+    }
+    :where(&)::after {
+      content: "";
+      position: absolute;
+      translate: var(--hit-nudge) var(--hit-nudge);
+      @supports (-moz-orient: inline) {
+        translate: none;
+      }
+      inset-inline: max(
+        min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
+        calc(
+          var(--hit-gap-x, var(--c-touch-floor) / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
+        )
+      );
+      inset-block: max(
+        min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
+        calc(
+          var(--hit-gap-y, var(--c-touch-floor) / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
+        )
+      );
+    }
+  }
+}
+
+/* touch-hit on every pointer, not only a finger's (DESIGN.md, The Peer Rule):
+   Approve and Deny, the one pair pressed under time pressure, on a phone and
+   at a desk. */
+@utility touch-hit-always {
+  @media all {
     :where(&) {
       position: relative;
     }

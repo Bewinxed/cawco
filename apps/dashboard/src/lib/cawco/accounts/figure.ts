@@ -5,7 +5,7 @@
  * Animations keyframes on transform, opacity, box-shadow and offset-distance
  * (chips ride offset-path curves), built from a storyboard in seconds.
  *
- * Travel and growth run on --ease-figure, fades on --ease-out; the edge
+ * Travel and growth run on --ease-in-out, fades on --ease-out; the edge
  * pulse is a ring leaving the bar; the last frame holds, then the figure
  * fades through to its first. A figure that is not playing shows its last
  * frame and caption, which is also all it ever shows under reduced motion.
@@ -354,7 +354,7 @@ export const figureHeight = (
  * dock back toward the gutter, so one arriving only ever passes empty slots.
  */
 function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
-  const mk = ease("--ease-figure");
+  const mk = ease("--ease-in-out");
   const eo = ease("--ease-out");
   const W = stage.clientWidth;
   const n = lanes.length;

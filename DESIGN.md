@@ -123,6 +123,31 @@ colors:
   diff-del-bg: "light-dark(oklch(0.5 0.17 15 / 0.15), oklch(0.58 0.17 15 / 0.15))"
   diff-add-emphasis: "light-dark(oklch(0.559 0.134 122.9 / 0.1), oklch(0.605 0.132 121.2 / 0.1))"
   diff-del-emphasis: "light-dark(oklch(0.5 0.17 15 / 0.1), oklch(0.58 0.17 15 / 0.1))"
+  account-rose: "light-dark(oklch(0.51 0.165 349.8), oklch(0.705 0.17 349.8))"
+  account-violet: "light-dark(oklch(0.51 0.15 292.5), oklch(0.7 0.155 292.5))"
+  account-week-toward: "light-dark(oklch(0 0 none), oklch(1 0 none))"
+  ring-track-spent: "light-dark(oklch(0.805 0.016 80), oklch(0.488 0.012 74))"
+  surface-well: "light-dark(oklch(0.967 0.008 84), oklch(0.184 0.004 70))"
+  tab-sheet: "light-dark(oklch(0.967 0.008 84), oklch(0.222 0.006 70))"
+  tab-recede-1: "light-dark(oklch(0.92 0.011 83), oklch(0.184 0.004 70))"
+  surface-fill-strong: "light-dark(oklch(0.854 0.014 82), oklch(0.402 0.01 72))"
+  seam: "light-dark(oklch(0.645 0.175 33 / 0.32), oklch(0.665 0.17 33 / 0.38))"
+  border-well: "light-dark(oklab(0.93584 0.00114568 0.010276), oklch(0.352 0.009 70))"
+  border-contrast: "light-dark(oklch(0.52 0.016 76), oklab(0.5845 0.0035268 0.014578))"
+  border-button-outline: "light-dark(oklab(0.649 0.003669 0.016187), oklab(0.5458 0.00373317 0.015146))"
+  border-row-outline: "light-dark(oklab(0.6275 0.00370262 0.0160766), oklab(0.5458 0.00373317 0.015146))"
+  border-control-strong: "light-dark(oklab(0.6275 0.00370262 0.0160766), oklab(0.5458 0.00373317 0.015146))"
+  brand-hover: "light-dark(oklch(0.6 0.175 33), oklch(0.705 0.16 34))"
+  c-target-tint: "light-dark(oklch(0.645 0.175 33 / 0.08), oklch(0.665 0.17 33 / 0.08))"
+  c-change-ring: "light-dark(oklch(0.52 0.14 140), oklch(0.76 0.15 135))"
+  status-live-glyph: "light-dark(oklch(0.5 0.15 252), oklch(0.74 0.12 245))"
+  status-attn-glyph: "light-dark(oklch(0.57 0.125 78), oklch(0.87 0.14 92))"
+  tab-rim-attn: "light-dark(oklch(0.48 0.125 78), oklch(0.87 0.14 92))"
+  status-done-glyph: "light-dark(oklch(0.52 0.14 140), oklch(0.76 0.15 135))"
+  status-fail-glyph: "light-dark(oklch(0.53 0.19 22), oklch(0.71 0.16 20))"
+  meter-wash-over: "light-dark(oklch(0.3444 0.0849993 16.3253 / 0.06), oklch(0.87776 0.0540679 14.3906 / 0.1))"
+  identity-ink: "light-dark(oklch(0.48 0.12 0), oklch(0.74 0.11 0))"
+  night-ring: "light-dark(transparent, oklch(0.934 0.01 82 / 0.07))"
 typography:
   meta:
     fontFamily: "Figtree Variable, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
@@ -144,6 +169,11 @@ typography:
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.55
+  row:
+    fontFamily: "Figtree Variable, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 500
+    lineHeight: 1.3
   button:
     fontFamily: "Figtree Variable, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "0.875rem"
@@ -174,6 +204,11 @@ typography:
     fontWeight: 400
     lineHeight: 1.6
     fontFeature: "liga 0, calt 0"
+  mono-figure:
+    fontFamily: "JetBrains Mono Variable, ui-monospace, SF Mono, monospace"
+    fontSize: "1em"
+    fontWeight: 400
+    fontFeature: "tnum, liga 0, calt 0"
   display:
     fontFamily: "Fredoka, Figtree Variable, ui-rounded, system-ui, sans-serif"
     fontSize: "2.5rem"
@@ -183,13 +218,13 @@ rounded:
   hair: "2px"
   xs: "5px"
   row-mark: "4.6px"
-  well: "7px"
+  radius-well: "7px"
   sm: "8px"
   md: "10px"
   lg: "12px"
   panel: "16px"
-  modal: "18px"
-  pill: "999px"
+  radius-modal: "18px"
+  radius-pill: "999px"
 spacing:
   "1": "4px"
   "2": "7px"
@@ -199,7 +234,7 @@ spacing:
   "6": "21px"
   "7": "25px"
   "8": "32px"
-  group: "18px"
+  space-group: "18px"
 components:
   button-primary:
     backgroundColor: "{colors.action-solid}"
@@ -265,7 +300,7 @@ components:
     backgroundColor: "{colors.surface-recess}"
     textColor: "{colors.ink-stat}"
     typography: "{typography.kpi}"
-    rounded: "{rounded.well}"
+    rounded: "{rounded.radius-well}"
     padding: "10px"
   badge:
     backgroundColor: "{colors.surface-recess}"
@@ -278,28 +313,28 @@ components:
     backgroundColor: "{colors.status-live-bg}"
     textColor: "{colors.status-live-ink}"
     typography: "{typography.label}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.radius-pill}"
     padding: "0 10px"
     height: "24px"
   status-pill-attn:
     backgroundColor: "transparent"
     textColor: "{colors.status-attn-ink}"
     typography: "{typography.label}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.radius-pill}"
     padding: "0 10px"
     height: "24px"
   status-pill-done:
     backgroundColor: "{colors.status-done-bg}"
     textColor: "{colors.status-done-ink}"
     typography: "{typography.label}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.radius-pill}"
     padding: "0 10px"
     height: "24px"
   status-pill-fail:
     backgroundColor: "{colors.status-fail-bg}"
     textColor: "{colors.status-fail-ink}"
     typography: "{typography.label}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.radius-pill}"
     padding: "0 10px"
     height: "24px"
   status-pill-idle:
@@ -328,11 +363,11 @@ components:
     padding: "3px"
   segmented-thumb:
     backgroundColor: "{colors.surface-lift}"
-    rounded: "{rounded.well}"
+    rounded: "{rounded.radius-well}"
   segment:
     textColor: "{colors.ink-muted}"
     typography: "{typography.label}"
-    rounded: "{rounded.well}"
+    rounded: "{rounded.radius-well}"
     padding: "0 10px"
     height: "30px"
   segment-active:
@@ -345,7 +380,7 @@ components:
     padding: "6px 10px"
   dialog-tray:
     backgroundColor: "{colors.surface-recess}"
-    rounded: "{rounded.modal}"
+    rounded: "{rounded.radius-modal}"
     padding: "6px"
   dialog-body:
     backgroundColor: "{colors.surface-raised}"
@@ -403,7 +438,7 @@ components:
     backgroundColor: "{colors.selected-bg}"
     textColor: "{colors.selected-ink}"
     typography: "{typography.meta}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.radius-pill}"
   option-chip:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.ink-strong}"
@@ -418,7 +453,7 @@ components:
     backgroundColor: "{colors.brand-wash}"
     textColor: "{colors.brand-ink}"
     typography: "{typography.label}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.radius-pill}"
     height: "21px"
   permission-card:
     backgroundColor: "{colors.surface-raised}"
@@ -431,14 +466,14 @@ components:
     typography: "{typography.label}"
     rounded: "{rounded.sm}"
     padding: "0 11px"
-    height: "32px"
+    height: "30px"
   permission-widen:
     backgroundColor: "{colors.status-attn-bg}"
     textColor: "{colors.status-attn-ink}"
     typography: "{typography.label}"
     rounded: "{rounded.sm}"
     padding: "0 11px"
-    height: "32px"
+    height: "30px"
   skeleton:
     backgroundColor: "{colors.surface-fill}"
     rounded: "{rounded.sm}"
@@ -446,7 +481,7 @@ components:
 
 # Design System: CawCo
 
-**The token source is `design/tokens/cawco.resolver.json`** (W3C DTCG 2025.10, conformant: checked against the DTCG's JSON Schemas on every build). Its base set is `cawco.tokens.json`; the dark scheme, a coarse pointer and the compact density are its modifiers' contexts, `cawco.dark.tokens.json`, `cawco.coarse.tokens.json` and `cawco.compact.tokens.json`. It is the one place a visual value is defined. `bun run tokens` in `apps/dashboard` builds it with the hub's generator (`packages/hub/src/design-tokens.ts`, Style Dictionary underneath) into `apps/dashboard/src/lib/tokens/tokens.css`. That is a `@layer theme` block where every colour that differs by scheme is `light-dark(light, dark)`. The same command writes `apps/dashboard/src/lib/tokens/theme.css`, the Tailwind theme over those tokens: every Tailwind namespace reset (`--*: initial`) but the numeric spacing step, one `@theme inline` key per token a utility reads (`bg-surface-raised`, `p-space-3`, `size-icon-md`, `rounded-md`, `shadow-tile`, `ease-out`, `anim-dur-control`; a transition's duration is Tailwind's own `duration-(--dur-control)`, which sets `--tw-duration` so a `transition-[…]` after it keeps it), the breakpoints (`phone:` 640px, `desk:` 901px, `wide:` 1025px) and the container queries' widths as literals, and the composite tokens as utilities (the type roles, `bg-action-surface`, `transition-control`). So a utility exists only where a token does: `text-sm`, `font-bold`, `ease-in` or `bg-red-500` names nothing. `bun run variants` writes `variants.css` beside it: hover only where a fine pointer can rest, `coarse:`, `fine:`, `can-hover:`, `light:`, `dark:`, `at-rest:`, and one named variant per attribute state a component styles (`state-open:`, `tone-fail:`, `aria-expanded-false:`). `app.css` imports all three and defines no token of its own. The same command, from the same Style Dictionary config (`apps/dashboard/scripts/build-tokens.ts`, its Apple platform in `build-tokens-apple.ts`), writes the native apps' tokens into `apps/apple/Packages/CawCoKit/Sources/CawCoDesign/`: `Resources/Tokens.xcassets`, one colour set per colour token with Any and Dark appearances (Display P3, gamut-mapped), and `Generated/Tokens.swift`, with `Palette` colour accessors and `TypeScale`, `Space`, `Radius`, `Size`, `Effect` and `Motion` constants (points, seconds, `Font.Weight`, `UnitCurve`, `TypeRole`). Shadows, gradients and transitions stay web-only. A token's `$value` is the spec's own type (a colour a Color Module object, a dimension `{ value, unit }`); one whose CSS derives (a `color-mix()`, a relative colour, a `clamp()`, a `calc()`) keeps that CSS in `$extensions["dev.cawco"].css`, and the build computes its `$value` from it in every context. To change a value, edit the JSON and rebuild; never edit `tokens.css` or add a literal to a component.
+**The token source is `design/tokens/cawco.resolver.json`** (W3C DTCG 2025.10, conformant: checked against the DTCG's JSON Schemas on every build). Its base set is `cawco.tokens.json`; the dark scheme, a coarse pointer and the compact density are its modifiers' contexts, `cawco.dark.tokens.json`, `cawco.coarse.tokens.json` and `cawco.compact.tokens.json`. It is the one place a visual value is defined. `bun run tokens` in `apps/dashboard` builds it with the hub's generator (`packages/hub/src/design-tokens.ts`, Style Dictionary underneath) into `apps/dashboard/src/lib/tokens/tokens.css`. That is a `@layer theme` block where every colour that differs by scheme is `light-dark(light, dark)`. The same command writes `apps/dashboard/src/lib/tokens/theme.css`, the Tailwind theme over those tokens: every Tailwind namespace reset (`--*: initial`) but the numeric spacing step, one `@theme inline` key per token a utility reads (`bg-surface-raised`, `p-space-3`, `size-icon-md`, `rounded-md`, `shadow-tile`, `ease-out`, `anim-dur-control`; a transition's duration is Tailwind's own `duration-(--dur-control)`, which sets `--tw-duration` so a `transition-[…]` after it keeps it), the breakpoints (`phone:` 640px, `desk:` 900px, so `max-desk:` is under 900px, `wide:` 1025px) and the container queries' widths as literals, and the composite tokens as utilities (the type roles, `bg-action-surface`, `transition-control`). So a utility exists only where a token does: `text-sm`, `font-bold`, `ease-in` or `bg-red-500` names nothing. `bun run variants` writes `variants.css` beside it: hover only where a fine pointer can rest, `coarse:`, `fine:`, `can-hover:`, `light:`, `dark:`, `at-rest:`, and one named variant per attribute state a component styles (`state-open:`, `tone-fail:`, `aria-expanded-false:`). `app.css` imports all three and defines no token of its own. The same command, from the same Style Dictionary config (`apps/dashboard/scripts/build-tokens.ts`, its Apple platform in `build-tokens-apple.ts`), writes the native apps' tokens into `apps/apple/Packages/CawCoKit/Sources/CawCoDesign/`: `Resources/Tokens.xcassets`, one colour set per colour token with Any and Dark appearances (Display P3, gamut-mapped), and `Generated/Tokens.swift`, with `Palette` colour accessors and `TypeScale`, `Space`, `Radius`, `Size`, `Effect` and `Motion` constants (points, seconds, `Font.Weight`, `UnitCurve`, `TypeRole`). Shadows, gradients and transitions stay web-only. A token's `$value` is the spec's own type (a colour a Color Module object, a dimension `{ value, unit }`); one whose CSS derives (a `color-mix()`, a relative colour, a `clamp()`, a `calc()`) keeps that CSS in `$extensions["dev.cawco"].css`, and the build computes its `$value` from it in every context. To change a value, edit the JSON and rebuild; never edit `tokens.css` or add a literal to a component.
 
 The frontmatter above restates the shipped colours as the browser computes them, in both schemes, for tools that read DESIGN.md. Where it and the JSON disagree, the JSON wins.
 
@@ -472,21 +507,28 @@ Motion is continuity, never decoration. Something that exists on both sides of a
 
 ### Motion grammar
 
-All motion stands on three curves and a short duration scale (values in the sidecar's `extensions.motion`).
+All motion stands on three curves, `linear`, and a short duration scale (the tokens' `motion` group; the sidecar's `extensions.motion` lists every value). Emil Kowalski's grammar, as `animate` and `review-animations` state it, with Family's frame: motion is continuity, never decoration, and "we fly instead of teleport".
 
-- **Ease-out** (`cubic-bezier(0.23, 1, 0.32, 1)`) carries entrances, exits and any change in place.
-- **Ease-in-out** (`cubic-bezier(0.77, 0, 0.175, 1)`) carries things already on screen moving from one place to another: rows sliding, a thumb gliding between segments, a height tween in the transcript.
+- **Ease-out** (`cubic-bezier(0.23, 1, 0.32, 1)`) carries entrances, exits, colour, and any change in place. It is the default: a curve is ease-out unless a rule below names another.
+- **Ease-in-out** (`cubic-bezier(0.77, 0, 0.175, 1)`) carries things already on screen moving from one place to another, and a figure filling to a new value: rows sliding, a thumb gliding between segments, a tip along a rail, a height tween in the transcript, a usage arc or a strategy figure's lane.
 - **Drawer** (`cubic-bezier(0.32, 0.72, 0, 1)`) carries floating surfaces, sheets, page swaps, shared-element flights and container size changes.
+- **Linear** carries constant motion: a spinner's turn, a steady glide (a tree's line reaching its rows at even times), a hold-to-confirm fill. Progress does not ease.
 
-**The No Ease-In Rule.** No ease-in curve exists. Anything that starts slow feels like the interface hesitating.
+Two recipes the owner picked from transitions.dev stand beside the grammar, each bound to one component, and no other element takes them: the skeleton's pulse and reveal, and a folder tab's choice, run on `--ease-crossfade` (CSS ease-in-out), the one gentle curve, for beats of 400ms and longer where the strong curves move more than an eighth of the change in a frame; and a comment card pouring out of its pin (`/dev/pin-goo`) opens on `--ease-goo`, the one overshoot in the product. `--ease-glide-out` is the tail of a linear glide inside `glide()` and is never picked by a component. The house does not use CSS `ease`.
 
-**The Fast Exit Rule.** Exits are shorter than entrances. A popover opens over 260ms and closes over 160ms. A dialog opens over 280ms and closes over 160ms. A toast rises over 280ms and leaves over 160ms.
+**The No Ease-In Rule.** No ease-in curve exists, and no run starts slow: a glide starts at its speed. Anything that starts slow feels like the interface hesitating.
+
+**The Frequency Rule.** How often the reader sees a motion decides whether it exists. A keyboard-initiated action never animates: the Jump palette, a list walked with the arrow keys, a shortcut's result land at once. What is seen tens of times a day (a hover, a row's highlight, a tab the reader lives in) gets a colour or opacity change on `--dur-control` or nothing. What is occasional (a popover, a sheet, a toast, a card opening) gets the standard motion below. Delight (a bounce, a flourish, a sound) belongs only to what is rare: the first run, a backup done, a wallet made (Family: "the potential for delight increases as the frequency of feature usage decreases"). Motion is never the only sign that something happened; a colour, a glyph or a word says it too.
+
+**The Fast Exit Rule.** Exits are shorter than entrances, and a thing leaves the way it came. A popover opens over `--dur-pop` (260ms) and closes over `--dur-exit` (160ms). A dialog or sheet opens over `--dur-panel` (280ms) and closes over `--dur-exit`. A toast rises over `--dur-panel` and leaves over `--dur-exit` toward its edge. The composer grows over `--dur-grow` (320ms) and folds back over `--dur-grow-exit` (220ms). Nothing on screen takes longer than `--dur-panel` but a flight (`--dur-lift`, 340ms), a grown surface, and the two picked recipes (`--dur-settle`, 400ms; `--dur-skeleton-reveal`, 400ms); ambient loops are not beats.
+
+**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` (0.92) or `--pop-rise` (8px) short of its place, fading in, never from scale 0; a popover scales from its trigger's side, a dialog from its centre. A pressed control scales to `--press-scale` (0.97) on `--dur-toggle`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another; `height` only for a disclosure, which is why `unfold` is short).
 
 **The One Object Rule.** What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A sidebar row becomes the tab it opens, a section row's title flies into the editor header, a sent message flies from the composer into the transcript row it became. A flight runs 280ms on the drawer curve, as a transform (FLIP) or a clip that opens from the source's box. The source is hidden while its copy flies, so the screen never shows two. A surface that closes on work still running travels into the place that work is parked, and comes back out of it (The Work Outlives Its Surface Rule).
 
 **The Nothing Jumps Rule.** When a list changes, rows that stay slide to their new places, rows that leave close while fading, and rows that arrive are uncovered top to bottom while what follows makes room (`motion/rows.svelte.ts`). Movement takes 280ms on ease-in-out, arrivals fade over 260ms, departures fade over 160ms, all started on the same frame. In a batch a tree's fold paces (closing over `--dur-exit`, opening at its line's speed), a row's fade runs over its own uncovering's or closing's duration, so each row is one clock. A move that happens entirely off screen jumps instead of sliding, so nothing drifts into view behind the reader's scroll.
 
-**The Interruptible Rule.** Every transition turns back from where it is drawn. Popovers transition on `data-state` rather than playing keyframes, folds animate from the drawn height, and a segmented thumb caught mid-glide restarts from where it stands.
+**The Interruptible Rule.** Every transition turns back from where it is drawn. A state a reader can flip twice in a second (a popover, a toggle, a fold, a toast's stack) is a CSS transition on `data-state`, never a keyframe that restarts from zero; folds animate from the drawn height; a segmented thumb caught mid-glide restarts from where it stands. What a finger lets go of settles on the one spring (Springs, below), which carries the finger's velocity, so a reversed drag never jumps. Predetermined motion runs off the main thread (CSS, or `element.animate()` keyframes); JavaScript drives only what must follow a value frame by frame.
 
 **The Stay In Context Rule.** The reader stays where they are and knows what is true, from the moment they ask for something to the moment it is done. The owner: "This fluid ux is the bar for any part of this project. Keeps the user in context." Four questions shape every flow, and their answers decide its form:
 - **Where is their attention?** The flow happens there. The thing they acted on stays in view and becomes its own result. Nothing sends them to another page, stacks a second surface on the first, or leaves a toast for them to connect back to what they did.
@@ -514,7 +556,7 @@ The question card is the worked answer: minimized, it folds to its bar over the 
 
 **The Show Don't Tell Rule.** A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, a run of outcomes as marks in their status colours, who runs something as their mark. Words are for what has no shape (a prompt, a reason, a name), and a row of labelled text facts is a sign that something should be drawn. The owner, on a routine's detail written as label and value rows: "walls of text with no structure, many things can be told with ui or visually rather than spamming text rows".
 
-**Springs.** Surfaces released by a finger settle on one spring (`motion/spring.ts`): perceptual duration 0.4s, bounce 0, mass 1, stiffness `(2π / 0.4)²` ≈ 246.7, damping `4π / 0.4` ≈ 31.4 (critically damped). The spring is integrated once at release at 120Hz and handed to the compositor as keyframes about 8ms apart, carrying the finger's velocity. A tab track scrolled with a mouse wheel glides on a second, critically damped spring with a 0.3s response (stiffness `(2π / 0.3)²` ≈ 438.6, damping `4π / 0.3` ≈ 41.9).
+**Springs.** Surfaces released by a finger settle on one spring (`motion/spring.ts`): perceptual duration `--dur-settle` (0.4s), bounce 0, mass 1, stiffness `(2π / 0.4)²` ≈ 246.7, damping `4π / 0.4` ≈ 31.4 (critically damped). The spring is integrated once at release at 120Hz and handed to the compositor as keyframes about 8ms apart, carrying the finger's velocity. A tab track scrolled with a mouse wheel glides on a second, critically damped spring with a `--dur-glide` (0.3s) response (stiffness `(2π / 0.3)²` ≈ 438.6, damping `4π / 0.3` ≈ 41.9).
 
 **Live work breathes.** Anything still running pulses its opacity on `--breath` (2s, ease-in-out), from full down to `--breath-floor` half a breath in and back, through the one shared `breath` keyframes (app.css; a mark takes it by the `.breathe` class or by naming `breath`), only for a reader who has not asked for less motion: the catch-up dot, a subagent's and a delegate's beat, the in-flight tool glyph (a delegate's live tool row too), the Working status glyph, a task card's and a plan step's live dot, the live dot (`ui/live-dot`) beside words that say what is running, on a speaker's mark while its answer is on its way and on a pin's pill while the agent works on it, Find's working glyph, a segmented control's thumb while its pick is asked, and the models page's finishing dot. The floor is the lowest opacity at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) still holds 3:1 against whatever stands under it on every surface (WCAG 2.2 SC 1.4.11, unrounded; probe breath-and-head): 0.8 by day (the search tool's ink on recess-deep the floor, 3.13:1; the Working glyph there 3.44:1) and 0.58 at night (the plan tool's ink on raised the floor, 3.14:1; the Working glyph there 3.28:1). No breather keeps keyframes of its own or a floor of its own. Every breath begins on one clock (`@cawco/core/breath`): its loops start on the wall clock's multiples of `--breath`, so every live dot breathes in step, the dashboard's and a previewed page's pills alike though each document keeps a timeline of its own, and a pill drawn again picks the breath up where it stands. Nothing that has finished moves.
 
@@ -522,7 +564,7 @@ The question card is the worked answer: minimized, it folds to its bar over the 
 
 **The Steady Swap Rule.** A text swap never moves what stands beside it, and runs on one clock. Words change in place through MorphText (`components/ui/morph-text`), the one way the product morphs words: the box takes the wider and taller of the old and new words at once, holds there while the letters cross, and takes the new words' size in one step when the morph has settled; no width or height ever tweens. Every animation of a swap (a letter gliding to its new place, one arriving from 0.95, one leaving to 0.95, a digit rolling in its slot, and their fades) shares one start, `--dur-morph` (180ms) and ease-out. With reduced motion nothing moves and the swap is still not instant: the old words fade out where they stand and the new ones fade in where they lay out, in the same held box, opacity only, over `--dur-morph`. A label with a second wording it is known to take (a button's "Answer" and "Answering…") stands both in one cell as wide as the wider, so it never changes width at all.
 
-**The Reduced Motion Rule.** Motion is opt-in. Every travelling transition and keyframe sits under `prefers-reduced-motion: no-preference`, and JavaScript motion asks the same question through `motionOk` (`motion/curves.svelte.ts`). With reduced motion, opacity and colour fades still run, pages cross-fade in place over 120ms, heights land at once, folds fade instead of opening, list changes only fade, flights do not fly, and loops stop (an indeterminate spinner keeps turning). Reduced motion means stillness. It does not mean an instant swap.
+**The Reduced Motion Rule.** Motion is opt-in. Every travelling transition and keyframe sits under `prefers-reduced-motion: no-preference`, and JavaScript motion asks the same question through `motionOk` (`motion/curves.svelte.ts`); no file asks `prefers-reduced-motion: reduce` on its own. With reduced motion, opacity and colour fades still run on their own clocks, blur crossfades still run (WCAG 2.3.3 counts neither as motion animation), pages cross-fade in place over `--dur-control`, heights land at once, folds fade instead of opening, list changes only fade, flights do not fly, a glide reveals its rows at once, springs land at once, and loops stop (an indeterminate spinner keeps turning). Reduced motion means stillness, fewer and gentler, never an instant swap and never nothing: the thing that changed still fades, so the reader sees that it did.
 
 **Pages.** The shell keys its page on the route (`motion/route.svelte.ts`). Between two sidebar spokes the page moves 8% vertically, in the order the sidebar runs, over 120ms. Deeper or shallower moves nudge 8% horizontally. Browser back and forward follow the history step and flip in right-to-left layouts. On a phone, Configure behaves as a stack: a deeper page pushes in from the inline end over 280ms while the page it leaves falls back 30% and dims to 0.6, and back reverses it over 260ms. On a wide screen, Configure sections rise or drop 4% over 140ms while the rail holds still. Everything runs on the drawer curve, and the leaving page is inert.
 
@@ -535,6 +577,16 @@ The question card is the worked answer: minimized, it folds to its bar over the 
 - **`unfold`** (`cawco/motion/fold.svelte.ts`): a disclosure's height, as a Svelte transition on what an `{#if}` mounts: `in:unfold` grows it from nothing to its measured height over `--dur-pop`, `out:unfold` folds it back over `--dur-exit`, fading with the height, so what sits below slides.
 - **`fluid-tabs`** (`components/ui/fluid-tabs`): segmented and tab switches, their sheet sliding under the choice (Segmented controls and tabs).
 - **The harness switch** (`cawco/motion/Rail.svelte`, down the New session form's harness rail in `cawco/spawn/ModelSection.svelte`, across the home's Working/Finished switch) is the reference tab switch: a thumb that slides under the chosen item and one label that travels to the item under the pointer or the keyboard and resizes to its name, rather than a tooltip per item, both gliding over `--dur-morph` on ease-in-out. A new switch is measured against it.
+
+A component takes one of the one-clock composites (`transition-control`, `transition-fade-hide`, `transition-band-show`, …, the sidecar's `extensions.motion` lists all 29 with their properties) rather than listing properties and clocks of its own; a new pairing of properties is a new composite token, not an inline list.
+
+The beats the rules above do not name, each with its one job:
+- `--dur-stagger` and `--dur-cascade`: a tree opening, `--dur-stagger` from one row's glyph to the next, `--dur-cascade` at most for the whole tree.
+- `--dur-menu`: menus, tooltips, mention tips.
+- `--dur-rail`: a transcript row's rail drawing down.
+- `--dur-mark-hold`: the longest a transcript that opens on a compaction holds its reveal for Caw's mark to be drawn (The Real Wait Rule).
+- `--dur-pick-up`: a pane card lifted.
+- `--dur-glide`: a tab track's glide under a mouse wheel (Springs).
 
 ### Sound and touch
 
@@ -578,7 +630,7 @@ Live, done and fail chips are the hue's 3-step mixed 24% toward its 9-step, with
 
 ### Neutral
 - **Paper ramp** (`neutral-1` … `neutral-12`, no step 10): warm paper at hue ~85 by day, roost at hue ~70 by night. The dark ramp is its own set of lightnesses, not an inversion. `neutral-9` is the one step shared by both schemes.
-- **Surfaces**: `surface-raised` (cards, menus, popovers, dialog body), `surface-recess` (the app field, dialog tray, badges, stat well), `surface-band` (a table's header band, one step under the field), `surface-recess-deep` (the groove of a segmented control or progress track), `surface-well` with `border-well` (a content well inside a raised card: the preview beside a conversation; the recess by day, the deep recess with the control edge at night), `surface-shelf` (the bar folder tabs stand on), `surface-lift` (a thumb in a groove), `surface-fill` (pressed or selected), `surface-pressed` (the kit Toggle's on step, where a pressed or chosen control stands: `surface-fill-strong`'s step by day, `surface-fill`'s at night, so it never reads as hovered), `surface-hover` (hover on any control or row), `code-bg` (code blocks). The eight-step `surface-1…8` ladder with `surface-shadow-1…8` is in the token source for nested elevation; the dashboard's components use the named roles above.
+- **Surfaces**: `surface-raised` (cards, menus, popovers, dialog body), `surface-recess` (the app field, dialog tray, badges, stat well), `surface-band` (a table's header band, one step under the field), `surface-recess-deep` (the groove of a segmented control or progress track), `surface-well` with `border-well` (a content well inside a raised card: the preview beside a conversation; the recess by day, the deep recess with the control edge at night), `surface-shelf` (the bar folder tabs stand on), `surface-lift` (a thumb in a groove), `surface-fill` (pressed or selected), `surface-pressed` (the kit Toggle's on step, where a pressed or chosen control stands: `surface-fill-strong`'s step by day, `surface-fill`'s at night, so it never reads as hovered), `surface-hover` (hover on any control or row), `code-bg` (code blocks). The dashboard's components use these named roles.
 - **Edges**: `border-hairline` (the quiet rule between rows, cards and regions), `border-control` (a control's own edge), `border-button-outline` (the outline button's edge: 3:1 against the raised surface, by day and at night), `border-control-strong` (the strong control edge: a framed text field's own border while its text has focus, The Caret Rule; the row outline's value, 3:1 against raised and the recess, by day and at night), `border-contrast` (the top bar's solid glass under Increase Contrast or Reduce Transparency, 3:1 against the bar's shelf, `surface-shelf`, and the raised surface: 4.0:1 and 5.4:1 by day, 4.6:1 and 3.8:1 at night), `well-edge` (the reader's message well: darker than the well by day, ink at 8% at night).
 - **Inks**: `ink-strong` (primary text), `ink-muted` (secondary text and labels), `ink-row` (a ledger row's name), `ink-stat` (a stat figure), and `ink-subtle` (placeholders and tertiary text). `ink-subtle` is the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on fill, hover and raised: 6% by day (4.55 / 4.55 / 5.66:1, hover being the fill's own step) and 33.3% at night (4.52:1 on fill).
 
@@ -657,7 +709,7 @@ The name carries the row's one weight step; nothing else in the row is 500.
 
 ## Layout
 
-The shell is a resizable rail (228px by default, the reader's own width wins), a 44px top bar (the compact bar's height, Apple HIG Toolbars) with no ground of its own, and a page on the recessed field. A page pads 25px on the inline start and 21px on the end, and the groups of a page (stat row, attention queue, cards) stand 18px apart. A page has no head of its own under the bar: its name, where one helps, is the bar's title, and its first group starts at the page's top pad (The Title Bars Follow Liquid Glass Rule).
+Stacking is `z-(--layer-<role>)` only; the sixteen roles are the tokens' `layer` group. The shell is a resizable rail (228px by default, the reader's own width wins), a 44px top bar (the compact bar's height, Apple HIG Toolbars) with no ground of its own, and a page on the recessed field. A page pads 25px on the inline start and 21px on the end, and the groups of a page (stat row, attention queue, cards) stand 18px apart. A page has no head of its own under the bar: its name, where one helps, is the bar's title, and its first group starts at the page's top pad (The Title Bars Follow Liquid Glass Rule).
 
 **The Title Bars Follow Liquid Glass Rule.** The owner: "this language for titlebars should be scrpaped from all future design, apple's HIG and liquid glass has revised the titlebar model significantly". Every bar that heads a surface (the top bar, a page, a pane, a side panel or column, a sheet, the peek, the artifact panel, a canvas's band) follows Apple's toolbar model as Liquid Glass revised it, on the web, the phone's web and the native app alike (HIG, Toolbars, updated for Liquid Glass 2025-12-16: developer.apple.com/design/human-interface-guidelines/toolbars):
 - **One bar, one row.** A surface has one bar, and its title and controls share one line. Facts about the surface (its place, a path, an id, a date, a count, its ask, what it is doing) are content: drawn or said in the surface, or left out. A title stacked over a line of facts beside one row of buttons is the shape this rule retires (the owner, on a project's head: "on the left you have two rows but on the right u have 1 row of buttons").
@@ -686,12 +738,13 @@ Depth is tonal first and shadowed second. The frame (app field, dialog tray, hea
 
 ### Shadow Vocabulary
 - **Tile** (`0 1px 2px` ink at 7% by day / black at 30% at night, plus a 1px ring of ink at 3.5% / 6%): cards, machine tiles, icon tiles, report cards.
-- **Hairline** (`0 3px 7px -2px` shadow-tint-2): a drop under a tile without a ring.
-- **Stat** (the hairline drop plus the night ring): the stat tile and the permission card.
+- **Hairline** (`shadow-hairline`, `0 3px 7px -2px` shadow-tint-2): a drop under a tile without a ring.
+- **Stat** (`shadow-stat`, the hairline drop plus the night ring): the stat tile and the permission card.
 - **Raised** (`0 1px 3px` and `0 1px 1px` shadow-tint, plus the night ring): a thumb in a groove. At night the ring makes it read as a hairline-edged lift.
-- **Overlay** (`0 18px 48px` shadow-tint-3, `0 2px 6px` shadow-tint, plus the night ring): popovers, menus, the dialog tray, toasts, floating tags. The modal shadow is the same value.
-- **Drawer** (`0 12px 40px` shadow-tint-3): sheets.
+- **Overlay** (`shadow-overlay`, `0 18px 48px` shadow-tint-3, `0 2px 6px` shadow-tint, plus the night ring): popovers, menus, the dialog tray, toasts, floating tags. The modal shadow (`shadow-modal`) is the same value.
+- **Drawer** (`shadow-drawer`, `0 12px 40px` shadow-tint-3): sheets.
 - **Drop** (`shadow-drop`, `0 14px 28px` shadow-tint-2, then `shadow-drop-near`, `0 2px 4px` shadow-tint): a drawn shape rather than a box, set as two `drop-shadow()` filters so it follows the shape's edge: the grown composer, once it stands still.
+- **Pressed inset** (`shadow-inset-sel`): a button pressed inside the markdown editor.
 - **Action ring** (`action-ring`: a white top hairline at 18% and a coral-tinted drop) and **code ring** (`code-ring`: an inner vermillion hairline and glow) are in the token source for the action and code blocks.
 
 The Tailwind ladder has four steps, `shadow-xs`, `shadow-md`, `shadow-lg` and `shadow-xl` (Tailwind's own scale is cleared, so no other step exists). md, lg and xl carry the night ring.
@@ -727,7 +780,7 @@ Corners are soft and graded by role: 2px (`--radius-hair`) for marks too small t
 
 - **Shape.** Each tab is one SVG path (`fold-path.ts`, drawn by fluid-tabs' TabItem) on a box one flare wider than the tab each side: from the start foot's tip on the shelf round the flare's quarter turn up to the tab's edge, up the side, round the shoulder at the tab radius, across the top, and down the other side the same way; a folded side runs straight down the tab's edge to the shelf. The sheet fills the path and the rim strokes it inside its edge, so the outline is one shape at every width. Each side of a tab is its C: the foot's flare, the run up the flank and the shoulder. The path is drawn from a pose, each foot's spread (1 the flare's quarter turn, 0 straight down) and each side's tuck (its whole C stepped in from the tab's edge, 0 at rest), and every pose is written in the same commands in the same order (a cubic for each foot, the quarter turn's with its handles 0.5523 of the flare along each tangent; a line for each side; the shoulders' arcs; the top), so a tab changing pose is each point of its path moving. It is drawn at the tab's measured box, at scale 1. Each tab's measured shape is kept (localStorage, and the server's copy through `/prefs`, the 40 most recent that fit a cookie), so the server's first paint draws the same shape the page will measure; a tab no browser here has measured draws no outline until it is measured, never a guessed one. The UI's face (Nunito, its Latin subset) is preloaded, so the first paint lays the tabs out at the widths their shapes were measured at.
 - **Slopes.** The path brings its top corners in from the foot by `--slope-start` 1px on the leading side and `--slope-end` 0px on the trailing side (the owner's pick), chosen tab and receded alike.
-- **Stack.** Tabs overlap in depth rather than sharing a stroke: every tab runs its full width with both shoulders round, and the tab nearer the choice covers the one behind it. Each tab, its sheet, rim and contents together, is one stack at its rank in the track: the chosen tab on top, then each tab above those farther from it. A side is folded (no foot) exactly where a tab ranked above it covers its foot where the two are drawn now, that tab's body reaching back over the side's edge, or where a hanging card stands flush with it (Session card); everywhere else it stands on its flared foot. The folds follow the tabs as drawn every frame anything in the strip moves (a drag, a slide), so a side changes only while the tab above still meets it and the change lies under that tab's sheet: a tab sliding out from under its neighbour shows its foot as it emerges, and the neighbour a dragged tab leaves stands on its own. Where two tabs overlap the one in front casts its edge on the one behind (`shadow-tab-start`, `shadow-tab-end`) from its straight flank, fading out over the flare above the foot, so nothing is cast into a foot's concave corner: there the foot's curve is the one edge, and a card hanging from the tab meets it clean.
+- **Stack.** The chosen tab's edge on the tab behind it is `shadow-tab-start-chosen` on its leading side and `shadow-tab-end-chosen` on its trailing side. Tabs overlap in depth rather than sharing a stroke: every tab runs its full width with both shoulders round, and the tab nearer the choice covers the one behind it. Each tab, its sheet, rim and contents together, is one stack at its rank in the track: the chosen tab on top, then each tab above those farther from it. A side is folded (no foot) exactly where a tab ranked above it covers its foot where the two are drawn now, that tab's body reaching back over the side's edge, or where a hanging card stands flush with it (Session card); everywhere else it stands on its flared foot. The folds follow the tabs as drawn every frame anything in the strip moves (a drag, a slide), so a side changes only while the tab above still meets it and the change lies under that tab's sheet: a tab sliding out from under its neighbour shows its foot as it emerges, and the neighbour a dragged tab leaves stands on its own. Where two tabs overlap the one in front casts its edge on the one behind (`shadow-tab-start`, `shadow-tab-end`) from its straight flank, fading out over the flare above the foot, so nothing is cast into a foot's concave corner: there the foot's curve is the one edge, and a card hanging from the tab meets it clean.
 - **Switch.** A choice is a come-forward through the tabs' own C sides (owner: "a small c shape svg path at the side of the tab"; "it doesn't seem or look like the tab is pushing physically form back to front"). No tab's box moves, nothing in the strip lays out again, and no neighbour bends, bows or moves: every tab stays in its slot (Shape). The chosen tab is drawn whole over its neighbours, its C sides over theirs; a side under another tab is tucked, its foot folded. Over the first half of `--dur-settle` on `--ease-crossfade`, each side the new choice puts under its neighbour tucks while its tab is still in front: its foot folds and its whole C steps in by the overlap (`--overlap`, one flare) onto the edge of the tab behind it. At half way, where that edge is all that shows, the stack is ranked for the new choice in one frame, and nothing drawn changes there. Over the second half each side the choice puts over its neighbour sweeps out: the chosen tab's C sides spread from folded to the full flare over the tabs beside it, while the side that tucked steps back out to its own edge under them, out of sight. A side that keeps its fold stands as it is. A jump is the same: only the sides the new ranking changes move. One run on the track (`tab-come-forward`) is the clock, and every pose is read off its progress each frame, so a slowed or seeked clock draws the paths where it stands, and a new switch caught mid-way starts from the paths as drawn. Everything else a choice changes travels on the same clock (`--dur-settle`, 400ms, the owner's "Slow · 400ms", on `--ease-crossfade`): the fill from the receded tint to the sheet's, the title's ink (the name twice in one cell, the strong ink faded in over the muted) and the rims' strengths all follow one typed value per tab (`--pick`, 0 to 1). `ease-crossfade` (CSS ease-in-out) moves at most 7.2% of a change in any 1/60s at 400ms; every other house curve moves more than an eighth in one frame there, which reads as a lurch. A swipe drives all of it frame by frame with the finger, and plays on, or back, as the finger lets go. A tab that has just opened grows in at its place in front, and a choice moved by its tab closing moves at once; neither comes forward. A choice made from the keyboard (the tablist's arrows, Home and End, Enter on a tab, a shortcut) is instant, as every keyboard action is (Emil Kowalski: never animate keyboard-initiated actions); only a pointer's choice comes forward. With reduced motion every choice is instant: the stack ranked and every path at rest at once.
 - **Edges of a scrolling strip.** A strip that scrolls fades the tabs past its ends (the house edge fade), but never a tab drawn chosen: each end's fade is cut short at the chosen tab, and while a switch runs, at the tab it is leaving too, which is still drawn chosen until it lands. A choice scrolls the strip only as far as it takes to show the new tab whole, and a choice that comes forward scrolls it on the come-forward's own clock and curve, from where it stands at the motion's first frame (never a jump ahead of it), clear of the fades where there is room, and keeps the tab it leaves whole beside it, feet included, where the two fit the strip together; where they do not (two tabs at their 240px cap on a phone), the new tab is the one shown whole.
 
@@ -908,7 +961,7 @@ A compact tinted row, never a slab: 10px radius, 10×12px padding, body type, an
 - **The reader's message's actions** stand on its speaker line, never in its well, so the well holds the words alone and hugs them: its foot is its words' foot and its padding, with no band kept for controls. Under the pointer and for keyboard focus Copy message, Edit message and Fork from here, in that order, come in at the end of the "You" line before the clock, each the kit's ghost `icon-sm` (30px, its 16px glyph) with its tooltip and its name, and hold while one of them runs. They fade in over `--dur-control` on ease-out and take their room at rest, so showing them changes paint only; they stand on the line, clear of the words, the note, the clock, the well and the next turn. In a run every later message's part opens with its own line on the hairline from the part above, its clock at the end standing at rest (the line is never empty), and its actions stand on that line beside it for that part alone, so a run carries every message's time. Where nothing hovers (a coarse pointer) one handle (`menu-dots`, the same ghost `icon-sm`, its 44px touch area) stands at rest after the clock and opens the kit's bottom sheet "Message" with Copy, Edit and Fork from here as 44px rows; a press runs the action and the sheet goes. Edit is offered on the reader's own sent message alone, while the agent is not running; it opens the message in place, where one line in meta ink above Cancel edit and Send edited message states the cost before the press: "Sending goes back to this message and replaces everything after it in the conversation." While its strip holds the keyboard's focus, while it is being edited, or while its sheet is open, the message is chosen: the transcript's selection pill stands under its well, in the well's four corners, square where a run opens the part (The Concentric Rule), and glides to the next one chosen. Copy's glyph becomes the drawn check for `--dur-hold`; a browser that refuses the clipboard says so under the words, with the way out. A queued or failed message says its state and its way back at rest, inside its well under the words, as text buttons: queued, Edit in place (its words lift into the composer) and Remove from queue; failed, under the reason, Retry, Edit (its words back in the composer) and Remove, or what fixes the refusal (Choose a mode, Move to …, Start a new session) while it holds. While a recovery row stands the message has no strip and no handle.
 - **A queued message being edited** folds to its tag ("queued · editing it below") over `--dur-panel` on the drawer curve while its words are in the composer, and opens again to take them back (`motion/fold`); its words are hidden while they fly, so the screen never shows two. A transcript held at its foot stays at its foot through both. Its Edit in place, at rest in its well, lifts it.
 - **Live tail:** one row holds the turn's indicator, reasoning and answer in turn. A phase change cross-fades inside the row (out 160ms, in 140ms) while the row's height tweens over 260ms on ease-in-out.
-- **Compaction divider:** a 1px wavy line in `brand-solid` across the column (1.5px amplitude, 16px wavelength) with Caw's head and "Compacted" in `brand-ink` at its centre; the whole row is the button that opens the compaction's brief under it. Under the pointer or keyboard focus the line and word step to `brand-ink-strong` and a chevron arrives after the word over 160ms on `ease-arrive` (4px slide, scale 0.25, 4px blur, opacity), leaving over 120ms on ease-out; the centre makes room by moving and the arms by clipping, never by resizing. Open, the chevron stays, turned down over 160ms on ease-in-out. A press scales the centre to 0.97, never the line. Landed live, the line draws in once from the centre over 260ms on ease-out and Caw plays his `compacted` file's enter clip once, then rests; read back from history nothing moves. At rest Caw is drawn only from `compacted.riv`: every divider shows one shared picture of his still, drawn from the file once per scheme and device pixel ratio, in an 18px box with 2px of canvas past it for his rim; with less motion he rests from the start. A compaction has this one row from its first moment and nothing else in the transcript announces it. While it runs, the row stands where the divider will be, with no line and nothing to open: Caw plays his looping `working` file in a `tx-compacting-caw` (32px) slot beside "Compacting…" in `brand-ink`. He stands taller than the line and takes no height, so the row never changes height. When it ends the row settles in place. The slot closes to 18px over `--dur-panel` on ease-out, carrying the word with it. Caw at work leaves by his own leave (`--dur-fade`), and his `compacted` file then plays its enter in the 18px box. The word morphs letter by letter to "Compacted", and the line draws out from it as on landing. With less motion nothing moves: Caw cross-fades and the line fades in. A compaction that fails becomes one line in `status-fail-ink` in the error formula ("Couldn't compact the conversation: …"), as wide as the column, with no line, no Caw and no "Compacted". A visually hidden status region in the row says "Compacting…", then "Compacted" or the failure.
+- **Compaction divider:** a 1px wavy line in `brand-solid` across the column (1.5px amplitude, 16px wavelength) with Caw's head and "Compacted" in `brand-ink` at its centre; the whole row is the button that opens the compaction's brief under it. Under the pointer or keyboard focus the line and word step to `brand-ink-strong` and a chevron arrives after the word over 160ms on ease-out (4px slide, scale 0.25, 4px blur, opacity), leaving over 120ms on ease-out; the centre makes room by moving and the arms by clipping, never by resizing. Open, the chevron stays, turned down over 160ms on ease-in-out. A press scales the centre to 0.97, never the line. Landed live, the line draws in once from the centre over 260ms on ease-out and Caw plays his `compacted` file's enter clip once, then rests; read back from history nothing moves. At rest Caw is drawn only from `compacted.riv`: every divider shows one shared picture of his still, drawn from the file once per scheme and device pixel ratio, in an 18px box with 2px of canvas past it for his rim; with less motion he rests from the start. A compaction has this one row from its first moment and nothing else in the transcript announces it. While it runs, the row stands where the divider will be, with no line and nothing to open: Caw plays his looping `working` file in a `tx-compacting-caw` (32px) slot beside "Compacting…" in `brand-ink`. He stands taller than the line and takes no height, so the row never changes height. When it ends the row settles in place. The slot closes to 18px over `--dur-panel` on ease-out, carrying the word with it. Caw at work leaves by his own leave (`--dur-fade`), and his `compacted` file then plays its enter in the 18px box. The word morphs letter by letter to "Compacted", and the line draws out from it as on landing. With less motion nothing moves: Caw cross-fades and the line fades in. A compaction that fails becomes one line in `status-fail-ink` in the error formula ("Couldn't compact the conversation: …"), as wide as the column, with no line, no Caw and no "Compacted". A visually hidden status region in the row says "Compacting…", then "Compacted" or the failure.
 - **Notice row:** CawCo's own message to the agent (a leak, a carry-on, a wake, a restart) is never drawn in the person's message shape. It takes the account line's place and shape: a `border-control` hairline across the column with one `type-meta` line in `ink-muted` at its centre, the 16px note glyph, the notice's line (core `words/notices.ts`) and a chevron. The whole line is the button that opens, at the text column as a brief opens, "Sent to the agent" in `ink-subtle` over the text the agent read. A run of notices with no turn between them is one row: the newest one's line, then "· 2 more" in `ink-subtle`, opening to each in order, its line over its text. A notice the session has not read yet stands at `--ghost-presence`, as a waiting send does. A notice of something that runs on (a leak's processes) ends its line "· still running" while it does and "· ended" once it has, changed in place on the same row.
 - **Rail:** a flat 2px line of `neutral-11` at 40%, the same in the head row and every row that continues it (`rail`, `rail-body`), so no seam shows. It is a one-colour gradient, not a colour: rows paint it as a background layer sized 2px wide, and a colour would fill the whole row.
 - **Tool rows:** 26px, label weight, the tool family's hue on its 16px glyph, the argument in mono and muted ink. The in-flight tool's glyph breathes to `--breath-floor` on `--breath`; finished rows hold still.
@@ -982,7 +1035,7 @@ The surface of the projects plan §5.11 (`preview/BrowserView.svelte`, its strea
 ### Permission gate
 A raised card (12px, control edge, hairline shadow, 11px padding) floating over the composer. It arrives once, rising 8px over 240ms, and is then completely still: the arrival is the whole signal.
 
-**The Peer Rule.** Approve and Deny are peers: the same size (`sm`, 30px; 44px of touch area on a coarse pointer), the same label type, the same fill, the same edge, and neither is ever made the more inviting. Why the rule exists (4ca69663): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They take one form on every surface (Caw's panel, the transcript's permission card `transcript/Prompt.svelte`, the peek's answer row `PeekPane.svelte`): apart and untinted. Deny and Approve stand at opposite ends of their row, the row's full width between them and never less than `--space-8`, no third control in that gap, so distance guards the thumb. Both take the one recessed fill (`surface-recess`) and one 1px `border-button-outline` edge, and their glyphs (a cross, a tick) and labels are `ink-strong`; they read apart by glyph, word and place, never by hue. No status fill or status ink touches either (The Reserved Hue Rule; the owner, on a red and a green button under a yellow card: "yellow card on red and green buttons i'm going to VOMIT"). Neither the fill nor the edge changes under the pointer, so the hand's last move never makes one brighter. In Caw's panel the pair's row is the row's last line: Deny on the text column's start, Approve on the trailing edge.
+**The Peer Rule.** Approve and Deny are peers: the same size (`sm`, 30px drawn; a 44×44 hit area on every pointer, not only a finger's, since HIG's 44 is for a pointer too and they are the pair pressed under time pressure), the same label type, the same fill, the same edge, and neither is ever made the more inviting. Why the rule exists (4ca69663): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They take one form on every surface (Caw's panel, the transcript's permission card `transcript/Prompt.svelte`, the peek's answer row `PeekPane.svelte`): apart and untinted. Deny and Approve stand at opposite ends of their row, the row's full width between them and never less than `--space-8`, no third control in that gap, so distance guards the thumb. Both take the one recessed fill (`surface-recess`) and one 1px `border-button-outline` edge, and their glyphs (a cross, a tick) and labels are `ink-strong`; they read apart by glyph, word and place, never by hue. No status fill or status ink touches either (The Reserved Hue Rule; the owner, on a red and a green button under a yellow card: "yellow card on red and green buttons i'm going to VOMIT"). Neither the fill nor the edge changes under the pointer, so the hand's last move never makes one brighter. In Caw's panel the pair's row is the row's last line: Deny on the text column's start, Approve on the trailing edge.
 
 **The Consequential Grant Rule.** A standing grant ("Always allow … for …") is a wider grant than the request, so it is kept apart: under a 32px break and a hairline, after a sentence saying what it would allow, and drawn in the warning tint with warning ink, a shield glyph and a real edge. It is the most salient control on the card on purpose. Above the answer row the card says who asks (its title), what will happen and to what (one strong line), and how much changes; then the change itself, open (the transcript's diff, at most `c-ask-diff-share` of the screen tall, scrolling inside), and the other input fields in a recess well, each value scrolling past 200px. Nothing is behind a disclosure: a grant is made on what it changes.
 
@@ -991,7 +1044,7 @@ A question card answers with option chips (30px, 8px radius, keycap digits). A p
 A decision page's card (`decisions/host/Decision.svelte`, and the kit's `.dp-card`) asks its question and answers with those chips, and a press on one picks it: the pick is kept at once and the card stays open, the chosen option in its chosen look where it stands. A press on the chosen one again (or Space, or its digit) lets it go; a several-pick card toggles each. There is no Continue, no Done and no fold (the owner: "The done and continue are useless buttons that break the flow of how this form should work", and, asked whether a picked card folds or stays open, "Stays open"). "Add a note" opens its field, which keeps what is typed as it is typed and stays open while it holds words. The page's one Send stands at its foot, with ⌘/Ctrl+Enter; the panel's head and a Needs you row stand no Send of their own for a decision page (his pick, "Only the page's own Send"). A note with no pick is the person talking: the agent answers it first and asks again (the decision-page skill).
 
 ### Effort chip
-A slider whose chip lives inside its fill. The track is a 30px raised field (38px on a phone) with a 10px radius. The fill is recess-deep. The chip is a lifted 8px block with a neutral-8 inner edge, holding level bars (2×10px, 4px pitch, 22% when unlit) and the level word. The chip snaps to the nearest level and is as wide as its longest word, so the rail never moves. A level change slides the fill over 160ms on ease-in-out, morphs the word letter by letter over 180ms, and fills the bars in order from the foot, 40ms apart (or drains them from the top down) over 180ms each. Stop pips show only where they are clear of the chip.
+A slider whose chip lives inside its fill. The track is a 30px raised field (38px on a phone) with a 10px radius. The fill is recess-deep. The chip is a lifted 8px block with a neutral-8 inner edge (`shadow-knob`), holding level bars (2×10px, 4px pitch, 22% when unlit) and the level word. The chip snaps to the nearest level and is as wide as its longest word, so the rail never moves. A level change slides the fill over 160ms on ease-in-out, morphs the word letter by letter over 180ms, and fills the bars in order from the foot, 40ms apart (or drains them from the top down) over 180ms each. Stop pips show only where they are clear of the chip.
 
 ### New-session popover
 The surface that set the language. It hangs from the trigger pressed, a popover like any other (the rail's Start session holds it for an opener with no trigger of its own), and holds nothing: no scrim, no blur, the page live beside it. A recess tray (12px, 7px padding, the popover's shadow, `c-new-session-pop-w` wide, as tall as the room under its trigger) holds a raised body (12px), and it opens and closes on the popover's own motion. Sections fade up 8px in a stagger. Its own popovers hang from it and glide between sibling triggers, morphing width and height over 260ms on the drawer curve. Setting chips are 30px with an 8px radius, a 16px glyph and a 12px chevron. A setting that cannot be changed where it is shown is the same chip sunk into the surface: `surface-recess` fill, `border-hairline` edge, no chevron and no hover, never plain text beside its bordered neighbours. Icon tiles are raised 8px squares with the tile shadow, dashed for empty or inverted for chosen. Under 640px the popover becomes a vaul bottom sheet.
@@ -1046,7 +1099,7 @@ The words the product shows live in `packages/core/src/words/**`, their one sour
 ## Do's and Don'ts
 
 ### Do:
-- **Do** take every colour, radius, type role, spacing step, curve and duration from the tokens in `design/tokens/cawco.tokens.json`. Add a token there and run `bun run tokens` before adding a one-off value.
+- **Do** take every colour, radius, type role, spacing step, curve and duration from the tokens `design/tokens/cawco.resolver.json` resolves: its base set `cawco.tokens.json`, or the modifier file a scheme, a pointer or a density differs in. Add a token to the file its context owns and run `bun run tokens` before adding a one-off value.
 - **Do** keep the action coral with its top-highlight gradient, and spend other hue only on status, identity and threshold data.
 - **Do** check every change in both schemes; neither is the default.
 - **Do** measure white on any new coral fill to 4.5:1, top gradient stop included.
@@ -1055,7 +1108,7 @@ The words the product shows live in `packages/core/src/words/**`, their one sour
 - **Do** set every changing figure in tabular numerals (`.num`), and keep weights at 400 and 500.
 - **Do** use Solar bold-duotone for every product icon, linear only for chevrons and arrows, at 12, 16 or 20px, each the glyph alone with no circle, square or box round it.
 - **Do** make a compact control scale to 0.97 on press and a wide or grouped one tint to `surface-pressed`, the step past the hover, so a press never reads as hovered.
-- **Do** give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size.
+- **Do** give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size, and Approve and Deny a 44×44 area on every pointer.
 - **Do** enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.
 - **Do** carry shared objects across a change, and reflow lists rather than letting rows jump.
 - **Do** take the house helper for each kind of motion: `morph()` for a size tween, `reflow()` for a list, `unfold` for a disclosure, `NsPopoverGroup` for a popover glide, `fluid-tabs` or the harness `Rail` for a tab switch (The House Helper Rule).
@@ -1076,7 +1129,7 @@ The words the product shows live in `packages/core/src/words/**`, their one sour
 - **Don't** write a token value in `app.css` or a component, or edit the generated `tokens.css`.
 - **Don't** set any text above weight 500, or pick a size without a role.
 - **Don't** use `rgba(0,0,0,·)` shadows; shadows come from the warm ink tints.
-- **Don't** use an ease-in curve, or let an exit run longer than its entrance.
+- **Don't** use an ease-in curve or CSS `ease`, start a run slow, animate a keyboard-initiated action, or let an exit run longer than its entrance.
 - **Don't** keep an arrived surface moving: no pulse or attention loop on anything that is not live work.
 - **Don't** send the reader away from where they asked, show a result the system hasn't confirmed, drop their state when something fails, or copy one flow's parts onto another that doesn't ask the same questions.
 - **Don't** let a reload, ×, Esc or a press outside cancel or lose work a surface started, or tell a failure in a toast that leaves on a timer.

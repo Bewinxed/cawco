@@ -834,7 +834,7 @@ final class DocRow: UIView {
         reveal.driver?.readerToggled()
         let (fade, done) = reveal.toggle(open: open)
         guard !UIAccessibility.isReduceMotionEnabled else { fade(); done(); return }
-        let animator = Motion.easeOut.animator(open ? Motion.durReveal : Motion.durExit) { fade() }
+        let animator = Motion.easeOut.animator(open ? Motion.durPop : Motion.durExit) { fade() }
         animator.addCompletion { _ in done() }
         animator.startAnimation()
     }

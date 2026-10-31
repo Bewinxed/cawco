@@ -678,7 +678,7 @@ final class WellSurface: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         let rect = bounds.inset(by: UIEdgeInsets(top: 0, left: inset, bottom: 0, right: 0))
-        let r = Radius.wellR
+        let r = Radius.radiusWell
         var corners: UIRectCorner = []
         if !grouped { corners.formUnion([.topLeft, .topRight]) }
         if !runsOn { corners.formUnion([.bottomLeft, .bottomRight]) }
@@ -724,7 +724,7 @@ final class WellSurface: UIView {
         let ring = CAShapeLayer()
         flashRing = ring
         let rect = bounds.inset(by: UIEdgeInsets(top: 0, left: inset, bottom: 0, right: 0)).insetBy(dx: 1, dy: 1)
-        ring.path = UIBezierPath(roundedRect: rect, cornerRadius: Radius.wellR - 1).cgPath
+        ring.path = UIBezierPath(roundedRect: rect, cornerRadius: Radius.radiusWell - 1).cgPath
         ring.fillColor = nil
         ring.lineWidth = 2
         ring.strokeColor = Palette.brandSolid.resolvedColor(with: traitCollection).cgColor

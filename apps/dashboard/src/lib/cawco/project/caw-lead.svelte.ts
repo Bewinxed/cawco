@@ -80,12 +80,10 @@ export const HEAD_NEXT: CawStatus[] = [
   "reconnecting",
 ];
 
-/** `--breath` in ms (`calc(var(--c-500) * 4)`), read from the root. */
+/** `--breath` in ms, read from the root. */
 function breathMs(): number {
-  return (
-    msOf(
-      getComputedStyle(document.documentElement).getPropertyValue("--c-500")
-    ) * 4
+  return msOf(
+    getComputedStyle(document.documentElement).getPropertyValue("--breath")
   );
 }
 

@@ -40,8 +40,8 @@ class RailRow: TapControl {
     /// Labels whose ink follows the row's state.
     var inks: [KitLabel] = []
     var glyphs: [GlyphView] = []
-    /// The row's resting ink (`text-sidebar-foreground`, or muted for "N older").
-    var restInk = Palette.sidebarForeground { didSet { paint(animated: false) } }
+    /// The row's resting ink (`text-ink-strong`, or muted for "N older").
+    var restInk = Palette.inkStrong { didSet { paint(animated: false) } }
     /// The row's ground at rest: clear, or a state's wash (a failed session's).
     var restFill = UIColor.clear { didSet { if restFill != oldValue { paint(animated: false) } } }
 
@@ -142,7 +142,7 @@ class RailRow: TapControl {
 final class GhostIconButton: UIButton {
     var on = false { didSet { paint() } }
 
-    init(_ glyph: Glyph, label: String, tint: UIColor = Palette.sidebarForeground, side: Double = 30) {
+    init(_ glyph: Glyph, label: String, tint: UIColor = Palette.inkStrong, side: Double = 30) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         var config = UIButton.Configuration.plain()

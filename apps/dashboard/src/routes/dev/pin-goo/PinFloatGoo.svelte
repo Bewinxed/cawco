@@ -7,7 +7,7 @@
   1. It pours out of its pin (the owner: "with the same goo-out animation
      https://transitions.dev/detail.html?t=gooey-plus-menu"), on that demo's
      clock and curves: open over `--dur-goo` on `--ease-goo` (its
-     overshoot), close over `--dur-goo-exit` on `--ease-goo-exit` with the
+     overshoot), close over `--dur-goo-exit` on `--ease-out` with the
      pin's dip. The pin, the card and the bridge between them are ONE vector
      silhouette (./silhouette.ts), one `<path>` with a real 1px
      `border-control` stroke, redrawn each frame from the shapes' boxes
@@ -24,7 +24,7 @@
      pin it pours from never wears it. What stands on it fades as
      the demo's icons do: the thread in over `--dur-goo-content` after
      `--dur-goo-content-delay`, out over `--dur-goo-content-exit`, on
-     `--ease-goo-content`, without their blur; clipped to the card's box as
+     `--ease-out`, without their blur; clipped to the card's box as
      drawn all the while. As it closes, the pin and the shape dip
      `--goo-dip` and back over `--dur-goo-settle`, and the card stays until
      that dip is done, the pin's own face back by then.
@@ -367,7 +367,7 @@
     to: to ? 1 : 0,
     elapsed: 0,
     length: knob(to ? "--dur-goo" : "--dur-goo-exit"),
-    curve: curveOf(to ? "--ease-goo" : "--ease-goo-exit"),
+    curve: curveOf(to ? "--ease-goo" : "--ease-out"),
   });
   const runAt = (run: Run) =>
     run.from +
@@ -737,7 +737,7 @@
   /** The demo's anticipation: the shape and the pin dip and come home as it closes. */
   function dip() {
     const dy = `translateY(${numberOf("--goo-dip")}px)`;
-    const easing = ease("--ease-goo-exit");
+    const easing = ease("--ease-out");
     for (const one of [goo, rimLayer, pinLayer]) {
       one?.animate(
         [
@@ -830,7 +830,7 @@
     data-slot="pin-goo"
   >
     <use
-      class="drop-shadow-drop-near transition-opacity duration-(--dur-goo-content) ease-goo-content group-data-run/goo:opacity-0 group-data-run/goo:duration-(--dur-goo-content-exit) motion-reduce:transition-none"
+      class="drop-shadow-drop-near transition-opacity duration-(--dur-goo-content) ease-out group-data-run/goo:opacity-0 group-data-run/goo:duration-(--dur-goo-content-exit) motion-reduce:transition-none"
       data-slot="goo-drop"
       href="#{uid}-goo-shape"
     />
@@ -859,14 +859,14 @@
   >
     <div bind:this={pinShift} class="relative flex">
       <div
-        class="flex transition-[opacity] duration-(--dur-goo-content) ease-goo-content group-data-[face=joined]/goo:opacity-0 group-data-[face=joined]/goo:duration-(--dur-goo-content-exit) motion-reduce:transition-none"
+        class="flex transition-[opacity] duration-(--dur-goo-content) ease-out group-data-[face=joined]/goo:opacity-0 group-data-[face=joined]/goo:duration-(--dur-goo-content-exit) motion-reduce:transition-none"
         data-slot="pin-own-face"
       >
         {@render pill?.()}
       </div>
       <!-- mark-line: the dot stands on the pin's top-end corner, absolutely, not beside its figure -->
       <span
-        class="absolute inset-0 flex items-center justify-center whitespace-nowrap rounded-pill type-label num text-action-solid data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-goo-content group-data-[face=joined]/goo:opacity-100 group-data-[face=joined]/goo:duration-(--dur-goo-content) motion-reduce:transition-none"
+        class="absolute inset-0 flex items-center justify-center whitespace-nowrap rounded-pill type-label num text-action-solid data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-out group-data-[face=joined]/goo:opacity-100 group-data-[face=joined]/goo:duration-(--dur-goo-content) motion-reduce:transition-none"
         data-focused={focused || undefined}
         data-slot="pin-joined-face"
         ><span data-figure>{pin}</span>{#if dot}<PinDot {dot} />{/if}</span
@@ -942,7 +942,7 @@
     data-slot="pin-goo-clip"
   >
     <div
-      class="flex min-h-0 min-w-0 flex-col gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain p-space-3 opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-goo-content group-data-[open=true]/goo:opacity-100 group-data-[open=true]/goo:duration-(--dur-goo-content) group-data-[open=true]/goo:delay-(--dur-goo-content-delay) motion-reduce:transition-none"
+      class="flex min-h-0 min-w-0 flex-col gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain p-space-3 opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-out group-data-[open=true]/goo:opacity-100 group-data-[open=true]/goo:duration-(--dur-goo-content) group-data-[open=true]/goo:delay-(--dur-goo-content-delay) motion-reduce:transition-none"
       data-slot="pin-body"
       bind:this={body}
     >

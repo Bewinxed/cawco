@@ -292,7 +292,7 @@ final class CompactionButton: UIControl {
         chev = to
         let still = UIAccessibility.isReduceMotionEnabled
         // It leaves a little quicker than it arrives.
-        let (duration, curve) = to == 1 ? (Motion.durToggle, Motion.easeArrive) : (Motion.durControl, Motion.easeOut)
+        let (duration, curve) = to == 1 ? (Motion.durToggle, Motion.easeOut) : (Motion.durControl, Motion.easeOut)
         let glide = animated && moved && !still
         let move: @MainActor @Sendable () -> Void = {
             self.mid.transform = self.centre

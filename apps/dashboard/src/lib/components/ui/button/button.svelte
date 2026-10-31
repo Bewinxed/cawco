@@ -92,6 +92,9 @@
         "approve-strong":
           "border-status-done-ink bg-surface-recess text-ink-strong not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink",
       },
+      /** Its 44×44 area on every pointer, not only a finger's (DESIGN.md,
+          The Peer Rule: Approve and Deny). */
+      hit: { always: "touch-hit-always" },
       /** No edge of its own. */
       edge: { none: "border-transparent" },
       /** Its box: a prompt's answer (the label size at medium weight, the
@@ -249,6 +252,7 @@
     press: pressKind = "scale",
     tone,
     answer,
+    hit,
     edge,
     fit,
     shape,
@@ -291,6 +295,7 @@
         press: pressKind,
         tone,
         answer,
+        hit,
         edge,
         fit,
         shape,

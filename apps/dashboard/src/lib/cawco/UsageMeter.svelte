@@ -538,7 +538,7 @@
               {#each stripMarks as ring, i (ring.id)}
                 <span
                   data-slot="slot"
-                  class="absolute top-0 grid transition-[inset-inline-start] duration-(--dur-reveal) ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid transition-[inset-inline-start] duration-(--dur-morph) ease-in-out motion-reduce:transition-off"
                   style:inset-inline-start={slotAt(
                     i,
                     stripMarks.length + (stripMore > 0 ? 1 : 0)
@@ -554,7 +554,7 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] duration-(--dur-reveal) ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] duration-(--dur-morph) ease-in-out motion-reduce:transition-off"
                   data-strip-more
                   style:inset-inline-start={slotAt(
                     stripMarks.length,

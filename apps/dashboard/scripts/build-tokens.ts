@@ -112,7 +112,6 @@ const SELECTION_OUT = "src/lib/tokens/selection.css";
 const RETIRED = new Set([
   "background",
   "foreground",
-  "card-foreground",
   "muted",
   "muted-foreground",
   "destructive",
@@ -121,8 +120,6 @@ const RETIRED = new Set([
   "info",
   "error",
   "sidebar",
-  "sidebar-foreground",
-  "sidebar-border",
   "font-sans",
 ]);
 

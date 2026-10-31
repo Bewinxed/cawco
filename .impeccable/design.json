@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-31T07:18:05.000Z",
+  "generatedAt": "2026-10-31T08:30:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -1931,6 +1931,383 @@
         "role": "tertiary",
         "displayName": "Diff Del Emphasis",
         "canonical": "light-dark(oklch(0.5 0.17 15 / 0.1), oklch(0.58 0.17 15 / 0.1))"
+      },
+      "account-rose": {
+        "role": "identity",
+        "displayName": "Account Rose",
+        "canonical": "light-dark(oklch(0.51 0.165 349.8), oklch(0.705 0.17 349.8))",
+        "hex": "#a63273",
+        "hexDark": "#eb6eaf",
+        "tonalRamp": [
+          "#210010",
+          "#4d002e",
+          "#7a004e",
+          "#a02c6e",
+          "#c75190",
+          "#ef75b4",
+          "#ffa3d6",
+          "#ffe0f4"
+        ]
+      },
+      "account-violet": {
+        "role": "identity",
+        "displayName": "Account Violet",
+        "canonical": "light-dark(oklch(0.51 0.15 292.5), oklch(0.7 0.155 292.5))",
+        "hex": "#6b51b3",
+        "hexDark": "#a28af5",
+        "tonalRamp": [
+          "#110032",
+          "#2d0065",
+          "#482989",
+          "#664bad",
+          "#866ed3",
+          "#a991fa",
+          "#cbbcff",
+          "#efe9ff"
+        ]
+      },
+      "account-week-toward": {
+        "role": "neutral",
+        "displayName": "Account Week Toward",
+        "canonical": "light-dark(oklch(0 0 none), oklch(1 0 none))",
+        "hex": "#000000",
+        "hexDark": "#ffffff",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "ring-track-spent": {
+        "role": "neutral",
+        "displayName": "Ring Track Spent",
+        "canonical": "light-dark(oklch(0.805 0.016 80), oklch(0.488 0.012 74))",
+        "hex": "#c5beb4",
+        "hexDark": "#645f59",
+        "tonalRamp": [
+          "#0f0a05",
+          "#29241c",
+          "#474139",
+          "#666057",
+          "#878178",
+          "#aaa49a",
+          "#cfc8be",
+          "#f4eee3"
+        ]
+      },
+      "surface-well": {
+        "role": "neutral",
+        "displayName": "Surface Well",
+        "canonical": "light-dark(oklch(0.967 0.008 84), oklch(0.184 0.004 70))",
+        "hex": "#f7f4ee",
+        "hexDark": "#141211",
+        "tonalRamp": [
+          "#0d0b08",
+          "#272521",
+          "#44423d",
+          "#63615c",
+          "#85827d",
+          "#a7a59f",
+          "#cbc9c3",
+          "#f1eee9"
+        ]
+      },
+      "tab-sheet": {
+        "role": "neutral",
+        "displayName": "Tab Sheet",
+        "canonical": "light-dark(oklch(0.967 0.008 84), oklch(0.222 0.006 70))",
+        "hex": "#f7f4ee",
+        "hexDark": "#1d1b18",
+        "tonalRamp": [
+          "#0d0b08",
+          "#272521",
+          "#44423d",
+          "#63615c",
+          "#85827d",
+          "#a7a59f",
+          "#cbc9c3",
+          "#f1eee9"
+        ]
+      },
+      "tab-recede-1": {
+        "role": "neutral",
+        "displayName": "Tab Recede 1",
+        "canonical": "light-dark(oklch(0.92 0.011 83), oklch(0.184 0.004 70))",
+        "hex": "#e8e4dd",
+        "hexDark": "#141211",
+        "tonalRamp": [
+          "#0d0b06",
+          "#28251f",
+          "#45423b",
+          "#64615a",
+          "#85827b",
+          "#a8a59d",
+          "#cdc9c1",
+          "#f2eee6"
+        ]
+      },
+      "surface-fill-strong": {
+        "role": "neutral",
+        "displayName": "Surface Fill Strong",
+        "canonical": "light-dark(oklch(0.854 0.014 82), oklch(0.402 0.01 72))",
+        "hex": "#d4cec5",
+        "hexDark": "#4c4742",
+        "tonalRamp": [
+          "#0e0b05",
+          "#28241d",
+          "#46413a",
+          "#656158",
+          "#878279",
+          "#a9a49b",
+          "#cec8bf",
+          "#f3eee4"
+        ]
+      },
+      "seam": {
+        "role": "primary",
+        "displayName": "Seam",
+        "canonical": "light-dark(oklch(0.645 0.175 33 / 0.32), oklch(0.665 0.17 33 / 0.38))"
+      },
+      "border-well": {
+        "role": "neutral",
+        "displayName": "Border Well",
+        "canonical": "light-dark(oklab(0.93584 0.00114568 0.010276), oklch(0.352 0.009 70))",
+        "hex": "#ede9e2",
+        "hexDark": "#3e3a36",
+        "tonalRamp": [
+          "#0d0b07",
+          "#27251f",
+          "#45423c",
+          "#64615b",
+          "#85827b",
+          "#a8a59e",
+          "#ccc9c2",
+          "#f2eee7"
+        ]
+      },
+      "border-contrast": {
+        "role": "neutral",
+        "displayName": "Border Contrast",
+        "canonical": "light-dark(oklch(0.52 0.016 76), oklab(0.5845 0.0035268 0.014578))",
+        "hex": "#6e685f",
+        "hexDark": "#817b72",
+        "tonalRamp": [
+          "#0f0a05",
+          "#2a241c",
+          "#474139",
+          "#676057",
+          "#888178",
+          "#aba49a",
+          "#cfc8be",
+          "#f5ede3"
+        ]
+      },
+      "border-button-outline": {
+        "role": "neutral",
+        "displayName": "Border Button Outline",
+        "canonical": "light-dark(oklab(0.649 0.003669 0.016187), oklab(0.5458 0.00373317 0.015146))",
+        "hex": "#958e84",
+        "hexDark": "#766f66",
+        "tonalRamp": [
+          "#0f0a04",
+          "#2a241c",
+          "#474138",
+          "#676057",
+          "#888178",
+          "#aba49a",
+          "#cfc8bd",
+          "#f5ede2"
+        ]
+      },
+      "border-row-outline": {
+        "role": "neutral",
+        "displayName": "Border Row Outline",
+        "canonical": "light-dark(oklab(0.6275 0.00370262 0.0160766), oklab(0.5458 0.00373317 0.015146))",
+        "hex": "#8e877e",
+        "hexDark": "#766f66",
+        "tonalRamp": [
+          "#0f0a04",
+          "#2a241c",
+          "#474138",
+          "#676057",
+          "#888178",
+          "#aba49a",
+          "#cfc8be",
+          "#f5ede3"
+        ]
+      },
+      "border-control-strong": {
+        "role": "neutral",
+        "displayName": "Border Control Strong",
+        "canonical": "light-dark(oklab(0.6275 0.00370262 0.0160766), oklab(0.5458 0.00373317 0.015146))",
+        "hex": "#8e877e",
+        "hexDark": "#766f66",
+        "tonalRamp": [
+          "#0f0a04",
+          "#2a241c",
+          "#474138",
+          "#676057",
+          "#888178",
+          "#aba49a",
+          "#cfc8be",
+          "#f5ede3"
+        ]
+      },
+      "brand-hover": {
+        "role": "primary",
+        "displayName": "Brand Hover",
+        "canonical": "light-dark(oklch(0.6 0.175 33), oklch(0.705 0.16 34))",
+        "hex": "#d44d33",
+        "hexDark": "#f27559",
+        "tonalRamp": [
+          "#240000",
+          "#530000",
+          "#860000",
+          "#ae280a",
+          "#d64f35",
+          "#ff7559",
+          "#ffad98",
+          "#ffe4da"
+        ]
+      },
+      "c-target-tint": {
+        "role": "primary",
+        "displayName": "C Target Tint",
+        "canonical": "light-dark(oklch(0.645 0.175 33 / 0.08), oklch(0.665 0.17 33 / 0.08))"
+      },
+      "c-change-ring": {
+        "role": "tertiary",
+        "displayName": "C Change Ring",
+        "canonical": "light-dark(oklch(0.52 0.14 140), oklch(0.76 0.15 135))",
+        "hex": "#367b24",
+        "hexDark": "#86c660",
+        "tonalRamp": [
+          "#001100",
+          "#003000",
+          "#015200",
+          "#2d731b",
+          "#509640",
+          "#73ba63",
+          "#97df87",
+          "#bbffab"
+        ]
+      },
+      "status-live-glyph": {
+        "role": "tertiary",
+        "displayName": "Status Live Glyph",
+        "canonical": "light-dark(oklch(0.5 0.15 252), oklch(0.74 0.12 245))",
+        "hex": "#0064b5",
+        "hexDark": "#65b2f1",
+        "tonalRamp": [
+          "#00062f",
+          "#00225c",
+          "#003f8e",
+          "#0062b2",
+          "#3285d9",
+          "#58a9ff",
+          "#96ceff",
+          "#d9f1ff"
+        ]
+      },
+      "status-attn-glyph": {
+        "role": "tertiary",
+        "displayName": "Status Attn Glyph",
+        "canonical": "light-dark(oklch(0.57 0.125 78), oklch(0.87 0.14 92))",
+        "hex": "#9f6c00",
+        "hexDark": "#f5d15c",
+        "tonalRamp": [
+          "#160700",
+          "#381f00",
+          "#5e3900",
+          "#865600",
+          "#ab7706",
+          "#d09a3d",
+          "#f6bf64",
+          "#ffe9b1"
+        ]
+      },
+      "tab-rim-attn": {
+        "role": "tertiary",
+        "displayName": "Tab Rim Attn",
+        "canonical": "light-dark(oklch(0.48 0.125 78), oklch(0.87 0.14 92))",
+        "hex": "#825300",
+        "hexDark": "#f5d15c",
+        "tonalRamp": [
+          "#160700",
+          "#381f00",
+          "#5e3900",
+          "#865600",
+          "#ab7706",
+          "#d09a3d",
+          "#f6bf64",
+          "#ffe9b1"
+        ]
+      },
+      "status-done-glyph": {
+        "role": "tertiary",
+        "displayName": "Status Done Glyph",
+        "canonical": "light-dark(oklch(0.52 0.14 140), oklch(0.76 0.15 135))",
+        "hex": "#367b24",
+        "hexDark": "#86c660",
+        "tonalRamp": [
+          "#001100",
+          "#003000",
+          "#015200",
+          "#2d731b",
+          "#509640",
+          "#73ba63",
+          "#97df87",
+          "#bbffab"
+        ]
+      },
+      "status-fail-glyph": {
+        "role": "tertiary",
+        "displayName": "Status Fail Glyph",
+        "canonical": "light-dark(oklch(0.53 0.19 22), oklch(0.71 0.16 20))",
+        "hex": "#c12535",
+        "hexDark": "#f57377",
+        "tonalRamp": [
+          "#230000",
+          "#520004",
+          "#860011",
+          "#b4122b",
+          "#dd434b",
+          "#ff6a6d",
+          "#ffaba8",
+          "#ffe3e0"
+        ]
+      },
+      "meter-wash-over": {
+        "role": "tertiary",
+        "displayName": "Meter Wash Over",
+        "canonical": "light-dark(oklch(0.3444 0.0849993 16.3253 / 0.06), oklch(0.87776 0.0540679 14.3906 / 0.1))"
+      },
+      "identity-ink": {
+        "role": "identity",
+        "displayName": "Identity Ink",
+        "canonical": "light-dark(oklch(0.48 0.12 0), oklch(0.74 0.11 0))",
+        "hex": "#913c5b",
+        "hexDark": "#e48da8",
+        "tonalRamp": [
+          "#22000a",
+          "#4d0023",
+          "#711e3f",
+          "#96405e",
+          "#bb617f",
+          "#e284a2",
+          "#ffa8c6",
+          "#ffe1ed"
+        ]
+      },
+      "night-ring": {
+        "role": "neutral",
+        "displayName": "Night Ring",
+        "canonical": "light-dark(transparent, oklch(0.934 0.01 82 / 0.07))"
       }
     },
     "typographyMeta": {
@@ -1973,6 +2350,14 @@
       "display": {
         "displayName": "Display",
         "purpose": "Fredoka 600, brand display only: marketing, a brand moment in an empty state. Never product chrome; the wordmark is Nunito."
+      },
+      "row": {
+        "displayName": "Row",
+        "purpose": "The title of a row that is a thing to read, not a name to scan: a task's linked items."
+      },
+      "mono-figure": {
+        "displayName": "Measured Figure",
+        "purpose": "A measurement standing among Figtree words: the usage popover's and strip's times, week shares."
       }
     },
     "shadows": [
@@ -2074,42 +2459,7 @@
       {
         "name": "surface-shadow-1",
         "value": "none",
-        "purpose": "Shadow per surface level, paired with --surface-1…8."
-      },
-      {
-        "name": "surface-shadow-2",
-        "value": "var(--shadow-tile)",
-        "purpose": "Step 2 of the nested elevation ladder, with surface-2; the dashboard draws the named roles instead."
-      },
-      {
-        "name": "surface-shadow-3",
-        "value": "0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
-        "purpose": "Step 3 of the nested elevation ladder, with surface-3; the dashboard draws the named roles instead."
-      },
-      {
-        "name": "surface-shadow-4",
-        "value": "var(--shadow-md)",
-        "purpose": "Step 4 of the nested elevation ladder, with surface-4; the dashboard draws the named roles instead."
-      },
-      {
-        "name": "surface-shadow-5",
-        "value": "0 6px 18px var(--shadow-tint-2), 0 2px 4px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
-        "purpose": "Step 5 of the nested elevation ladder, with surface-5; the dashboard draws the named roles instead."
-      },
-      {
-        "name": "surface-shadow-6",
-        "value": "var(--shadow-lg)",
-        "purpose": "Step 6 of the nested elevation ladder, with surface-6; the dashboard draws the named roles instead."
-      },
-      {
-        "name": "surface-shadow-7",
-        "value": "0 14px 40px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
-        "purpose": "Step 7 of the nested elevation ladder, with surface-7; the dashboard draws the named roles instead."
-      },
-      {
-        "name": "surface-shadow-8",
-        "value": "var(--shadow-overlay)",
-        "purpose": "Step 8 of the nested elevation ladder, with surface-8; the dashboard draws the named roles instead."
+        "purpose": "The shadow paired with --surface-1."
       },
       {
         "name": "action-ring",
@@ -2120,11 +2470,6 @@
         "name": "code-ring",
         "value": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.1))",
         "purpose": "Inner vermillion ring and soft inner glow on code blocks."
-      },
-      {
-        "name": "selected-shadow",
-        "value": "none",
-        "purpose": "A selected item casts nothing: selection is a fill, never a lift."
       },
       {
         "name": "shadow-knob",
@@ -2166,57 +2511,32 @@
       {
         "name": "ease-out",
         "value": "cubic-bezier(0.23, 1, 0.32, 1)",
-        "purpose": "Entrances, exits and changes in place."
+        "purpose": "Entrances, exits, colour and any change in place: the default."
       },
       {
         "name": "ease-in-out",
         "value": "cubic-bezier(0.77, 0, 0.175, 1)",
-        "purpose": "Movement on screen: rows sliding, thumbs gliding, height tweens."
+        "purpose": "Things already on screen moving from one place to another, and a figure filling to a new value: rows sliding, thumbs gliding, height tweens, a usage arc, a strategy figure's lane."
       },
       {
         "name": "ease-drawer",
         "value": "cubic-bezier(0.32, 0.72, 0, 1)",
-        "purpose": "Popovers, sheets, page swaps, shared-element flights, container morphs."
+        "purpose": "Floating surfaces, sheets, page swaps, shared-element flights, container size changes."
       },
       {
         "name": "ease-crossfade",
         "value": "cubic-bezier(0.42, 0, 0.58, 1)",
-        "purpose": "Two states trading places where they stand: a folder tab's choice over dur-settle. At most 7.2% of a change in any 1/60s at 400ms."
-      },
-      {
-        "name": "ease-arrive",
-        "value": "cubic-bezier(0.2, 0, 0, 1)",
-        "purpose": "A small mark arriving beside what it belongs to: the compaction divider's chevron."
-      },
-      {
-        "name": "ease-figure",
-        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
-        "purpose": "A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths)."
+        "purpose": "The owner's one gentle curve, bound to the skeleton's pulse and reveal and a folder tab's choice over dur-settle: beats of 400ms and longer. At most 7.2% of a change in any 1/60s at 400ms."
       },
       {
         "name": "ease-goo",
         "value": "cubic-bezier(0.34, 1.56, 0.64, 1)",
-        "purpose": "A shape pouring out of another as one drawn silhouette (goo-join): a comment's card out of its pill. It overshoots a little and settles, the liquid's give. transitions.dev Gooey plus menu, its open curve (--pv3i)."
-      },
-      {
-        "name": "ease-goo-exit",
-        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
-        "purpose": "A comment's card drawn back into its pill as one silhouette, over --dur-goo-exit, and the dip its pin takes as it closes, over --dur-goo-settle. transitions.dev Gooey plus menu, its close curve and its anticipation's (--pv34, --pv2n)."
-      },
-      {
-        "name": "ease-goo-content",
-        "value": "cubic-bezier(0.25, 0.1, 0.25, 1)",
-        "purpose": "What stands on a goo shape (a comment card's thread, its pin's figure) fading in and out as the shape pours and drains, over --dur-goo-content and --dur-goo-content-exit. CSS ease, the curve transitions.dev Gooey plus menu gives its items' icons."
-      },
-      {
-        "name": "ease-glide-in",
-        "value": "cubic-bezier(0.3333, 0, 0.6667, 0.3333)",
-        "purpose": "A glide's first stretch (--space-3): speed rising evenly from rest into the steady pace an opening tree's line, its room and the rows under it travel at."
+        "purpose": "The one overshoot in the product, bound to a comment card pouring out of its pin (/dev/pin-goo). A shape pouring out of another as one drawn silhouette (goo-join): a comment's card out of its pill. It overshoots a little and settles, the liquid's give. transitions.dev Gooey plus menu, its open curve (--pv3i)."
       },
       {
         "name": "ease-glide-out",
         "value": "cubic-bezier(0.3333, 0.6667, 0.6667, 1)",
-        "purpose": "A glide's last stretch (--space-1): speed falling evenly from the steady pace to rest."
+        "purpose": "The last stretch of a steady glide; the glide starts at speed. From the steady pace, speed falling evenly to rest. Only glide() in motion/curves.svelte.ts writes it; no component picks it."
       },
       {
         "name": "dur-stagger",
@@ -2316,12 +2636,12 @@
       {
         "name": "dur-goo-exit",
         "value": "250ms",
-        "purpose": "A comment's card drawn back into its pill as one silhouette, on --ease-goo-exit, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g)."
+        "purpose": "A comment's card drawn back into its pill as one silhouette, on --ease-out, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g)."
       },
       {
         "name": "dur-goo-content",
         "value": "180ms",
-        "purpose": "What stands on a goo shape fading in, on --ease-goo-content after --dur-goo-content-delay. transitions.dev Gooey plus menu, its items' icons in (180ms; their 2px blur is left out: a transitioned filter can hang WebKit)."
+        "purpose": "What stands on a goo shape fading in, on --ease-out after --dur-goo-content-delay. transitions.dev Gooey plus menu, its items' icons in (180ms; their 2px blur is left out: a transitioned filter can hang WebKit)."
       },
       {
         "name": "dur-goo-content-delay",
@@ -2331,12 +2651,12 @@
       {
         "name": "dur-goo-content-exit",
         "value": "120ms",
-        "purpose": "What stands on a goo shape fading out as the shape drains, at once, on --ease-goo-content. transitions.dev Gooey plus menu, its items' icons out (120ms)."
+        "purpose": "What stands on a goo shape fading out as the shape drains, at once, on --ease-out. transitions.dev Gooey plus menu, its items' icons out (120ms)."
       },
       {
         "name": "dur-goo-settle",
         "value": "700ms",
-        "purpose": "The dip a goo shape's anchor takes as what poured out of it drains back: down --goo-dip at 30% and home, on --ease-goo-exit. A comment's pin as its card closes. transitions.dev Gooey plus menu, its anticipation (--pv2w)."
+        "purpose": "The dip a goo shape's anchor takes as what poured out of it drains back: down --goo-dip at 30% and home, on --ease-out. A comment's pin as its card closes. transitions.dev Gooey plus menu, its anticipation (--pv2w)."
       },
       {
         "name": "dur-lift",
@@ -2354,9 +2674,9 @@
         "purpose": "The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, \"Slow · 400ms\")."
       },
       {
-        "name": "dur-reveal",
-        "value": "240ms",
-        "purpose": "A disclosure growing open (collapsible-content); it folds shut over --dur-exit."
+        "name": "dur-glide",
+        "value": "300ms",
+        "purpose": "A tab track's glide under a mouse wheel: the second spring's response."
       },
       {
         "name": "dur-hold",
@@ -2379,13 +2699,8 @@
         "purpose": "A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms."
       },
       {
-        "name": "c-500",
-        "value": "500ms",
-        "purpose": "Base unit for --breath."
-      },
-      {
         "name": "breath",
-        "value": "calc(var(--c-500) * 4)",
+        "value": "2000ms",
         "purpose": "The opacity pulse of live work: beats, the in-flight tool glyph, the Working glyph, shimmer."
       },
       {
@@ -2640,12 +2955,12 @@
       },
       {
         "name": "spring-settle",
-        "value": "perceptual duration 0.4s, bounce 0, mass 1, stiffness (2π/0.4)² ≈ 246.7, damping 4π/0.4 ≈ 31.4",
+        "value": "perceptual duration --dur-settle (0.4s), bounce 0, mass 1, stiffness (2π/0.4)² ≈ 246.7, damping 4π/0.4 ≈ 31.4",
         "purpose": "Every hand-released surface (motion/spring.ts): sheets, tab swipe, the phone's group deck. Integrated at 120Hz, played as keyframes ~8ms apart."
       },
       {
         "name": "spring-glide",
-        "value": "response 0.3s, critically damped: stiffness (2π/0.3)² ≈ 438.6, damping 4π/0.3 ≈ 41.9",
+        "value": "response --dur-glide (0.3s), critically damped: stiffness (2π/0.3)² ≈ 438.6, damping 4π/0.3 ≈ 41.9",
         "purpose": "A mouse wheel moving a tab track sideways (fluid-tabs/TabsList.svelte)."
       },
       {
@@ -2670,7 +2985,7 @@
       },
       {
         "name": "tree-fold",
-        "value": "open: line glides (ease-glide-in over --space-3, steady, ease-glide-out over --space-1) at --dur-stagger a glyph, --dur-cascade at most, the room and the rows under it at the same speed; a glyph-less result over --dur-panel; each row's glyph and title over --dur-rail, ease-out. Close: from the next frame, room over --dur-exit ease-in-out, line back on ease-out",
+        "value": "open: line glides (linear at speed from its first frame, ease-glide-out over the last --space-1) at --dur-stagger a glyph, --dur-cascade at most, the room and the rows under it at the same speed; a glyph-less result over --dur-panel; each row's glyph and title over --dur-rail, ease-out. Close: from the next frame, room over --dur-exit ease-in-out, line back on ease-out",
         "purpose": "A tree's rows opening and folding under their parent (motion/branch.svelte.ts, the batch pace in motion/rows.svelte.ts)."
       },
       {
@@ -2778,9 +3093,9 @@
       "name": "Permission Gate",
       "kind": "custom",
       "refersTo": "permission-card",
-      "description": "Approve and Deny as untinted peers at opposite ends of the row (recess fill, one outline edge, ink-strong); the standing grant set apart in the warning tint.",
+      "description": "Approve and Deny as untinted peers at opposite ends of the row (recess fill, one outline edge, ink-strong), 30px drawn with a 44×44 hit area on every pointer; the standing grant set apart in the warning tint.",
       "html": "<section class=\"ds-gate\" aria-label=\"Permission request\"><p class=\"ds-gate-lede\">Run <code class=\"ds-gate-cmd\">rm -rf apps/dashboard/.svelte-kit</code></p><div class=\"ds-gate-row\"><button class=\"ds-gate-btn ds-grant\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M5 12.5l4.5 4.5L19 7.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Approve</span></button><button class=\"ds-gate-btn ds-refuse\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Deny</span></button></div><div class=\"ds-gate-widen\"><p>This would allow <code class=\"ds-gate-cmd\">rm -rf</code> for this project, a wider grant than the request above.</p><button class=\"ds-gate-btn ds-widen\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><path d=\"M12 22C10.9807 22 10.6199 21.8425 9.89844 21.5273C7.23883 20.3655 3 17.6292 3 11.9912V11L12 8V22Z\"/><path d=\"M12 2C12.8114 2 13.595 2.26825 15.1621 2.80469L15.7354 3.00098C18.7409 4.02979 20.244 4.54434 20.6221 5.08203C20.9996 5.6199 21 7.21941 21 10.417V11L12 8V2Z\"/><g opacity=\".5\"><path d=\"M21 11V11.9912C21 17.6292 16.7612 20.3655 14.1016 21.5273C13.3801 21.8425 13.0193 22 12 22V8L21 11Z\"/><path d=\"M12 8L3 11V10.417C3 7.21941 3.00041 5.6199 3.37793 5.08203C3.75595 4.54434 5.25909 4.02979 8.26465 3.00098L8.83789 2.80469C10.405 2.26825 11.1886 2 12 2V8Z\"/></g></g></svg><span>Always allow rm</span></button></div></section>",
-      "css": ".ds-gate { width: 420px; padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-hairline); color: var(--ink-strong); } .ds-gate-lede { margin: 0 0 var(--space-2); font: var(--type-body); } .ds-gate-cmd { font-family: var(--font-mono); font-size: var(--text-label); } .ds-gate-row { display: flex; justify-content: space-between; gap: var(--space-8); } .ds-gate-btn { display: inline-flex; align-items: center; gap: var(--space-2); height: var(--c-btn-h-sm); padding: 0 var(--space-3); border: 1px solid var(--border-button-outline); border-radius: var(--radius-sm); background: var(--surface-recess); font: var(--type-label); cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-gate-btn svg { width: 12px; height: 12px; }  .ds-gate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } .ds-grant { color: var(--ink-strong); } .ds-refuse { color: var(--ink-strong); } .ds-gate-widen { margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border-hairline); } .ds-gate-widen p { margin: 0 0 var(--space-2); font: var(--type-body); color: var(--ink-muted); } .ds-widen { border-color: var(--status-attn-ink); background: var(--status-attn-bg); color: var(--status-attn-ink); } @media (prefers-reduced-motion: no-preference) { .ds-gate-btn:active { transform: scale(var(--press-scale)); } } @media (pointer: coarse) { .ds-gate-btn { height: 44px; } }"
+      "css": ".ds-gate { width: 420px; padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-hairline); color: var(--ink-strong); } .ds-gate-lede { margin: 0 0 var(--space-2); font: var(--type-body); } .ds-gate-cmd { font-family: var(--font-mono); font-size: var(--text-label); } .ds-gate-row { display: flex; justify-content: space-between; gap: var(--space-8); } .ds-gate-btn { position: relative; display: inline-flex; align-items: center; gap: var(--space-2); height: var(--c-btn-h-sm); padding: 0 var(--space-3); border: 1px solid var(--border-button-outline); border-radius: var(--radius-sm); background: var(--surface-recess); font: var(--type-label); cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-gate-btn::after { content: \"\"; position: absolute; inset-block: calc(50% - var(--c-touch-floor) / 2); inset-inline: min(0px, calc(50% - var(--c-touch-floor) / 2)); } .ds-gate-btn svg { width: 12px; height: 12px; }  .ds-gate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } .ds-grant { color: var(--ink-strong); } .ds-refuse { color: var(--ink-strong); } .ds-gate-widen { margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border-hairline); } .ds-gate-widen p { margin: 0 0 var(--space-2); font: var(--type-body); color: var(--ink-muted); } .ds-widen { border-color: var(--status-attn-ink); background: var(--status-attn-bg); color: var(--status-attn-ink); } @media (prefers-reduced-motion: no-preference) { .ds-gate-btn:active { transform: scale(var(--press-scale)); } } @media (pointer: coarse) { .ds-gate-btn { height: 44px; } }"
     },
     {
       "name": "Empty State",
@@ -2813,12 +3128,22 @@
     "rules": [
       {
         "name": "The No Ease-In Rule",
-        "body": "No ease-in curve exists. Anything that starts slow feels like the interface hesitating.",
+        "body": "No ease-in curve exists, and no run starts slow: a glide starts at its speed. Anything that starts slow feels like the interface hesitating.",
+        "section": "overview"
+      },
+      {
+        "name": "The Frequency Rule",
+        "body": "How often the reader sees a motion decides whether it exists. A keyboard-initiated action never animates: the Jump palette, a list walked with the arrow keys, a shortcut's result land at once. What is seen tens of times a day (a hover, a row's highlight, a tab the reader lives in) gets a colour or opacity change on `--dur-control` or nothing. What is occasional (a popover, a sheet, a toast, a card opening) gets the standard motion below. Delight (a bounce, a flourish, a sound) belongs only to what is rare: the first run, a backup done, a wallet made (Family: \"the potential for delight increases as the frequency of feature usage decreases\"). Motion is never the only sign that something happened; a colour, a glyph or a word says it too.",
         "section": "overview"
       },
       {
         "name": "The Fast Exit Rule",
-        "body": "Exits are shorter than entrances. A popover opens over 260ms and closes over 160ms. A dialog opens over 280ms and closes over 160ms. A toast rises over 280ms and leaves over 160ms.",
+        "body": "Exits are shorter than entrances, and a thing leaves the way it came. A popover opens over `--dur-pop` (260ms) and closes over `--dur-exit` (160ms). A dialog or sheet opens over `--dur-panel` (280ms) and closes over `--dur-exit`. A toast rises over `--dur-panel` and leaves over `--dur-exit` toward its edge. The composer grows over `--dur-grow` (320ms) and folds back over `--dur-grow-exit` (220ms). Nothing on screen takes longer than `--dur-panel` but a flight (`--dur-lift`, 340ms), a grown surface, and the two picked recipes (`--dur-settle`, 400ms; `--dur-skeleton-reveal`, 400ms); ambient loops are not beats.",
+        "section": "overview"
+      },
+      {
+        "name": "The Enter Rule",
+        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` (0.92) or `--pop-rise` (8px) short of its place, fading in, never from scale 0; a popover scales from its trigger's side, a dialog from its centre. A pressed control scales to `--press-scale` (0.97) on `--dur-toggle`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another; `height` only for a disclosure, which is why `unfold` is short).",
         "section": "overview"
       },
       {
@@ -2833,7 +3158,7 @@
       },
       {
         "name": "The Interruptible Rule",
-        "body": "Every transition turns back from where it is drawn. Popovers transition on `data-state` rather than playing keyframes, folds animate from the drawn height, and a segmented thumb caught mid-glide restarts from where it stands.",
+        "body": "Every transition turns back from where it is drawn. A state a reader can flip twice in a second (a popover, a toggle, a fold, a toast's stack) is a CSS transition on `data-state`, never a keyframe that restarts from zero; folds animate from the drawn height; a segmented thumb caught mid-glide restarts from where it stands. What a finger lets go of settles on the one spring (Springs, below), which carries the finger's velocity, so a reversed drag never jumps. Predetermined motion runs off the main thread (CSS, or `element.animate()` keyframes); JavaScript drives only what must follow a value frame by frame.",
         "section": "overview"
       },
       {
@@ -2868,7 +3193,7 @@
       },
       {
         "name": "The Reduced Motion Rule",
-        "body": "Motion is opt-in. Every travelling transition and keyframe sits under `prefers-reduced-motion: no-preference`, and JavaScript motion asks the same question through `motionOk` (`motion/curves.svelte.ts`). With reduced motion, opacity and colour fades still run, pages cross-fade in place over 120ms, heights land at once, folds fade instead of opening, list changes only fade, flights do not fly, and loops stop (an indeterminate spinner keeps turning). Reduced motion means stillness. It does not mean an instant swap.",
+        "body": "Motion is opt-in. Every travelling transition and keyframe sits under `prefers-reduced-motion: no-preference`, and JavaScript motion asks the same question through `motionOk` (`motion/curves.svelte.ts`); no file asks `prefers-reduced-motion: reduce` on its own. With reduced motion, opacity and colour fades still run on their own clocks, blur crossfades still run (WCAG 2.3.3 counts neither as motion animation), pages cross-fade in place over `--dur-control`, heights land at once, folds fade instead of opening, list changes only fade, flights do not fly, a glide reveals its rows at once, springs land at once, and loops stop (an indeterminate spinner keeps turning). Reduced motion means stillness, fewer and gentler, never an instant swap and never nothing: the thing that changed still fades, so the reader sees that it did.",
         "section": "overview"
       },
       {
@@ -3043,7 +3368,7 @@
       },
       {
         "name": "The Peer Rule",
-        "body": "Approve and Deny are peers: the same size (`sm`, 30px; 44px of touch area on a coarse pointer), the same label type, the same fill, the same edge, and neither is ever made the more inviting. Why the rule exists (4ca69663): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They take one form on every surface (Caw's panel, the transcript's permission card `transcript/Prompt.svelte`, the peek's answer row `PeekPane.svelte`): apart and untinted. Deny and Approve stand at opposite ends of their row, the row's full width between them and never less than `--space-8`, no third control in that gap, so distance guards the thumb. Both take the one recessed fill (`surface-recess`) and one 1px `border-button-outline` edge, and their glyphs (a cross, a tick) and labels are `ink-strong`; they read apart by glyph, word and place, never by hue. No status fill or status ink touches either (The Reserved Hue Rule; the owner, on a red and a green button under a yellow card: \"yellow card on red and green buttons i'm going to VOMIT\"). Neither the fill nor the edge changes under the pointer, so the hand's last move never makes one brighter. In Caw's panel the pair's row is the row's last line: Deny on the text column's start, Approve on the trailing edge.",
+        "body": "Approve and Deny are peers: the same size (`sm`, 30px drawn; a 44×44 hit area on every pointer, not only a finger's, since HIG's 44 is for a pointer too and they are the pair pressed under time pressure), the same label type, the same fill, the same edge, and neither is ever made the more inviting. Why the rule exists (4ca69663): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They take one form on every surface (Caw's panel, the transcript's permission card `transcript/Prompt.svelte`, the peek's answer row `PeekPane.svelte`): apart and untinted. Deny and Approve stand at opposite ends of their row, the row's full width between them and never less than `--space-8`, no third control in that gap, so distance guards the thumb. Both take the one recessed fill (`surface-recess`) and one 1px `border-button-outline` edge, and their glyphs (a cross, a tick) and labels are `ink-strong`; they read apart by glyph, word and place, never by hue. No status fill or status ink touches either (The Reserved Hue Rule; the owner, on a red and a green button under a yellow card: \"yellow card on red and green buttons i'm going to VOMIT\"). Neither the fill nor the edge changes under the pointer, so the hand's last move never makes one brighter. In Caw's panel the pair's row is the row's last line: Deny on the text column's start, Approve on the trailing edge.",
         "section": "components"
       },
       {
@@ -3078,7 +3403,7 @@
       }
     ],
     "dos": [
-      "Do take every colour, radius, type role, spacing step, curve and duration from the tokens in `design/tokens/cawco.tokens.json`. Add a token there and run `bun run tokens` before adding a one-off value.",
+      "Do take every colour, radius, type role, spacing step, curve and duration from the tokens `design/tokens/cawco.resolver.json` resolves: its base set `cawco.tokens.json`, or the modifier file a scheme, a pointer or a density differs in. Add a token to the file its context owns and run `bun run tokens` before adding a one-off value.",
       "Do keep the action coral with its top-highlight gradient, and spend other hue only on status, identity and threshold data.",
       "Do check every change in both schemes; neither is the default.",
       "Do measure white on any new coral fill to 4.5:1, top gradient stop included.",
@@ -3087,7 +3412,7 @@
       "Do set every changing figure in tabular numerals (`.num`), and keep weights at 400 and 500.",
       "Do use Solar bold-duotone for every product icon, linear only for chevrons and arrows, at 12, 16 or 20px, each the glyph alone with no circle, square or box round it.",
       "Do make a compact control scale to 0.97 on press and a wide or grouped one tint to `surface-pressed`, the step past the hover, so a press never reads as hovered.",
-      "Do give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size.",
+      "Do give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size, and Approve and Deny a 44×44 area on every pointer.",
       "Do enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.",
       "Do carry shared objects across a change, and reflow lists rather than letting rows jump.",
       "Do take the house helper for each kind of motion: `morph()` for a size tween, `reflow()` for a list, `unfold` for a disclosure, `NsPopoverGroup` for a popover glide, `fluid-tabs` or the harness `Rail` for a tab switch (The House Helper Rule).",
@@ -3108,7 +3433,7 @@
       "Don't write a token value in `app.css` or a component, or edit the generated `tokens.css`.",
       "Don't set any text above weight 500, or pick a size without a role.",
       "Don't use `rgba(0,0,0,·)` shadows; shadows come from the warm ink tints.",
-      "Don't use an ease-in curve, or let an exit run longer than its entrance.",
+      "Don't use an ease-in curve or CSS `ease`, start a run slow, animate a keyboard-initiated action, or let an exit run longer than its entrance.",
       "Don't keep an arrived surface moving: no pulse or attention loop on anything that is not live work.",
       "Don't send the reader away from where they asked, show a result the system hasn't confirmed, drop their state when something fails, or copy one flow's parts onto another that doesn't ask the same questions.",
       "Don't let a reload, ×, Esc or a press outside cancel or lose work a surface started, or tell a failure in a toast that leaves on a timer.",
