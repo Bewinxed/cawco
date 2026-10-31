@@ -5,7 +5,8 @@
  * one a hover previews; each change asks the page what to stand on its
  * stage (`cawco:stage`). The kept states are kept per session, as the
  * canvas's view is, so the graph opens on the state kept last, or on the
- * step its address names (`?step=<story>`).
+ * step its address names (`?step=<story>`), its dock folded when the
+ * address says so (`?dock=folded`).
  *
  * The dock's state too: the kept move as its page played it (`cawco:move`),
  * the agent's timing of each clip and the person's edits of it (Original |
@@ -126,6 +127,14 @@ function addressedStep(): string | null {
     return null;
   }
   return new URLSearchParams(location.search).get("step") || null;
+}
+
+/** The address opens the dock folded to its head (`?dock=folded`), as far down as its top edge drags it. */
+function addressedDockFolded(): boolean {
+  if (typeof location === "undefined") {
+    return false;
+  }
+  return new URLSearchParams(location.search).get("dock") === "folded";
 }
 
 /** A section's first state, at rest: where its graph opens before anything was kept. */
@@ -275,7 +284,8 @@ export class DesignGraph {
     this.#index = kept.index;
     this.panelW = kept.panelW;
     this.graphH = kept.graphH;
-    this.dockH = kept.dockH;
+    // Folded is the dock's least height: GraphPanel holds it to one row, its head.
+    this.dockH = addressedDockFolded() ? 0 : kept.dockH;
     this.#edits = kept.edits;
   }
 
