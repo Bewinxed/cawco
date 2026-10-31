@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "apps-dashboard-src-lib-cawco-bench-arm-a"
-primary_target: "apps/dashboard/src/lib/cawco/bench/arm-a"
+slug: "src-lib-cawco-bench-arm-a"
+primary_target: "src/lib/cawco/bench/arm-a"
 related_targets: []
 ---
 
