@@ -77,6 +77,7 @@ import {
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { z } from "zod";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { resolveClaudeExecutable } from "./auth";
 import { excludeFromCheckout } from "./checkout-exclude";
@@ -703,6 +704,8 @@ interface Ran {
   code: number | null;
   /** The tail of what it said, which is what a failure's `detail` carries. */
   output: string;
+  /** Everything it printed on stdout, for a command whose answer is its output. */
+  stdout: string;
   /** It did not answer within {@link CLI_TIMEOUT_MS}, and was killed. */
   timedOut?: true;
 }
@@ -735,9 +738,13 @@ const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
     ]);
     const code = await child.exited;
     if (child.signalCode) {
-      return { code: null, output: `was ended by ${child.signalCode}` };
+      return { code: null, output: `was ended by ${child.signalCode}`, stdout };
     }
-    return { code, output: tail(stderr) || tail(stdout) || `exited ${code}` };
+    return {
+      code,
+      output: tail(stderr) || tail(stdout) || `exited ${code}`,
+      stdout,
+    };
   });
   switch (ran.kind) {
     case "answered":
@@ -746,6 +753,7 @@ const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
       return {
         code: null,
         output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s`,
+        stdout: "",
         timedOut: true,
       };
     default:
@@ -824,14 +832,88 @@ const registeredAs = (
 
 interface InstalledPlugins {
   /** Plugin id → one entry per scope it is installed at, with its unpacked copy. */
-  plugins?: Record<string, { scope?: string; installPath?: string }[]>;
+  plugins?: Record<
+    string,
+    { scope?: string; installPath?: string; version?: string }[]
+  >;
 }
 
-/** Whether the CLI lists the plugin at the scope this daemon installs at. */
-const isInstalled = async (id: string): Promise<boolean> => {
+/** The CLI's record of the plugin at the scope this daemon installs at. */
+const installedEntry = async (
+  id: string
+): Promise<{ version?: string } | undefined> => {
   const stored = await readJson<InstalledPlugins>(INSTALLED_PLUGINS);
-  return (stored?.plugins?.[id] ?? []).some((entry) => entry.scope === "user");
+  return (stored?.plugins?.[id] ?? []).find((entry) => entry.scope === "user");
 };
+
+/** Whether the CLI lists the plugin at the scope this daemon installs at. */
+const isInstalled = async (id: string): Promise<boolean> =>
+  (await installedEntry(id)) !== undefined;
+
+/**
+ * One install as `claude plugin list --json` reports it
+ * (https://code.claude.com/docs/en/plugins/cli-reference#json-output).
+ * `version` is "the version Claude Code computed at install"; `folderVersion`,
+ * for a plugin sessions load in place from its marketplace's folder (every
+ * vendored one: a relative path in a marketplace added from a directory), is
+ * "the plugin's `version` as Claude Code loaded it from that folder, which
+ * can differ from the `version` field above". Absent when the folder's
+ * manifest declares none.
+ */
+const ListedPlugin = z.object({
+  folderVersion: z.string().optional(),
+  id: z.string(),
+  scope: z.string(),
+  version: z.string(),
+});
+type ListedPlugin = z.infer<typeof ListedPlugin>;
+
+/**
+ * Claude Code's own account of the user-scope installs, by id, or the run
+ * that would not give it. One `claude plugin list --json` per sync: it is what
+ * computes a folder's version, by the rule the CLI keeps
+ * (https://code.claude.com/docs/en/plugins/loading#how-claude-code-computes-the-version).
+ */
+const listPlugins = async (
+  bin: string
+): Promise<
+  | { ok: true; plugins: Map<string, ListedPlugin> }
+  | { ok: false; ran: Ran; why: string }
+> => {
+  const ran = await runClaude(bin, ["plugin", "list", "--json"]);
+  if (ran.code !== 0) {
+    return { ok: false, ran, why: ran.output };
+  }
+  let listed: ListedPlugin[];
+  try {
+    listed = z.array(ListedPlugin).parse(JSON.parse(ran.stdout));
+  } catch (error) {
+    return {
+      ok: false,
+      ran,
+      why: `its output is not the list: ${said(error)}`,
+    };
+  }
+  return {
+    ok: true,
+    plugins: new Map(
+      listed
+        .filter((plugin) => plugin.scope === "user")
+        .map((plugin) => [plugin.id, plugin])
+    ),
+  };
+};
+
+/**
+ * The version a plugin's record should move to, when it lags the folder
+ * sessions load it from: what `claude plugin update` re-records ("`claude
+ * plugin update <id>` re-records its version", as `claude plugin install`
+ * answers for an installed in-place plugin, 2.1.311).
+ */
+const recordLag = (plugin: ListedPlugin): string | undefined =>
+  plugin.folderVersion !== undefined && plugin.folderVersion !== plugin.version
+    ? plugin.folderVersion
+    : undefined;
 
 /** `plugin@marketplace` is the CLI's own form, and the half after the `@` is the link. */
 const marketplaceOf = (id: string): string => id.split("@").pop() ?? "";
@@ -1408,6 +1490,53 @@ export const fleetHoldings = async (): Promise<FleetHoldings> => ({
 });
 
 /**
+ * One carried plugin brought to what its folder holds, through the CLI: an
+ * install when Claude Code has none, an update when its record lags the
+ * folder, nothing otherwise. Sessions load a carried plugin in place from
+ * its folder ({@link ListedPlugin}), so the update moves the record, its
+ * cached copy and its `installPath` to the version sessions already load.
+ * Answers why it did not land, or nothing when it did.
+ */
+const installCarried = async (
+  bin: string,
+  vendoredId: string,
+  listed: ListedPlugin | undefined
+): Promise<FleetItemState | undefined> => {
+  if (!listed) {
+    const ran = await runClaude(bin, [
+      "plugin",
+      "install",
+      vendoredId,
+      "--scope",
+      "user",
+    ]);
+    return (await isInstalled(vendoredId)) ? undefined : ranFailed(ran);
+  }
+  const lag = recordLag(listed);
+  if (lag === undefined) {
+    return;
+  }
+  const ran = await runClaude(bin, [
+    "plugin",
+    "update",
+    vendoredId,
+    "--scope",
+    "user",
+  ]);
+  const recorded = (await installedEntry(vendoredId))?.version;
+  if (recorded === lag) {
+    console.info(
+      `[fleet] ${vendoredId}: updated from ${listed.version} to ${lag}`
+    );
+    return;
+  }
+  return {
+    ...ranFailed(ran),
+    detail: `still recorded at ${recorded ?? "nothing"}, its folder holds ${lag}: ${ran.output}`,
+  };
+};
+
+/**
  * Installs the vendored plugins, and answers with what each one came to.
  *
  * Keyed by the FLEET's id — `name@marketplace`, the id the hub's config used —
@@ -1476,7 +1605,15 @@ const syncVendoredPlugins = async (
     }
   }
 
-  for (const { id } of wanted) {
+  // What Claude Code holds installed, read once: whether each plugin is
+  // installed at all, and whether its record lags the folder it loads from.
+  const carried = wanted.filter(({ id }) => byId.has(id));
+  const installs =
+    carried.length > 0
+      ? await listPlugins(bin)
+      : { ok: true as const, plugins: new Map<string, ListedPlugin>() };
+
+  for (const { id } of carried) {
     const plugin = byId.get(id);
     if (!plugin) {
       continue;
@@ -1492,24 +1629,23 @@ const syncVendoredPlugins = async (
       };
       continue;
     }
+    if (!installs.ok) {
+      // Left unmanaged so the next sync reads and installs it again.
+      report[id] = {
+        ...ranFailed(installs.ran),
+        detail: `claude plugin list --json: ${installs.why}`,
+      };
+      continue;
+    }
 
-    const already =
-      managed[id] === plugin.hash && (await isInstalled(vendoredId));
-    const ran = already
-      ? undefined
-      : await runClaude(bin, [
-          "plugin",
-          "install",
-          vendoredId,
-          "--scope",
-          "user",
-        ]);
-
-    if (!(already || (await isInstalled(vendoredId)))) {
+    const failed = await installCarried(
+      bin,
+      vendoredId,
+      installs.plugins.get(vendoredId)
+    );
+    if (failed) {
       // Left unmanaged so the next sync writes and installs it again.
-      report[id] = ran
-        ? ranFailed(ran)
-        : { state: "failed", cause: "absent", detail: "install did not land" };
+      report[id] = failed;
       continue;
     }
 
@@ -3331,7 +3467,8 @@ export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> => {
  * Applies the parts `parts` of the fleet's desired state to this machine
  * ({@link converge}) and answers with what every entry of them came to.
  * Idempotent: a second sync with the same config writes the same file and
- * runs no CLI at all.
+ * changes nothing through the CLI; its plugins part reads one `claude plugin
+ * list --json` when the fleet carries plugins.
  */
 export const syncFleetConfig = (
   config: PlacedFleetConfig,
