@@ -300,6 +300,19 @@ export const askAnsweredText = (ask: AskRecord): string => {
   }
 };
 
+/**
+ * Who answered an ask, as its answer's message opens: the person, or the
+ * session that answered for them (a delegate's parent, or its project's
+ * conversation), by its title.
+ */
+const answeredBy = (ask: AskRecord): string => {
+  const by = ask.answer?.by;
+  if (by?.via !== "session") {
+    return "The person";
+  }
+  return by.name ? `Your parent session "${by.name}"` : "Your parent session";
+};
+
 /** The longest input a permit's answer quotes; a longer one is the call in the session's own conversation. */
 const PERMIT_INPUT_MAX = 2000;
 
@@ -309,14 +322,14 @@ const permitAnsweredText = (ask: AskRecord, asked: AskedPermit): string => {
   const result = ask.answer?.result;
   if (result?.behavior !== "allow") {
     const reason = result?.message.trim() ?? "";
-    return `The person declined the ${tool} call your harness asked to make before your last process ended${reason ? `: ${reason}` : ""}. Don't make it, and don't do it another way.`;
+    return `${answeredBy(ask)} declined the ${tool} call your harness asked to make before your last process ended${reason ? `: ${reason}` : ""}. Don't make it, and don't do it another way.`;
   }
   const input = JSON.stringify(asked.input, null, 2);
   const shown =
     input.length <= PERMIT_INPUT_MAX
       ? `\n\n${input}`
       : " (its input is the cut call's in your conversation).";
-  return `The person approved the ${tool} call your harness asked to make before your last process ended. Make that call again with the same input and it runs without asking, once${shown}`;
+  return `${answeredBy(ask)} approved the ${tool} call your harness asked to make before your last process ended. Make that call again with the same input and it runs without asking, once${shown}`;
 };
 
 /** One answer as its line reads: the labels chosen, joined, or the words typed. */
@@ -345,12 +358,12 @@ const questionAnsweredText = (ask: AskRecord, asked: AskedQuestion): string => {
   const link = askLink(ask);
   const result = ask.answer?.result;
   if (result?.behavior !== "allow") {
-    return `The person dismissed ${link} without answering:\n${questionLines(asked.questions)}\nDon't ask it again in the same words; decide what you can and say what you assumed.`;
+    return `${answeredBy(ask)} dismissed ${link} without answering:\n${questionLines(asked.questions)}\nDon't ask it again in the same words; decide what you can and say what you assumed.`;
   }
   const differs = asked.blocks
     ? ""
     : "\nIf this differs from what you went ahead with, change course.";
-  return `The person answered ${link}:\n${questionLines(asked.questions, result.answers ?? {})}${differs}`;
+  return `${answeredBy(ask)} answered ${link}:\n${questionLines(asked.questions, result.answers ?? {})}${differs}`;
 };
 
 const OUTCOMES: ReadonlySet<string> = new Set<AskOutcome>([
