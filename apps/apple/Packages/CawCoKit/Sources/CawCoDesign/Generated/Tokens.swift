@@ -513,6 +513,8 @@ public enum Size {
     public static let cBtnH: Double = 36
     public static let cBtnHSm: Double = 30
     public static let cBtnHXs: Double = 24
+    /// A delegate's tail's row (DelegateTail): one meta line; the column scrolls up one as a row arrives.
+    public static let cTailRow: Double = 24
     public static let cBtnHLg: Double = 44
     public static let cInputH: Double = 36
     /// A nav row; touch screens and narrow windows take the 44px row.
@@ -1434,7 +1436,10 @@ public enum Motion {
     public static let accountStaleOpacity: Double = 0.82
     /// The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch).
     public static let rideFade: Double = 14
+    /// How far every surface, row or part travels as it comes or goes (DESIGN.md, The Enter Rule): a floating surface or toast from its edge, a list swap's rows sideways, a keyframe's rise.
     public static let popRise: Double = 8
+    /// How far a view handing its place to the next along a strip travels as it comes in or goes: a tab switch's transcript and its composer's words, from the side of the tab it came from. A cue of which way it went, not a page turn.
+    public static let swapNudge: Double = 40
     /// How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr.
     public static let foldBlur: Double = 2
     /// The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5.

@@ -285,6 +285,7 @@
   --spacing-c-btn-h: var(--c-btn-h);
   --spacing-c-btn-h-sm: var(--c-btn-h-sm);
   --spacing-c-btn-h-xs: var(--c-btn-h-xs);
+  --spacing-c-tail-row: var(--c-tail-row);
   --spacing-c-btn-h-lg: var(--c-btn-h-lg);
   --spacing-c-input-h: var(--c-input-h);
   /* Switches with its context: no literal maps to it. */
@@ -859,7 +860,7 @@
   @keyframes ns-in {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(var(--pop-rise));
     }
     to {
       opacity: 1;
@@ -879,7 +880,7 @@
   @keyframes ns-panel {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(var(--pop-rise));
     }
     to {
       opacity: 1;
@@ -947,13 +948,13 @@
   @keyframes kit-dialog-in {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(var(--pop-rise));
     }
   }
   @keyframes kit-dialog-out {
     to {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(var(--pop-rise));
     }
   }
   @keyframes kit-tip-in {

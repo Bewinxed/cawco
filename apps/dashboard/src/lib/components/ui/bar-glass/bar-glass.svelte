@@ -12,7 +12,7 @@
    * the window), so a frame of any width draws the form its own width
    * would. It knows nothing of the stores: what it holds arrives as
    * `children` (the bar's controls) and `head` (Caw's head), its states as
-   * props (`joined`, `instant`, bar-glass).
+   * props (`joined`, bar-glass).
    *
    * `form="group"` is the same capsule as a head's trailing group (The
    * Title Bars Follow Liquid Glass Rule: "Each group is one capsule of the
@@ -24,8 +24,8 @@
    * panel): its join takes the card's `surface-raised` and `border-control`
    * edge over its top, down its flanks and up a `radius-lg` flare at its
    * leading foot, with no edge across the foot, fading in over `--dur-pop`
-   * and out over `--dur-exit`; a card the keyboard opened changes it at once
-   * (`instant`). On the phone the join runs on down through the neck, square
+   * and out over `--dur-exit`; a card a key opened or shut changes it at
+   * once (motion/keyed lands it). On the phone the join runs on down through the neck, square
    * on the screen's side.
    */
   import type { Snippet } from "svelte";
@@ -35,7 +35,6 @@
     children,
     form = "bar",
     joined = false,
-    instant = false,
   }: {
     /** Caw's head, last in the group, at the edge (the top bar's; a group has none). */
     head?: Snippet;
@@ -49,8 +48,6 @@
     children?: Snippet;
     /** A card stands drawn out of the glass: the glass draws its join. */
     joined?: boolean;
-    /** The card standing came from the keyboard: the join comes and goes at once. */
-    instant?: boolean;
   } = $props();
 </script>
 
@@ -67,7 +64,6 @@
       "@max-desk/shell:before:border-e-0 @max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
   ]}
   data-bar-group={form === "bar" ? "" : undefined}
-  data-instant={instant ? "" : undefined}
   data-joined={joined ? "" : undefined}
   style:--flare="var(--radius-lg)"
   style:--tools-top="calc(var(--c-top-bar-h) - var(--c-tab-row-h))"
@@ -83,7 +79,7 @@
     <span
       data-slot="join"
       aria-hidden="true"
-      class="absolute inset-bs-0 -inset-be-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--join-round)] group-data-joined/tools:opacity-100 group-data-joined/tools:not-group-data-instant/tools:duration-(--dur-pop) group-data-instant/tools:transition-off before:absolute before:inset-0 before:bg-surface-raised before:clip-join @max-desk/shell:-inset-be-(--caw-neck) @max-desk/shell:[--r:var(--tools-round)] @max-desk/shell:clip-path-(--join-edge-phone) @max-desk/shell:before:clip-join-phone"
+      class="absolute inset-bs-0 -inset-be-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--join-round)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join @max-desk/shell:-inset-be-(--caw-neck) @max-desk/shell:[--r:var(--tools-round)] @max-desk/shell:clip-path-(--join-edge-phone) @max-desk/shell:before:clip-join-phone"
       style:--f="var(--flare)"
       style:--h="calc(100% - 1px)"
       style:--join-round="calc(var(--c-btn-h) / 2)"

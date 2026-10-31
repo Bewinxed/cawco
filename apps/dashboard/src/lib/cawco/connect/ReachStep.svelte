@@ -114,8 +114,8 @@
     field.animate(
       [
         { translate: "0 0" },
-        { translate: "-4px 0" },
-        { translate: "4px 0" },
+        { translate: "calc(-1 * var(--space-1)) 0" },
+        { translate: "var(--space-1) 0" },
         { translate: "-2px 0" },
         { translate: "0 0" },
       ],

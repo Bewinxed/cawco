@@ -28,3 +28,26 @@ export const swap = { transition: "opacity var(--dur-fade) ease" };
 export const bend = "cubic-bezier(0.2, 0, 0, 1)";
 export const still = { duration: 0, easing: "linear" };
 export const said = "timed out after 30000ms";
+export const drop = (node: HTMLElement): Animation =>
+  node.animate([{ translate: "0 18px" }, { translate: "0 0" }], {
+    duration: 0,
+  });
+const NUDGE_PX = 40;
+export const nudge = (node: HTMLElement, dir: number): Animation =>
+  node.animate(
+    [{ transform: `translateX(${dir * NUDGE_PX}px)` }, { transform: "none" }],
+    { duration: 0 }
+  );
+export const rise = () => ({
+  css: (t: number) => `transform: translateY(${(1 - t) * 8}px)`,
+});
+export const cascade = (i: number) => ({ delay: i * 30 });
+export const risen = (node: HTMLElement, t: number): Animation =>
+  node.animate(
+    [
+      { translate: "0 var(--pop-rise)", outline: "1px solid" },
+      { translate: `0 calc(var(--pop-rise) * ${1 - t})` },
+    ],
+    { duration: 0 }
+  );
+export const tokenTimes = (ms: number) => ({ delay: ms * 1.5 });

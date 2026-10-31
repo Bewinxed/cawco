@@ -64,3 +64,7 @@ scripts/lint/fixtures/design/planted.ts:27:35 house/no-raw-motion
 scripts/lint/fixtures/design/planted.ts:28:21 house/no-raw-motion
 scripts/lint/fixtures/design/planted.svelte:39:21 house/no-raw-motion
 scripts/lint/fixtures/design/planted.svelte:39:42 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:32:30 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:38:33 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:42:58 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:44:49 house/no-raw-motion

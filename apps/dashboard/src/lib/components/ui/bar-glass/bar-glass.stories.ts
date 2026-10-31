@@ -10,7 +10,7 @@ import BarGlassFrame from "./bar-glass-frame.svelte";
 export default {
   title: "Kit/Bar glass",
   component: BarGlassFrame,
-  args: { width: 1440, joined: false, instant: false },
+  args: { width: 1440, joined: false },
 };
 
 /** The desk's glass at rest: a capsule holding Jump, the machines and the head. */

@@ -134,6 +134,7 @@
     rise,
     sheetSlide,
   } from "../motion/curves.svelte";
+  import { landKey } from "../motion/keyed.svelte";
   import { settleAway } from "../motion/rest.js";
   import { closeInto } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
@@ -3182,6 +3183,9 @@
       case "cawco:key": {
         const name = previewKey(message.key);
         if (name) {
+          // A key the page's window heard: what it starts here lands at once
+          // (motion/keyed), as for this window's own keys.
+          landKey();
           pressKey(name);
         }
         break;

@@ -3530,6 +3530,14 @@
         "unit": "px"
       }
     },
+    "c-tail-row": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "A delegate's tail's row (DelegateTail): one meta line; the column scrolls up one as a row arrives."
+    },
     "c-btn-h-lg": {
       "$type": "dimension",
       "$value": {
@@ -7377,7 +7385,16 @@
       "$value": {
         "value": 8,
         "unit": "px"
-      }
+      },
+      "$description": "How far every surface, row or part travels as it comes or goes (DESIGN.md, The Enter Rule): a floating surface or toast from its edge, a list swap's rows sideways, a keyframe's rise."
+    },
+    "swap-nudge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "How far a view handing its place to the next along a strip travels as it comes in or goes: a tab switch's transcript and its composer's words, from the side of the tab it came from. A cue of which way it went, not a page turn."
     },
     "fold-blur": {
       "$type": "dimension",

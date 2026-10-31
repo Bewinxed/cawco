@@ -19,7 +19,6 @@
     width,
     height,
     joined = false,
-    instant = false,
     shell = $bindable(null),
     children,
   }: {
@@ -28,7 +27,6 @@
     /** The frame's least height, px: room for what hangs from the glass. */
     height?: number;
     joined?: boolean;
-    instant?: boolean;
     /** The shell container. */
     shell?: HTMLElement | null;
     /** What hangs from the glass, in the shell. */
@@ -46,7 +44,7 @@
     class="flex h-c-top-bar-h items-center bg-surface-raised border-b border-b-border-hairline pe-space-6 @max-desk/shell:pe-0"
   >
     <div class="ms-auto flex min-w-0 items-center @max-desk/shell:self-stretch">
-      <BarGlass {instant} {joined}>
+      <BarGlass {joined}>
         {#snippet head()}
           <button
             data-bar-item

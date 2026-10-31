@@ -463,7 +463,7 @@
 
   /**
    * The composer arriving where a read-only note stood (and back): the two
-   * cross-fade over --dur-control and the composer rises 8px into place.
+   * cross-fade over --dur-control and the composer rises --pop-rise into place.
    * Reduced motion keeps the fade.
    */
   function rise(_node: Element): TransitionConfig {
@@ -472,7 +472,9 @@
       duration: dur("--dur-control"),
       easing: easeOut,
       css: (t, u) =>
-        still ? `opacity: ${t}` : `opacity: ${t}; translate: 0 ${u * 8}px`,
+        still
+          ? `opacity: ${t}`
+          : `opacity: ${t}; translate: 0 calc(var(--pop-rise) * ${u})`,
     };
   }
   /**
@@ -489,7 +491,7 @@
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(${u * 4}px)`,
+          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--space-1) * ${u}))`,
     };
   }
   function fade(_node: Element): TransitionConfig {
@@ -503,8 +505,8 @@
    * A minimized question's bar comes into the tray row once the card's
    * fold (--dur-grow-exit) has landed, so the two never stand in one place
    * at once: the fold speeds up as it goes and only crosses the tray row in
-   * its last frames (measured at 390: 210 of its 220ms). It comes up 8px
-   * out of a 4px blur over --dur-control, as the card's own parts come up
+   * its last frames (measured at 390: 210 of its 220ms). It comes up --pop-rise
+   * out of a --part-blur blur over --dur-control, as the card's own parts come up
    * (Prompt `.part`). Reduced motion keeps the fade, with no wait.
    */
   function askedIn(_node: Element): TransitionConfig {
@@ -516,7 +518,7 @@
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; translate: 0 ${u * 8}px; filter: blur(${u * 4}px)`,
+          : `opacity: ${t}; translate: 0 calc(var(--pop-rise) * ${u}); filter: blur(calc(var(--part-blur) * ${u}))`,
     };
   }
   /** The bar gives way to the card growing over it: a fade over --dur-exit. */
@@ -636,7 +638,7 @@
 
   /**
    * Another conversation's words take the field's place the way its
-   * transcript does: the words that stood there slide 16px away from the
+   * transcript does: the words that stood there slide --swap-nudge away from the
    * incoming tab's side as they fade, and the new ones slide in from that
    * side and fade up, typed out so the last character lands as the field's
    * height glide ends: the field holds its height until the transcript has
@@ -661,7 +663,6 @@
     outWrap: number;
     text: string;
   }
-  const FLIGHT_PX = 16;
   let flight = $state<Flight | null>(null);
   let typed = $state("");
   /** How far the words arriving drop from the field's foot ({@link scrollDrop}). */
@@ -931,12 +932,21 @@
         fill: "forwards",
       } as const;
       flightOut?.animate(
-        [start, { transform: `translateX(${-dir * FLIGHT_PX}px)`, opacity: 0 }],
+        [
+          start,
+          {
+            transform: `translateX(calc(var(--swap-nudge) * ${-dir}))`,
+            opacity: 0,
+          },
+        ],
         timing
       );
       flightIn?.animate(
         [
-          { transform: `translateX(${dir * FLIGHT_PX}px)`, opacity: 0 },
+          {
+            transform: `translateX(calc(var(--swap-nudge) * ${dir}))`,
+            opacity: 0,
+          },
           { transform: "none", opacity: 1 },
         ],
         timing

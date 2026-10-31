@@ -76,7 +76,7 @@
       easing: out ? easeOut : easeDrawer,
       css: (t: number) =>
         travel
-          ? `opacity: ${t}; transform: translateY(${(1 - t) * 6}px) scale(${0.96 + 0.04 * t})`
+          ? `opacity: ${t}; transform: translateY(calc(var(--pop-rise) * ${1 - t})) scale(${0.96 + 0.04 * t})`
           : `opacity: ${t}`,
     };
   }

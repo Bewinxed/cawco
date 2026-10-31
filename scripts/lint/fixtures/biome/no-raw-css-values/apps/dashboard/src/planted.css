@@ -32,3 +32,8 @@
   /* biome-ignore lint/plugin/no-raw-css-values: a fixture's own suppression, which must hold. */
   inset: -9999px;
 }
+@keyframes planted-rise {
+  from {
+    translate: 0 18px;
+  }
+}

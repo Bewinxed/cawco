@@ -389,7 +389,7 @@ export function appearOnMount({
 
 /**
  * A floating tag coming and going over the transcript's foot ("Jump to
- * latest", the catch-up): it rises 8px and grows from .96 as it fades in,
+ * latest", the catch-up): it rises --pop-rise and grows from .96 as it fades in,
  * and sinks back out. `token` is its duration: --dur-panel in, --dur-exit
  * out. Without motion it only fades.
  */
@@ -400,7 +400,7 @@ export function rise(_node: Element, token: "--dur-panel" | "--dur-exit") {
     easing: easeOut,
     css: (t: number) =>
       travel
-        ? `opacity: ${t}; transform: translateY(${(1 - t) * 8}px) scale(${0.96 + 0.04 * t})`
+        ? `opacity: ${t}; transform: translateY(calc(var(--pop-rise) * ${1 - t})) scale(${0.96 + 0.04 * t})`
         : `opacity: ${t}`,
   };
 }

@@ -1,5 +1,6 @@
 import type { ShellShortcut } from "@cawco/core/shell-shortcuts";
 import { barGlass } from "./bar-glass.svelte";
+import { landKey } from "./motion/keyed.svelte";
 
 /**
  * The shell's shortcuts (core `SHELL_SHORTCUTS`) run from one place: the
@@ -24,10 +25,12 @@ export function shellShortcutsAre(
 
 /**
  * Runs shortcut `name`, pressed on the keyboard: whether the shell acted on
- * it (a split with nothing to split does not). A key, so a card it opens
- * stands open at once, as from the dashboard's own keys.
+ * it (a split with nothing to split does not). A key, so what it starts
+ * lands at once (motion/keyed) and a card it opens takes the focus with its
+ * ring, as from the dashboard's own keys.
  */
 export function runShellShortcut(name: ShellShortcut): boolean {
   barGlass.byPointer = false;
+  landKey();
   return actions?.(name) ?? false;
 }

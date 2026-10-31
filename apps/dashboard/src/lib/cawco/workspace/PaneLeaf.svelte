@@ -214,8 +214,6 @@
      way it went. The side is read off the strip as it was before the
      switch, so a tab that closed still says where it stood. Only the
      showing transcript is painted there, so it alone moves. */
-  /** How far the arriving transcript travels: a cue, not a page turn. */
-  const NUDGE_PX = 40;
   let stack = $state<HTMLElement>();
   /** What the group last showed, and its strip then. Not reactive: only the effects below read them. */
   let shownId = untrack(() => viewId);
@@ -326,7 +324,10 @@
           )
           ?.animate(
             [
-              { transform: `translateX(${dir * NUDGE_PX}px)`, opacity: 0.4 },
+              {
+                transform: `translateX(calc(var(--swap-nudge) * ${dir}))`,
+                opacity: 0.4,
+              },
               { transform: "none", opacity: 1 },
             ],
             { duration: dur("--dur-pop"), easing: ease("--ease-drawer") }

@@ -61,7 +61,7 @@ const ALLOWED_LENGTH =
   /^(?:-?0+(?:\.0+)?[a-z]+|-?[12]px|1(?:em|ex|ch|cap|ic)|\d+r?lh|-?(?:\d+\.?\d*|\.\d+)(?:vw|vh|vi|vb|vmin|vmax|[sld]v[whib]|cq[whib]|cqmin|cqmax))$/iu;
 
 /** Each length literal a CSS value writes past the allowed ones. */
-function rawLengths(value) {
+export function rawLengths(value) {
   const text = value
     .replace(/\/\*[\s\S]*?\*\//gu, " ")
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu, " ")

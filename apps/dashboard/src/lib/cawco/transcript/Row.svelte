@@ -110,7 +110,7 @@
    * row it took over, to its own measured height over --dur-rail on
    * --ease-out — and a rail row's rail, being its own background, draws down
    * with that opening as one stroke. Only once the place is open does the
-   * content fade up into it (--dur-menu, 3px). A rail row's content is what
+   * content fade up into it (--dur-menu, --pop-rise). A rail row's content is what
    * stands on the rail — its children — so the rail is never faded with it;
    * any other row's content is the row. The rows above make room on that one
    * clock instead of jumping by the row's height in the frame it lands: the
@@ -390,7 +390,7 @@
     let last: Animation | null = null;
     const frames = moving
       ? [
-          { opacity: 0, translate: "0 3px" },
+          { opacity: 0, translate: "0 var(--pop-rise)" },
           { opacity: 1, translate: "0 0" },
         ]
       : [{ opacity: 0 }, { opacity: 1 }];

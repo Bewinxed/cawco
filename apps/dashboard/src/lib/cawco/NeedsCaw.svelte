@@ -605,7 +605,7 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible @max-desk/shell:hidden data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:duration-(--dur-pop) group-data-instant/tools:data-foot:transition-off"
+    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible @max-desk/shell:hidden data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--dur-pop)"
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
@@ -646,7 +646,7 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 hidden size-c-bar-caw-glass-phone -translate-1/2 overflow-visible @max-desk/shell:block data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:duration-(--dur-pop) group-data-instant/tools:data-foot:transition-off"
+    class="pointer-events-none absolute start-1/2 top-1/2 hidden size-c-bar-caw-glass-phone -translate-1/2 overflow-visible @max-desk/shell:block data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--dur-pop)"
     data-count={count}
     viewBox="{STAND_INSET} {STAND_INSET} {STAND_BOX} {STAND_BOX}"
   >

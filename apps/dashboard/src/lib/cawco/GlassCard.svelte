@@ -21,9 +21,9 @@
    * the box from its drawn size, each face's fade from its drawn opacity, and
    * contents still fading out come back if they are asked for again.
    *
-   * Jump from the keyboard (⌘K) stands open at once, leaves at once, and a
-   * swap into it lands at once, with no fade and no tween (Emil Kowalski:
-   * "Never animate keyboard-initiated actions"; bar-glass `instant`). With
+   * Opened, shut or changed by a key (⌘K, Escape, a forwarded shortcut), the
+   * card lands at once, with no slide, fade or tween (DESIGN.md, The
+   * Frequency Rule; motion/keyed lands it, motion/hang asks it). With
    * less motion the box takes its new size at once and the contents still
    * cross-fade.
    *
@@ -79,6 +79,7 @@
   import MachinesList from "./MachinesList.svelte";
   import { dur, ease } from "./motion/curves.svelte";
   import { FOLDED, GROWN, standsOpen } from "./motion/hang";
+  import { keyed } from "./motion/keyed.svelte";
   import { cawQuiet } from "./NeedsCaw.svelte";
 
   /** The first paint, on both sides, has the width cookie's guess (first-render.svelte.ts). */
@@ -303,14 +304,14 @@
     if (from === to) {
       return;
     }
-    barGlass.instant = to === "jump" && !barGlass.byPointer;
     if (from === null && !folding) {
       settle(to);
       return;
     }
-    // Opened again while it folds: it turns back and changes as it does.
+    // Opened again while it folds: it turns back and changes as it does; a
+    // key's change lands at once (motion/keyed).
     folding = false;
-    swap(to, !barGlass.instant);
+    swap(to, !keyed.current);
   }
   $effect.pre(() => {
     const to = asked;
@@ -514,10 +515,8 @@
     customAnchor={glass}
     escapeKeydownBehavior={escapeBehavior}
     interactOutsideBehavior={rehearsing ? "defer-otherwise-ignore" : "close"}
-    folded={() => barGlass.instant}
     forceMount
     glass
-    held={() => barGlass.instant}
     inert={asked === null || rehearsing}
     morphs={{
       width: true,
@@ -526,9 +525,7 @@
       // down out of the glass, which is translate alone (motion/hang); what
       // arrives mid-slide (Jump's first answer) lands at once, and the
       // slide, a percentage of the card's own box, follows it.
-      still: () =>
-        barGlass.instant ||
-        !(folding || (content !== null && standsOpen(content))),
+      still: () => !(folding || (content !== null && standsOpen(content))),
     }}
     onCloseAutoFocus={(event) => {
       event.preventDefault();

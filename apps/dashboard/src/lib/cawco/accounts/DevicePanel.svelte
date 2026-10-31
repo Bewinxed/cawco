@@ -10,7 +10,7 @@
    * Start makes it (`start`).
    *
    * The well arrives as a transcript row does: its place opens, then its
-   * content fades up 3px into it.
+   * content fades up --pop-rise into it.
    */
   import { accountsWords } from "@cawco/core/words/accounts";
   import type { TransitionConfig } from "svelte/transition";
@@ -51,7 +51,7 @@
   );
   const shown = $derived(phase === "waiting" || phase === "expired");
 
-  /** Its place opens (--dur-morph), then what it holds fades up 3px (--dur-menu). */
+  /** Its place opens (--dur-morph), then what it holds fades up --pop-rise (--dur-menu). */
   function openPlace(node: HTMLElement): TransitionConfig {
     if (!motionOk.current) {
       return {
@@ -73,7 +73,7 @@
           return `height: ${p * height}px; overflow: hidden; opacity: 0`;
         }
         const p = easeOut((t - split) / (1 - split));
-        return `opacity: ${p}; transform: translateY(${(1 - p) * 3}px)`;
+        return `opacity: ${p}; transform: translateY(calc(var(--pop-rise) * ${1 - p}))`;
       },
     };
   }

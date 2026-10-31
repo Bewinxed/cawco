@@ -267,11 +267,13 @@ function optionsFor(rule, file) {
     case "house/no-raw-duration-read":
       return file === "src/lib/cawco/motion/curves.svelte.ts" ? null : {};
     case "house/no-raw-motion":
-      // The token build's own output, and the helpers that hold the curves
-      // as functions of t (DESIGN.md, The House Helper Rule).
-      return file.startsWith("src/lib/tokens/") || MOTION_HELPERS.has(file)
-        ? null
-        : {};
+      // The token build's own output reads nothing; the helpers that hold
+      // the curves as functions of t (DESIGN.md, The House Helper Rule) may
+      // write a curve out, and nothing else.
+      if (file.startsWith("src/lib/tokens/")) {
+        return null;
+      }
+      return { curves: MOTION_HELPERS.has(file) };
     default:
       return {};
   }

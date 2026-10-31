@@ -5,10 +5,9 @@
  * the card shows in place: the card stays hung, its contents cross-fade and
  * its box tweens to the new size (motion/morph). While the card stands drawn
  * out of the glass, the glass draws its join into it (Shell `.join`) and
- * Caw's lower arcs give way to the seam (NeedsCaw). Jump opened from the
- * keyboard stands open at once and leaves at once (HangCard `held`,
- * `folded`), a swap into it is at once too, and the glass's join and Caw's
- * arcs change with it, at once (`instant`).
+ * Caw's lower arcs give way to the seam (NeedsCaw). A card a key opens,
+ * shuts or changes lands at once, its join and Caw's arcs with it
+ * (motion/keyed; DESIGN.md, The Frequency Rule).
  */
 
 export type GlassCard = "caw" | "machines" | "jump" | "files";
@@ -18,12 +17,6 @@ class BarGlass {
   open = $state<GlassCard | null>(null);
   /** The glass's card stands drawn out of the glass: the glass draws its join. */
   joined = $state(false);
-  /**
-   * The card standing was opened, or swapped to, from the keyboard (Jump by
-   * ⌘K): it and the glass's join and Caw's arcs come and go at once. Kept
-   * until the next card opens, so its close is as instant as its open.
-   */
-  instant = $state(false);
   /**
    * What the card gives the focus back to when it closes, handed over by
    * what opened it when the opener itself goes away: the phone's sheet,
@@ -38,7 +31,8 @@ class BarGlass {
   invoker: HTMLElement | null = null;
   /**
    * The last thing that could open a card was a pointer press, not a key
-   * (GlassCard reads it: a keyboard's Jump stands open at once). Set from the
+   * (GlassCard reads it for the focus: a press leaves no ring on the card's
+   * first row, a key's opening shows it; the motion is motion/keyed's). Set from the
    * dashboard's own window, and by a shell shortcut forwarded from an
    * artifact's page, whose keys never reach that window.
    */

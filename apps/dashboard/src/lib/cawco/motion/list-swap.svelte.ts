@@ -11,7 +11,7 @@
  *   they are out.
  * - The new rows mount at once, keyed `${gen}:${id}` so even a row in both
  *   lists enters as new, and come in from the side the choice moved toward
- *   (`ns-in-*`, 18px and a fade) over --dur-pop: the first once the old
+ *   (`ns-in-*`, --pop-rise and a fade) over --dur-pop: the first once the old
  *   rows are out, each next --dur-stagger later, capped at STAGGER_CAP.
  * A relay: each new row arrives no sooner than the old row in its place
  * has gone (`rowAnim`'s `notBefore`, which a caller that knows the places
@@ -131,7 +131,7 @@ export class ListSwap<T> {
     rows.forEach((row, i) => {
       row.animate(
         [
-          { opacity: 0, transform: "translateX(18px)" },
+          { opacity: 0, transform: "translateX(var(--pop-rise))" },
           { opacity: 1, transform: "none" },
         ],
         {

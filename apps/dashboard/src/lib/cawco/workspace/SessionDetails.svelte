@@ -112,7 +112,7 @@
       duration: reduceMotion.current ? 0 : dur("--dur-morph"),
       easing: easeOut,
       css: (t) =>
-        `transform: translateX(calc(${(1 - t) * 8}px * var(--dir))); opacity: ${t}`,
+        `transform: translateX(calc(var(--pop-rise) * ${1 - t} * var(--dir))); opacity: ${t}`,
     };
   }
   const uid = $props.id();
@@ -404,7 +404,10 @@
       for (const el of [metaEl, statsEl]) {
         el?.animate(
           [
-            { transform: `translateX(${8 * dir}px)`, opacity: 0.6 },
+            {
+              transform: `translateX(calc(var(--pop-rise) * ${dir}))`,
+              opacity: 0.6,
+            },
             { transform: "none", opacity: 1 },
           ],
           { duration: dur("--dur-morph"), easing: CURVE.out }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-31T12:00:00.000Z",
+  "generatedAt": "2026-10-31T14:00:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -2761,7 +2761,12 @@
       {
         "name": "pop-rise",
         "value": "8px",
-        "purpose": "How far a floating surface or toast travels from its edge."
+        "purpose": "How far every surface, row or part travels as it comes or goes (The Enter Rule): a floating surface or toast from its edge, a list swap's rows sideways, a keyframe's rise."
+      },
+      {
+        "name": "swap-nudge",
+        "value": "40px",
+        "purpose": "How far a view handing its place to the next along a strip travels as it comes in or goes: a tab switch's transcript and its composer's words, from the side of the tab it came from. A cue of which way it went, not a page turn."
       },
       {
         "name": "fold-blur",
@@ -2980,7 +2985,7 @@
       },
       {
         "name": "keyed",
-        "value": "from a key the page takes to --dur-control after it, every transition, animation and helper clock begun since the key lands at once; loops, waits past --dur-cascade and clocks past --dur-hold are left; typing in a field is no action",
+        "value": "from a key the page takes to --dur-control after it, every transition, animation and helper clock begun since the key lands at once (a key forwarded from an artifact's page too, landKey); loops, waits past --dur-cascade and clocks past --dur-hold are left; typing in a field is no action",
         "purpose": "The Frequency Rule: a keyboard-initiated action never animates, the same action from a pointer keeps its motion (motion/keyed.svelte.ts, trackKeyed on the root layout)."
       },
       {
@@ -3143,7 +3148,7 @@
       },
       {
         "name": "The Enter Rule",
-        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` (0.92) or `--pop-rise` (8px) short of its place, fading in, never from scale 0; a popover scales from its trigger's side, a dialog from its centre. A pressed control scales to `--press-scale` (0.97) on `--dur-toggle`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another; `height` only for a disclosure, which is why `unfold` is short).",
+        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` (0.92) or `--pop-rise` (8px) short of its place, fading in, never from scale 0; a popover scales from its trigger's side, a dialog from its centre. Every travel a surface, a row or a part makes as it comes or goes is `--pop-rise`, a list swap's rows sideways too; the one longer cue is a view handing its place to the next along a strip (a tab switch's transcript and its composer's words), which comes `--swap-nudge` (40px) from the side it came from. No keyframe writes a length out (house/no-raw-motion, and the token build for its own `@keyframes`). A pressed control scales to `--press-scale` (0.97) on `--dur-toggle`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another; `height` only for a disclosure, which is why `unfold` is short).",
         "section": "overview"
       },
       {

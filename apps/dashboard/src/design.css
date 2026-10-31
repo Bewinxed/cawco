@@ -1678,7 +1678,7 @@
 @keyframes ns-in-r {
   from {
     opacity: 0;
-    transform: translateX(var(--space-5));
+    transform: translateX(var(--pop-rise));
   }
   to {
     opacity: 1;
@@ -1688,7 +1688,7 @@
 @keyframes ns-in-l {
   from {
     opacity: 0;
-    transform: translateX(calc(-1 * var(--space-5)));
+    transform: translateX(calc(-1 * var(--pop-rise)));
   }
   to {
     opacity: 1;
@@ -1698,13 +1698,13 @@
 @keyframes ns-out-l {
   to {
     opacity: 0;
-    transform: translateX(calc(-1 * var(--space-5)));
+    transform: translateX(calc(-1 * var(--pop-rise)));
   }
 }
 @keyframes ns-out-r {
   to {
     opacity: 0;
-    transform: translateX(var(--space-5));
+    transform: translateX(var(--pop-rise));
   }
 }
 /* The rail's travelling label (motion/Rail) settling in as it re-labels. */

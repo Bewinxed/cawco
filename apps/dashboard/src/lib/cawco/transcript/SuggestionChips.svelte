@@ -52,12 +52,12 @@
    */
   function arrive(_node: HTMLElement, { i }: { i: number }) {
     return {
-      delay: i * 30,
+      delay: i * dur("--dur-stagger"),
       duration: dur("--dur-panel"),
       easing: easeOut,
       css: (t: number, u: number) =>
         motionOk.current
-          ? `opacity: ${t}; transform: translateY(${4 * u}px) scale(${0.96 + 0.04 * t})`
+          ? `opacity: ${t}; transform: translateY(calc(var(--pop-rise) * ${u})) scale(${0.96 + 0.04 * t})`
           : `opacity: ${t}`,
     };
   }

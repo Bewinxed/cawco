@@ -668,8 +668,8 @@
   /* ── The bar's slot ──────────────────────────────────────────────────
      The hosted tabs, a page's strip, the crumb and Configure's back link
      take turns in one slot. The one leaving is lifted out of the row where
-     it stands and fades over --dur-control; the one arriving rises 4px as
-     it fades in over the same length, and a hosted strip comes down 6px
+     it stands and fades over --dur-control; the one arriving rises --pop-rise as
+     it fades in over the same length, and a hosted strip comes down --pop-rise
      from the bar's edge instead. With less motion, only the fades run.
      The session's strip is the session surface's, so like the surface it
      is kept once it has been drawn: under another spoke it is lifted out
@@ -681,7 +681,7 @@
     easing: easeOut,
     css: (t: number, u: number) =>
       motionOk.current
-        ? `opacity: ${t}; transform: translateY(${4 * u}px)`
+        ? `opacity: ${t}; transform: translateY(calc(var(--pop-rise) * ${u}))`
         : `opacity: ${t}`,
   });
 
@@ -796,7 +796,10 @@
             fading = node.animate(
               motionOk.current
                 ? [
-                    { opacity: 0, transform: "translateY(-6px)" },
+                    {
+                      opacity: 0,
+                      transform: "translateY(calc(-1 * var(--pop-rise)))",
+                    },
                     { opacity: 1, transform: "none" },
                   ]
                 : [{ opacity: 0 }, { opacity: 1 }],
@@ -1269,7 +1272,7 @@
           <!-- The glass (kit BarGlass), as one shape with the card hanging
                from it while one does (bar-glass: Caw's panel, the machines,
                Jump, Files). -->
-          <BarGlass instant={barGlass.instant} joined={barGlass.joined}>
+          <BarGlass joined={barGlass.joined}>
             {#snippet head()}
               <!-- Caw's head: what needs you, and its drawer. -->
               <NeedsCaw />

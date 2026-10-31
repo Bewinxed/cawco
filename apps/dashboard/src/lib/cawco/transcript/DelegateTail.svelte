@@ -72,7 +72,6 @@
 
   /** Rows on screen, the height of the tail; one row's height, in px. */
   const SLOTS = 6;
-  const ROW = 24;
 
   const lastLine = (text: string): string =>
     text
@@ -350,7 +349,7 @@
     column.lastElementChild?.animate([{ opacity: 0 }, { opacity: 1 }], timing);
     leaving?.animate([{ opacity: 1 }, { opacity: 0 }], timing);
     await column.animate(
-      [{ transform: `translateY(${ROW}px)` }, { transform: "none" }],
+      [{ transform: "translateY(var(--c-tail-row))" }, { transform: "none" }],
       timing
     ).finished;
     shown = shown.slice(-SLOTS);
@@ -364,7 +363,7 @@
      the flow, so the widest row is the tail's width (the panel sizes to it). -->
 <div
   class="flex flex-col justify-end h-(--tail-h) overflow-hidden text-ink-strong data-full:mask-(--tail-fade)"
-  style:--row="{ROW}px"
+  style:--row="var(--c-tail-row)"
   style:--slots={slots}
   style:--tail-h="calc(var(--row) * var(--slots))"
   style:--tail-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--row))"}

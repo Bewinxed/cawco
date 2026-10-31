@@ -58,6 +58,7 @@
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
 import { dur, ease, motionOk } from "./curves.svelte";
+import { keyed } from "./keyed.svelte";
 
 /** The x of a floating wrapper's `translate(Xpx, Ypx)`. */
 const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/u;
@@ -324,7 +325,8 @@ function growMotion(
       grown(node);
       return;
     }
-    if (!motionOk.current) {
+    // With less motion, or opened by a key (The Frequency Rule), it stands open at once.
+    if (!motionOk.current || keyed.current) {
       halt();
       set(1);
       grown(node);
@@ -345,6 +347,7 @@ function growMotion(
     if (
       options.folded?.() ||
       !motionOk.current ||
+      keyed.current ||
       !placed ||
       node.dataset.shown === undefined
     ) {
@@ -449,7 +452,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
     options.onshown?.(true);
     // What waits on the card standing open (SessionDetails asks for its
     // context reading then) hears `grown`.
-    if (!motionOk.current || options.held?.()) {
+    if (!motionOk.current || keyed.current || options.held?.()) {
       run?.cancel();
       run = null;
       grown(node);
@@ -473,6 +476,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
     if (
       options.folded?.() ||
       !motionOk.current ||
+      keyed.current ||
       !placed ||
       node.dataset.shown === undefined
     ) {

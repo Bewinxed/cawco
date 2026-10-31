@@ -271,11 +271,11 @@ const KEYFRAMES: Record<string, string> = {
   "sheet-in": "from {\n  transform: var(--sheet-away);\n}",
   "sheet-out": "to {\n  transform: var(--sheet-away);\n}",
   "ns-in":
-    "from {\n  opacity: 0;\n  transform: translateY(8px);\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
+    "from {\n  opacity: 0;\n  transform: translateY(var(--pop-rise));\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
   "ns-check":
     "from {\n  opacity: 0;\n  transform: scale(0.5);\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
   "ns-panel":
-    "from {\n  opacity: 0;\n  transform: translateY(6px);\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
+    "from {\n  opacity: 0;\n  transform: translateY(var(--pop-rise));\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
   "ns-pop-out": "to {\n  opacity: 0;\n  scale: var(--pop-scale);\n}",
   "ns-pop-in":
     "from {\n  opacity: 0;\n  scale: var(--pop-scale);\n  translate: 0 calc(-1 * var(--pop-rise));\n}",
@@ -287,8 +287,10 @@ const KEYFRAMES: Record<string, string> = {
   "cell-swap": "from {\n  opacity: 0;\n  scale: var(--pop-scale);\n}",
   finish: "35% {\n  background-color: var(--status-done-bg);\n}",
   "head-fade": "to {\n  opacity: 1;\n}",
-  "kit-dialog-in": "from {\n  opacity: 0;\n  transform: translateY(6px);\n}",
-  "kit-dialog-out": "to {\n  opacity: 0;\n  transform: translateY(6px);\n}",
+  "kit-dialog-in":
+    "from {\n  opacity: 0;\n  transform: translateY(var(--pop-rise));\n}",
+  "kit-dialog-out":
+    "to {\n  opacity: 0;\n  transform: translateY(var(--pop-rise));\n}",
   "kit-tip-in": "from {\n  opacity: 0;\n  translate: var(--kit-tip-from);\n}",
   "kit-skeleton-pulse":
     "0%,\n100% {\n  opacity: 1;\n}\n50% {\n  opacity: var(--skeleton-pulse-floor);\n}",
@@ -474,6 +476,29 @@ const uncurved = [built.css, theme.css].flatMap((css) =>
 if (uncurved.length > 0) {
   throw new Error(
     `motion with no curve, so CSS ease (name its --ease-* token, or linear for a discrete property):\n  ${uncurved.join("\n  ")}`
+  );
+}
+/**
+ * A built `@keyframes` travels a token (`var(--pop-rise)`), never a length
+ * written out: the stylesheet half of house/no-raw-motion, for the
+ * keyframes this build writes (KEYFRAMES), which no lint reads. `0`, a
+ * hairline, a share (`%`) and the font's own units stand, as in
+ * no-raw-css-values.grit.
+ */
+const KEYFRAMES_BLOCK = /@keyframes\s+([\w-]+)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/gu;
+const LENGTH =
+  /(?<![\w.#-])-?(?:\d+\.?\d*|\.\d+)(?:px|rem|vw|vh|cm|mm|pt)(?![\w-])/gu;
+const HAIRLINE = /^-?(?:0+(?:\.0+)?[a-z]+|[12]px)$/u;
+const travelled = [built.css, theme.css].flatMap((css) =>
+  [...css.matchAll(KEYFRAMES_BLOCK)].flatMap(([, name, body]) =>
+    (body.match(LENGTH) ?? [])
+      .filter((length) => !HAIRLINE.test(length))
+      .map((length) => `@keyframes ${name}: ${length}`)
+  )
+);
+if (travelled.length > 0) {
+  throw new Error(
+    `keyframes travel a length written out (name its token: var(--pop-rise), or add one to the JSON):\n  ${travelled.join("\n  ")}`
   );
 }
 const selectionCss = [

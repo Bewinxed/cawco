@@ -350,7 +350,7 @@
   });
 
   /**
-   * The surface mounting already open slides 25px in from the edge it opens
+   * The surface mounting already open slides --pop-rise in from the edge it opens
    * against and fades up (--dur-panel, --ease-out), the same move its class
    * transition makes when it opens later. Reduced motion keeps the fade.
    */
@@ -365,7 +365,7 @@
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; transform: translateX(${u * 25}px);`,
+          : `opacity: ${t}; transform: translateX(calc(var(--pop-rise) * ${u}));`,
     };
   }
 </script>

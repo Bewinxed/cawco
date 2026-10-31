@@ -691,6 +691,8 @@
     --c-btn-h: 36px;
     --c-btn-h-sm: 30px;
     --c-btn-h-xs: 24px;
+    /* A delegate's tail's row (DelegateTail): one meta line; the column scrolls up one as a row arrives. */
+    --c-tail-row: 24px;
     --c-btn-h-lg: 44px;
     --c-input-h: 36px;
     /* A nav row; touch screens and narrow windows take the 44px row. */
@@ -1581,7 +1583,10 @@
     --account-stale-opacity: 0.82;
     /* The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch). */
     --ride-fade: 14px;
+    /* How far every surface, row or part travels as it comes or goes (DESIGN.md, The Enter Rule): a floating surface or toast from its edge, a list swap's rows sideways, a keyframe's rise. */
     --pop-rise: 8px;
+    /* How far a view handing its place to the next along a strip travels as it comes in or goes: a tab switch's transcript and its composer's words, from the side of the tab it came from. A cue of which way it went, not a page turn. */
+    --swap-nudge: 40px;
     /* How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr. */
     --fold-blur: 2px;
     /* How far out of focus the grown composer's parts come up from, and sink back into as it folds: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Web only. */
