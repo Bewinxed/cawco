@@ -768,6 +768,8 @@ export const artifact = {
       /** The last piece a decision page shows that moved to another version, and that version (hub artifacts service `versionMoved`); null before. */
       mediaAt: (meta.get("mediaAt") as string | undefined) ?? null,
       revision: (meta.get("revision") as number | undefined) ?? null,
+      /** Its name, as the hub stamps it (artifacts service `stampMeta`); null before. */
+      name: (meta.get("name") as string | undefined) ?? null,
       /** When the person last pressed Send, as the hub stamped it (artifacts service `send`); null before. */
       sentAt: (meta.get("sentAt") as string | null | undefined) ?? null,
     };

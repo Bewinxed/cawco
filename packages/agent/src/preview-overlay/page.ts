@@ -128,6 +128,27 @@ if (tag?.dataset.artifact && tag.dataset.state) {
 }
 /** The version stamp of the pieces the page was served with (hub artifacts service `versionMoved`). */
 let { mediaAt } = artifact.meta();
+/**
+ * A page the hub served, opened alone (`artifact_browse`'s address, or a
+ * tab of its own): no frame holds it, so no host says hello, and it joins
+ * its own doc on its own origin, through the pass its entry set
+ * (preview-access.ts), so revisions and its pieces' new versions reach it
+ * as they reach the panel. The dashboard frames a page, and the app's host
+ * script stands in for `window.parent`: both say hello themselves.
+ */
+const alone = window.top === window && window.parent === window;
+const seededId = artifact.id();
+const seededKind = artifact.kind();
+if (alone && seededId && seededKind) {
+  artifact.join(
+    {
+      id: seededId,
+      kind: seededKind,
+      name: artifact.meta().name ?? document.title,
+    },
+    `/__cawco/artifact/${seededId}`
+  );
+}
 // Before any listener that stops a press: a morph waits for every pointer up.
 watchPointers();
 
