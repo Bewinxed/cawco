@@ -23,7 +23,7 @@
   const pct = (ms: number) => `${(ms / span) * 100}%`;
 </script>
 
-<div class="@container flex min-w-0 flex-col gap-space-1" data-clips>
+<div class="flex min-w-0 flex-col gap-space-1 overflow-x-clip" data-clips>
   {#if judge.move}
     {@const move = judge.move}
     <div class="flex min-h-c-btn-h-sm items-center gap-space-2">
@@ -51,7 +51,7 @@
     >
       {#each runner.clips as clip, index (index)}
         <li
-          class="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-space-2 @xl:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_max-content]"
+          class="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_max-content] items-center gap-space-2"
           data-clip={clip.kind}
         >
           <span class="flex min-w-0 items-center gap-space-1">
@@ -71,11 +71,11 @@
             <!-- The playhead: ink, never coral (DESIGN.md, The playhead). -->
             <span
               class="absolute inset-y-0 w-px bg-ink-strong"
-              style:left={pct(runner.at)}
+              style:left="min({pct(runner.at)}, 100% - 1px)"
             ></span>
           </span>
           <span
-            class="hidden type-code whitespace-nowrap text-ink-muted tabular-nums @xl:inline"
+            class="max-w-c-graph-label-max-w truncate type-meta whitespace-nowrap text-ink-muted tabular-nums"
             >{Math.round(clip.start)} → {Math.round(clip.start + clip.length)} ms
             · {clip.curve}</span
           >

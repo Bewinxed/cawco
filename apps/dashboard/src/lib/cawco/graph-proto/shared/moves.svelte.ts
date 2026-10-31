@@ -10,6 +10,7 @@
  */
 import { type ClipKind, kindOfClip } from "@cawco/core/design-graph";
 import { humanize } from "@cawco/core/tool-presentation";
+import { graphProtoWords as words } from "@cawco/core/words/graph-proto";
 import { tick } from "svelte";
 
 export interface ProtoClip {
@@ -27,19 +28,23 @@ export interface ProtoClip {
 const frame = () =>
   new Promise<void>((done) => requestAnimationFrame(() => done()));
 
-/** An animation's target in words: its card's title, its slot, else its tag. */
+/** An animation's target in words: its card by the task it shows, the count, else its slot. */
 function wordsOf(target: Element | null): string {
   if (!target) {
-    return "Column";
+    return words.clipColumn;
   }
-  const card = target.closest("[data-task]");
-  const title = card?.querySelector("[data-task-head]")?.textContent?.trim();
+  const item = target.closest("li[data-flip]");
+  const id =
+    target.closest("[data-task]")?.getAttribute("data-task") ??
+    item?.querySelector("[data-task]")?.getAttribute("data-task");
+  if (id) {
+    return words.clipCard(id);
+  }
+  if (target.closest("[data-slot=count]")) {
+    return words.clipCount;
+  }
   const slot = target.closest("[data-slot]")?.getAttribute("data-slot");
-  if (title) {
-    const short = title.length > 28 ? `${title.slice(0, 27)}…` : title;
-    return slot && slot !== "cards" ? `${short} · ${humanize(slot)}` : short;
-  }
-  return slot ? humanize(slot) : target.localName;
+  return slot ? humanize(slot) : words.clipColumn;
 }
 
 function propertyOf(animation: Animation): string {
@@ -66,11 +71,8 @@ function propertyOf(animation: Animation): string {
   return "transform";
 }
 
-const endOf = (animation: Animation): number => {
-  const timing = animation.effect?.getComputedTiming();
-  const end = Number(timing?.endTime ?? 0);
-  return Number.isFinite(end) ? end : 0;
-};
+const endOf = (animation: Animation): number =>
+  Number(animation.effect?.getComputedTiming().endTime ?? 0);
 
 export class MoveRunner {
   /** The stage's box the live component stands in. */
@@ -101,7 +103,14 @@ export class MoveRunner {
     }
     this.#animations = root
       .getAnimations({ subtree: true })
-      .filter((one) => one.playState !== "finished");
+      // A move's clips run on the document's clock and end: a scroll-driven
+      // animation (the column's edge fade) or a looping one is no clip.
+      .filter(
+        (one) =>
+          one.playState !== "finished" &&
+          one.timeline === document.timeline &&
+          Number.isFinite(endOf(one))
+      );
     this.clips = this.#animations.map((one) => {
       const timing = one.effect?.getComputedTiming();
       const property = propertyOf(one);

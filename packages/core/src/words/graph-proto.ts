@@ -50,6 +50,10 @@ export const graphProtoWords = {
   clips: (count: number) => `Clips (${count})`,
   clipsOf: (from: string, to: string) => `${from} → ${to}`,
   noClips: "This move animated nothing.",
+  /** A clip's element: a card by the task it shows, the count, the column itself. */
+  clipCard: (id: string) => `Card ${id}`,
+  clipCount: "Count",
+  clipColumn: "Column",
   replay: "Replay",
   /** A state no arrow reaches, or none leaves. */
   noWayIn: "No way in",

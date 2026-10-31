@@ -152,13 +152,11 @@
   $effect(() => {
     const story = judge.kept;
     tick().then(() => {
-      track
-        ?.querySelector(`[data-keyframe="${story}"]`)
-        ?.scrollIntoView({
-          block: "nearest",
-          inline: "center",
-          behavior: "smooth",
-        });
+      track?.querySelector(`[data-keyframe="${story}"]`)?.scrollIntoView({
+        block: "nearest",
+        inline: "center",
+        behavior: "smooth",
+      });
     });
   });
 
