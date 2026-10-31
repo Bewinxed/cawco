@@ -567,7 +567,7 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
     name: "low",
     description:
-      "Fastest pass: the leaf does what the brief says, checks it against a case or two, and stops. Use it when the brief leaves nothing to decide or you want a draft to react to: mechanical edits across many files (renames, copy or config sweeps, a listed set of replacements), inventories and where-is sweeps, log and evidence pulls, quick sketches and prototypes. Not for bug fixes, reviews, security, parsers, migrations, or anything where a missed edge case ships.",
+      "Opus 5.5 at its cheapest effort, for a brief that settles everything: mechanical edits across many files (renames, copy or config sweeps, a listed set of replacements), inventories and where-is sweeps, log and evidence pulls, quick sketches. Also the first pass of an item whose checks alone decide pass or fail; if the leaf can't make them pass, dispatch it again at `medium`. Not where one missed edge case ships: parsers, migrations, security.",
     harness: "claude",
     model: "claude-opus-5-5",
     effort: "low",
@@ -576,7 +576,7 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
     name: "medium",
     description:
-      "The default for most delegated work: carrying out a complete spec (new features, multi-file changes, UI built from a spec, doc rewrites, deploys with known steps) and wide research sweeps that return a cited report. It runs the brief's build, lint, type-check and verification command, but does not hunt edge cases beyond the brief. Given a complete spec, the higher levels write much the same code more slowly and add assumptions of their own. Not for bugs with an unknown cause, reviews, verification passes, or security: use `high`.",
+      "Opus 5.5 at its default effort, and the default for delegated work: carrying out a complete spec (new features, multi-file changes, UI built from a spec, doc rewrites, deploys with known steps), bug fixes, and a review someone asked for. It runs the brief's build, lint, type-check and proof, and stays inside the brief. Go to `high` when a `medium` run came back wrong or shallow, or the work is known to be hard. Web research sweeps go to `research`.",
     harness: "claude",
     model: "claude-opus-5-5",
     effort: "medium",
@@ -585,7 +585,7 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
     name: "high",
     description:
-      "For work where verification and hidden edge cases decide the result: fixing a bug in an existing codebase, reviewing a diff into ranked file:line findings, the verification pass after a `low` or `medium` build, browser verification of a flow, a security review of a change, and performance work. Also architecture plans and analyses where the method chosen changes the answer. Takes about 1.5–3x as long as `medium`. Code whose edge cases are the whole job goes to `xhigh`. More effort does not fix a wrong approach: rewrite the brief instead.",
+      "Opus 5.5 one step above its default: more thinking per turn, slower and costlier than `medium`. For work known to be hard: a bug whose cause a first look didn't find, a security review of a change, performance work, architecture plans and analyses where the method chosen changes the answer, or any item a `medium` run got wrong. Code whose edge cases are the whole job goes to `xhigh`. More effort does not fix a wrong approach: rewrite the brief instead.",
     harness: "claude",
     model: "claude-opus-5-5",
     effort: "high",
@@ -594,7 +594,7 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
     name: "xhigh",
     description:
-      "Between `high` and `max`, for code whose edge cases are the whole job and where one missed case ships as a defect: sanitizers, parsers, storage engines, concurrency, auth, data migrations, or a fix `high` got only partly right. In Anthropic's storage-engine bug task the xhigh runs reproduced the crash before editing and went from 0/5 at low to 4/5, at about 11 min a run. It stays on one problem, so it costs far less than `max`. Not for spec-complete builds (`medium`) or ordinary reviews (`high`).",
+      "Opus 5.5 for long-horizon work, slower and costlier than `high`: a run over 30 minutes that must stay on one hard problem, or code whose edge cases are the whole job once a `high` run missed some (sanitizers, parsers, storage engines, concurrency, auth, data migrations). Use it where a lower level's result showed the need. Not for spec-complete builds (`medium`) or ordinary reviews.",
     harness: "claude",
     model: "claude-opus-5-5",
     effort: "xhigh",
@@ -612,7 +612,7 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
     name: "advisor",
     description:
-      "Advisor on Fable 5.1: a second, stronger opinion at a decision point, returned as guidance you apply yourself. Consult it before committing to an approach, when the same error keeps recurring, and before declaring a task done. It sees only the brief, so the brief carries the goal, the constraints, what you tried, the exact error text and the file paths involved. The report gives a recommendation, the reasoning behind it, and what would change it, and names each check the answer still depends on for you to dispatch. Carrying out a spec goes to `medium`; fixing a bug with an unknown cause goes to `high`.",
+      "Advisor on Fable 5.1: a second, stronger opinion on one question, returned as guidance you apply yourself. Use it when an approach is hard to reverse and the evidence leaves it open, or when the same error keeps recurring. It sees only the brief, so the brief carries the goal, the constraints, what you tried, the exact error text and the file paths involved. The report gives a recommendation, the reasoning behind it, and what would change it, and names each check the answer still depends on for you to dispatch. Carrying out a spec goes to `medium`; fixing a bug with an unknown cause goes to `high`.",
     harness: "claude",
     model: "claude-fable-5-1",
     effort: "high",
@@ -621,7 +621,7 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
     name: "research",
     description:
-      "Web research on Sonnet 5.5: one question answered from many current sources, searched with Exa and read with CRW (`crw_scrape`, `crw_map`, `crw_crawl`), returned as a cited report where every finding carries its claim, URL and a one-line quote. Use it for a wide sweep where the owner pasted no source: comparing libraries or services, current settings for a model, what a platform supports or charges. The orchestrator reads the owner's own links itself. The report is input for the orchestrator's spec; code changes go to the effort types.",
+      "Web research on Sonnet 5.5: one question answered from many current sources, searched through Monid (`monid_discover` \"web search\", then `monid_run` an endpoint it lists) and read with CRW (`crw_scrape`, `crw_map`, `crw_crawl`), returned as a cited report where every finding carries its claim, URL and a one-line quote. Use it for a wide sweep where the owner pasted no source: comparing libraries or services, current settings for a model, what a platform supports or charges. The orchestrator reads the owner's own links itself. The report is input for the orchestrator's spec; code changes go to the effort types.",
     harness: "claude",
     model: "claude-sonnet-5-5",
     effort: "medium",
