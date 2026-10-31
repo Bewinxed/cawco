@@ -1789,7 +1789,7 @@ async function measure(
                 '[data-slot="pane"][data-pane][data-pane-hidden]',
                 "a pane put away",
               ],
-              ['[data-slot="dock"]', "the composer"],
+              ['[data-slot="dock"]', "the composer's dock"],
               ["[data-session-tabs], [data-session-tab]", "the tabs"],
             ];
             const nameOf = (box: Element) =>

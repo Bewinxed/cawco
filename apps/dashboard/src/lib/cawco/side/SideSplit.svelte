@@ -31,6 +31,7 @@
   import { dur, motionOk } from "../motion/curves.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
+  import FailedSurface from "./FailedSurface.svelte";
   import SideSheet from "./SideSheet.svelte";
   import Split from "./Split.svelte";
 
@@ -171,10 +172,21 @@
   {/if}
 {/snippet}
 
-<!-- A render error in what stands beside the conversation stays there: a
-     worded line with Try again, the conversation working (RegionBoundary). -->
+<!-- What stood beside the conversation, stopped on a render error: its
+     card's switch, name and Close outlive it, round its face (RegionBoundary,
+     FailedSurface). A press on the switch builds the other one afresh. -->
 {#snippet bounded()}
-  <RegionBoundary region="side panel">{@render surface()}</RegionBoundary>
+  {@const switched = opened.length > 1 ? switcher : undefined}
+  {#key shown}
+    <RegionBoundary part={shown}>
+      {@render surface()}
+      {#snippet chrome(face)}
+        <FailedSurface switcher={switched} {viewId} what={shown}>
+          {@render face()}
+        </FailedSurface>
+      {/snippet}
+    </RegionBoundary>
+  {/key}
 {/snippet}
 
 {#snippet sheets()}
@@ -187,13 +199,17 @@
       onkeyescape={(event) => previewPane?.parentEscape(event)}
       open={sheetOpen}
     >
-      <RegionBoundary region="preview">
+      <RegionBoundary part="preview">
         <PreviewPane
           instanceId={viewId}
           onScreen={visible && active}
           sheet
           bind:this={previewPane}
         />
+        {#snippet chrome(face)}
+          <FailedSurface {viewId} what="preview">{@render face()}</FailedSurface
+          >
+        {/snippet}
       </RegionBoundary>
     </SideSheet>
   {/if}

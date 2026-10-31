@@ -1,13 +1,12 @@
 <script lang="ts">
   /**
    * What a part that is one list or one strip shows where it stood when it
-   * stops on a render error (RegionBoundary's `failed`): one row on the house
+   * stops on a render error (RegionBoundary): one row on the house
    * row grid (DESIGN.md, Caw's panel): Caw's still in the lead column, the
    * words, and at the trailing edge the action that leads, an outline, with
    * Show details stepped back beside it in a quiet ghost. The rest of its
    * surface keeps working, and its view's coral stays that view's (DESIGN.md,
-   * The Coral Is Where You Act Rule). A design proposal, drawn on its canvas
-   * (fault/preview).
+   * The Coral Is Where You Act Rule).
    *
    * `strip`: it stands in a pane's tab row, at the row's height: a smaller
    * Caw, its actions beside its words rather than a strip's width away, and
@@ -16,11 +15,11 @@
    */
   import { commonWords } from "@cawco/core/words/common";
   import { regionFaultWords } from "@cawco/core/words/region-fault";
-  import { shellWords } from "@cawco/core/words/shell";
   import { Button } from "#lib/components/ui/button/index.js";
   import CawFace from "../home/CawFace.svelte";
   import { appearOnMount } from "../motion/curves.svelte";
   import FaultDetails from "./FaultDetails.svelte";
+  import ShowDetails from "./ShowDetails.svelte";
 
   let {
     what,
@@ -28,10 +27,10 @@
     details,
     open = false,
     strip = false,
-    onretry = () => undefined,
-    onreload = () => undefined,
+    onretry,
+    onreload,
   }: {
-    /** The part, as a sentence names it: "the comments", "these tabs". */
+    /** The part, as a sentence names it: "this comment", "these tabs". */
     what: string;
     again?: boolean;
     /** The error word for word, under Show details. */
@@ -39,8 +38,8 @@
     /** Show details starts open. */
     open?: boolean;
     strip?: boolean;
-    onretry?: () => void;
-    onreload?: () => void;
+    onretry: () => void;
+    onreload: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally: `open` only says how it starts.
@@ -78,18 +77,7 @@
         data-strip={strip || undefined}
         class="ms-auto flex flex-none items-center gap-space-1 data-strip:ms-0"
       >
-        <Button
-          aria-controls={detailsId}
-          aria-expanded={shown}
-          data-details
-          label={shown ? shellWords.hideDetails : shellWords.showDetails}
-          onclick={() => {
-            shown = !shown;
-          }}
-          size="xs"
-          tone={strip ? undefined : "quiet"}
-          variant="ghost"
-        />
+        <ShowDetails controls={detailsId} quiet={!strip} size="xs" bind:shown />
         <Button
           data-lead
           label={again ? regionFaultWords.reloadPage : commonWords.tryAgain}

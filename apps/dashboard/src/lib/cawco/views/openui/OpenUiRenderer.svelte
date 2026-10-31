@@ -5,9 +5,10 @@
   (`useOpenUIState`): the streaming parser, the store holding `$bindings`,
   the query manager calling a tool provider, `evaluateRoot` resolving every
   prop to a value, then each element drawn by its library component inside
-  its own error boundary. `@openuidev/svelte-lang` 0.4.1's Renderer runs no
-  Query() tools (it has no `toolProvider` and draws props unevaluated), which
-  is why this exists; it depends on nothing but lang-core and Svelte, so it
+  its own error boundary, which draws the host's `fault` in its place, or
+  nothing. `@openuidev/svelte-lang` 0.4.1's Renderer runs no Query() tools
+  (it has no `toolProvider` and draws props unevaluated), which is why
+  this exists; it depends on nothing but lang-core and Svelte, so it
   can be offered upstream as that package's tool support.
 
   Bare programs only: OpenUI Cloud's message framing and its scripts
@@ -81,6 +82,12 @@
   } from "@openuidev/lang-core";
   import { untrack } from "svelte";
   import { reportError } from "../../error-report.js";
+  import {
+    detailsOf,
+    type Fault,
+    Rebuild,
+    reloadPage,
+  } from "../../fault/rebuild.svelte";
   import { afterSkeleton, revealOut } from "../../motion/curves.svelte";
   import RegionHeld from "../../RegionHeld.svelte";
 
@@ -92,6 +99,7 @@
     toolProvider = null,
     class: className,
     pending: pendingContent,
+    fault,
     onParseResult,
     onError,
   }: {
@@ -110,6 +118,11 @@
      * the program draws at once with the defaults.
      */
     pending?: Snippet;
+    /**
+     * What an element that throws as it is drawn shows in its place (a
+     * decision page's failed card); nothing where it draws nothing.
+     */
+    fault?: Snippet<[ElementNode, Fault]>;
     /** The raw parse (props still as AST), each time it changes. */
     onParseResult?: (result: ParseResult | null) => void;
     /** Every error the parser, the evaluation, a render or a tool reported; [] once all are gone. */
@@ -392,11 +405,23 @@
       ? `an inline ${node.typeName} in ${owner}`
       : `an inline ${node.typeName}`;
   };
+  /** Each element's rebuilds, by where it stands: its fault's Try again, and whether the rebuild threw again at once. */
+  const rebuilds = new Map<string, Rebuild>();
+  function rebuildOf(node: ElementNode): Rebuild {
+    const place = placeOf(node);
+    let rebuild = rebuilds.get(place);
+    if (!rebuild) {
+      rebuild = new Rebuild();
+      rebuilds.set(place, rebuild);
+    }
+    return rebuild;
+  }
   let renderErrors: OpenUIError[] = [];
   let renderFailures = $state(0);
   let retries: (() => void)[] = [];
   function renderFailed(node: ElementNode, error: unknown, reset: () => void) {
     retries.push(reset);
+    rebuildOf(node).threw(detailsOf(error));
     if (isStreaming) {
       return;
     }
@@ -514,8 +539,21 @@
       <!-- Its error is the component's, never the route's (region-held.ts). -->
       <RegionHeld />
       <Comp props={node.props} {renderNode} statementId={node.statementId} />
-      {#snippet failed()}
-        <!-- A component that throws draws nothing; its throw is logged whole (`logThrown`) and reported. -->
+      {#snippet failed(thrown, reset)}
+        <!-- Its throw is logged whole (`logThrown`) and reported; the host's
+             `fault` stands in its place, else nothing. -->
+        {#if fault}
+          {@const rebuild = rebuildOf(node)}
+          {@render fault(node, {
+            details: detailsOf(thrown),
+            again: rebuild.again,
+            retry: () => {
+              rebuild.tried();
+              reset();
+            },
+            reload: reloadPage,
+          })}
+        {/if}
       {/snippet}
     </svelte:boundary>
   {/if}

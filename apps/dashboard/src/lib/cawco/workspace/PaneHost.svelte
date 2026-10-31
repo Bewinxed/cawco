@@ -90,7 +90,7 @@
     <!-- The wrapper is a flex item of whichever slot it lands in, and the slot
          is the pane's whole box. -->
     <div class="flex min-h-0 min-w-0 flex-auto" use:dock={id}>
-      <RegionBoundary region="conversation">
+      <RegionBoundary face="page" part="conversation">
         <SessionPane
           active={isActive}
           browsing={ctx?.machine ?? null}

@@ -1350,7 +1350,7 @@
         </div>
       {:else if mounted}
         <div class="flex min-h-0 flex-auto flex-col">
-          <RegionBoundary region="transcript">
+          <RegionBoundary part="transcript">
             <Transcript
               {agentName}
               {firstScreen}
@@ -1417,7 +1417,7 @@
         data-slot="composer-dock"
         class="absolute inset-0 z-1 pointer-events-none"
       >
-        <RegionBoundary kept="Your draft is kept." region="composer">
+        <RegionBoundary face="composer" part="composer">
           {@render ownComposer()}
         </RegionBoundary>
       </div>

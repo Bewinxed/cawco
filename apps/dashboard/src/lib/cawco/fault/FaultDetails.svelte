@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
    * What a fault's Show details opens: the error word for word in the house
-   * well, with Copy beside it, as a fault's command stands (RowFault). It scrolls inside past a dozen lines, so a
-   * long stack never pushes the fault's own action out of reach.
+   * well, with Copy beside it, as a fault's command stands (RowFault). It scrolls inside past a
+   * dozen lines, so a long stack never pushes the fault's own action out of reach.
    */
+  import { regionFaultWords } from "@cawco/core/words/region-fault";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   import { unfold } from "../motion/fold.svelte";
 
@@ -29,9 +30,9 @@
   <pre
     class="kit-edge-fade-block fade-len-c-edge-fade-len m-0 max-h-c-fault-details-h min-w-0 flex-1 overflow-y-auto overscroll-contain py-space-1 text-start text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere">{details}</pre>
   <CopyButton
-    aria-label="Copy the error"
+    aria-label={regionFaultWords.copyError}
     class="flex-none"
     size="xs"
-    text={details}>Copy</CopyButton
+    text={details}>{regionFaultWords.copy}</CopyButton
   >
 </div>

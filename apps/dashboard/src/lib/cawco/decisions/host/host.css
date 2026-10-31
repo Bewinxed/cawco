@@ -13,11 +13,15 @@
 
 @source "./";
 @source "../../views/openui/OpenUiRenderer.svelte";
+@source "../../fault/FaultActions.svelte";
+@source "../../fault/FaultDetails.svelte";
+@source "../../fault/ShowDetails.svelte";
 @source "../../../components/ui/alert/";
 @source "../../../components/ui/badge/";
 @source "../../../components/ui/button/";
 @source "../../../components/ui/checkbox/checkbox.svelte";
 @source "../../../components/ui/chip/";
+@source "../../../components/ui/copy-button/";
 @source "../../../components/ui/kbd/";
 @source "../../../components/ui/live-dot/";
 @source "../../../components/ui/morph-text/";

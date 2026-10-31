@@ -421,7 +421,7 @@
             data-slot="composer-dock"
             class="pointer-events-none absolute inset-0 z-1"
           >
-            <RegionBoundary kept="Your draft is kept." region="composer">
+            <RegionBoundary face="composer" part="composer">
               <Composer
                 fleet={composerFleet}
                 agentName="Caw"

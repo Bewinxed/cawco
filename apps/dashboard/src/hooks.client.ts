@@ -18,10 +18,13 @@ export const init: ClientInit = () => {
  * boundary sees it (kit client.js, `transformError`). Logged whole, as
  * SvelteKit does not in a build, and sent to the hub. A boundary's is
  * answered `region`, so `page.error` never reads as the route failing
- * (region-held.ts).
+ * (region-held.ts), and carries the throw's own words, which the part's
+ * face shows under Show details (fault/rebuild `detailsOf`).
  */
 export const handleError: HandleClientError = ({ error, event }) => {
   console.error("[cawco]", error);
   reportError(error, { path: event.url.pathname });
-  return claimRegionDrop() ? { region: true } : undefined;
+  return claimRegionDrop()
+    ? { region: true, message: String(error) }
+    : undefined;
 };

@@ -1020,7 +1020,7 @@
       style:--rail-inset="env(safe-area-inset-left, 0px)"
     >
       {#if railed}
-        <RegionBoundary region="sidebar">
+        <RegionBoundary face="line" part="sidebar">
           <Sidebar {narrow} scroller={keepScroll} />
         </RegionBoundary>
       {/if}
@@ -1073,7 +1073,7 @@
         titleHidden
       >
         {#if !railed}
-          <RegionBoundary region="sidebar">
+          <RegionBoundary face="line" part="sidebar">
             <Sidebar
               {narrow}
               onfiles={openFilesSheet}
@@ -1198,7 +1198,7 @@
                     aria-hidden="true"
                     class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
                   ></span>
-                  <RegionBoundary region="tabs">
+                  <RegionBoundary face="strip" part="tabs">
                     <PaneTabs hosted {leaf} />
                   </RegionBoundary>
                 </div>
@@ -1382,7 +1382,8 @@
               in:pageIn
               out:pageOut
             >
-              <RegionBoundary region="page">{@render children()}</RegionBoundary
+              <RegionBoundary face="page" part="page"
+                >{@render children()}</RegionBoundary
               >
             </div>
           {/key}
@@ -1396,7 +1397,7 @@
               in:pageIn
               {@attach park(() => onSession)}
             >
-              <RegionBoundary region="workspace">
+              <RegionBoundary face="page" part="workspace">
                 <SessionSurface shown={onSession} />
               </RegionBoundary>
             </div>

@@ -11,8 +11,6 @@ import { commonWords } from "./common";
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const decisionsWords = {
-  /** A decision card that stopped, as a sentence names it (fault/DecisionFault). */
-  thisDecision: "this decision",
   /** The tab's name in the project's strip, and ‹ back to its list. */
   tab: "Decisions",
   /** The figure beside the ring while a page is picked on: `12 of 20 picked`. */

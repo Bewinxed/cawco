@@ -387,7 +387,7 @@
   ></span>
 
   {#if !hosted}
-    <RegionBoundary region="tabs" strip>
+    <RegionBoundary barOver face="strip" part="tabs">
       <PaneTabs {leaf} travel={swipe.travel} />
     </RegionBoundary>
   {/if}
@@ -515,7 +515,7 @@
       inert={lent.transcriptShare === 0}
       style:width="{lent.transcriptShare * 100}%"
     >
-      <RegionBoundary kept="Your draft is kept." region="composer">
+      <RegionBoundary face="composer" part="composer">
         <Composer
           fleet={composerFleet}
           {...composerOf(lent)}

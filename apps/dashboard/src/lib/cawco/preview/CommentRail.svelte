@@ -40,6 +40,7 @@
   import { commentWords as said } from "@cawco/core/words/comments";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
@@ -313,6 +314,14 @@
     };
   };
 </script>
+
+<!-- One comment that throws as it is drawn fails as one line in its place;
+     the comments round it stand (RegionBoundary). -->
+{#snippet boundedRow(pin: Pin)}
+  <RegionBoundary as="li" face="line" part="comment">
+    {@render row(pin)}
+  </RegionBoundary>
+{/snippet}
 
 {#snippet row(pin: Pin)}
   {@const attached = attachedTo(pin)}
@@ -667,7 +676,7 @@
               data-slot="to-check"
             >
               {#each shown as pin (pin.id)}
-                {@render row(pin)}
+                {@render boundedRow(pin)}
               {/each}
               {#if checks.unasked}
                 <li data-slot="unasked">{@render checks.unasked()}</li>
@@ -685,7 +694,7 @@
         {:else if shown.length > 0}
           <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
             {#each shown as pin (pin.id)}
-              {@render row(pin)}
+              {@render boundedRow(pin)}
             {/each}
           </ol>
         {:else if asked.trim()}
