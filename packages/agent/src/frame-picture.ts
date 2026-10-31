@@ -16,8 +16,10 @@
  * Here the window is grown by the room the canvas lacks, the frame is posed
  * again in it and left to settle, and the picture is of its body alone, by
  * its own rect, refused unless the body stands whole in the canvas at its
- * own size and the png is its CSS size times the device's scale.
+ * own size and the png is its CSS size times the device's scale, the
+ * scale written in it (its `pHYs`, core picture-scale.ts).
  */
+import { withPngScale } from "@cawco/core/picture-scale";
 import type { FramePictureRead, Interaction } from "@cawco/core/stage";
 import type { Page } from "playwright-core";
 
@@ -227,5 +229,11 @@ export async function framePicture(
       `Frame ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (its clip, ${width}×${height} CSS px from (${left}, ${top}), is ${want.w}×${want.h}).`
     );
   }
-  return { clip: { x: left, y: top, w: width, h: height }, png, read };
+  // The png records the scale it was taken at (core picture-scale.ts), so a
+  // page that shows it draws it at the frame's own size.
+  return {
+    clip: { x: left, y: top, w: width, h: height },
+    png: Buffer.from(withPngScale(png, scale)),
+    read,
+  };
 }

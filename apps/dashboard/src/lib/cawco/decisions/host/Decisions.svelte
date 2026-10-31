@@ -18,10 +18,20 @@
   the page head: Caw as the title's mark (The Mark Line Rule) and the title.
   Then the offline notice when CawCo does not show the page, and every
   decision and piece of media the program puts on it. The second row is the
-  foot, the panel's full width on the raised surface with a hairline over
-  it, "never a scroll away" and never over a card, clear of a host's docked
-  composer (the page's bottom padding) and the screen's bottom inset: the
-  count picked and its bar at the column's start, Send at its end.
+  foot, the panel's full width, "never a scroll away" and never over a
+  card, clear of a host's docked composer (the page's bottom padding) and
+  the screen's bottom inset: the count picked and its bar at the column's
+  start, Send at its end. It is a bar (DESIGN.md, The Title Bars Follow
+  Liquid Glass Rule: "A bar draws no fill, hairline or shadow of its own",
+  Send on a page of picks its one prominent action), so it stands on the
+  page's recessed ground with no ground of its own, and the cards part from
+  it by the scroll edge effect: they fade out at its edge while more of
+  them stands below (the house edge fade, `kit-edge-fade-block`), sharp at
+  rest at the page's end.
+
+  Send is spent ("Sent", its check) while the hub's record says the person
+  sent and has written nothing since (core `unsentChoices` over the doc's
+  `meta.sentAt`, which the bridge's "sent" tells), so a reload keeps it.
 
   The count and Send's label ("Send 3 picks": what goes) change in place
   through MorphText (DESIGN.md, The Steady Swap Rule), the count's digit
@@ -36,6 +46,7 @@
   page (his pick, "Only the page's own Send").
 -->
 <script lang="ts">
+  import { unsentChoices } from "@cawco/core/choices";
   import { pickMade, readProgram } from "@cawco/core/decisions";
   import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
@@ -53,7 +64,13 @@
   import { CURVE, dur, motionOk } from "../../motion/curves.svelte";
   import { morph } from "../../motion/morph.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { bridge, hearWidths, MEDIA_WIDTHS, picks } from "./page.svelte.js";
+  import {
+    bridge,
+    hearWidths,
+    MEDIA_WIDTHS,
+    picks,
+    sent,
+  } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
 
   let {
@@ -180,19 +197,10 @@
     });
   };
   let sending = $state(false);
-  /** What the person has picked and written on each card, as one string. */
-  const standing = $derived(
-    JSON.stringify(
-      ids.map((one) => [
-        one,
-        picks.now[one]?.options ?? [],
-        picks.now[one]?.note ?? "",
-      ])
-    )
+  /** The hub's record says the person sent, and has written nothing since (core `unsentChoices`, as artifact_read reads it): Send is spent, across reloads. */
+  const spent = $derived(
+    sent.at !== null && unsentChoices(picks.now, sent.at) === 0
   );
-  /** That, as it stood when the hub last took a send: while it still stands so, Send is spent. */
-  let sentPicks = $state<string | null>(null);
-  const spent = $derived(sentPicks !== null && sentPicks === standing);
   /** Send's label: what goes, or that it went (morphing through the same MorphText as its count). */
   const sendLabel = $derived.by(() => {
     if (spent) {
@@ -238,10 +246,8 @@
       return;
     }
     sending = true;
-    const going = standing;
     try {
       await cawco.send(undefined, control);
-      sentPicks = going;
     } catch (error) {
       console.error("[decision-page] send failed:", error);
     } finally {
@@ -262,7 +268,7 @@
 >
   <div
     bind:this={scroller}
-    class="min-h-0 overflow-y-auto overscroll-y-contain scrollbar-gutter-stable max-phone:no-scrollbar"
+    class="kit-edge-fade-block min-h-0 overflow-y-auto overscroll-y-contain scrollbar-gutter-stable max-phone:no-scrollbar"
     data-slot="page-scroll"
   >
     <div
@@ -303,7 +309,7 @@
   <!-- Its words and Send on one row at a desk; under a finger the count's bar gives way first, then Send wraps under the count. -->
   <footer
     {@attach morph()}
-    class="min-w-0 overflow-hidden border-t border-border-hairline bg-surface-raised pt-space-3 pb-safe-space-3 scrollbar-gutter-stable max-phone:no-scrollbar"
+    class="min-w-0 overflow-hidden pt-space-3 pb-safe-space-3 scrollbar-gutter-stable max-phone:no-scrollbar"
     data-safe-bottom
     data-slot="page-foot"
   >

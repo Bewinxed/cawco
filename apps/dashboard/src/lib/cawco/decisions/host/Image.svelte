@@ -1,11 +1,17 @@
 <!--
   A picture beside the page: a file the session's work folder or machine
   held when it published, kept in the artifact's folder (hub
-  decision-program.ts). It fits the slot it stands in, its well's width,
-  height following, never grown past its own size; its edge the house image
-  outline (1px inside it). The owner judges designs from these pictures
-  side by side ("ur just spamming images here that are too big for me to
-  judge"), so none sets the page's or the options' width.
+  decision-program.ts). It draws at the size of the screen it was taken on:
+  its own pixels over the scale its file records (hub page-pictures.ts,
+  core picture-scale.ts), so a 780px capture of a 390 phone screen taken at
+  a scale of 2 stands 390 CSS px wide, beside a live 390 frame at one size.
+  It fits the slot it stands in, its well's width, height following, never
+  grown past that size; its edge the house image outline (1px inside it).
+  The owner judges designs from these pictures side by side ("ur just
+  spamming images here that are too big for me to judge"), so none sets the
+  page's or the options' width. Its box stands at its size from the page's
+  first paint (its `width` and `height`, which the browser keeps as its
+  aspect ratio before it loads), so nothing moves as it loads.
 
   Pressed, it stands at its full size in place: its option's cell, or its
   cell in the card's media, spans the card's width (`has-data-full`,
@@ -17,7 +23,7 @@
   In a Row its well grows by its picture's aspect ratio (`picture-row`,
   design.css), so pictures side by side stand at one height, the narrowest
   never under `--c-picture-min`: it tells the Row its shape (Row.svelte). One the page
-  does not hold says so in words where it would stand.
+  does not hold, or whose size no reader knew, says so in words where it would stand.
 -->
 <script lang="ts">
   import { decisionsWords as words } from "@cawco/core/words/decisions";
@@ -35,17 +41,13 @@
   /** Its alt as a phrase inside its press's name: no closing stop. */
   const named = $derived(alt.trim().replace(/\.$/u, ""));
   const src = $derived(served.files[file]);
+  /** Its size as the hub read it: its pixels and the scale it was taken at. */
+  const size = $derived(src ? served.pictures[src] : undefined);
   let failed = $state(false);
-  let picture = $state<HTMLImageElement>();
-  /** Its own width over its height once it has loaded. */
-  let ratio = $state<number>();
+  /** Its width over its height. */
+  const ratio = $derived(size ? size.width / size.height : undefined);
   /** It stands at its full size, its cell across the card. */
   let full = $state(false);
-  const measure = () => {
-    if (picture && picture.naturalWidth > 0 && picture.naturalHeight > 0) {
-      ratio = picture.naturalWidth / picture.naturalHeight;
-    }
-  };
   /** The Row it stands in, which stands its pictures by the narrowest's shape. */
   const row = getContext<PictureRatios | undefined>(PICTURE_RATIOS);
   const key = {};
@@ -53,17 +55,11 @@
     row?.(key, ratio ?? null);
     return () => row?.(key, null);
   });
-  $effect(() => {
-    // A picture the browser had already loaded fires no load of its own.
-    if (picture?.complete) {
-      measure();
-    }
-  });
 </script>
 
 <!-- mark-line: the picture stands over its caption, in a column; it is no mark beside words -->
 <Well caption={props.caption ? String(props.caption) : undefined} {ratio}>
-  {#if src && !failed}
+  {#if src && size && !failed}
     <button
       aria-label={full ? words.pictureFit : words.pictureFull(named)}
       class={[
@@ -83,18 +79,18 @@
       }}
       type="button"
     >
-      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load says so in words; one that loads tells its well its shape. -->
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load says so in words. -->
       <img
         {alt}
-        bind:this={picture}
-        class="block h-auto w-auto max-w-full rounded-xs outline-1 -outline-offset-1 outline-image-outline"
+        class="block h-auto max-w-full rounded-xs outline-1 -outline-offset-1 outline-image-outline"
         decoding="async"
+        height={Math.round(size.height / size.scale)}
         loading="lazy"
         onerror={() => {
           failed = true;
         }}
-        onload={measure}
         {src}
+        width={Math.round(size.width / size.scale)}
       />
     </button>
   {:else}
@@ -103,7 +99,7 @@
       data-slot="media-gone"
       class="type-meta w-full text-ink-muted wrap-anywhere"
     >
-      {failed
+      {src
         ? "The picture this card showed didn't load."
         : "The picture this card showed is gone."}
     </p>

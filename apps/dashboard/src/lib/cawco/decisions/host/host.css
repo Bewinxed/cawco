@@ -48,7 +48,11 @@
      and its scroller (Decisions.svelte's first row) moves only where a fold
      rides it (Decision.svelte), never by the browser's
      scroll anchoring as a card folds above the reader's view (the
-     transcript's precedent). */
+     transcript's precedent). Media is no reason for it: every picture's
+     box stands at its size from the first paint (Image.svelte), so a
+     picture loading moves nothing; a card's own height tween (a note
+     opening, a picture pressed to full size) still would be fought by
+     anchoring frame by frame. */
   :root,
   [data-slot="page-scroll"] {
     overflow-anchor: none;

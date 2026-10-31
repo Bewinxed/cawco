@@ -439,6 +439,7 @@ import {
 import { COMMENT_LIMITS, SEND_CONTROLS } from "@cawco/core/comments";
 import { compressAnswer } from "@cawco/core/compress-answer";
 import { decidesFileProblems } from "@cawco/core/decides";
+import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
@@ -15330,7 +15331,10 @@ export const createServer = (
             ? { ...held, ...embedAt(artifactId, id, reachedAt) }
             : held;
       }
-      return { hash: served.hash, media: scriptJson("cawco-media", media) };
+      return {
+        hash: served.hash,
+        media: `${scriptJson("cawco-media", media)}${scriptJson(PICTURES_TAG, served.pictures)}`,
+      };
     },
     canvasFrom: (request, instanceId, artifactId) =>
       openDiagramAsCanvas(request, instanceId, artifactId),

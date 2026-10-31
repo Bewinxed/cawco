@@ -87,6 +87,17 @@ export interface ArtifactChoices {
   sentAt: string | null;
 }
 
+/**
+ * The person's picks and notes written since their last Send (`sentAt`,
+ * ISO; null before one): what Send sends of a page's choices. The hub's
+ * record of a Send, read alike by artifact_read and the page's own Send.
+ */
+export const unsentChoices = (
+  state: Record<string, ChoiceEntry>,
+  sentAt: string | null
+): number =>
+  Object.values(state).filter((entry) => !sentAt || entry.at > sentAt).length;
+
 const isChoiceId = (value: unknown, max: number): value is string =>
   typeof value === "string" && value.length <= max && CHOICE_ID.test(value);
 

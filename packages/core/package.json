@@ -219,6 +219,7 @@
     "./words/asks": "./src/words/asks.ts",
     "./attachments": "./src/attachments.ts",
     "./frames": "./src/frames.ts",
+    "./picture-scale": "./src/picture-scale.ts",
     "./words/preview": "./src/words/preview.ts",
     "./references": "./src/references.ts",
     "./accounts": "./src/accounts.ts",

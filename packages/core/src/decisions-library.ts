@@ -42,6 +42,19 @@ export const DECISION_COMPONENTS = [
 ] as const;
 export type DecisionComponentName = (typeof DECISION_COMPONENTS)[number];
 
+/** A picture's size as a decision page's host reads it (`cawco-pictures`, hub page-pictures.ts), by its address beside the page. */
+export interface PictureSize {
+  /** Its own pixels down, as it draws: an EXIF turn already taken. */
+  height: number;
+  /** The scale it records (core picture-scale.ts `pngScale`): it draws at its pixels over this, in CSS px. */
+  scale: number;
+  /** Its own pixels across, as it draws. */
+  width: number;
+}
+
+/** The script tag that carries a decision page's pictures' sizes, by address. */
+export const PICTURES_TAG = "cawco-pictures";
+
 /** The pieces a card draws in a well (the dashboard's Well.svelte). */
 export const DECISION_WELLS = [
   "Image",
@@ -99,7 +112,7 @@ export const decisionLibrary = <C>(
   );
   const Image = define(
     "Image",
-    "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result). It fits the width of its slot, never past its own size; pressed, it opens at its full size in its card. When every option carries pictures, the options stand side by side at one scale, and the pictures in a Row stand at one height.",
+    "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result). It draws at the size of the screen it was taken on: its pixels over the scale its PNG records in its pHYs (144 dpi for a capture at a device scale of 2; a file that records none draws 1 px to 1 CSS px). It fits the width of its slot, never past that size; pressed, it opens at that size in its card. When every option carries pictures, the options stand side by side at one scale, and the pictures in a Row stand at one height.",
     z.object({
       file: z.string().describe('Like "shots/hero.png".'),
       alt: z.string().describe("What it shows, in one sentence."),

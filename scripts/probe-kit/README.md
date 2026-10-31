@@ -70,12 +70,19 @@ await house.at(page, "state name"); // at each state, once the spec has settled 
 house.report();                      // one PASS/FAIL line per rule over every state
 ```
 
+Any page, from the command line, once per width (under 640 a phone's touch
+screen), exiting 1 on any finding:
+
+```sh
+bun scripts/probe-kit/house-rules.ts <url> --width 1540x800 --width 390x844 [--scope <selector>]
+```
+
 | Rule | Read by | What it reads |
 | --- | --- | --- |
 | `overflow` | `journeys/scan.ts` + impeccable `text-occlusion` | text past the screen, out of its control or box; a control out of the row, card or panel it is laid out in (`specs/web/scan-control-box`); text under a control or an opaque box |
 | `coral` | own code | per view (`views`), controls and worded chips whose fill, edge or (a control's) ink is a coral token from tokens.css: at most one; a checked checkbox, switch or radio is named, not counted; a bare link is link ink |
 | `glyph` | own code | a control whose only content is a glyph sits on no fill, edge or shadow, nor does a wrapper holding it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox (`marks` adds standalone status glyphs) |
-| `bar-ground` | own code | `header`, toolbars, the bar and foot data-slots paint nothing; a folder-tab shelf (DESIGN.md:665) and a group's capsule are named |
+| `bar-ground` | own code | toolbars, the bar and foot data-slots, and a `header` that does not scroll with its content (one that does, in flow under a scroller, heads a group of it: a list's section, a card) paint nothing; a folder-tab shelf (DESIGN.md:665) and a group's capsule are named |
 | `head` | own code | a bar's title and controls on one row (centres within 4px), no second line in the bar, the title not repeated by the next heading |
 | `back-close` | own code | no control's words say Back or Close |
 | `hidden-cue` | own code + ink | a scroller cut at an edge has a mask there that draws (the band drawn with the mask, without it, and without the scroller), or an item peeking 16px |

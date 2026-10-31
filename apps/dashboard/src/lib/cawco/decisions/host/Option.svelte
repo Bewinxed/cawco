@@ -3,10 +3,11 @@
   subgrid), so every chip, line, cost and media starts on one line across
   the columns. A pictured option left alone on its card's last row spans it
   (Decision.svelte `lone`), on the first column's edge. Its first row is the pick, the kit's option (ui/option-group
-  item: the 30px option chip with its keycap, its place in its decision),
+  item: the 30px option chip with its keycap, its place in its decision,
+  drawn only where there is a keyboard to press it, as Send's keys are),
   then the Recommended and Current badges after it; then its line (what it
   gets), its cost (what it costs), its builds (what picking it means
-  building or changing) and its media, each in its row, each the
+  building or changing) and its media, 11px apart, each in its row, each the
   writer's own sentence with no label before it. The
   overlay stores a press on its `data-option` (pick.ts) and the group draws
   it chosen. The line and the cost are labels of the chip, so a press on
@@ -112,8 +113,11 @@
       id="{uid}-chip"
       value={id}
     >
-      {#if keycap > 0}<Kbd aria-hidden="true" data-box look="keycap"
-          >{keycap}</Kbd
+      {#if keycap > 0}<Kbd
+          aria-hidden="true"
+          data-box
+          look="keycap"
+          reach="keyboard">{keycap}</Kbd
         >{/if}<span
         class="min-w-0 wrap-anywhere text-pretty"
         data-slot="option-label"
@@ -161,7 +165,11 @@
     >
   {/if}
   {#if media.length > 0}
-    <div class={["min-w-0", rowOf(at.media)]} data-slot="option-media">
+    <!-- Its pieces one under another, 11px apart, as the card's own media and a Column stand theirs (Stack.svelte). -->
+    <div
+      class={["flex min-w-0 flex-col gap-space-3", rowOf(at.media)]}
+      data-slot="option-media"
+    >
       {@render renderNode(media)}
     </div>
   {/if}

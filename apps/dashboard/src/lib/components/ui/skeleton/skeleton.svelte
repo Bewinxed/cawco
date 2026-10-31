@@ -31,6 +31,8 @@
         "x-height": "h-c-skeleton-x-height",
         /** A card's picture well, at the ghost picture's 16:10. */
         picture: "aspect-16/10",
+        /** A decision page's live screen in its well: a screen's 16:10 under the media cap, as its frame stands (decisions host Preview.svelte). */
+        screen: "aspect-16/10 max-h-c-media-max-h",
         /** The default 36px button, or a 36px row of a menu or a finder. */
         control: "h-c-btn-h",
         /** A small (30px) button or chip, or a rail row. */

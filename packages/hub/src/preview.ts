@@ -425,9 +425,10 @@ export interface PreviewListenerDeps {
   pictures: ReturnType<typeof artifactPictures>;
   /**
    * A decision page's program: its hash (the page's, for the overlay) and
-   * the script tag naming what the artifacts its Canvas and Preview pieces
+   * the script tags naming what the artifacts its Canvas and Preview pieces
    * show are now, an embedded preview's address built from where the page
-   * was reached (`reachedAt`); null for any other page.
+   * was reached (`reachedAt`), and its pictures' sizes
+   * (artifacts/page-pictures.ts); null for any other page.
    */
   program: (
     artifactId: string,

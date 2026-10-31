@@ -13,7 +13,7 @@ import { mount } from "svelte";
 import { reportErrorsTo } from "../../error-report.js";
 import { relayAway } from "./away";
 import Host from "./Host.svelte";
-import { bridge, picks, takeServed } from "./page.svelte.js";
+import { bridge, picks, sent, takeServed } from "./page.svelte.js";
 
 /** The commit the host was built from (core decision-host.ts `define`): its reports name it. */
 declare const CAWCO_HOST_BUILD: string;
@@ -22,6 +22,9 @@ reportErrorsTo(PREVIEW_ERRORS_PATH, CAWCO_HOST_BUILD);
 takeServed(document);
 bridge()?.on("picks", (next) => {
   picks.now = next;
+});
+bridge()?.on("sent", (at) => {
+  sent.at = at;
 });
 relayAway();
 

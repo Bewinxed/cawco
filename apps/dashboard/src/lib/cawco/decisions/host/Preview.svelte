@@ -680,9 +680,10 @@
 </script>
 
 {#snippet screenWait()}
+  <!-- At the frame's own box: a screen's 16:10 under the same media cap, so the page stands as tall as it will when the frame comes. -->
   <Skeleton
     class="w-full"
-    height={screenTall === null ? "picture" : undefined}
+    height={screenTall === null ? "screen" : undefined}
     style={screenTall === null ? undefined : `block-size: ${screenTall}px`}
   />
 {/snippet}

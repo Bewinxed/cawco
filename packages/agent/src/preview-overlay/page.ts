@@ -611,13 +611,30 @@ function ready() {
  * markup — `data-cawco-choice="hero"` on the element (or a container),
  * `data-option="b"` on each option, `data-cawco-multiple` on the choice to
  * allow several — or calls `cawco.choose`, `cawco.note`, `cawco.set` and
- * `cawco.on("picks", …)`; every named field of a page is kept too
+ * `cawco.on("picks", …)`, and hears the person's last Send as the hub
+ * keeps it with `cawco.on("sent", …)`; every named field of a page is kept too
  * (fields.ts). All of them read and write the doc's `state` directly; the
  * host relays nothing. The one thing the page asks its host is
  * `cawco.pickPlace`, which needs the host's own pickers.
  */
 
 const listeners = new Set<(current: State) => void>();
+/** Who hears the hub's record of the person's last Send (`cawco.on("sent")`). */
+const sentListeners = new Set<(sentAt: string | null) => void>();
+/** The last Send each of them heard, so a meta change that is no send tells none. */
+let sentHeard: string | null | undefined;
+
+/** Tells the page when the person last pressed Send, as the hub keeps it, once it changes. */
+function toldSent() {
+  const { sentAt } = artifact.meta();
+  if (sentAt === sentHeard) {
+    return;
+  }
+  sentHeard = sentAt;
+  for (const listener of sentListeners) {
+    listener(sentAt);
+  }
+}
 
 /**
  * Tells the host something went wrong, `of` naming what: a field the hub's
@@ -705,6 +722,7 @@ artifact.watch({
   },
   meta: () => {
     republished();
+    toldSent();
     tellDoc();
   },
   ink: () => {
@@ -719,6 +737,7 @@ artifact.watch({
       fillFields(artifact.state());
     }
     told();
+    toldSent();
     republished();
     tellDoc();
   },
@@ -1089,7 +1108,11 @@ declare global {
       set: (key: string, value: unknown) => Promise<void>;
       /** The person's Send: the session hears it has new responses to read; `text` is kept with them; `control` names what was pressed (core `SEND_CONTROLS`). */
       send: (text?: string, control?: string) => Promise<void>;
-      on: (event: "picks", listener: (picks: State) => void) => () => void;
+      on: {
+        (event: "picks", listener: (picks: State) => void): () => void;
+        /** When the person last pressed Send, ISO, as the hub keeps it (null before), told now and as it changes. */
+        (event: "sent", listener: (sentAt: string | null) => void): () => void;
+      };
       /**
        * Asks the person for a machine and a folder on it, with CawCo's own
        * machine list and folder browser; the pick is stored under `place`
@@ -1136,16 +1159,28 @@ Object.defineProperty(window, "cawco", {
         throw error;
       }
     },
-    on: (event: "picks", listener: (current: State) => void) => {
+    on: ((
+      event: "picks" | "sent",
+      listener: ((current: State) => void) | ((sentAt: string | null) => void)
+    ) => {
+      if (event === "sent") {
+        const heard = listener as (sentAt: string | null) => void;
+        sentListeners.add(heard);
+        if (artifact.known()) {
+          heard(artifact.meta().sentAt);
+        }
+        return () => sentListeners.delete(heard);
+      }
       if (event !== "picks") {
         throw new Error(`cawco.on: unknown event ${event}`);
       }
-      listeners.add(listener);
+      const heard = listener as (current: State) => void;
+      listeners.add(heard);
       if (artifact.known()) {
-        listener(artifact.state());
+        heard(artifact.state());
       }
-      return () => listeners.delete(listener);
-    },
+      return () => listeners.delete(heard);
+    }) as Window["cawco"]["on"],
     pickPlace: async () => {
       const place = placeOf(await askHost("cawco/pick-place", { pageHash }));
       if (!place) {

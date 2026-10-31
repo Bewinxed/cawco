@@ -494,7 +494,7 @@ declare global {
 }
 
 /** Installs `kitRuns` and `kitInside` on every page and frame, before its own scripts. */
-function installRuns(): void {
+export function installRuns(): void {
   const walk = (root: Document | ShadowRoot): Animation[] => {
     const runs = [...root.getAnimations()];
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);

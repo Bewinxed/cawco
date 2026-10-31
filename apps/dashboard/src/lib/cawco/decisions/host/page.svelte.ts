@@ -1,10 +1,12 @@
 /**
- * What the host page knows beside its program: the person's picks as the
- * overlay's bridge hears them (`window.cawco`), the files its Images show and
- * the artifacts its Canvas and Preview pieces show, as the hub served them
+ * What the host page knows beside its program: the person's picks and the
+ * time of their last Send as the overlay's bridge hears them
+ * (`window.cawco`), the files its Images show with their sizes, and the
+ * artifacts its Canvas and Preview pieces show, as the hub served them
  * (hub decision-program.ts `programHost`, preview.ts `servePage`).
  */
 import type { ChoiceEntry } from "@cawco/core/choices";
+import { PICTURES_TAG, type PictureSize } from "@cawco/core/decisions-library";
 import type { CanvasShapes } from "@cawco/core/stage";
 import { SvelteMap } from "svelte/reactivity";
 import { z } from "zod";
@@ -46,6 +48,9 @@ export function hearWidths(on?: MediaWidths): {
 /** The picks by decision id, as the hub keeps them now. */
 export const picks = $state<{ now: Record<string, ChoiceEntry> }>({ now: {} });
 
+/** When the person last pressed Send, ISO, as the hub keeps it (its doc's `meta.sentAt`); null before. */
+export const sent = $state<{ at: string | null }>({ at: null });
+
 /** An artifact a Canvas or Preview names, as the hub has it; null when it is gone. */
 export type MediaArtifact = {
   /** A dev server's preview or a sheet: the address of the origin the hub opened for it. */
@@ -60,7 +65,15 @@ export const served = $state<{
   /** Each Image's file as written, to its address beside the page. */
   files: Record<string, string>;
   media: Record<string, MediaArtifact>;
-}>({ files: {}, media: {} });
+  /** Each picture's size by its address (hub page-pictures.ts): an address with none is a file no reader knew. */
+  pictures: Record<string, PictureSize>;
+}>({ files: {}, media: {}, pictures: {} });
+
+const PictureSizeSchema = z.object({
+  width: z.number().positive(),
+  height: z.number().positive(),
+  scale: z.number().positive(),
+}) satisfies z.ZodType<PictureSize>;
 
 /** The JSON in one of the page's script tags, as `schema`'s shape; `fallback` when it is missing, not JSON, or not that shape. */
 const jsonIn = <S extends z.ZodType>(
@@ -100,16 +113,25 @@ export const takeServed = (doc: Document): void => {
     z.record(z.string(), MediaArtifactSchema),
     {}
   );
+  served.pictures = jsonIn(
+    doc,
+    PICTURES_TAG,
+    z.record(z.string(), PictureSizeSchema),
+    {}
+  );
 };
 
 /** The bridge, once the overlay put it on the window; null where CawCo does not show the page. */
 export interface Bridge {
   choose: (choice: string, option: string | string[] | null) => Promise<void>;
   note: (choice: string, text: string) => Promise<void>;
-  on: (
-    event: "picks",
-    listener: (picks: Record<string, ChoiceEntry>) => void
-  ) => () => void;
+  on: {
+    (
+      event: "picks",
+      listener: (picks: Record<string, ChoiceEntry>) => void
+    ): () => void;
+    (event: "sent", listener: (sentAt: string | null) => void): () => void;
+  };
   /** `control` names what the person pressed: the hub's journal says it. */
   send: (text?: string, control?: "page-send" | "page-key") => Promise<void>;
   set: (key: string, value: unknown) => Promise<void>;

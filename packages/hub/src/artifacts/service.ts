@@ -54,6 +54,7 @@ import {
   type SettledBy,
   type ShownFailure,
   sessionLink,
+  unsentChoices,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -113,6 +114,7 @@ import {
   pickOf,
   picksMade,
 } from "@cawco/core/decisions";
+import type { PictureSize } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
 import {
   excerptOf,
@@ -222,6 +224,7 @@ import {
   pictureChanges,
   sceneChanges,
 } from "./page-changes";
+import { pagePictures } from "./page-pictures";
 import { picturePath, thumbnailPath } from "./sync";
 
 /** How a tool names an artifact: its id or handle, else its name. */
@@ -1029,13 +1032,6 @@ const answerOf = (
     ...(entry.settled ? { settled: entry.settled } : {}),
   };
 };
-
-/** The person's picks and notes written since their last send: what Send sends of the page's choices. */
-const unsentChoices = (
-  state: Record<string, ChoiceEntry>,
-  sentAt: string | null
-): number =>
-  Object.values(state).filter((entry) => !sentAt || entry.at > sentAt).length;
 
 /** The page hash the newest entry was made on: a preview's, which the hub never built. */
 const newestHash = (state: Record<string, ChoiceEntry>): string | null =>
@@ -7055,13 +7051,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * A decision page's program and what its media show now, for the page
      * the hub serves (preview.ts `servePage`): the hash its overlay carries,
      * and each artifact its Canvas and Preview pieces name, null once the hub
-     * no longer holds it. Null for any other page.
+     * no longer holds it, and its pictures' sizes by their addresses
+     * (page-pictures.ts). Null for any other page.
      */
     programServed: (
       id: string
     ): {
       hash: string;
       media: Record<string, ServedMedia | null>;
+      pictures: Record<string, PictureSize>;
     } | null => {
       const row = db.get(id);
       const program = row ? programOf(row) : undefined;
@@ -7083,7 +7081,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             : {}),
         };
       }
-      return { hash: pageHash(program), media };
+      return {
+        hash: pageHash(program),
+        media,
+        pictures: pagePictures(join(deps.root, id)),
+      };
     },
 
     /**

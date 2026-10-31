@@ -7,6 +7,11 @@
  *   await house.at(page, "state name");   // after the spec's own settle
  *   house.report();                       // one PASS/FAIL line per rule
  *
+ * From the command line, on any page, once per width (under 640 a phone's
+ * touch screen), in the kit's Chromium; exits 1 on any finding:
+ *
+ *   bun scripts/probe-kit/house-rules.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]
+ *
  * `houseRules(page, opts)` is the one read under the ledger: it runs the
  * overflow sweep (journeys/scan.ts), `impeccable detect --json --cdp` on the
  * page as it stands (Chromium: the kit's own browser, by its DevTools port),
@@ -18,8 +23,8 @@
  * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box |
  * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, and an identity tile on its mark hue, are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
- * | bar-ground  | own code                    | bars (`header`, toolbars, the bar data-slots, foot bars) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md:665) and a group's capsule (DESIGN.md:666) are named, not failed |
- * | head        | own code                    | a bar's title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
+ * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md:665) and a group's capsule (DESIGN.md:666) are named, not failed |
+ * | head        | own code                    | a bar's (as bar-ground reads one) title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
  * | back-close  | own code                    | no control's words say Back or Close (DESIGN.md:668) |
  * | hidden-cue  | own code + ink              | a scroller cut at an edge carries a computed mask there that draws (the edge's pixels with and without it), or an item peeking 16px or more |
  * | contrast    | own code + impeccable `low-contrast` | every text run against the ground under it, 4.5:1 (3:1 at 24px); the lowest is reported |
@@ -36,7 +41,7 @@ import type { Page } from "playwright-core";
 import { userLayerPath } from "../../packages/core/src/paths";
 import { capture, type Raster } from "./ink";
 import { scan } from "./journeys/scan";
-import { devtoolsPort, type Kit, ROOT } from "./kit";
+import { devtoolsPort, installRuns, type Kit, ROOT, Run, settle } from "./kit";
 
 export type HouseRule =
   | "overflow"
@@ -965,9 +970,41 @@ function houseRead(args: InPageArgs): InPageRead {
   }
 
   // ---- 4. bars have no ground; 5. heads ----
-  const BAR =
-    'header, [role="toolbar"], [role="banner"], [data-slot="bar"], [data-slot="view-bar"], [data-slot="page-head"], [data-slot="project-head"], [data-slot="side-head"], [data-slot="sheet-header"], [data-slot="drawer-header"], [data-slot="dialog-header"], [data-slot="foot"], [data-slot="page-foot"], [data-slot="sheet-footer"], [data-slot="drawer-footer"], [data-slot="dialog-footer"]';
-  const bars = [...scope.querySelectorAll(BAR)].filter(shown);
+  /** What names itself a bar: a toolbar, a banner, or a bar's data-slot. */
+  const NAMED_BAR =
+    '[role="toolbar"], [role="banner"], [data-slot="bar"], [data-slot="view-bar"], [data-slot="page-head"], [data-slot="project-head"], [data-slot="side-head"], [data-slot="sheet-header"], [data-slot="drawer-header"], [data-slot="dialog-header"], [data-slot="foot"], [data-slot="page-foot"], [data-slot="sheet-footer"], [data-slot="drawer-footer"], [data-slot="dialog-footer"]';
+  const BAR = `header, ${NAMED_BAR}`;
+  /**
+   * Whether `el` scrolls with the content it stands in: in flow under a
+   * scroller (an element's, or the document's where its root scrolls),
+   * neither it nor anything between sticky or fixed. DESIGN.md:665 calls a
+   * bar what heads a surface and never scrolls with its content ("the
+   * content runs to the surface's top edge, and where it scrolls under the
+   * controls the scroll edge effect parts them"), so a `<header>` that
+   * scrolls with a list or a card heads a group of that content (a list's
+   * section, a card's question) and is no bar.
+   */
+  const scrollsWithContent = (el: Element): boolean => {
+    for (let at: Element | null = el; at; at = at.parentElement) {
+      if (/sticky|fixed/u.test(style(at).position)) {
+        return false;
+      }
+      const up = at.parentElement;
+      if (!up || up === document.body || up === document.documentElement) {
+        break;
+      }
+      if (/auto|scroll/u.test(style(up).overflowY)) {
+        return true;
+      }
+    }
+    const root = [document.documentElement, document.body].map(
+      (one) => style(one).overflowY
+    );
+    return !root.some((one) => /hidden|clip/u.test(one));
+  };
+  const bars = [...scope.querySelectorAll(BAR)]
+    .filter(shown)
+    .filter((one) => one.matches(NAMED_BAR) || !scrollsWithContent(one));
   if (!skip.has("bar-ground")) {
     for (const bar of bars) {
       const p = paints(bar);
@@ -2115,4 +2152,118 @@ export class HouseRules {
       );
     }
   }
+}
+
+/** Below this width a page is read as a phone's: touch and a coarse pointer (DESIGN.md's 640px line). */
+const PHONE_LINE = 640;
+const USAGE =
+  "bun scripts/probe-kit/house-rules.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]";
+
+/** One width a page is read at, from `--width 1540` or `--width 390x844`. */
+const sizeOf = (said: string): { height: number; width: number } => {
+  const [width, height] = said.split("x").map(Number);
+  if (!(width && width > 0) || (height !== undefined && !(height > 0))) {
+    throw new Error(`--width takes px, like 1540 or 390x844: not "${said}".`);
+  }
+  return { width, height: height ?? (width < PHONE_LINE ? 844 : 900) };
+};
+
+/** What the command line asks: the page, its widths (1440 when none), and the scope. */
+const askedOf = (
+  args: string[]
+): {
+  scope: string | undefined;
+  sizes: { height: number; width: number }[];
+  url: string | undefined;
+} => {
+  const valuesOf = (flag: string) =>
+    args.flatMap((one, i) =>
+      one === flag && args[i + 1] ? [args[i + 1] as string] : []
+    );
+  const widths = valuesOf("--width");
+  const [scope] = valuesOf("--scope");
+  return {
+    url: args.find(
+      (one, i) => !(one.startsWith("--") || args[i - 1]?.startsWith("--"))
+    ),
+    sizes: (widths.length > 0 ? widths : ["1440"]).map(sizeOf),
+    scope,
+  };
+};
+
+/** One width's read, said: each rule's PASS or FAIL and what it found, then the rest. The findings' count. */
+const sayRead = (read: HouseRead): number => {
+  let found = 0;
+  for (const rule of RULES) {
+    const mine = read.findings.filter((one) => one.rule === rule);
+    found += mine.length;
+    console.log(
+      `${mine.length === 0 ? "PASS" : "FAIL"} ${rule}, ${HOUSE_RULES[rule].says}: ${mine.length} finding(s)`
+    );
+    for (const one of mine.slice(0, 8)) {
+      console.log(`  ${one.element}: ${one.measured}`);
+    }
+  }
+  if (read.lowest) {
+    console.log(
+      `lowest contrast ${read.lowest.ratio.toFixed(2)}:1, ${read.lowest.element}`
+    );
+  }
+  const lines = [
+    ...read.named.map((one) => `named, not failed: ${one}`),
+    ...read.unread.map((one) => `unread: ${one}`),
+    `impeccable: ${read.impeccable.ran ? "ran" : read.impeccable.said}`,
+    ...read.others.slice(0, 8).map((one) => `impeccable note: ${one}`),
+  ];
+  for (const line of lines) {
+    console.log(line);
+  }
+  return found;
+};
+
+/**
+ * The house rules read on the page at `url` from the command line, once per
+ * width, in the kit's Chromium (its DevTools port open, so impeccable runs
+ * on it as in a spec). Exits 1 when any rule found something.
+ */
+async function main(args: string[]): Promise<number> {
+  const { url, sizes, scope } = askedOf(args);
+  if (!url) {
+    console.log(USAGE);
+    return 2;
+  }
+  const run = new Run();
+  let found = 0;
+  try {
+    const browser = await run.browser("chromium");
+    for (const size of sizes) {
+      const phone = size.width < PHONE_LINE;
+      const context = await browser.newContext({
+        viewport: size,
+        deviceScaleFactor: 2,
+        hasTouch: phone,
+        isMobile: phone,
+      });
+      try {
+        await context.addInitScript(installRuns);
+        const page = await context.newPage();
+        await page.goto(url, { waitUntil: "load" });
+        await settle(page);
+        const read = await houseRules(page, scope ? { scope } : {});
+        console.log(
+          `\n${size.width}×${size.height}${phone ? " touch" : ""}: ${page.url()}`
+        );
+        found += sayRead(read);
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await run.close();
+  }
+  return found > 0 ? 1 : 0;
+}
+
+if (import.meta.main) {
+  process.exit(await main(process.argv.slice(2)));
 }
