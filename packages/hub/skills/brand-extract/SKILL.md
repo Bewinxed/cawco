@@ -18,4 +18,4 @@ The **brand kit** is the project folder's `knowledge/brand/`: the files every wr
    Write each where the task's `outputs` say (else those names). Done when every line has its quote or its source.
 3. **Flag the conflicts**: where the source contradicts itself (two blues for the same role, two voices), list both with where each appears. Done when each conflict is a question for the person.
 4. **Hand it to review**: move the task to review with a one-line reason, or `finish_item` inside a work item, naming the conflicts first. Done when the task is in review.
-5. **After the person decides**, Caw writes the agreed files into `knowledge/brand/` with `folder_write`, and the person moves the task to kit. In a design project, colours and type also go into `design/tokens.json`.
+5. **After the person decides**, Caw writes the agreed files into `knowledge/brand/` with `folder_write`, and the person moves the task to kit. In a design project, colours and type also go into the design system through `design_write` (the `design-system` skill).
