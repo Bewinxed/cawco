@@ -879,11 +879,17 @@ export function adminTools() {
           .optional()
           .describe(
             "How to read the pattern. Default 'phrase'. 'meaning' makes the pattern a yes/no " +
-              "question Jev answers about the output (needs Jev on: a TypeSafe key or OpenRouter set in Settings; " +
+              "question CawCo's Jev model answers about the output (needs its route: a TypeSafe key or OpenRouter set in Settings; " +
               "timing 'turn' or 'message' only)."
           ),
-        caseSensitive: z.boolean().optional(),
-        wholeWord: z.boolean().optional(),
+        caseSensitive: z
+          .boolean()
+          .optional()
+          .describe("Match a phrase's case. Default false."),
+        wholeWord: z
+          .boolean()
+          .optional()
+          .describe("Match a phrase only as whole words. Default false."),
         watch: z
           .enum(["text", "thinking", "both"])
           .optional()
