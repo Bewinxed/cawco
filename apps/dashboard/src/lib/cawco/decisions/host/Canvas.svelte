@@ -21,7 +21,7 @@
   import { hubRefusal } from "../../hub-read.js";
   import { revealHere, revealOut } from "../../motion/curves.svelte.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { served } from "./page.svelte.js";
+  import { pieceName, served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
   import Well from "./Well.svelte";
 
@@ -29,6 +29,8 @@
     $props();
   const id = $derived(String(props.artifact ?? ""));
   const held = $derived(served.media[id]);
+  /** What the page calls it, on screen, to a reader and to its frame: never its artifact's name (page.svelte.ts `pieceName`). */
+  const named = pieceName(() => props.caption, "canvas");
   let frame = $state<HTMLIFrameElement>();
   let opening = $state(false);
   let said = $state("");
@@ -60,7 +62,7 @@
         artifact: {
           id: held?.id ?? id,
           kind: "canvas",
-          name: held?.name ?? "canvas",
+          name: named(),
         },
         sync: `/__cawco/artifact/${held?.id ?? id}`,
         theme: scheme.now,
@@ -138,7 +140,7 @@
       style:block-size={shape ? `${shape.height}px` : undefined}
       style:inline-size={shape ? `${shape.width}px` : "100%"}
       tabindex="-1"
-      title={`Canvas: ${held.name}`}
+      title={named()}
       {@attach (node) => {
         if (!shape) {
           underSkeleton = true;

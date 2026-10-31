@@ -57,6 +57,8 @@
     hearWidths,
     MEDIA_WIDTHS,
     type MediaWidths,
+    PIECE_NAME,
+    type PieceNames,
     picks,
   } from "./page.svelte.js";
 
@@ -134,6 +136,8 @@
   setContext("decision-options", () => order);
   /** Its id: each option's parts are named under it, ids that hold across revisions. */
   setContext("decision-id", () => id);
+  /** Its media name themselves by its question where nothing nearer names them (page.svelte.ts `pieceName`). */
+  setContext<PieceNames>(PIECE_NAME, () => question);
   /**
    * The rows every option of the card stands on (the chip, its line, its
    * cost, its builds, its media): one track each that any option fills,

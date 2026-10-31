@@ -102,13 +102,17 @@ export const decisionsWords = {
     `its stage didn't draw it within ${seconds} s. Try again; if it stays empty, open the canvas in its session to see why.`,
   /**
    * A Preview not yet drawn, its wait's line (dashboard Preview.svelte):
-   * waiting for its turn among the page's previews, or opening on its turn;
-   * `kind` and `name` are its artifact's (`the preview bench-look`).
+   * waiting for its turn among the page's previews, or opening on its turn.
+   * `piece` is what the page calls it (dashboard page.svelte.ts
+   * `pieceName`), never its artifact's name.
    */
-  previewQueued: (kind: string, name: string) =>
-    `Waiting to open the ${kind} ${name}…`,
-  previewOpening: (kind: string, name: string) =>
-    `Opening the ${kind} ${name}…`,
+  previewQueued: (piece: string) => `Waiting to open “${piece}”…`,
+  previewOpening: (piece: string) => `Opening “${piece}”…`,
+  /** A Preview whose origin didn't answer, its fault's head; `piece` as above. */
+  previewUnreached: (piece: string) => `“${piece}” can't be reached.`,
+  /** What a Canvas or a Preview is called where the page names it nothing (no caption, option or card). */
+  pieceCanvas: "Drawing",
+  piecePreview: "Preview",
   /** A decided card's fold: the options turned down. */
   others: (count: number) =>
     `${count} other ${count === 1 ? "option" : "options"}`,

@@ -8,6 +8,8 @@
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { PICTURES_TAG, type PictureSize } from "@cawco/core/decisions-library";
 import type { CanvasShapes } from "@cawco/core/stage";
+import { decisionsWords } from "@cawco/core/words/decisions";
+import { getContext } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { z } from "zod";
 import { MediaArtifactSchema } from "#lib/cawco/stored-shapes.js";
@@ -20,6 +22,40 @@ import { MediaArtifactSchema } from "#lib/cawco/stored-shapes.js";
 export type MediaWidths = (key: object, width: number | null) => void;
 /** The context a well finds its hearer under (Decisions, Decision and Option set it). */
 export const MEDIA_WIDTHS = "decision-media-widths";
+
+/**
+ * What the page calls the pieces under it, read when drawn: a Decision sets
+ * its question, an Option its label, so a Canvas or Preview inside names
+ * itself by the page's own words ({@link pieceName}).
+ */
+export type PieceNames = () => string;
+/** The context a piece finds what the page calls it under (Decision and Option set it). */
+export const PIECE_NAME = "decision-piece-name";
+
+/**
+ * What a Canvas or Preview is called on screen and to a reader: its caption, else the
+ * label of the option it stands in, else its card's question, else its
+ * piece's word (core `decisionsWords.pieceCanvas`, `piecePreview`). Never its
+ * artifact's name, which the page's writer chose for itself (a blind
+ * benchmark's `image-settings-arm-a` said which arm was which). Call it in
+ * the piece's script, where its context is read.
+ */
+export function pieceName(
+  caption: () => unknown,
+  piece: "canvas" | "preview"
+): () => string {
+  const page = getContext<PieceNames | undefined>(PIECE_NAME);
+  return () => {
+    const own = typeof caption() === "string" ? String(caption()).trim() : "";
+    return (
+      own ||
+      page?.().trim() ||
+      (piece === "canvas"
+        ? decisionsWords.pieceCanvas
+        : decisionsWords.piecePreview)
+    );
+  };
+}
 
 /** Who hears a picture's width over its height (Image.svelte), by the picture's own key, null once it is gone: the Row it stands in. */
 export type PictureRatios = (key: object, ratio: number | null) => void;
@@ -58,7 +94,6 @@ export type MediaArtifact = {
   /** The version the page draws: the artifact's newest, a next version its owner's panel has not opened yet included (hub artifacts service `newestVersion`). */
   id: string;
   kind: string;
-  name: string;
   /** That version's revision: its frame loads again when it moves. */
   revision: number;
   /** A component canvas's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */

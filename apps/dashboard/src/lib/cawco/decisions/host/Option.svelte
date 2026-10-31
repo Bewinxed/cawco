@@ -26,7 +26,12 @@
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { OptionGroupItem } from "#lib/components/ui/option-group/index.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { MEDIA_WIDTHS, type MediaWidths } from "./page.svelte.js";
+  import {
+    MEDIA_WIDTHS,
+    type MediaWidths,
+    PIECE_NAME,
+    type PieceNames,
+  } from "./page.svelte.js";
 
   let {
     props,
@@ -61,6 +66,8 @@
     | undefined
   >("decision-rows");
   const id = $derived(String(props.id ?? ""));
+  /** Its media name themselves by its label (page.svelte.ts `pieceName`). */
+  setContext<PieceNames>(PIECE_NAME, () => String(props.label ?? id));
   const keycap = $derived((order?.().indexOf(id) ?? -1) + 1);
   const media = $derived(Array.isArray(props.media) ? props.media : []);
   const decision = getContext<(() => string) | undefined>("decision-id");

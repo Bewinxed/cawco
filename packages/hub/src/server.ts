@@ -15331,7 +15331,6 @@ export const createServer = (
           embed?: string;
           id: string;
           kind: string;
-          name: string;
           revision: number;
         } | null
       > = {};

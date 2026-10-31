@@ -287,13 +287,15 @@ const unmerged = (error: unknown): ArtifactRefusal =>
  */
 /**
  * What a decision page's media says of an artifact it shows (its program's
- * Canvas and Preview pieces): its kind and name; a component canvas's shapes.
+ * Canvas and Preview pieces): its kind; a component canvas's shapes. Never
+ * its name: the page names each piece by its own words (its caption, its
+ * option's label, its card's question), and a name in the page's media is a
+ * text node of it (a blind benchmark's arms were named there).
  */
 export interface ServedMedia {
   /** The version the page draws: the artifact's newest, a next version held for its owner's panel included (service `newestVersion`). */
   id: string;
   kind: ArtifactKind;
-  name: string;
   /** That version's revision: a Preview of a server loads again when it moves (a server made again on another port). */
   revision: number;
   shapes?: CanvasShapes;
@@ -7316,7 +7318,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         media[shown] = {
           id: shownRow.id,
           kind: shownRow.kind,
-          name: shownRow.name,
           revision: shownRow.revision,
           ...(shownRow.kind === "component"
             ? { shapes: shapesOf(shownRow) }

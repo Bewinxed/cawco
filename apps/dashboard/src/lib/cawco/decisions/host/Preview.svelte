@@ -92,7 +92,7 @@
   import { dur, reveal, revealHere } from "../../motion/curves.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { type EmbedTurn, embedTurn, scrollerOf } from "./embed-turns.js";
-  import { served } from "./page.svelte.js";
+  import { pieceName, served } from "./page.svelte.js";
   import Well from "./Well.svelte";
 
   let {
@@ -105,6 +105,8 @@
   }> = $props();
   const id = $derived(String(props.artifact ?? ""));
   const held = $derived(served.media[id]);
+  /** What the page calls it, on screen and to a reader: never its artifact's name (page.svelte.ts `pieceName`). */
+  const named = pieceName(() => props.caption, "preview");
   const stories = $derived(
     Array.isArray(props.stories) ? props.stories.map(String) : []
   );
@@ -692,8 +694,8 @@
       return "";
     }
     return turnState === "waiting"
-      ? decisionsWords.previewQueued(held.kind, held.name)
-      : decisionsWords.previewOpening(held.kind, held.name);
+      ? decisionsWords.previewQueued(named())
+      : decisionsWords.previewOpening(named());
   });
   /** The failure stands once the grace is over: inside it the wait shows nothing of its own. */
   const fault = $derived(slow ? failed : null);
@@ -797,7 +799,7 @@
       style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
       style:block-size={framedHeight}
       style:inline-size={picture === undefined ? undefined : `${picture}px`}
-      title={held.name}
+      title={named()}
     ></iframe>
   {:else if held?.embed}
     <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so its box holds its picture's own shape as the page's media knows it from its first paint (the kit's picture where none was ever drawn), its skeleton a layer over it until it stands drawn (said and loaded), its frame loading at no height under that layer, then at its own height. Past the grace the wait's line stands at the box's top over the skeleton, until it stands drawn; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
@@ -826,8 +828,7 @@
         >
           {#if fault.kind === "unreached"}
             <p class="type-label text-ink-strong wrap-anywhere">
-              The {held.kind}
-              {held.name} can't be reached.
+              {decisionsWords.previewUnreached(named())}
             </p>
             <p
               class="type-meta text-status-fail-ink wrap-anywhere"
@@ -880,7 +881,7 @@
             }}
             src={ready}
             style:block-size={framedHeight}
-            title={held.name}
+            title={named()}
             {@attach (node) => {
               if (!drawn) {
                 underWait = true;

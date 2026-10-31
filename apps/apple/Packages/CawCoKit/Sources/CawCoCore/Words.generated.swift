@@ -1973,14 +1973,24 @@ public enum Words {
             "its stage didn't draw it within \(seconds) s. Try again; if it stays empty, open the canvas in its session to see why."
         }
 
-        /// A Preview not yet drawn, its wait's line (dashboard Preview.svelte): waiting for its turn among the page's previews, or opening on its turn; `kind` and `name` are its artifact's (`the preview bench-look`).
-        public static func previewQueued(kind: String, name: String) -> String {
-            "Waiting to open the \(kind) \(name)…"
+        /// A Preview not yet drawn, its wait's line (dashboard Preview.svelte): waiting for its turn among the page's previews, or opening on its turn. `piece` is what the page calls it (dashboard page.svelte.ts `pieceName`), never its artifact's name.
+        public static func previewQueued(piece: String) -> String {
+            "Waiting to open “\(piece)”…"
         }
 
-        public static func previewOpening(kind: String, name: String) -> String {
-            "Opening the \(kind) \(name)…"
+        public static func previewOpening(piece: String) -> String {
+            "Opening “\(piece)”…"
         }
+
+        /// A Preview whose origin didn't answer, its fault's head; `piece` as above.
+        public static func previewUnreached(piece: String) -> String {
+            "“\(piece)” can't be reached."
+        }
+
+        /// What a Canvas or a Preview is called where the page names it nothing (no caption, option or card).
+        public static let pieceCanvas = "Drawing"
+
+        public static let piecePreview = "Preview"
 
         /// A decided card's fold: the options turned down.
         public static func others(count: Int) -> String {
