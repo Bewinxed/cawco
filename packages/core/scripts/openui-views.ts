@@ -83,25 +83,42 @@ if (trusting.length > 0) {
 const IMPORTANT_RULES = /^## Important Rules\n[\s\S]*?(?=^## )/mu;
 /** lang-core's streaming heading. */
 const STREAMING_HEADING = /^## Hoisting & Streaming \(CRITICAL\)$/mu;
+/** lang-core's closing line under the tools, which says to mock data. */
+const TOOLS_CRITICAL = /\n\nCRITICAL: Use ONLY the tools listed above[^\n]*/u;
 
 /**
  * `generateSystemPrompt` as these libraries need it. lang-core 1.0.2 always
  * appends an "## Important Rules" section naming tables, charts and forms,
- * which neither library has, and heads the streaming section "(CRITICAL)";
- * `PromptOptions` has no setting for either. This drops the first and renames
- * the second, its body kept. It fails once either is gone, so a lang-core
- * release with a setting replaces it.
+ * which neither library has; heads the streaming section "(CRITICAL)"; ends
+ * the tools section with a CRITICAL line telling the writer to use "realistic
+ * mock data", against the view library's rule to use only real data; and
+ * appends `additionalRules` under Final Verification with no heading of
+ * their own. `PromptOptions` has no setting for any of these. This drops the
+ * first and the third, renames the second, its body kept, and heads the rules
+ * "## Rules". It fails once one is gone, so a lang-core release with a
+ * setting replaces it.
  */
 const systemPrompt = (promptSpec: SystemPromptSpec): string => {
   const prompt = generateSystemPrompt(promptSpec);
-  if (!(IMPORTANT_RULES.test(prompt) && STREAMING_HEADING.test(prompt))) {
+  const rules = (promptSpec.promptOptions?.additionalRules ?? [])
+    .map((rule) => `- ${rule}`)
+    .join("\n");
+  const hasTools = prompt.includes("\n## Available Tools\n");
+  if (!(
+    IMPORTANT_RULES.test(prompt) &&
+    STREAMING_HEADING.test(prompt) &&
+    TOOLS_CRITICAL.test(prompt) === hasTools &&
+    prompt.endsWith(`\n\n${rules}`)
+  )) {
     throw new Error(
-      "openui: lang-core's prompt no longer has the Important Rules section or the CRITICAL streaming heading: use its setting and remove systemPrompt from scripts/openui-views.ts."
+      "openui: lang-core's prompt changed shape (the Important Rules section, the CRITICAL streaming heading, the CRITICAL tools line or the closing rules): use its setting and update systemPrompt in scripts/openui-views.ts."
     );
   }
-  return prompt
+  const cleaned = prompt
     .replace(IMPORTANT_RULES, "")
-    .replace(STREAMING_HEADING, "## Hoisting and streaming");
+    .replace(STREAMING_HEADING, "## Hoisting and streaming")
+    .replace(TOOLS_CRITICAL, "");
+  return `${cleaned.slice(0, -rules.length)}## Rules\n\n${rules}`;
 };
 
 const library = viewLibrary(

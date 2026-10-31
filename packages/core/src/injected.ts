@@ -511,7 +511,7 @@ export const awayNotesOf = (
 const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/u;
 
 /** The rule both silent presences share: how a turn ends, and the one thing that reaches the person. */
-const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL}, with no text after it. Only a question or a choice reaches them, by ask or a decision card. On a work item, your last turn ends on finish_item.`;
+const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL} as its last call. Only a question or a choice reaches them, by ask or a decision card. On a work item, your last turn ends on finish_item.`;
 
 /** What a session reads of the person, at the head of its turn ({@link PresenceSaid}). */
 export const presenceLine = (said: PresenceSaid): string => {
