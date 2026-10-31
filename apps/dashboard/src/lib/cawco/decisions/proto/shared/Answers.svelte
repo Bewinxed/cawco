@@ -60,7 +60,7 @@
       ]}
       style:--col-w="min({SIZES[size].w}px, 100% - var(--space-8) * 2)"
     >
-      <div class={one ? "@max-phone:px-space-4" : ""}>
+      <div class="@max-phone:px-space-4">
         <AnswerHead {dec} {question} {answer} index={i} />
       </div>
       <LiveFrame {size} label="{answer.name}, {SIZES[size].word}">

@@ -22,7 +22,7 @@
 <div
   class="flex flex-wrap items-end justify-between gap-x-space-5 gap-y-space-3"
 >
-  <div class="min-w-0 flex-1">
+  <div class="min-w-0 flex-1 basis-field-group">
     <QuestionHead {dec} {question} {level} />
   </div>
   <SizeSwitch

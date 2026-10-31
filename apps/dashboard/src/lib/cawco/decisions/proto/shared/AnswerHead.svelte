@@ -33,7 +33,6 @@
     class?: string;
   } = $props();
 
-  const picked = $derived(dec.chose(question.id, answer.id));
   const settled = $derived(
     dec.settledBy(question) !== null && question.settled?.answer === answer.id
   );
@@ -46,10 +45,8 @@
     digit={index + 1}
     data-chosen={settled || undefined}
     onclick={(event) => {
-      if (picked) {
-        event.preventDefault();
-        dec.pick(question.id, answer.id);
-      }
+      event.preventDefault();
+      dec.pick(question.id, answer.id);
     }}
   >
     <Kbd look="keycap" reach="keyboard">{index + 1}</Kbd>

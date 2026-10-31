@@ -91,7 +91,7 @@
     class={[
       "flex scroll-mt-space-8 flex-col gap-space-4",
       nested &&
-        "ms-space-6 border-border-hairline border-s ps-space-5 @max-phone:ms-space-3 @max-phone:ps-space-3",
+        "ms-space-6 border-border-hairline border-s ps-space-5 @max-phone:ms-0 @max-phone:border-s-0 @max-phone:ps-0",
     ]}
     aria-label={q.question}
     use:watch

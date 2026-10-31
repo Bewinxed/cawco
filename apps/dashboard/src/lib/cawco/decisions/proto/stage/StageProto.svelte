@@ -127,9 +127,9 @@
       <button
         type="button"
         class={[
-          "flex h-c-btn-h-sm max-w-details items-center gap-space-2 rounded-pill border bg-surface-raised px-space-3 mark-line hover:bg-surface-hover",
+          "flex h-c-btn-h-sm items-center gap-space-2 rounded-pill border bg-surface-raised px-space-3 mark-line hover:bg-surface-hover",
           current
-            ? "min-w-0 flex-initial border-border-control-strong text-ink-strong"
+            ? "min-w-0 max-w-full flex-none border-border-control-strong text-ink-strong"
             : "flex-none border-border-control text-ink-muted",
           q && dec.stateOf(q) === "remark" && "line-through",
         ]}

@@ -2,7 +2,8 @@
   /**
    * A question's answers as one kit OptionGroup in its list form (one row
    * per option, its description under its label), kept in the request's
-   * state: one tab stop, the arrows walk the answers, a digit picks while
+   * state (its heads pick through it, so a press on a picked one clears
+   * it): one tab stop, the arrows walk the answers, a digit picks while
    * focus is in them. `layout` lays the answers out: `columns` side by side
    * snapping one to the next, `row` side by side and stacked on a phone,
    * `list` one under another.
@@ -27,14 +28,7 @@
 
 <OptionGroup
   layout="list"
-  bind:value={
-    () => dec.picks[question.id] ?? [],
-    (next) => {
-      if (next[0] && !dec.chose(question.id, next[0])) {
-        dec.pick(question.id, next[0]);
-      }
-    }
-  }
+  value={dec.picks[question.id] ?? []}
   aria-label={question.question}
 >
   {#if layout === "columns"}
@@ -45,7 +39,7 @@
     </div>
   {:else if layout === "row"}
     <div
-      class="flex gap-space-5 overflow-x-auto overscroll-x-contain pb-space-2 @max-phone:flex-col"
+      class="flex gap-space-5 overflow-x-auto overscroll-x-contain pb-space-2 @max-phone:-mx-space-4 @max-phone:flex-col"
     >
       {@render children()}
     </div>
