@@ -1198,6 +1198,12 @@ public enum Size {
     public static let cLimitBar: Double = 64
     /// A Limits tile's least width (its dial, figure and sentence).
     public static let cUsageTileMin: Double = 248
+    /// A Who decides member card's least width.
+    public static let cRosterCardMin: Double = 280
+    /// A hand-over row's least width: two stand across wherever two fit.
+    public static let cRosterRowMin: Double = 272
+    /// A member's face on its card, and how far its name and facts stand in.
+    public static let cRosterFace: Double = 48
     /// A project spend stat tile's least width.
     public static let cStatTileMin: Double = 152
     /// The usage key's label column, so values line up down a tile and across a row.

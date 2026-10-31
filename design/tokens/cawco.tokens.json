@@ -7048,6 +7048,30 @@
       },
       "$description": "A Limits tile's least width (its dial, figure and sentence)."
     },
+    "c-roster-card-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 17.5,
+        "unit": "rem"
+      },
+      "$description": "A Who decides member card's least width."
+    },
+    "c-roster-row-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 17,
+        "unit": "rem"
+      },
+      "$description": "A hand-over row's least width: two stand across wherever two fit."
+    },
+    "c-roster-face": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3,
+        "unit": "rem"
+      },
+      "$description": "A member's face on its card, and how far its name and facts stand in."
+    },
     "c-stat-tile-min": {
       "$type": "dimension",
       "$value": {

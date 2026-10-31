@@ -171,4 +171,25 @@ export const decidesWords = {
   kindsLine: (kinds: string) => `Kinds: ${kinds}.`,
   /** A decision card for Caw: the event's trigger. */
   decisionTrigger: (page: string) => `a decision card on ${page} is yours`,
+
+  // ── The page's words: the roster, its tiles and the hand-over ───────────
+  /** A member's card with no kind. */
+  holdsNothing: (project: string) => `Holds nothing in ${project}.`,
+  /** A kind's tile, as its control is named. */
+  handOverKind: (kind: string) => `Hand over ${kind}`,
+  /** The tile's press, in its tooltip. */
+  handOver: "Hand over",
+  /** A kind following the fleet, in its scope glyph's tooltip. */
+  followsFleetTip: (subject: string) =>
+    `Follows the fleet, which sends it to ${subject}`,
+  /** A kind this project set itself, in its scope glyph's tooltip. */
+  ownTip: (project: string, subject: string) =>
+    `${project}'s own. The fleet sends it to ${subject}`,
+  /** A project's own kind, its way back. */
+  giveBack: "Give it back to the fleet's choice",
+  /** The hand-over's head. */
+  handTo: (kind: string) =>
+    `Hand ${kind.toLowerCase()} to, for choices raised from now on`,
+  /** The member the fleet names for this kind, at the end of its row. */
+  fleetsChoice: "Fleet's choice",
 };

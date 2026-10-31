@@ -585,6 +585,9 @@
   --spacing-c-usage-plot: var(--c-usage-plot);
   --spacing-c-limit-bar: var(--c-limit-bar);
   --spacing-c-usage-tile-min: var(--c-usage-tile-min);
+  --spacing-c-roster-card-min: var(--c-roster-card-min);
+  --spacing-c-roster-row-min: var(--c-roster-row-min);
+  --spacing-c-roster-face: var(--c-roster-face);
   --spacing-c-stat-tile-min: var(--c-stat-tile-min);
   --spacing-c-rings-key-label-w: var(--c-rings-key-label-w);
   --spacing-c-rings-key-value-w: var(--c-rings-key-value-w);

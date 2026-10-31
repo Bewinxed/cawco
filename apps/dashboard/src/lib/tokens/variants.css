@@ -445,6 +445,7 @@
 @custom-variant slot-grid-pane (&[data-slot="grid-pane"]);
 @custom-variant slot-group (&[data-slot="group"]);
 @custom-variant slot-grown-halo (&[data-slot="grown-halo"]);
+@custom-variant slot-handover (&[data-slot="handover"]);
 @custom-variant slot-head (&[data-slot="head"]);
 @custom-variant slot-heading (&[data-slot="heading"]);
 @custom-variant slot-highlight-ghost (&[data-slot="highlight-ghost"]);

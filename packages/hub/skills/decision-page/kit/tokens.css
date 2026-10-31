@@ -1377,6 +1377,12 @@
     --c-limit-bar: 64px;
     /* A Limits tile's least width (its dial, figure and sentence). */
     --c-usage-tile-min: 15.5rem;
+    /* A Who decides member card's least width. */
+    --c-roster-card-min: 17.5rem;
+    /* A hand-over row's least width: two stand across wherever two fit. */
+    --c-roster-row-min: 17rem;
+    /* A member's face on its card, and how far its name and facts stand in. */
+    --c-roster-face: 3rem;
     /* A project spend stat tile's least width. */
     --c-stat-tile-min: 9.5rem;
     /* The usage key's label column, so values line up down a tile and across a row. */

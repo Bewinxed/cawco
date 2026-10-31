@@ -121,6 +121,35 @@ export function cawPose(pose: CawPose, px: number): CawStill {
   return look(`${pose}:artboard:${px}`, pose, backing, box, dark);
 }
 
+/**
+ * A pose as a portrait, `px` CSS px square: the pose's `box` (core
+ * `CAW_POSES`: `[x, y, side]` in artboard units, framing his head and what he
+ * holds) fills the picture. Read inside an effect or an attachment, it is
+ * read again when the scheme or the device pixel ratio changes.
+ */
+export function cawPortrait(
+  file: CawFile,
+  frame: readonly [number, number, number],
+  px: number
+): CawStill {
+  const dark = theme.resolved === "dark";
+  const backing = Math.round(px * deviceRatio.current);
+  const [x, y, side] = frame;
+  const unit = backing / side;
+  const box = {
+    x: (BOX.x - x) * unit,
+    y: (BOX.y - y) * unit,
+    side: BOX.side * unit,
+  };
+  return look(
+    `${file}:portrait:${frame.join()}:${px}`,
+    file,
+    backing,
+    box,
+    dark
+  );
+}
+
 function look(
   framing: string,
   status: CawFile,
