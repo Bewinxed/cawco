@@ -82,9 +82,9 @@
   import { markHue, sessionSprite } from "./mark";
   import { nestFrom } from "./motion/branch.svelte";
   import { unfold } from "./motion/fold.svelte";
+  import { glyphIn, glyphOut } from "./motion/glyph";
   import RowFault from "./RowFault.svelte";
   import TreeMark from "./TreeMark.svelte";
-  import { glyphIn, glyphOut } from "./workspace/session-status";
 
   let {
     class: className,

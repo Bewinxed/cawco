@@ -64,6 +64,7 @@
   import { CURVE, dur, motionOk } from "./motion/curves.svelte";
   import { echoBeat } from "./motion/echo.svelte";
   import { fold, unfold } from "./motion/fold.svelte";
+  import { glyphIn, glyphOut } from "./motion/glyph";
   import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import { sessionPlace } from "./session-names.svelte";
@@ -76,7 +77,6 @@
     stopWork,
   } from "./stop-work.svelte";
   import TreeMark from "./TreeMark.svelte";
-  import { glyphIn, glyphOut } from "./workspace/session-status";
 
   let {
     class: className,
