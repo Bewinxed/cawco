@@ -213,6 +213,8 @@ export interface Frame {
   error?: PageError;
   key: string;
   label: HTMLElement;
+  /** Whether its story stands mounted in its body ({@link Frame.mounted} stays unset where it threw): see `liveNow`. */
+  live?: boolean;
   mounted?: Mounted;
   section: Section;
   story: Story;
@@ -1748,7 +1750,17 @@ export function boot(options: BootOptions): void {
 
   /** The frame's body set for its column: its scheme, width and forced state. */
   function dress(frame: Frame): void {
-    const { body, column, story } = frame;
+    const { story } = frame;
+    dressBody(frame.body, frame.column, story);
+    frame.el.toggleAttribute("data-cawco-selected", chosen === story.name);
+    frame.el.toggleAttribute(
+      "data-cawco-edited",
+      overrides.has(`${frame.section.file}|${story.name}`)
+    );
+  }
+
+  /** A body dressed as a frame of `column` is: its scheme, width, forced state and the dials' variables. */
+  function dressBody(body: HTMLElement, column: Column, story: Story): void {
     const scheme = schemeOf(column);
     const ground = groundOf();
     body.style.colorScheme = scheme;
@@ -1767,21 +1779,33 @@ export function boot(options: BootOptions): void {
         body.classList.add(allClass(state));
       }
     }
-    frame.el.toggleAttribute("data-cawco-selected", chosen === story.name);
-    frame.el.toggleAttribute(
-      "data-cawco-edited",
-      overrides.has(`${frame.section.file}|${story.name}`)
-    );
     for (const value of dialVars) {
       body.style.setProperty(value[0], value[1]);
     }
   }
 
+  /**
+   * Whether a frame's story is mounted: every frame on a desk, where each
+   * stands in view with its section; on a phone only the frame shown, as
+   * the phone shows one at a time (chrome.ts PAGE_CSS puts every other
+   * frame and section out of rendering, `display: none`). Mounted there
+   * unseen, a frame still cost its whole story: in Safari's engine at a
+   * phone's 440 px, a canvas of four states files mounted all 108 of its
+   * frames, 50,899 elements and 2.2 GB in its web process.
+   */
+  const live = (frame: Frame): boolean =>
+    !chrome.phone() || chrome.shown() === frame.key;
+
+  /** A frame's story mounted afresh where it is {@link live}; else its body dressed and empty. */
   function mountFrame(frame: Frame): void {
     frame.mounted?.unmount();
     frame.mounted = undefined;
     frame.body.replaceChildren();
     dress(frame);
+    frame.live = live(frame);
+    if (!frame.live) {
+      return;
+    }
     frame.mounted = mountInto(
       frame.body,
       frame.section,
@@ -1789,6 +1813,62 @@ export function boot(options: BootOptions): void {
       { ...argsOf(frame.section, frame.story.name), ...dialArgs },
       frame
     );
+  }
+
+  /** A frame's story taken down, its body left empty: it is not {@link live}. */
+  function sleepFrame(frame: Frame): void {
+    frame.mounted?.unmount();
+    frame.mounted = undefined;
+    frame.body.replaceChildren();
+    frame.live = false;
+  }
+
+  /**
+   * Each frame mounted or taken down as {@link live} says now: the chrome
+   * showed another frame, or turned desk or phone.
+   */
+  function liveNow(): void {
+    let changed = false;
+    for (const section of sections) {
+      changed = liveIn(section) || changed;
+    }
+    if (changed) {
+      later();
+    }
+  }
+
+  /**
+   * A section's frames mounted or taken down as {@link live} says; a
+   * state's frame mounted whose story has no probe yet is probed, after the
+   * pass its section runs. Answers whether any changed.
+   */
+  function liveIn(section: Section): boolean {
+    let changed = false;
+    let unprobed = false;
+    for (const frame of section.frames.values()) {
+      const want = live(frame);
+      if (want === !!frame.live) {
+        continue;
+      }
+      changed = true;
+      if (want) {
+        mountFrame(frame);
+        unprobed ||=
+          frame.column.interaction !== "rest" &&
+          !section.probes.has(frame.story.name);
+      } else {
+        sleepFrame(frame);
+      }
+    }
+    if (unprobed && section.loaded) {
+      const probe = () => probeAll(section, true);
+      section.settling = (section.settling ?? Promise.resolve()).then(
+        probe,
+        probe
+      );
+      quietly(section.settling);
+    }
+    return changed;
   }
 
   /** The interactions a story's rest frame reaches: each whose CSS rules match an element in it. */
@@ -1830,22 +1910,51 @@ export function boot(options: BootOptions): void {
     if (!section.mod || embed) {
       return false;
     }
+    // The frames mounted just now draw first: what a person sees comes before what the canvas reads.
     await frameTick();
-    rewriteAll();
-    let changed = false;
-    for (const story of section.mod.SHEET.stories) {
+    const rests = (section.mod?.SHEET.stories ?? []).flatMap((story) => {
       const rest = [...section.frames.values()].find(
         (one) =>
           one.story.name === story.name && one.column.interaction === "rest"
       );
-      if (!rest) {
-        continue;
+      return rest ? [rest] : [];
+    });
+    // A rest frame not mounted (a phone's, not shown: `live`) is read from its story mounted in the rig as the frame would be, then taken down.
+    const stand = rests
+      .filter((rest) => !rest.live)
+      .map((rest) => {
+        const body = document.createElement("div");
+        body.className = `cawco-frame-body ${HELD}`;
+        dressBody(body, rest.column, rest.story);
+        rig.append(body);
+        const mounted = mountInto(
+          body,
+          section,
+          rest.story.name,
+          { ...argsOf(section, rest.story.name), ...dialArgs },
+          {}
+        );
+        return { rest, body, mounted };
+      });
+    let changed = false;
+    try {
+      if (stand.length > 0) {
+        await frameTick();
       }
-      const reached = reachedIn(rest.body);
-      const before = section.interactions.get(story.name)?.join() ?? "";
-      if (before !== reached.join()) {
-        section.interactions.set(story.name, reached);
-        changed = true;
+      rewriteAll();
+      for (const rest of rests) {
+        const body = stand.find((one) => one.rest === rest)?.body ?? rest.body;
+        const reached = reachedIn(body);
+        const before = section.interactions.get(rest.story.name)?.join() ?? "";
+        if (before !== reached.join()) {
+          section.interactions.set(rest.story.name, reached);
+          changed = true;
+        }
+      }
+    } finally {
+      for (const one of stand) {
+        one.mounted?.unmount();
+        one.body.remove();
       }
     }
     if (!changed) {
@@ -2015,8 +2124,16 @@ export function boot(options: BootOptions): void {
     section.el.dataset.cawcoAsleep = "";
   }
 
-  /** Whether a section stands within a viewport of the canvas's view. */
+  /**
+   * Whether a section stands within a viewport of the canvas's view. One
+   * out of rendering (a phone's section not shown: chrome.ts PAGE_CSS) is
+   * near: a phone loads every section, so its outline and its picker name
+   * every story, and mounts only the frame it shows (`live`).
+   */
   const nearView = (section: Section): boolean => {
+    if (unrendered(section)) {
+      return true;
+    }
     const box = section.el.getBoundingClientRect();
     const bounds = canvas.getBoundingClientRect();
     const mx = bounds.width * LOAD_MARGIN;
@@ -2028,6 +2145,9 @@ export function boot(options: BootOptions): void {
       box.left <= bounds.right + mx
     );
   };
+  /** A section out of rendering: it has no box. */
+  const unrendered = (section: Section): boolean =>
+    section.el.getClientRects().length === 0;
   let pumping = false;
   /**
    * Loads the sections near the view, in the file's order: one only once
@@ -2099,7 +2219,8 @@ export function boot(options: BootOptions): void {
     (entries) => {
       for (const entry of entries) {
         const section = sections.find((one) => one.el === entry.target);
-        if (section && !entry.isIntersecting) {
+        // A section a phone puts out of rendering mounts no frame (`live`) and stays loaded: slept, the pass would load it again at once (`nearView`) and probe it anew.
+        if (section && !entry.isIntersecting && !unrendered(section)) {
           sleepSection(section);
         }
       }
@@ -2166,7 +2287,23 @@ export function boot(options: BootOptions): void {
     }
   }
 
-  async function probeAll(section: Section): Promise<void> {
+  /**
+   * A section's stories probed: each that reaches an interaction and has a
+   * frame of one {@link live} (every such story on a desk; on a phone the
+   * story of the frame shown, if it shows a state), `unread`: only those
+   * not probed yet. A probe reads every element of its story in each state
+   * it reaches; a phone's 30 stories took 13.6 s of its page's main thread
+   * in Safari's engine as it loaded, for deltas of frames it never showed
+   * (the stage keeps an earlier draw's for those: host.ts `keepReport`).
+   */
+  async function probeAll(section: Section, unread = false): Promise<void> {
+    const liveState = (story: Story) =>
+      [...section.frames.values()].some(
+        (frame) =>
+          frame.story.name === story.name &&
+          frame.column.interaction !== "rest" &&
+          frame.live
+      );
     const asked = (section.mod?.SHEET.stories ?? []).map((story) => ({
       story,
       reached: (section.interactions.get(story.name) ?? []).filter(
@@ -2178,7 +2315,12 @@ export function boot(options: BootOptions): void {
         section.probes.delete(story.name);
       }
     }
-    const probed = asked.filter((one) => one.reached.length > 0);
+    const probed = asked.filter(
+      (one) =>
+        one.reached.length > 0 &&
+        liveState(one.story) &&
+        !(unread && section.probes.has(one.story.name))
+    );
     if (probed.length > 0) {
       await probeTogether(section, probed);
     }
@@ -2502,6 +2644,7 @@ export function boot(options: BootOptions): void {
     frame.mounted = (
       frame.body as HTMLElement & { __cawcoMounted?: Mounted }
     ).__cawcoMounted;
+    frame.live = true;
     // Each animation again, paused, where its element still stands; an
     // outro's element is gone once the move ends, so its clip is tuned
     // without a preview.
@@ -2578,13 +2721,12 @@ export function boot(options: BootOptions): void {
    * sliver. Said as the frame's failure, in words; no width is put in its
    * place. Null when it stands at a width of its own or past the floor.
    */
-  function atFloor(frame: Frame, box: DOMRect): PageError | null {
+  function atFloor(frame: Frame, width: number): PageError | null {
     if (widthOf(frame.story, frame.column.width) !== null) {
       return null;
     }
     const floor =
       Number.parseFloat(getComputedStyle(frame.body).minInlineSize) || 0;
-    const width = box.width / zoom.z;
     return floor > 0 && width <= floor + 0.5
       ? {
           message: `drawn ${Math.round(width)}px wide: the story has no width of its own; give it a viewport or a width`,
@@ -2595,9 +2737,22 @@ export function boot(options: BootOptions): void {
       : null;
   }
 
+  /**
+   * A frame as it drew. Its box is read from layout, in the world's own
+   * pixels, never from the screen: the same whatever the zoom. Read off the
+   * screen and divided by the zoom, it came out a pixel either way as a
+   * pinch went on, so each report rewrote the frame's status line and asked
+   * for another (the world's resize observer), each repainting the frame:
+   * in Safari's engine a pinch on a phone drew a frame every 350 ms.
+   */
   function frameRender(frame: Frame): FrameRender {
-    const box = frame.body.getBoundingClientRect();
-    const origin = world.getBoundingClientRect();
+    const at = worldBox(frame.el);
+    const box = {
+      x: at.x + frame.body.offsetLeft,
+      y: at.y + frame.body.offsetTop,
+      w: frame.body.offsetWidth,
+      h: frame.body.offsetHeight,
+    };
     let state: FrameRender["state"] = "empty";
     let { error } = frame;
     if (error) {
@@ -2606,7 +2761,7 @@ export function boot(options: BootOptions): void {
       // Not on screen at this width (a phone shows one frame at a time): it has not drawn nothing, it is not shown.
       state = "unshown";
     } else if (drew(frame.body)) {
-      error = atFloor(frame, box) ?? undefined;
+      error = atFloor(frame, box.w) ?? undefined;
       state = error ? "failed" : "drawn";
     }
     const probeRead = frame.section.probes
@@ -2618,14 +2773,9 @@ export function boot(options: BootOptions): void {
       form: formWords(frame.story, frame.column.width),
       interaction: frame.column.interaction,
       scheme: schemeOf(frame.column),
-      width: Math.round(box.width / zoom.z),
+      width: box.w,
       state,
-      box: {
-        x: Math.round((box.x - origin.x) / zoom.z),
-        y: Math.round((box.y - origin.y) / zoom.z),
-        w: Math.round(box.width / zoom.z),
-        h: Math.round(box.height / zoom.z),
-      },
+      box,
       text: firstWords(frame.body),
       parts: partsOf(frame.body, root),
       ...(error ? { error } : {}),
@@ -3076,8 +3226,6 @@ export function boot(options: BootOptions): void {
         lines.push({ from, to, kind: "group", label: "" });
       }
     }
-    edges.replaceChildren();
-    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
     // An end not drawn (a phone shows one frame) has no box: no edge is drawn to it.
     const drawn = lines.filter((line) =>
       [line.from, line.to].every((el) => {
@@ -3085,6 +3233,12 @@ export function boot(options: BootOptions): void {
         return box.width > 0 && box.height > 0;
       })
     );
+    // None to draw and none drawn: nothing is written, so nothing in the world repaints.
+    if (drawn.length === 0 && edges.childElementCount === 1) {
+      return;
+    }
+    edges.replaceChildren();
+    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
     // Every edge joins two stories' rest frames, and a rest frame stands in
     // its section's first column: so every edge runs in the world's left
     // gutter, out of its frame's left side, along a lane of its own and into
@@ -3413,6 +3567,7 @@ export function boot(options: BootOptions): void {
     setView,
     playVisible,
     applyDials,
+    shown: liveNow,
     world: () => zoom,
   });
 

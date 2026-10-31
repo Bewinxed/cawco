@@ -87,6 +87,8 @@ export interface ChromeOptions {
   resetLayout: () => void;
   sections: () => Section[];
   setView: (next: Partial<View>) => void;
+  /** The frame shown changed, or the page turned desk or phone: which frames stand mounted follows (runtime `live`). */
+  shown: () => void;
   spec: CanvasSpec;
   tokens: string;
   view: View;
@@ -506,6 +508,11 @@ export class Chrome {
     return this.#flags.phone;
   }
 
+  /** The frame in view (a phone's one frame shown); null before any is. */
+  shown(): string | null {
+    return this.#current;
+  }
+
   /** The head's height, the band's and on a phone the strip's under it: where the canvas begins (`--band`). */
   top(): number {
     return this.#head.getBoundingClientRect().height;
@@ -713,6 +720,7 @@ export class Chrome {
       }
       section.el.toggleAttribute("data-cawco-shown", one?.section === section);
     }
+    this.#o.shown();
     if (!one) {
       return;
     }
@@ -815,10 +823,14 @@ export class Chrome {
         );
         if (status && read) {
           status.dataset.state = read.state;
-          status.textContent =
+          const words =
             read.state === "failed"
               ? `failed: ${read.error?.message ?? ""}${read.error?.file ? ` at ${read.error.file}:${read.error.line}:${read.error.column}` : ""}`
               : `${read.state} ${read.box.w}×${read.box.h}`;
+          // Written only when it changes: each write repaints the frame's layer.
+          if (status.textContent !== words) {
+            status.textContent = words;
+          }
         }
       }
     }
@@ -841,6 +853,7 @@ export class Chrome {
     );
     this.#phoneStrip();
     this.#measure();
+    this.#o.shown();
     if (this.#flags.phone) {
       const first = this.#current ?? this.#frames()[0]?.key;
       if (first) {
