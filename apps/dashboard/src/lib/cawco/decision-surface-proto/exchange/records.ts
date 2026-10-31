@@ -561,7 +561,7 @@ export const cawEnded: Thread = {
   standing: "ended",
   doing: "Ended at 13:40",
   since: "2026-10-31T13:40:00Z",
-  line: "Ended · 1 never picked · Cawco-Dev's conversation takes it",
+  line: "Ended · 1 never picked · Caw takes it",
   messages: [
     ...caw.messages,
     {
@@ -569,7 +569,7 @@ export const cawEnded: Thread = {
       id: "caw-ended",
       at: "2026-10-31T13:40:00Z",
       neverPicked: [switchOff.question],
-      takenBy: "Cawco-Dev's conversation",
+      takenBy: "Caw, Cawco-Dev's conversation,",
     },
   ],
 };
