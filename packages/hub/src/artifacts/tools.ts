@@ -153,7 +153,7 @@ export const artifactCreate = {
     "preview or page when the whole surface is judged. A try is a preview at `path`: a server on `port` (in a " +
     "workspace `serve` is its command, which CawCo runs there with PORT and keeps up) or a folder (`dir`). A drawing " +
     "is a canvas: `elements`, `mermaid`, or empty. A page is also `html`, or `dir` holding page.oui or page.html. " +
-    "Proof, references, a plan or finished work go in your words, not here. The same kind and name again replaces " +
+    "Proof, references, a plan or finished work go in your words, not here; a task attempt's result is the exception, shown here for its review (task_result). The same kind and name again replaces " +
     "it, picks kept.",
   input: {
     kind: z.enum(MADE_ARTIFACT_KINDS),
@@ -316,14 +316,14 @@ export const artifactList = {
 export const artifactShow = {
   name: "artifact_show",
   description:
-    "Bring an artifact, yours or your delegation tree's, to the front of your panel.",
+    "Bring an artifact, yours or your delegation tree's, to the front of your panel; one a delegate handed you opens by this, at its newest version.",
   input: { id },
 };
 
 export const artifactBrowse = {
   name: "artifact_browse",
   description:
-    "Open an artifact in your own browser tool to click through it as the person would, before you report that it works. " +
+    "Open an artifact in your own browser tool to click through it as the person would, when the brief asks for that or a fault needs seeing. " +
     "Answers an address to load once, open for 15 minutes or until this session ends.",
   input: { id },
 };
