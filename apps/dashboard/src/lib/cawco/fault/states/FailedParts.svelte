@@ -1,7 +1,6 @@
 <script lang="ts" module>
   /** Where the failure stands, each the place it is wired in the dashboard. */
-  export type Place =
-    "side" | "sheet" | "comments" | "decision" | "page" | "tabs" | "composer";
+  export type Place = "side" | "sheet" | "page" | "tabs" | "composer";
 </script>
 
 <script lang="ts">
@@ -16,44 +15,15 @@
    *   puts the card away.
    * - `sheet`: the preview's sheet on a phone (SideSplit's sheets): the
    *   boundary and the card round its face as SideSplit draws them.
-   * - `comments`: the real Comments rail given three comments, the middle
-   *   one's reply carrying no words, so its row throws and fails as one
-   *   line, its siblings standing.
-   * - `decision`: the real renderer drawing a decision page's three cards
-   *   as its host does (decisions/host/Host: `cardOf`, the kit's still Caw),
-   *   the middle card throwing (ThrowingDecision) and the first card's
-   *   diagram (ThrowingDiagram): a card fails as its card, the diagram as a
-   *   line in its place.
    * - `page`, `tabs`, `composer`: a page's body, a pane's tab strip under
    *   the phone's bar, the composer's pill (RegionBoundary's faces).
    *
    * `stuck`: every rebuild throws the same way, so Try again turns the face
    * to Reload page at once.
    */
-  import type { Pin } from "@cawco/core/comments";
-  import { decisionLibrary } from "@cawco/core/decisions-library";
-  import Badge from "../../decisions/host/Badge.svelte";
-  import Canvas from "../../decisions/host/Canvas.svelte";
-  import Column from "../../decisions/host/Column.svelte";
-  import { decisionCardOf } from "../../decisions/host/card-fault";
-  import Dials from "../../decisions/host/Dials.svelte";
-  import Image from "../../decisions/host/Image.svelte";
-  import Option from "../../decisions/host/Option.svelte";
-  import Preview from "../../decisions/host/Preview.svelte";
-  import Row from "../../decisions/host/Row.svelte";
-  import Section from "../../decisions/host/Section.svelte";
-  import { stillCaw } from "../../decisions/host/StillCaw.svelte";
-  import Text from "../../decisions/host/Text.svelte";
-  import CommentRail from "../../preview/CommentRail.svelte";
   import RegionBoundary from "../../RegionBoundary.svelte";
   import FailedSurface from "../../side/FailedSurface.svelte";
   import Split from "../../side/Split.svelte";
-  import OpenUiRenderer, {
-    type OpenUIComponent,
-  } from "../../views/openui/OpenUiRenderer.svelte";
-  import DecisionColumn from "./DecisionColumn.svelte";
-  import ThrowingDecision from "./ThrowingDecision.svelte";
-  import ThrowingDiagram from "./ThrowingDiagram.svelte";
   import Throws from "./Throws.svelte";
 
   let {
@@ -72,74 +42,6 @@
   const builds = { n: 0 };
   /** The side card's Close, live: the card goes, as the split's does. */
   let closed = $state(false);
-
-  const LIBRARY = decisionLibrary<OpenUIComponent>({
-    Decisions: DecisionColumn,
-    Section,
-    Decision: ThrowingDecision,
-    Option,
-    Image,
-    Diagram: ThrowingDiagram,
-    Canvas,
-    Preview,
-    Dials,
-    Text,
-    Badge,
-    Row,
-    Column,
-  });
-  /** caw-off-calls, as the hub keeps it: its second card throws, and the first card's diagram. */
-  const PROGRAM = `root = Decisions("Turning Caw off: the tray you asked for", [build, throws, keeps])
-build = Decision("build", "Build this tray for turning Caw off?", [yes, later], "When you turn Caw off, it lists every session and task Caw started, all checked.", [flow], [], false, null, "scope")
-flow = Diagram("flowchart LR\nTray --> ")
-yes = Option("yes", "Yes, build it", "The tray lists what Caw started.", true, [], "One more step before Caw is off.")
-later = Option("later", "Not yet", "Caw turns off as today.", false, [], "What Caw started keeps running unseen.")
-throws = Decision("throws", "With many sessions running, does the list stop at about ten rows?", [ten, all], "A long list scrolls inside the tray.", [], [], false, null, "look")
-ten = Option("ten", "About ten rows", "The rest scroll.", true, [], "Some rows are out of sight.")
-all = Option("all", "Every row", "The tray grows.", false, [], "It can pass the screen.")
-keeps = Decision("keeps", "Does an unchecked row say 'Keeps running'?", [box, words], "An unchecked row is one you let finish.", [], [], false, null, "look")
-box = Option("box", "No, the empty box says it", "One mark per row.", true, [], "The box alone carries it.")
-words = Option("words", "Yes, 'Keeps running' replaces its status", "The row says it in words.", false, [], "A second word per row.")`;
-
-  const NOW = Date.parse("2026-10-30T21:17:00Z");
-  const at = (minutes: number) =>
-    new Date(NOW - minutes * 60_000).toISOString();
-  const pin = (
-    number: number,
-    title: string,
-    said: string,
-    reply: string | undefined
-  ): Pin =>
-    ({
-      id: `pin-${number}`,
-      number,
-      kind: "comment",
-      by: "person",
-      at: at(40 - number),
-      title,
-      anchor: { selector: `#part-${number}`, source: null },
-      elements: [],
-      thread: [
-        { id: `e-${number}-1`, by: "person", at: at(40 - number), text: said },
-        { id: `e-${number}-2`, by: "agent", at: at(30 - number), text: reply },
-      ],
-    }) as unknown as Pin;
-  /** goo-card's comments that night; the second one's reply was kept with no words. */
-  const PINS: Pin[] = [
-    pin(
-      1,
-      "Comment card",
-      "The neck doubles when I scroll.",
-      "Fixed: one shape draws both."
-    ),
-    pin(2, "Pin 2", "Can the card open from the pin?", undefined),
-    pin(
-      3,
-      "Thread",
-      "Replies should stand under the comment.",
-      "They do now, oldest first."
-    ),
-  ];
 </script>
 
 {#snippet stand()}
@@ -230,40 +132,6 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
           {/snippet}
         </RegionBoundary>
       </div>
-    </div>
-  {:else if place === "comments"}
-    <div class="flex min-h-0 flex-1 justify-end p-space-2">
-      <div
-        class="flex min-h-0 w-c-comments-w max-w-full flex-col rounded-lg bg-surface-raised shadow-drawer"
-      >
-        <CommentRail
-          down={null}
-          focused={null}
-          hold="ready"
-          layout="beside"
-          live={new Set()}
-          onclose={() => undefined}
-          onhover={() => undefined}
-          onopen={() => undefined}
-          onpage={() => undefined}
-          onresolve={() => undefined}
-          onretry={() => undefined}
-          onretrypin={() => undefined}
-          open={null}
-          pins={PINS}
-          unread={new Set()}
-        />
-      </div>
-    </div>
-  {:else if place === "decision"}
-    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-      <OpenUiRenderer
-        cardOf={decisionCardOf}
-        caw={stillCaw}
-        label="the failure states' decision page"
-        library={LIBRARY}
-        response={PROGRAM}
-      ></OpenUiRenderer>
     </div>
   {:else if place === "page"}
     <header
