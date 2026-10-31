@@ -107,6 +107,10 @@ export const askEnvelope = (
       requestKind: "question",
     });
   }
+  // A permit is the harness's own prompt, by the harness's tool name.
+  if (asked.kind === "permit") {
+    return parkedToolAsk(asker, ask.id, asked.tool, asked.input, where);
+  }
   return parkedToolAsk(
     asker,
     ask.id,
@@ -251,8 +255,12 @@ const make = (db: DbShape): PendingShape => {
         raisedAtOf(envelope) ??
         Date.now();
       requests.set(requestId, envelope);
+      // A process's prompt the hub now owns (asks.ts `keep`) is read back
+      // from its row, no longer from the process's kept copy.
       if (outlivesHub) {
         kept.save(requestId, envelope);
+      } else {
+        kept.drop(requestId);
       }
       return true;
     },

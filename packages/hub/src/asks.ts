@@ -12,6 +12,12 @@
  *   naming the exact tool and arguments, and the call answers at once
  *   ({@link askRecordedWords}).
  *
+ * - **permit**: a harness's own permission prompt (an edit, a command) whose
+ *   process went before the person answered ({@link keep}). The session
+ *   stays halted on the same card; Approve grants that exact call once
+ *   ({@link granted}) and tells the session to make it again, Deny tells it
+ *   no. Nothing runs on the hub.
+ *
  * Each reaches every screen and push as a `permission_request` (pending.ts
  * `askEnvelope`), so no agent, gateway or hub restart cuts it.
  *
@@ -46,6 +52,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_ORIGIN,
+  type AskedPermit,
   type AskedQuestion,
   type AskRecord,
   type AskResult,
@@ -57,6 +64,7 @@ import {
   HUB_RESTARTED,
   isAdminWrite,
   newAskId,
+  sameCall,
   UserQuestionShape,
 } from "@cawco/core/asks";
 import { canonicalJson } from "@cawco/core/canonical-json";
@@ -87,7 +95,7 @@ type Approve = Extract<AskRecord["asked"], { kind: "approve" }>;
 
 /** What an ask names in the hub's log: the tool it approves, or that it is a question. */
 const named = (ask: AskRecord): string =>
-  ask.asked.kind === "approve" ? ask.asked.tool : "a question";
+  ask.asked.kind === "question" ? "a question" : ask.asked.tool;
 
 /**
  * A question's answer as its row keeps it: the answers folded in the shape
@@ -196,6 +204,18 @@ export interface AsksDeps {
 
 /** Why a session's ask goes unanswered when it ends. */
 const ENDED_WHY = "its session ended before you answered";
+
+/** Why a permit goes when its session's next process asks the same call itself. */
+const ASKED_AGAIN_WHY = "its session asked the same call again";
+
+/** A parked prompt's tool call, as its frame carries it. */
+const callOf = (envelope: Envelope): AskedPermit => {
+  const { toolName, input } = envelope.payload as {
+    toolName: string;
+    input: Record<string, unknown>;
+  };
+  return { kind: "permit", tool: toolName, input };
+};
 
 export const createAsks = (deps: AsksDeps) => {
   /** The answer's message, to the session that asked now (a fold moves its row). */
@@ -406,13 +426,66 @@ export const createAsks = (deps: AsksDeps) => {
         throw new Error(askClosedWords(taken.ask));
       }
       deps.settle(id, { answer: { ...from, behavior: result.behavior } });
-      // A question runs nothing: its session is told the answer.
-      if (taken.ask.asked.kind === "question") {
-        tellAnswered(taken.ask);
-      } else {
+      // A question runs nothing, nor does a permit, whose session makes the
+      // call itself: either is told the answer.
+      if (taken.ask.asked.kind === "approve") {
         detach(carryOut(taken.ask, taken.ask.asked), `ask ${id}`);
+      } else {
+        tellAnswered(taken.ask);
       }
       return true;
+    },
+
+    /**
+     * A harness's permission prompt whose process went before the person
+     * answered, kept as the hub's own ask under the same request id, so the
+     * same card stays on every screen and push, and its session parks on it.
+     * The prompt's own frame is replaced, not settled.
+     */
+    keep(prompt: Envelope, asker: InstanceRow): void {
+      const { raisedAt, toolUseId } = prompt.payload as {
+        raisedAt?: number;
+        toolUseId?: string;
+      };
+      const asked = callOf(prompt);
+      const ask: AskRecord = {
+        id: prompt.requestId ?? newAskId(),
+        instanceId: asker.id,
+        state: "open",
+        raisedAt: raisedAt ?? Date.now(),
+        asked,
+        ...(toolUseId ? { toolUseId } : {}),
+      };
+      deps.asks.add(ask);
+      deps.park(askEnvelope(ask, asker));
+      console.log(
+        `[asks] ${asker.id}'s process went while its ${asked.tool} prompt waited on the person (${ask.id}): kept`
+      );
+    },
+
+    /**
+     * Whether a prompt from `asker`'s harness is a call the person already
+     * approved as a permit: its grant spent, the call is allowed once. A
+     * prompt for the same call with no grant takes the open permit's place,
+     * which is withdrawn: the live prompt is the one to answer.
+     */
+    granted(asker: InstanceRow, prompt: Envelope): boolean {
+      const call = callOf(prompt);
+      const permitted = (ask: AskRecord): boolean =>
+        ask.asked.kind === "permit" && sameCall(ask.asked, call);
+      const grant = deps.asks.grant(asker.id, permitted, Date.now());
+      if (grant) {
+        console.log(
+          `[asks] ${asker.id} makes ${call.tool} again: allowed once by ${grant.id}`
+        );
+        return true;
+      }
+      for (const ask of deps.asks.openOf(asker.id)) {
+        if (permitted(ask)) {
+          withdraw(ask, ASKED_AGAIN_WHY);
+        }
+      }
+      return false;
     },
 
     /**

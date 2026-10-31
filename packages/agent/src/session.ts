@@ -3858,7 +3858,7 @@ export class SessionSupervisor {
             body.instanceId === instanceId &&
             body.processGeneration === processGeneration
           ) {
-            this.#settleAsk(instanceId, requestId, "cancelled");
+            this.#settleAsk(instanceId, requestId, "cancelled", true);
           }
         }
         if (
@@ -6799,7 +6799,8 @@ export class SessionSupervisor {
   #settleAsk(
     instanceId: string,
     requestId: string,
-    outcome: "answered" | "cancelled" = "answered"
+    outcome: "answered" | "cancelled" = "answered",
+    processEnded = false
   ): void {
     const ask = this.#openAsks.get(requestId);
     if (!(ask && "instanceId" in ask) || ask.instanceId !== instanceId) {
@@ -6815,6 +6816,7 @@ export class SessionSupervisor {
       requestId,
       processGeneration: ask.processGeneration,
       outcome,
+      ...(processEnded ? { processEnded } : {}),
     };
     if (!this.sink(settled)) {
       this.#unheardSettles.set(requestId, settled);

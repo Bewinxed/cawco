@@ -71,6 +71,7 @@ import type {
   PermissionMode,
   PermissionRequestFrame,
   PermissionResult,
+  PermissionSettledFrame,
   PreviewAddress,
   PreviewDown,
   PreviewSource,
@@ -3500,13 +3501,14 @@ export const createServer = (
   // person's asks (asks.ts): each a row, answered at once, an approved write
   // run by the hub. Made before the settlement listener below, which hears
   // their ends with every other ask's.
+  /** Whether a session is over for good: stopped, its workspace archived, stranded, or gone. */
+  const endedForGood = (instanceId: string): boolean => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    return !row || ENDED_STATUSES.has(row.status) || stranded(row);
+  };
   const hubAsks = createAsks({
     asks: db.asks,
-    // Over for good: stopped, its workspace archived, stranded, or gone.
-    ended: (instanceId) => {
-      const [row] = db.getInstancesByIds([instanceId]);
-      return !row || ENDED_STATUSES.has(row.status) || stranded(row);
-    },
+    ended: endedForGood,
     instance: (instanceId) => db.getInstancesByIds([instanceId])[0],
     declined: (name, input, asker) => {
       if (name === PROJECT_SETTINGS) {
@@ -3600,6 +3602,36 @@ export const createServer = (
     tell: (instanceId, text, origin) =>
       tellSession(instanceId, text, { name: origin }),
   });
+  /**
+   * A harness's permission prompt whose process went, kept as a permit
+   * (asks.ts `keep`) while its session may run again: the same card stays,
+   * and the session parks on it (the owner's pick on approval-waits, "Halts
+   * until you answer, and survives restarts"). False for anything else
+   * parked, which goes with its process: a question (asked again,
+   * {@link noteWithdrawn}), an ask the hub raised, one an answer is already
+   * in flight for.
+   */
+  const keepPrompt = (parked: Envelope): boolean => {
+    const payload = parked.payload as
+      Partial<PermissionRequestFrame> | undefined;
+    if (
+      payload?.kind !== "permission_request" ||
+      payload.processGeneration === undefined ||
+      payload.browserAsk ||
+      payload.connectAsk ||
+      outlivesSession(parked) ||
+      questionsOf(payload.toolName ?? "", payload.input ?? {}) !== null ||
+      answeringPermissions.has(parked.requestId ?? "")
+    ) {
+      return false;
+    }
+    const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
+    if (!row || endedForGood(row.id)) {
+      return false;
+    }
+    hubAsks.keep(parked, row);
+    return true;
+  };
   /**
    * Says something to a session, as the hub: `name` is the notice's kind,
    * `line` what the person's transcript says of it in one line (core
@@ -3940,7 +3972,7 @@ export const createServer = (
   // that just started holds no daemon sockets, so it has no basis for any row
   // claiming `running` or `starting`.
   const swept = db.sweepBootStatuses();
-  /** Asks this start drops with the process that parked them: asked again when each session next runs ({@link noteWithdrawn}). */
+  /** Asks this start drops with the process that parked them: asked again when each session next runs ({@link noteWithdrawn}), or kept as permits ({@link keepPrompt}) once asks can be presented. */
   const droppedAtStart: Envelope[] = [];
   for (const parked of pending.list()) {
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
@@ -3950,7 +3982,6 @@ export const createServer = (
     // (upstream-asks.ts): the hub makes it.
     if (!(outlivesSession(parked) || (row && PARKS_ASKS.has(row.status)))) {
       droppedAtStart.push(parked);
-      pending.forget(parked.instanceId ?? "");
     }
   }
   if (swept) {
@@ -5563,13 +5594,17 @@ export const createServer = (
     // Its asks the hub owns stay unless it ended for good (asks.ts).
     hubAsks.withdrawEnded(instanceId);
     if (!outlived) {
-      // What it had asked the person is asked again if it runs again.
+      // If it runs again, a permission prompt it was halted on stays, and
+      // what it had asked the person is asked again.
       if (keep === "all") {
         noteWithdrawn(
           pending
             .list()
             .filter(
-              (ask) => ask.instanceId === instanceId && !outlivesSession(ask)
+              (ask) =>
+                ask.instanceId === instanceId &&
+                !outlivesSession(ask) &&
+                !keepPrompt(ask)
             )
         );
       }
@@ -22236,6 +22271,36 @@ export const createServer = (
   };
   onPermissionAnswer(pending, answerPendingPermission);
 
+  /** A prompt a permit granted, allowed at its process as asked; said in the log either way. */
+  const allowGranted = async (ask: Envelope): Promise<void> => {
+    const requestId = ask.requestId ?? "";
+    const { input } = ask.payload as Partial<PermissionRequestFrame>;
+    const allowed = await callAgent(
+      ask.machineId,
+      RESOLVE_PERMISSION,
+      [requestId, { behavior: "allow", updatedInput: input ?? {} }],
+      READ_TIMEOUT_MS,
+      undefined,
+      ask.instanceId
+    );
+    let said: string;
+    switch (allowed.kind) {
+      case "unanswered":
+        said = silentWords(ask.machineId, allowed);
+        break;
+      case "answered":
+        said = allowed.value.ok
+          ? "allowed"
+          : (allowed.value.error ?? "the machine refused it");
+        break;
+      default:
+        throw unreachable(allowed);
+    }
+    console.log(
+      `[hub] granted call session=${ask.instanceId ?? "none"} request=${requestId}: ${said}`
+    );
+  };
+
   /**
    * An ask admission refused (`askRefusal`) is taken back from the process
    * that asked it: denied in words saying it could not be shown and why, so
@@ -27843,7 +27908,9 @@ export const createServer = (
    * - the at-limit controller has it, or its compaction after a move, or a
    *   continuation of it is under way, or it moves account at its turn's
    *   end: those send their own word;
-   * - an ask of it is parked: its process is waiting on that ask.
+   * - an ask of it is parked: its process is waiting on that ask, or, its
+   *   process gone, the session is halted on its permit until the answer
+   *   wakes it (asks.ts `keep`).
    */
   const cutTurnOf = (
     row: PublicInstanceRow,
@@ -27917,7 +27984,16 @@ export const createServer = (
     }
   };
 
-  noteWithdrawn(droppedAtStart);
+  /** Asks that went with the process that parked them: off every screen, and a question asked again when its session next runs. */
+  const goneWithProcess = (asks: readonly Envelope[]): void => {
+    noteWithdrawn(asks);
+    for (const parked of asks) {
+      pending.resolve(parked.requestId ?? "", "cancelled");
+    }
+  };
+  // A prompt whose session may run again stays as a permit; the rest go
+  // with the process that parked them.
+  goneWithProcess(droppedAtStart.filter((parked) => !keepPrompt(parked)));
   // An approved ask this hub was running when it went is told, never run
   // again; the asks of sessions that ended meanwhile are withdrawn.
   hubAsks.boot();
@@ -34987,11 +35063,11 @@ export const createServer = (
                     ["running", "starting", "unknown"].includes(owner.status)
                   ) &&
                   !heldIds.has(parked.instanceId ?? "") &&
-                  !(heldOpencode && owner?.harness === "opencode")
+                  !(heldOpencode && owner?.harness === "opencode") &&
+                  // A prompt is kept while its session may run again.
+                  !keepPrompt(parked)
                 ) {
-                  // Asked again by its session when it next runs.
-                  noteWithdrawn([parked]);
-                  pending.resolve(parked.requestId ?? "", "cancelled");
+                  goneWithProcess([parked]);
                 }
               }
               // Sessions that ran on while this hub was away: a read that
@@ -36497,12 +36573,28 @@ export const createServer = (
                   console.warn(
                     `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${peek(message.payload, "toolName") ?? "unknown"}: ${refusal}`
                   );
-                  pending.remember(message.requestId, message);
-                  pending.resolve(message.requestId, "cancelled", {
-                    why: refusal,
-                  });
+                  // A prompt kept as a permit stays the person's: only the
+                  // late process is told.
+                  const kept = pending.get(message.requestId);
+                  if (!(kept && outlivesSession(kept))) {
+                    pending.remember(message.requestId, message);
+                    pending.resolve(message.requestId, "cancelled", {
+                      why: refusal,
+                    });
+                  }
                   // Admission does not wait on the machine.
                   detach(withdrawUnshown(message, refusal), "ask withdrawal");
+                  break;
+                }
+                // The call a permit of its session granted runs once without
+                // asking: its last process asked it, the person approved it
+                // after that process went (asks.ts `granted`).
+                if (
+                  owner &&
+                  !pending.get(message.requestId) &&
+                  hubAsks.granted(owner, message)
+                ) {
+                  detach(allowGranted(message), "granted call");
                   break;
                 }
                 // A replayed ask (the daemon re-announces unresolved asks after
@@ -36564,7 +36656,13 @@ export const createServer = (
                   parked?.instanceId === message.instanceId &&
                   parked?.machineId === message.machineId &&
                   peek(parked.payload, "processGeneration") ===
-                    peek(message.payload, "processGeneration")
+                    peek(message.payload, "processGeneration") &&
+                  // A prompt its ended process took with it stays for the
+                  // session's next process ({@link keepPrompt}).
+                  !(
+                    (message.payload as Partial<PermissionSettledFrame>)
+                      .processEnded === true && keepPrompt(parked)
+                  )
                 ) {
                   // Answered with no answer of the hub's in flight: the
                   // harness took it in its own interface, and says not how.

@@ -679,6 +679,12 @@ export interface PermissionSettledFrame {
   /** An ask is over, whoever settled it; every client removes its parked card. */
   kind: "permission_settled";
   outcome?: "answered" | "cancelled";
+  /**
+   * A cancelled ask's process ended with it open: nobody answered it, and the
+   * hub keeps a permission prompt for the session's next process (hub asks.ts
+   * `keep`) instead of taking it off every screen.
+   */
+  processEnded?: boolean;
   processGeneration?: string;
   /**
    * Why a cancelled ask went unanswered, when the hub could say: it could not

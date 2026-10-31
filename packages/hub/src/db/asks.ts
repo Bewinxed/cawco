@@ -35,6 +35,15 @@ export interface AsksDb {
   /** Approved calls started and never ended: the hub went while running them. */
   readonly cutShort: () => AskRecord[];
   readonly get: (id: string) => AskRecord | undefined;
+  /**
+   * Spends `instanceId`'s first approved, unspent permit that `matches`, in
+   * one transaction, so a grant allows one call; undefined when none does.
+   */
+  readonly grant: (
+    instanceId: string,
+    matches: (ask: AskRecord) => boolean,
+    at: number
+  ) => AskRecord | undefined;
   /** Every open ask, oldest first. */
   readonly open: () => AskRecord[];
   /** `instanceId`'s open asks. */
@@ -141,6 +150,29 @@ export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
       const row = read(id);
       return row && recordOf(row);
     },
+    grant: (instanceId, matches, at) =>
+      db.transaction(() => {
+        const granted = db
+          .select()
+          .from(asks)
+          .where(
+            and(
+              eq(asks.state, "answered"),
+              eq(asks.instanceId, instanceId),
+              eq(sql`json_extract(${asks.record}, '$.asked.kind')`, "permit"),
+              eq(
+                sql`json_extract(${asks.record}, '$.answer.result.behavior')`,
+                "allow"
+              ),
+              isNull(sql`json_extract(${asks.record}, '$.used')`)
+            )
+          )
+          .orderBy(asc(asks.raisedAt))
+          .all()
+          .map(recordOf)
+          .find(matches);
+        return granted && put({ ...granted, used: { at } });
+      }),
     open: () =>
       db
         .select()

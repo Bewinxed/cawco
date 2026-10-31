@@ -59644,6 +59644,10 @@
           "outcome": {
             "$ref": "#/components/schemas/PermissionSettledFrameOutcome"
           },
+          "processEnded": {
+            "description": "A cancelled ask's process ended with it open: nobody answered it, and the\nhub keeps a permission prompt for the session's next process (hub asks.ts\n`keep`) instead of taking it off every screen.",
+            "type": "boolean"
+          },
           "processGeneration": {
             "type": "string"
           },

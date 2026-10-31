@@ -10,10 +10,14 @@
  * the arguments the person was shown (hub asks.ts): an `admin_*_write`,
  * `project_settings`, opening a relay, installing a build. A `question` is
  * the session's own `ask` call: questions in the house shape
- * (`UserQuestion`), and whether its work waits on the answer.
+ * (`UserQuestion`), and whether its work waits on the answer. A `permit` is
+ * a harness's own permission prompt whose process went before the person
+ * answered: the hub keeps it, and on yes grants that exact call once, for
+ * the session's next process to make again.
  */
 import { z } from "zod";
 import { clockWords, dayWords } from "./accounts";
+import { canonicalJson } from "./canonical-json";
 import type { AskAnswer } from "./frames";
 import type { UserAnswers, UserQuestion } from "./harness";
 import { markerTag, readMarkerTag } from "./injected";
@@ -53,6 +57,43 @@ const APPROVE = z.object({
   carry: CARRY,
   source: SOURCE_FACTS.optional(),
 });
+
+/**
+ * What a `permit` ask asks: the tool call a session's harness was halted on
+ * when its process went, by the harness's own tool name and input. Approved,
+ * it is granted once ({@link sameCall}); nothing runs until the session's
+ * next process makes the call again.
+ */
+const PERMIT = z.object({
+  kind: z.literal("permit"),
+  tool: z.string(),
+  input: z.record(z.string(), z.unknown()),
+});
+export type AskedPermit = z.infer<typeof PERMIT>;
+
+/**
+ * Whether two tool calls are the same call, as a permit's grant matches the
+ * one its session makes again: the same tool with the same input, a shell
+ * command's `description` aside (the model words it afresh; it runs nothing).
+ */
+export const sameCall = (
+  a: { tool: string; input: Record<string, unknown> },
+  b: { tool: string; input: Record<string, unknown> }
+): boolean => a.tool === b.tool && callKey(a) === callKey(b);
+
+const callKey = ({
+  tool,
+  input,
+}: {
+  tool: string;
+  input: Record<string, unknown>;
+}): string => {
+  if (tool.toLowerCase() !== "bash") {
+    return canonicalJson(input);
+  }
+  const { description: _description, ...runs } = input;
+  return canonicalJson(runs);
+};
 
 /** The house question shape (core harness.ts `UserQuestion`), as zod: every card, push and answer reads it. */
 export const UserQuestionShape = z.object({
@@ -107,7 +148,7 @@ export type AskResult = z.infer<typeof RESULT>;
 export const ASK_STORED = z.object({
   /** The tool call the card is drawn at. */
   toolUseId: z.string().optional(),
-  asked: z.discriminatedUnion("kind", [APPROVE, QUESTION]),
+  asked: z.discriminatedUnion("kind", [APPROVE, QUESTION, PERMIT]),
   answer: z
     .object({ at: z.number(), by: ANSWER_BY, result: RESULT })
     .optional(),
@@ -123,6 +164,8 @@ export const ASK_STORED = z.object({
   withdrawn: z
     .object({ at: z.number(), by: z.literal("hub"), why: z.string() })
     .optional(),
+  /** An approved permit's grant, spent: the hub allowed the same call when the session's harness asked it again. */
+  used: z.object({ at: z.number() }).optional(),
 });
 
 export type AskRecord = z.infer<typeof ASK_STORED> & {
@@ -158,9 +201,9 @@ export const askRecordedWords = (ask: { id: string; link: string }): string =>
 
 /** What an ask is called where its link names it: "approval of admin_hooks_write", "question: Keep /v1?". */
 const askLabel = (asked: AskRecord["asked"]): string =>
-  asked.kind === "approve"
-    ? `approval of ${asked.tool}`
-    : `question: ${asked.questions[0]?.question ?? ""}`;
+  asked.kind === "question"
+    ? `question: ${asked.questions[0]?.question ?? ""}`
+    : `approval of ${asked.tool}`;
 
 /** An ask's link, in the session that asked it. */
 export const askLink = (ask: Pick<AskRecord, "asked" | "instanceId">): string =>
@@ -188,7 +231,7 @@ export const askStanceLine = (asked: {
  * answered or dismissed.
  */
 export type AskOutcome =
-  "ran" | "failed" | "declined" | "cut" | "answered" | "dismissed";
+  "ran" | "failed" | "declined" | "cut" | "granted" | "answered" | "dismissed";
 
 /** Why a carried call has no end of its own: the hub that ran it went. */
 export const HUB_RESTARTED =
@@ -200,6 +243,9 @@ const outcomeOf = (ask: AskRecord): AskOutcome => {
   }
   if (ask.answer?.result.behavior !== "allow") {
     return "declined";
+  }
+  if (ask.asked.kind === "permit") {
+    return "granted";
   }
   if (ask.carried?.said !== undefined) {
     return "ran";
@@ -220,6 +266,9 @@ export const askAnsweredText = (ask: AskRecord): string => {
   if (asked.kind === "question") {
     return `${tag}${questionAnsweredText(ask, asked)}`;
   }
+  if (asked.kind === "permit") {
+    return `${tag}${permitAnsweredText(ask, asked)}`;
+  }
   const { tool } = asked;
   switch (outcome) {
     case "ran":
@@ -235,12 +284,32 @@ export const askAnsweredText = (ask: AskRecord): string => {
           : "";
       return `${tag}The person declined ${tool}${reason ? `: ${reason}` : ""}. Nothing ran; don't do it another way.`;
     }
+    case "granted":
     case "answered":
     case "dismissed":
       throw new Error(`An approve ask has no ${outcome} outcome.`);
     default:
       return outcome satisfies never;
   }
+};
+
+/** The longest input a permit's answer quotes; a longer one is the call in the session's own conversation. */
+const PERMIT_INPUT_MAX = 2000;
+
+/** A permit's answer, in words: the call granted once, or declined. */
+const permitAnsweredText = (ask: AskRecord, asked: AskedPermit): string => {
+  const { tool } = asked;
+  const result = ask.answer?.result;
+  if (result?.behavior !== "allow") {
+    const reason = result?.message.trim() ?? "";
+    return `The person declined the ${tool} call your harness asked to make before your last process ended${reason ? `: ${reason}` : ""}. Don't make it, and don't do it another way.`;
+  }
+  const input = JSON.stringify(asked.input, null, 2);
+  const shown =
+    input.length <= PERMIT_INPUT_MAX
+      ? `\n\n${input}`
+      : " (its input is the cut call's in your conversation).";
+  return `The person approved the ${tool} call your harness asked to make before your last process ended. Make that call again with the same input and it runs without asking, once${shown}`;
 };
 
 /** One answer as its line reads: the labels chosen, joined, or the words typed. */
@@ -282,6 +351,7 @@ const OUTCOMES: ReadonlySet<string> = new Set<AskOutcome>([
   "failed",
   "declined",
   "cut",
+  "granted",
   "answered",
   "dismissed",
 ]);
@@ -289,12 +359,16 @@ const OUTCOMES: ReadonlySet<string> = new Set<AskOutcome>([
 /** An answered ask's message read back: its id, kind and outcome; null for any other text. */
 export const parseAskAnswered = (
   text: string
-): { id: string; kind: "approve" | "question"; outcome: AskOutcome } | null => {
+): {
+  id: string;
+  kind: AskRecord["asked"]["kind"];
+  outcome: AskOutcome;
+} | null => {
   const tag = readMarkerTag(text);
   const { id, kind, outcome } = tag?.fields ?? {};
   return tag?.kind === MARKER &&
     id &&
-    (kind === "approve" || kind === "question") &&
+    (kind === "approve" || kind === "question" || kind === "permit") &&
     outcome &&
     OUTCOMES.has(outcome)
     ? { id, kind, outcome: outcome as AskOutcome }
