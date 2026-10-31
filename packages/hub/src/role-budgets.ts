@@ -48,13 +48,16 @@ import type { Tasks } from "./tasks";
  * task_result, machine_pause, answer_delegate and forge_post their contracts,
  * and no_reply_needed and open_items theirs (worker 28,665, delegate 10,716,
  * curator 1,332 measured).
+ * 2026-10-31: only a session that talks with the person lists no_reply_needed,
+ * so no work item and no triage run does (worker 28,632, delegate 10,550,
+ * curator 1,166 measured). The delegate's and curator's budgets are lowered to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 28_700,
-  delegate: 10_750,
+  delegate: 10_600,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1340,
+  curator: 1200,
 };
 
 /**

@@ -853,7 +853,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       NO_REPLY_TOOL,
-      "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it last, when the turn has nothing for them, and write nothing after it: text after it reaches them as a reply. It changes nothing else. A work item still ends on finish_item, and three such turns in a row with nothing running fail it.",
+      "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it last, when the turn has nothing for them, and write nothing after it: text after it reaches them as a reply. It changes nothing else.",
       {},
       () => Promise.resolve("This turn ends here with no reply."),
       sentence,

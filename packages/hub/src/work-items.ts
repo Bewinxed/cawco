@@ -1485,9 +1485,9 @@ const WAIT_TOOLS: ReadonlySet<string> = new Set(["wait_item", "finish_item"]);
 
 /**
  * Whether a tool call leaves a declared wait on: a CawCo read, wait_item or
- * finish_item (each settles the wait itself), no_reply_needed, which only
- * ends the turn (a delegate answering "still open" with it alone is a quiet
- * turn, so the third fails its item), Claude's ToolSearch, which only loads a
+ * finish_item (each settles the wait itself), no_reply_needed, refused to a
+ * work item yet listed by OpenCode's shared discovery (roles.ts), so a turn
+ * of it alone is still a quiet one, Claude's ToolSearch, which only loads a
  * deferred tool, or OpenCode's Code Mode program, whose own calls are judged
  * one by one as their frames come (server.ts). Any other call is the
  * session's own work.

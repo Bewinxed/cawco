@@ -907,6 +907,7 @@ import {
   relayJourneyRoutes,
 } from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
+import { talksWithPerson } from "./roles";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import {
@@ -9507,14 +9508,15 @@ export const createServer = (
    * at every hand, a hand again included, on every harness alike. The
    * record keeps the send as it was accepted: the person's bubble is their
    * words alone. A keep-alive ping goes as it is, and so does every send to
-   * a delegate on a work item: it asks its parent, never the person.
+   * a session that does not talk with the person (roles.ts
+   * `talksWithPerson`): a work item asks its parent, never the person.
    */
   const presenced = (
     envelope: Envelope<SendPayload>
   ): Envelope<SendPayload> => {
     const { instanceId, message } = envelope.payload;
     const [row] = db.getInstancesByIds([instanceId]);
-    if (isKeepAlive(message) || (row?.workItemId && row.parentInstanceId)) {
+    if (isKeepAlive(message) || (row && !talksWithPerson(row))) {
       return envelope;
     }
     const said = personSaid(instanceId, message.origin.kind === "human");

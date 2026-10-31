@@ -37,9 +37,10 @@
  * Every session that works (the worker, the delegate) searches what was
  * said and made with `find` (find-tool.ts), the dashboard's Find.
  *
- * Every session, whatever its role, can end a turn with no reply
- * (`no_reply_needed`, {@link listed}): the one way Claude Code takes a turn
- * with no text, so a role without it writes a line it was told not to.
+ * A session that talks with the person can end a turn with no reply
+ * (`no_reply_needed`, {@link talksWithPerson}): the one way Claude Code takes
+ * a turn with no text. A work item ends on finish_item instead, and triage
+ * on its decision.
  *
  * Memory (§5.4): the worker and the delegate write notes into their
  * project's inbox (`memory_note`); a worker in a project and the curator
@@ -206,12 +207,17 @@ const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
 ]);
 
 /** Whether a session in `role` lists `name` by its role alone. */
-const listed = (role: SessionRole, name: string): boolean => {
-  if (name === NO_REPLY_TOOL) {
-    return true;
-  }
-  return role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
-};
+const listed = (role: SessionRole, name: string): boolean =>
+  role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
+
+/**
+ * Whether the session talks with the person: it has no work item, which
+ * answers its parent and ends on finish_item, and is no triage run, which
+ * nobody reads. Only such a session hears of the person (server.ts
+ * `presenced`) and can end a turn with no reply.
+ */
+export const talksWithPerson = (row: InstanceRow): boolean =>
+  !row.workItemId && roleOf(row) !== "overseer";
 
 /** Whether `role`'s toolset is a closed list, which a project's tools follow too. */
 const closed = (role: SessionRole): boolean => role !== "worker";
@@ -222,6 +228,9 @@ const closed = (role: SessionRole): boolean => role !== "worker";
  * closed role has only its list.
  */
 export const allows = (row: InstanceRow, name: string): boolean => {
+  if (name === NO_REPLY_TOOL) {
+    return talksWithPerson(row);
+  }
   const role = roleOf(row);
   if (PROJECT_TOOLS.has(name) && !closed(role)) {
     return !!row.projectId;
@@ -257,6 +266,9 @@ export const connectionToolsFor = (
 
 /** What a session hears when it calls a tool it does not have ({@link allows}). */
 export const refusal = (row: InstanceRow, name: string): string => {
+  if (name === NO_REPLY_TOOL && row.workItemId) {
+    return `${name} isn't available on a work item, which ends on finish_item.`;
+  }
   const role = roleOf(row);
   if (PROJECT_TOOLS.has(name) && !closed(role)) {
     return `${name} is a project's own tool, and this session is in no project.`;
