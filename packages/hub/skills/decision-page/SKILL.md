@@ -67,7 +67,7 @@ Each row refuses the page until it is fixed.
 
 | Refuse | Fix |
 | --- | --- |
-| A `look` card with an option lacking a picture | Give every option an `Image`, `Preview` or `Canvas` in its media, or, for a verdict on one design (the `pins` card), the Decision the picture and its options none |
+| A `look` card with an option lacking a picture | Give every option an `Image`, `Preview` or `Canvas` in its media; media every option shares goes once in the Decision's media, above them. For a verdict on one design (the `pins` card), the Decision carries the picture and its options none |
 | A card with no question | Ask the choice in the person's words, ending in "?" |
 | An option with no cost line | Give its `cost`: what picking it takes away or makes harder |
 | Two Recommended on one card, or none | Mark exactly one, and say why in the card's `why` |

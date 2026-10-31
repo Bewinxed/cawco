@@ -347,10 +347,11 @@ const decisionsIn = (value: unknown): ElementNode[] => {
 };
 
 /**
- * A look decision that doesn't show what the person judges: it passes when
- * every option carries a picture (a choice between looks), or when the
- * Decision's own media does and no option does (a verdict on one design,
- * like the pins card's "Right" / "Still wrong"). A mix is refused, so a
+ * A look decision that doesn't show what the person judges. Every option
+ * carries a picture (a choice between looks), and the Decision may carry
+ * one too, as media the options share; or only the Decision carries one
+ * and no option does (a verdict on one design, like the pins card's
+ * "Looks right" / "Not yet"). Any other card leaves an option bare, so a
  * choice between looks never falls back to words.
  */
 const lookProblems = (root: ElementNode | null): string[] =>
@@ -359,25 +360,15 @@ const lookProblems = (root: ElementNode | null): string[] =>
       return [];
     }
     const options = props.options.filter(isElement);
-    const idsOf = (list: ElementNode[]): string =>
-      list.map((option) => `"${String(option.props.id)}"`).join(", ");
-    const pictured = options.filter((option) =>
-      holdsPicture(option.props.media)
-    );
-    const bare = options.filter((option) => !pictured.includes(option));
-    const lead = `Decision "${String(props.id)}" is about how something looks`;
-    if (holdsPicture(props.media)) {
-      return pictured.length > 0
-        ? [
-            `${lead}: with a picture on the Decision it is a verdict on one design, so its options carry none (${idsOf(pictured)} ${pictured.length === 1 ? "has one" : "have them"}); or give every option a picture and the Decision none.`,
-          ]
-        : [];
+    const bare = options.filter((option) => !holdsPicture(option.props.media));
+    const verdict = holdsPicture(props.media) && bare.length === options.length;
+    if (bare.length === 0 || verdict) {
+      return [];
     }
-    return bare.length > 0
-      ? [
-          `${lead}: give each option a picture (Image, Preview or Canvas), or, for a verdict on one design, give the Decision the picture and its options none; ${idsOf(bare)} ${bare.length === 1 ? "has" : "have"} none.`,
-        ]
-      : [];
+    const ids = bare.map((option) => `"${String(option.props.id)}"`).join(", ");
+    return [
+      `Decision "${String(props.id)}" is about how something looks: give each option a picture (Image, Preview or Canvas); ${ids} ${bare.length === 1 ? "has" : "have"} none. A picture on the Decision is media its options share, or, with no option pictured, a verdict on one design.`,
+    ];
   });
 
 /** A decision's `after`s: each an id or `page#id`, one on this page a decision it has, never itself. */

@@ -266,7 +266,7 @@ export const decisionLibrary = <C>(
         .string()
         .optional()
         .describe(
-          "Required: what sort of choice it is, a kind's id from the Kinds your instructions list; the hub settles it by the project's Who decides. A look decision gives each option a picture (Image, Preview or Canvas), or, as a verdict on one design, itself one and its options none."
+          "Required: what sort of choice it is, a kind's id from the Kinds your instructions list; the hub settles it by the project's Who decides. A look decision gives each option a picture (Image, Preview or Canvas), and may give itself one as media its options share; as a verdict on one design, it gives itself one and its options none."
         ),
     })
   );
@@ -337,7 +337,7 @@ export const decisionPromptOptions = (): PromptOptions => ({
   examples: [EXAMPLE, EDIT],
   additionalRules: [
     "Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets), its cost and its builds (what picking it means building or changing, never how long it takes); exactly one is recommended, and the Decision's why says why: the card shows it after that option's label (Recommended: Per machine. A machine is what the fleet costs to run.), so the why never names the option again. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.",
-    'Every Decision names its kind, the 9th argument (pass [], [], false, null before it when the others are left out). A "look" Decision, about how something looks, gives every Option a picture in its media (Image, Preview or Canvas), or, as a verdict on one design, puts the picture in the Decision\'s media and none in its Options; the hub refuses any mix.',
+    "Every Decision names its kind, the 9th argument (pass [], [], false, null before it when the others are left out). A \"look\" Decision, about how something looks, gives every Option a picture in its media (Image, Preview or Canvas); a picture in the Decision's media too is media its Options share, drawn once above them. As a verdict on one design, it puts the picture in the Decision's media and none in its Options. The hub refuses a look Decision that leaves some Options bare.",
     "Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.",
     'after names what a decision depends on; one naming another page\'s decision ("page#id") links the two pages, and the Decisions tab says it on each ("After: …", "Unlocks: …"). A Section groups decisions under a heading. Leave them out when the decisions stand alone.',
     "Plain words everywhere: no URLs or markup. Canvas and Preview name an artifact by its id; Image names a file.",
