@@ -120,7 +120,7 @@
         cost: !!held?.cost,
         builds: !!held?.builds,
         recommended: held?.recommended === true,
-        media: Array.isArray(held?.media) && held.media.length > 0,
+        pieces: Array.isArray(held?.media) ? held.media.length : 0,
         picture: holdsImage(held?.media),
       };
     })
@@ -140,9 +140,14 @@
   setContext<PieceNames>(PIECE_NAME, () => question);
   /**
    * The rows every option of the card stands on (the chip, its line, its
-   * cost, its builds, its media): one track each that any option fills,
-   * shared across the columns, so every chip, line, cost, builds and media
-   * starts on one line.
+   * cost, its builds, then one per piece of media): one track each that any
+   * option fills, shared across the columns, so every chip, line, cost and
+   * builds starts on one line, and so does each option's piece at the same
+   * place: two designs' Previews of the same states, one piece per state,
+   * stand state beside state, each row as tall as its tallest piece (the
+   * owner, on two canvases of twelve states stacked whole, one under the
+   * other: "why is there 10 thousand copies of the same componetn here? i
+   * can't compare").
    */
   const rows = $derived.by(() => {
     let at = 1;
@@ -156,7 +161,9 @@
     const line = next(options.some((option) => option.line));
     const cost = next(options.some((option) => option.cost));
     const builds = next(options.some((option) => option.builds));
-    const media = next(options.some((option) => option.media));
+    const pieces = Math.max(0, ...options.map((option) => option.pieces));
+    const media = next(pieces > 0);
+    at += Math.max(0, pieces - 1);
     return { line, cost, builds, media, span: at };
   });
   setContext("decision-rows", () => rows);

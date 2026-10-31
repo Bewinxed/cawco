@@ -223,7 +223,7 @@ export const decisionLibrary = <C>(
         .array(media)
         .optional()
         .describe(
-          "Its design, drawn live under its pick, which the person can operate."
+          "Its design, drawn live under its pick, which the person can operate. Each piece stands on the row the other options' pieces at the same place share: one Preview per state, in the same order in every option, compares the options state beside state."
         ),
       cost: z.string().optional().describe("What it costs them, in one line."),
       current: z

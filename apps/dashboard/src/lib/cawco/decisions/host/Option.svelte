@@ -8,7 +8,9 @@
   then the Recommended and Current badges after it; then its line (what it
   gets), its cost (what it costs), its builds (what picking it means
   building or changing) and its media, 11px apart, each in its row, each the
-  writer's own sentence with no label before it. The
+  writer's own sentence with no label before it; each piece of its media on
+  a row of its own, the row every option's piece at that place shares, so
+  two designs shown a state per piece compare state beside state. The
   overlay stores a press on its `data-option` (pick.ts) and the group draws
   it chosen. The line and the cost are labels of the chip, so a press on
   their words picks too; the pick is named by its label alone, and its line,
@@ -84,31 +86,15 @@
       .filter(Boolean)
       .join(" ") || undefined
   );
-  const SPAN = {
-    1: "row-span-1",
-    2: "row-span-2",
-    3: "row-span-3",
-    4: "row-span-4",
-    5: "row-span-5",
-  } as const;
-  const ROW = {
-    2: "row-start-2",
-    3: "row-start-3",
-    4: "row-start-4",
-    5: "row-start-5",
-  } as const;
   const at = $derived(
     rows?.() ?? { line: 2, cost: 3, builds: 4, media: 5, span: 5 }
   );
-  const rowOf = (track: number) => ROW[track as keyof typeof ROW];
 </script>
 
 <div
-  class={[
-    "grid min-w-0 grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full has-data-full:col-span-full",
-    SPAN[at.span as keyof typeof SPAN],
-  ]}
+  class="grid min-w-0 row-span-(--span) grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full has-data-full:col-span-full"
   data-slot="option-cell"
+  style:--span={at.span}
 >
   <!-- Its lines packed at the row's top (`content-start`): the row is stretched to the track every cell's first row shares, and a stretched line centred the chip there, so a cell whose badge wrapped stood its chip 14px higher than its neighbours'. Each chip stands on the row's first line, its badges centred beside it or wrapped under it. -->
   <div class="flex min-w-0 flex-wrap content-start items-center gap-space-2">
@@ -140,44 +126,39 @@
   </div>
   {#if props.line}
     <label
-      class={[
-        "type-body min-w-0 max-w-c-measure text-pretty text-ink-strong wrap-anywhere",
-        rowOf(at.line),
-      ]}
+      class="type-body min-w-0 max-w-c-measure text-pretty text-ink-strong wrap-anywhere row-start-(--row)"
       data-option-for={id}
       for="{uid}-chip"
-      id="{uid}-line">{String(props.line)}</label
+      id="{uid}-line"
+      style:--row={at.line}>{String(props.line)}</label
     >
   {/if}
   {#if props.cost}
     <label
-      class={[
-        "type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere",
-        rowOf(at.cost),
-      ]}
+      class="type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere row-start-(--row)"
       data-option-for={id}
       for="{uid}-chip"
-      id="{uid}-cost">{String(props.cost)}</label
+      id="{uid}-cost"
+      style:--row={at.cost}>{String(props.cost)}</label
     >
   {/if}
   {#if props.builds}
     <label
-      class={[
-        "type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere",
-        rowOf(at.builds),
-      ]}
+      class="type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere row-start-(--row)"
       data-option-for={id}
       for="{uid}-chip"
-      id="{uid}-builds">{String(props.builds)}</label
+      id="{uid}-builds"
+      style:--row={at.builds}>{String(props.builds)}</label
     >
   {/if}
-  {#if media.length > 0}
-    <!-- Its pieces one under another, 11px apart, as the card's own media and a Column stand theirs (Stack.svelte). -->
+  {#each media as piece, place (place)}
+    <!-- Each piece on its own row, shared with every option's piece at the same place (Decision.svelte `rows`): a state beside the same state. -->
     <div
-      class={["flex min-w-0 flex-col gap-space-3", rowOf(at.media)]}
+      class="row-start-(--row) flex min-w-0 flex-col"
       data-slot="option-media"
+      style:--row={at.media + place}
     >
-      {@render renderNode(media)}
+      {@render renderNode(piece)}
     </div>
-  {/if}
+  {/each}
 </div>
