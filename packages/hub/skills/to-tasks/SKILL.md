@@ -1,6 +1,6 @@
 ---
 name: to-tasks
-description: Turn a spec, a decision page's picks or the conversation into CawCo tasks, each a vertical slice with blocking edges, acceptance criteria and checks. Use when a spec is agreed, when the person says "make tasks", "break this down" or "file these", or when work must outlive this conversation.
+description: Turn a spec, a decision page's picks or the conversation into CawCo tasks, each a vertical slice with blocking edges, acceptance criteria and checks. Use when a spec is agreed, when the person asks for tasks, or when work must outlive this conversation.
 ---
 
 # To tasks
