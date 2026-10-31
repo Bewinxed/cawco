@@ -59,6 +59,7 @@
   import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
   import { refusals } from "./refusals.svelte";
+  import { noteChange } from "./repeated-keys";
   import { sessionHere } from "./session-here";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import { floor } from "./visible-viewport.svelte";
@@ -129,6 +130,17 @@
 
   let chip = $state<HTMLButtonElement>();
   let open = $state(false);
+  /**
+   * The thread opens or is put away, said to the page's change notes as it
+   * happens (repeated-keys.ts), so a list that breaks in the flush after
+   * names it.
+   */
+  function show(next: boolean): void {
+    if (next !== open) {
+      noteChange(next ? "comment popover opened" : "comment popover closed");
+    }
+    open = next;
+  }
   /** Where the panel stands in the viewport: under the chip, or over it where the room under it is short. */
   let place = $state<{
     x: number;
@@ -240,7 +252,7 @@
     const stop = panel
       ? pressOutside(panel, (event) => {
           if (!(event.target instanceof Node && chip?.contains(event.target))) {
-            open = false;
+            show(false);
           }
         })
       : () => undefined;
@@ -266,7 +278,7 @@
           box.bottom <= 0 ||
           box.top >= innerHeight
         ) {
-          open = false;
+          show(false);
           return;
         }
         stand();
@@ -285,7 +297,7 @@
   });
 
   function close(refocus: boolean): void {
-    open = false;
+    show(false);
     if (refocus) {
       chip?.focus();
     }
@@ -294,12 +306,12 @@
   async function press(event: MouseEvent): Promise<void> {
     clearTimeout(restTimer);
     if (open) {
-      open = false;
+      show(false);
       return;
     }
     stand();
     problem = null;
-    open = true;
+    show(true);
     // Opened from the keys (a click with no pointer), the focus goes in to its first act.
     if (event.detail === 0) {
       await tick();
@@ -321,7 +333,7 @@
     restTimer = setTimeout(() => {
       stand();
       problem = null;
-      open = true;
+      show(true);
     }, dur("--dur-peek"));
   }
   $effect(() => () => clearTimeout(restTimer));
@@ -333,7 +345,7 @@
       return;
     }
     const key = refKey;
-    open = false;
+    show(false);
     const refused = await openReference(
       named.artifact,
       { pin: named.number },

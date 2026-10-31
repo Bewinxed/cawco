@@ -56,6 +56,7 @@
   import MessageBody from "../MessageBody.svelte";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
+  import { keysChecked } from "../repeated-keys";
   import SessionReference from "../SessionReference.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import DocThumb from "../transcript/DocThumb.svelte";
@@ -141,6 +142,19 @@
     ondraft?: () => void;
   } = $props();
 
+  /**
+   * The thread's entries as the pin holds them, once their ids were checked:
+   * an id held twice is reported with both entries (repeated-keys.ts)
+   * before the keyed each throws on it.
+   */
+  const thread = $derived(
+    keysChecked(
+      `comment ${pin.number}'s thread`,
+      pin.thread,
+      (entry) => entry.id,
+      (entry) => `${entry.by}'s entry at ${entry.at}`
+    )
+  );
   let roomEl = $state<HTMLDivElement | null>(null);
   /** The thread stands where it opened and the person hasn't scrolled it: a new entry keeps it there. */
   let atPlace = true;
@@ -535,11 +549,11 @@
        (its later entries under the first's speaker line), the person's
        run one well. -->
   <ol data-slot="thread" class="m-0 p-0 list-none">
-    {#each pin.thread as entry, i (entry.id)}
-      {@const grouped = pin.thread[i - 1]?.by === entry.by}
+    {#each thread as entry, i (entry.id)}
+      {@const grouped = thread[i - 1]?.by === entry.by}
       <li data-slot="entry" class="group/entry" data-by={entry.by}>
         {#if entry.by === "person"}
-          {@const runsOn = pin.thread[i + 1]?.by === "person"}
+          {@const runsOn = thread[i + 1]?.by === "person"}
           <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
             {#if !grouped}
               <Who name="You" shown timestamp={entry.at} you />

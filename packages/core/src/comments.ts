@@ -1425,6 +1425,28 @@ export type RefusedReplies = Record<
 >;
 
 /**
+ * Pin `thread` with each of `kept` after it, once: the person's replies a
+ * refused write lost, kept aside by the pane and by the page. One the
+ * thread holds again (sent again, or kept by the hub after all), or kept
+ * aside by both, stands where it already is: a thread is keyed by its
+ * entries' ids. Answers `thread` itself when nothing is added.
+ */
+export const withKeptReplies = (
+  thread: ThreadEntry[],
+  kept: ThreadEntry[]
+): ThreadEntry[] => {
+  const held = new Set(thread.map((entry) => entry.id));
+  const more = kept.filter((entry) => {
+    if (held.has(entry.id)) {
+      return false;
+    }
+    held.add(entry.id);
+    return true;
+  });
+  return more.length > 0 ? [...thread, ...more] : thread;
+};
+
+/**
  * What a refused write lost of the person's replies: their entries in each
  * of `pins`' threads that `held` (the hub's pins after it) still has the pin
  * of but not the entry. A pin the hub holds none of is lost whole, not here.

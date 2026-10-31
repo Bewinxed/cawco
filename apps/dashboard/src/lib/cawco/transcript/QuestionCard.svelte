@@ -303,7 +303,9 @@
     </span>
   </h2>
 
-  {#each questions as q (q.question)}
+  <!-- A call's questions and each question's options are a list by their
+       place: the agent writes their words, which can repeat. -->
+  {#each questions as q, index (index)}
     <p
       data-slot="lede"
       class="rail-hang text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-c-measure"
@@ -321,7 +323,7 @@
       })}
       data-question={q.question}
     >
-      {#each settled ? [] : q.options as opt, i (opt.label)}
+      {#each settled ? [] : q.options as opt, i (i)}
         <span
           class={chipVariants()}
           data-key={shareKey(q.question, opt.label)}
@@ -331,7 +333,7 @@
         </span>
       {/each}
       {#if answered}
-        {#each q.options.filter( (opt) => isSelected(q.question, opt.label) ) as opt (opt.label)}
+        {#each q.options.flatMap( (opt, at) => (isSelected(q.question, opt.label) ? [{ opt, at }] : []) ) as { opt, at } (at)}
           <span
             data-slot="sel"
             class={chipVariants()}
@@ -340,9 +342,7 @@
               ms: dur("--dur-pop"),
             })}
           >
-            <Kbd data-box look="keycap">{q.options.indexOf(opt) + 1}</Kbd><span
-              >{opt.label}</span
-            >
+            <Kbd data-box look="keycap">{at + 1}</Kbd><span>{opt.label}</span>
           </span>
         {/each}
       {/if}

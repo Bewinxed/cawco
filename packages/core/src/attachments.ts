@@ -174,13 +174,16 @@ export const sidecarOf = (path: string): string =>
   path.replace(VIDEO_FILE, ".vtt");
 
 /**
- * What a `send_to_user` call shows under its row in the transcript:
- * its attachments less each `.vtt` sent beside its video, which belongs to
- * that video rather than standing as a file of its own.
+ * What a `send_to_user` call shows under its row in the transcript: its
+ * attachments, each path once, less each `.vtt` sent beside its video,
+ * which belongs to that video rather than standing as a file of its own.
+ * A path is the file, and the row's gallery is keyed by it: one attached
+ * twice is one file shown.
  */
 export function shownAttachments(paths: string[]): string[] {
+  const once = [...new Set(paths)];
   const captions = new Set(
-    paths.filter((path) => VIDEO_FILE.test(path)).map(sidecarOf)
+    once.filter((path) => VIDEO_FILE.test(path)).map(sidecarOf)
   );
-  return paths.filter((path) => !captions.has(path));
+  return once.filter((path) => !captions.has(path));
 }

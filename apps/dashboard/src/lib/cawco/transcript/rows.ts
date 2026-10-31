@@ -141,6 +141,38 @@ export type Row =
    */
   | { kind: "notices"; key: string; messages: Message[] };
 
+/** The ids of what a row draws: its messages', its call's, or none. */
+function idsOf(row: Row): string[] {
+  switch (row.kind) {
+    case "single":
+    case "question":
+    case "delegate":
+    case "queued":
+      return [row.message.id];
+    case "connect":
+      return row.message ? [row.message.id] : [];
+    case "tools":
+    case "account":
+    case "notices":
+      return row.messages.map((m) => m.id);
+    case "subagent":
+      return [row.spawn.id];
+    case "livetool":
+      return [row.glance.toolId];
+    case "compaction":
+      return row.records?.map((m) => m.id) ?? [];
+    case "harness":
+    case "live":
+    case "stream":
+    case "thinking":
+      return [];
+  }
+}
+
+/** A row named in a report: its kind and the ids of what it draws ("tools [a, b]"). */
+export const rowSaid = (row: Row): string =>
+  `${row.kind} [${idsOf(row).join(", ")}]`;
+
 /**
  * What an account row's lines say now, oldest first, read off their messages
  * each time: the hub says a line again in its place (a move waiting for work

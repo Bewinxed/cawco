@@ -9,6 +9,7 @@
     previewMode,
     replyAgain,
     type ThreadEntry,
+    withKeptReplies,
   } from "@cawco/core/comments";
   import { detach } from "@cawco/core/detach";
   import {
@@ -1063,13 +1064,11 @@
   }
   const pins = $derived.by(() => {
     const held = (view?.pins ?? []).map((pin) => {
-      const refused = [
+      const thread = withKeptReplies(pin.thread, [
         ...(refusedReplies[pin.id]?.entries ?? []),
         ...(pageReplies[pin.id]?.entries ?? []),
-      ];
-      return refused.length > 0
-        ? { ...pin, thread: [...pin.thread, ...refused] }
-        : pin;
+      ]);
+      return thread === pin.thread ? pin : { ...pin, thread };
     });
     const known = new Set(held.map((pin) => pin.id));
     const more = Object.values(pagePins).filter((pin) => !known.has(pin.id));

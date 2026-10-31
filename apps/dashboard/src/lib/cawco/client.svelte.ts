@@ -196,6 +196,7 @@ import { presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type CommandRefusal, refusals } from "./refusals.svelte";
+import { noteChange } from "./repeated-keys";
 import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
 import { checkServedBuild, newerBuild } from "./served-build.svelte";
 import type {
@@ -1609,8 +1610,9 @@ function pull(list: Message[], id: string): Message | undefined {
  * A block the hub sent, entering `into` as the object this view holds it
  * under. An id names one row, held by one list: a send goes from this tab's
  * own (`local`) to waiting (`queued`) to placed (`blocks`), and the list it
- * was in gives it up in the same step it enters the next. The object on
- * screen takes the hub's word in place, so the row stays where it is drawn.
+ * was in gives it up in the same step it enters the next, a placed row the
+ * hub lists waiting again included. The object on screen takes the hub's
+ * word in place, so the row stays where it is drawn.
  * This holds whatever the block is — the hub's row for the send, or the row
  * the harness stored under the send's own id.
  */
@@ -1629,10 +1631,13 @@ function take(
       fresh
     );
   }
+  // Placed, it leaves the sends waiting; waiting again, it leaves the rows
+  // placed (the caller puts the whole queue in at once).
   const waiting =
     into === "blocks"
       ? pull(target.queued, block.id)
-      : target.queued.find((message) => message.id === block.id);
+      : (target.queued.find((message) => message.id === block.id) ??
+        pull(target.blocks, block.id));
   // A placed send the hub moves leaves `blocks` and comes back in one batch:
   // the row still on screen is the one it comes back as.
   const held =
@@ -1892,6 +1897,18 @@ function putBlock(
 }
 
 /**
+ * The sends waiting, as the hub lists them now, each taken into `queued`
+ * ({@link take}). Where the main transcript changed from: its end, or the
+ * first placed row that waits again, which leaves `blocks`.
+ */
+function putQueue(target: SessionState, blocks: TranscriptBlock[]): number {
+  const waiting = new Set(blocks.map((block) => block.id));
+  const placed = target.blocks.findIndex((message) => waiting.has(message.id));
+  target.queued = blocks.map((block) => take(target, block, "queued"));
+  return placed < 0 ? target.blocks.length : placed;
+}
+
+/**
  * One batch of the hub's changes to a session's transcript, applied in the
  * order it made them. Each is idempotent by id: a block this view already
  * holds takes the hub's word in place, wherever it stands, and is never held
@@ -1905,6 +1922,7 @@ function applyTranscript(
   target: SessionState,
   events: TranscriptEvent[]
 ): void {
+  noteChange("transcript stream");
   /** The blocks at the front this batch has left as they were placed; none moved yet. */
   let kept = Number.POSITIVE_INFINITY;
   for (const event of events) {
@@ -1927,10 +1945,7 @@ function applyTranscript(
         break;
       }
       case "queue":
-        kept = Math.min(kept, target.blocks.length);
-        target.queued = event.blocks.map((block) =>
-          take(target, block, "queued")
-        );
+        kept = Math.min(kept, putQueue(target, event.blocks));
         break;
       case "branch": {
         const known = target.subagents[event.branch.toolUseId];
@@ -2072,6 +2087,7 @@ function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
   if (where.sessionKey) {
     target.sessionId = where.sessionKey;
   }
+  noteChange("transcript read");
   seesCompaction(page);
   target.continuedTo = page.continuedTo ?? null;
   mergeRows(target, page.blocks, page.cursor, page.removed ?? []);
@@ -2140,6 +2156,7 @@ function prependTranscriptPage(
   target: SessionState,
   page: TranscriptPage
 ): void {
+  noteChange("older page read");
   seesCompaction(page);
   const known = new Set(target.blocks.map((block) => block.id));
   target.blocks = [

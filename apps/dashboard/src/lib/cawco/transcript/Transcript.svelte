@@ -75,6 +75,7 @@
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
+  import { noteChange, repeatedKey, reportRepeat } from "../repeated-keys";
   import { provideSessionHere } from "../session-here";
   import { readJson, writeJson } from "../storage";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
@@ -110,6 +111,7 @@
     type FoldMemo,
     queuedFrom,
     type Row,
+    rowSaid,
     type StepFold,
     stepFold,
     wellRunsFrom,
@@ -1699,7 +1701,33 @@
     }
     return -1;
   }
-  const renderedRows = $derived(presentation.rows);
+  /**
+   * The rows virtua keys, as they are, once their keys were checked: a key
+   * held twice is reported with both rows and what moved the page last
+   * (repeated-keys.ts), before the keyed each throws on it. The settled
+   * rows they begin with are checked once for each such array, the rest
+   * each time.
+   */
+  const settledRepeat = perSettled((settled) =>
+    repeatedKey(settled, (row) => row.key)
+  );
+  function keysChecked(drawn: Row[], settled: Row[]): Row[] {
+    const repeat =
+      (settled.length > 0 ? settledRepeat(settled) : null) ??
+      repeatedKey(
+        drawn,
+        (row) => row.key,
+        settled.length,
+        settledKeys(settled)
+      );
+    if (repeat) {
+      reportRepeat("transcript's rows", repeat, rowSaid);
+    }
+    return drawn;
+  }
+  const renderedRows = $derived(
+    keysChecked(presentation.rows, presentation.settled)
+  );
   /**
    * THE SERVER'S FIRST SCREEN IS PAINTED, AND STAYS UNTIL THE LIST TAKES IT.
    *
@@ -3357,6 +3385,7 @@
    * 17.1ms in a 107ms task: a reply's long frames).
    */
   function onListScroll(offset: number): void {
+    noteChange("transcript scroll");
     awayScroll = 0;
     if (aside.size > 0) {
       liftInView(offset);
