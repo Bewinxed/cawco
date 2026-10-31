@@ -55,6 +55,7 @@ import {
 
 const SLOW = "PROBE-SLOW";
 const QUESTION = "PROBE-QUESTION";
+const ASK = "mcp__cawco__ask";
 /**
  * How long the page may take to answer. A hung web process never answers
  * again (10s here, killed some 20s in); the theme switch's whole-page view
@@ -64,20 +65,30 @@ const ANSWERS_MS = 3000;
 /** The composer's field (MentionField, a contenteditable combobox). */
 const FIELD = COMPOSER_FIELD;
 
+/** Whether the question's session has put its question through CawCo's ask. */
+let questionAsked = false;
+
 /** A turn that runs for a while; a question; every other one, a word. */
 const respond = (request: Seen): Reply => {
-  if (!request.tools || request.afterTool) {
-    return { everyMs: 5, words: ["ok"] };
-  }
-  if (request.last.includes(SLOW)) {
-    return { everyMs: 300, words: Array.from({ length: 80 }, () => "step") };
-  }
-  if (request.last.includes(QUESTION)) {
+  // A session asks the person through CawCo's `ask` (deferred: loaded by
+  // ToolSearch first); Claude Code's own AskUserQuestion is denied at spawn.
+  if (request.tools && !questionAsked && request.all.includes(QUESTION)) {
+    if (!request.toolNames.includes(ASK)) {
+      return {
+        everyMs: 5,
+        words: [],
+        tool: {
+          name: "ToolSearch",
+          input: { query: `select:${ASK}`, max_results: 1 },
+        },
+      };
+    }
+    questionAsked = true;
     return {
       everyMs: 5,
       words: [],
       tool: {
-        name: "AskUserQuestion",
+        name: ASK,
         input: {
           questions: [
             {
@@ -90,9 +101,17 @@ const respond = (request: Seen): Reply => {
               ],
             },
           ],
+          blocks: false,
+          meanwhile: "Writing the notes plainly",
         },
       },
     };
+  }
+  if (!request.tools || request.afterTool) {
+    return { everyMs: 5, words: ["ok"] };
+  }
+  if (request.last.includes(SLOW)) {
+    return { everyMs: 300, words: Array.from({ length: 80 }, () => "step") };
   }
   return { everyMs: 5, words: ["ok"] };
 };
@@ -401,9 +420,9 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
     "claude",
     "Probe blur question",
     fleet.workdir,
-    {
-      permissionMode: "default",
-    }
+    // Its question is CawCo's ask, parked by the hub whatever the mode; in
+    // bypass the call itself is put without a permission card first.
+    { permissionMode: "bypassPermissions" }
   );
   page = await phone(kit);
   await open(page, `${base}/session/${asker}`, FIELD, 90_000);
