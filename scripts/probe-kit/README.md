@@ -89,6 +89,20 @@ bun scripts/probe-kit/house-rules.ts <url> --width 1540x800 --width 390x844 [--s
 | `contrast` | own code + impeccable `low-contrast` | each text run on the ground under it, 4.5:1 (3:1 from 24px); the lowest is printed |
 | `settled` | own code | no finite animation running, fonts loaded |
 | `made-up` | own code | no `PROBE-`, `JOURNEY-`, `/tmp/`, `.cawco/tmp`, `probe-kit`, `Lorem`, `Test item`, lone “Body”; `allowedText` slots hold only their source's words |
+| `tight-inset` | own code | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides (the row grid's inset); sideways only, since a text rect is the line's box and not its ink |
+| `tight-control` | own code | a drawn button stands `space-2` (7px) or more under the field, line or card above it (Spacing ladder); items of one list and a layer over the page are their own |
+| `uneven-inset` | own code | a drawn row its children fill keeps one inset at both ends: the smaller not under 55% of a larger of 16px or more (the row grid's trailing edge) |
+| `fat-row` | own code | a list's one-line rows stand under 3.4 lines or 48px tall, read when two or more of three or more break it (Density) |
+| `loose-list` | own code | a list's alike rows stand no further apart than their height and 24px (Density) |
+| `empty-pane` | own code | a landmark or pane of 120px or more holds a word, mark, control or drawn block (The Empty Starts Work, The Claim Of Nothing); a short list over free space is a layout |
+| `clipped-glyph` | own code | an svg draws inside its viewBox, past half its stroke, and no box that clips without scrolling cuts it (The Solar Duotone Rule) |
+| `mixed-icons` | own code | no outlined mark beside a filled one in a bar, nav or list; an open stroke (chevron, arrow, Close, Plus, Tick, Minus) is a glyph (The Solar Duotone Rule) |
+| `small-text` | own code | under a 600px screen, words drawn at 10px or more, through any scale; one or two letters are a mark |
+| `anchor-drift` | own code, over reads | an open popover, menu or listbox whose height changed between two reads of one page holds its top or its foot (The Nothing Jumps Rule); one read says so as unread |
+
+Cut by the crop is `overflow` and `hidden-cue`, and spills its slot is
+`overflow`. An entrance or an exit is no house rule: a read comes after the
+settle, when the move is over, so a spec holds one on the clock with `anim.ts`.
 
 Impeccable runs as `impeccable detect --json --cdp <port>` on the page as it
 stands: every kit Chromium carries a DevTools port (`devtoolsPort(page)`),

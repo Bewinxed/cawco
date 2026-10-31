@@ -30,6 +30,21 @@
  * | contrast    | own code + impeccable `low-contrast` | every text run against the ground under it, 4.5:1 (3:1 at 24px); the lowest is reported |
  * | settled     | own code                    | no finite animation running, fonts loaded (`settle(page)` gets a page there) |
  * | made-up     | own code                    | no fixture or probe words (`PROBE-`, `/tmp/`, `Lorem` …), a lone "Body", text outside the spec's `allowedText` source |
+ * | tight-inset | own code                    | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides |
+ * | tight-control | own code                  | a drawn button stands 7px (`space-2`) or more under the field, line or card above it |
+ * | uneven-inset | own code                   | a drawn row of children one inset at both ends: the smaller end not under 55% of a 16px or larger one |
+ * | fat-row     | own code                    | one-line rows of a list not over 3.4 lines and 48px tall |
+ * | loose-list  | own code                    | a list's rows not further apart than they are tall, and 24px |
+ * | empty-pane  | own code                    | a landmark or pane of 120px or more holds a word, mark, control or drawn block |
+ * | clipped-glyph | own code                  | an svg draws inside its viewBox, and no box that clips without scrolling cuts it |
+ * | mixed-icons | own code                    | no outlined mark beside a filled one in a bar, nav or list; an open-stroked glyph (chevron, arrow, close, plus, tick) is allowed |
+ * | small-text  | own code                    | at a width under 600, no words drawn under 10px |
+ * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
+ *
+ * The other lines the house calls never intentional are read already: cut by
+ * the crop by `overflow` and `hidden-cue`, spills its slot by `overflow`. An
+ * entrance or an exit is not read here: a read comes after the settle, when
+ * the move is over; a spec holds one on the clock with anim.ts.
  *
  * Every other impeccable finding in the scope is printed as a NOTE: its
  * rules are taste the house has not made a rule of.
@@ -53,7 +68,17 @@ export type HouseRule =
   | "hidden-cue"
   | "contrast"
   | "settled"
-  | "made-up";
+  | "made-up"
+  | "tight-inset"
+  | "tight-control"
+  | "uneven-inset"
+  | "fat-row"
+  | "loose-list"
+  | "empty-pane"
+  | "clipped-glyph"
+  | "mixed-icons"
+  | "small-text"
+  | "anchor-drift";
 
 /** Each rule, what it holds, and who reads it: the report's words. */
 const HOUSE_RULES: Record<HouseRule, { says: string; by: string }> = {
@@ -79,6 +104,46 @@ const HOUSE_RULES: Record<HouseRule, { says: string; by: string }> = {
   },
   settled: { says: "no finite motion running, fonts ready", by: "own code" },
   "made-up": { says: "nothing made up", by: "own code" },
+  "tight-inset": {
+    says: "words stand 8px inside their surface (the row grid's inset)",
+    by: "own code",
+  },
+  "tight-control": {
+    says: "a drawn button stands a ladder step under what is above it (Spacing ladder)",
+    by: "own code",
+  },
+  "uneven-inset": {
+    says: "a drawn row keeps one inset at both ends (the row grid's trailing edge)",
+    by: "own code",
+  },
+  "fat-row": {
+    says: "a one-line row is no taller than the density it runs at (Density)",
+    by: "own code",
+  },
+  "loose-list": {
+    says: "a list's rows stand on its pitch, no air for filling (Density)",
+    by: "own code",
+  },
+  "empty-pane": {
+    says: "a pane holds something (The Empty Starts Work, The Claim Of Nothing)",
+    by: "own code",
+  },
+  "clipped-glyph": {
+    says: "a glyph is drawn whole on its grid (The Solar Duotone Rule)",
+    by: "own code",
+  },
+  "mixed-icons": {
+    says: "one face for marks in a bar (The Solar Duotone Rule)",
+    by: "own code",
+  },
+  "small-text": {
+    says: "no words under 10px on a narrow screen (the dense roles are the smallest that reads)",
+    by: "own code",
+  },
+  "anchor-drift": {
+    says: "an open popover holds an edge as its list changes (The Nothing Jumps Rule)",
+    by: "own code",
+  },
 };
 
 const RULES = Object.keys(HOUSE_RULES) as HouseRule[];
@@ -588,6 +653,10 @@ function houseRead(args: InPageArgs): InPageRead {
 
   const CONTROL =
     'button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"], [role="combobox"], [role="slider"]';
+  /** A layer a control opens: over the page, wherever its markup stands. */
+  const POPOVER =
+    '[data-popover], [data-slot="popover-content"], [role="menu"], [role="listbox"]';
+  const LAYER = `${POPOVER}, [role="dialog"]`;
   const inScope = (el: Element) => scope.contains(el);
   const controls = [...scope.querySelectorAll(CONTROL)].filter(
     (el) => shown(el) && !el.closest("svg")
@@ -1060,8 +1129,6 @@ function houseRead(args: InPageArgs): InPageRead {
       // A layer a bar's control opens (a popover, a menu, a dialog) is over
       // the page, not in the bar's row, wherever its markup stands (a
       // preview's drawing keeps it beside its anchor; the product portals it).
-      const LAYER =
-        '[data-popover], [data-slot="popover-content"], [role="dialog"], [role="menu"], [role="listbox"]';
       const ofBar = (node: Node): boolean => {
         const el = node instanceof Element ? node : node.parentElement;
         const layer = el?.closest(LAYER);
@@ -1604,6 +1671,492 @@ function houseRead(args: InPageArgs): InPageRead {
           say("made-up", el, `“${words(text)}” is not in ${slot.source}`);
         }
       }
+    }
+  }
+
+  // ---- 11. the lines that are never intentional ----
+  const inFlowBoxes = [...scope.querySelectorAll("*")].filter(
+    (el) => !el.closest("svg") && shown(el)
+  );
+  /** Lays its children out one under another: a column, or a grid of one. */
+  const isColumn = (el: Element) => {
+    const s = style(el);
+    if (s.display.includes("flex")) {
+      return s.flexDirection.startsWith("column");
+    }
+    if (s.display.includes("grid")) {
+      return s.gridTemplateColumns.split(" ").length < 2;
+    }
+    return s.display === "block" || s.display === "flow-root";
+  };
+  /** What a list's rows stand in: no landmark, nothing drawn cell by cell. */
+  const listsRows = (el: Element) =>
+    el.children.length >= 3 &&
+    isColumn(el) &&
+    !el.matches(
+      'main, section, article, header, footer, form, table, [role="grid"]'
+    ) &&
+    !el.closest('table, [role="grid"]');
+
+  // The row grid's inset ("ends on one trailing edge `space-3` in from the
+  // list's"), held at the line words start to crowd it. Sideways only: a text
+  // rect is the line's box, not its ink, so its top and foot carry the
+  // leading and read short of what the eye sees.
+  if (!skip.has("tight-inset")) {
+    const told = new Set<Element>();
+    for (const t of texts) {
+      let owner: Element | null = t.parent;
+      while (owner && scope.contains(owner) && paints(owner).length === 0) {
+        owner = owner.parentElement;
+      }
+      if (!(owner && scope.contains(owner)) || told.has(owner)) {
+        continue;
+      }
+      const s = style(owner);
+      const r = owner.getBoundingClientRect();
+      if (
+        !(s.boxShadow !== "none" || edges(s).length > 0) ||
+        Number.parseFloat(s.borderTopLeftRadius) < 6 ||
+        r.width < 160 ||
+        r.height < 48 ||
+        owner.closest('[role="tablist"], [role="toolbar"]')
+      ) {
+        continue;
+      }
+      const left = Math.min(...t.rects.map((one) => one.left)) - r.left;
+      const right = r.right - Math.max(...t.rects.map((one) => one.right));
+      const near = [
+        left >= 0 && left < 8 ? `${px(left)} from its left` : "",
+        right >= 0 && right < 8 ? `${px(right)} from its right` : "",
+      ].filter(Boolean);
+      if (near.length > 0) {
+        told.add(owner);
+        say(
+          "tight-inset",
+          t.parent,
+          `“${words(t.node.data)}” stands ${near.join(" and ")} in ${selectorOf(owner)}`
+        );
+      }
+    }
+  }
+
+  // The Spacing ladder: `space-2` (7px) is the least a drawn button stands
+  // under what is above it. The items of one list keep their own rhythm, and
+  // a layer stands over what its button happens to line up with.
+  if (!skip.has("tight-control")) {
+    const above = inFlowBoxes
+      .filter(
+        (el) => paints(el).length > 0 || el.matches("input, textarea, select")
+      )
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter((one) => one.r.width >= 24 && one.r.height >= 12);
+    for (const c of controls) {
+      const r = c.getBoundingClientRect();
+      if (
+        !c.matches('button, [role="button"]') ||
+        paints(c).length === 0 ||
+        r.width < 24 ||
+        r.height < 16
+      ) {
+        continue;
+      }
+      let worst: { el: Element; gap: number } | null = null;
+      for (const { el, r: b } of above) {
+        const gap = r.top - b.bottom;
+        if (
+          gap < -1 ||
+          gap >= 7 ||
+          Math.min(b.right, r.right) - Math.max(b.left, r.left) < 16 ||
+          el.contains(c) ||
+          c.contains(el) ||
+          el.closest(LAYER) !== c.closest(LAYER) ||
+          (el.parentElement === c.parentElement && el.tagName === c.tagName)
+        ) {
+          continue;
+        }
+        if (!worst || gap < worst.gap) {
+          worst = { el, gap };
+        }
+      }
+      if (worst) {
+        say(
+          "tight-control",
+          c,
+          `${px(worst.gap)} under ${describe(worst.el)}, under the 7px of space-2`
+        );
+      }
+    }
+  }
+
+  // The row grid's trailing edge: a drawn row its children fill keeps one
+  // inset at both ends. A row with free space on one side is a layout.
+  if (!skip.has("uneven-inset")) {
+    for (const row of inFlowBoxes) {
+      const r = row.getBoundingClientRect();
+      if (
+        row.children.length < 2 ||
+        r.width < 120 ||
+        r.height < 24 ||
+        r.height > 80 ||
+        paints(row).length === 0 ||
+        row.matches("table, thead, tbody, tr")
+      ) {
+        continue;
+      }
+      const kids = [...row.children]
+        .filter(
+          (kid) => shown(kid) && !/absolute|fixed/u.test(style(kid).position)
+        )
+        .map((kid) => kid.getBoundingClientRect())
+        .filter((kid) => kid.width >= 6 && kid.height >= 6);
+      if (kids.length < 2) {
+        continue;
+      }
+      const mids = kids.map((kid) => (kid.top + kid.bottom) / 2);
+      if (Math.max(...mids) - Math.min(...mids) > 8) {
+        continue;
+      }
+      const first = Math.min(...kids.map((kid) => kid.left));
+      const last = Math.max(...kids.map((kid) => kid.right));
+      const leftIn = first - r.left;
+      const rightIn = r.right - last;
+      const lo = Math.min(leftIn, rightIn);
+      const hi = Math.max(leftIn, rightIn);
+      if (
+        (last - first) / r.width >= 0.7 &&
+        hi >= 16 &&
+        lo >= 0 &&
+        lo < hi * 0.55 &&
+        hi - lo >= 6
+      ) {
+        say(
+          "uneven-inset",
+          row,
+          `holds its children ${px(leftIn)} from its left and ${px(rightIn)} from its right`
+        );
+      }
+    }
+  }
+
+  // Density (a 44px row pitch), read off the list's own rows: a one-line row
+  // grown over its words and a list stretched to fill its pane.
+  if (!(skip.has("fat-row") && skip.has("loose-list"))) {
+    for (const list of inFlowBoxes) {
+      if (!listsRows(list)) {
+        continue;
+      }
+      const rows = [...list.children]
+        .filter(shown)
+        .map((el) => ({ el, r: el.getBoundingClientRect() }));
+      if (!skip.has("fat-row")) {
+        const wide = rows.filter(
+          (one) => one.r.height >= 16 && one.r.width >= 120
+        );
+        const fat = wide.flatMap(({ el, r }) => {
+          if (
+            r.height <= 48 ||
+            el.querySelector("textarea, input, img, canvas")
+          ) {
+            return [];
+          }
+          const runs = texts.filter((t) => el.contains(t.node));
+          const tops = new Set(
+            runs.flatMap((t) => t.rects.map((one) => Math.round(one.top / 6)))
+          );
+          if (runs.length === 0 || tops.size > 1) {
+            return [];
+          }
+          const size = Math.max(
+            ...runs.map((t) => Number.parseFloat(style(t.parent).fontSize))
+          );
+          return r.height > size * 3.4 ? [{ el, h: r.height, size }] : [];
+        });
+        const [worst] = fat.sort((a, b) => b.h - a.h);
+        if (worst && wide.length >= 3 && fat.length >= 2) {
+          say(
+            "fat-row",
+            worst.el,
+            `${px(worst.h)} tall for one ${px(worst.size)} line, ${fat.length} of ${wide.length} rows in ${selectorOf(list)}`
+          );
+        }
+      }
+      if (!skip.has("loose-list")) {
+        const alike = rows
+          .map((one) => one.r)
+          .filter((r) => r.height >= 14 && r.height <= 64 && r.width >= 100)
+          .sort((a, b) => a.top - b.top);
+        const hs = alike.map((r) => r.height);
+        const ws = alike.map((r) => r.width);
+        if (
+          alike.length >= 3 &&
+          Math.max(...hs) <= Math.min(...hs) * 1.5 &&
+          Math.max(...ws) <= Math.min(...ws) * 1.3
+        ) {
+          const gaps = alike
+            .slice(1)
+            .map((r, i) => r.top - (alike[i] as DOMRect).bottom);
+          const mid = (of: number[]) =>
+            [...of].sort((a, b) => a - b)[Math.floor(of.length / 2)] ?? 0;
+          const gap = mid(gaps);
+          const h = mid(hs);
+          if (gap > Math.max(24, h)) {
+            say(
+              "loose-list",
+              list,
+              `rows ${px(gap)} apart for ${px(h)} of row`
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // The Empty Starts Work and The Claim Of Nothing: empty, a pane says why
+  // and offers the work; loading, a skeleton stands in. A pane with nothing
+  // in it at all is neither. A short list over free space is a layout, held
+  // to at one item and many, so only the pane with nothing is read.
+  if (!skip.has("empty-pane")) {
+    const panes = [
+      ...scope.querySelectorAll(
+        'main, aside, section, [role="main"], [role="complementary"], [role="region"], [role="tabpanel"], [data-slot$="pane"]'
+      ),
+    ].filter((el) => {
+      const r = el.getBoundingClientRect();
+      return shown(el) && r.height >= 120 && r.width >= 80;
+    });
+    const holds = (el: Element) =>
+      visibleWords(el).length > 0 ||
+      style(el).backgroundImage.includes("url(") ||
+      [...el.querySelectorAll("*")].some(
+        (one) =>
+          shown(one) &&
+          (one.matches(
+            `svg, img, canvas, video, iframe, object, embed, ${CONTROL}`
+          ) ||
+            one.shadowRoot !== null ||
+            (one.children.length === 0 && paints(one).length > 0))
+      );
+    const bare = panes.filter((el) => !holds(el));
+    for (const pane of bare) {
+      if (!bare.some((one) => one !== pane && pane.contains(one))) {
+        const r = pane.getBoundingClientRect();
+        say(
+          "empty-pane",
+          pane,
+          `${px(r.width)}×${px(r.height)} with no word, mark, control or drawn block in it`
+        );
+      }
+    }
+  }
+
+  // The Solar Duotone Rule: each glyph is drawn on its grid and shows whole.
+  // A scroller's cut is content to scroll to, and hidden-cue's to read.
+  const glyphs = [...scope.querySelectorAll("svg")].filter(
+    (svg) =>
+      !svg.parentElement?.closest("svg") &&
+      shown(svg) &&
+      svg.getBoundingClientRect().width >= 8 &&
+      svg.getBoundingClientRect().width <= 160 &&
+      svg.getBoundingClientRect().height <= 160
+  );
+  if (!skip.has("clipped-glyph")) {
+    for (const svg of glyphs) {
+      const vb = svg.viewBox?.baseVal;
+      const shape = svg.querySelector(
+        "path, circle, rect, line, polyline, polygon, ellipse"
+      );
+      let past = 0;
+      if (vb && vb.width > 0 && shape && style(svg).overflow !== "visible") {
+        try {
+          const b = svg.getBBox();
+          past =
+            b.width > 0
+              ? Math.max(
+                  vb.x - b.x,
+                  vb.y - b.y,
+                  b.x + b.width - (vb.x + vb.width),
+                  b.y + b.height - (vb.y + vb.height)
+                )
+              : 0;
+        } catch {
+          past = 0;
+        }
+      }
+      const stroke = shape
+        ? Number.parseFloat(getComputedStyle(shape).strokeWidth) || 0
+        : 0;
+      if (past > stroke / 2 + 0.25) {
+        say(
+          "clipped-glyph",
+          svg,
+          `draws ${past.toFixed(1)} units past its viewBox`
+        );
+        continue;
+      }
+      const r = svg.getBoundingClientRect();
+      for (
+        let up = svg.parentElement;
+        up && scope.contains(up) && up !== scope;
+        up = up.parentElement
+      ) {
+        const s = style(up);
+        const c = up.getBoundingClientRect();
+        const cuts = [
+          /hidden|clip/u.test(s.overflowX) && r.left < c.left - 0.5
+            ? `${px(c.left - r.left)} at its left`
+            : "",
+          /hidden|clip/u.test(s.overflowX) && r.right > c.right + 0.5
+            ? `${px(r.right - c.right)} at its right`
+            : "",
+          /hidden|clip/u.test(s.overflowY) && r.top < c.top - 0.5
+            ? `${px(c.top - r.top)} at its top`
+            : "",
+          /hidden|clip/u.test(s.overflowY) && r.bottom > c.bottom + 0.5
+            ? `${px(r.bottom - c.bottom)} at its foot`
+            : "",
+        ].filter(Boolean);
+        const gone =
+          r.right <= c.left ||
+          r.left >= c.right ||
+          r.bottom <= c.top ||
+          r.top >= c.bottom;
+        if (gone || /auto|scroll/u.test(s.overflowX + s.overflowY)) {
+          break;
+        }
+        if (cuts.length > 0) {
+          say(
+            "clipped-glyph",
+            svg,
+            `cut by ${selectorOf(up)}: ${cuts.join(", ")}`
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  // The Solar Duotone Rule: marks wear bold-duotone, and chevrons, arrows,
+  // Close, Plus, Tick and Minus are open linear strokes "because they are
+  // glyphs, not marks". An outlined mark is a stroke that closes a shape.
+  if (!skip.has("mixed-icons")) {
+    const faceOf = (
+      svg: SVGSVGElement
+    ): "filled" | "outlined" | "glyph" | null => {
+      let filled = 0;
+      let stroked = 0;
+      let closed = false;
+      for (const shape of svg.querySelectorAll(
+        "path, rect, circle, ellipse, polygon, line, polyline"
+      )) {
+        if (shape.closest("defs, mask, clipPath, pattern, symbol")) {
+          continue;
+        }
+        const s = getComputedStyle(shape);
+        const hasFill = s.fill !== "none" && rgba(s.fill)[3] > 0;
+        const hasStroke =
+          s.stroke !== "none" && Number.parseFloat(s.strokeWidth) > 0;
+        if (hasStroke && !hasFill) {
+          stroked += 1;
+          closed ||=
+            shape.matches("rect, circle, ellipse, polygon") ||
+            /z/iu.test(shape.getAttribute("d") ?? "");
+        } else if (hasFill && !hasStroke) {
+          filled += 1;
+        }
+      }
+      if (filled > 0 && stroked === 0) {
+        return "filled";
+      }
+      if (stroked > 0 && filled === 0) {
+        return closed ? "outlined" : "glyph";
+      }
+      return null;
+    };
+    const holders = [
+      ...scope.querySelectorAll(
+        `${BAR}, nav, [role="tablist"], [role="list"], ul`
+      ),
+    ].filter(shown);
+    for (const holder of holders) {
+      const faces = glyphs
+        .filter((svg) => holder.contains(svg))
+        .filter((svg) => svg.getBoundingClientRect().width <= 32)
+        .map((svg) => ({ svg, face: faceOf(svg) }));
+      const outlined = faces.filter((one) => one.face === "outlined");
+      const filled = faces.filter((one) => one.face === "filled");
+      const [first] = outlined;
+      if (first && filled.length > 0) {
+        say(
+          "mixed-icons",
+          first.svg,
+          `${outlined.length} outlined beside ${filled.length} filled in ${selectorOf(holder)}`
+        );
+      }
+    }
+  }
+
+  // DESIGN.md's dense roles "are already the smallest that reads" (meta,
+  // 12px). As drawn, through any scale; one or two letters are a mark.
+  if (!skip.has("small-text") && window.innerWidth < 600) {
+    const told = new Set<Element>();
+    for (const t of texts) {
+      if (told.has(t.parent) || t.node.data.trim().length <= 2) {
+        continue;
+      }
+      const own = t.parent as HTMLElement;
+      const scale =
+        own.offsetWidth > 0
+          ? own.getBoundingClientRect().width / own.offsetWidth
+          : 1;
+      const size = Number.parseFloat(style(t.parent).fontSize) * scale;
+      if (size < 10) {
+        told.add(t.parent);
+        say(
+          "small-text",
+          t.parent,
+          `“${words(t.node.data)}” drawn at ${px(size)} on a ${window.innerWidth}px screen`
+        );
+      }
+    }
+  }
+
+  // The Nothing Jumps Rule, on an open surface: its list grows and shrinks
+  // from the edge it opened on. Read across this page's reads, so one read
+  // alone says so.
+  {
+    const was = window as unknown as {
+      __houseLayers?: Map<
+        Element,
+        { bottom: number; height: number; top: number }
+      >;
+    };
+    was.__houseLayers ??= new Map();
+    const seen = was.__houseLayers;
+    const layers = [...scope.querySelectorAll(POPOVER)].filter(
+      (el) => shown(el) && !el.parentElement?.closest(POPOVER)
+    );
+    for (const layer of layers) {
+      const r = layer.getBoundingClientRect();
+      const before = seen.get(layer);
+      if (!before) {
+        if (!skip.has("anchor-drift")) {
+          unread.push(
+            `anchor-drift: ${describe(layer)} first read here; a later read of this page compares it`
+          );
+        }
+      } else if (
+        !skip.has("anchor-drift") &&
+        Math.abs(r.height - before.height) >= 0.5 &&
+        Math.abs(r.top - before.top) >= 1 &&
+        Math.abs(r.bottom - before.bottom) >= 1
+      ) {
+        say(
+          "anchor-drift",
+          layer,
+          `its top moved ${px(r.top - before.top)} and its foot ${px(r.bottom - before.bottom)} as its height went ${px(before.height)} to ${px(r.height)}`
+        );
+      }
+      seen.set(layer, { top: r.top, bottom: r.bottom, height: r.height });
     }
   }
 

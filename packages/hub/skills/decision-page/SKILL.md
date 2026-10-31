@@ -20,6 +20,7 @@ A choice reaches the person only as a decision card on a page, so every pick is 
 - **One Recommended**: exactly one option `recommended`, and the Decision's `why` is the one sentence that says why it. The card shows the why after that option's label ("Recommended: Per machine. …"), so the why never names the option again.
 - **Pick plus note**: the card gives both; it asks nothing else. Leave the Decision's `note` out and its button reads "Add a note". When the pick needs a particular note, give `note` a noun phrase the button finishes ("a reason for the rollback" reads "Add a reason for the rollback").
 - **The same facts for every option**: each line and each cost answers the same question in the same units, the Recommended option's cost included.
+- **One change per pair**: a look card's options are the same real screen with one difference, said in each side's `line`; a behaviour card shows the states and the moves between them, playable.
 - **A reason that can be checked**: the `why` names the fact that makes the Recommended option right (a number, a limit, what breaks), never only that it is better.
 - **A stable order**: options stand in their own order (today first, small to large); never move the Recommended one to the top.
 - **Say what it changes**: the question or the `why` says what the pick changes. Where something stands today, mark that option `current`.
@@ -67,6 +68,7 @@ Each row refuses the page until it is fixed.
 
 | Refuse | Fix |
 | --- | --- |
+| Wireframes, box drawings | A look option is the real thing at real size |
 | A `look` card with an option lacking a picture | Give every option an `Image`, `Preview` or `Canvas` in its media; media every option shares goes once in the Decision's media, above them. For a verdict on one design (the `pins` card), the Decision carries the picture and its options none |
 | A card with no question | Ask the choice in the person's words, ending in "?" |
 | An option with no cost line | Give its `cost`: what picking it takes away or makes harder |
