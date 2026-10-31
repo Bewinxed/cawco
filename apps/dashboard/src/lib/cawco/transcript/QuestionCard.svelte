@@ -118,22 +118,26 @@
    */
   const settled = $derived(answered || dismissed);
   const card = $derived(String(message.toolCallId ?? message.id));
-  const shareKey = (question: string, label: string): string =>
-    `question:${card}:${question}:${label}`;
+  /**
+   * The motion an option shares with its pick, by the places of its question
+   * and of it in the call: the agent writes their words, which can repeat.
+   */
+  const shareKey = (question: number, option: number): string =>
+    `question:${card}:${question}:${option}`;
   let section = $state<HTMLElement>();
   /** Where each option stood as the card settled, in its row. */
   const stood = new WeakMap<
     Element,
     { top: number; left: number; width: number }
   >();
-  /** Each options row's height as the card settled, by its question. */
-  const rowHeights = new Map<string, number>();
+  /** Each options row's height as the card settled, by the row. */
+  const rowHeights = new WeakMap<Element, number>();
   /** Every options row's height and every option's place, as the card settles. */
   function measure(root: HTMLElement): void {
     for (const row of root.querySelectorAll<HTMLElement>(
       '[data-slot="qopts"]'
     )) {
-      rowHeights.set(row.dataset.question ?? "", row.offsetHeight);
+      rowHeights.set(row, row.offsetHeight);
       // The row's children are its chips (the options, then the picks).
       for (const option of row.querySelectorAll<HTMLElement>(":scope > span")) {
         stood.set(option, {
@@ -146,17 +150,21 @@
   }
   /** The picked options leave for the answer that replaces the card. */
   function departChosen(root: HTMLElement): void {
-    for (const q of questions) {
-      for (const label of chosen(q.question)) {
+    questions.forEach((q, index) => {
+      q.options.forEach((opt, at) => {
+        if (!isSelected(q.question, opt.label)) {
+          return;
+        }
+        const key = shareKey(index, at);
         const option = root.querySelector<HTMLElement>(
-          `[data-slot="qopts"] > [data-key="${CSS.escape(shareKey(q.question, label))}"]`
+          `[data-slot="qopts"] > [data-key="${CSS.escape(key)}"]`
         );
         if (option) {
-          option.dataset.share = shareKey(q.question, label);
+          option.dataset.share = key;
           depart(option);
         }
-      }
-    }
+      });
+    });
   }
   let wasSettled = untrack(() => settled);
   $effect.pre(() => {
@@ -171,9 +179,9 @@
     wasSettled = now;
   });
   /** A row's height from what it was to what it is now; shut when nothing is left in it. */
-  function settleRow(row: HTMLElement, question: string): void {
-    const was = rowHeights.get(question);
-    rowHeights.delete(question);
+  function settleRow(row: HTMLElement): void {
+    const was = rowHeights.get(row);
+    rowHeights.delete(row);
     if (was === undefined || !motionOk.current) {
       return;
     }
@@ -210,7 +218,7 @@
       for (const row of section?.querySelectorAll<HTMLElement>(
         '[data-slot="qopts"]'
       ) ?? []) {
-        settleRow(row, row.dataset.question ?? "");
+        settleRow(row);
       }
     });
   });
@@ -321,14 +329,9 @@
       class={chipsVariants({
         class: "rail-hang relative mt-space-row mb-space-2",
       })}
-      data-question={q.question}
     >
       {#each settled ? [] : q.options as opt, i (i)}
-        <span
-          class={chipVariants()}
-          data-key={shareKey(q.question, opt.label)}
-          out:leave
-        >
+        <span class={chipVariants()} data-key={shareKey(index, i)} out:leave>
           <Kbd data-box look="keycap">{i + 1}</Kbd><span>{opt.label}</span>
         </span>
       {/each}
@@ -338,7 +341,7 @@
             data-slot="sel"
             class={chipVariants()}
             data-chosen
-            {@attach land(() => shareKey(q.question, opt.label), {
+            {@attach land(() => shareKey(index, at), {
               ms: dur("--dur-pop"),
             })}
           >
