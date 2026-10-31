@@ -134,6 +134,8 @@ export default {
         "scripts/fixed-ports-check.ts",
         // scripts/check.ts:562
         "scripts/border-width-check.ts",
+        // scripts/check.ts:571
+        "scripts/design-sidecar-check.ts",
         // scripts/check.ts:575
         "scripts/page-imports-check.ts",
         // scripts/check.ts:576

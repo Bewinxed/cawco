@@ -567,6 +567,20 @@ const gated: Gated[] = [
     "packages/hub/skills/decision-page/kit/",
   ]),
   bun("scripts/token-alias-check.ts", ["design/tokens/"]),
+  {
+    ...bun("scripts/design-sidecar-check.ts", []),
+    // Its verdict is git's: the files it compares and the commits that last
+    // wrote them.
+    key: async () => {
+      const read = [".impeccable/design.json", "DESIGN.md", "design/tokens/"];
+      return keyOf(
+        ["scripts/design-sidecar-check.ts", ...under(...read)],
+        (await git("log", "-1", "--format=%H", "--", read[0] as string)) ?? "",
+        (await git("log", "-1", "--format=%H", "--", ...read.slice(1))) ?? "",
+        (await git("status", "--porcelain", "--", ...read)) ?? ""
+      );
+    },
+  },
   // Each Biome plugin reports its planted mistakes and nothing else.
   bun("scripts/lint/biome-plugins.ts", [
     "scripts/lint/",

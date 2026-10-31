@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-25T05:42:17.284Z",
+  "generatedAt": "2026-10-31T06:34:56.000Z",
   "title": "Design System: CawCo",
-  "source": "design/tokens/cawco.tokens.json",
+  "source": "design/tokens/cawco.resolver.json",
   "extensions": {
     "colorMeta": {
       "action-solid": {
@@ -163,11 +163,6 @@
         "displayName": "Coral Wash",
         "canonical": "light-dark(oklch(0.946 0.03 38), oklch(0.665 0.17 33 / 0.16))"
       },
-      "brand-ink-strong": {
-        "role": "primary",
-        "displayName": "Coral Ink, Hovered",
-        "canonical": "light-dark(oklch(0.55 0.165 33), oklch(0.76 0.12 34))"
-      },
       "brand-ink": {
         "role": "primary",
         "displayName": "Coral Ink",
@@ -184,6 +179,11 @@
           "#ffa28a",
           "#ffc7ae"
         ]
+      },
+      "brand-ink-strong": {
+        "role": "primary",
+        "displayName": "Coral Ink, Hovered",
+        "canonical": "light-dark(oklch(0.55 0.165 33), oklch(0.76 0.12 34))"
       },
       "link-ink": {
         "role": "primary",
@@ -1125,6 +1125,23 @@
           "#f2eee7"
         ]
       },
+      "surface-pressed": {
+        "role": "neutral",
+        "displayName": "Surface Pressed",
+        "canonical": "light-dark(oklch(0.854 0.014 82), oklch(0.314 0.008 70))",
+        "hex": "#d4cec5",
+        "hexDark": "#34312d",
+        "tonalRamp": [
+          "#0e0b05",
+          "#28241d",
+          "#46413a",
+          "#656158",
+          "#878279",
+          "#a9a49b",
+          "#cec8bf",
+          "#f3eee4"
+        ]
+      },
       "surface-hover": {
         "role": "neutral",
         "displayName": "Surface Hover",
@@ -1192,13 +1209,6 @@
           "#cdc8c0",
           "#f3eee5"
         ]
-      },
-      "border-button-outline": {
-        "role": "neutral",
-        "displayName": "Border Button Outline",
-        "canonical": "light-dark(color-mix(in oklab, oklch(0.735 0.017 78), oklch(0.52 0.016 76) 40%), color-mix(in oklab, oklch(0.52 0.016 76), oklch(0.778 0.012 78) 10%))",
-        "hex": "#958e84",
-        "hexDark": "#766f66"
       },
       "well-edge": {
         "role": "neutral",
@@ -1926,15 +1936,19 @@
     "typographyMeta": {
       "meta": {
         "displayName": "Meta",
-        "purpose": "Timestamps, counts, units, hints, board table data."
+        "purpose": "Timestamps, counts, units, hints, table data on the board, toast meta."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Names, group headings, badges, chips, small buttons, menu items."
+        "purpose": "Names, group headings, badges, chips, small buttons, menu items, segment labels."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Sentences, descriptions, alerts, prose; the body default."
+        "purpose": "Sentences, descriptions, alert text, prose; running text measures 60 to 72ch."
+      },
+      "prose": {
+        "displayName": "Prose",
+        "purpose": "Transcript prose and rendered markdown, Figtree at 1.55."
       },
       "button": {
         "displayName": "Button",
@@ -1950,19 +1964,15 @@
       },
       "column-head": {
         "displayName": "Column head",
-        "purpose": "A ledger's header band, uppercase."
-      },
-      "prose": {
-        "displayName": "Prose",
-        "purpose": "Transcript prose and rendered markdown, Figtree at 1.55."
+        "purpose": "A ledger's header band, uppercase, 0.06em tracking."
       },
       "code": {
         "displayName": "Code",
-        "purpose": "JetBrains Mono for code, commands, paths, IDs and keycaps; ligatures off."
+        "purpose": "JetBrains Mono for code, commands, paths, tool names and keycaps; ligatures off."
       },
       "display": {
         "displayName": "Display",
-        "purpose": "Fredoka 600, brand display only: the wordmark, marketing, a brand moment."
+        "purpose": "Fredoka 600, brand display only: marketing, a brand moment in an empty state. Never product chrome; the wordmark is Nunito."
       }
     },
     "shadows": [
@@ -2012,14 +2022,49 @@
         "purpose": "Popovers, menus, the dialog tray, toasts, floating tags (also --shadow-modal)."
       },
       {
+        "name": "shadow-overlay-hung",
+        "value": "0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint)",
+        "purpose": "A hanging surface whose top shows its own surface across the cut into its anchor (Caw's panel, kit-hang): the overlay's drop without the night ring, which would draw across the cut as a seam."
+      },
+      {
         "name": "shadow-modal",
         "value": "var(--shadow-overlay)",
-        "purpose": ""
+        "purpose": "The modal: the overlay value."
       },
       {
         "name": "shadow-drawer",
         "value": "0 12px 40px var(--shadow-tint-3)",
         "purpose": "Sheets and drawers."
+      },
+      {
+        "name": "shadow-drop",
+        "value": "0 14px 28px var(--shadow-tint-2)",
+        "purpose": "A drawn shape's drop (the grown composer), drawn as the SVG's own feDropShadow filters so it follows the shape, not a box, and is painted once rather than reapplied as the shape moves (grown.ts): this far layer, then shadow-drop-near."
+      },
+      {
+        "name": "shadow-drop-near",
+        "value": "0 2px 4px var(--shadow-tint)",
+        "purpose": "The near layer of a drawn shape's drop, under shadow-drop (the grown composer, once it stands still)."
+      },
+      {
+        "name": "shadow-tab-start",
+        "value": "-2px 0 5px -1px var(--tab-shade)",
+        "purpose": "A folder tab's edge on the tab behind it, at its leading side: one-sided, never above its top (PaneTabs .shade)."
+      },
+      {
+        "name": "shadow-tab-end",
+        "value": "2px 0 5px -1px var(--tab-shade)",
+        "purpose": "A folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade)."
+      },
+      {
+        "name": "shadow-tab-start-chosen",
+        "value": "-2px 0 5px -1px var(--tab-shade-chosen)",
+        "purpose": "The chosen folder tab's edge on the tab behind it, at its leading side (PaneTabs .shade)."
+      },
+      {
+        "name": "shadow-tab-end-chosen",
+        "value": "2px 0 5px -1px var(--tab-shade-chosen)",
+        "purpose": "The chosen folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade)."
       },
       {
         "name": "shadow-inset-sel",
@@ -2034,37 +2079,37 @@
       {
         "name": "surface-shadow-2",
         "value": "var(--shadow-tile)",
-        "purpose": ""
+        "purpose": "Step 2 of the nested elevation ladder, with surface-2; the dashboard draws the named roles instead."
       },
       {
         "name": "surface-shadow-3",
         "value": "0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
-        "purpose": ""
+        "purpose": "Step 3 of the nested elevation ladder, with surface-3; the dashboard draws the named roles instead."
       },
       {
         "name": "surface-shadow-4",
         "value": "var(--shadow-md)",
-        "purpose": ""
+        "purpose": "Step 4 of the nested elevation ladder, with surface-4; the dashboard draws the named roles instead."
       },
       {
         "name": "surface-shadow-5",
         "value": "0 6px 18px var(--shadow-tint-2), 0 2px 4px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
-        "purpose": ""
+        "purpose": "Step 5 of the nested elevation ladder, with surface-5; the dashboard draws the named roles instead."
       },
       {
         "name": "surface-shadow-6",
         "value": "var(--shadow-lg)",
-        "purpose": ""
+        "purpose": "Step 6 of the nested elevation ladder, with surface-6; the dashboard draws the named roles instead."
       },
       {
         "name": "surface-shadow-7",
         "value": "0 14px 40px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
-        "purpose": ""
+        "purpose": "Step 7 of the nested elevation ladder, with surface-7; the dashboard draws the named roles instead."
       },
       {
         "name": "surface-shadow-8",
         "value": "var(--shadow-overlay)",
-        "purpose": ""
+        "purpose": "Step 8 of the nested elevation ladder, with surface-8; the dashboard draws the named roles instead."
       },
       {
         "name": "action-ring",
@@ -2073,13 +2118,18 @@
       },
       {
         "name": "code-ring",
-        "value": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.10))",
+        "value": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.1))",
         "purpose": "Inner vermillion ring and soft inner glow on code blocks."
       },
       {
         "name": "selected-shadow",
         "value": "none",
-        "purpose": ""
+        "purpose": "A selected item casts nothing: selection is a fill, never a lift."
+      },
+      {
+        "name": "shadow-knob",
+        "value": "inset 0 0 0 1px var(--neutral-8), 0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
+        "purpose": "The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (DESIGN.md Effort chip)."
       },
       {
         "name": "shadow-tint",
@@ -2103,7 +2153,7 @@
       },
       {
         "name": "scrim",
-        "value": "oklch(from var(--background) l c h / 0.72)",
+        "value": "oklch(from var(--background) l c h / var(--scrim-mix))",
         "purpose": "What a dialog's backdrop paints: the page itself, translucent."
       },
       {
@@ -2139,6 +2189,26 @@
         "purpose": "A small mark arriving beside what it belongs to: the compaction divider's chevron."
       },
       {
+        "name": "ease-figure",
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths)."
+      },
+      {
+        "name": "ease-goo",
+        "value": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "purpose": "A shape pouring out of another as one drawn silhouette (goo-join): a comment's card out of its pill. It overshoots a little and settles, the liquid's give. transitions.dev Gooey plus menu, its open curve (--pv3i)."
+      },
+      {
+        "name": "ease-goo-exit",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "A comment's card drawn back into its pill as one silhouette, over --dur-goo-exit, and the dip its pin takes as it closes, over --dur-goo-settle. transitions.dev Gooey plus menu, its close curve and its anticipation's (--pv34, --pv2n)."
+      },
+      {
+        "name": "ease-goo-content",
+        "value": "cubic-bezier(0.25, 0.1, 0.25, 1)",
+        "purpose": "What stands on a goo shape (a comment card's thread, its pin's figure) fading in and out as the shape pours and drains, over --dur-goo-content and --dur-goo-content-exit. CSS ease, the curve transitions.dev Gooey plus menu gives its items' icons."
+      },
+      {
         "name": "ease-glide-in",
         "value": "cubic-bezier(0.3333, 0, 0.6667, 0.3333)",
         "purpose": "A glide's first stretch (--space-3): speed rising evenly from rest into the steady pace an opening tree's line, its room and the rows under it travel at."
@@ -2152,6 +2222,11 @@
         "name": "dur-stagger",
         "value": "60ms",
         "purpose": "Between one row of an opening tree and the next: its line reaches each glyph in turn at a steady pace."
+      },
+      {
+        "name": "dur-cascade",
+        "value": "480ms",
+        "purpose": "The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together."
       },
       {
         "name": "dur-ghost",
@@ -2169,14 +2244,19 @@
         "purpose": "Tooltips, content fading into an opened place, a new thinking step."
       },
       {
-        "name": "dur-exit",
-        "value": "160ms",
-        "purpose": "Every exit: popovers, dialogs, sheets, toasts, floating tags, row fades."
+        "name": "dur-peek",
+        "value": "300ms",
+        "purpose": "How long the pointer rests on a comment's pill before its peek comes; one within this of the last goes at once (DESIGN.md, A pin's pill)."
       },
       {
         "name": "dur-toggle",
         "value": "160ms",
         "purpose": "A switch's knob, a checkbox's tick drawing, a step connector drawing."
+      },
+      {
+        "name": "dur-exit",
+        "value": "160ms",
+        "purpose": "Every exit: popovers, dialogs, sheets, toasts, floating tags, row fades."
       },
       {
         "name": "dur-morph",
@@ -2199,6 +2279,11 @@
         "purpose": "The longest a transcript that opens on a compaction holds its reveal for Caw's mark to be drawn. A bound, not a pace."
       },
       {
+        "name": "dur-wait-grace",
+        "value": "1000ms",
+        "purpose": "How long a wait runs before its loading state (Caw at loading or reconnecting) appears; a shorter wait shows its plain surface. NN/g, Response Times: no special feedback is needed for delays under 1.0 second."
+      },
+      {
         "name": "dur-pop",
         "value": "260ms",
         "purpose": "Floating surfaces opening, list arrivals, the live tail's height tween."
@@ -2209,9 +2294,69 @@
         "purpose": "Dialogs and sheets entering, list movement, toasts rising, badge tint changes."
       },
       {
-        "name": "dur-cascade",
-        "value": "480ms",
-        "purpose": "The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together."
+        "name": "dur-pick-up",
+        "value": "calc(var(--dur-panel) * 0.6)",
+        "purpose": "A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is."
+      },
+      {
+        "name": "dur-grow",
+        "value": "320ms",
+        "purpose": "The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited."
+      },
+      {
+        "name": "dur-grow-exit",
+        "value": "220ms",
+        "purpose": "The grown composer folding back into its pill, shorter than its growth."
+      },
+      {
+        "name": "dur-goo",
+        "value": "350ms",
+        "purpose": "A comment's card pouring out of its pill as one silhouette, on --ease-goo. transitions.dev Gooey plus menu, its open (--pv3x)."
+      },
+      {
+        "name": "dur-goo-exit",
+        "value": "250ms",
+        "purpose": "A comment's card drawn back into its pill as one silhouette, on --ease-goo-exit, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g)."
+      },
+      {
+        "name": "dur-goo-content",
+        "value": "180ms",
+        "purpose": "What stands on a goo shape fading in, on --ease-goo-content after --dur-goo-content-delay. transitions.dev Gooey plus menu, its items' icons in (180ms; their 2px blur is left out: a transitioned filter can hang WebKit)."
+      },
+      {
+        "name": "dur-goo-content-delay",
+        "value": "120ms",
+        "purpose": "How long what stands on a goo shape waits as the shape pours out before it resolves in: the shape has most of its room by then. transitions.dev Gooey plus menu, its items' icons (+120ms)."
+      },
+      {
+        "name": "dur-goo-content-exit",
+        "value": "120ms",
+        "purpose": "What stands on a goo shape fading out as the shape drains, at once, on --ease-goo-content. transitions.dev Gooey plus menu, its items' icons out (120ms)."
+      },
+      {
+        "name": "dur-goo-settle",
+        "value": "700ms",
+        "purpose": "The dip a goo shape's anchor takes as what poured out of it drains back: down --goo-dip at 30% and home, on --ease-goo-exit. A comment's pin as its card closes. transitions.dev Gooey plus menu, its anticipation (--pv2w)."
+      },
+      {
+        "name": "dur-lift",
+        "value": "340ms",
+        "purpose": "A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve."
+      },
+      {
+        "name": "dur-press-hold",
+        "value": "380ms",
+        "purpose": "How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it."
+      },
+      {
+        "name": "dur-settle",
+        "value": "400ms",
+        "purpose": "The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, \"Slow · 400ms\")."
+      },
+      {
+        "name": "dur-reveal",
+        "value": "240ms",
+        "purpose": "A disclosure growing open (collapsible-content); it folds shut over --dur-exit."
       },
       {
         "name": "dur-hold",
@@ -2224,9 +2369,14 @@
         "purpose": "One turn of an ambient loop while something is pending: spinners, the task ring, and Tailwind's animate-spin (linear), animate-pulse (ease-in-out) and animate-ping (ease-out). The skeleton pulses on its own --dur-skeleton-pulse (1s), transitions.dev's recipe."
       },
       {
-        "name": "default-transition",
-        "value": "duration var(--dur-control), timing var(--ease-out)",
-        "purpose": "Tailwind's default transition timing (transition-colors and siblings) on the product's tokens."
+        "name": "dur-skeleton-pulse",
+        "value": "1000ms",
+        "purpose": "One pulse of a skeleton while it waits: its opacity from 1 down to --skeleton-pulse-floor and back, on --ease-crossfade, looping until what it stands for arrives. transitions.dev Skeleton loader and reveal, --pulse-dur: 1000ms (the owner's pick: \"transitions.dev exactly\")."
+      },
+      {
+        "name": "dur-skeleton-reveal",
+        "value": "400ms",
+        "purpose": "A skeleton handing its place to what it stood for: the skeleton fades out and blurs to --skeleton-reveal-blur while the content fades in out of it, both on --ease-crossfade. transitions.dev Skeleton loader and reveal, --reveal-dur: 400ms."
       },
       {
         "name": "c-500",
@@ -2235,13 +2385,8 @@
       },
       {
         "name": "breath",
-        "value": "2000ms (--c-500 × 4)",
+        "value": "calc(var(--c-500) * 4)",
         "purpose": "The opacity pulse of live work: beats, the in-flight tool glyph, the Working glyph, shimmer."
-      },
-      {
-        "name": "transition-control",
-        "value": "background-color, border-color, color: var(--dur-control) var(--ease-out)",
-        "purpose": "The default control transition."
       },
       {
         "name": "press-scale",
@@ -2249,14 +2394,249 @@
         "purpose": "Every press scale, over --dur-toggle on ease-out; also the new-session dialog's exit scale and the phone deck's pick-up."
       },
       {
+        "name": "leave-scale",
+        "value": "0.97",
+        "purpose": "How far Caw shrinks as he fades out, from any drawing, over --dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over --dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms."
+      },
+      {
         "name": "pop-scale",
         "value": "0.92",
         "purpose": "The scale a floating surface, chip or pop grows from and shrinks to."
       },
       {
+        "name": "deck-step",
+        "value": "1.25px",
+        "purpose": "How far each card of a session mark's deck shows below the one in front (SessionMark)."
+      },
+      {
+        "name": "deck-shrink",
+        "value": "0.11",
+        "purpose": "How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i."
+      },
+      {
+        "name": "deck-shade-step",
+        "value": "0.2",
+        "purpose": "How much more of the deck's shade each card behind takes."
+      },
+      {
+        "name": "echo-scale",
+        "value": "1.45",
+        "purpose": "How far a working session's echo grows from its tile before it has faded (motion/echo)."
+      },
+      {
+        "name": "echo-opacity",
+        "value": "0.45",
+        "purpose": "A working session's echo as it leaves the tile."
+      },
+      {
+        "name": "breath-floor",
+        "value": "0.8 (night: 0.58)",
+        "purpose": "The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1)."
+      },
+      {
+        "name": "account-week-mix",
+        "value": "0.32 (night: 0.63)",
+        "purpose": "How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track."
+      },
+      {
+        "name": "account-stale-opacity",
+        "value": "0.82",
+        "purpose": "An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 against the border-control track it lies on, in both schemes (by day cyan and green set the floor at 0.82, at night rose at 0.80); on the raised surface they hold more."
+      },
+      {
+        "name": "ride-fade",
+        "value": "14px",
+        "purpose": "The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch)."
+      },
+      {
         "name": "pop-rise",
         "value": "8px",
         "purpose": "How far a floating surface or toast travels from its edge."
+      },
+      {
+        "name": "fold-blur",
+        "value": "2px",
+        "purpose": "How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr."
+      },
+      {
+        "name": "part-blur",
+        "value": "4px",
+        "purpose": "How far out of focus the grown composer's parts come up from, and sink back into as it folds: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Web only."
+      },
+      {
+        "name": "goo-join",
+        "value": "var(--radius-lg)",
+        "purpose": "Where a goo shape meets what poured out of it (a comment's pin and its card): the radius every inward corner of the one silhouette is rounded to, so the join flares out along the card's edge and the two read as one shape. A card's own corner, so the flare and the corners are one curve family."
+      },
+      {
+        "name": "goo-dip",
+        "value": "5px",
+        "purpose": "How far a goo shape's anchor dips as what poured out of it drains back, over --dur-goo-settle. transitions.dev Gooey plus menu (--pv49: 5px)."
+      },
+      {
+        "name": "skeleton-pulse-floor",
+        "value": "0.5",
+        "purpose": "The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5."
+      },
+      {
+        "name": "skeleton-reveal-blur",
+        "value": "2px",
+        "purpose": "How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px."
+      },
+      {
+        "name": "transition-control",
+        "value": "background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out), --tw-gradient-from var(--dur-control) var(--ease-out), --tw-gradient-to var(--dur-control) var(--ease-out)",
+        "purpose": "The default control transition."
+      },
+      {
+        "name": "transition-fade-show",
+        "value": "opacity var(--dur-fade) var(--ease-out), visibility 0s",
+        "purpose": "Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go)."
+      },
+      {
+        "name": "transition-fade-hide",
+        "value": "opacity var(--dur-fade) var(--ease-out), visibility 0s linear var(--dur-fade)",
+        "purpose": "Something stepping aside: its fade, and its visibility gone once the fade is done (the composer's parts under an ask, a drawing, a minimized pill)."
+      },
+      {
+        "name": "transition-exit-show",
+        "value": "opacity var(--dur-exit) var(--ease-out), visibility 0s",
+        "purpose": "The composer's tray coming back: the exit's beat, its visibility back at once."
+      },
+      {
+        "name": "transition-exit-hide",
+        "value": "opacity var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit)",
+        "purpose": "The composer's tray leaving: the exit's beat, its visibility gone once the fade is done."
+      },
+      {
+        "name": "transition-fade-blur",
+        "value": "opacity var(--dur-fade) var(--ease-out), filter var(--dur-fade) var(--ease-out)",
+        "purpose": "A part fading up out of a slight blur (part-blur) in place, with reduced motion: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs."
+      },
+      {
+        "name": "transition-fade-slide-blur",
+        "value": "opacity var(--dur-fade) var(--ease-out), translate var(--dur-panel) var(--ease-drawer), filter var(--dur-fade) var(--ease-out)",
+        "purpose": "A part fading up out of a slight blur (part-blur) as it slides into place on the drawer curve: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs."
+      },
+      {
+        "name": "transition-tint-press",
+        "value": "background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out), transform var(--dur-toggle) var(--ease-out)",
+        "purpose": "A chip's fill and ink on the control's beat, and its press scale (transform) on the toggle's (the tree's count, a needs card's chip, a notice row)."
+      },
+      {
+        "name": "transition-control-press",
+        "value": "background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out), --tw-gradient-from var(--dur-control) var(--ease-out), --tw-gradient-to var(--dur-control) var(--ease-out), transform var(--dur-toggle) var(--ease-out)",
+        "purpose": "transition-control, and the press's transform on the toggle's beat."
+      },
+      {
+        "name": "transition-control-slide",
+        "value": "background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out), translate var(--dur-exit) var(--ease-out)",
+        "purpose": "transition-control, and a swiped row's translate home on the exit's beat."
+      },
+      {
+        "name": "transition-control-ring",
+        "value": "background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out)",
+        "purpose": "transition-control, and a ring drawn as a box-shadow on the same beat."
+      },
+      {
+        "name": "transition-chip-settle",
+        "value": "background-color var(--dur-panel) var(--ease-out), color var(--dur-panel) var(--ease-out), transform var(--dur-toggle) var(--ease-out)",
+        "purpose": "A chip whose fill and ink settle on the panel's beat, its press (transform) on the toggle's (a rollout's state chip)."
+      },
+      {
+        "name": "transition-pick-card",
+        "value": "border-color var(--dur-fade) var(--ease-out), background-color var(--dur-fade) var(--ease-out), transform var(--dur-control) var(--ease-out)",
+        "purpose": "A choice card's outline and fill on the fade's beat, its press (transform) on the control's (the account strategy picker)."
+      },
+      {
+        "name": "transition-frame-end-first",
+        "value": "inset-inline-end var(--dur-fade) var(--ease-in-out) 0ms, inset-inline-start var(--dur-fade) var(--ease-in-out) var(--dur-ghost)",
+        "purpose": "A frame gliding between cards: its leading edge moves at once, its trailing edge a ghost's beat later, so it stretches then settles (the channel cards)."
+      },
+      {
+        "name": "transition-frame-start-first",
+        "value": "inset-inline-start var(--dur-fade) var(--ease-in-out) 0ms, inset-inline-end var(--dur-fade) var(--ease-in-out) var(--dur-ghost)",
+        "purpose": "transition-frame-end-first's mirror, for a glide the other way."
+      },
+      {
+        "name": "transition-split-surface",
+        "value": "opacity var(--dur-panel) var(--ease-out), transform var(--dur-panel) var(--ease-out), padding var(--dur-panel) var(--ease-drawer)",
+        "purpose": "A side surface sliding in beside the main pane: its fade and travel on ease-out, its room (padding) on the drawer curve."
+      },
+      {
+        "name": "transition-ring-arc",
+        "value": "stroke-dashoffset var(--dur-panel) var(--ease-in-out), stroke var(--dur-toggle) var(--ease-out), opacity var(--dur-toggle) var(--ease-out)",
+        "purpose": "A usage ring's arc drawing to its new length, its stroke and fade on the toggle's beat."
+      },
+      {
+        "name": "transition-rail-tip",
+        "value": "transform var(--dur-morph) var(--ease-in-out), width var(--dur-morph) var(--ease-in-out), opacity var(--dur-control) var(--ease-out)",
+        "purpose": "A rail's selection tip gliding and resizing to its new item, fading on the control's beat."
+      },
+      {
+        "name": "transition-panel-travel",
+        "value": "transform var(--dur-panel) var(--ease-in-out), opacity var(--dur-panel) var(--ease-out)",
+        "purpose": "A panel travelling to its new place on ease-in-out while it fades on ease-out (the new-session location panels)."
+      },
+      {
+        "name": "transition-panel-resize",
+        "value": "transform var(--dur-toggle) var(--ease-in-out), height var(--dur-toggle) var(--ease-in-out), opacity var(--dur-control) var(--ease-out)",
+        "purpose": "A panel moving and taking its new height on the toggle's beat, fading on the control's (the model list's panel)."
+      },
+      {
+        "name": "transition-suggest-chip",
+        "value": "scale var(--dur-toggle) var(--ease-out), background-color var(--dur-panel) var(--ease-out), border-color var(--dur-panel) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "purpose": "A suggestion chip: its press on the toggle's beat, its tint and outline on the panel's, its ink on the control's."
+      },
+      {
+        "name": "transition-segment",
+        "value": "transform var(--dur-toggle) var(--ease-out), width var(--dur-toggle) var(--ease-out), height var(--dur-toggle) var(--ease-out), opacity var(--dur-ghost) var(--ease-out)",
+        "purpose": "A segmented control's thumb gliding and resizing to its tab, fading on the ghost's beat."
+      },
+      {
+        "name": "transition-fold-fade",
+        "value": "opacity var(--dur-exit) var(--ease-out), filter var(--dur-exit) var(--ease-out)",
+        "purpose": "A fold's inner panel fading and cross-blurring out of --fold-blur as it opens and shuts (UpdateCard, MovedLogins, RecordCard; the open state stretches it to the panel's beat). A transitioned filter can hang WebKit; these folds are each driven on WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other element takes this."
+      },
+      {
+        "name": "transition-morph-fade",
+        "value": "opacity var(--dur-morph) var(--ease-out), filter var(--dur-morph) var(--ease-out)",
+        "purpose": "A pending button's label and spinner cross-fading and cross-blurring as one replaces the other (the kit's pending-content), where motion is wanted. A transitioned filter can hang WebKit (scripts/probe-kit/specs/web/safari-blurs.ts); no other element takes this."
+      },
+      {
+        "name": "transition-band-hide",
+        "value": "opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit), background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "purpose": "The connection band (HubBand) going, with less motion: its fade and its visibility on the exit's beat, its tint and ink on the control's."
+      },
+      {
+        "name": "transition-band-show",
+        "value": "opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel), background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "purpose": "The connection band (HubBand) coming, with less motion: its fade and its visibility on the panel's beat and the drawer curve, its tint and ink on the control's."
+      },
+      {
+        "name": "transition-band-slide-hide",
+        "value": "translate var(--dur-exit) var(--ease-out), opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit), background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "purpose": "The connection band (HubBand) going back up under the bar: its travel, fade and visibility on the exit's beat, its tint and ink on the control's."
+      },
+      {
+        "name": "transition-band-slide-show",
+        "value": "translate var(--dur-panel) var(--ease-drawer), opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel), background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "purpose": "The connection band (HubBand) sliding down from under the bar: its travel, fade and visibility on the panel's beat and the drawer curve, its tint and ink on the control's."
+      },
+      {
+        "name": "transition-band-row-shut",
+        "value": "grid-template-rows var(--dur-exit) var(--ease-out)",
+        "purpose": "The connection band's row (HubBand) shutting as the band goes back up: its grid row on the exit's beat."
+      },
+      {
+        "name": "transition-band-row-open",
+        "value": "grid-template-rows var(--dur-panel) var(--ease-drawer)",
+        "purpose": "The connection band's row (HubBand) opening from nothing as the band slides down: its grid row on the panel's beat and the drawer curve."
+      },
+      {
+        "name": "default-transition",
+        "value": "duration var(--dur-control), timing var(--ease-out)",
+        "purpose": "Tailwind's default transition timing (transition-colors and siblings) on the product's tokens."
       },
       {
         "name": "spring-settle",
@@ -2358,9 +2738,9 @@
       "name": "Text Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "A 36px field on the raised surface; focus turns its own border into the ring.",
+      "description": "A 36px field on the raised surface; its caret is its focus, and its own border steps to the strong control edge while its text has focus (The Caret Rule).",
       "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search sessions…\" aria-label=\"Search sessions\">",
-      "css": ".ds-input { height: 36px; width: 240px; padding: 0 12px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink-strong); box-shadow: var(--shadow-xs); font: var(--type-body); caret-color: var(--brand-solid); transition: var(--transition-control); } .ds-input::placeholder { color: var(--ink-subtle); } .ds-input:focus-visible { outline: none; border-color: var(--border-control-strong); }"
+      "css": ".ds-input { height: 36px; width: 240px; padding: 0 12px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink-strong); box-shadow: var(--shadow-xs); font: var(--type-body); caret-color: var(--brand-solid); transition: var(--transition-control); } .ds-input::placeholder { color: var(--ink-subtle); } .ds-input:focus { outline: none; border-color: var(--border-control-strong); }"
     },
     {
       "name": "Stat Tile",
@@ -2382,9 +2762,9 @@
       "name": "Menu",
       "kind": "nav",
       "refersTo": "popover",
-      "description": "A floating surface with 32px items; hover paints the shared ghost fill, selection the pressed fill.",
-      "html": "<div class=\"ds-menu\" role=\"menu\"><button class=\"ds-item\" role=\"menuitem\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><g opacity=\".5\"><path d=\"M6 13H18C19.8856 13 20.8284 13 21.4142 13.5858C22 14.1716 22 15.1144 22 17C22 18.8856 22 19.8284 21.4142 20.4142C20.8284 21 19.8856 21 18 21H6C4.11438 21 3.17157 21 2.58579 20.4142C2 19.8284 2 18.8856 2 17C2 15.1144 2 14.1716 2.58579 13.5858C3.17157 13 4.11438 13 6 13Z\"/><path d=\"M6 3H18C19.8856 3 20.8284 3 21.4142 3.58579C22 4.17157 22 5.11438 22 7C22 8.88562 22 9.82843 21.4142 10.4142C20.8284 11 19.8856 11 18 11H6C4.11438 11 3.17157 11 2.58579 10.4142C2 9.82843 2 8.88562 2 7C2 5.11438 2 4.17157 2.58579 3.58579C3.17157 3 4.11438 3 6 3Z\"/></g><path d=\"M12.75 7C12.75 6.58579 13.0858 6.25 13.5 6.25H18C18.4142 6.25 18.75 6.58579 18.75 7C18.75 7.41421 18.4142 7.75 18 7.75H13.5C13.0858 7.75 12.75 7.41421 12.75 7Z\"/><path d=\"M6 8.75C5.58579 8.75 5.25 8.41421 5.25 8V6C5.25 5.58579 5.58579 5.25 6 5.25C6.41421 5.25 6.75 5.58579 6.75 6V8C6.75 8.41421 6.41421 8.75 6 8.75Z\"/><path d=\"M9 8.75C8.58579 8.75 8.25 8.41421 8.25 8V6C8.25 5.58579 8.58579 5.25 9 5.25C9.41421 5.25 9.75 5.58579 9.75 6V8C9.75 8.41421 9.41421 8.75 9 8.75Z\"/><path d=\"M12.75 17C12.75 16.5858 13.0858 16.25 13.5 16.25H18C18.4142 16.25 18.75 16.5858 18.75 17C18.75 17.4142 18.4142 17.75 18 17.75H13.5C13.0858 17.75 12.75 17.4142 12.75 17Z\"/><path d=\"M6 18.75C5.58579 18.75 5.25 18.4142 5.25 18V16C5.25 15.5858 5.58579 15.25 6 15.25C6.41421 15.25 6.75 15.5858 6.75 16V18C6.75 18.4142 6.41421 18.75 6 18.75Z\"/><path d=\"M9 18.75C8.58579 18.75 8.25 18.4142 8.25 18V16C8.25 15.5858 8.58579 15.25 9 15.25C9.41421 15.25 9.75 15.5858 9.75 16V18C9.75 18.4142 9.41421 18.75 9 18.75Z\"/></g></svg><span>Open on machine</span></button><button class=\"ds-item ds-item-on\" role=\"menuitem\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M5 12.5l4.5 4.5L19 7.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Follow tail</span></button><button class=\"ds-item\" role=\"menuitem\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Stop session</span></button></div>",
-      "css": ".ds-menu { display: flex; flex-direction: column; width: 220px; padding: 6px; border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); color: var(--ink-strong); } .ds-item { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-xs); background: transparent; color: inherit; font: var(--type-label); text-align: start; cursor: default; transition: var(--transition-control); } .ds-item svg { flex: none; } .ds-item:hover { background: var(--surface-hover); } .ds-item-on { background: var(--surface-fill); } .ds-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; } @media (pointer: coarse) { .ds-item { min-height: 44px; } }"
+      "description": "A floating surface with 32px items; the hover ghost is the only fill an item takes, and a chosen item shows its tick in the item's own ink.",
+      "html": "<div class=\"ds-menu\" role=\"menu\"><button class=\"ds-item\" role=\"menuitem\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><g opacity=\".5\"><path d=\"M6 13H18C19.8856 13 20.8284 13 21.4142 13.5858C22 14.1716 22 15.1144 22 17C22 18.8856 22 19.8284 21.4142 20.4142C20.8284 21 19.8856 21 18 21H6C4.11438 21 3.17157 21 2.58579 20.4142C2 19.8284 2 18.8856 2 17C2 15.1144 2 14.1716 2.58579 13.5858C3.17157 13 4.11438 13 6 13Z\"/><path d=\"M6 3H18C19.8856 3 20.8284 3 21.4142 3.58579C22 4.17157 22 5.11438 22 7C22 8.88562 22 9.82843 21.4142 10.4142C20.8284 11 19.8856 11 18 11H6C4.11438 11 3.17157 11 2.58579 10.4142C2 9.82843 2 8.88562 2 7C2 5.11438 2 4.17157 2.58579 3.58579C3.17157 3 4.11438 3 6 3Z\"/></g><path d=\"M12.75 7C12.75 6.58579 13.0858 6.25 13.5 6.25H18C18.4142 6.25 18.75 6.58579 18.75 7C18.75 7.41421 18.4142 7.75 18 7.75H13.5C13.0858 7.75 12.75 7.41421 12.75 7Z\"/><path d=\"M6 8.75C5.58579 8.75 5.25 8.41421 5.25 8V6C5.25 5.58579 5.58579 5.25 6 5.25C6.41421 5.25 6.75 5.58579 6.75 6V8C6.75 8.41421 6.41421 8.75 6 8.75Z\"/><path d=\"M9 8.75C8.58579 8.75 8.25 8.41421 8.25 8V6C8.25 5.58579 8.58579 5.25 9 5.25C9.41421 5.25 9.75 5.58579 9.75 6V8C9.75 8.41421 9.41421 8.75 9 8.75Z\"/><path d=\"M12.75 17C12.75 16.5858 13.0858 16.25 13.5 16.25H18C18.4142 16.25 18.75 16.5858 18.75 17C18.75 17.4142 18.4142 17.75 18 17.75H13.5C13.0858 17.75 12.75 17.4142 12.75 17Z\"/><path d=\"M6 18.75C5.58579 18.75 5.25 18.4142 5.25 18V16C5.25 15.5858 5.58579 15.25 6 15.25C6.41421 15.25 6.75 15.5858 6.75 16V18C6.75 18.4142 6.41421 18.75 6 18.75Z\"/><path d=\"M9 18.75C8.58579 18.75 8.25 18.4142 8.25 18V16C8.25 15.5858 8.58579 15.25 9 15.25C9.41421 15.25 9.75 15.5858 9.75 16V18C9.75 18.4142 9.41421 18.75 9 18.75Z\"/></g></svg><span>Open on machine</span></button><button class=\"ds-item\" role=\"menuitem\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M5 12.5l4.5 4.5L19 7.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Follow tail</span></button><button class=\"ds-item\" role=\"menuitem\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Stop session</span></button></div>",
+      "css": ".ds-menu { display: flex; flex-direction: column; width: 220px; padding: 6px; border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); color: var(--ink-strong); } .ds-item { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-xs); background: transparent; color: inherit; font: var(--type-label); text-align: start; cursor: default; transition: var(--transition-control); } .ds-item svg { flex: none; } .ds-item:hover { background: var(--surface-hover); } .ds-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; } @media (pointer: coarse) { .ds-item { min-height: 44px; } }"
     },
     {
       "name": "Segmented Control",
@@ -2392,7 +2772,7 @@
       "refersTo": "segmented",
       "description": "A recessed groove with a lifted thumb under the chosen segment; segments tint on press, never scale.",
       "html": "<div class=\"ds-seg\" role=\"tablist\"><span class=\"ds-seg-thumb\" aria-hidden=\"true\"></span><button class=\"ds-seg-item ds-seg-on\" role=\"tab\" aria-selected=\"true\">Sessions</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Machines</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Runs</button></div>",
-      "css": ".ds-seg { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-recess-deep); } .ds-seg-thumb { position: absolute; top: 3px; left: 3px; width: 84px; height: 30px; border-radius: var(--radius-well); background: var(--surface-lift); box-shadow: var(--shadow-raised); transition: transform var(--dur-pop) var(--ease-in-out); } .ds-seg-item { position: relative; width: 84px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-well); background: transparent; color: var(--ink-muted); font: 500 var(--text-label) / 1 var(--font-body); cursor: pointer; transition: var(--transition-control); } .ds-seg-on { color: var(--ink-strong); } .ds-seg-item:not(.ds-seg-on):active { background-color: var(--surface-fill); } .ds-seg-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }"
+      "css": ".ds-seg { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-recess-deep); } .ds-seg-thumb { position: absolute; top: 3px; left: 3px; width: 84px; height: 30px; border-radius: var(--radius-well); background: var(--surface-lift); box-shadow: var(--shadow-raised); transition: transform var(--dur-pop) var(--ease-in-out); } .ds-seg-item { position: relative; width: 84px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-well); background: transparent; color: var(--ink-muted); font: 500 var(--text-label) / 1 var(--font-body); cursor: pointer; transition: var(--transition-control); } .ds-seg-on { color: var(--ink-strong); } .ds-seg-item:not(.ds-seg-on):active { background-color: var(--surface-pressed); } .ds-seg-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }"
     },
     {
       "name": "Permission Gate",
@@ -2400,20 +2780,20 @@
       "refersTo": "permission-card",
       "description": "Approve and Deny as untinted peers at opposite ends of the row (recess fill, one outline edge, ink-strong); the standing grant set apart in the warning tint.",
       "html": "<section class=\"ds-gate\" aria-label=\"Permission request\"><p class=\"ds-gate-lede\">Run <code class=\"ds-gate-cmd\">rm -rf apps/dashboard/.svelte-kit</code></p><div class=\"ds-gate-row\"><button class=\"ds-gate-btn ds-grant\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M5 12.5l4.5 4.5L19 7.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Approve</span></button><button class=\"ds-gate-btn ds-refuse\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Deny</span></button></div><div class=\"ds-gate-widen\"><p>This would allow <code class=\"ds-gate-cmd\">rm -rf</code> for this project, a wider grant than the request above.</p><button class=\"ds-gate-btn ds-widen\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><path d=\"M12 22C10.9807 22 10.6199 21.8425 9.89844 21.5273C7.23883 20.3655 3 17.6292 3 11.9912V11L12 8V22Z\"/><path d=\"M12 2C12.8114 2 13.595 2.26825 15.1621 2.80469L15.7354 3.00098C18.7409 4.02979 20.244 4.54434 20.6221 5.08203C20.9996 5.6199 21 7.21941 21 10.417V11L12 8V2Z\"/><g opacity=\".5\"><path d=\"M21 11V11.9912C21 17.6292 16.7612 20.3655 14.1016 21.5273C13.3801 21.8425 13.0193 22 12 22V8L21 11Z\"/><path d=\"M12 8L3 11V10.417C3 7.21941 3.00041 5.6199 3.37793 5.08203C3.75595 4.54434 5.25909 4.02979 8.26465 3.00098L8.83789 2.80469C10.405 2.26825 11.1886 2 12 2V8Z\"/></g></g></svg><span>Always allow rm</span></button></div></section>",
-      "css": ".ds-gate { width: 420px; padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-hairline); color: var(--ink-strong); } .ds-gate-lede { margin: 0 0 var(--space-2); font: var(--type-body); } .ds-gate-cmd { font-family: var(--font-mono); font-size: var(--text-label); } .ds-gate-row { display: flex; justify-content: space-between; gap: var(--space-8); } .ds-gate-btn { display: inline-flex; align-items: center; gap: var(--space-2); height: var(--space-8); padding: 0 var(--space-3); border: 1px solid var(--border-button-outline); border-radius: var(--radius-sm); background: var(--surface-recess); font: var(--type-label); cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-gate-btn svg { width: 12px; height: 12px; }  .ds-gate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } .ds-grant { color: var(--ink-strong); } .ds-refuse { color: var(--ink-strong); } .ds-gate-widen { margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border-hairline); } .ds-gate-widen p { margin: 0 0 var(--space-2); font: var(--type-body); color: var(--ink-muted); } .ds-widen { border-color: var(--status-attn-ink); background: var(--status-attn-bg); color: var(--status-attn-ink); } @media (prefers-reduced-motion: no-preference) { .ds-gate-btn:active { transform: scale(var(--press-scale)); } } @media (pointer: coarse) { .ds-gate-btn { height: 44px; } }"
+      "css": ".ds-gate { width: 420px; padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-hairline); color: var(--ink-strong); } .ds-gate-lede { margin: 0 0 var(--space-2); font: var(--type-body); } .ds-gate-cmd { font-family: var(--font-mono); font-size: var(--text-label); } .ds-gate-row { display: flex; justify-content: space-between; gap: var(--space-8); } .ds-gate-btn { display: inline-flex; align-items: center; gap: var(--space-2); height: var(--c-btn-h-sm); padding: 0 var(--space-3); border: 1px solid var(--border-button-outline); border-radius: var(--radius-sm); background: var(--surface-recess); font: var(--type-label); cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-gate-btn svg { width: 12px; height: 12px; }  .ds-gate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } .ds-grant { color: var(--ink-strong); } .ds-refuse { color: var(--ink-strong); } .ds-gate-widen { margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border-hairline); } .ds-gate-widen p { margin: 0 0 var(--space-2); font: var(--type-body); color: var(--ink-muted); } .ds-widen { border-color: var(--status-attn-ink); background: var(--status-attn-bg); color: var(--status-attn-ink); } @media (prefers-reduced-motion: no-preference) { .ds-gate-btn:active { transform: scale(var(--press-scale)); } } @media (pointer: coarse) { .ds-gate-btn { height: 44px; } }"
     },
     {
       "name": "Empty State",
       "kind": "custom",
       "refersTo": "card",
-      "description": "The one empty state: a duotone mark, a title, one line saying why, at most one action. Shown only once the data is known to be empty.",
+      "description": "The one empty state: a duotone mark, a title, one line saying why, and its one action, words alone on the outline button. Shown only once the data is known to be empty.",
       "html": "<div class=\"ds-empty\"><span class=\"ds-empty-mark\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><g opacity=\".5\"><path d=\"M6 13H18C19.8856 13 20.8284 13 21.4142 13.5858C22 14.1716 22 15.1144 22 17C22 18.8856 22 19.8284 21.4142 20.4142C20.8284 21 19.8856 21 18 21H6C4.11438 21 3.17157 21 2.58579 20.4142C2 19.8284 2 18.8856 2 17C2 15.1144 2 14.1716 2.58579 13.5858C3.17157 13 4.11438 13 6 13Z\"/><path d=\"M6 3H18C19.8856 3 20.8284 3 21.4142 3.58579C22 4.17157 22 5.11438 22 7C22 8.88562 22 9.82843 21.4142 10.4142C20.8284 11 19.8856 11 18 11H6C4.11438 11 3.17157 11 2.58579 10.4142C2 9.82843 2 8.88562 2 7C2 5.11438 2 4.17157 2.58579 3.58579C3.17157 3 4.11438 3 6 3Z\"/></g><path d=\"M12.75 7C12.75 6.58579 13.0858 6.25 13.5 6.25H18C18.4142 6.25 18.75 6.58579 18.75 7C18.75 7.41421 18.4142 7.75 18 7.75H13.5C13.0858 7.75 12.75 7.41421 12.75 7Z\"/><path d=\"M6 8.75C5.58579 8.75 5.25 8.41421 5.25 8V6C5.25 5.58579 5.58579 5.25 6 5.25C6.41421 5.25 6.75 5.58579 6.75 6V8C6.75 8.41421 6.41421 8.75 6 8.75Z\"/><path d=\"M9 8.75C8.58579 8.75 8.25 8.41421 8.25 8V6C8.25 5.58579 8.58579 5.25 9 5.25C9.41421 5.25 9.75 5.58579 9.75 6V8C9.75 8.41421 9.41421 8.75 9 8.75Z\"/><path d=\"M12.75 17C12.75 16.5858 13.0858 16.25 13.5 16.25H18C18.4142 16.25 18.75 16.5858 18.75 17C18.75 17.4142 18.4142 17.75 18 17.75H13.5C13.0858 17.75 12.75 17.4142 12.75 17Z\"/><path d=\"M6 18.75C5.58579 18.75 5.25 18.4142 5.25 18V16C5.25 15.5858 5.58579 15.25 6 15.25C6.41421 15.25 6.75 15.5858 6.75 16V18C6.75 18.4142 6.41421 18.75 6 18.75Z\"/><path d=\"M9 18.75C8.58579 18.75 8.25 18.4142 8.25 18V16C8.25 15.5858 8.58579 15.25 9 15.25C9.41421 15.25 9.75 15.5858 9.75 16V18C9.75 18.4142 9.41421 18.75 9 18.75Z\"/></g></svg></span><p class=\"ds-empty-title\">Nothing is connected yet</p><p class=\"ds-empty-line\">Join a machine to see every session in one board.</p><button class=\"ds-btn-primary ds-empty-action\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg><span>Show join command</span></button></div>",
-      "css": ".ds-empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding-block: var(--space-6); } .ds-empty-mark { display: inline-flex; color: var(--ink-muted); margin-bottom: var(--space-1); } .ds-empty-mark svg { width: 20px; height: 20px; } .ds-empty-title { margin: 0; font: var(--type-title); letter-spacing: -0.01em; color: var(--ink-strong); } .ds-empty-line { margin: 0; max-width: 60ch; font: var(--type-body); color: var(--ink-muted); } .ds-empty-action { margin-top: var(--space-2); display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: var(--radius-md); background-color: var(--action-solid); background-image: var(--action-surface); color: var(--on-action); font: 500 var(--text-body) / 1 var(--font-body); cursor: pointer; }"
+      "css": ".ds-empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding-block: var(--space-6); } .ds-empty-mark { display: inline-flex; color: var(--ink-muted); margin-bottom: var(--space-1); } .ds-empty-mark svg { width: 20px; height: 20px; } .ds-empty-title { margin: 0; font: var(--type-title); letter-spacing: -0.01em; color: var(--ink-strong); } .ds-empty-line { margin: 0; max-width: 60ch; font: var(--type-body); color: var(--ink-muted); } .ds-empty-action { margin-top: var(--space-2); display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid var(--border-button-outline); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink-strong); font: 500 var(--text-body) / 1 var(--font-body); cursor: pointer; }"
     },
     {
       "name": "Tree Mark",
       "kind": "custom",
-      "refersTo": "tree-mark",
+      "refersTo": "identity-mark",
       "description": "The 18px tile that leads every row with rows under it (TreeMark): a session's sprite, a project's folder or the bare history glyph as its face; a parent's count on the tile over a deck of up to three cards; the face-to-chevron morph on hover and while open (a project keeps its count while open: it is a status); and one status shape, a 6px dot (status-dot-size) centred on the tile's top-right corner, the tile cut away 1.5px round it (status-dot-cut). Failed is still, needs-you echoes on the list's beat, working echoes the tile and shows a still dot only with reduced motion. No ring round a tile. Session rows (SessionRow) lead with it in every list.",
       "html": "<span class=\"ds-mark\"><span class=\"ds-mark-tile\"></span><span class=\"ds-mark-dot\"></span></span>",
       "css": ".ds-mark { position: relative; display: inline-block; inline-size: 18px; block-size: 18px; } .ds-mark-tile { position: absolute; inset: 0; border-radius: var(--radius-xs); background-color: var(--mark-1); mask-image: radial-gradient(circle at 100% 0, transparent calc(var(--status-dot-size) / 2 + var(--status-dot-cut) - 0.25px), #000 calc(var(--status-dot-size) / 2 + var(--status-dot-cut) + 0.25px)); } .ds-mark-dot { position: absolute; top: calc(var(--status-dot-size) / -2); right: calc(var(--status-dot-size) / -2); inline-size: var(--status-dot-size); block-size: var(--status-dot-size); border-radius: var(--radius-pill); background-color: var(--status-fail-glyph); }"
@@ -2458,7 +2838,7 @@
       },
       {
         "name": "The Stay In Context Rule",
-        "body": "The reader stays where they are and knows what is true, from the moment they ask for something to the moment it is done. The owner: \"This fluid ux is the bar for any part of this project. Keeps the user in context.\" Four questions shape every flow, and their answers decide its form:",
+        "body": "The reader stays where they are and knows what is true, from the moment they ask for something to the moment it is done. The owner: \"This fluid ux is the bar for any part of this project. Keeps the user in context.\" Four questions shape every flow, and their answers decide its form: Where is their attention? The flow happens there. The thing they acted on stays in view and becomes its own result. Nothing sends them to another page, stacks a second surface on the first, or leaves a toast for them to connect back to what they did. What do they need to know to decide? The consequences this action really has, shown before they commit, and nothing more. A light, reversible action just happens where it was asked. One that reaches other things names those things where the decision is made. What is true right now? The system's state as it changes, not the state the interface hopes for. Something is done when the system says it is. An action that takes time shows its progress on the things it is changing. What if it doesn't go to plan? They are still where they were, with what they had, told what happened to which thing, and able to carry on from there. Work that runs longer than the surface that started it is kept by The Work Outlives Its Surface Rule, through a reload and a dismissal alike.",
         "section": "overview"
       },
       {
@@ -2498,7 +2878,7 @@
       },
       {
         "name": "The Quiet Feel Rule",
-        "body": "Sound and touch accompany a gesture the reader is making; they never announce anything on their own, never stand in for a word or a glyph, and never play for something the reader did not do. Sound is Cuelume (synthesized live, no files), always at its `subtle` emphasis. It is off until the reader turns it on with the Sound switch beside the theme in the rail's footer, and the choice is kept in this browser (`feel.svelte.ts`). Touch is web-haptics: the Vibration API on Android, and on iOS Safari, which has none, the system tick of a switch toggled out of sight. It answers only a finger on a coarse pointer and has no setting. Both libraries load on the first press or key, never with the page, and Cuelume's audio graph is built while idle right after with an inaudible play, so the first cue costs no frame (built on the first real cue it cost the frame that cue landed in: 76ms against 4ms warm). The moments, all in the composer today:",
+        "body": "Sound and touch accompany a gesture the reader is making; they never announce anything on their own, never stand in for a word or a glyph, and never play for something the reader did not do. Sound is Cuelume (synthesized live, no files), always at its `subtle` emphasis. It is off until the reader turns it on with the Sound switch beside the theme in the rail's footer, and the choice is kept in this browser (`feel.svelte.ts`). Touch is web-haptics: the Vibration API on Android, and on iOS Safari, which has none, the system tick of a switch toggled out of sight. It answers only a finger on a coarse pointer and has no setting. Both libraries load on the first press or key, never with the page, and Cuelume's audio graph is built while idle right after with an inaudible play, so the first cue costs no frame (built on the first real cue it cost the frame that cue landed in: 76ms against 4ms warm). The moments, all in the composer today: Detent (the recall wheel landing on another entry): `select`, rising toward older and falling toward newer, with a `selection` tick. Overshooting past an end is not a detent. Hold (a held press bringing the wheel up): `open`, with a `medium` tap. Open and close (the wheel brought up by a key, and put away unchosen): `open` and `close`, no touch. Take and give back (a queued message's words lifted into the composer, and given back to their bubble): `select` and `close`, each with a `light` tap.",
         "section": "overview"
       },
       {
@@ -2513,7 +2893,7 @@
       },
       {
         "name": "The Coral Is Where You Act Rule",
-        "body": "Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option and the selection tint. It is never a status: failed is crimson and needs-you is spark, so coral never reads as an alarm and an alarm never reads as a button.",
+        "body": "Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option and the selection tint. Advice is never coral: the option a writer recommends wears the Recommended badge (Badges and state chips), and when it starts chosen it wears both, the badge for the advice and the coral edge for the pick, so moving the pick moves only the coral. It is never a status: failed is crimson and needs-you is spark, so coral never reads as an alarm and an alarm never reads as a button.",
         "section": "colors"
       },
       {
@@ -2563,12 +2943,12 @@
       },
       {
         "name": "The Row Dress Rule",
-        "body": "A list row has at most four dresses, and each part takes the one for its job:",
+        "body": "A list row has at most four dresses, and each part takes the one for its job: the row's name is label in `ink-row` (`ink-subtle` when it is a state standing in for a name); the thing itself (a comment's words, a message) is body in `ink-strong`; facts about it (age, counts, place, the last reply) are meta in `ink-muted`, with a speaker's name inside such a line at 500; an unread fact steps to `ink-strong`, a coral word takes `brand-ink`, and a state that the row's mark already draws takes no word at all.",
         "section": "typography"
       },
       {
         "name": "The Mark Line Rule",
-        "body": "Words set beside a mark (an icon, a glyph, an avatar, a status dot, a keycap) have their x-height's middle on the mark's middle, within half a pixel, in every engine. Centring a line box does not do it: Figtree's ascent and descent sit unevenly about its x-height and Blink floors the half-leading, so a centred 13px label sat 0.3px below its mark in Blink and 1.25px below in WebKit and Gecko. The mark line recipe (app.css) trims each run of words to its x-height band (`text-box: trim-both ex alphabetic`) and pads back the room the trim took, half above and half below, so the run keeps its line's height and centring lands on the x-height. The kit's rows draw it by their own class (option and tray chips, menu items, segments, rail lines, and the button, badge and toggle); any other row takes `.mark-line`. Its words are elements, never bare text beside the mark. A box on the line (a mark's tile, a chevron's cell, a pill) says so with `data-box`. A control that holds nothing but marks (an icon-only button, a link that is only its glyph) is told apart by the recipe itself and centred as a box, its glyph on the line's middle within half a pixel; it needs no `data-box`. A selector sees no text, so a child whose only elements are marks is taken for a box whatever words stand bare beside them: a control's words are an element of their own, and a line that sets a mark in running text says `.mark-text`. A run that truncates clips with `overflow: clip`, never `hidden`, which Gecko does not trim. A run that stands alone, such as a pill's own words or a grid cell's label, takes `.mark-text`. A mark beside words that wrap sits in a `.mark-cell`, one line tall at the top of a flex-start row, never nudged down with a margin. A mark set in running text sits on `vertical-align: middle`, and its row says so with `<!-- mark-line: why -->` directly above it, as does any row whose mark is not beside its words. `bun run check` enforces all of this (apps/dashboard/scripts/mark-line-check.ts).",
+        "body": "Words set beside a mark (an icon, a glyph, an avatar, a status dot, a keycap) have their x-height's middle on the mark's middle, within half a pixel, in every engine. Centring a line box does not do it: Figtree's ascent and descent sit unevenly about its x-height and Blink floors the half-leading, so a centred 13px label sat 0.3px below its mark in Blink and 1.25px below in WebKit and Gecko. The mark line recipe (app.css) trims each run of words to its x-height band (`text-box: trim-both ex alphabetic`) and pads back the room the trim took, half above and half below, so the run keeps its line's height and centring lands on the x-height. The kit's rows draw it by their own class (option and tray chips, menu items, segments, rail lines, and the button, badge and toggle); any other row takes `.mark-line`. Its words are elements, never bare text beside the mark. A box on the line (a mark's tile, a chevron's cell, a pill) says so with `data-box`. A control that holds nothing but marks (an icon-only button, a link that is only its glyph) is a box too and says `data-box`, centred as one, its glyph on the line's middle within half a pixel; the kit's button given an icon and no label says it on its own. The recipe never finds a box by what it holds: a `:has()` there made every element on the page a selector anchor, and every press restyled the root and the line of ancestors under it. A control's words are an element of their own, and a line that sets a mark in running text says `.mark-text`. A run that truncates clips with `overflow: clip`, never `hidden`, which Gecko does not trim. A run is a block: the trim reaches no flex, grid or table container (CSS Inline 3), which keeps its whole line and takes the padding on top, so a run whose words stack or swap (a label and its reason, two wordings in one cell) holds that layout inside it, and a row of its own on the line says `data-box`. A run that stands alone, such as a pill's own words or a grid cell's label, takes `.mark-text`. A mark beside words that wrap sits in a `.mark-cell`, one line tall at the top of a flex-start row, never nudged down with a margin. A mark set in running text sits on `vertical-align: middle`, and its row says so with `<!-- mark-line: why -->` directly above it, as does any row whose mark is not beside its words. `bun run check` enforces all of this (apps/dashboard/scripts/mark-line-check.ts).",
         "section": "typography"
       },
       {
@@ -2673,7 +3053,7 @@
       },
       {
         "name": "The Solar Duotone Rule",
-        "body": "Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. A status glyph keeps its hue (`status-*-glyph`) at that 0.5 and holds 3:1 or more as a whole on the surfaces it sits on, so a row's state reads in colour at a glance (9ca3b2154). Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, and Minus is Solar's bare minus-linear. An icon is the glyph alone: no circle, square or box round a Solar glyph; where Solar ships only a contained cut, a container-less glyph is drawn in Solar's style.",
+        "body": "Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. A status glyph keeps its hue (`status-*-glyph`) at that 0.5 and holds 3:1 or more as a whole on the surfaces it sits on, so a row's state reads in colour at a glance (9ca3b2154). Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, and Minus is Solar's bare `minus-linear` in the same grammar. The Tick is also the done glyph (a finished step), in `status-done-glyph`, never Solar's `check-circle`. An icon is the glyph alone: no circle, square, squircle or box stands round a Solar glyph, so a `*-circle`, `*-square` or boxed cut is never used where Solar ships the bare one (sort is `sort-from-top-to-bottom`, not the squircled `sort`), and where Solar ships only a contained cut a container-less glyph is drawn in Solar's style, as Info's \"i\", the MCP plug and a dotted ring drawn in Solar's style for Not yet are (the owner, 10-24: \"u need to draw similar style icons that are without their containers\").",
         "section": "components"
       },
       {
@@ -2683,12 +3063,12 @@
       },
       {
         "name": "The One Ring Rule",
-        "body": "Every control (a button, a tab, a row, an option, a handle, a select, a link) shows one ring on keyboard focus only, on `:focus-visible`: a 2px solid outline in `focus-ring`, 2px outside the element. A press on a button shows none. List rows, tabs, options, a select and anything flush against a container or inside a clipping scroller carry the ring inset on their own border box instead, so it never stacks on a border or gets cut. The ring is for focus alone: nothing that is a selection or a mode borrows its colour or its shape, which take the selected marks instead (`selected-bg` and `selected-ink`, the chosen option's `brand-solid` edge, a page mode's 1px `seam`, a selected canvas frame's label in `selected-ink` and its 1px `border-control-strong` edge). The ring's colour is set at rest, so focus only switches it on. A scroller brings a focused control into view with room for its ring. Pointer focus on a control shows nothing.",
+        "body": "Every control (a button, a tab, a row, an option, a handle, a select, a link) shows one ring on keyboard focus only, on `:focus-visible`: a 2px solid outline in `focus-ring`, 2px outside the element. A press on a button shows none. List rows, tabs, options, a select and anything flush against a container or inside a clipping scroller carry the ring inset on their own border box instead, so it never stacks on a border or gets cut. The ring is for focus alone: nothing that is a selection or a mode borrows its colour or its shape (an open comment's pin is marked by its open card, never by a ring; its pill wears the ring only while the keyboard has it, and a modifier held alone is no keyboard use), which take the selected marks instead (`selected-bg` and `selected-ink`, the chosen option's `brand-solid` edge, a page mode's 1px `seam`, a selected canvas frame's label in `selected-ink` and its 1px `border-control-strong` edge). The ring's colour is set at rest, so focus only switches it on. A scroller brings a focused control into view with room for its ring. Pointer focus on a control shows nothing.",
         "section": "components"
       },
       {
         "name": "The 44 Touch Rule",
-        "body": "On a coarse pointer every control's tappable area reaches 44×44 through a transparent `::after` (`.touch-hit`, WCAG 2.5.8), while its drawn size and the layout stay the same. Where neighbours sit closer, `--hit-gap-x` and `--hit-gap-y` stop each area at the midpoint so areas never overlap; clusters open their gap on touch (8 to 14px for a row's controls, to 16px in the top bar). A scroller that would clip the areas pads into an equal negative margin. Menu items and nav rows are 44px tall on touch. One exception: a chip set in running text (ui/chip `inline`: a session, mention or skill in the composer or the transcript) takes its line's height as its hit area, as a link does, because a 44px area there would cover the lines above and below it. WCAG 2.2 SC 2.5.8 exempts it: \"Inline: The target is in a sentence or its size is otherwise constrained by the line-height of non-target text\" (w3.org/WAI/WCAG22/Understanding/target-size-minimum). Every other chip keeps its 44px under a finger.",
+        "body": "On a coarse pointer every control's tappable area reaches 44×44 through a transparent `::after` (`.touch-hit`, WCAG 2.5.8), while its drawn size and the layout stay the same. Where neighbours sit closer, `--hit-gap-x` and `--hit-gap-y` stop each area at the midpoint so areas never overlap; clusters open their gap on touch (8 to 14px for a row's controls, to 16px in the top bar). A text field's area lies under the field (`.hit-under`): the field takes its own presses, so a finger places its caret and selects its words, and the area takes only the room round it. A scroller that would clip the areas pads into an equal negative margin. Menu items and nav rows are 44px tall on touch. One exception: a chip set in running text (ui/chip `inline`: a session, mention or skill in the composer or the transcript) takes its line's height as its hit area, as a link does, because a 44px area there would cover the lines above and below it. WCAG 2.2 SC 2.5.8 exempts it: \"Inline: The target is in a sentence or its size is otherwise constrained by the line-height of non-target text\" (w3.org/WAI/WCAG22/Understanding/target-size-minimum). Every other chip keeps its 44px under a finger.",
         "section": "components"
       },
       {
@@ -2705,7 +3085,7 @@
       "Do recess the frame and raise the content; the stat well is the only card-in-card.",
       "Do say status with a glyph or a word before hue, and draw idle as no chip at all.",
       "Do set every changing figure in tabular numerals (`.num`), and keep weights at 400 and 500.",
-      "Do use Solar bold-duotone for every product icon, linear only for chevrons and arrows, at 12, 16 or 20px.",
+      "Do use Solar bold-duotone for every product icon, linear only for chevrons and arrows, at 12, 16 or 20px, each the glyph alone with no circle, square or box round it.",
       "Do make a compact control scale to 0.97 on press and a wide or grouped one tint to `surface-pressed`, the step past the hover, so a press never reads as hovered.",
       "Do give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size.",
       "Do enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.",
