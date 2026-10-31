@@ -198,8 +198,6 @@
       oklch(from var(--coral-9) l c h / 0.38)
     );
     --code-bg: light-dark(var(--neutral-3), oklch(15.6% 0.004 70));
-    /* One step off the page. */
-    --surface-1: light-dark(var(--neutral-2), oklch(18.4% 0.004 70));
     /* Borders: graded, never flattened to one value. */
     --border: light-dark(
       var(--neutral-6),
@@ -378,11 +376,6 @@
     --meter-stale-track: light-dark(oklch(75% 0.008 265), oklch(45% 0.008 265));
     /* The one neutral the usage breakdown and history bars draw in. */
     --meter-share: light-dark(oklch(55% 0.012 265), oklch(72% 0.01 265));
-    /* A near or over row's only tint: a faint wash of its status ink (owner: "the tints for yellow/red are too overwhelming"). */
-    --meter-wash-near: light-dark(
-      color-mix(in oklch, var(--status-attn-ink) 6%, transparent),
-      color-mix(in oklch, var(--status-attn-ink) 10%, transparent)
-    );
     --meter-wash-over: light-dark(
       color-mix(in oklch, var(--status-fail-ink) 6%, transparent),
       color-mix(in oklch, var(--status-fail-ink) 10%, transparent)
@@ -545,8 +538,6 @@
     /* The chosen folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade). */
     --shadow-tab-end-chosen: 2px 0 5px -1px var(--tab-shade-chosen);
     --shadow-inset-sel: inset 0 1px 1px var(--shadow-tint);
-    /* The shadow paired with --surface-1. */
-    --surface-shadow-1: none;
     /* The action's edge: a white top hairline and a coral-tinted drop. */
     --action-ring:
       inset 0 1px 0 oklch(100% 0 0 / 0.18),
@@ -607,8 +598,6 @@
     --leading-root: 1.5;
     /* A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14. */
     --leading-prose-sm: 1.7142857;
-    /* The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed). */
-    --leading-relaxed: 1.625;
     /* prose-sm: above an h2, in the heading's own ems. */
     --prose-sm-title-before: 1.6;
     /* prose-sm: below an h1 or h2, in the heading's own ems. */
@@ -730,8 +719,6 @@
     --c-target-gap: 2px;
     /* A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons. */
     --c-sheet-inspector-w: 296px;
-    /* An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: "at most 60% of the well"). */
-    --c-sheet-inspector-max-h: 60dvh;
     /* The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink). */
     --c-sheet-inspector-head-h: 44px;
     /* A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (DESIGN.md Artifact panel, canvas and ink; Skeleton). */
@@ -751,18 +738,14 @@
     /* A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview). */
     --c-review-words: 320px;
     --c-mark: 26px;
-    --c-mark-glyph: 16px;
     --c-row-mark: 18px;
     --c-pill-h: 24px;
     --c-pill-gap: 6px;
-    --c-pill-fs: var(--text-label);
     --c-badge-h: 20px;
     /* A stat tile's height. */
     --c-stat-h: 90px;
     /* The padding of a stat tile's recessed well (DESIGN.md stat-well). */
     --c-stat-well-pad: 10px;
-    /* A ledger's toolbar zone, holding 32px controls 11px in. */
-    --c-toolbar-zone: 55px;
     --c-toolbar-ctl: 32px;
     /* Find, as the glass's card on a desk: wide enough that a row's meta line ("Needs you · cockpit · delegate of Orchestrate cockpit fleet · linux", 12px meta) stands on one line beside a 16px glyph, and narrow enough to leave the page live beside it at 1055px (docs/tom/find-and-mention-chosen.md). */
     --c-find-w: 520px;
@@ -1307,8 +1290,6 @@
     --c-usage-strip-home-h: 56px;
     /* The week share's column: as wide as "100%" in the figure face. */
     --c-usage-pct-w: 4ch;
-    /* A filed task card's least track in a reply. */
-    --c-filed-task-w: 14rem;
     /* The composer's attachments row before it scrolls. */
     --c-atts-max-h: 180px;
     /* How far the settle's text clip reaches past a word's box, so ascenders and descenders survive. */
@@ -1379,8 +1360,6 @@
     --c-dialog-document-w: 95vw;
     /* The tallest a tool call's document well grows in the transcript before it scrolls. */
     --c-tool-well-max-h: 420px;
-    /* The template-path completer's tallest list. */
-    --c-completer-max-h: 240px;
     /* The Set-key field's basis beside its buttons. */
     --c-key-field-basis: 14rem;
     /* The Set-key field's widest. */
@@ -1429,8 +1408,6 @@
     --c-address-tray-w: 384px;
     /* Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card). */
     --c-address-caw: 64px;
-    /* Caw's still box in the address tray's title slot (stations). */
-    --c-address-caw-title: 40px;
     /* The QR on the address tray's phone step: the address a phone opens once. */
     --c-address-qr: 112px;
     /* The tallest the address tray's Raw well stands before it scrolls. */
@@ -1500,9 +1477,6 @@
     /* A message not yet said in the conversation (sending, queued). */
     --ghost-presence: 0.7;
     --material-saturate: 1.6;
-    /* Relative tints for rows inside any surface: hover +6%, selected +10% ink. */
-    --surface-hover-mix: 6%;
-    --surface-selected-mix: 10%;
     /* The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle. */
     --tab-rim-mix-chosen: 0.97;
     /* The chosen tab's rim strength when its session is idle or done, in the muted ink: its top holds 3:1 against the shelf (3.2:1 by day, 3.8:1 by night at 1px); its sides taper softer by design. By day 0.32 left its side at 1.4:1, by night at 2.0:1. */
@@ -1629,17 +1603,18 @@
       --tw-gradient-to var(--dur-control) var(--ease-out);
     /* Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go). */
     --transition-fade-show:
-      opacity var(--dur-fade) var(--ease-out), visibility 0s;
+      opacity var(--dur-fade) var(--ease-out), visibility 0s linear;
     /* Something stepping aside: its fade, and its visibility gone once the fade is done (the composer's parts under an ask, a drawing, a minimized pill). */
     --transition-fade-hide:
       opacity var(--dur-fade) var(--ease-out),
       visibility 0s linear var(--dur-fade);
     /* The composer's tray coming back: the exit's beat, its visibility back at once. */
     --transition-exit-show:
-      opacity var(--dur-exit) var(--ease-out), visibility 0s;
+      opacity var(--dur-exit) var(--ease-out), visibility 0s linear;
     /* The composer's tray leaving: the exit's beat, its visibility gone once the fade is done. */
     --transition-exit-hide:
-      opacity var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit);
+      opacity var(--dur-exit) var(--ease-out),
+      visibility 0s linear var(--dur-exit);
     /* A part fading up out of a slight blur (part-blur) in place, with reduced motion: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Tested in iOS 27.2 Safari on 2026-10-23 (probe-kit ios-safari-motion): the page answers through it and the blur runs. */
     --transition-fade-blur:
       opacity var(--dur-fade) var(--ease-out),
@@ -1738,24 +1713,28 @@
       filter var(--dur-morph) var(--ease-out);
     /* The connection band (HubBand) going, with less motion: its fade and its visibility on the exit's beat, its tint and ink on the control's. */
     --transition-band-hide:
-      opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit),
+      opacity var(--dur-exit) var(--ease-out),
+      visibility var(--dur-exit) linear,
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
     /* The connection band (HubBand) coming, with less motion: its fade and its visibility on the panel's beat and the drawer curve, its tint and ink on the control's. */
     --transition-band-show:
-      opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel),
+      opacity var(--dur-panel) var(--ease-drawer),
+      visibility var(--dur-panel) linear,
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
     /* The connection band (HubBand) going back up under the bar: its travel, fade and visibility on the exit's beat, its tint and ink on the control's. */
     --transition-band-slide-hide:
       translate var(--dur-exit) var(--ease-out),
-      opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit),
+      opacity var(--dur-exit) var(--ease-out),
+      visibility var(--dur-exit) linear,
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
     /* The connection band (HubBand) sliding down from under the bar: its travel, fade and visibility on the panel's beat and the drawer curve, its tint and ink on the control's. */
     --transition-band-slide-show:
       translate var(--dur-panel) var(--ease-drawer),
-      opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel),
+      opacity var(--dur-panel) var(--ease-drawer),
+      visibility var(--dur-panel) linear,
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
     /* The connection band's row (HubBand) shutting as the band goes back up: its grid row on the exit's beat. */

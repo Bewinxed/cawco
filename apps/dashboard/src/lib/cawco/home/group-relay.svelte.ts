@@ -9,7 +9,7 @@
  */
 import { flushSync } from "svelte";
 import { dur, motionOk } from "../motion/curves.svelte";
-import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
+import { inMs, ListSwap } from "../motion/list-swap.svelte";
 import {
   boxHeights,
   driveHeights,
@@ -165,7 +165,7 @@ export class GroupRelay<
         driven.done,
         ...relayed.lastOut.values(),
         ...[...enter.values()].map(
-          (at) => ListSwap.enterAt(at.i, at.notBefore) + IN_MS
+          (at) => ListSwap.enterAt(at.i, at.notBefore) + inMs()
         )
       );
       flushSync(() => {
@@ -211,7 +211,7 @@ export class GroupRelay<
   /** A line's leaving, as an `animation` value; none when it does not leave. */
   leaveAnim = (key: string): string | undefined => {
     const at = this.plan?.leave.get(key);
-    return at === undefined ? undefined : this.swap.leaveAnim(at);
+    return at === undefined ? undefined : this.swap.leaveAnim();
   };
 
   /**

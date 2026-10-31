@@ -8,6 +8,7 @@ import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
+import { rawMotion } from "./raw-motion.mjs";
 import { rawClassValues } from "./raw-values.mjs";
 import {
   dimensionBindings,
@@ -25,6 +26,12 @@ import {
 import { variantOrder } from "./variant-order.mjs";
 
 const KIT = "src/lib/components/ui/";
+/** The motion helpers that write the curves out (house/no-raw-motion). */
+const MOTION_HELPERS = new Set([
+  "src/lib/cawco/motion/curves.svelte.ts",
+  "src/lib/cawco/motion/rows.svelte.ts",
+  "src/lib/cawco/motion/hang.ts",
+]);
 
 /**
  * What a caller may write on a kit part: where it stands, never how it
@@ -259,6 +266,12 @@ function optionsFor(rule, file) {
       return { allow: ["nodrag", "nopan"] };
     case "house/no-raw-duration-read":
       return file === "src/lib/cawco/motion/curves.svelte.ts" ? null : {};
+    case "house/no-raw-motion":
+      // The token build's own output, and the helpers that hold the curves
+      // as functions of t (DESIGN.md, The House Helper Rule).
+      return file.startsWith("src/lib/tokens/") || MOTION_HELPERS.has(file)
+        ? null
+        : {};
     default:
       return {};
   }
@@ -296,6 +309,7 @@ const FIND = {
   "house/no-clip-with-move": clipWithMove,
   "house/no-class-join": classJoins,
   "house/no-raw-class-values": rawClassValues,
+  "house/no-raw-motion": rawMotion,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

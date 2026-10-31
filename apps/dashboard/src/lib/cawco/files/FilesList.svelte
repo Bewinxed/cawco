@@ -66,7 +66,14 @@
   import { frameObserver } from "../frame-observer";
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
-  import { crossIn, dur, reveal, revealOut } from "../motion/curves.svelte";
+  import {
+    crossIn,
+    dur,
+    motionOk,
+    reveal,
+    revealOut,
+  } from "../motion/curves.svelte";
+  import { scrollMotion } from "../motion/keyed.svelte";
   import Rail from "../motion/Rail.svelte";
   import RowFault from "../RowFault.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
@@ -393,9 +400,7 @@
     const scroller = document.getElementById(`${uid}-${region}-scroll`);
     scroller?.scrollBy({
       top: scroller.clientHeight * 0.8,
-      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "instant"
-        : "smooth",
+      behavior: scrollMotion(motionOk.current),
     });
   };
 

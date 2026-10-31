@@ -892,7 +892,9 @@
     --edge-bottom-under: var(--surface-recess);
     --edge-top-background: var(--edge-top-under);
     --edge-bottom-background: var(--edge-bottom-under);
+    /* biome-ignore lint/plugin/no-raw-motion: a step a millisecond long is no beat: it ends in transitionend, where ScreenEdges reads the colour, and a 0s change fires none. */
     --edge-top-fade: 1ms;
+    /* biome-ignore lint/plugin/no-raw-motion: a step a millisecond long is no beat: it ends in transitionend, where ScreenEdges reads the colour, and a 0s change fires none. */
     --edge-bottom-fade: 1ms;
     --edge-shown: 1;
     --edge-show-fade: var(--dur-exit);
@@ -932,6 +934,7 @@
   }
   :root[data-kit-sheet~="bottom"] {
     --edge-bottom-background: var(--surface-raised);
+    /* biome-ignore lint/plugin/no-raw-motion: a step a millisecond long is no beat: it ends in transitionend, where ScreenEdges reads the colour, and a 0s change fires none. */
     --edge-bottom-fade: 1ms;
   }
   :root[data-kit-sheet~="side"] {

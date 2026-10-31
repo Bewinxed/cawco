@@ -20,3 +20,11 @@ export const cut = (node: HTMLElement, frame: Keyframe): void => {
 export const reveals = (node: HTMLElement): void => {
   node.scrollIntoView({ block: "nearest" });
 };
+export const slide = (node: HTMLElement): Animation =>
+  node.animate([{ opacity: 0 }, { opacity: 1 }], 120);
+export const fade = { duration: 200, delay: 0, easing: "ease-out" };
+export const glide = "transform 120ms var(--ease-out)";
+export const swap = { transition: "opacity var(--dur-fade) ease" };
+export const bend = "cubic-bezier(0.2, 0, 0, 1)";
+export const still = { duration: 0, easing: "linear" };
+export const said = "timed out after 30000ms";

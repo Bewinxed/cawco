@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-31T08:30:00.000Z",
+  "generatedAt": "2026-10-31T12:00:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -2457,11 +2457,6 @@
         "purpose": "A selected control sunk into its field (markdown editor)."
       },
       {
-        "name": "surface-shadow-1",
-        "value": "none",
-        "purpose": "The shadow paired with --surface-1."
-      },
-      {
         "name": "action-ring",
         "value": "inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px light-dark(oklch(45% 0.12 33 / 0.25), oklch(0% 0 0 / 0.4))",
         "purpose": "The action's edge: a white top hairline and a coral-tinted drop."
@@ -2805,7 +2800,7 @@
       },
       {
         "name": "transition-fade-show",
-        "value": "opacity var(--dur-fade) var(--ease-out), visibility 0s",
+        "value": "opacity var(--dur-fade) var(--ease-out), visibility 0s linear",
         "purpose": "Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go)."
       },
       {
@@ -2815,12 +2810,12 @@
       },
       {
         "name": "transition-exit-show",
-        "value": "opacity var(--dur-exit) var(--ease-out), visibility 0s",
+        "value": "opacity var(--dur-exit) var(--ease-out), visibility 0s linear",
         "purpose": "The composer's tray coming back: the exit's beat, its visibility back at once."
       },
       {
         "name": "transition-exit-hide",
-        "value": "opacity var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit)",
+        "value": "opacity var(--dur-exit) var(--ease-out), visibility 0s linear var(--dur-exit)",
         "purpose": "The composer's tray leaving: the exit's beat, its visibility gone once the fade is done."
       },
       {
@@ -2920,22 +2915,22 @@
       },
       {
         "name": "transition-band-hide",
-        "value": "opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit), background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "value": "opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit) linear, background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
         "purpose": "The connection band (HubBand) going, with less motion: its fade and its visibility on the exit's beat, its tint and ink on the control's."
       },
       {
         "name": "transition-band-show",
-        "value": "opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel), background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "value": "opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel) linear, background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
         "purpose": "The connection band (HubBand) coming, with less motion: its fade and its visibility on the panel's beat and the drawer curve, its tint and ink on the control's."
       },
       {
         "name": "transition-band-slide-hide",
-        "value": "translate var(--dur-exit) var(--ease-out), opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit), background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "value": "translate var(--dur-exit) var(--ease-out), opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit) linear, background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
         "purpose": "The connection band (HubBand) going back up under the bar: its travel, fade and visibility on the exit's beat, its tint and ink on the control's."
       },
       {
         "name": "transition-band-slide-show",
-        "value": "translate var(--dur-panel) var(--ease-drawer), opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel), background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
+        "value": "translate var(--dur-panel) var(--ease-drawer), opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel) linear, background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
         "purpose": "The connection band (HubBand) sliding down from under the bar: its travel, fade and visibility on the panel's beat and the drawer curve, its tint and ink on the control's."
       },
       {
@@ -2982,6 +2977,11 @@
         "name": "unfold",
         "value": "in --dur-pop / out --dur-exit, ease-out; reduced motion --dur-control fade",
         "purpose": "Content an {#if} mounts growing from nothing (motion/fold.svelte.ts)."
+      },
+      {
+        "name": "keyed",
+        "value": "from a key the page takes to --dur-control after it, every transition, animation and helper clock begun since the key lands at once; loops, waits past --dur-cascade and clocks past --dur-hold are left; typing in a field is no action",
+        "purpose": "The Frequency Rule: a keyboard-initiated action never animates, the same action from a pointer keeps its motion (motion/keyed.svelte.ts, trackKeyed on the root layout)."
       },
       {
         "name": "tree-fold",
@@ -3133,7 +3133,7 @@
       },
       {
         "name": "The Frequency Rule",
-        "body": "How often the reader sees a motion decides whether it exists. A keyboard-initiated action never animates: the Jump palette, a list walked with the arrow keys, a shortcut's result land at once. What is seen tens of times a day (a hover, a row's highlight, a tab the reader lives in) gets a colour or opacity change on `--dur-control` or nothing. What is occasional (a popover, a sheet, a toast, a card opening) gets the standard motion below. Delight (a bounce, a flourish, a sound) belongs only to what is rare: the first run, a backup done, a wallet made (Family: \"the potential for delight increases as the frequency of feature usage decreases\"). Motion is never the only sign that something happened; a colour, a glyph or a word says it too.",
+        "body": "How often the reader sees a motion decides whether it exists. A keyboard-initiated action never animates: the Jump palette, a list walked with the arrow keys, a shortcut's result, a menu opened with Enter or shut with Escape land at once, while the same action from a pointer keeps its motion. `keyed` lands them (The House Helper Rule); typing in a field is not an action, so a field still grows a line at a time. What is seen tens of times a day (a hover, a row's highlight, a tab the reader lives in) gets a colour or opacity change on `--dur-control` or nothing. What is occasional (a popover, a sheet, a toast, a card opening) gets the standard motion below. Delight (a bounce, a flourish, a sound) belongs only to what is rare: the first run, a backup done, a wallet made (Family: \"the potential for delight increases as the frequency of feature usage decreases\"). Motion is never the only sign that something happened; a colour, a glyph or a word says it too.",
         "section": "overview"
       },
       {

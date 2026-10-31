@@ -45,6 +45,7 @@
   import { onMount, tick, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { keyed } from "#lib/cawco/motion/keyed.svelte.js";
   import { track } from "#lib/cawco/track.js";
   import { IconSearch } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
@@ -473,7 +474,8 @@
 
   function roll(): void {
     cancelAnimationFrame(frame);
-    if (!motionOk.current) {
+    // A key's roll lands at once (DESIGN.md, The Frequency Rule).
+    if (!motionOk.current || keyed.current) {
       stand(clamp(Math.round(target)));
       draw();
       settled?.();

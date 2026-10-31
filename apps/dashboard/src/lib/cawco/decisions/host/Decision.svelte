@@ -247,23 +247,10 @@
     (picks.now[id]?.options ?? []).filter((one) => order.includes(one))
   );
 
-  /**
-   * A keyboard's pick under way: it lands in one frame, the chosen colour
-   * with no fade (`data-instant`) and the card's height with no tween.
-   */
-  let instant = $state(false);
   /** The page's one polite live region (Decisions.svelte). */
   const page = getContext<{ say: (words: string) => void } | undefined>(
     "decision-page"
   );
-
-  /** Lets go of `instant` once the frame it landed in has been drawn. */
-  const afterInstant = () =>
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        instant = false;
-      })
-    );
 
   // Only the person's own press speaks: the overlay's other writes to the
   // page's doc (a pin re-anchored) and a pick from elsewhere say nothing.
@@ -300,14 +287,14 @@
     }
     seen = now;
   });
-  /** A press on an option, by a key or a pointer, about to write its pick. */
-  function arm(key: boolean) {
+  /**
+   * A press on an option, by a key or a pointer, about to write its pick. A
+   * key's pick lands in one frame, its colour and the card's height
+   * unfaded (motion/keyed).
+   */
+  function arm() {
     pressed = performance.now();
     held = [...chosen];
-    instant = key;
-    if (key) {
-      afterInstant();
-    }
   }
   let body = $state<HTMLDivElement>();
   $effect(() => {
@@ -321,12 +308,12 @@
           "[data-option], [data-option-for]"
         )
       ) {
-        arm(false);
+        arm();
       }
     };
     // Space and an option's digit pick (the group presses the option); armed
     // here, in capture, before the group's own keys run.
-    const keyed = (event: KeyboardEvent) => {
+    const pressedKey = (event: KeyboardEvent) => {
       if (
         event.altKey ||
         event.ctrlKey ||
@@ -336,14 +323,14 @@
         return;
       }
       if (event.key === " " || (event.key >= "1" && event.key <= "9")) {
-        arm(true);
+        arm();
       }
     };
     group.addEventListener("pointerdown", pointed, true);
-    group.addEventListener("keydown", keyed, true);
+    group.addEventListener("keydown", pressedKey, true);
     return () => {
       group.removeEventListener("pointerdown", pointed, true);
-      group.removeEventListener("keydown", keyed, true);
+      group.removeEventListener("keydown", pressedKey, true);
     };
   });
 
@@ -433,11 +420,10 @@
 </script>
 
 <article
-  {@attach morph({ still: () => instant })}
-  class="group/card relative flex min-w-0 data-instant:**:transition-none scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-(--card-in) shadow-tile"
+  {@attach morph()}
+  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-(--card-in) shadow-tile"
   data-cawco-choice={id}
   data-cawco-multiple={multiple ? "" : undefined}
-  data-instant={instant ? "" : undefined}
   data-slot="decision"
   id={`decision-${id}`}
 >

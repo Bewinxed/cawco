@@ -1,0 +1,42 @@
+language css
+
+// A duration or a curve on the dashboard and the decision-page kit is a
+// motion token (DESIGN.md, Motion grammar: "All motion stands on three
+// curves, `linear`, and a short duration scale"; "The house does not use CSS
+// `ease`"), never a literal, in every stylesheet and every Svelte `<style>`.
+// Only the token build's own output writes them (apps/dashboard/src/lib/tokens/,
+// the kit's tokens.css). The markup and script half is Golar's
+// (scripts/lint/design/raw-motion.mjs).
+//
+// - A time written out (`120ms`, `.2s`) is var(--dur-…); `0s` and `0ms`
+//   say "at once" and stand.
+// - A `cubic-bezier()` is var(--ease-…).
+// - CSS's own `ease`, `ease-in`, `ease-out` and `ease-in-out` are an
+//   --ease-* token, or `linear` for a discrete property (`visibility`).
+//
+// A literal that is no motion of the design says why in a
+// `biome-ignore lint/plugin/no-raw-motion: <reason>` comment.
+or {
+  CssRegularDimension() as $hit where {
+    $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },
+    $filename <: not includes "apps/dashboard/src/lib/tokens/",
+    $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
+    $hit <: r"(?i)^(?:\d+\.?\d*|\.\d+)m?s$",
+    $hit <: not r"(?i)^0*\.?0*m?s$",
+    register_diagnostic(span=$hit, message="A duration is a motion token: write var(--dur-…), and add it to design/tokens/cawco.tokens.json first (then bun run tokens).")
+  },
+  CssFunction() as $hit where {
+    $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },
+    $filename <: not includes "apps/dashboard/src/lib/tokens/",
+    $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
+    $hit <: r"(?is)^cubic-bezier\(.*",
+    register_diagnostic(span=$hit, message="A curve is a motion token: write var(--ease-…), and add it to design/tokens/cawco.tokens.json first (then bun run tokens).")
+  },
+  CssIdentifier() as $hit where {
+    $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },
+    $filename <: not includes "apps/dashboard/src/lib/tokens/",
+    $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
+    $hit <: r"(?i)^ease(?:-in|-out|-in-out)?$",
+    register_diagnostic(span=$hit, message="CSS's own curve: write var(--ease-…), or linear for a discrete property (DESIGN.md: the house does not use CSS ease).")
+  }
+}

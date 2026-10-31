@@ -1,5 +1,6 @@
 <script lang="ts">
   import { spawnWords } from "@cawco/core/words/spawn";
+  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { MachineRow } from "#lib/components/ui/machine-row/index.js";
@@ -93,7 +94,7 @@
       data-machine-id={row.id}
       disabled={!row.online}
       onclick={() => ontoggle(row.id)}
-      style={`--delay:${80 + index * 45}ms`}
+      style:--delay={staggered(index + 1)}
       style:border-radius={radius(index, on)}
       type="button"
     >
@@ -128,7 +129,7 @@
     class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
     data-fh="1"
     onclick={addMachine}
-    style="--delay:140ms"
+    style:--delay={staggered(machines.length + 1)}
     type="button"
   >
     <span data-slot="tile" class={iconTileVariants({ empty: true })}

@@ -284,7 +284,7 @@
                   aria-hidden="true"
                   class="pointer-events-none absolute inset-x-0 top-0"
                   inert
-                  style:animation={bodySwap.leaveAnim(i)}
+                  style:animation={bodySwap.leaveAnim()}
                 >
                   {#if gone.view === "chart"}
                     {@render plot(chart, false)}
@@ -294,9 +294,7 @@
                 </div>
               {/each}
               {#key bodySwap.gen}
-                <div
-                  style:animation={bodySwap.rowAnim(i, ListSwap.leaveEnd(i))}
-                >
+                <div style:animation={bodySwap.rowAnim(i, ListSwap.leaveEnd())}>
                   {#if view === "chart"}
                     {@render plot(chart, true)}
                   {:else}

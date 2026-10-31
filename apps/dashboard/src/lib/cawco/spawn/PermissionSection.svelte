@@ -2,6 +2,7 @@
   import { detach } from "@cawco/core/detach";
   import type { HarnessKind, PermissionMode } from "@cawco/core/harness";
   import { spawnWords } from "@cawco/core/words/spawn";
+  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
@@ -115,7 +116,7 @@
       disabled={row.disabled}
       onclick={() => pick(row.value)}
       role="radio"
-      style={`--delay:${i * 35}ms`}
+      style:--delay={staggered(i)}
       type="button"
     >
       <span data-slot="tile" class={iconTileVariants()} style:color={row.hue}

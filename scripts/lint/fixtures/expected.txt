@@ -56,3 +56,11 @@ scripts/lint/fixtures/design/planted-class-join.svelte:63:6 house/no-class-join
 scripts/lint/fixtures/design/planted-class-join.svelte:64:19 house/no-class-join
 scripts/lint/fixtures/design/planted-class-join.svelte:65:13 house/no-class-join
 scripts/lint/fixtures/design/planted.ts:21:3 house/no-scroll-into-view
+scripts/lint/fixtures/design/planted.ts:24:50 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:25:33 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:25:56 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:26:22 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:27:35 house/no-raw-motion
+scripts/lint/fixtures/design/planted.ts:28:21 house/no-raw-motion
+scripts/lint/fixtures/design/planted.svelte:39:21 house/no-raw-motion
+scripts/lint/fixtures/design/planted.svelte:39:42 house/no-raw-motion

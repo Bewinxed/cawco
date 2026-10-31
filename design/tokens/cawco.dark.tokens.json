@@ -1,39 +1,4 @@
 {
-  "marketing": {
-    "site-heading-ink": {
-      "$type": "color",
-      "$value": "{color.spark}"
-    },
-    "site-canvas": {
-      "$type": "color",
-      "$value": "{color.crow-ink}"
-    },
-    "site-ink": {
-      "$type": "color",
-      "$value": "{color.paper}"
-    },
-    "site-secondary": {
-      "$type": "color",
-      "$value": "{color.neutral-11}"
-    },
-    "site-line": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklab",
-        "components": [0.9555, 0.00032, 0.013947],
-        "alpha": 0.22
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklab, {color.paper} 22%, transparent)"
-        }
-      }
-    },
-    "site-panel": {
-      "$type": "color",
-      "$value": "{color.surface-raised}"
-    }
-  },
   "color": {
     "neutral-1": {
       "$type": "color",
@@ -611,13 +576,6 @@
         "components": [0.156, 0.004, 70]
       }
     },
-    "surface-1": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.184, 0.004, 70]
-      }
-    },
     "border": {
       "$type": "color",
       "$value": {
@@ -951,19 +909,6 @@
       "$value": {
         "colorSpace": "oklch",
         "components": [0.72, 0.01, 265]
-      }
-    },
-    "meter-wash-near": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.9, 0.115, 95],
-        "alpha": 0.1
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-attn-ink} 10%, transparent)"
-        }
       }
     },
     "meter-wash-over": {

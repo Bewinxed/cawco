@@ -28,7 +28,7 @@
   import type { FsEntry } from "@cawco/core/protocol";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { CURVE, dur, staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -249,7 +249,7 @@
           class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-body text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
           ><span>{spawnWords.location.fromProject}</span></span
         >
-        <span class="ns-in flex flex-none" style="--delay:40ms">
+        <span class="ns-in flex flex-none" style:--delay={staggered(1)}>
           <Button onclick={onoverride} size="sm" tone="quiet" variant="ghost">
             {spawnWords.location.override}
           </Button>

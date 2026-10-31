@@ -1,0 +1,21 @@
+/* Planted: a time, a curve function and CSS's own curves written out; then
+   what the rule allows. */
+.planted {
+  transition: opacity 120ms ease;
+  animation: fade 0.2s cubic-bezier(0.2, 0, 0, 1) both;
+  transition-timing-function: ease-in-out;
+}
+
+.allowed {
+  transition:
+    opacity var(--dur-fade) var(--ease-out),
+    visibility 0s linear var(--dur-fade);
+  animation-delay: 0ms;
+}
+.ease-out {
+  color: var(--ink-strong);
+}
+.kept {
+  /* biome-ignore lint/plugin/no-raw-motion: a fixture's own suppression, which must hold. */
+  transition-duration: 1ms;
+}

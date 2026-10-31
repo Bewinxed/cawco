@@ -1,6 +1,7 @@
 <script lang="ts">
   import { spawnWords } from "@cawco/core/words/spawn";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
@@ -212,7 +213,7 @@
         data-machine-id={row.machineId}
         data-project-id={row.id}
         onclick={() => onpick(row)}
-        style={`--delay:${index * 35}ms`}
+        style:--delay={staggered(index)}
         type="button"
       >
         <span data-slot="tile" class={iconTileVariants()} style:color={row.hue}
@@ -243,7 +244,7 @@
       onclick={() => {
         draft = { name: "", path: "" };
       }}
-      style:--delay={`${projects.length * 35}ms`}
+      style:--delay={staggered(projects.length)}
       type="button"
     >
       <span data-slot="tile" class={iconTileVariants({ empty: true })}

@@ -73,6 +73,7 @@
     frameSize,
   } from "../frame-observer";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
+  import { scrollMotion } from "../motion/keyed.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
   import { noteChange, repeatedKey, reportRepeat } from "../repeated-keys";
@@ -390,8 +391,7 @@
   let lastArray: unknown = null;
   /** Whether the ledger has seen a build: the first one is everything already there. */
   let seeded = false;
-  /** Rows that land together cascade this far apart, and no more than five deep. */
-  const STAGGER_MS = 30;
+  /** Rows that land together cascade --dur-stagger apart, and no more than five deep. */
   const STAGGER_ROWS = 5;
 
   /** Whether the page is visible. Tracked, so the ledger and the rows can read it. */
@@ -4327,7 +4327,7 @@
     }
     return {
       kind: "arrive",
-      lead: Math.min(slot, STAGGER_ROWS - 1) * STAGGER_MS,
+      lead: Math.min(slot, STAGGER_ROWS - 1) * dur("--dur-stagger"),
       start: null,
     };
   }
@@ -4431,7 +4431,7 @@
       return;
     }
     jumpTarget = bottom;
-    node.scrollTo({ top: bottom, behavior: "smooth" });
+    node.scrollTo({ top: bottom, behavior: scrollMotion(true) });
   }
 
   /**

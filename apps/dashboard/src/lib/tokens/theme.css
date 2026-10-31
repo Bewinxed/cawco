@@ -143,7 +143,6 @@
   --color-well-edge: var(--well-edge);
   --color-seam: var(--seam);
   --color-code-bg: var(--code-bg);
-  --color-surface-1: var(--surface-1);
   --color-border: var(--border);
   --color-border-hairline: var(--border-hairline);
   --color-border-well: var(--border-well);
@@ -214,7 +213,6 @@
   --color-meter-stale: var(--meter-stale);
   --color-meter-stale-track: var(--meter-stale-track);
   --color-meter-share: var(--meter-share);
-  --color-meter-wash-near: var(--meter-wash-near);
   --color-meter-wash-over: var(--meter-wash-over);
   --color-presence-online: var(--presence-online);
   --color-presence-away: var(--presence-away);
@@ -259,7 +257,6 @@
   --color-tab-shade-chosen: var(--tab-shade-chosen);
   --color-night-ring: var(--night-ring);
 
-  --shadow-surface-shadow-1: var(--surface-shadow-1);
   --shadow-action-ring: var(--action-ring);
   --shadow-code-ring: var(--code-ring);
 
@@ -305,7 +302,6 @@
   --spacing-c-target-stroke: var(--c-target-stroke);
   --spacing-c-target-gap: var(--c-target-gap);
   --spacing-c-sheet-inspector-w: var(--c-sheet-inspector-w);
-  --spacing-c-sheet-inspector-max-h: var(--c-sheet-inspector-max-h);
   --spacing-c-sheet-inspector-head-h: var(--c-sheet-inspector-head-h);
   --spacing-c-canvas-skeleton-w: var(--c-canvas-skeleton-w);
   --spacing-c-canvas-skeleton-h: var(--c-canvas-skeleton-h);
@@ -315,15 +311,12 @@
   --spacing-c-pin-list-max: var(--c-pin-list-max);
   --spacing-c-review-words: var(--c-review-words);
   --spacing-c-mark: var(--c-mark);
-  --spacing-c-mark-glyph: var(--c-mark-glyph);
   --spacing-c-row-mark: var(--c-row-mark);
   --spacing-c-pill-h: var(--c-pill-h);
   --spacing-c-pill-gap: var(--c-pill-gap);
-  --spacing-c-pill-fs: var(--c-pill-fs);
   --spacing-c-badge-h: var(--c-badge-h);
   --spacing-c-stat-h: var(--c-stat-h);
   --spacing-c-stat-well-pad: var(--c-stat-well-pad);
-  --spacing-c-toolbar-zone: var(--c-toolbar-zone);
   --spacing-c-toolbar-ctl: var(--c-toolbar-ctl);
   --spacing-c-find-w: var(--c-find-w);
   --spacing-c-new-session-pop-w: var(--c-new-session-pop-w);
@@ -550,7 +543,6 @@
   --spacing-c-usage-strip-clip: var(--c-usage-strip-clip);
   --spacing-c-usage-strip-home-h: var(--c-usage-strip-home-h);
   --spacing-c-usage-pct-w: var(--c-usage-pct-w);
-  --spacing-c-filed-task-w: var(--c-filed-task-w);
   --spacing-c-atts-max-h: var(--c-atts-max-h);
   --spacing-c-compaction-word-bleed: var(--c-compaction-word-bleed);
   --spacing-c-give-way-min: var(--c-give-way-min);
@@ -581,7 +573,6 @@
   --spacing-c-dialog-close-clear: var(--c-dialog-close-clear);
   --spacing-c-dialog-document-w: var(--c-dialog-document-w);
   --spacing-c-tool-well-max-h: var(--c-tool-well-max-h);
-  --spacing-c-completer-max-h: var(--c-completer-max-h);
   --spacing-c-key-field-basis: var(--c-key-field-basis);
   --spacing-c-key-field-max: var(--c-key-field-max);
   --spacing-c-bench-phone-w: var(--c-bench-phone-w);
@@ -606,7 +597,6 @@
   --spacing-c-new-project-w: var(--c-new-project-w);
   --spacing-c-address-tray-w: var(--c-address-tray-w);
   --spacing-c-address-caw: var(--c-address-caw);
-  --spacing-c-address-caw-title: var(--c-address-caw-title);
   --spacing-c-address-qr: var(--c-address-qr);
   --spacing-c-address-raw-h: var(--c-address-raw-h);
   --spacing-c-address-phone-h: var(--c-address-phone-h);
@@ -682,7 +672,7 @@
     forwards;
   --animate-wait-grace-in: kit-fade-in var(--dur-fade) var(--ease-out)
     var(--dur-wait-grace) both;
-  --animate-wait-grace-show: kit-fade-in 1ms var(--dur-wait-grace) both;
+  --animate-wait-grace-show: kit-fade-in 0s linear var(--dur-wait-grace) both;
   --animate-check-in: kit-fade-in var(--dur-toggle) var(--ease-out) both;
   --animate-check-draw: check-draw var(--dur-toggle) var(--ease-out) both;
   --animate-rail-label-in: rail-label-in var(--dur-exit) var(--ease-out) both;
@@ -702,7 +692,7 @@
   --animate-mark-in: mark-in var(--dur-pop) var(--ease-out) both;
   --animate-sheet-in: sheet-in var(--dur-panel) var(--ease-drawer);
   --animate-sheet-out: sheet-out var(--dur-exit) var(--ease-drawer) forwards;
-  --animate-ns-sec: ns-in var(--dur-pop) var(--ease-out) var(--delay, 0ms)
+  --animate-ns-sec: ns-in var(--dur-pop) var(--ease-out) var(--delay, 0s)
     backwards;
   --animate-ns-in: ns-in var(--ns-row-ms) var(--ease-out) backwards;
   --animate-ns-check: ns-check var(--ns-check-ms) var(--ease-out) both;
@@ -1018,7 +1008,6 @@
   --leading-kpi: var(--leading-kpi);
   --leading-root: var(--leading-root);
   --leading-prose-sm: var(--leading-prose-sm);
-  --leading-relaxed: var(--leading-relaxed);
 
   --radius-hair: var(--radius-hair);
   --radius-xs: var(--radius-xs);

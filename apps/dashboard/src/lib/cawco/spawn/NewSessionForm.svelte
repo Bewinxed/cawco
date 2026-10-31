@@ -28,6 +28,7 @@
   import { tick, untrack } from "svelte";
   import { z } from "zod";
   import { awayOf, failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
+  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { SessionDraftSchema } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
   import {
@@ -2227,7 +2228,6 @@
     <section
       data-slot="prompt-sec"
       class="relative z-1 grid grid-cols-1 gap-space-2 motion-safe:animate-ns-sec"
-      style="--delay:0ms"
     >
       <div class="group-data-stepped:hidden">
         <SectionHeader
@@ -2417,7 +2417,7 @@
         {#if continueFrom && carry === "summary"}
           <div
             class="grid gap-space-2 motion-safe:animate-ns-sec"
-            style="--delay:60ms"
+            style:--delay={staggered(1)}
           >
             <ModelSection
               harness={summarizerHarness}
@@ -2439,7 +2439,7 @@
         {/if}
         <div
           class="grid gap-space-2 motion-safe:animate-ns-sec"
-          style="--delay:80ms"
+          style:--delay={staggered(continueFrom && carry === "summary" ? 2 : 1)}
         >
           <ModelSection
             account={accountTool}

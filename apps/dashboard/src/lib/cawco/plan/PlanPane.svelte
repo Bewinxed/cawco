@@ -65,6 +65,7 @@
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
+  import { scrollMotion } from "../motion/keyed.svelte";
   import { popOut } from "../motion/pop.svelte";
   import { send } from "../project-tasks";
   import { planAsked, takePlan } from "../reference-things.svelte";
@@ -174,7 +175,7 @@
     }
     takePlan(instanceId);
     bringIntoView(row, {
-      behavior: motionOk.current ? "smooth" : "auto",
+      behavior: scrollMotion(motionOk.current),
     });
     row.setAttribute("data-linked", "");
     setTimeout(() => row.removeAttribute("data-linked"), dur("--dur-fade") * 4);

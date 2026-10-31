@@ -73,6 +73,7 @@
  */
 import { CURVE, dur, ease, motionOk } from "./curves.svelte";
 import { folding, foldStarts, leaving, unfolding } from "./fold.svelte";
+import { keyed } from "./keyed.svelte";
 import { heldToTravel } from "./rows.svelte";
 import { sizingChanges } from "./sizing";
 
@@ -190,7 +191,8 @@ export interface Morph {
   rows?: boolean;
   /**
    * Read as a tween would start: true while the change should land at once
-   * (a keyboard-initiated swap, a card shut out of sight), with no tween.
+   * (a card shut out of sight), with no tween. A key's change lands at once
+   * without it (motion/keyed).
    */
   still?: () => boolean;
   width?: boolean;
@@ -325,6 +327,7 @@ export function morph({
           (width && Math.abs(to.w - from.w) > 0.5);
         if (
           !(moved && motionOk.current) ||
+          keyed.current ||
           still?.() ||
           from.h === 0 ||
           to.h === 0 ||

@@ -155,6 +155,14 @@ const rootToken = (name: string): string => {
 };
 /** A `--dur-*` token on the root, in ms. */
 export const dur = (name: `--dur-${string}`): number => msOf(rootToken(name));
+
+/**
+ * The delay of the `n`th of a run of things arriving in turn, as CSS for a
+ * `--delay`: --dur-stagger apart, never later than --dur-cascade however
+ * many there are (a tree's rows are paced the same way, `glideSpeed`).
+ */
+export const staggered = (n: number): string =>
+  `min(calc(var(--dur-stagger) * ${n}), var(--dur-cascade))`;
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));

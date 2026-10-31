@@ -9,6 +9,7 @@ import type { RuleRow } from "@cawco/core/rules";
 import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { getContext, setContext } from "svelte";
 import { failureWords } from "#lib/cawco/hub-read.js";
+import { dur } from "#lib/cawco/motion/curves.svelte.js";
 import type { ProjectRow } from "../client.svelte";
 import type {
   DelegateTypesPayload,
@@ -83,8 +84,8 @@ async function read<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** How long a saved row stays marked after the list comes back. */
-const FLASH_MS = 700;
+/** How long a saved row stays marked after the list comes back: its flash (`animate-row-flash`). */
+const flashMs = () => dur("--dur-fade") * 3;
 
 export class ConfigStore {
   readonly rules = new Slot("the rules", async () => {
@@ -235,7 +236,7 @@ export class ConfigStore {
     this.flash = key;
     this.#flashTimer = setTimeout(() => {
       this.flash = null;
-    }, FLASH_MS);
+    }, flashMs());
   }
 }
 

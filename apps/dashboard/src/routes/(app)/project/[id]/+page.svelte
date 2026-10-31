@@ -2307,7 +2307,7 @@
             {#key shown}
               <div
                 class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-page:flex-auto"
-                style:animation={swap.rowAnim(0, ListSwap.leaveEnd(0))}
+                style:animation={swap.rowAnim(0, ListSwap.leaveEnd())}
                 out:leave
               >
                 {@render pane(shown)}

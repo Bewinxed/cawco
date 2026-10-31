@@ -209,14 +209,13 @@
      the strip, a key, a jump — lands the way a swipe does: the panes slide
      by their distance on the swipe's own spring (gesture.svelte.ts,
      `prepare` and `arrive`). Elsewhere the arriving transcript glides in
-     from the side of the tab it came from and fades up, over 260ms on
+     from the side of the tab it came from and fades up, over --dur-pop on
      --ease-drawer (the app's own curve), so the eye reads which
      way it went. The side is read off the strip as it was before the
      switch, so a tab that closed still says where it stood. Only the
      showing transcript is painted there, so it alone moves. */
   /** How far the arriving transcript travels: a cue, not a page turn. */
   const NUDGE_PX = 40;
-  const SWITCH_MS = 260;
   let stack = $state<HTMLElement>();
   /** What the group last showed, and its strip then. Not reactive: only the effects below read them. */
   let shownId = untrack(() => viewId);
@@ -271,7 +270,7 @@
         done: new Promise((resolve) => {
           landed = resolve;
         }),
-        ms: () => (settle ? swipe.settleMs : SWITCH_MS),
+        ms: () => (settle ? swipe.settleMs : dur("--dur-pop")),
       };
       if (settle) {
         swipe.prepare(from, id);
@@ -330,7 +329,7 @@
               { transform: `translateX(${dir * NUDGE_PX}px)`, opacity: 0.4 },
               { transform: "none", opacity: 1 },
             ],
-            { duration: SWITCH_MS, easing: ease("--ease-drawer") }
+            { duration: dur("--dur-pop"), easing: ease("--ease-drawer") }
           );
         if (glide) {
           glide.finished.then(done, done);

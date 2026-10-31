@@ -1,5 +1,6 @@
 <script lang="ts">
   import { spawnWords } from "@cawco/core/words/spawn";
+  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
@@ -79,7 +80,7 @@
         onlifetime(option.ephemeral);
         onchange(false);
       }}
-      style={`--delay:${index * 35}ms`}
+      style:--delay={staggered(index)}
       type="button"
     >
       <span data-slot="tile" class={iconTileVariants()} style:color={option.hue}

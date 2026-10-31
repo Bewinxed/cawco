@@ -62,7 +62,7 @@
     IconShield,
     IconTuning as Tuning,
   } from "#lib/icons.js";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
+  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
   import EffortPips from "./EffortPips.svelte";
   import NsPopover from "./NsPopover.svelte";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
@@ -116,15 +116,14 @@
       tone: fullSend ? "grant" : undefined,
     })
   );
-  /** Apply the level now, but keep the picker open while the chip settles on it. */
-  const SETTLE_MS = 260;
+  /** Apply the level now, but keep the picker open while the chip settles on it (--dur-pop). */
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   function commitEffort(level: EffortLevel) {
     tools.oneffort(level);
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => {
       pop = null;
-    }, SETTLE_MS);
+    }, dur("--dur-pop"));
   }
   $effect(() => () => clearTimeout(closeTimer));
 </script>

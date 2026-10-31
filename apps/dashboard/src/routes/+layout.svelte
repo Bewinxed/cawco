@@ -13,6 +13,7 @@
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { trackDevicePixel } from "#lib/cawco/device-pixel.js";
+  import { trackKeyed } from "#lib/cawco/motion/keyed.svelte.js";
   import ScreenEdges from "#lib/cawco/ScreenEdges.svelte";
   import { trackVisibleViewport } from "#lib/cawco/visible-viewport.svelte.js";
 
@@ -28,6 +29,8 @@
   // Bottom sheets rest on the keyboard, and a focused field stays in view: a
   // pin's reply and a page's place picker are fields on a phone too.
   onMount(trackVisibleViewport);
+  // What a key starts lands at once (DESIGN.md, The Frequency Rule).
+  onMount(trackKeyed);
 </script>
 
 <!-- The screen's edges, in the page's own top and bottom colours, before

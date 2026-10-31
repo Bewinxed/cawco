@@ -145,7 +145,7 @@ const ANIMATIONS: Record<string, string> = {
   // flashes it: fading in, or (with reduced motion) at once.
   "animate-wait-grace-in":
     "kit-fade-in var(--dur-fade) var(--ease-out) var(--dur-wait-grace) both",
-  "animate-wait-grace-show": "kit-fade-in 1ms var(--dur-wait-grace) both",
+  "animate-wait-grace-show": "kit-fade-in 0s linear var(--dur-wait-grace) both",
   // A tick draws itself along its stroke over --dur-toggle (DESIGN.md Ticks
   // and dots), on a path of pathLength="1" with `dash-unit`; with reduced
   // motion it only fades in.
@@ -183,7 +183,7 @@ const ANIMATIONS: Record<string, string> = {
   // The new-session form (DESIGN.md New-session popover): its sections fade
   // up in turn (`--delay`).
   "animate-ns-sec":
-    "ns-in var(--dur-pop) var(--ease-out) var(--delay, 0ms) backwards",
+    "ns-in var(--dur-pop) var(--ease-out) var(--delay, 0s) backwards",
   // The dialog's one-shot entrances, each on a duration the dialog sets on
   // `.ns-theme` (read with `--theme(… inline)`): a row fading up, a check
   // landing, the panel rising; its popover opening and closing.
@@ -450,6 +450,30 @@ const night = darkContext ? selection?.variants[darkContext] : undefined;
 if (!(selection && night) || `${selection.css}${night}`.includes("{")) {
   throw new Error(
     "color.selection: ::selection is written from its light and dark values, and they reference no other token"
+  );
+}
+/**
+ * Every item of a built `--transition-*` or `--animate-*` names its curve:
+ * one left out is CSS's `ease`, which the house never runs (DESIGN.md,
+ * Motion grammar: "The house does not use CSS `ease`"). A discrete property
+ * (`visibility`) names `linear`.
+ */
+const CURVED = /var\(--ease-[\w-]+\)|\blinear\b|\bstep-(?:start|end)\b/u;
+const MOTION_DECLARATION = /(--(?:transition|animate)-[\w-]+):\s*([^;]+);/gu;
+/** A comma between a list's items, not one inside a function's parentheses. */
+const ITEM_COMMA = /,(?![^(]*\))/u;
+const SPACES = /\s+/gu;
+const uncurved = [built.css, theme.css].flatMap((css) =>
+  [...css.matchAll(MOTION_DECLARATION)].flatMap(([, name, value]) =>
+    value
+      .split(ITEM_COMMA)
+      .filter((item) => !CURVED.test(item))
+      .map((item) => `${name}: ${item.trim().replace(SPACES, " ")}`)
+  )
+);
+if (uncurved.length > 0) {
+  throw new Error(
+    `motion with no curve, so CSS ease (name its --ease-* token, or linear for a discrete property):\n  ${uncurved.join("\n  ")}`
   );
 }
 const selectionCss = [

@@ -56,7 +56,7 @@ function departures<T extends { id: string }>(
   for (const group of old) {
     const id = group.machineId;
     const out = (key: string, row?: T): number => {
-      const end = ListSwap.leaveEnd(lines.length);
+      const end = ListSwap.leaveEnd();
       leave.set(key, lines.length);
       lines.push({ key, machineId: id, row });
       lastOut.set(id, end);
@@ -134,7 +134,7 @@ export function planRelay<T extends { id: string }>(
       leave.set(line.key, leaving);
       lastOut.set(
         line.box,
-        Math.max(lastOut.get(line.box) ?? 0, ListSwap.leaveEnd(leaving))
+        Math.max(lastOut.get(line.box) ?? 0, ListSwap.leaveEnd())
       );
       leaving += 1;
     } else if (line.after && !line.before) {

@@ -110,13 +110,15 @@
   >
     <!-- Every beat here is the breath (--breath): each word stands for two
          of them in an eight-breath cycle, rising in and out, and the light
-         crosses a word once a breath. -->
+         crosses a word once a breath. Each word starts its rise a rise
+         early (1.5% of its eight breaths, the keyframes'), so it stands
+         full on its own beat. -->
     {#each words as word, index}
       <span
         class="loops col-start-1 row-start-1 whitespace-nowrap opacity-0 data-first:opacity-100 motion-safe:animate-thinking-word"
         data-first={index === 0 || undefined}
         data-slot="word"
-        style:--word-delay={`calc(var(--breath) * ${index * 2} - 0.24s)`}
+        style:--word-delay={`calc(var(--breath) * ${index * 2 - 0.12})`}
       >
         <!-- The light passing over the word: the word again in the strong
              ink, masked to a band three words wide (the band enters from the

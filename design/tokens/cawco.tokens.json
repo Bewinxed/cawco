@@ -1,259 +1,4 @@
 {
-  "marketing": {
-    "site-heading-ink": {
-      "$type": "color",
-      "$value": "{color.crow-ink}"
-    },
-    "site-caw-scale": {
-      "$type": "number",
-      "$value": 1.5
-    },
-    "site-canvas": {
-      "$type": "color",
-      "$value": "{color.spark}"
-    },
-    "site-ink": {
-      "$type": "color",
-      "$value": "{color.crow-ink}"
-    },
-    "site-secondary": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklab",
-        "components": [0.337569, -0.002237, 0.028588]
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklab, {color.crow-ink} 80%, {color.spark})"
-        }
-      }
-    },
-    "site-line": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklab",
-        "components": [0.203828, -0.00112, 0.003725],
-        "alpha": 0.22
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklab, {color.crow-ink} 22%, transparent)"
-        }
-      }
-    },
-    "site-panel": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklab",
-        "components": [0.885806, -0.005582, 0.109787]
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklab, {color.spark} 84%, {color.paper})"
-        }
-      }
-    },
-    "site-display": {
-      "$type": "dimension",
-      "$value": {
-        "value": 3,
-        "unit": "rem"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(3rem, 6.8vw, 6rem)"
-        }
-      }
-    },
-    "site-display-phone": {
-      "$type": "dimension",
-      "$value": {
-        "value": 2.25,
-        "unit": "rem"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(2.25rem, 10vw, 3rem)"
-        }
-      }
-    },
-    "site-price-display": {
-      "$type": "dimension",
-      "$value": {
-        "value": 2.5,
-        "unit": "rem"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(2.5rem, 4.5vw, 4rem)"
-        }
-      }
-    },
-    "site-plan-display": {
-      "$type": "dimension",
-      "$value": {
-        "value": 1.5,
-        "unit": "rem"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(1.5rem, 2.5vw, 2rem)"
-        }
-      }
-    },
-    "site-body": {
-      "$type": "dimension",
-      "$value": {
-        "value": 1,
-        "unit": "rem"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(1rem, 1.4vw, 1.25rem)"
-        }
-      }
-    },
-    "site-heading-leading": {
-      "$type": "number",
-      "$value": 1.02
-    },
-    "site-display-weight": {
-      "$type": "fontWeight",
-      "$value": 600
-    },
-    "site-gutter": {
-      "$type": "dimension",
-      "$value": {
-        "value": 18,
-        "unit": "px"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(18px, 4vw, 64px)"
-        }
-      }
-    },
-    "site-max-width": {
-      "$type": "dimension",
-      "$value": {
-        "value": 1440,
-        "unit": "px"
-      }
-    },
-    "site-copy-width": {
-      "$type": "dimension",
-      "$value": {
-        "value": 640,
-        "unit": "px"
-      }
-    },
-    "site-stage-width": {
-      "$type": "dimension",
-      "$value": {
-        "value": 900,
-        "unit": "px"
-      }
-    },
-    "site-stage-min": {
-      "$type": "dimension",
-      "$value": {
-        "value": 130,
-        "unit": "px"
-      }
-    },
-    "site-stage-max": {
-      "$type": "dimension",
-      "$value": {
-        "value": 340,
-        "unit": "px"
-      }
-    },
-    "site-mascot-size": {
-      "$type": "dimension",
-      "$value": {
-        "value": 140,
-        "unit": "px"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(140px, 31svh, 330px)"
-        }
-      }
-    },
-    "site-mascot-phone": {
-      "$type": "dimension",
-      "$value": {
-        "value": 120,
-        "unit": "px"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(120px, 24svh, 190px)"
-        }
-      }
-    },
-    "site-pricing-mascot": {
-      "$type": "dimension",
-      "$value": {
-        "value": 140,
-        "unit": "px"
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "clamp(140px, 24svh, 230px)"
-        }
-      }
-    },
-    "site-pricing-mascot-phone": {
-      "$type": "dimension",
-      "$value": {
-        "value": 100,
-        "unit": "px"
-      }
-    },
-    "site-badge-height": {
-      "$type": "dimension",
-      "$value": {
-        "value": 40,
-        "unit": "px"
-      }
-    },
-    "site-badge-width": {
-      "$type": "dimension",
-      "$value": {
-        "value": 120,
-        "unit": "px"
-      }
-    },
-    "site-cta-height": {
-      "$type": "dimension",
-      "$value": {
-        "value": 48,
-        "unit": "px"
-      }
-    },
-    "site-brand-size": {
-      "$type": "dimension",
-      "$value": {
-        "value": 28,
-        "unit": "px"
-      }
-    },
-    "site-orbit-size": {
-      "$type": "dimension",
-      "$value": {
-        "value": 56,
-        "unit": "px"
-      }
-    },
-    "site-hairline": {
-      "$type": "dimension",
-      "$value": {
-        "value": 1,
-        "unit": "px"
-      }
-    }
-  },
   "color": {
     "neutral-1": {
       "$type": "color",
@@ -1079,11 +824,6 @@
       "$type": "color",
       "$value": "{color.neutral-3}"
     },
-    "surface-1": {
-      "$type": "color",
-      "$value": "{color.neutral-2}",
-      "$description": "One step off the page."
-    },
     "border": {
       "$type": "color",
       "$value": "{color.neutral-6}",
@@ -1673,20 +1413,6 @@
         "components": [0.55, 0.012, 265]
       },
       "$description": "The one neutral the usage breakdown and history bars draw in."
-    },
-    "meter-wash-near": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.35, 0.075, 88],
-        "alpha": 0.06
-      },
-      "$description": "A near or over row's only tint: a faint wash of its status ink (owner: \"the tints for yellow/red are too overwhelming\").",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-attn-ink} 6%, transparent)"
-        }
-      }
     },
     "meter-wash-over": {
       "$type": "color",
@@ -2919,38 +2645,6 @@
         "inset": true
       }
     },
-    "surface-shadow-1": {
-      "$type": "shadow",
-      "$value": {
-        "color": {
-          "colorSpace": "srgb",
-          "components": [0, 0, 0],
-          "alpha": 0
-        },
-        "offsetX": {
-          "value": 0,
-          "unit": "px"
-        },
-        "offsetY": {
-          "value": 0,
-          "unit": "px"
-        },
-        "blur": {
-          "value": 0,
-          "unit": "px"
-        },
-        "spread": {
-          "value": 0,
-          "unit": "px"
-        }
-      },
-      "$description": "The shadow paired with --surface-1.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "none"
-        }
-      }
-    },
     "action-ring": {
       "$type": "shadow",
       "$value": [
@@ -3345,11 +3039,6 @@
       "$type": "number",
       "$value": 1.7142857,
       "$description": "A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14."
-    },
-    "leading-relaxed": {
-      "$type": "number",
-      "$value": 1.625,
-      "$description": "The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed)."
     },
     "prose-sm-title-before": {
       "$type": "number",
@@ -3965,19 +3654,6 @@
       },
       "$description": "A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons."
     },
-    "c-sheet-inspector-max-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 506.4,
-        "unit": "px"
-      },
-      "$description": "An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: \"at most 60% of the well\").",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "60dvh"
-        }
-      }
-    },
     "c-sheet-inspector-head-h": {
       "$type": "dimension",
       "$value": {
@@ -4051,13 +3727,6 @@
         "unit": "px"
       }
     },
-    "c-mark-glyph": {
-      "$type": "dimension",
-      "$value": {
-        "value": 16,
-        "unit": "px"
-      }
-    },
     "c-row-mark": {
       "$type": "dimension",
       "$value": {
@@ -4078,10 +3747,6 @@
         "value": 6,
         "unit": "px"
       }
-    },
-    "c-pill-fs": {
-      "$type": "dimension",
-      "$value": "{type.text-label}"
     },
     "c-badge-h": {
       "$type": "dimension",
@@ -4105,14 +3770,6 @@
         "unit": "px"
       },
       "$description": "The padding of a stat tile's recessed well (DESIGN.md stat-well)."
-    },
-    "c-toolbar-zone": {
-      "$type": "dimension",
-      "$value": {
-        "value": 55,
-        "unit": "px"
-      },
-      "$description": "A ledger's toolbar zone, holding 32px controls 11px in."
     },
     "c-toolbar-ctl": {
       "$type": "dimension",
@@ -6524,14 +6181,6 @@
         }
       }
     },
-    "c-filed-task-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 14,
-        "unit": "rem"
-      },
-      "$description": "A filed task card's least track in a reply."
-    },
     "c-atts-max-h": {
       "$type": "dimension",
       "$value": {
@@ -6857,14 +6506,6 @@
       },
       "$description": "The tallest a tool call's document well grows in the transcript before it scrolls."
     },
-    "c-completer-max-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 240,
-        "unit": "px"
-      },
-      "$description": "The template-path completer's tallest list."
-    },
     "c-key-field-basis": {
       "$type": "dimension",
       "$value": {
@@ -7071,14 +6712,6 @@
         "unit": "px"
       },
       "$description": "Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card)."
-    },
-    "c-address-caw-title": {
-      "$type": "dimension",
-      "$value": {
-        "value": 40,
-        "unit": "px"
-      },
-      "$description": "Caw's still box in the address tray's title slot (stations)."
     },
     "c-address-qr": {
       "$type": "dimension",
@@ -7316,25 +6949,6 @@
     "material-saturate": {
       "$type": "number",
       "$value": 1.6
-    },
-    "surface-hover-mix": {
-      "$type": "number",
-      "$value": 0.06,
-      "$description": "Relative tints for rows inside any surface: hover +6%, selected +10% ink.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "6%"
-        }
-      }
-    },
-    "surface-selected-mix": {
-      "$type": "number",
-      "$value": 0.1,
-      "$extensions": {
-        "dev.cawco": {
-          "css": "10%"
-        }
-      }
     },
     "tab-rim-mix-chosen": {
       "$type": "number",
@@ -7852,7 +7466,7 @@
       "$description": "Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go).",
       "$extensions": {
         "dev.cawco": {
-          "css": "opacity {motion.dur-fade} {motion.ease-out}, visibility 0s"
+          "css": "opacity {motion.dur-fade} {motion.ease-out}, visibility 0s linear"
         }
       }
     },
@@ -7886,7 +7500,7 @@
       "$description": "The composer's tray coming back: the exit's beat, its visibility back at once.",
       "$extensions": {
         "dev.cawco": {
-          "css": "opacity {motion.dur-exit} {motion.ease-out}, visibility 0s"
+          "css": "opacity {motion.dur-exit} {motion.ease-out}, visibility 0s linear"
         }
       }
     },
@@ -7903,7 +7517,7 @@
       "$description": "The composer's tray leaving: the exit's beat, its visibility gone once the fade is done.",
       "$extensions": {
         "dev.cawco": {
-          "css": "opacity {motion.dur-exit} {motion.ease-out}, visibility 0s {motion.dur-exit}"
+          "css": "opacity {motion.dur-exit} {motion.ease-out}, visibility 0s linear {motion.dur-exit}"
         }
       }
     },
@@ -8243,7 +7857,7 @@
       "$description": "The connection band (HubBand) going, with less motion: its fade and its visibility on the exit's beat, its tint and ink on the control's.",
       "$extensions": {
         "dev.cawco": {
-          "css": "opacity {motion.dur-exit} {motion.ease-out}, visibility {motion.dur-exit}, background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+          "css": "opacity {motion.dur-exit} {motion.ease-out}, visibility {motion.dur-exit} linear, background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
         }
       }
     },
@@ -8260,7 +7874,7 @@
       "$description": "The connection band (HubBand) coming, with less motion: its fade and its visibility on the panel's beat and the drawer curve, its tint and ink on the control's.",
       "$extensions": {
         "dev.cawco": {
-          "css": "opacity {motion.dur-panel} {motion.ease-drawer}, visibility {motion.dur-panel}, background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+          "css": "opacity {motion.dur-panel} {motion.ease-drawer}, visibility {motion.dur-panel} linear, background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
         }
       }
     },
@@ -8277,7 +7891,7 @@
       "$description": "The connection band (HubBand) going back up under the bar: its travel, fade and visibility on the exit's beat, its tint and ink on the control's.",
       "$extensions": {
         "dev.cawco": {
-          "css": "translate {motion.dur-exit} {motion.ease-out}, opacity {motion.dur-exit} {motion.ease-out}, visibility {motion.dur-exit}, background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+          "css": "translate {motion.dur-exit} {motion.ease-out}, opacity {motion.dur-exit} {motion.ease-out}, visibility {motion.dur-exit} linear, background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
         }
       }
     },
@@ -8294,7 +7908,7 @@
       "$description": "The connection band (HubBand) sliding down from under the bar: its travel, fade and visibility on the panel's beat and the drawer curve, its tint and ink on the control's.",
       "$extensions": {
         "dev.cawco": {
-          "css": "translate {motion.dur-panel} {motion.ease-drawer}, opacity {motion.dur-panel} {motion.ease-drawer}, visibility {motion.dur-panel}, background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+          "css": "translate {motion.dur-panel} {motion.ease-drawer}, opacity {motion.dur-panel} {motion.ease-drawer}, visibility {motion.dur-panel} linear, background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
         }
       }
     },

@@ -312,7 +312,7 @@
         axis="y"
         class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-md border-e border-e-border-hairline bg-surface-recess p-space-2"
         itemClass="ns-in touch-hit press-tint grid size-c-btn-h place-items-center"
-        stagger={30}
+        stagger
         items={railItems}
         label={spawnWords.model.harness}
         onpick={(id: string) => onharness(id as HarnessKind)}
@@ -426,11 +426,11 @@
             data-leaving
             inert
           >
-            {#each swap.leaving as entry, i (entry.id)}
+            {#each swap.leaving as entry (entry.id)}
               <div
                 data-slot="row"
                 class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-xs px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed border border-transparent bg-transparent"
-                style:animation={swap.leaveAnim(i)}
+                style:animation={swap.leaveAnim()}
               >
                 {@render rowBody(entry)}
               </div>

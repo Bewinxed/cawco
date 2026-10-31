@@ -159,8 +159,6 @@ public enum Palette {
     /// Every divider: the transcript's user-message seam, section rules, the seams between machines and lists. The coral ramp at a subtle strength.
     public static let seam = Palette.named("seam")
     public static let codeBg = Palette.named("code-bg")
-    /// One step off the page.
-    public static let surface1 = Palette.named("surface-1")
     /// Borders: graded, never flattened to one value.
     public static let border = Palette.named("border")
     public static let borderHairline = Palette.named("border-hairline")
@@ -260,8 +258,6 @@ public enum Palette {
     public static let meterStaleTrack = Palette.named("meter-stale-track")
     /// The one neutral the usage breakdown and history bars draw in.
     public static let meterShare = Palette.named("meter-share")
-    /// A near or over row's only tint: a faint wash of its status ink (owner: "the tints for yellow/red are too overwhelming").
-    public static let meterWashNear = Palette.named("meter-wash-near")
     public static let meterWashOver = Palette.named("meter-wash-over")
     public static let presenceOnline = Palette.named("presence-online")
     public static let presenceAway = Palette.named("presence-away")
@@ -359,8 +355,6 @@ public enum Shadow {
     /// The chosen folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade).
     public static let shadowTabEndChosen: [ShadowLayer] = [ShadowLayer(x: 2, y: 0, blur: 5, spread: -1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2400), dark: P3(0.0000, 0.0000, 0.0000, 0.0000)), inset: false)]
     public static let shadowInsetSel: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: true)]
-    /// The shadow paired with --surface-1.
-    public static let surfaceShadow1: [ShadowLayer] = []
     /// The action's edge: a white top hairline and a coral-tinted drop.
     public static let actionRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 0, spread: 0, ink: Ink(light: P3(1.0000, 1.0000, 1.0000, 0.1800), dark: P3(1.0000, 1.0000, 1.0000, 0.1800)), inset: true), ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.5066, 0.2338, 0.1694, 0.2500), dark: P3(0.0000, 0.0000, 0.0000, 0.4000)), inset: false)]
     /// Inner vermillion ring and soft inner glow on code blocks.
@@ -415,8 +409,6 @@ public enum TypeScale {
     public static let leadingRoot: Double = 1.5
     /// A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14.
     public static let leadingProseSm: Double = 1.714286
-    /// The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed).
-    public static let leadingRelaxed: Double = 1.625
     /// prose-sm: above an h2, in the heading's own ems.
     public static let proseSmTitleBefore: Double = 1.6
     /// prose-sm: below an h1 or h2, in the heading's own ems.
@@ -551,8 +543,6 @@ public enum Size {
     public static let cTargetGap: Double = 2
     /// A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons.
     public static let cSheetInspectorW: Double = 296
-    /// An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: "at most 60% of the well").
-    public static let cSheetInspectorMaxH: Double = 506.4
     /// The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink).
     public static let cSheetInspectorHeadH: Double = 44
     /// A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (DESIGN.md Artifact panel, canvas and ink; Skeleton).
@@ -572,18 +562,14 @@ public enum Size {
     /// A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview).
     public static let cReviewWords: Double = 320
     public static let cMark: Double = 26
-    public static let cMarkGlyph: Double = 16
     public static let cRowMark: Double = 18
     public static let cPillH: Double = 24
     public static let cPillGap: Double = 6
-    public static let cPillFs: Double = 13
     public static let cBadgeH: Double = 20
     /// A stat tile's height.
     public static let cStatH: Double = 90
     /// The padding of a stat tile's recessed well (DESIGN.md stat-well).
     public static let cStatWellPad: Double = 10
-    /// A ledger's toolbar zone, holding 32px controls 11px in.
-    public static let cToolbarZone: Double = 55
     public static let cToolbarCtl: Double = 32
     /// Find, as the glass's card on a desk: wide enough that a row's meta line ("Needs you · cockpit · delegate of Orchestrate cockpit fleet · linux", 12px meta) stands on one line beside a 16px glyph, and narrow enough to leave the page live beside it at 1055px (docs/tom/find-and-mention-chosen.md).
     public static let cFindW: Double = 520
@@ -1128,8 +1114,6 @@ public enum Size {
     public static let cUsageStripHomeH: Double = 56
     /// The week share's column: as wide as "100%" in the figure face.
     public static let cUsagePctW: Double = 32
-    /// A filed task card's least track in a reply.
-    public static let cFiledTaskW: Double = 224
     /// The composer's attachments row before it scrolls.
     public static let cAttsMaxH: Double = 180
     /// How far the settle's text clip reaches past a word's box, so ascenders and descenders survive.
@@ -1202,8 +1186,6 @@ public enum Size {
     public static let cDialogDocumentW: Double = 370.5
     /// The tallest a tool call's document well grows in the transcript before it scrolls.
     public static let cToolWellMaxH: Double = 420
-    /// The template-path completer's tallest list.
-    public static let cCompleterMaxH: Double = 240
     /// The Set-key field's basis beside its buttons.
     public static let cKeyFieldBasis: Double = 224
     /// The Set-key field's widest.
@@ -1253,8 +1235,6 @@ public enum Size {
     public static let cAddressTrayW: Double = 384
     /// Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card).
     public static let cAddressCaw: Double = 64
-    /// Caw's still box in the address tray's title slot (stations).
-    public static let cAddressCawTitle: Double = 40
     /// The QR on the address tray's phone step: the address a phone opens once.
     public static let cAddressQr: Double = 112
     /// The tallest the address tray's Raw well stands before it scrolls.
@@ -1330,9 +1310,6 @@ public enum Effect {
     /// A message not yet said in the conversation (sending, queued).
     public static let ghostPresence: Double = 0.7
     public static let materialSaturate: Double = 1.6
-    /// Relative tints for rows inside any surface: hover +6%, selected +10% ink.
-    public static let surfaceHoverMix: Double = 0.06
-    public static let surfaceSelectedMix: Double = 0.1
     /// The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMixChosen = SchemeValue(light: 0.97, dark: 0.78)

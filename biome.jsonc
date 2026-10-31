@@ -20,6 +20,10 @@
     // A colour or a size in a stylesheet or a `<style>` is a token
     // (DESIGN.md); the markup half is Golar's (scripts/lint/design/raw-values.mjs).
     "./scripts/lint/no-raw-css-values.grit",
+    // A duration or a curve there is a motion token, and CSS's own `ease` is
+    // never one (DESIGN.md, Motion grammar); the markup and script half is
+    // Golar's (scripts/lint/design/raw-motion.mjs).
+    "./scripts/lint/no-raw-motion.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

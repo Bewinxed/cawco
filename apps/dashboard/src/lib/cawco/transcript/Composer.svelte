@@ -90,6 +90,7 @@
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { scrollMotion } from "#lib/cawco/motion/keyed.svelte.js";
   import { popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
@@ -2036,7 +2037,7 @@
         field.scrollTop = from;
         field.scrollTo({
           top: to,
-          behavior: motionOk.current ? "smooth" : "instant",
+          behavior: scrollMotion(motionOk.current),
         });
       }
     }

@@ -76,7 +76,7 @@
     }
     return {
       duration: dur("--dur-morph"),
-      delay: 60,
+      delay: dur("--dur-stagger"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };

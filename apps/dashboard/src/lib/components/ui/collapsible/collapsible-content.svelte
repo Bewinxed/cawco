@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Collapsible as CollapsiblePrimitive } from "bits-ui";
   import { untrack } from "svelte";
-  import { CURVE } from "#lib/cawco/motion/curves.svelte.js";
+  import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { fold } from "#lib/cawco/motion/fold.svelte.js";
   import { rootOpen } from "./opened";
 
@@ -31,10 +31,6 @@
     /** Fade the content in and out with the height. */
     fade?: boolean;
   } = $props();
-
-  /** Opening, and folding shut: an exit is quicker than an entrance. */
-  const OPEN_MS = 240;
-  const SHUT_MS = 160;
 
   /**
    * THE BODY IS BUILT THE FIRST TIME IT IS OPENED. bits-ui's Content renders
@@ -69,7 +65,11 @@
       const animation = fold(
         node,
         opening,
-        { ms: opening ? OPEN_MS : SHUT_MS, easing: CURVE.out, fade },
+        {
+          ms: dur(opening ? "--dur-pop" : "--dur-exit"),
+          easing: CURVE.out,
+          fade,
+        },
         from
       );
       if (!animation) {

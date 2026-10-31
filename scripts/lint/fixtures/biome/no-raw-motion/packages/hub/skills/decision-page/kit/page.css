@@ -1,0 +1,4 @@
+/* Planted: the kit's pages wear the same motion tokens. */
+.planted {
+  transition: transform 0.3s ease-out;
+}

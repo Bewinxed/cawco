@@ -25,3 +25,11 @@ no-raw-css-values/apps/dashboard/src/planted.css:9:17 no-raw-css-values
 no-raw-css-values/apps/dashboard/src/planted.css:11:13 no-raw-css-values
 no-raw-css-values/packages/hub/skills/decision-page/kit/page.css:3:11 no-raw-css-values
 kit-namespace-only/planted.ts:5:24 kit-namespace-only
+no-raw-motion/apps/dashboard/src/Planted.svelte:6:23 no-raw-motion
+no-raw-motion/apps/dashboard/src/planted.css:4:23 no-raw-motion
+no-raw-motion/apps/dashboard/src/planted.css:4:29 no-raw-motion
+no-raw-motion/apps/dashboard/src/planted.css:5:19 no-raw-motion
+no-raw-motion/apps/dashboard/src/planted.css:5:24 no-raw-motion
+no-raw-motion/apps/dashboard/src/planted.css:6:31 no-raw-motion
+no-raw-motion/packages/hub/skills/decision-page/kit/page.css:3:25 no-raw-motion
+no-raw-motion/packages/hub/skills/decision-page/kit/page.css:3:30 no-raw-motion

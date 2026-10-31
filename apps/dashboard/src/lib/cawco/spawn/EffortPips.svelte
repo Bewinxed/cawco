@@ -8,6 +8,7 @@
   import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
 
   let {
@@ -78,14 +79,13 @@
       }
     });
   });
-  /** Wait per bar, counted from the bar the move starts at; bars that do not change wait for nothing. */
-  const BAR_STEP_MS = 40;
-  const barDelay = (i: number) => {
+  /** A bar's place in the move, counted from the bar it starts at (each a --dur-stagger on); bars that do not change wait for nothing. */
+  const barStep = (i: number) => {
     if (effortIdx > cameFrom && i > cameFrom && i <= effortIdx) {
-      return (i - cameFrom - 1) * BAR_STEP_MS;
+      return i - cameFrom - 1;
     }
     if (effortIdx < cameFrom && i > effortIdx && i <= cameFrom) {
-      return (cameFrom - i) * BAR_STEP_MS;
+      return cameFrom - i;
     }
     return 0;
   };
@@ -252,7 +252,7 @@
                     class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:duration-(--dur-morph) motion-safe:ease-out group-not-data-ready:transition-none"
                     height="10"
                     rx="1"
-                    style={`--delay:${barDelay(i)}ms`}
+                    style:--delay={staggered(barStep(i))}
                     style:--t={i <= effortIdx ? "scaleY(1)" : "scaleY(0)"}
                     width="2"
                     x={i * 4}

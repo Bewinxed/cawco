@@ -10,6 +10,7 @@
 <script generics="Item extends RailItem" lang="ts">
   import type { Snippet } from "svelte";
   import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
+  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { cn } from "#lib/utils.js";
   /**
    * A designed radio group: a thumb that slides under the chosen item, and
@@ -46,8 +47,8 @@
     label: string;
     class?: string;
     itemClass?: string;
-    /** Each item's entrance delay is this many ms per place (`--delay`, read by `ns-in`). */
-    stagger?: number;
+    /** Each item comes in a place later than the one before (`--delay`, read by `ns-in`). */
+    stagger?: boolean;
     /** What an item draws: its mark, and whatever else it carries. */
     item: Snippet<[Item, number]>;
     /** Said after the name in the travelling label ("soon"). */
@@ -238,7 +239,7 @@
         }
       }}
       role="radio"
-      style:--delay={stagger === undefined ? undefined : `${i * stagger}ms`}
+      style:--delay={stagger ? staggered(i) : undefined}
       tabindex={entry.id === value ? 0 : -1}
       type="button"
     >

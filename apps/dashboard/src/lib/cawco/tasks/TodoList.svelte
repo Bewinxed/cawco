@@ -21,6 +21,7 @@
   import { IconPlus } from "#lib/icons.js";
   import { page } from "$app/state";
   import { dur, motionOk } from "../motion/curves.svelte";
+  import { scrollMotion } from "../motion/keyed.svelte";
 
   let {
     todos,
@@ -59,7 +60,7 @@
       if (row) {
         bringIntoView(row, {
           at: "third",
-          behavior: motionOk.current ? "smooth" : "auto",
+          behavior: scrollMotion(motionOk.current),
         });
       }
       marked = ref;
