@@ -16,7 +16,7 @@ Prefix every inner class with a two-letter prefix of the mockup's own (`ld-row`,
 
 CawCo's tokens only (`kit/tokens.css`, from DESIGN.md): `--surface-page`, `--surface-raised`, `--surface-recess`, `--border-hairline`, `--border-control`, `--ink-strong`, `--ink-muted`; coral for "you" and the thing you act on: `--brand-solid`, `--brand-ink`, `--brand-wash`, `--selected-bg`; status pairs that mean status only: `--status-done-bg/-ink`, `--status-attn-bg/-ink`, `--status-fail-bg/-ink`. Type `--font-sans`, `--font-mono` (ids, paths, times, numbers), sizes `--text-meta`, `--text-label`, `--text-body`; radii `--radius-sm`, `--radius-md`, `--radius-lg`; spacing `--space-1` … `--space-8`; motion `--dur-control`, `--ease-out`. A value the tokens lack is a token to add to `design/tokens/cawco.tokens.json` first.
 
-Content is real-looking: repo `github.com/you/site`, projects `site` and `launch-q4`, machines `obelisk` and `macbook`, task ids like `tsk-142`, times like `08:55`. Copy is calm, short and sentence case; buttons are verb + object.
+Content is the project's real records: its own repository, projects, machines and tasks by the names the hub gives them, with real times. Copy is calm, short and sentence case; buttons are verb + object.
 
 ## Layout
 

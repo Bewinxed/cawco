@@ -26,12 +26,12 @@ Add `data-cawco-multiple` to the `[data-cawco-choice]` element; each click toggl
 
 ## How it would look
 
-Put a figure between the why and the options; two side by side for "look" and "how it works", or `dp-show solo` for one:
+Put a figure between the why and the options; two side by side for "look" and "how it works", or `dp-show solo` for one. Each figure is a mockup, the flow drawn as one too:
 
 ```html
 <div class="dp-show">
   <figure class="dp-pane"><figcaption>How it would look</figcaption>{{MK:lead-look}}</figure>
-  <figure class="dp-pane"><figcaption>How it works</figcaption><pre>…</pre></figure>
+  <figure class="dp-pane"><figcaption>How it works</figcaption>{{MK:lead-flow}}</figure>
 </div>
 ```
 
