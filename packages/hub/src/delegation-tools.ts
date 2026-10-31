@@ -6,6 +6,7 @@ import {
   type Kind,
   kindsLine,
   LANDS_MODES,
+  NO_REPLY_TOOL,
   REFERENCE_GUIDANCE,
   SESSION_CHOSEN_MODES,
   SPAWNING_TOOLS,
@@ -822,6 +823,21 @@ export function handoffTools(deps: HandoffDeps) {
       }
     ),
     tool(
+      NO_REPLY_TOOL,
+      "End this turn with no reply to the person. Call it last, when the turn has nothing for them.",
+      {},
+      () => Promise.resolve("This turn ends here with no reply."),
+      sentence,
+      {
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      }
+    ),
+    tool(
       "show_image",
       "Show an image file to the user in this session's transcript, by path, without reading its pixels: whenever they should SEE a screenshot, render or diagram.",
       {
@@ -1109,8 +1125,9 @@ export function handoffTools(deps: HandoffDeps) {
  * every other one is deferred behind ToolSearch. These are the calls a
  * session makes every turn or must not miss: in one orchestrator, handoff
  * 69 calls, delegate 32, artifact_create 11 (2026-10-15); a leaf's
- * finish_item and every session's set_title are asked for by name. When
- * delegate sat deferred, one name among 133, sessions ran work inline 79
+ * finish_item and every session's set_title are asked for by name, and a
+ * silent turn ends on no_reply_needed, which a ToolSearch call in front of it
+ * would only delay. When delegate sat deferred, one name among 133, sessions ran work inline 79
  * times for each delegation. "Keep your 3–5 most frequently used tools
  * non-deferred so Claude can call them without searching first"
  * (platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool).
@@ -1120,6 +1137,7 @@ const ALWAYS_LOAD: ReadonlySet<string> = new Set([
   "handoff",
   "finish_item",
   "set_title",
+  NO_REPLY_TOOL,
   "artifact_create",
 ]);
 

@@ -1320,8 +1320,8 @@ export const sessionEnv = (
   // Said as root alone, whatever the agent's own env says ({@link
   // CLAUDE_ROOT_SANDBOX}).
   [CLAUDE_ROOT_SANDBOX]: root ? "1" : undefined,
-  // Last: the silent-turn reminder stays off whatever the spec or the
-  // person's env says.
+  // Last: the silent-turn reminder stays off, and a turn may end on
+  // no_reply_needed, whatever the spec or the person's env says.
   ...CLAUDE_QUIET_ENV,
 });
 

@@ -101,6 +101,7 @@ import {
   INPUTS_LIMIT_BYTES,
   isWorkspaceNeedsRefusal,
   machineCalled,
+  NO_REPLY_TOOL,
   OUTPUTS_DIR,
   sessionLink,
   sizeWords,
@@ -1484,10 +1485,12 @@ const WAIT_TOOLS: ReadonlySet<string> = new Set(["wait_item", "finish_item"]);
 
 /**
  * Whether a tool call leaves a declared wait on: a CawCo read, wait_item or
- * finish_item (each settles the wait itself), Claude's ToolSearch, which
- * only loads a deferred tool, or OpenCode's Code Mode program, whose own
- * calls are judged one by one as their frames come (server.ts). Any other
- * call is the session's own work.
+ * finish_item (each settles the wait itself), no_reply_needed, which only
+ * ends the turn (a delegate answering "still open" with it alone is a quiet
+ * turn, so the third fails its item), Claude's ToolSearch, which only loads a
+ * deferred tool, or OpenCode's Code Mode program, whose own calls are judged
+ * one by one as their frames come (server.ts). Any other call is the
+ * session's own work.
  */
 const restsInWait = (tool: string): boolean => {
   if (tool === "ToolSearch" || tool === CODE_MODE_TOOL) {
@@ -1497,7 +1500,9 @@ const restsInWait = (tool: string): boolean => {
     return false;
   }
   const name = tool.replace(CAWCO_TOOL, "");
-  return WAIT_TOOLS.has(name) || CAWCO_READ.test(name);
+  return (
+    WAIT_TOOLS.has(name) || name === NO_REPLY_TOOL || CAWCO_READ.test(name)
+  );
 };
 
 /** A harness gets one minute after its declared deadline to start a turn. */

@@ -59,6 +59,7 @@ import {
   type InstanceRow,
   isMachineSilence,
   type NeutralMessage,
+  NO_REPLY_TOOL,
   type PermissionMode,
   type SendPayload,
   type SpawnPayload,
@@ -132,9 +133,19 @@ const stable = (value: unknown): string => {
   return value === undefined ? "" : JSON.stringify(value);
 };
 
-/** Whether a call is one of CawCo's designed waits (core `FLEET_WATCH_WAITS`): made again, it is the wait going on. */
-const designedWait = (name: string): boolean =>
-  CAWCO_TOOL.test(name) && FLEET_WATCH_WAITS.has(name.replace(CAWCO_TOOL, ""));
+/**
+ * Whether a call never counts toward `repeat`: one of CawCo's designed waits
+ * (core `FLEET_WATCH_WAITS`), which made again is the wait going on, and
+ * no_reply_needed, which stands where a turn's closing words would and takes
+ * the same empty input at every silent turn's end.
+ */
+const neverRepeats = (name: string): boolean => {
+  if (!CAWCO_TOOL.test(name)) {
+    return false;
+  }
+  const own = name.replace(CAWCO_TOOL, "");
+  return FLEET_WATCH_WAITS.has(own) || own === NO_REPLY_TOOL;
+};
 
 /** A call's identity: its name and its input, the model's own `description` left out. */
 const callKey = (name: string, input: Record<string, unknown>): string => {
@@ -888,15 +899,14 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     }
   };
 
-  /** One call toward `repeat`: the same call again counts, a different one closes it, a designed wait is neither. */
+  /** One call toward `repeat`: the same call again counts, a different one closes it, one that {@link neverRepeats} is neither. */
   const countCall = (
     id: string,
     watch: Watch,
     name: string,
     input: Record<string, unknown>
   ): void => {
-    // A designed wait made again is the wait going on: never a repeat.
-    if (designedWait(name)) {
+    if (neverRepeats(name)) {
       return;
     }
     const key = callKey(name, input);

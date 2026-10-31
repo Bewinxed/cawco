@@ -19,6 +19,7 @@
  * migration over its stored sends (hub db/tag-markers.ts).
  */
 import type { ArtifactKind, CarryRestored } from "./index";
+import { NO_REPLY_TOOL } from "./no-reply";
 import { artifactLink, stepLink } from "./references";
 import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
@@ -519,10 +520,10 @@ export const presenceLine = (said: PresenceSaid): string => {
         ? `[CawCo presence] The person is back on this chat; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nIf their message asks something specific, answer it in full and point to "Since ${said.recap.section}" in your plan in one line. Otherwise open with a recap of those notes in one to three sentences, then answer. Then fold that section into the rest of your plan's spec with todo_write.`
         : "[CawCo presence] The person is on this chat now: talk to them normally.";
     case "elsewhere":
-      return "[CawCo presence] The person is at their desk but not on this chat. Work silent: keep your plan current with todo_write. Write to them when a turn has a question or a choice for them; every other turn ends silent, on its last tool call.";
+      return `[CawCo presence] The person is at their desk but not on this chat. Work silent: keep your plan current with todo_write. Write to them when a turn has a question or a choice for them; every other turn ends on ${NO_REPLY_TOOL}.`;
     case "away": {
       const heading = awayNotesHeading(said.since ?? "now");
-      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Work silent: each turn ends on its last tool call, and a question comes to this chat only when you are blocked. Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Something waiting on them is a step of your plan: name the step by its link as todo_write answers it, labelled by its words, never a copy of its state. Tick steps as they finish.`;
+      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Work silent: each turn ends on ${NO_REPLY_TOOL}, and a question comes to this chat only when you are blocked. Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Something waiting on them is a step of your plan: name the step by its link as todo_write answers it, labelled by its words, never a copy of its state. Tick steps as they finish.`;
     }
   }
 };

@@ -37,6 +37,10 @@
  * Every session that works (the worker, the delegate) searches what was
  * said and made with `find` (find-tool.ts), the dashboard's Find.
  *
+ * Every session, whatever its role, can end a turn with no reply
+ * (`no_reply_needed`, {@link listed}): the one way Claude Code takes a turn
+ * with no text, so a role without it writes a line it was told not to.
+ *
  * Memory (§5.4): the worker and the delegate write notes into their
  * project's inbox (`memory_note`); a worker in a project and the curator
  * call `memory_propose` (the session's commits, the curator's waits for
@@ -45,6 +49,7 @@
 import {
   type InstanceRow,
   type MemoryRole,
+  NO_REPLY_TOOL,
   type SessionRole,
   SPAWNING_TOOLS,
 } from "@cawco/core";
@@ -201,8 +206,12 @@ const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
 ]);
 
 /** Whether a session in `role` lists `name` by its role alone. */
-const listed = (role: SessionRole, name: string): boolean =>
-  role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
+const listed = (role: SessionRole, name: string): boolean => {
+  if (name === NO_REPLY_TOOL) {
+    return true;
+  }
+  return role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
+};
 
 /** Whether `role`'s toolset is a closed list, which a project's tools follow too. */
 const closed = (role: SessionRole): boolean => role !== "worker";

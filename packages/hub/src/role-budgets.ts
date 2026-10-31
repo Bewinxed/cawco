@@ -42,13 +42,15 @@ import type { Tasks } from "./tasks";
  * 2026-10-31: a canvas's elements say that text wraps at its width and a
  * childless frame takes what it covers, which agents had worked out by hand
  * (worker 27,968 measured).
+ * 2026-10-31: every role lists no_reply_needed, the one way Claude Code takes
+ * a turn with no text (worker 28,065, curator 1,292 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 28_000,
+  worker: 28_100,
   delegate: 10_224,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1200,
+  curator: 1300,
 };
 
 /**

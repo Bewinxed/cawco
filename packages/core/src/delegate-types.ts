@@ -13,6 +13,7 @@ import {
   type HarnessKind,
   harnessNamed,
 } from "./harness";
+import { NO_REPLY_TOOL } from "./no-reply";
 import { delegateTypesWords } from "./words/delegate-types";
 
 /** One named preset. `name` is the key a `delegate` call's `type` asks for. */
@@ -182,8 +183,8 @@ export const QUESTION_TOOL_DENIED: readonly string[] =
 
 /**
  * CawCo's own tools that only reach the person or only read, by their bare
- * names: allowed to every session in every mode, as Claude Code's own
- * question tool and its reads were. Each changes nothing a person would want
+ * names, and the one that ends a turn on nothing: allowed to every session
+ * in every mode, as Claude Code's own question tool and its reads were. Each changes nothing a person would want
  * to approve first, and a person's ask (`ask`, `browser_ask`,
  * `connect_ask`) is parked by the hub as the person's card whatever the mode,
  * so a harness's own approval in front of it only asked twice.
@@ -218,6 +219,9 @@ export const PERSON_AND_READ_TOOLS = [
   "comment_read",
   "design_map",
   "memory_read",
+  // Ends the turn. A prompt in front of it would ask the person about a turn
+  // that has nothing for them; refused, Claude Code's nudge comes back.
+  NO_REPLY_TOOL,
 ] as const;
 
 /**
