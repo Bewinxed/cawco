@@ -226,7 +226,8 @@
       } else {
         camera?.walkTo(box, phone ? Math.min(1, (width - 16) / box.w) : 1, {
           top: 0,
-          foot: FOOT,
+          // A phone's foot holds three rows of groups: the camera keeps the live card above them.
+          foot: phone ? 3 * FOOT : FOOT,
         });
       }
     });
@@ -239,7 +240,7 @@
     STATES.filter((one) => judge.seen.includes(one.story)).length
   );
   /** The live card's own height cap: the panel's room under the bar and over the walk head. */
-  const cap = $derived(Math.round(height * 0.62));
+  const cap = $derived(Math.round(height * (phone ? 0.42 : 0.62)));
 
   const keyed = (event: KeyboardEvent) => {
     if (
