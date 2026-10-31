@@ -92,22 +92,6 @@ export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 export const CANVAS_EMBED_FAILED = "cawco:embed-failed";
 
 /**
- * Any page framed by another (a decision page's Preview of a page, a dev
- * server's or a folder's preview): the message its overlay posts to the
- * page holding it, `{ type, least }`, the least font size its shown words
- * are set at in CSS px, told again when it changes. The Preview scales the
- * design down no further than stands those words at 10px.
- */
-export const EMBED_WORDS = "cawco:embed-words";
-
-/** Whether `value` is a least font size a page's overlay could tell ({@link EMBED_WORDS}): CSS px past 0, within reason. Ours: 200. */
-export const isEmbedWords = (value: unknown): value is number =>
-  typeof value === "number" &&
-  Number.isFinite(value) &&
-  value > 0 &&
-  value <= 200;
-
-/**
  * A canvas embed's module graph, before it fetches any of it: the message
  * it posts to the page holding it as its page is read, `{ type, urls }`,
  * each module's absolute address. It fetches nothing of it until the page
@@ -251,22 +235,25 @@ export type Scheme = "light" | "dark";
 export const FORMS = { phone: 390, tablet: 768, desk: 1280 } as const;
 export type FormName = keyof typeof FORMS;
 
-/** A phone's and a tablet's shape, upright: an iPhone's 390×844, an iPad's 768×1024. Ours. */
-const UPRIGHT = {
+/** A screen's height over its width: an upright iPhone's 390×844, an upright iPad's 768×1024, a desk window's 16:10. Ours. */
+const SCREEN_SHAPE = {
   phone: 844 / FORMS.phone,
   tablet: 1024 / FORMS.tablet,
+  desk: 10 / 16,
 } as const;
 
 /**
- * A whole screen's height at its layout `width`, px, where that width is a
- * device held upright: a phone's under {@link FORMS}' tablet, a tablet's under
- * its desk. Null from a desk's width up, where a screen stands on its side.
+ * A whole screen's height at its layout `width`, px: a phone's upright under
+ * {@link FORMS}' tablet, a tablet's upright under its desk, a desk window's
+ * from there up.
  */
-export const uprightHeight = (width: number): number | null => {
+export const screenHeight = (width: number): number => {
   if (width < FORMS.tablet) {
-    return Math.round(width * UPRIGHT.phone);
+    return Math.round(width * SCREEN_SHAPE.phone);
   }
-  return width < FORMS.desk ? Math.round(width * UPRIGHT.tablet) : null;
+  return Math.round(
+    width * (width < FORMS.desk ? SCREEN_SHAPE.tablet : SCREEN_SHAPE.desk)
+  );
 };
 
 /** A story's form: a preset's name and width, or a width of its own (`custom`). */

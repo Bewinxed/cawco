@@ -54,8 +54,6 @@ export type MediaArtifact = {
   name: string;
   /** A component canvas's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */
   shapes?: CanvasShapes;
-  /** A whole screen's least words, CSS px, as a Preview last heard its overlay tell them (core `EMBED_WORDS`): a Preview stands at the scale they allow from its first paint. */
-  words?: number;
 } | null;
 
 export const served = $state<{

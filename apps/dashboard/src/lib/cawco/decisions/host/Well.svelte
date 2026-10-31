@@ -3,9 +3,7 @@
   (Preview, Diagram, Image, Canvas, Dials): the content well inside a raised
   card (DESIGN.md, Surfaces: `surface-well` with `border-well`), the token
   radius `well`, 11px in. Its piece stands at its real size, 1 CSS px per
-  px, centred on both axes where it is narrower than the well; only a
-  Preview of a page-sized design wider than its well scales down to fit it
-  (`shown`, Preview.svelte), never under its words' 10px.
+  px, centred on both axes where it is narrower than the well.
   A piece that knows its own width (`picture`: a Preview's design, a
   canvas's drawing, a picture's or a diagram's own) has its well hug it: the
   piece and the well's insets, never wider than what holds it, so no empty
@@ -35,8 +33,6 @@
     picture,
     ratio,
     said = "",
-    shown,
-    stage = $bindable(),
   }: {
     action?: Snippet;
     caption?: string;
@@ -47,13 +43,12 @@
     picture?: number;
     /** Its picture's width over its height, once known: in a Row its well grows by it, so the Row's pictures stand at one height. */
     ratio?: number;
-    /** The width its piece stands at in the stage, px, where it is scaled to fit (a page-sized Preview); its `picture` where it is not. It scrolls sideways only where this is wider than the stage. */
-    shown?: number;
     /** A refusal of the action, in the hub's words. */
     said?: string;
-    /** The box the piece stands in. */
-    stage?: HTMLDivElement;
   } = $props();
+
+  /** The box the piece stands in. */
+  let stage = $state<HTMLDivElement>();
 
   /** The card's and the page's ear for this well's width (Decision, Decisions). */
   const tell = getContext<MediaWidths | undefined>(MEDIA_WIDTHS);
@@ -84,10 +79,9 @@
     sizes.observe(box);
     return () => sizes.disconnect();
   });
-  const wide = $derived.by(() => {
-    const width = shown ?? picture;
-    return width !== undefined && room > 0 && width > room + 0.5;
-  });
+  const wide = $derived(
+    picture !== undefined && room > 0 && picture > room + 0.5
+  );
 </script>
 
 <figure

@@ -1,34 +1,26 @@
 <!--
   Another artifact of the session's, live in a frame, at its real size: 1
-  CSS px per px. A page-sized design (a page, a dev server's or a folder's
-  preview, a sheet: a whole screen, the owner's "too narrow and small for
-  me to view how the graph/timeline looks") naming no width takes its
-  card's whole width (`fills`: its card's options stand one to a row), a
-  screen's 16:10 of it, and lays itself out to it; naming its own layout
-  width it stands at that width where its well holds it, else scaled down
-  to the well's width (`embed-scale`), never so far that its own least
-  words (as its overlay tells them, core `EMBED_WORDS`) stand under
-  `--c-media-words-floor`, past which it scrolls sideways at that scale.
-  Its words as the last Preview of it heard them, in any browser, are in
-  the page's media (hub `keepSaidWords`), so it stands at that scale from
-  its first paint; one no Preview has heard yet stands at the well's room.
-  Naming a phone's or a tablet's width it stands upright at that device's
-  whole shape (core `uprightHeight`), the media cap aside, and is never
-  scaled: wider than its well it scrolls sideways, as a story does.
+  CSS px per px, never scaled (the owner's rule for every preview). A
+  page-sized design (a page, a dev server's or a folder's preview, a sheet:
+  a whole screen, the owner's "too narrow and small for me to view how the
+  graph/timeline looks") naming no width takes its card's whole width
+  (`fills`: its card's options stand one to a row), a screen's 16:10 of it
+  under the media cap, and lays itself out to it. Naming its own layout
+  width it stands at that width and that screen's own height (core
+  `screenHeight`: upright under a desk's width, 16:10 from there up), the
+  media cap aside: wider than its well it scrolls sideways, as a story does.
   Open full size brings it to the front of the session's panel,
   as Canvas's Open to draw does. A page stands at its own address on this
-  page's origin (`/__cawco/page/<id>/`), as wide as its `width` says (the
-  well's width where it says none) and as tall as its content up to the
-  media cap; a taller one scrolls inside its frame, the house edge fade
-  over its head and foot while more is past them, so nothing is cut off
-  without a way to see it. A dev server's or a folder's preview or a sheet
-  stands on an origin of its own the hub opened for it (hub server.ts
-  `embedAt`), open in the panel or not, named
-  in the page's media, at the shape of a screen as wide as its `width`
-  says, loaded on its turn among the page's embeds and alone in it (one
-  dashboard's load at a time, the one in view first, embed-turns.ts), once
-  its card is close to the view (`DRAW_MARGIN`), and shown only once it
-  stands at its final scale: its words told where it is scaled. A
+  page's origin (`/__cawco/page/<id>/`); naming no width it is as tall as
+  its content up to the media cap. One taller than its frame scrolls inside
+  it, the house edge fade over its head and foot while more is past them,
+  so nothing is cut off without a way to see it. A dev server's or a
+  folder's preview or a sheet stands on an origin of its own the hub opened
+  for it (hub server.ts `embedAt`), open in the panel or not, named in the
+  page's media, loaded on its turn among the page's embeds and alone in it
+  (one dashboard's load at a time, the one in view first, embed-turns.ts),
+  once its card is close to the view (`DRAW_MARGIN`), and shown once its
+  frame has loaded. A
   component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
@@ -77,10 +69,9 @@
     CANVAS_EMBED_READY,
     CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
-    EMBED_WORDS,
     type EmbedShape,
+    screenHeight,
     storiesKey,
-    uprightHeight,
   } from "@cawco/core/stage";
   import { commonWords } from "@cawco/core/words/common";
   import { decisionsWords } from "@cawco/core/words/decisions";
@@ -173,71 +164,17 @@
    */
   const pageSized = $derived(!!held && held.kind !== "component");
   /**
-   * A page-sized design's height, px, where its own width is a phone's or a
-   * tablet's: that device's shape, upright (core `uprightHeight`), real px
-   * whatever the page's window, so a phone is judged at a phone's height;
-   * null where it names no width, or a desk's or wider, which stands at a
-   * screen's 16:10 under the media cap.
+   * A page-sized design's height, px, where it names its own width: that
+   * screen's own (core `screenHeight`), real px whatever the page's window,
+   * so a phone is judged at a phone's height and a desk at a desk's; null
+   * where it names none, which stands at a screen's 16:10 under the media cap.
    */
-  const upright = $derived(
-    pageSized && picture !== undefined ? uprightHeight(picture) : null
+  const screenTall = $derived(
+    pageSized && picture !== undefined ? screenHeight(picture) : null
   );
-  /** The well's stage: the room its piece has (Well.svelte). */
-  let stage = $state<HTMLDivElement>();
-  /** The stage's width, px, as layout has it. */
-  let room = $state(0);
-  /** The least a scaled design's words stand at, px: `--c-media-words-floor`. */
-  let wordsFloor = 0;
-  /** The least font size the design's shown words are set at, px, as its overlay tells it (core `EMBED_WORDS`); null until it has. */
-  let words = $state<number | null>(null);
-  /** Its least words as this Preview heard them, else as the page's media kept them from the last Preview of it, in any browser (hub `keepSaidWords`); null where neither knows. */
-  const least = $derived(words ?? held?.words ?? null);
-  $effect(() => {
-    const well = stage;
-    if (!well) {
-      return;
-    }
-    wordsFloor =
-      Number.parseFloat(
-        getComputedStyle(well).getPropertyValue("--c-media-words-floor")
-      ) || 0;
-    const read = () => {
-      room = Number.parseFloat(getComputedStyle(well).width) || 0;
-    };
-    read();
-    const sizes = frameObserver(read);
-    sizes.observe(well);
-    return () => sizes.disconnect();
-  });
-  /**
-   * A page-sized design's scale: 1 where its well holds its own layout
-   * width (`width`), else down to the well's room, never so far that its
-   * own least words (`least`) stand under `--c-media-words-floor`, past
-   * which it scrolls sideways in its well at that scale; a design whose
-   * words are already at the floor is never scaled. Where no Preview has
-   * heard its words yet it is drawn at the well's room, the floor unknown
-   * until it tells them. With no width of its own it takes the card's whole
-   * width and lays itself out to it, at 1. A phone or a tablet ({@link upright})
-   * stands at 1 always, scrolling sideways where its well is narrower.
-   */
-  const scale = $derived(
-    pageSized &&
-      upright === null &&
-      picture !== undefined &&
-      room > 0 &&
-      picture > room + 0.5
-      ? Math.min(
-          1,
-          Math.max(least === null ? 0 : wordsFloor / least, room / picture)
-        )
-      : 1
-  );
-  const scaled = $derived(scale < 1 && picture !== undefined);
-  /** The frame's own height on a scaled design: its box's height over its scale, so its first view fills the box. */
-  const scaledHeight = $derived(scaled ? `calc(100% / ${scale})` : undefined);
-  /** The frame's height unscaled: a phone's or a tablet's upright, or as tall as it says it is; none until then, its class's 16:10. */
+  /** The frame's height: its screen's own, or as tall as it says it is; none until then, its class's 16:10. */
   const framedHeight = $derived.by(() => {
-    const height = upright ?? tall;
+    const height = screenTall ?? tall;
     return height === null ? undefined : `${height}px`;
   });
   /** What a press on Open full size was refused, in the hub's words. */
@@ -286,30 +223,12 @@
     }).catch(() => undefined);
   };
 
-  /**
-   * The least words a whole screen told, beside the page's own address as a
-   * canvas's shape is (hub preview.ts `PAGE_SHAPE_PATH`), where the media
-   * kept others: the next Preview of it stands at the scale they allow from
-   * its first paint.
-   */
-  const tellWords = (heard: number) => {
-    if (held?.words === heard) {
-      return;
-    }
-    fetch("shape", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ artifact: id, words: heard }),
-    }).catch(() => undefined);
-  };
-
   /** A component canvas's own height and widest story, as it says them (agent canvas runtime `by=embed`): its frame is as tall and as wide. */
   $effect(() => {
     const heard = (event: MessageEvent) => {
       const said = event.data as {
         down?: unknown;
         height?: unknown;
-        least?: unknown;
         type?: unknown;
         urls?: unknown;
         why?: unknown;
@@ -321,16 +240,6 @@
       const why = failureIn(said);
       if (why !== null) {
         fail(why);
-        return;
-      }
-      // A page-sized design's least words: how far it may be scaled.
-      if (
-        said?.type === EMBED_WORDS &&
-        typeof said.least === "number" &&
-        said.least > 0
-      ) {
-        words = said.least;
-        tellWords(said.least);
         return;
       }
       // Its graph, told before it fetches any of it: it fetches on its turn.
@@ -420,22 +329,12 @@
   /** The frame stood unseen under its wait (its skeleton), so its showing is the skeleton's reveal. */
   let underWait = false;
   /**
-   * A scaled screen's words went untold for {@link DRAW_MS} after its frame
-   * loaded (a page with none, or none shown): it stands at the scale it
-   * knows.
+   * It stands at its own shape: a screen once its frame has loaded; a
+   * component canvas once it has said its height (every Preview of a canvas
+   * by that one rule, the first as the rest), never at a screen's 16:10
+   * while it hasn't. Until then its wait stands.
    */
-  let wordsUntold = $state(false);
-  /**
-   * It stands at its own shape: a screen once its frame has loaded and, where
-   * it is scaled, its words are told, so its first paint is at its final
-   * scale, never a frame at 1 scrolling sideways while its words are on their
-   * way; a component canvas once it has said its height (every Preview of a
-   * canvas by that one rule, the first as the rest), never at a screen's
-   * 16:10 while it hasn't. Until then its wait stands.
-   */
-  const shaped = $derived(
-    screen ? drawn && (!scaled || words !== null || wordsUntold) : tall !== null
-  );
+  const shaped = $derived(screen ? drawn : tall !== null);
   /** What its frame's shape is now, for a reader: a screen's 16:10, drawn at the height its canvas said, or waiting for that. */
   const shape = $derived.by(() => {
     if (!shaped) {
@@ -591,17 +490,6 @@
    * canvas, an import that never settles) is otherwise an empty box for good.
    */
   const DRAW_MS = 30_000;
-  $effect(() => {
-    track(attempt);
-    wordsUntold = false;
-    if (!(screen && drawn) || shaped) {
-      return;
-    }
-    const late = setTimeout(() => {
-      wordsUntold = true;
-    }, DRAW_MS);
-    return () => clearTimeout(late);
-  });
   // A whole screen's turn (embed-turns.ts, alone) ends once it stands at its shape.
   $effect(() => {
     if (screen && shaped) {
@@ -764,13 +652,13 @@
    * The box's least height where a fault stands in it: the picture's own as
    * its wait held it (its said height, else its stories' as the media knows
    * them, `--space-3` between), so the card keeps its place and shape when
-   * the picture fails, or a phone's or a tablet's upright height; null for a
-   * screen's 16:10, or a canvas never drawn anywhere, which hold the kit
+   * the picture fails, or a named width's screen height; null for a screen
+   * naming no width, or a canvas never drawn anywhere, which hold the kit
    * picture's.
    */
   const heldHeight = $derived.by(() => {
     if (screen) {
-      return upright === null ? null : `${upright}px`;
+      return screenTall === null ? null : `${screenTall}px`;
     }
     if (tall !== null) {
       return `${tall}px`;
@@ -786,8 +674,8 @@
 {#snippet screenWait()}
   <Skeleton
     class="w-full"
-    height={upright === null ? "picture" : undefined}
-    style={upright === null ? undefined : `block-size: ${upright}px`}
+    height={screenTall === null ? "picture" : undefined}
+    style={screenTall === null ? undefined : `block-size: ${screenTall}px`}
   />
 {/snippet}
 
@@ -803,70 +691,43 @@
 
 <Well
   action={pageSized ? full : undefined}
-  bind:stage
   caption={props.caption ? String(props.caption) : undefined}
   fills={pageSized && picture === undefined}
   {picture}
   said={refusal}
-  shown={scaled && picture !== undefined ? picture * scale : undefined}
 >
   {#if held?.kind === "page"}
-    <!-- A page taller than the media cap scrolls inside its frame, under the house edge fade (its 40px, `--c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its frame stands at its own width scaled down to the well's (`embed-scale`), never under its words' 10px. -->
-    <div
-      class={scaled
-        ? [
-            "relative flex-none overflow-clip rounded-xs max-h-c-media-max-h",
-            tall === null && "aspect-16/10",
-          ]
-        : "contents"}
-      data-scale={scaled ? scale : undefined}
-      data-slot="embed-scale"
-      style:block-size={scaled && tall !== null
-        ? `${tall * scale}px`
-        : undefined}
-      style:inline-size={scaled && picture !== undefined
-        ? `${picture * scale}px`
-        : undefined}
-    >
-      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load measures the page, so the frame is as tall as it. -->
-      <!-- biome-ignore lint/security/useIframeSandbox: a page CawCo serves itself under /__cawco, which needs scripts and its own origin to run, and with both a sandbox holds nothing back. -->
-      <iframe
-        bind:this={frame}
-        class={[
-          "block rounded-xs border-0 bg-surface-page not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
-          scaled
-            ? "absolute start-0 top-0 origin-top-left scale-(--frame-scale) rtl:origin-top-right"
-            : [
-                upright === null && "max-h-c-media-max-h",
-                picture === undefined ? "w-full" : "flex-none",
-                tall === null && upright === null && "aspect-16/10",
-              ],
-        ]}
-        data-cawco-artifact={id}
-        data-more-above={more.above || undefined}
-        data-more-below={more.below || undefined}
-        data-slot="embed"
-        data-words={words ?? undefined}
-        onload={sized}
-        src={`/__cawco/page/${id}/`}
-        style:--fade="var(--c-edge-fade-len)"
-        style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
-        style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
-        style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
-        style:--frame-scale={scaled ? String(scale) : undefined}
-        style:block-size={scaledHeight ?? framedHeight}
-        style:inline-size={picture === undefined ? undefined : `${picture}px`}
-        title={held.name}
-      ></iframe>
-    </div>
+    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. -->
+    <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load measures the page, so the frame is as tall as it. -->
+    <!-- biome-ignore lint/security/useIframeSandbox: a page CawCo serves itself under /__cawco, which needs scripts and its own origin to run, and with both a sandbox holds nothing back. -->
+    <iframe
+      bind:this={frame}
+      class={[
+        "block rounded-xs border-0 bg-surface-page not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
+        screenTall === null && "max-h-c-media-max-h",
+        picture === undefined ? "w-full" : "flex-none",
+        tall === null && screenTall === null && "aspect-16/10",
+      ]}
+      data-cawco-artifact={id}
+      data-more-above={more.above || undefined}
+      data-more-below={more.below || undefined}
+      data-slot="embed"
+      onload={sized}
+      src={`/__cawco/page/${id}/`}
+      style:--fade="var(--c-edge-fade-len)"
+      style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
+      style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+      style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+      style:block-size={framedHeight}
+      style:inline-size={picture === undefined ? undefined : `${picture}px`}
+      title={held.name}
+    ></iframe>
   {:else if held?.embed}
     <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at its picture's own shape as the page's media knows it (the kit's picture where none was ever drawn), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace Caw and the wait's line stand over the screen's place or the canvas's skeleton (The Real Wait Rule), until it stands at its shape; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div
       bind:this={box}
       class={["relative", picture === undefined ? "w-full" : "flex-none"]}
-      style:inline-size={picture === undefined
-        ? undefined
-        : `${picture * scale}px`}
+      style:inline-size={picture === undefined ? undefined : `${picture}px`}
     >
       {#if fault}
         <!-- In the picture's own place and shape (`heldHeight`, else the kit picture's 16:10), never a box that says nothing: what happened in one line, then Try again. -->
@@ -914,56 +775,39 @@
         </div>
       {:else}
         {#if ready}
-          <!-- A screen wider than its well: its frame at its own width and a screen's 16:10 of it, scaled down to the well's (`embed-scale`), never under its words' 10px. -->
-          <div
-            class={scaled
-              ? "relative aspect-16/10 max-h-c-media-max-h w-full overflow-clip rounded-xs"
-              : "contents"}
-            data-scale={scaled ? scale : undefined}
-            data-slot="embed-scale"
-          >
-            <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load says the frame is drawn, so the wait stands until then. -->
-            <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
-            <iframe
-              bind:this={frame}
-              class={[
-                "block rounded-xs border-0 bg-surface-page transition-opacity duration-(--dur-fade)",
-                scaled
-                  ? "absolute start-0 top-0 origin-top-left scale-(--frame-scale) rtl:origin-top-right"
-                  : [
-                      "w-full",
-                      tall === null &&
-                        upright === null &&
-                        (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),
-                    ],
-                !(drawn && shaped) && "opacity-0",
-              ]}
-              data-cawco-artifact={id}
-              data-drawn={drawn || undefined}
-              data-shape={shape}
-              data-slot="embed"
-              data-turn={turnState}
-              data-words={words ?? undefined}
-              onload={() => {
-                drawn = true;
-                // A page that told no graph by its load has none to fetch (a stage's error page): it holds no turn.
-                turn?.graph([]);
-              }}
-              src={ready}
-              style:--frame-scale={scaled ? String(scale) : undefined}
-              style:block-size={scaledHeight ?? framedHeight}
-              style:inline-size={scaled ? `${picture}px` : undefined}
-              title={held.name}
-              {@attach (node) => {
-                if (!drawn) {
-                  underWait = true;
-                } else if (underWait) {
-                  underWait = false;
-                  revealHere(node);
-                }
-              }}
-            ></iframe>
-          </div>
+          <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load says the frame is drawn, so the wait stands until then. -->
+          <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
+          <iframe
+            bind:this={frame}
+            class={[
+              "block w-full rounded-xs border-0 bg-surface-page transition-opacity duration-(--dur-fade)",
+              tall === null &&
+                screenTall === null &&
+                (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),
+              !(drawn && shaped) && "opacity-0",
+            ]}
+            data-cawco-artifact={id}
+            data-drawn={drawn || undefined}
+            data-shape={shape}
+            data-slot="embed"
+            data-turn={turnState}
+            onload={() => {
+              drawn = true;
+              // A page that told no graph by its load has none to fetch (a stage's error page): it holds no turn.
+              turn?.graph([]);
+            }}
+            src={ready}
+            style:block-size={framedHeight}
+            title={held.name}
+            {@attach (node) => {
+              if (!drawn) {
+                underWait = true;
+              } else if (underWait) {
+                underWait = false;
+                revealHere(node);
+              }
+            }}
+          ></iframe>
           {#if !(shaped || slow) && screen}
             <!-- Inside the grace, the screen's skeleton over the frame still loading; it goes in its reveal. -->
             <div class="absolute inset-0" out:reveal>
@@ -975,9 +819,11 @@
             <div
               class={[
                 "w-full",
-                upright === null && "aspect-16/10 max-h-c-media-max-h",
+                screenTall === null && "aspect-16/10 max-h-c-media-max-h",
               ]}
-              style:block-size={upright === null ? undefined : `${upright}px`}
+              style:block-size={screenTall === null
+                ? undefined
+                : `${screenTall}px`}
             ></div>
           {:else}
             {@render screenWait()}

@@ -137,7 +137,6 @@ import {
   type DesignMap,
   type DesignQuery,
   type EmbedShape,
-  isEmbedWords,
   type RenderReport,
   type ServeSpec,
   type SheetRead,
@@ -284,15 +283,12 @@ const unmerged = (error: unknown): ArtifactRefusal =>
  */
 /**
  * What a decision page's media says of an artifact it shows (its program's
- * Canvas and Preview pieces): its kind and name; a component canvas's shapes;
- * a whole screen's least words as a Preview last heard them (core
- * `EMBED_WORDS`).
+ * Canvas and Preview pieces): its kind and name; a component canvas's shapes.
  */
 export interface ServedMedia {
   kind: ArtifactKind;
   name: string;
   shapes?: CanvasShapes;
-  words?: number;
 }
 
 export interface ArtifactInput {
@@ -7079,14 +7075,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           media[shown] = null;
           continue;
         }
-        const words = docs.doc(shownRow.id).getMap("meta").get("saidWords");
         media[shown] = {
           kind: shownRow.kind,
           name: shownRow.name,
           ...(shownRow.kind === "component"
             ? { shapes: shapesOf(shownRow) }
             : {}),
-          ...(isEmbedWords(words) ? { words } : {}),
         };
       }
       return { hash: pageHash(program), media };
@@ -7116,27 +7110,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           .getMap("meta")
           .set("saidShapes", { ...had, [key]: { h: shape.h, w: shape.w } });
       });
-      return true;
-    },
-
-    /**
-     * The least font size a whole screen's words are set at (core
-     * `EMBED_WORDS`), as a decision page's Preview of it heard its overlay
-     * tell it, kept in its doc (`meta.saidWords`): the page's media carries
-     * it from then on, so the next Preview of it, in any browser, stands at
-     * the scale those words allow from its first paint. Changed only when it
-     * differs. False for a component canvas, which says its own shape.
-     */
-    keepSaidWords: (id: string, words: number): boolean => {
-      const row = db.get(id);
-      if (!row || row.kind === "component") {
-        return false;
-      }
-      if (docs.doc(id).getMap("meta").get("saidWords") !== words) {
-        docs.transact(id, "hub", (doc) => {
-          doc.getMap("meta").set("saidWords", words);
-        });
-      }
       return true;
     },
 

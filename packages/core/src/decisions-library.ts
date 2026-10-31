@@ -128,7 +128,7 @@ export const decisionLibrary = <C>(
   );
   const Preview = define(
     "Preview",
-    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's or a folder's preview, or a sheet. A component canvas shows the component alone: the stories `stories` names, in that order (every story, in its file's order, when it names none), each at its own size from its start, never scaled: one wider than the room it has scrolls sideways in its well, and a card's options stand side by side only where every one fits at its width, else one under another at the card's full width. A page, a preview or a sheet is a whole screen: with no `width` it takes the card's full width at a screen's 16:10 and lays itself out to it, its card's options one under another; with a desk's `width` (1280 or more) it stands at that width where the card holds it, else scaled down to fit, never so far that its own smallest words stand under 10px (past that it scrolls sideways); with a phone's or a tablet's `width` (under 768, under 1280) it stands upright at that device's whole shape, 390×844 and 768×1024 in proportion to its width, never scaled: one wider than the room it has scrolls sideways in its well, and options stand side by side as stories do; a page taller than its frame scrolls inside it; Open full size brings it to the front of your panel.",
+    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's or a folder's preview, or a sheet. A component canvas shows the component alone: the stories `stories` names, in that order (every story, in its file's order, when it names none), each at its own size from its start, never scaled: one wider than the room it has scrolls sideways in its well, and a card's options stand side by side only where every one fits at its width, else one under another at the card's full width. A page, a preview or a sheet is a whole screen: with no `width` it takes the card's full width at a screen's 16:10 and lays itself out to it, its card's options one under another; with a `width` it stands at that width and that screen's own height, never scaled: a phone's or a tablet's (under 768, under 1280) upright at that device's whole shape, 390×844 and 768×1024 in proportion to its width, a desk's (1280 or more) at 16:10; one wider than the room it has scrolls sideways in its well, and options stand side by side as stories do; a page taller than its frame scrolls inside it; Open full size brings it to the front of your panel.",
     z.object({
       artifact: z.string().describe("Its id."),
       caption,
@@ -142,7 +142,7 @@ export const decisionLibrary = <C>(
         .number()
         .optional()
         .describe(
-          "The design's own width in px, like 640: a page's or a preview's, or the widest of a component canvas's stories' own widths (its `parameters.viewport`). Its frame stands at it, 1:1, and the page widens to it where the window holds it; a page or a preview wider than its card scales down to fit."
+          "The design's own width in px, like 640: a page's or a preview's, or the widest of a component canvas's stories' own widths (its `parameters.viewport`). Its frame stands at it, 1:1, and the page widens to it where the window holds it; wider than its card it scrolls sideways in its well, never scaled."
         ),
     })
   );

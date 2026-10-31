@@ -6149,20 +6149,12 @@
         "value": 675.2,
         "unit": "px"
       },
-      "$description": "The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor).",
+      "$description": "The tallest a decision card's media well draws its piece: a canvas, a frame naming no width and a diagram each fit to it (a diagram never under its words' 10px floor).",
       "$extensions": {
         "dev.cawco": {
           "css": "80vb"
         }
       }
-    },
-    "c-media-words-floor": {
-      "$type": "dimension",
-      "$value": {
-        "value": 10,
-        "unit": "px"
-      },
-      "$description": "The least a scaled design's words stand at: a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) wider than its card scales down no further than stands the least words the design itself sets (its overlay tells them) at this size. Past it the design scrolls sideways in its well at that scale."
     },
     "c-artifact-card-min": {
       "$type": "dimension",

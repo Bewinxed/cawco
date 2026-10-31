@@ -33,7 +33,6 @@ import type {
   PageAnchor,
   PinnedElement,
 } from "@cawco/core/comments";
-import { EMBED_WORDS } from "@cawco/core/stage";
 import {
   contentBox,
   type FrameElement,
@@ -307,88 +306,6 @@ export function answerEmbedder(deps: EmbeddedDeps): void {
     });
   }
   window.parent.postMessage({ type: EMBEDDED }, "*");
-  tellWords(deps.own);
-}
-
-/** The most text nodes read for the least words: a page past them is read at its first. Our call. */
-const WORDS_READ_MOST = 4000;
-
-/** The least font size, CSS px, any shown word of this page is set at (the overlay's own left out); null with none shown. */
-function leastWords(own: (node: Node) => boolean): number | null {
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  let least = Number.POSITIVE_INFINITY;
-  let read = 0;
-  for (
-    let node = walker.nextNode();
-    node && read < WORDS_READ_MOST;
-    node = walker.nextNode()
-  ) {
-    const holder = node.parentElement;
-    if (!(holder && node.textContent?.trim()) || own(node)) {
-      continue;
-    }
-    read += 1;
-    if (holder.checkVisibility?.({ visibilityProperty: true }) === false) {
-      continue;
-    }
-    const size = Number.parseFloat(getComputedStyle(holder).fontSize);
-    if (size > 0 && size < least) {
-      least = size;
-    }
-  }
-  return Number.isFinite(least) ? least : null;
-}
-
-/** How long the page stands still (its content, its size, its faces) before its words are read again. Our call: past one mount's burst of changes, short of a wait. */
-const WORDS_QUIET_MS = 200;
-
-/**
- * Tells the page holding this one the least font size its shown words are
- * set at (core `EMBED_WORDS`), to any parent: a number, and nothing else.
- * Said once the page has loaded, and again whenever its content, its
- * layout's size or its faces changed and stood still {@link WORDS_QUIET_MS}.
- * An app whose root keeps the window's size (a dashboard) shows no words at
- * its load and mounts them later, so its size alone never told them; and a
- * read waits on a timer, never an animation frame, which Chromium gives no
- * cross-origin frame off screen or unseen (its Preview holds it under its
- * skeleton until these words come).
- */
-function tellWords(own: (node: Node) => boolean): void {
-  let told: number | null = null;
-  let quiet: ReturnType<typeof setTimeout> | undefined;
-  const tell = () => {
-    if (!document.body) {
-      return;
-    }
-    const least = leastWords(own);
-    if (least !== null && least !== told) {
-      told = least;
-      window.parent.postMessage({ type: EMBED_WORDS, least }, "*");
-    }
-  };
-  const soon = () => {
-    clearTimeout(quiet);
-    quiet = setTimeout(tell, WORDS_QUIET_MS);
-  };
-  const start = () => {
-    tell();
-    document.fonts?.ready.then(soon);
-    new ResizeObserver(soon).observe(document.documentElement);
-    new MutationObserver((records) => {
-      if (records.some((record) => !own(record.target))) {
-        soon();
-      }
-    }).observe(document.documentElement, {
-      characterData: true,
-      childList: true,
-      subtree: true,
-    });
-  };
-  if (document.readyState === "complete") {
-    start();
-  } else {
-    addEventListener("load", start, { once: true });
-  }
 }
 
 /** What the page's overlay gives the bridge (page.ts). */
