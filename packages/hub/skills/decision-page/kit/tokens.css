@@ -736,7 +736,7 @@
     --c-artifact-row-h: 44px;
     /* A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: past the 24 Pointer Rule's floor, so the bubble has room round its number and is a whole target under a mouse (DESIGN.md, A pin's pill). */
     --c-pin: 28px;
-    /* A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, a hollow pill's edge adding 4px past one figure (DESIGN.md, A pin's pill). */
+    /* A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, in every state (DESIGN.md, A pin's pill). */
     --c-pin-pad: 8px;
     /* A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (DESIGN.md, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form). */
     --c-pin-gone-ring: 1px;

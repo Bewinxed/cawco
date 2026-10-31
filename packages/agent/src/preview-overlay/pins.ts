@@ -99,10 +99,6 @@ const RING = 2;
 const TAIL_R = 2;
 /** The longest text whose lines a pin's point is read against (`lineEnd`), characters. Our call: a paragraph's, never a page's. */
 const LINE_READ_MOST = 4000;
-/** The room a pill needs past its line's end to stand there, px: a three-figure pill and its rings. Our call. */
-const PILL_ROOM = 44;
-/** The room a pill needs before its line's start, px: a one- or two-figure pill and its ring, in a page's margin. Our call. */
-const PILL_ROOM_START = 28;
 /** Room round a mark's crop, px. Our call. */
 const CROP_PAD = 24;
 /** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
@@ -485,7 +481,8 @@ export function startPins(deps: PinsDeps): Pins {
   /** Where `el` stands with a pin at `point` on it, the page's px. */
   const standingOn = (
     el: Element,
-    point: { x: number; y: number } | undefined
+    point: { x: number; y: number } | undefined,
+    paint: Paint
   ): Standing => {
     const box = pageBox(el);
     if (isPage(el)) {
@@ -496,7 +493,7 @@ export function startPins(deps: PinsDeps): Pins {
       box.x + spot.x * box.w,
       box.y + spot.y * box.h,
     ];
-    const line = lineEnd(el, pressed);
+    const line = lineEnd(el, pressed, paint);
     const at = line?.at ?? pressed;
     return {
       at,
@@ -523,7 +520,8 @@ export function startPins(deps: PinsDeps): Pins {
    */
   const lineEnd = (
     el: Element,
-    [px, py]: [number, number]
+    [px, py]: [number, number],
+    paint: Paint
   ): { at: [number, number]; start: boolean } | null => {
     if (
       el.ownerDocument !== document ||
@@ -548,17 +546,19 @@ export function startPins(deps: PinsDeps): Pins {
     if (x >= right) {
       return null;
     }
-    if (right + PILL_ROOM <= room) {
+    // The room past the line's end: a three-figure pill and its rings; before
+    // its start, in the page's margin: a two-figure pill and its ring.
+    if (right + pillWidth("000", paint) + 2 * RING <= room) {
       return { at: [right + scrollX + 1, bottom + scrollY], start: false };
     }
-    if (left - PILL_ROOM_START >= 0) {
+    if (left - pillWidth("00", paint) - RING >= 0) {
       return { at: [left + scrollX - 1, bottom + scrollY], start: true };
     }
     return null;
   };
 
   /** Where pin `pin` stands in the page now, or null when it is not on it. */
-  const standing = (pin: Pin): Standing | null => {
+  const standing = (pin: Pin, paint: Paint): Standing | null => {
     if (pin.ink) {
       const box = deps.groupBox(pin.ink);
       return box
@@ -576,10 +576,10 @@ export function startPins(deps: PinsDeps): Pins {
     }
     if (wholePage(pin.anchor)) {
       const el = deps.locate(pin.anchor)?.el ?? document.body;
-      return el ? standingOn(el, undefined) : null;
+      return el ? standingOn(el, undefined, paint) : null;
     }
     const found = deps.locate(pin.anchor);
-    return found ? standingOn(found.el, pin.point) : null;
+    return found ? standingOn(found.el, pin.point, paint) : null;
   };
 
   /**
@@ -663,10 +663,12 @@ export function startPins(deps: PinsDeps): Pins {
 
   /** The figures' width in the pill's face, px. */
   let measure: CanvasRenderingContext2D | null = null;
+  /**
+   * A pill's width for `label`, as PinMark lays it out: its figures with
+   * `--c-pin-pad` each side, never narrower than `--c-pin`, in every state
+   * (a hollow pill's edge is drawn inside its box).
+   */
   const pillWidth = (label: string, paint: Paint) => {
-    if (label.length < 2) {
-      return paint.height;
-    }
     measure ??= document.createElement("canvas").getContext("2d");
     if (!measure) {
       return paint.height;
@@ -676,10 +678,7 @@ export function startPins(deps: PinsDeps): Pins {
     const digit = Math.max(
       ...[..."0123456789"].map((d) => measure?.measureText(d).width ?? 0)
     );
-    return Math.max(
-      paint.height,
-      Math.ceil(digit * label.length + 2 * paint.pad)
-    );
+    return Math.max(paint.height, digit * label.length + 2 * paint.pad);
   };
 
   /**
@@ -991,7 +990,7 @@ export function startPins(deps: PinsDeps): Pins {
     const drawn: DrawnPill[] = [];
     const drawnFixed: DrawnPill[] = [];
     for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
-      const where = standing(pin);
+      const where = standing(pin, paint);
       if (!where) {
         missing.push(pin);
         continue;
@@ -1043,7 +1042,7 @@ export function startPins(deps: PinsDeps): Pins {
         drafted = { ...now };
       }
       if (drafted.el.isConnected) {
-        where = standingOn(drafted.el, drafted.point);
+        where = standingOn(drafted.el, drafted.point, paint);
       }
     }
     if (!where) {

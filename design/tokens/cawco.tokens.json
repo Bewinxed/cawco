@@ -4198,7 +4198,7 @@
         "value": 8,
         "unit": "px"
       },
-      "$description": "A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, a hollow pill's edge adding 4px past one figure (DESIGN.md, A pin's pill)."
+      "$description": "A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, in every state (DESIGN.md, A pin's pill)."
     },
     "c-pin-gone-ring": {
       "$type": "dimension",
