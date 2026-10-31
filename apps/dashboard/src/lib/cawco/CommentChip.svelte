@@ -131,6 +131,12 @@
   let chip = $state<HTMLButtonElement>();
   let open = $state(false);
   /**
+   * The phone's sheet, put away and still sliding down: it stays drawn until
+   * it has (ThreadSheet `onclosed`), and opened again before then the same
+   * sheet turns back up.
+   */
+  let sheetClosing = $state(false);
+  /**
    * The thread opens or is put away, said to the page's change notes as it
    * happens (repeated-keys.ts), so a list that breaks in the flush after
    * names it.
@@ -138,6 +144,9 @@
   function show(next: boolean): void {
     if (next !== open) {
       noteChange(next ? "comment popover opened" : "comment popover closed");
+    }
+    if (open && !next && phone.current) {
+      sheetClosing = true;
     }
     open = next;
   }
@@ -488,8 +497,17 @@
       id={panelId}
       style:--keyboard-lift="{lift}px"
     >
-      {#if open}
-        <ThreadSheet label={words} onclose={() => close(false)} open>
+      {#if open || sheetClosing}
+        <ThreadSheet
+          label={words}
+          onclose={() => close(false)}
+          onclosed={() => {
+            if (!open) {
+              sheetClosing = false;
+            }
+          }}
+          {open}
+        >
           {@render thread(pin)}
         </ThreadSheet>
       {/if}

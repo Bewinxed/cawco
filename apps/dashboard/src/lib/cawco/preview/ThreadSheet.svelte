@@ -16,6 +16,13 @@
    * of it (`--keyboard-lift`, written by whoever holds it): the sheet stands
    * on the keyboard and its field over it.
    *
+   * Its holder keeps it drawn and drives `open`: closed, it slides down on
+   * vaul's own curve (a fade under reduced motion), and says so once it has
+   * (`onclosed`, bits-ui's Dialog `onOpenChangeComplete`, which waits on the
+   * sheet's exit animation however the close came: the prop, Close, Escape,
+   * a press outside or a drag). Opened again before then, the same sheet
+   * turns back up, its reply as it stood.
+   *
    * Its stops are px of the room as measured (`room`), never fractions:
    * vaul-svelte (1.0.0-next.7) works out where a stop stands from
    * the host's `getBoundingClientRect()` inside a `$derived`
@@ -37,6 +44,7 @@
     open,
     label,
     onclose,
+    onclosed,
     surface = $bindable(),
     children,
   }: {
@@ -45,6 +53,8 @@
     label: string;
     /** Close, Escape, or the sheet dragged below its lower stop. */
     onclose: () => void;
+    /** Closed and done sliding down: its holder may stop drawing it. */
+    onclosed?: () => void;
     /** The sheet as drawn: what covers the page, for its holder to tell. */
     surface?: HTMLElement;
     children: Snippet;
@@ -106,6 +116,11 @@
     onOpenChange={(next) => {
       if (!next) {
         onclose();
+      }
+    }}
+    onOpenChangeComplete={(next) => {
+      if (!next) {
+        onclosed?.();
       }
     }}
     {open}

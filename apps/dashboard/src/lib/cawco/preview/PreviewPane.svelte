@@ -1758,9 +1758,10 @@
    */
   let pinHeard = $state<string | null>(null);
   /**
-   * The pin whose card is going back into its pill, closed: it stays drawn
-   * until it has (PinFloat `onclosed`), so its pin opened again before then
-   * turns the same card back (PinFloat `open`).
+   * The pin whose card is going back into its pill, or whose sheet is
+   * sliding down, closed: it stays drawn until it has (PinFloat and
+   * ThreadSheet `onclosed`), so its pin opened again before then turns the
+   * same card or sheet back (their `open`).
    */
   let closingPin = $state<string | null>(null);
   /** The pin J and K stand on. */
@@ -2419,12 +2420,13 @@
    * The thread closes: its Close, Esc, another row or pin opened (`swap`:
    * its card stays as it stands until the next one's place is heard, then
    * goes at once, so no frame shows it beside the next). Closed, its card
-   * beside the pill goes back into it, drawn until it has (`closingPin`).
+   * beside the pill goes back into it, and the phone's sheet slides down,
+   * each drawn until it has (`closingPin`).
    * Its reply's words stay with its pin.
    */
   function closeCard(swap = false) {
     const id = openPin;
-    if (!swap && id && drawnPin === id && !floatSheet) {
+    if (!swap && id && drawnPin === id) {
       closingPin = id;
     }
     openPin = null;
@@ -4609,7 +4611,12 @@
           <ThreadSheet
             label={`Comment ${cardPin.number}`}
             onclose={() => closeCard()}
-            open
+            onclosed={() => {
+              if (!openPin) {
+                closingPin = null;
+              }
+            }}
+            open={openPin !== null}
             bind:surface={cardFloat}
           >
             {@render thread(cardPin)}
