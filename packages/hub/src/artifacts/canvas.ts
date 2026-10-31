@@ -99,8 +99,14 @@ export const screenJoined = async (
   return docs.screens(artifactId) > 0;
 };
 
-/** The agent's write landed now ({@link CANVAS_WROTE_AT}): the picture is owed until a screen posts one after it. */
-const stampWrote = (docs: ArtifactDocs, artifactId: string): void =>
+/**
+ * The agent's write changed the scene now ({@link CANVAS_WROTE_AT}): the
+ * picture is owed until a screen posts one after it. Stamped by the hub's
+ * service only when the write changed what the canvas shows (its
+ * `sceneWritten`), as a screen posts no new picture for a scene that looks
+ * the same.
+ */
+export const stampWrote = (docs: ArtifactDocs, artifactId: string): void =>
   docs.transact(artifactId, "hub", (doc) =>
     doc.getMap("meta").set(CANVAS_WROTE_AT, new Date().toISOString())
   );
@@ -229,7 +235,6 @@ export const convertOnScreen = async (
         `The canvas wasn't changed: ${result.error} Fix it, then try again.`
       );
     }
-    stampWrote(docs, artifactId);
     return result.ids;
   } finally {
     if (observer) {
@@ -267,9 +272,6 @@ export const deleteElements = (
       }
     }
   });
-  if (deleted.length > 0) {
-    stampWrote(docs, artifactId);
-  }
   return {
     deleted: deleted.reverse(),
     missing: ids.filter((id) => !present.has(id)),

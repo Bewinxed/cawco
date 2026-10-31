@@ -189,6 +189,7 @@ import {
   pictureOfWrite,
   pictureShowsWrite,
   screenJoined,
+  stampWrote,
 } from "./canvas";
 import {
   type CanvasInput,
@@ -3344,6 +3345,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     markRevision(row, items.slice(0, CHANGES_LIMIT), () => row.revision);
 
   /**
+   * What the agent's write to canvas `row` changed (page-changes.ts
+   * `sceneChanges`, from the scene `before` it, its stamps moving alone no
+   * change); one that changed it owes a new picture ({@link stampWrote}),
+   * and one that changed nothing owes none.
+   */
+  const sceneWritten = (
+    row: ArtifactRow,
+    before: CanvasEntry[]
+  ): ChangedItem[] => {
+    const items = sceneChanges(before, canvasEntries(docs, row.id));
+    if (items.length > 0) {
+      stampWrote(docs, row.id);
+    }
+    return items;
+  };
+
+  /**
    * What an agent's update to canvas `row` changed (page-changes.ts
    * `sceneChanges`, from the scene `before` it and as it stands now), marked
    * under the canvas's next scene version (`meta.sceneVersion`). A canvas's
@@ -3356,7 +3374,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     before: CanvasEntry[]
   ): ChangedItem[] => {
-    const items = sceneChanges(before, canvasEntries(docs, row.id));
+    const items = sceneWritten(row, before);
     if (items.length === 0) {
       return [];
     }
@@ -5028,8 +5046,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       making.owner.id === making.maker.id
     );
     const said = heldId(row);
-    // Made again, what it changed is marked, as a page made again marks it.
+    // Made again, what it changed is marked, as a page made again marks it;
+    // made new, nothing is marked, and its drawing owes its first picture.
     const changed = before ? markSceneChanges(row, was) : [];
+    if (!before) {
+      sceneWritten(row, was);
+    }
     const made = {
       ...said,
       kind: row.kind,
