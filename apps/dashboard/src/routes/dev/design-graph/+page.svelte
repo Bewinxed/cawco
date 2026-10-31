@@ -41,6 +41,9 @@
     state: "open" as const,
   };
   setPaneFleet(benchFleet(INSTANCE, () => preview, "preview"));
+  // The page never scrolls (its tab is h-dvh, overflow hidden), so its root keeps no gutter: the preview proxy's floor
+  // (core preview-proxy.ts GUTTER_FLOOR) would otherwise hold a classic scrollbar's width open down its inline end.
+  document.documentElement.style.scrollbarGutter = "auto";
 </script>
 
 <svelte:head><title>{preview.artifact.name} · CawCo</title></svelte:head>
