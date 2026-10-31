@@ -4,7 +4,8 @@
  * `GraphModel`), the tab shown, the state kept in each states file and the
  * one a hover previews; each change asks the page what to stand on its
  * stage (`cawco:stage`). The kept states are kept per session, as the
- * canvas's view is, so the graph opens on the state kept last.
+ * canvas's view is, so the graph opens on the state kept last, or on the
+ * step its address names (`?step=<story>`).
  *
  * The dock's state too: the kept move as its page played it (`cawco:move`),
  * the agent's timing of each clip and the person's edits of it (Original |
@@ -117,6 +118,14 @@ function keptOf(key: string): Kept {
   } catch {
     return { ...NOTHING_KEPT };
   }
+}
+
+/** The step the address opens on (`?step=Several`), a story name; null when it names none. */
+function addressedStep(): string | null {
+  if (typeof location === "undefined") {
+    return null;
+  }
+  return new URLSearchParams(location.search).get("step") || null;
 }
 
 /** A section's first state, at rest: where its graph opens before anything was kept. */
@@ -250,12 +259,15 @@ export class DesignGraph {
   #clock = 0;
   #tuning: ReturnType<typeof setTimeout> | undefined;
   #edits: Record<string, ClipTiming[]>;
+  /** The story the address names to open on, over the kept one; stood once, in the first section that holds it. */
+  #opening: string | null;
 
   /** `post`: to the page, on its own origin (the pane's). */
   constructor(instanceId: string, post: (message: object) => void) {
     this.#key = `cawco-design-graph:${instanceId}`;
     this.#post = post;
     const kept = keptOf(this.#key);
+    this.#opening = addressedStep();
     this.file = kept.file;
     this.kept = kept.kept;
     this.open = kept.open;
@@ -279,6 +291,14 @@ export class DesignGraph {
       // A section still on its way keeps what was kept: its stories aren't all known yet.
       if (section.state === "drawn" && had && !holds(section, had)) {
         delete kept[section.file];
+      }
+      const opening: StagePoint | null = this.#opening
+        ? { file: section.file, story: this.#opening, interaction: "rest" }
+        : null;
+      if (opening && holds(section, opening)) {
+        kept[section.file] = opening;
+        this.file = section.file;
+        this.#opening = null;
       }
       if (!kept[section.file]) {
         kept[section.file] = firstOf(
