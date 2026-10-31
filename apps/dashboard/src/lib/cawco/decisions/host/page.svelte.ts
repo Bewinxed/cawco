@@ -59,6 +59,8 @@ export type MediaArtifact = {
   id: string;
   kind: string;
   name: string;
+  /** That version's revision: its frame loads again when it moves. */
+  revision: number;
   /** A component canvas's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */
   shapes?: CanvasShapes;
 } | null;
@@ -109,12 +111,24 @@ export const takeServed = (doc: Document): void => {
     z.record(z.string(), z.string()),
     {}
   );
-  served.media = jsonIn(
+  const media = jsonIn(
     doc,
     "cawco-media",
     z.record(z.string(), MediaArtifactSchema),
     {}
   );
+  // Each piece in place, and only one that moved: its Preview or Canvas
+  // loads again, and every other stands as it is.
+  for (const id of Object.keys(served.media)) {
+    if (!(id in media)) {
+      delete served.media[id];
+    }
+  }
+  for (const [id, now] of Object.entries(media)) {
+    if (JSON.stringify(served.media[id]) !== JSON.stringify(now)) {
+      served.media[id] = now;
+    }
+  }
   served.pictures = jsonIn(
     doc,
     PICTURES_TAG,

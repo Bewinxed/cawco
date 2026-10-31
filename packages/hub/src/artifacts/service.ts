@@ -293,6 +293,8 @@ export interface ServedMedia {
   id: string;
   kind: ArtifactKind;
   name: string;
+  /** That version's revision: a Preview of a server loads again when it moves (a server made again on another port). */
+  revision: number;
   shapes?: CanvasShapes;
 }
 
@@ -822,6 +824,9 @@ const HELD_NEXT = artifactToolWords.heldAsNext;
 
 /** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
 const HANDED = "handed";
+
+/** The doc meta key a decision page's open views follow for its pieces' versions: the last piece moved and the version it stands at (service `versionMoved`, agent preview-overlay page.ts `mediaMoved`). */
+const MEDIA_AT = "mediaAt";
 
 /** The doc meta key of a preview whose folder its machine said is gone at its last start, with the daemon's words (service `sourceSeen`). */
 const SOURCE_GONE = "sourceGone";
@@ -2591,6 +2596,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * An owner's own create of an artifact its maker's next version is held
+   * for opens that version first, as its artifact_show would ({@link
+   * promote}): the create shows it, and lands on it, so neither the maker's
+   * change nor the owner's is written over the other.
+   */
+  const openNextFirst = async (
+    { owner, maker }: Making,
+    kind: ArtifactRow["kind"],
+    name: string
+  ): Promise<void> => {
+    const found =
+      owner.id === maker.id ? namedFor(owner, kind, name) : undefined;
+    const next = found ? db.heldOf(found.id) : undefined;
+    if (found && next) {
+      await promote(found, next);
+    }
+  };
+
+  /**
    * A change held as `held.next`, made by `ready`: the parent hears of it
    * once, when this change began the hold; a fresh one whose change threw
    * is let go, so nothing of it reaches them.
@@ -2610,6 +2634,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw error;
     }
     if (holding.fresh) {
+      versionMoved(row);
       await deps.handedUp(owner, maker, row, holding.next);
     }
   };
@@ -2618,7 +2643,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * An update of artifact `row` ({@link revisable}; `change`, given where it
    * goes): its maker's, while the parent's panel shows it, goes to its next
    * version ({@link holdNext}); anyone else's (its owner's, or a session of
-   * the project its writers left it in) to the artifact itself.
+   * the project its writers left it in) to its newest version
+   * ({@link newestVersion}), so a change beside a held one joins it there
+   * and artifact_show opens both, never one over the other.
    */
   const changedBy = async <T>(
     instance: InstanceRow,
@@ -2628,7 +2655,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const holding = row.madeBy === instance.id ? holdNext(instance, row) : null;
     const owner = holder(row);
     if (!(holding && owner)) {
-      return await change(row);
+      return await change(newestVersion(row));
     }
     let result: T | undefined;
     await heldOver({ maker: instance, owner }, row, holding, async () => {
@@ -2844,6 +2871,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     rmSync(join(deps.root, row.id), { recursive: true, force: true });
     deps.removed?.(row);
     releaseServed(row);
+    if (row.heldFor !== null) {
+      versionMoved(row);
+    }
+  };
+
+  /**
+   * Artifact `row`'s version moved (a next version held, opened or let go,
+   * or it was made again): every decision page of its delegation tree or
+   * its project that shows it as a Canvas or Preview piece hears it (doc
+   * meta {@link MEDIA_AT}), and one open takes its media again in place,
+   * its picks and notes kept (agent preview-overlay page.ts).
+   */
+  const versionMoved = (row: ArtifactRow): void => {
+    const id = row.heldFor ?? row.id;
+    const artifact = db.get(id);
+    const writer = artifact ? holder(artifact) : undefined;
+    if (!artifact) {
+      return;
+    }
+    const pages = new Map(
+      [
+        ...(writer ? db.ofInstances([...deps.tree(writer)]) : []),
+        ...(artifact.projectId ? db.ofProject(artifact.projectId) : []),
+      ]
+        .filter((page) => page.kind === "page" && mediaOf(page).includes(id))
+        .map((page) => [page.id, page])
+    );
+    // The version it stands at now, so a move told twice is heard once.
+    const now = newestVersion(artifact);
+    const at = `${id}@${now.id}:${now.revision}`;
+    for (const page of pages.values()) {
+      const meta = docs.doc(page.id).getMap("meta");
+      if (meta.get(MEDIA_AT) !== at) {
+        docs.transact(page.id, "hub", () => meta.set(MEDIA_AT, at));
+      }
+    }
   };
 
   /**
@@ -2889,6 +2952,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       updatedAt: new Date(),
     }) as ArtifactRow;
     discard(next);
+    versionMoved(promoted);
     // A server the next version moved off is let go once nothing shows it.
     keepServed(promoted, row, undefined);
     // The program it opens on goes out to the person now: its Previews' stages warmed for it.
@@ -4854,6 +4918,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         "A canvas takes elements or mermaid, not both."
       );
     }
+    await openNextFirst(making, "canvas", input.name);
     const { before, holding, row } = canvasPlaced(making, input);
     stampMeta(row, null);
     const change = drawingOf(input);
@@ -5661,6 +5726,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         revision: target.revision + 1,
         updatedAt: now,
       }) as ArtifactRow;
+      // Made again where it stands: a held one is told once it is written (heldOver).
+      if (!holding) {
+        versionMoved(row);
+      }
       return { before, holding, movedFrom, row };
     }
     const row = db.create({
@@ -6871,6 +6940,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           source,
         });
       }
+      await openNextFirst(making, input.kind, input.name);
       const { before, holding, movedFrom, row } = placed(making, input, {
         source,
         machineId,
@@ -7151,6 +7221,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           id: shownRow.id,
           kind: shownRow.kind,
           name: shownRow.name,
+          revision: shownRow.revision,
           ...(shownRow.kind === "component"
             ? { shapes: shapesOf(shownRow) }
             : {}),

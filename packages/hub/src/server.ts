@@ -15327,7 +15327,13 @@ export const createServer = (
       }
       const media: Record<
         string,
-        { embed?: string; id: string; kind: string; name: string } | null
+        {
+          embed?: string;
+          id: string;
+          kind: string;
+          name: string;
+          revision: number;
+        } | null
       > = {};
       for (const [id, held] of Object.entries(served.media)) {
         media[id] =

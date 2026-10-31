@@ -126,6 +126,8 @@ if (tag?.dataset.artifact && tag.dataset.state) {
     tag.dataset.maps
   );
 }
+/** The version stamp of the pieces the page was served with (hub artifacts service `versionMoved`). */
+let { mediaAt } = artifact.meta();
 // Before any listener that stops a press: a morph waits for every pointer up.
 watchPointers();
 
@@ -722,6 +724,7 @@ artifact.watch({
   },
   meta: () => {
     republished();
+    mediaMoved();
     toldSent();
     tellDoc();
   },
@@ -739,6 +742,7 @@ artifact.watch({
     told();
     toldSent();
     republished();
+    mediaMoved();
     tellDoc();
   },
   refused: (reason) => failed("state", reason),
@@ -1029,6 +1033,26 @@ async function republished() {
       republished();
     }
   }
+}
+
+/**
+ * A piece the page shows moved to another version (a next version held,
+ * opened or let go): a page that draws itself (a decision page's host)
+ * hears it as a revision of its own program, and takes its media again in
+ * place, its picks and notes as they are. A page that doesn't shows none.
+ */
+function mediaMoved() {
+  const now = artifact.meta().mediaAt;
+  if (now === mediaAt) {
+    return;
+  }
+  mediaAt = now;
+  dispatchEvent(
+    new CustomEvent("cawco:revision", {
+      cancelable: true,
+      detail: { pageHash },
+    })
+  );
 }
 
 function choose(

@@ -533,7 +533,7 @@ const revisedWords = (revised: Revised): string => {
   ];
   return lines(
     `Revised to revision ${revised.revision}${statements.length > 0 ? `: ${statements.join("; ")}` : ""}.`,
-    revised.held,
+    revised.held && artifactToolWords.revisedNext(revised.held),
     `Its decisions now: ${listed(revised.decisions) || "none"}.`,
     cardLinkLines(
       "The cards it put in or rewrote, as you name each to the person:",

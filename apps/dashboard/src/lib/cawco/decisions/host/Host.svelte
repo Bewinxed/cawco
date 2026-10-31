@@ -5,7 +5,9 @@
   new page hash; the overlay hands it here as `cawco:revision`, and this
   draws the new program in place, never swapping the page's DOM, then says
   `cawco:hmr` with the program's hash, so the overlay re-reads its pins and
-  marks every option again from the stored picks.
+  marks every option again from the stored picks. A piece it shows moved to
+  another version (hub artifacts service `versionMoved`) comes the same way:
+  its program is the same, so only that piece's media is taken again.
 -->
 <script lang="ts">
   import { onMount, tick } from "svelte";

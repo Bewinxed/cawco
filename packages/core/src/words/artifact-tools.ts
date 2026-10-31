@@ -21,6 +21,9 @@ export const artifactToolWords = {
   /** A maker's change while the parent has it open. */
   heldAsNext:
     "Your parent opened it, so this change waits as its next version: their panel keeps the version they opened until they call artifact_show, and decision pages, artifact_read and artifact_browse have this one now.",
+  /** A revision that went to an artifact's next version its panel hasn't opened, `next` that version's id. */
+  revisedNext: (next: string) =>
+    `This change is in its next version, artifact ${next}: decision pages draw it now, and the panel keeps the version it opened until artifact_show opens this one.`,
   /** An `artifact_read` of an artifact with a next version its panel hasn't opened, `next` that version's id. */
   readsNext: (next: string) =>
     `This read shows its next version, artifact ${next}: decision pages draw it, and the panel keeps the opened version, where the person's picks are, until artifact_show opens it.`,

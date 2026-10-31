@@ -765,6 +765,8 @@ export const artifact = {
     const meta = mirror.getMap("meta");
     return {
       pageHash: (meta.get("pageHash") as string | undefined) ?? null,
+      /** The last piece a decision page shows that moved to another version, and that version (hub artifacts service `versionMoved`); null before. */
+      mediaAt: (meta.get("mediaAt") as string | undefined) ?? null,
       revision: (meta.get("revision") as number | undefined) ?? null,
       /** When the person last pressed Send, as the hub stamped it (artifacts service `send`); null before. */
       sentAt: (meta.get("sentAt") as string | null | undefined) ?? null,
