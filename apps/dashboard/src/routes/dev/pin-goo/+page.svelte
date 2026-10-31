@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * THE GOO CARD (dev only): a comment's card pouring out of its pill
    * through the gooey plus-menu's filter (PinFloatGoo), on the page the
@@ -16,7 +17,6 @@
    */
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { pressOutside } from "#lib/cawco/press-outside.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";

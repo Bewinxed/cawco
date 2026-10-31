@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * A task's to-dos (to-do), nested as the file nests them. A tick
    * shows at once and is written behind it; a tick the hub refuses goes back
@@ -11,7 +12,6 @@
    */
   import { todoGroups } from "@cawco/core/plan";
   import { tick } from "svelte";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import type { Todo } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";

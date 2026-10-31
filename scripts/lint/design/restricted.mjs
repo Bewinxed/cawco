@@ -15,7 +15,7 @@
 //   the delivery says why in a `golar-ignore-next-line` comment.
 // - house/no-scroll-into-view: `scrollIntoView` moves every box round its
 //   element on both axes, `overflow: hidden` ones too, a page's column off
-//   the foot beside its scroller among them. bring-into-view.ts moves the
+//   the foot beside its scroller among them. core bring-into-view.ts moves the
 //   one axis, through the boxes a person scrolls.
 import { eachNode } from "./model.mjs";
 
@@ -83,7 +83,7 @@ export function scrollIntoViews(model) {
         start: node.start,
         end: node.end,
         message:
-          "scrollIntoView moves every box round the element, sideways too. Use bringIntoView or bringIntoStrip (lib/cawco/bring-into-view.ts), which move one axis.",
+          "scrollIntoView moves every box round the element, sideways too. Use bringIntoView or bringIntoStrip (core bring-into-view.ts), which move one axis.",
       });
     }
   });

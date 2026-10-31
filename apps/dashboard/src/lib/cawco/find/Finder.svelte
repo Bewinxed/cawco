@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * Find (docs/tom/find-and-mention-chosen.md, Option 1 with its must-fixes):
    * one field and one list whose unit is a session, the reason
@@ -25,7 +26,6 @@
    */
   import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { tick, untrack } from "svelte";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";

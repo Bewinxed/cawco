@@ -54,6 +54,12 @@
 
 import { breathPhase } from "@cawco/core/breath";
 import {
+  bringInto,
+  type Scroller,
+  scrollersOf,
+  scrollMoves,
+} from "@cawco/core/bring-into-view";
+import {
   type AnchorFound,
   changedAnchor,
   newId,
@@ -69,25 +75,23 @@ import {
   wholePage,
   writePin,
 } from "@cawco/core/comments";
+import { PREVIEW_REVEAL_RECT } from "@cawco/core/frames";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import { absences } from "./absent";
 import { artifact } from "./artifact";
-import { type Box, clipOf, grow, meets, pageBox } from "./frames";
+import { type Box, clipOf, grow, meets, pageBox, rectOf } from "./frames";
 import { fitToPage, insetFoot } from "./ink";
 import { motionOk } from "./motion";
 import { durationMs, type InkChrome } from "./radial";
 import {
   bandsAt,
-  bringInto,
   type FootPad,
   inBands,
   innerScroller,
   liftUnder,
   padFoot,
   pageScrolls,
-  scrollersOf,
-  scrollMoves,
   unpadFoot,
 } from "./scrollers";
 
@@ -1228,11 +1232,15 @@ export function startPins(deps: PinsDeps): Pins {
     const r = (where.pill?.box.h ?? 20) / 2;
     const x = where.at[0] - scrollX;
     const y = where.at[1] - scrollY;
+    /** Where it stands now, for the host's scrollers: another origin's, which only it can move. */
+    const tellHost = (at: number) =>
+      deps.post(PREVIEW_REVEAL_RECT, { top: at - r, bottom: at + r });
     const clear = bandsAt(x, covered, r);
     if (where.shown && inBands(y, clear)) {
+      tellHost(y);
       return;
     }
-    const chain = scrollersOf(where.el);
+    const chain = scrollersOf(where.el, rectOf);
     let landed = bringInto(chain, y, clear);
     const room = landed ? 0 : liftUnder(x, covered, r);
     if (room > 0 && giveRoom(chain, room, owner)) {
@@ -1243,6 +1251,7 @@ export function startPins(deps: PinsDeps): Pins {
     if (moves) {
       scrollMoves(moves, motionOk() && !instant ? "smooth" : "auto");
     }
+    tellHost(moves?.at ?? y);
   };
 
   /**
@@ -1254,11 +1263,7 @@ export function startPins(deps: PinsDeps): Pins {
    * and its list scrolls further. Whether any was given: none where the page
    * holds its scroll and no container scrolls the pill.
    */
-  const giveRoom = (
-    chain: ReturnType<typeof scrollersOf>,
-    px: number,
-    owner: string
-  ) => {
+  const giveRoom = (chain: Scroller[], px: number, owner: string) => {
     const page = pageScrolls();
     const inner = page ? null : innerScroller(chain);
     if (!(page || inner)) {

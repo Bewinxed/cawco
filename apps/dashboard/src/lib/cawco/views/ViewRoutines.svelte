@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { detach } from "@cawco/core/detach";
   import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
   import { DAY_MS } from "@cawco/core/time";
@@ -9,7 +10,6 @@
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import CantStart from "#lib/cawco/CantStart.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";

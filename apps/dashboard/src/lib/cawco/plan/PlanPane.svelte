@@ -34,6 +34,7 @@
 </script>
 
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * A session's plan (PRD §5.2, "Every session's plan, in a panel"): its
    * steps as a tree (PlanTree); its spec, read-only, whole, as running
@@ -58,7 +59,6 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { IconClose } from "#lib/icons.js";

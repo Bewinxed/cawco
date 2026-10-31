@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * The Configure rail: every section, grouped, with how many rows it holds
    * and how many of them are failing somewhere. As `list` it is the whole
    * screen under 900px — the same entries at a touch height.
    */
   import { configureWords as words } from "@cawco/core/words/configure";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import {
     dur,
     easeOut,

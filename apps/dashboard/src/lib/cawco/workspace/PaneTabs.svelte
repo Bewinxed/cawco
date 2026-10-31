@@ -21,6 +21,7 @@
 
 <script lang="ts">
   import type { Activity } from "@cawco/core/activity";
+  import { bringIntoStrip } from "@cawco/core/bring-into-view";
   import { commonWords } from "@cawco/core/words/common";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { Popover } from "bits-ui";
@@ -42,7 +43,6 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { bringIntoStrip } from "#lib/cawco/bring-into-view.js";
   import {
     dur,
     ease,

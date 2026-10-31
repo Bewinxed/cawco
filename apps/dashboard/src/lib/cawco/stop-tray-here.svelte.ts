@@ -5,8 +5,8 @@
  * in view and in hand as it unfolds and grows.
  */
 
+import { bringIntoView } from "@cawco/core/bring-into-view";
 import { untrack } from "svelte";
-import { bringIntoView } from "#lib/cawco/bring-into-view.js";
 import { cawco } from "./client.svelte";
 import { frameObserver } from "./frame-observer";
 import { span } from "./home/home-state.svelte";

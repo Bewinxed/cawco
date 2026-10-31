@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import type {
     DecisionPageRead,
     DecisionPageSummary,
@@ -23,7 +24,6 @@
    */
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./bring-into-view": "./src/bring-into-view.ts",
     "./build-info": "./src/build-info.ts",
     "./run-captured": "./src/run-captured.ts",
     "./octokit-answer": "./src/octokit-answer.ts",

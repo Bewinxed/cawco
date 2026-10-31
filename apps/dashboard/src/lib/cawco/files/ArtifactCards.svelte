@@ -51,12 +51,12 @@
    */
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import { reasonLine, reasonShort } from "@cawco/core/artifact-needs";
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import type { ArtifactSummary } from "@cawco/core/protocol";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { type Component, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";

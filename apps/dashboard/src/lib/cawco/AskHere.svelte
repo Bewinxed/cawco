@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * A question standing in the page, under the control that asked it
    * (ask-here.svelte.ts; DESIGN.md, The Open Page Rule). It unfolds where it

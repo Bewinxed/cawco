@@ -15,6 +15,7 @@
 </script>
 
 <script generics="T" lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * A parent's older rows (older.ts): the "N older" row, the last row under
    * the parent and on the same nesting line as its siblings, and under it,
@@ -40,7 +41,6 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";

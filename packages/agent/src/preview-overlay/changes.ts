@@ -30,7 +30,9 @@
  * A press on a ringed element in Interact mode is a look at it
  * (`cawco:change-pressed`).
  */
+import { bringIntoView } from "@cawco/core/bring-into-view";
 import { type PageAnchor, readPins } from "@cawco/core/comments";
+import { PREVIEW_REVEAL_RECT } from "@cawco/core/frames";
 import {
   type Anchorable,
   anchorable,
@@ -41,7 +43,6 @@ import {
 } from "./anchor-names";
 import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
-import { bringInto, scrollersOf, scrollMoves } from "./scrollers";
 
 /** A ring's ping, as `getAnimations()` names it. */
 const PING = "cawco-change-ping";
@@ -349,16 +350,14 @@ export function startChanges(deps: ChangesDeps): Changes {
       return;
     }
     clearTimeout(flashTimer);
-    // Up and down only, by the scrollers round it (scrollers.ts, as a pin is
-    // brought out): `scrollIntoView` also scrolled every scroller round it
-    // sideways, a page's column off its fixed foot among them.
+    // Up and down only, by the scrollers round it (core bring-into-view.ts);
+    // a host's scrollers are its own, asked by where it lands.
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const moves = bringInto(scrollersOf(el), el.getBoundingClientRect().top, [
-      { top: 0, bottom: innerHeight },
-    ]);
-    if (moves) {
-      scrollMoves(moves, reduce ? "auto" : "smooth");
-    }
+    const spot = bringIntoView(el, {
+      at: "third",
+      behavior: reduce ? "auto" : "smooth",
+    });
+    deps.post(PREVIEW_REVEAL_RECT, spot);
     deps.outline(el);
     const ring = drawn.get(anchor);
     if (ring) {
