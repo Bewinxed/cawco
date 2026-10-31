@@ -16,6 +16,9 @@ html.cawco-canvas-page[data-theme="light"] { color-scheme: light; }
 html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 /* The page is the well the frames stand in (surface-well): the frame recesses, each frame's own page reads raised on it. */
 html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100%; overflow: hidden; background: var(--surface-well); }
+/* The page never scrolls, so its root keeps no scrollbar gutter: the proxy's floor (core preview-proxy.ts GUTTER_FLOOR) would
+   otherwise hold a classic scrollbar's width open down its inline end, an empty strip beside the stage. */
+html.cawco-canvas-page { scrollbar-gutter: auto; }
 /* The canvas ends where the design graph's panel and dock begin: no frame is ever drawn under them. */
 .cawco-canvas { position: fixed; inset-block: var(--cawco-stage-top) var(--cawco-stage-bottom); inset-inline: 0 var(--cawco-stage-end); overflow: hidden;
   touch-action: none; background: var(--surface-well); }
