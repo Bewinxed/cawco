@@ -627,4 +627,14 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
     effort: "medium",
     denyTools: ["mcp__claude-in-chrome__*"],
   },
+  {
+    name: "reader",
+    description:
+      "Reading on Sonnet 5.5 at low effort: a sweep of many files, transcripts or reports; an inventory or where-is list; an extraction into a table; a summary of what a set of documents says. The brief names the sources, the filter and the shape of the answer (the table's columns, or the list's fields); the report is that table or list with counts, and a line per source it could not read. Judgement on what it finds, and any edit, go to an effort type; web research goes to `research`.",
+    harness: "claude",
+    model: "claude-sonnet-5-5",
+    effort: "low",
+    denyTools: ["mcp__claude-in-chrome__*"],
+    canDelegate: false,
+  },
 ];
