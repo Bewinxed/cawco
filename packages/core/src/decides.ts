@@ -266,7 +266,7 @@ export const kindName = (
 
 /** One sentence every session is told: what CawCo's MCP instructions and the decision-page skill say. */
 export const DECIDES_RULE =
-  "A choice that is not yours to make is a decision card with its kind; wait on the card — the hub settles it by the project's Who decides.";
+  "A choice that is not yours to make is a decision card with its kind; wait on the card — the hub settles it by the project's Who decides. A choice already made stays made: before a card, search for it with find (in a project, its decided pages' logs are decisions/<page>/log.md, by folder_read) and apply what you find.";
 
 /** The fleet's kinds as every session's instructions list them: `Kinds: look (layout, copy, …) · …`. */
 export const kindsLine = (kinds: readonly Kind[]): string =>
