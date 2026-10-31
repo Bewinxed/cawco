@@ -1494,6 +1494,25 @@ export function boot(options: BootOptions): void {
   }
 
   let saidShape = "";
+  /**
+   * Whether the next shape said is its stories' at rest: the first said
+   * since they mounted, before the person pressed or typed in the embed. The
+   * page holding it keeps only that one for the next Preview's first paint
+   * (`rest`, dashboard decisions host Preview.svelte `tellShape`): a list
+   * opened or closed changes the live frame, never what the next load holds.
+   */
+  let atRest = true;
+  if (embed) {
+    for (const input of ["pointerdown", "keydown"] as const) {
+      document.addEventListener(
+        input,
+        () => {
+          atRest = false;
+        },
+        true
+      );
+    }
+  }
   /** A measure of the embed's shape waits on its world to settle ({@link settledHeight}): the calls meanwhile are answered by it. */
   let shaping = false;
   /**
@@ -1560,7 +1579,11 @@ export function boot(options: BootOptions): void {
       return;
     }
     saidShape = shape;
-    window.parent.postMessage({ type: CANVAS_EMBED_SIZE, height, width }, "*");
+    window.parent.postMessage(
+      { type: CANVAS_EMBED_SIZE, height, width, rest: atRest },
+      "*"
+    );
+    atRest = false;
   }
 
   /**
@@ -1891,6 +1914,8 @@ export function boot(options: BootOptions): void {
     );
     quietly(said(section));
     if (embed) {
+      // Mounted afresh: the next shape said is its stories' at rest.
+      atRest = true;
       unnamedInEmbed();
       sayShape();
     } else {

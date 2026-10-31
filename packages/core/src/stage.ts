@@ -78,7 +78,10 @@ export const sectionName = (
 /**
  * A canvas page embedded in a decision page's Preview (`by=embed`, and a
  * `story` per story it shows): the message it posts to the page holding it,
- * `{ type, height }` in CSS px, so its frame is as tall as its frames.
+ * `{ type, height, width, rest }` in CSS px, so its frame is as tall as its
+ * frames and as wide as its widest; `rest` when it is its stories' shape at
+ * rest (the first said since they mounted, before any press or key in it),
+ * the one shape kept for the next Preview's first paint ({@link CanvasShapes}).
  */
 export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 
@@ -175,9 +178,9 @@ export interface EmbedShape {
  * A component canvas's shapes as a decision page's media carries them, so a
  * Preview's skeleton stands at its picture's own shape from its first paint
  * (dashboard decisions host Preview.svelte):
- * - `said`: what an embed of it said, by the stories its Preview names
- *   ({@link storiesKey}), as a Preview heard it and told beside its page
- *   (`/__cawco/page/<page>/shape`);
+ * - `said`: what an embed of it said at rest, by the stories its Preview
+ *   names and the width it names ({@link storiesKey}), as a Preview heard it
+ *   and told beside its page (`/__cawco/page/<page>/shape`);
  * - `drawn`: each story's rest frame as the stage's render report has it,
  *   for a Preview no embed has said yet.
  */
@@ -186,9 +189,15 @@ export interface CanvasShapes {
   said: Record<string, EmbedShape>;
 }
 
-/** The key of a Preview's stories, in the order it names them; empty for every story. */
-export const storiesKey = (stories: readonly string[]): string =>
-  stories.join("|");
+/**
+ * The key of a Preview's at-rest shape: its stories, in the order it names
+ * them (empty for every story), and the width it names (`@1280`; none where
+ * it names none), at which a story of no width of its own lays itself out.
+ */
+export const storiesKey = (
+  stories: readonly string[],
+  width: number | null
+): string => `${stories.join("|")}${width === null ? "" : `@${width}`}`;
 
 /** Whether `value` is a shape an embed could say: a height past 0 and a width past 0 or none, finite, within reason. Ours: 20,000 px. */
 export const isEmbedShape = (value: unknown): value is EmbedShape => {

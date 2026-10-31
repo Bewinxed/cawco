@@ -15380,17 +15380,20 @@ export const createServer = (
         h?: unknown;
         stories?: unknown;
         w?: unknown;
+        width?: unknown;
       } | null;
       const shape = { h: told?.h, w: told?.w ?? null };
       const canvas = typeof told?.artifact === "string" ? told.artifact : "";
+      const width = told?.width ?? null;
       if (!(
         canvas &&
+        (width === null || (typeof width === "number" && width > 0)) &&
         Array.isArray(told?.stories) &&
         told.stories.every((one) => typeof one === "string") &&
         isEmbedShape(shape)
       )) {
         return new Response(
-          "A shape is { artifact: id, stories: string[], h: px, w: px or null }.",
+          "A shape is { artifact: id, stories: string[], width: the Preview's px or null, h: px, w: px or null }.",
           { status: 400 }
         );
       }
@@ -15401,7 +15404,7 @@ export const createServer = (
       }
       return artifacts.keepSaidShape(
         canvas,
-        storiesKey(told.stories as string[]),
+        storiesKey(told.stories as string[], width as number | null),
         shape
       )
         ? new Response(null, { status: 204 })

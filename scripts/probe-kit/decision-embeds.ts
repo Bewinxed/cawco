@@ -370,13 +370,17 @@ function decisionPage(
     ...Object.entries(media.files).map(([id, held]) => [
       id,
       {
+        id,
         kind: "component",
         name: held[0]?.split("/").at(-1) ?? id,
         embed: `${media.embedAt}/@cawco/canvas?${held.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&scheme=${media.theme}`,
         shapes: { said: media.said.get(id) ?? {}, drawn: {} },
       },
     ]),
-    ...Object.keys(media.pages).map((id) => [id, { kind: "page", name: id }]),
+    ...Object.keys(media.pages).map((id) => [
+      id,
+      { id, kind: "page", name: id },
+    ]),
   ]);
   const title = program.match(TITLE)?.[1] ?? "";
   // The overlay's own pick where it runs; the stand-in bridge's otherwise.
@@ -476,10 +480,11 @@ export async function startDecisionStage(
           h: number;
           stories: string[];
           w: number | null;
+          width: number | null;
         };
         said.set(told.artifact, {
           ...said.get(told.artifact),
-          [storiesKey(told.stories)]: { h: told.h, w: told.w },
+          [storiesKey(told.stories, told.width)]: { h: told.h, w: told.w },
         });
         return new Response(null, { status: 204 });
       }

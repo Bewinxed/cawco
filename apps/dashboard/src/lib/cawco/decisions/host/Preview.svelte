@@ -108,6 +108,12 @@
   const stories = $derived(
     Array.isArray(props.stories) ? props.stories.map(String) : []
   );
+  /** The width the program names for it, px; null where it names none. */
+  const namedWidth = $derived(
+    typeof props.width === "number" ? props.width : null
+  );
+  /** The key its at-rest shape is kept by (core `storiesKey`). */
+  const shapeKey = $derived(storiesKey(stories, namedWidth));
   let frame = $state<HTMLIFrameElement>();
   /** The box the frame and its wait stand in: where the picture is on the page, for its turn (embed-turns.ts). */
   let box = $state<HTMLDivElement>();
@@ -129,7 +135,7 @@
       w: number | null;
     } | null => {
       const shapes = held?.shapes;
-      const said = shapes?.said[storiesKey(stories)];
+      const said = shapes?.said[shapeKey];
       if (said) {
         return { parts: [said], w: said.w };
       }
@@ -207,13 +213,16 @@
   let turnState = $state<"waiting" | "fetching" | "fetched">("waiting");
 
   /**
-   * The shape its canvas said, told beside the page's own address (hub
-   * preview.ts `PAGE_SHAPE_PATH`) where the media knew another: kept for every next Preview of
-   * these stories, in any browser. Unheard, the next stands at what the
-   * media knew; nothing waits on it.
+   * The shape its canvas said at rest, told beside the page's own address
+   * (hub preview.ts `PAGE_SHAPE_PATH`) where the media knew another: kept
+   * for every next Preview of these stories at this width, in any browser.
+   * Only the at-rest one (core `CANVAS_EMBED_SIZE`'s `rest`): after a list
+   * opened and closed at 1540, the closed list's 506 was kept, and the next
+   * load held its wells there and grew them 289px as the frames drew.
+   * Unheard, the next stands at what the media knew; nothing waits on it.
    */
   const tellShape = (heard: EmbedShape) => {
-    const had = held?.shapes?.said[storiesKey(stories)];
+    const had = held?.shapes?.said[shapeKey];
     if (had?.h === heard.h && had.w === heard.w) {
       return;
     }
@@ -221,7 +230,12 @@
     fetch("shape", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ artifact: id, stories, ...heard }),
+      body: JSON.stringify({
+        artifact: id,
+        stories,
+        width: namedWidth,
+        ...heard,
+      }),
     }).catch(() => undefined);
   };
 
@@ -231,6 +245,7 @@
       const said = event.data as {
         down?: unknown;
         height?: unknown;
+        rest?: unknown;
         type?: unknown;
         urls?: unknown;
         why?: unknown;
@@ -265,7 +280,9 @@
         tall = said.height;
         saidWidth = typeof said.width === "number" ? said.width : null;
         turn?.done();
-        tellShape({ h: tall, w: saidWidth });
+        if (said.rest === true) {
+          tellShape({ h: tall, w: saidWidth });
+        }
       }
     };
     addEventListener("message", heard);

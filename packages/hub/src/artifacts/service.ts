@@ -7331,9 +7331,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * The shape an embed of component canvas `id` said for the stories a
-     * Preview names (core `storiesKey`), as a decision page's Preview heard
-     * it, kept in the canvas's doc (`meta.saidShapes`): the page's media
+     * The shape an embed of component canvas `id` said at rest for the
+     * stories a Preview names at the width it names (core `storiesKey`), as
+     * a decision page's Preview heard it, kept in the canvas's doc (`meta.saidShapes`): the page's media
      * carries it from then on, so the next Preview of it, in any browser,
      * stands its skeleton at that shape from its first paint. Changed only
      * when it differs. False for an artifact that is no component canvas.

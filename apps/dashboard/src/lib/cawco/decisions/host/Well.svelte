@@ -12,7 +12,12 @@
   piece that knows its width stands in a sideways scroller from its first
   paint, never only once the well has measured itself, so a piece wider than
   the well (a window narrowed under it) is clipped and scrolls inside it in
-  the very frame it is wider, never past its card onto the page; under the
+  the very frame it is wider, never past its card onto the page; its edge
+  fade says what is past its sides, with no scrollbar of its own
+  (`no-scrollbar`, as the house's other faded sideways scrollers): drawn,
+  Chromium's first measure of the stage (a scroller of contained inline
+  size) counted a 10px sideways scrollbar under a piece as wide as it, and
+  every card holding one shrank 20px at the next layout; under the
   house edge fade at its full 40px on every width (over words cut mid-word a phone's
   16px reads as a clip), on the side where more is hidden. Under it the
   caption in meta at the start and the piece's one action at the end; an
@@ -79,7 +84,7 @@
       class={[
         "relative flex min-w-0 flex-1 items-center-safe justify-center-safe",
         picture !== undefined &&
-          "kit-edge-fade fade-len-c-edge-fade-len contain-inline-size overflow-x-auto overscroll-x-contain",
+          "kit-edge-fade fade-len-c-edge-fade-len no-scrollbar contain-inline-size overflow-x-auto overscroll-x-contain",
       ]}
       data-slot="media-stage"
     >
