@@ -853,40 +853,43 @@ const isInstalled = async (id: string): Promise<boolean> =>
 /**
  * One install as `claude plugin list --json` reports it
  * (https://code.claude.com/docs/en/plugins/cli-reference#json-output).
- * `version` is "the version Claude Code computed at install"; `folderVersion`,
- * for a plugin sessions load in place from its marketplace's folder (every
- * vendored one: a relative path in a marketplace added from a directory), is
- * "the plugin's `version` as Claude Code loaded it from that folder, which
- * can differ from the `version` field above". Absent when the folder's
- * manifest declares none.
+ * `version` is "the version Claude Code computed at install". For a plugin
+ * sessions load in place from its marketplace's folder (every vendored one: a
+ * relative path in a marketplace added from a directory), `readFromFolder` is
+ * that folder and `folderVersion` "the plugin's `version` as Claude Code
+ * loaded it from that folder". On 2.1.311 that is the plugin.json's, or the
+ * marketplace entry's when the plugin has no plugin.json, and absent when a
+ * plugin.json declares none, whatever its entry says.
+ * `installPath` is the cached copy, which a copied plugin loads from.
  */
 const ListedPlugin = z.object({
   folderVersion: z.string().optional(),
   id: z.string(),
+  installPath: z.string().optional(),
+  readFromFolder: z.string().optional(),
   scope: z.string(),
   version: z.string(),
 });
 type ListedPlugin = z.infer<typeof ListedPlugin>;
 
 /**
- * Claude Code's own account of the user-scope installs, by id, or the run
- * that would not give it. One `claude plugin list --json` per sync: it is what
- * computes a folder's version, by the rule the CLI keeps
- * (https://code.claude.com/docs/en/plugins/loading#how-claude-code-computes-the-version).
+ * Claude Code's own account of its installs, every scope, or the run that
+ * would not give it: one `claude plugin list --json`.
  */
 const listPlugins = async (
   bin: string
 ): Promise<
-  | { ok: true; plugins: Map<string, ListedPlugin> }
-  | { ok: false; ran: Ran; why: string }
+  { ok: true; plugins: ListedPlugin[] } | { ok: false; ran: Ran; why: string }
 > => {
   const ran = await runClaude(bin, ["plugin", "list", "--json"]);
   if (ran.code !== 0) {
     return { ok: false, ran, why: ran.output };
   }
-  let listed: ListedPlugin[];
   try {
-    listed = z.array(ListedPlugin).parse(JSON.parse(ran.stdout));
+    return {
+      ok: true,
+      plugins: z.array(ListedPlugin).parse(JSON.parse(ran.stdout)),
+    };
   } catch (error) {
     return {
       ok: false,
@@ -894,26 +897,27 @@ const listPlugins = async (
       why: `its output is not the list: ${said(error)}`,
     };
   }
-  return {
-    ok: true,
-    plugins: new Map(
-      listed
-        .filter((plugin) => plugin.scope === "user")
-        .map((plugin) => [plugin.id, plugin])
-    ),
-  };
 };
 
 /**
- * The version a plugin's record should move to, when it lags the folder
- * sessions load it from: what `claude plugin update` re-records ("`claude
- * plugin update <id>` re-records its version", as `claude plugin install`
- * answers for an installed in-place plugin, 2.1.311).
+ * The version a carried plugin's record should move to, when it lags what its
+ * folder declares: what Claude Code read there (`folderVersion`), else the
+ * entry's version the vendored catalog carries ({@link vendoredCatalog}),
+ * the order Claude Code computes a version in
+ * (https://code.claude.com/docs/en/plugins/loading#how-claude-code-computes-the-version).
+ * `claude plugin update` re-records it ("`claude plugin update <id>`
+ * re-records its version", as `claude plugin install` answers for an
+ * installed in-place plugin, 2.1.311).
  */
-const recordLag = (plugin: ListedPlugin): string | undefined =>
-  plugin.folderVersion !== undefined && plugin.folderVersion !== plugin.version
-    ? plugin.folderVersion
+const recordLag = (
+  plugin: ListedPlugin,
+  entryVersion: string | undefined
+): string | undefined => {
+  const declared = plugin.folderVersion ?? entryVersion;
+  return declared !== undefined && declared !== plugin.version
+    ? declared
     : undefined;
+};
 
 /** `plugin@marketplace` is the CLI's own form, and the half after the `@` is the link. */
 const marketplaceOf = (id: string): string => id.split("@").pop() ?? "";
@@ -1239,9 +1243,9 @@ const byMarketplace = (
  */
 const writeVendoredMarketplace = async (
   marketplace: string,
-  plugins: readonly FleetPluginPayload[],
-  into: string
+  plugins: readonly FleetPluginPayload[]
 ): Promise<void> => {
+  const into = vendorDir(marketplace);
   for (const plugin of plugins) {
     if (!plugin.files) {
       continue;
@@ -1274,21 +1278,56 @@ const writeVendoredMarketplace = async (
   );
 
   await writeStateFile(
-    join(into, ".claude-plugin", "marketplace.json"),
-    `${JSON.stringify(
-      {
-        name: vendorName(marketplace),
-        owner: { name: "cawco" },
-        plugins: plugins.map((plugin) => ({
-          name: plugin.name,
-          source: `./plugins/${plugin.name}`,
-          description: `Carried by the cawco fleet (${marketplace}).`,
-        })),
-      },
-      null,
-      2
-    )}\n`
+    catalogPath(marketplace),
+    vendoredCatalog(marketplace, plugins)
   );
+};
+
+/** Where a vendored marketplace's catalog is. */
+const catalogPath = (marketplace: string): string =>
+  join(vendorDir(marketplace), ".claude-plugin", "marketplace.json");
+
+/**
+ * The catalog of one vendored marketplace, as written. Each entry carries the
+ * version the plugin declares ({@link FleetPluginPayload.version}): Claude
+ * Code reads a plugin's version from its plugin.json first and its
+ * marketplace entry second
+ * (https://code.claude.com/docs/en/plugins/loading#how-claude-code-computes-the-version),
+ * so a plugin that versions through its upstream entry keeps that version here.
+ */
+const vendoredCatalog = (
+  marketplace: string,
+  plugins: readonly FleetPluginPayload[]
+): string =>
+  `${JSON.stringify(
+    {
+      name: vendorName(marketplace),
+      owner: { name: "cawco" },
+      plugins: plugins.map((plugin) => ({
+        name: plugin.name,
+        source: `./plugins/${plugin.name}`,
+        description: `Carried by the cawco fleet (${marketplace}).`,
+        ...(plugin.version ? { version: plugin.version } : {}),
+      })),
+    },
+    null,
+    2
+  )}\n`;
+
+/** The vendored marketplaces whose catalog on disk is not the one `groups` makes. */
+const staleCatalogs = async (
+  groups: ReadonlyMap<string, readonly FleetPluginPayload[]>
+): Promise<string[]> => {
+  const stale = await Promise.all(
+    [...groups].map(async ([marketplace, group]) => {
+      const file = Bun.file(catalogPath(marketplace));
+      const held = (await file.exists()) ? await file.text() : undefined;
+      return held === vendoredCatalog(marketplace, group)
+        ? undefined
+        : marketplace;
+    })
+  );
+  return stale.filter((marketplace) => marketplace !== undefined);
 };
 
 /**
@@ -1303,7 +1342,7 @@ const writeVendoredMarketplaces = async (
     if (!isSafeSegment(marketplace)) {
       throw new Error(`unsafe marketplace name ${marketplace}`);
     }
-    await writeVendoredMarketplace(marketplace, group, vendorDir(marketplace));
+    await writeVendoredMarketplace(marketplace, group);
   }
   // Each removal is its own folder: all at once.
   const present = await readdir(VENDOR_ROOT).catch(() => [] as string[]);
@@ -1499,9 +1538,10 @@ export const fleetHoldings = async (): Promise<FleetHoldings> => ({
  */
 const installCarried = async (
   bin: string,
-  vendoredId: string,
+  plugin: FleetPluginPayload,
   listed: ListedPlugin | undefined
 ): Promise<FleetItemState | undefined> => {
+  const vendoredId = vendoredIdOf(payloadId(plugin));
   if (!listed) {
     const ran = await runClaude(bin, [
       "plugin",
@@ -1512,7 +1552,7 @@ const installCarried = async (
     ]);
     return (await isInstalled(vendoredId)) ? undefined : ranFailed(ran);
   }
-  const lag = recordLag(listed);
+  const lag = recordLag(listed, plugin.version);
   if (lag === undefined) {
     return;
   }
@@ -1577,6 +1617,9 @@ const syncVendoredPlugins = async (
     ...[...groups.keys()].filter(
       (marketplace) => !present.includes(marketplace)
     ),
+    // A catalog whose entries moved with no plugin's bytes moving: a
+    // version the hub now carries for a plugin this disk already holds.
+    ...(await staleCatalogs(groups)),
   ]);
   const gone = present.filter((marketplace) => !groups.has(marketplace));
 
@@ -1608,10 +1651,20 @@ const syncVendoredPlugins = async (
   // What Claude Code holds installed, read once: whether each plugin is
   // installed at all, and whether its record lags the folder it loads from.
   const carried = wanted.filter(({ id }) => byId.has(id));
-  const installs =
+  const listed =
     carried.length > 0
       ? await listPlugins(bin)
-      : { ok: true as const, plugins: new Map<string, ListedPlugin>() };
+      : { ok: true as const, plugins: [] };
+  const installs = listed.ok
+    ? {
+        ok: true as const,
+        plugins: new Map(
+          listed.plugins
+            .filter((one) => one.scope === "user")
+            .map((one) => [one.id, one])
+        ),
+      }
+    : listed;
 
   for (const { id } of carried) {
     const plugin = byId.get(id);
@@ -1640,7 +1693,7 @@ const syncVendoredPlugins = async (
 
     const failed = await installCarried(
       bin,
-      vendoredId,
+      plugin,
       installs.plugins.get(vendoredId)
     );
     if (failed) {
@@ -3798,26 +3851,28 @@ function mergeMcp(
   return found;
 }
 
-/** Where an installed plugin's skills live, by the name a session calls them. */
+/**
+ * Where each installed plugin's skills live, by the name a session calls them:
+ * the folder sessions load it from. That is `readFromFolder` for a plugin
+ * loaded in place, whose cached copy (`installPath`) stays at the version it
+ * was installed at, and `installPath` for a copied one. A plugin's skills
+ * are a `skills/` directory inside it, which is what `/` lists as
+ * `<plugin>:<skill>`. A skills-directory or session-only plugin's skills are
+ * read where they are ({@link discoverSkills}), not here.
+ */
 function pluginSkillRoots(
-  installed: InstalledPlugins
+  listed: readonly ListedPlugin[]
 ): { plugin: string; root: string }[] {
-  const roots: { plugin: string; root: string }[] = [];
-  for (const [id, entries] of Object.entries(installed.plugins ?? {})) {
-    for (const entry of entries) {
-      // The CLI keeps the unpacked copy's path per install; a plugin's skills
-      // are a `skills/` directory inside it, which is what `/` lists as
-      // `<plugin>:<skill>`.
-      if (!entry.installPath) {
-        continue;
-      }
-      roots.push({
-        plugin: id.split("@")[0],
-        root: join(entry.installPath, "skills"),
-      });
+  const roots = new Map<string, string>();
+  for (const plugin of listed) {
+    const [name, source] = plugin.id.split("@");
+    const loadsFrom = plugin.readFromFolder ?? plugin.installPath;
+    if (source === "skills-dir" || source === "inline" || !loadsFrom) {
+      continue;
     }
+    roots.set(join(loadsFrom, "skills"), name);
   }
-  return roots;
+  return [...roots].map(([root, plugin]) => ({ plugin, root }));
 }
 
 /**
@@ -3862,14 +3917,36 @@ async function skillsIn(
   return found;
 }
 
+/**
+ * The installs Claude Code lists here, read once for an inspection. None when
+ * it cannot be started or will not say, with the reason in the agent's log.
+ */
+const installedPlugins = async (): Promise<ListedPlugin[]> => {
+  let bin: string;
+  try {
+    bin = await claudeToStart();
+  } catch (error) {
+    if (!(error instanceof ClaudeRefused)) {
+      throw error;
+    }
+    console.warn(`[fleet] plugin skills not read: ${error.message}`);
+    return [];
+  }
+  const listed = await listPlugins(bin);
+  if (!listed.ok) {
+    console.warn(`[fleet] claude plugin list --json: ${listed.why}`);
+    return [];
+  }
+  return listed.plugins;
+};
+
 /** Every skill on this machine, in the order Claude Code would resolve them. */
 const discoverSkills = async (
   cwd: string | undefined,
   managed: Sidecar
 ): Promise<DiscoveredSkill[]> => {
-  const installed = (await readJson<InstalledPlugins>(INSTALLED_PLUGINS)) ?? {};
   const plugins = await Promise.all(
-    pluginSkillRoots(installed).map(({ plugin, root }) =>
+    pluginSkillRoots(await installedPlugins()).map(({ plugin, root }) =>
       skillsIn(root, "plugin", `${plugin}:`)
     )
   );

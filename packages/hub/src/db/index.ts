@@ -6473,11 +6473,12 @@ const make = async (path: string): Promise<DbShape> => {
             id: plugins.id,
             hash: plugins.hash,
             bytes: plugins.bytes,
+            version: plugins.version,
           })
           .from(plugins)
           .where(eq(plugins.enabled, true))
           .all()
-          .flatMap(({ id, hash, bytes }) => {
+          .flatMap(({ id, hash, bytes, version }) => {
             const files = hash
               ? keptFiles(
                   `plugin:${id}`,
@@ -6501,6 +6502,7 @@ const make = async (path: string): Promise<DbShape> => {
                 hash,
                 bytes: bytes ?? 0,
                 files,
+                ...(version ? { version } : {}),
               },
             ];
           }),

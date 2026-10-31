@@ -333,7 +333,7 @@ export const readMarketplace = (
  * `pluginVersion`), or the sentence saying why it is not.
  */
 export type ResolvedPlugin =
-  (FleetPluginPayload & { version?: string }) | { name: string; error: string };
+  FleetPluginPayload | { name: string; error: string };
 
 /**
  * Every wanted plugin of one marketplace, resolved to files.

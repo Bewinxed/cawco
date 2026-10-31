@@ -387,6 +387,14 @@ export interface FleetPluginPayload {
   marketplace: string;
   /** The plugin's own name, as its marketplace's manifest lists it. */
   name: string;
+  /**
+   * The version the plugin declares: its plugin.json's, else its upstream
+   * marketplace entry's (hub fleet-versions.ts `pluginVersion`), the order
+   * Claude Code reads them in. Written into the vendored marketplace's entry,
+   * so a plugin that versions through its entry keeps a version on every
+   * machine. Absent when it declares none.
+   */
+  version?: string;
 }
 
 /**
