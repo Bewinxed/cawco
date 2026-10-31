@@ -274,12 +274,17 @@ const FILE_REF = /^\/api\/files\/[0-9a-f]{64}$/u;
  * `attachments` with each file once, the first of each as attached. A
  * reference is the hash of the bytes, so one picture pasted twice is the same
  * reference twice, and every list of what a person attached is keyed by it.
+ * One with no reference yet (a composer's file still on its way to the hub)
+ * stays: what it is is not known until it lands.
  */
-export const eachFileOnce = (
-  attachments: CommentAttachment[]
-): CommentAttachment[] => {
+export const eachFileOnce = <T extends { ref?: string }>(
+  attachments: T[]
+): T[] => {
   const seen = new Set<string>();
   return attachments.filter((one) => {
+    if (one.ref === undefined) {
+      return true;
+    }
     if (seen.has(one.ref)) {
       return false;
     }

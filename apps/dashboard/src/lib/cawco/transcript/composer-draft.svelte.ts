@@ -10,6 +10,7 @@
  * across a reload through `draft-store.ts`.
  */
 
+import { eachFileOnce } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import type { StarterPlace } from "@cawco/core/starters";
 import { untrack } from "svelte";
@@ -449,9 +450,15 @@ export class ComposerDraft {
       }
     };
     uploadFile(file.blob, file.name, (progress) => patch({ progress }))
-      .then(({ ref, size, mediaType }) =>
-        patch({ ref, size, mediaType, progress: 1, blob: undefined })
-      )
+      .then(({ ref, size, mediaType }) => {
+        patch({ ref, size, mediaType, progress: 1, blob: undefined });
+        // A comment carries each file once (eachFileOnce, as the hub keeps
+        // it): one that lands as the same bytes as a file already attached
+        // goes, and the first attached keeps its chip and its place.
+        if (this.byReference) {
+          this.files = eachFileOnce(this.files);
+        }
+      })
       .catch((error: unknown) =>
         patch({
           error: failureWords(error),
