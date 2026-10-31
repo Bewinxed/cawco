@@ -284,7 +284,7 @@ export class DesignGraph {
     this.#index = kept.index;
     this.panelW = kept.panelW;
     this.graphH = kept.graphH;
-    // Folded is the dock's least height: GraphPanel holds it to one row, its head.
+    // Folded is the dock's least height: GraphPanel holds it to its head (`dockFloor`).
     this.dockH = addressedDockFolded() ? 0 : kept.dockH;
     this.#edits = kept.edits;
   }
