@@ -283,6 +283,7 @@ export const decidesWords = {
     knows: "Knows",
     decides: "Decides",
     hear: "How you hear",
+    record: "Record",
   },
   /** A folded row's way back in. */
   change: "Change",
@@ -438,6 +439,23 @@ export const decidesWords = {
   /** What waits under a kind could not be counted. */
   waitingUnread: (reason: string) =>
     `Couldn't count what waits under it: ${reason}`,
+
+  // ── A member's record ───────────────────────────────────────────────────
+  /** Its figures, each a link where it has a place; `age` as formatAgeShort says it ("now", "2h"). */
+  record: {
+    decided: (count: number) => `${count.toLocaleString()} decided`,
+    last: (age: string) =>
+      age === "now" ? "last just now" : `last ${age} ago`,
+    takenBack: (count: number) => `${count.toLocaleString()} taken back`,
+    waiting: (count: number) => `${count.toLocaleString()} waiting`,
+    spend: (usd: string) => `${usd} this month`,
+    nothingYet: "Nothing decided yet",
+    threads: (count: number) =>
+      `${count.toLocaleString()} ${count === 1 ? "thread" : "threads"}`,
+    lastTurn: (age: string) =>
+      age === "now" ? "last turn just now" : `last turn ${age} ago`,
+    unread: (reason: string) => `The record didn't load: ${reason}`,
+  },
 
   // ── The project's details: its Who decides row ─────────────────────────
   detailsLabel: "Who decides",

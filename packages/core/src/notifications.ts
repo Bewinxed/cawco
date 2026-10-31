@@ -228,6 +228,8 @@ export interface DeskAlertFrame {
   collapseId: string;
   instanceId?: undefined;
   kind: "desk_alert";
+  /** Where it opens when that is a place of the dashboard's own (a decision card), as its path; null: by `session`. */
+  path: string | null;
   /**
    * A newer alert under its tag alerts again rather than replacing the older
    * in silence: an artifact's (one tag per artifact, hub push.ts `pinAsked`).

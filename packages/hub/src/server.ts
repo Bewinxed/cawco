@@ -29736,6 +29736,10 @@ export const createServer = (
               .filter((skill) => skill.enabled && !skill.projectId)
               .map((skill) => ({ id: skill.name, note: skill.source })),
           spend: (instances, since) => db.decides.spend(instances, since),
+          cawRecord: (projectId, since) => ({
+            ...db.cawThreads(projectId),
+            spendUsd: db.cawSpentSince(projectId, since.getTime()),
+          }),
           live: (id) => {
             const state = db.workItem(id)?.state;
             return state === "starting" || state === "running";

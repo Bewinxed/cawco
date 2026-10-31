@@ -4011,6 +4011,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "operationId": "getApiDecidesMembersByIdRecord",
@@ -4092,6 +4100,11 @@
                 "schema": {
                   "type": "string"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
               }
             }
           },
@@ -4121,6 +4134,33 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decides/pages/{artifactId}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiDecidesPagesByArtifactId",
+        "responses": {
+          "200": {
+            "description": "getApiDecidesPagesByArtifactId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiDecidesPagesByArtifactId200"
                 }
               }
             }
@@ -28773,6 +28813,28 @@
       "getApiDecidesMembersByIdRecord200": {
         "type": "object",
         "properties": {
+          "caw": {
+            "type": "object",
+            "properties": {
+              "lastTurnAt": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "spendUsd": {
+                "type": "number"
+              },
+              "threads": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "lastTurnAt",
+              "spendUsd",
+              "threads"
+            ]
+          },
           "decided": {
             "type": "number"
           },
@@ -28798,6 +28860,60 @@
           "spendUsd",
           "takenBack",
           "waiting"
+        ]
+      },
+      "getApiDecidesPagesByArtifactId200": {
+        "type": "object",
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "card": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "member": {
+                  "type": "string"
+                },
+                "settledAt": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "signed": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "takenBackAt": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              },
+              "required": [
+                "card",
+                "kind",
+                "member",
+                "settledAt",
+                "signed",
+                "takenBackAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "cards"
         ]
       },
       "getApiProjectsByIdDecides200": {
@@ -60870,6 +60986,13 @@
               "desk_alert"
             ]
           },
+          "path": {
+            "description": "Where it opens when that is a place of the dashboard's own (a decision card), as its path; null: by `session`.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "renotify": {
             "description": "A newer alert under its tag alerts again rather than replacing the older\nin silence: an artifact's (one tag per artifact, hub push.ts `pinAsked`).",
             "type": "boolean"
@@ -60893,6 +61016,7 @@
           "body",
           "collapseId",
           "kind",
+          "path",
           "renotify",
           "session",
           "title",

@@ -718,6 +718,11 @@ export interface DbShape {
   /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
   /** Dollars the project's Caw turns have cost since `since` (ms epoch). */
   readonly cawSpentSince: (projectId: string, since: number) => number;
+  /** The project's Caw conversations, ever, and when the newest of their turns was reported (ms epoch; null before any). */
+  readonly cawThreads: (projectId: string) => {
+    lastTurnAt: number | null;
+    threads: number;
+  };
   /** The gate workspaces, still with their checkout, that run a workspace's landing gate steps (the iOS build) on other machines. */
   readonly checkWorkspacesOf: (workspaceId: string) => WorkspaceRow[];
   /**
@@ -8003,6 +8008,26 @@ const make = async (path: string): Promise<DbShape> => {
       });
     },
     cawSpentSince: (projectId, since) => cawSince(projectId, since),
+    cawThreads: (projectId) => {
+      const conversations = and(
+        eq(instances.projectId, projectId),
+        eq(instances.origin, "project")
+      );
+      const threads =
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(instances)
+          .where(conversations)
+          .get()?.count ?? 0;
+      const last =
+        db
+          .select({ at: sql<number | null>`max(${usageBuckets.lastTs})` })
+          .from(usageBuckets)
+          .innerJoin(instances, eq(instances.sessionId, usageBuckets.sessionId))
+          .where(conversations)
+          .get()?.at ?? null;
+      return { threads, lastTurnAt: last };
+    },
     projectSpend: (projectId, { todayStart, monthStart }) => {
       // Caw: what the project's conversations reported.
       const caw = {

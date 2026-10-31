@@ -103,6 +103,8 @@ export interface DecidesDb {
     artifactId: string,
     card: string
   ) => CardSettlingRow | undefined;
+  /** Where each card of `artifactId` the hub routed went. */
+  readonly settlings: (artifactId: string) => CardSettlingRow[];
   /** The cost of `instances`' turns since `since`, in dollars. */
   readonly spend: (instances: string[], since: Date) => number;
 }
@@ -283,6 +285,12 @@ export const decidesDb = (
       });
       return open;
     },
+    settlings: (artifactId) =>
+      db
+        .select()
+        .from(cardSettlings)
+        .where(eq(cardSettlings.artifactId, artifactId))
+        .all(),
     settling: (artifactId, card) =>
       db
         .select()

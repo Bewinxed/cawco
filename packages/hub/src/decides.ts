@@ -52,6 +52,11 @@ export interface HarnessOffer {
 }
 
 export interface DecidesDeps {
+  /** Project `projectId`'s Caw: his conversations' cost since `since`, how many he has had, and his newest turn (ms epoch). */
+  readonly cawRecord: (
+    projectId: string,
+    since: Date
+  ) => { lastTurnAt: number | null; spendUsd: number; threads: number };
   readonly db: DecidesDb;
   /** The harnesses on online machines, with their models (`agent_harnesses`). */
   readonly harnesses: () => HarnessOffer[];
@@ -370,311 +375,353 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     return writes;
   };
 
-  return new Elysia()
-    .get("/api/decides", () => ({
-      ...db.fleet(),
-      harnesses: deps.harnesses(),
-      skills: deps.skills(),
-      connections: { slack: false, email: false },
-    }))
-    .put(
-      "/api/decides/routes",
-      { body: t.Object({ routes: t.Record(t.String(), t.String()) }) },
-      ({ body }) =>
-        answered(() => {
-          const fleet = db.fleet();
-          knownKinds(fleet, Object.keys(body.routes));
-          knownMembers(fleet, Object.values(body.routes));
-          db.setRoutes(body.routes);
-          return db.fleet();
-        })
-    )
-    .post(
-      "/api/decides/members",
-      {
-        body: t.Object({
-          name: t.String(),
-          job: t.String(),
-          hue: HUE,
-          hear: HEAR,
-          agent: AGENT,
-        }),
-      },
-      ({ body }) =>
-        answered(() => {
-          const name = body.name.trim();
-          const id = slugOf(name);
-          if (!(name && id)) {
-            throw new DecidesRefusal(422, decidesWords.nameMissing);
-          }
-          const fleet = db.fleet();
-          if (
-            memberOf(fleet, id) ||
-            (BUILT_IN_MEMBERS as readonly string[]).includes(id) ||
-            types.get(id) ||
-            !DECIDES_ID.test(id)
-          ) {
-            throw new DecidesRefusal(409, decidesWords.nameTaken(name));
-          }
-          db.putMember(
-            {
-              id,
-              type: "agent",
-              name,
-              job: body.job.trim(),
-              subject: name,
-              hue: body.hue,
-              hear: body.hear,
-              delegateType: id,
-              reach: null,
-            },
-            typeOf(id, body.agent)
-          );
-          return memberOf(db.fleet(), id) as Member;
-        })
-    )
-    .put(
-      "/api/decides/members/:id",
-      {
-        body: t.Object({
-          job: t.Optional(t.String()),
-          hue: t.Optional(HUE),
-          hear: HEAR,
-          agent: AGENT,
-        }),
-      },
-      ({ params, body }) =>
-        answered(() => saveMember(editable(params.id), body))
-    )
-    .put(
-      "/api/decides/members/:id/picture",
-      {
-        body: t.Union([
-          t.Object({
-            pose: t.Union(CAW_POSE_IDS.map((pose) => t.Literal(pose))),
+  return (
+    new Elysia()
+      .get("/api/decides", () => ({
+        ...db.fleet(),
+        harnesses: deps.harnesses(),
+        skills: deps.skills(),
+        connections: { slack: false, email: false },
+      }))
+      .put(
+        "/api/decides/routes",
+        { body: t.Object({ routes: t.Record(t.String(), t.String()) }) },
+        ({ body }) =>
+          answered(() => {
+            const fleet = db.fleet();
+            knownKinds(fleet, Object.keys(body.routes));
+            knownMembers(fleet, Object.values(body.routes));
+            db.setRoutes(body.routes);
+            return db.fleet();
+          })
+      )
+      .post(
+        "/api/decides/members",
+        {
+          body: t.Object({
+            name: t.String(),
+            job: t.String(),
+            hue: HUE,
+            hear: HEAR,
+            agent: AGENT,
           }),
-          t.Object({ hue: HUE }),
-        ]),
-      },
-      ({ params, body }) =>
-        answered(() => {
-          const member = memberOf(db.fleet(), params.id);
-          if (!member) {
-            throw new DecidesRefusal(
-              404,
-              decidesWords.unknownMember(params.id)
+        },
+        ({ body }) =>
+          answered(() => {
+            const name = body.name.trim();
+            const id = slugOf(name);
+            if (!(name && id)) {
+              throw new DecidesRefusal(422, decidesWords.nameMissing);
+            }
+            const fleet = db.fleet();
+            if (
+              memberOf(fleet, id) ||
+              (BUILT_IN_MEMBERS as readonly string[]).includes(id) ||
+              types.get(id) ||
+              !DECIDES_ID.test(id)
+            ) {
+              throw new DecidesRefusal(409, decidesWords.nameTaken(name));
+            }
+            db.putMember(
+              {
+                id,
+                type: "agent",
+                name,
+                job: body.job.trim(),
+                subject: name,
+                hue: body.hue,
+                hear: body.hear,
+                delegateType: id,
+                reach: null,
+              },
+              typeOf(id, body.agent)
             );
-          }
-          if ("pose" in body) {
-            if (member.pose === null) {
+            return memberOf(db.fleet(), id) as Member;
+          })
+      )
+      .put(
+        "/api/decides/members/:id",
+        {
+          body: t.Object({
+            job: t.Optional(t.String()),
+            hue: t.Optional(HUE),
+            hear: HEAR,
+            agent: AGENT,
+          }),
+        },
+        ({ params, body }) =>
+          answered(() => saveMember(editable(params.id), body))
+      )
+      .put(
+        "/api/decides/members/:id/picture",
+        {
+          body: t.Union([
+            t.Object({
+              pose: t.Union(CAW_POSE_IDS.map((pose) => t.Literal(pose))),
+            }),
+            t.Object({ hue: HUE }),
+          ]),
+        },
+        ({ params, body }) =>
+          answered(() => {
+            const member = memberOf(db.fleet(), params.id);
+            if (!member) {
               throw new DecidesRefusal(
-                422,
-                decidesWords.wearsMark(member.name)
+                404,
+                decidesWords.unknownMember(params.id)
               );
             }
-            db.setBuiltIn({
-              pictures: { [member.id as FlockMember]: body.pose },
-            });
-          } else {
-            const row = db.members().find((one) => one.id === member.id);
-            if (!row) {
-              throw new DecidesRefusal(
-                422,
-                decidesWords.wearsPose(member.name)
-              );
+            if ("pose" in body) {
+              if (member.pose === null) {
+                throw new DecidesRefusal(
+                  422,
+                  decidesWords.wearsMark(member.name)
+                );
+              }
+              db.setBuiltIn({
+                pictures: { [member.id as FlockMember]: body.pose },
+              });
+            } else {
+              const row = db.members().find((one) => one.id === member.id);
+              if (!row) {
+                throw new DecidesRefusal(
+                  422,
+                  decidesWords.wearsPose(member.name)
+                );
+              }
+              db.putMember({ ...row, hue: body.hue }, null);
             }
-            db.putMember({ ...row, hue: body.hue }, null);
-          }
-          return memberOf(db.fleet(), member.id) as Member;
-        })
-    )
-    .delete("/api/decides/members/:id", ({ params }) =>
-      answered(async () => {
-        const member = added(params.id);
-        const fleet = db.fleet();
-        const writes = await rewriteProjects(
-          fleet,
-          (own) => {
-            const kinds = Object.keys(own.routes).filter(
-              (kind) => own.routes[kind] === member.id
-            );
-            return kinds.length > 0
-              ? {
-                  ...own,
-                  routes: {
-                    ...own.routes,
-                    ...Object.fromEntries(kinds.map((kind) => [kind, "you"])),
-                  },
-                }
-              : undefined;
-          },
-          decidesWords.removedCommit(
-            member.name,
-            fleet.kinds
-              .filter((kind) => fleet.routes[kind.id] === member.id)
-              .map((kind) => kind.name)
-          )
-        );
-        // Its delegate type goes to the trash, as a type's delete does.
-        if (member.delegateType) {
-          deps.trashType(member.delegateType);
-        }
-        const kindsReturned = db.removeMember(member.id);
-        for (const one of writes) {
-          await one.write();
-        }
-        return {
-          kindsReturned,
-          projectsRewritten: writes.map((one) => one.id),
-        };
-      })
-    )
-    .post(
-      "/api/decides/kinds",
-      {
-        body: t.Object({
-          name: t.String(),
-          example: t.String(),
-          to: t.String(),
-        }),
-      },
-      ({ body }) =>
-        answered(() => {
-          const fleet = db.fleet();
-          const { name, example } = kindFields(fleet, body);
-          const id = slugOf(name);
-          knownMembers(fleet, [body.to]);
-          const kind: Kind = {
-            id,
-            name,
-            example,
-            builtIn: false,
-            position:
-              fleet.kinds.reduce(
-                (most, one) => Math.max(most, one.position),
-                -1
-              ) + 1,
-          };
-          db.putKind(kind);
-          db.setRoutes({ ...fleet.routes, [id]: body.to });
-          return kind;
-        })
-    )
-    .put(
-      "/api/decides/kinds/:id",
-      { body: t.Object({ name: t.String(), example: t.String() }) },
-      ({ params, body }) =>
-        answered(() => {
-          const fleet = db.fleet();
-          const kind = kindOf(fleet, params.id);
-          if (!kind) {
-            throw new DecidesRefusal(404, decidesWords.unknownKind(params.id));
-          }
-          const { name, example } = kindFields(fleet, body, kind.id);
-          const renamed = { ...kind, name, example };
-          db.putKind(renamed);
-          return renamed;
-        })
-    )
-    .delete(
-      "/api/decides/kinds/:id",
-      { body: t.Object({ moveTo: t.String() }) },
-      ({ params, body }) =>
+            return memberOf(db.fleet(), member.id) as Member;
+          })
+      )
+      .delete("/api/decides/members/:id", ({ params }) =>
         answered(async () => {
+          const member = added(params.id);
           const fleet = db.fleet();
-          const kind = removable(fleet, params.id, body.moveTo);
-          // Read every project's file while the kind still reads in it.
           const writes = await rewriteProjects(
             fleet,
             (own) => {
-              if (!(kind.id in own.routes)) {
-                return;
-              }
-              const { [kind.id]: _gone, ...routes } = own.routes;
-              return { ...own, routes };
+              const kinds = Object.keys(own.routes).filter(
+                (kind) => own.routes[kind] === member.id
+              );
+              return kinds.length > 0
+                ? {
+                    ...own,
+                    routes: {
+                      ...own.routes,
+                      ...Object.fromEntries(kinds.map((kind) => [kind, "you"])),
+                    },
+                  }
+                : undefined;
             },
-            decidesWords.kindRemovedCommit(kind.name)
+            decidesWords.removedCommit(
+              member.name,
+              fleet.kinds
+                .filter((kind) => fleet.routes[kind.id] === member.id)
+                .map((kind) => kind.name)
+            )
           );
-          const { moved, projects } = await refileAll(kind.id, body.moveTo);
-          db.removeKind(kind.id, body.moveTo);
+          // Its delegate type goes to the trash, as a type's delete does.
+          if (member.delegateType) {
+            deps.trashType(member.delegateType);
+          }
+          const kindsReturned = db.removeMember(member.id);
           for (const one of writes) {
             await one.write();
-            projects.add(one.id);
           }
-          return { moved, projects: [...projects] };
+          return {
+            kindsReturned,
+            projectsRewritten: writes.map((one) => one.id),
+          };
         })
-    )
-    .get("/api/decides/kinds/:id/waiting", ({ params }) =>
-      answered(() => {
-        const pages = deps.waitingUnder(params.id);
-        return {
-          count: pages.reduce((sum, page) => sum + page.cards.length, 0),
-          projects: [
-            ...new Set(
-              pages.flatMap((page) =>
-                page.row.projectId ? [page.row.projectId] : []
-              )
-            ),
-          ],
-        };
-      })
-    )
-    .get("/api/decides/members/:id/record", ({ params }) =>
-      answered(() => {
-        if (!memberOf(db.fleet(), params.id)) {
-          throw new DecidesRefusal(404, decidesWords.unknownMember(params.id));
-        }
-        const record = db.record(params.id);
-        const month = new Date();
-        month.setDate(1);
-        month.setHours(0, 0, 0, 0);
-        return {
-          decided: record.decided,
-          lastAt: record.lastAt?.toISOString() ?? null,
-          takenBack: record.takenBack,
-          waiting: record.unsettled.filter((row) =>
-            row.workItemId ? deps.live(row.workItemId) : row.signed === null
-          ).length,
-          spendUsd: deps.spend(record.instances, month),
-        };
-      })
-    )
-    .get("/api/projects/:id/decides", ({ params }) =>
-      answered(async () => {
-        known(params.id);
-        return {
-          file: DECIDES_FILE,
-          decides: await decidesTable(params.id, db.fleet()),
-        };
-      })
-    )
-    .put(
-      "/api/projects/:id/decides",
-      {
-        body: t.Object({
-          routes: t.Record(t.String(), t.Nullable(t.String())),
-          message: t.String({ minLength: 1, maxLength: MESSAGE_LIMIT }),
-        }),
-      },
-      ({ params, body }) =>
+      )
+      .post(
+        "/api/decides/kinds",
+        {
+          body: t.Object({
+            name: t.String(),
+            example: t.String(),
+            to: t.String(),
+          }),
+        },
+        ({ body }) =>
+          answered(() => {
+            const fleet = db.fleet();
+            const { name, example } = kindFields(fleet, body);
+            const id = slugOf(name);
+            knownMembers(fleet, [body.to]);
+            const kind: Kind = {
+              id,
+              name,
+              example,
+              builtIn: false,
+              position:
+                fleet.kinds.reduce(
+                  (most, one) => Math.max(most, one.position),
+                  -1
+                ) + 1,
+            };
+            db.putKind(kind);
+            db.setRoutes({ ...fleet.routes, [id]: body.to });
+            return kind;
+          })
+      )
+      .put(
+        "/api/decides/kinds/:id",
+        { body: t.Object({ name: t.String(), example: t.String() }) },
+        ({ params, body }) =>
+          answered(() => {
+            const fleet = db.fleet();
+            const kind = kindOf(fleet, params.id);
+            if (!kind) {
+              throw new DecidesRefusal(
+                404,
+                decidesWords.unknownKind(params.id)
+              );
+            }
+            const { name, example } = kindFields(fleet, body, kind.id);
+            const renamed = { ...kind, name, example };
+            db.putKind(renamed);
+            return renamed;
+          })
+      )
+      .delete(
+        "/api/decides/kinds/:id",
+        { body: t.Object({ moveTo: t.String() }) },
+        ({ params, body }) =>
+          answered(async () => {
+            const fleet = db.fleet();
+            const kind = removable(fleet, params.id, body.moveTo);
+            // Read every project's file while the kind still reads in it.
+            const writes = await rewriteProjects(
+              fleet,
+              (own) => {
+                if (!(kind.id in own.routes)) {
+                  return;
+                }
+                const { [kind.id]: _gone, ...routes } = own.routes;
+                return { ...own, routes };
+              },
+              decidesWords.kindRemovedCommit(kind.name)
+            );
+            const { moved, projects } = await refileAll(kind.id, body.moveTo);
+            db.removeKind(kind.id, body.moveTo);
+            for (const one of writes) {
+              await one.write();
+              projects.add(one.id);
+            }
+            return { moved, projects: [...projects] };
+          })
+      )
+      .get("/api/decides/kinds/:id/waiting", ({ params }) =>
+        answered(() => {
+          const pages = deps.waitingUnder(params.id);
+          return {
+            count: pages.reduce((sum, page) => sum + page.cards.length, 0),
+            projects: [
+              ...new Set(
+                pages.flatMap((page) =>
+                  page.row.projectId ? [page.row.projectId] : []
+                )
+              ),
+            ],
+          };
+        })
+      )
+      .get(
+        "/api/decides/members/:id/record",
+        { query: t.Object({ project: t.Optional(t.String()) }) },
+        ({ params, query }) =>
+          answered(() => {
+            const member = memberOf(db.fleet(), params.id);
+            if (!member) {
+              throw new DecidesRefusal(
+                404,
+                decidesWords.unknownMember(params.id)
+              );
+            }
+            const record = db.record(params.id);
+            const month = new Date();
+            month.setDate(1);
+            month.setHours(0, 0, 0, 0);
+            // Caw, asked from a project's page: that project's conversations.
+            const caw =
+              member.type === "caw" && query.project !== undefined
+                ? deps.cawRecord(known(query.project).id, month)
+                : null;
+            return {
+              caw: caw && {
+                spendUsd: caw.spendUsd,
+                threads: caw.threads,
+                lastTurnAt:
+                  caw.lastTurnAt === null
+                    ? null
+                    : new Date(caw.lastTurnAt).toISOString(),
+              },
+              decided: record.decided,
+              lastAt: record.lastAt?.toISOString() ?? null,
+              takenBack: record.takenBack,
+              waiting: record.unsettled.filter((row) =>
+                row.workItemId ? deps.live(row.workItemId) : row.signed === null
+              ).length,
+              spendUsd: deps.spend(record.instances, month),
+            };
+          })
+      )
+      // Where each card of a decision page went (card_settlings), for the
+      // signature its surface draws: the member it went to, the line a card
+      // that came to him carries (`decidesWords.cameToYou`), and when it was
+      // settled and taken back. The answer's own signature (`SettledBy`) is on
+      // the page's entries.
+      .get("/api/decides/pages/:artifactId", ({ params }) => ({
+        cards: db.settlings(params.artifactId).map((row) => ({
+          card: row.card,
+          member: row.route,
+          kind: row.kind,
+          signed: row.signed,
+          settledAt: row.settledAt?.toISOString() ?? null,
+          takenBackAt: row.takenBackAt?.toISOString() ?? null,
+        })),
+      }))
+      .get("/api/projects/:id/decides", ({ params }) =>
         answered(async () => {
           known(params.id);
-          const fleet = db.fleet();
-          knownKinds(fleet, Object.keys(body.routes));
-          knownMembers(
-            fleet,
-            Object.values(body.routes).filter((id): id is string => id !== null)
-          );
-          await writeFolderFile(
-            params.id,
-            DECIDES_FILE,
-            await projectFile(params.id, fleet, body.routes),
-            { author: YOU, message: body.message }
-          );
           return {
             file: DECIDES_FILE,
             decides: await decidesTable(params.id, db.fleet()),
           };
         })
-    );
+      )
+      .put(
+        "/api/projects/:id/decides",
+        {
+          body: t.Object({
+            routes: t.Record(t.String(), t.Nullable(t.String())),
+            message: t.String({ minLength: 1, maxLength: MESSAGE_LIMIT }),
+          }),
+        },
+        ({ params, body }) =>
+          answered(async () => {
+            known(params.id);
+            const fleet = db.fleet();
+            knownKinds(fleet, Object.keys(body.routes));
+            knownMembers(
+              fleet,
+              Object.values(body.routes).filter(
+                (id): id is string => id !== null
+              )
+            );
+            await writeFolderFile(
+              params.id,
+              DECIDES_FILE,
+              await projectFile(params.id, fleet, body.routes),
+              { author: YOU, message: body.message }
+            );
+            return {
+              file: DECIDES_FILE,
+              decides: await decidesTable(params.id, db.fleet()),
+            };
+          })
+      )
+  );
 };

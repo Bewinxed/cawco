@@ -10,15 +10,16 @@
   import { decidesWords } from "@cawco/core/words/decides";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   import { untrack } from "svelte";
+  import { HUB_UNREACHABLE } from "#lib/cawco/hub-read.js";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import { WhoDecides } from "../decides.svelte";
+  import { type RecordRead, WhoDecides } from "../decides.svelte";
   import type { FleetOffer } from "../decides-client";
   import { drawPopoversInPlace, holdsPanels } from "../in-place";
   import { type Draft, NEW, type RowId } from "../setup.svelte";
   import WhoRoster from "../WhoRoster.svelte";
   import { added, fleetRoutes, kinds, project as projectName } from "./records";
-  import { harnesses, skills, types } from "./setup-records";
+  import { harnesses, records, skills, types } from "./setup-records";
 
   let {
     members = added.slice(0, 7),
@@ -34,6 +35,7 @@
     picking = false,
     removing = false,
     parked = [],
+    record = "read",
   }: {
     members?: Member[];
     routes?: Record<string, string>;
@@ -57,6 +59,8 @@
     removing?: boolean;
     /** Members whose settings were closed before saving, with a change each. */
     parked?: string[];
+    /** The open member's record: as the hub answered it, still reading, or failed. */
+    record?: "read" | "reading" | "failed";
   } = $props();
 
   drawPopoversInPlace();
@@ -120,6 +124,34 @@
   // The hub's writes, kept on the page.
   who.handTo = () => Promise.resolve(true);
   who.useFleet = () => Promise.resolve(true);
+  /** The record each read answers, as `record` says it stands. */
+  const recordOf = (member: string): RecordRead => {
+    if (record === "failed") {
+      return {
+        state: "failed",
+        reason: decidesWords.record.unread(HUB_UNREACHABLE),
+      };
+    }
+    if (record === "reading") {
+      return { state: "reading" };
+    }
+    return {
+      state: "read",
+      record: records[member] ?? {
+        caw: null,
+        decided: 0,
+        lastAt: null,
+        takenBack: 0,
+        waiting: 0,
+        spendUsd: 0,
+      },
+    };
+  };
+  who.readRecord = (member) => {
+    const read = recordOf(member);
+    who.record = { member, read };
+    return Promise.resolve();
+  };
   who.saveSetup = () => {
     const { setup } = who;
     if (setup && Object.keys(who.setupProblems(setup)).length > 0) {

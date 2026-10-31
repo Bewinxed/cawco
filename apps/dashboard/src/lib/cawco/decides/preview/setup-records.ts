@@ -7,7 +7,7 @@
  * agent he added, as Add a member writes it.
  */
 import type { DelegateType } from "@cawco/core/delegate-types";
-import type { FleetOffer } from "../decides-client";
+import type { FleetOffer, MemberRecord } from "../decides-client";
 
 export const harnesses: FleetOffer["harnesses"] = [
   {
@@ -152,3 +152,50 @@ export const types: DelegateType[] = [
     canDelegate: true,
   },
 ];
+
+/**
+ * Each member's record as `GET /api/decides/members/:id/record` answered at
+ * 2026-10-31 17:00: the Advisor has run and settled nothing yet, Common
+ * practice decided three he took back. Caw's line is Cawco-Dev's month
+ * (`GET /api/projects/:id/spend`); his thread count and newest turn are
+ * this change's own figures, which no hub answered yet. Design reviewer is
+ * the fixture's agent, its figures a busy month's.
+ */
+export const records: Record<string, MemberRecord> = {
+  advisor: {
+    caw: null,
+    decided: 0,
+    lastAt: null,
+    takenBack: 0,
+    waiting: 0,
+    spendUsd: 8.121_333_5,
+  },
+  practice: {
+    caw: null,
+    decided: 3,
+    lastAt: "2026-10-31T09:34:10.511Z",
+    takenBack: 3,
+    waiting: 0,
+    spendUsd: 0.241_804_3,
+  },
+  caw: {
+    caw: {
+      spendUsd: 97.896_489_4,
+      threads: 38,
+      lastTurnAt: "2026-10-31T15:12:00.000Z",
+    },
+    decided: 0,
+    lastAt: null,
+    takenBack: 0,
+    waiting: 0,
+    spendUsd: 0,
+  },
+  "design-reviewer": {
+    caw: null,
+    decided: 1284,
+    lastAt: "2026-10-31T14:02:00.000Z",
+    takenBack: 17,
+    waiting: 2,
+    spendUsd: 1342.5,
+  },
+};

@@ -27,7 +27,8 @@ import { readJson, writeJson } from "#lib/cawco/storage.js";
 import type { FleetOffer } from "./decides-client";
 
 /** Each row a member's settings can hold, in the order they stand. */
-export type RowId = "does" | "lead" | "runs" | "knows" | "decides" | "hear";
+export type RowId =
+  "does" | "lead" | "runs" | "knows" | "decides" | "hear" | "record";
 
 /** Add a member's key, where a member's settings are keyed by its id. */
 export const NEW = "new";
@@ -66,7 +67,9 @@ const DraftShape = z.object({
 const ParkedShape = z.object({
   draft: DraftShape,
   adding: z.literal("agent").nullable(),
-  open: z.enum(["does", "lead", "runs", "knows", "decides", "hear"]).nullable(),
+  open: z
+    .enum(["does", "lead", "runs", "knows", "decides", "hear", "record"])
+    .nullable(),
   reached: z.number().int().min(0),
   /** The draft as it was opened, to tell a change from none. */
   start: DraftShape,
@@ -132,19 +135,20 @@ export class Setup {
   }
 }
 
-/** The rows a member's settings hold, by who it is and the page it is on. */
+/** The rows a member's settings hold, by who it is and the page it is on; a member being added has no record yet. */
 export const rowsFor = (member: Member | null, project: boolean): RowId[] => {
   const type = member?.type ?? "agent";
+  const record: RowId[] = member === null ? [] : ["record"];
   switch (type) {
     case "practice":
-      return ["runs", "hear"];
+      return ["runs", "hear", ...record];
     case "caw":
       return project
-        ? ["does", "lead", "runs", "knows", "decides"]
-        : ["does", "decides"];
+        ? ["does", "lead", "runs", "knows", "decides", ...record]
+        : ["does", "decides", ...record];
     case "advisor":
     case "agent":
-      return ["does", "runs", "knows", "decides", "hear"];
+      return ["does", "runs", "knows", "decides", "hear", ...record];
     case "you":
     case "asker":
     case "person":
@@ -159,7 +163,8 @@ export const rowsFor = (member: Member | null, project: boolean): RowId[] => {
 export const readOnly = (row: RowId, member: Member | null): boolean =>
   (row === "does" && member !== null && member.type !== "agent") ||
   (row === "knows" && member?.type === "caw") ||
-  row === "lead";
+  row === "lead" ||
+  row === "record";
 
 /** The first identity hue no member wears, else the first. */
 const freeHue = (members: Member[]): number =>

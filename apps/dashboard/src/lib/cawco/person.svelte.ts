@@ -10,7 +10,8 @@
  *   same.
  * - A desk alert (`desk_alert`) names one tab, the one the person uses: that
  *   tab shows it as a desktop notification, the item's real words, a click
- *   opening the session it is about, and answers the hub it did.
+ *   opening the place it names (a decision card) or the session it is
+ *   about, and answers the hub it did.
  * - Nothing reports before the person's yes ({@link deskAsks}): on a
  *   computer whose CawCo agent can read its desktop (the hub ties the
  *   browser to its machine by the address it asks from, `thisMachine`), the
@@ -412,8 +413,9 @@ export function showDeskAlert(
   shown.onclick = () => {
     window.focus();
     shown.close();
-    goto(frame.session ? conversationHref(frame.session, index) : "/").catch(
-      () => undefined
-    );
+    goto(
+      frame.path ??
+        (frame.session ? conversationHref(frame.session, index) : "/")
+    ).catch(() => undefined);
   };
 }

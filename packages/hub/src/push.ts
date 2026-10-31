@@ -434,6 +434,16 @@ interface Burst {
 const idOf = (item: Arrival): string => item.notification.collapseId;
 
 /** What a burst's items are, when they are all one thing: "6 tasks need you". */
+/**
+ * Where a desk alert opens when that is a place of the dashboard's own: a
+ * member's answer opens its card in the project's Decisions. Null: it opens
+ * by its session.
+ */
+const deskPath = (data: PushData): string | null =>
+  data.kind === "decided" && data.projectId
+    ? `/project/${encodeURIComponent(data.projectId)}?view=decisions&page=${encodeURIComponent(data.artifactId)}#${encodeURIComponent(data.card)}`
+    : null;
+
 const NOUNS: Partial<Record<PushData["kind"], string>> = {
   ask: "asks",
   turn: "sessions",
@@ -1236,6 +1246,7 @@ export const createPush = ({
       body: sealed.subtitle
         ? `${sealed.subtitle} · ${sealed.body}`
         : sealed.body,
+      path: deskPath(item.notification.data),
       session: item.instanceId,
     });
   };

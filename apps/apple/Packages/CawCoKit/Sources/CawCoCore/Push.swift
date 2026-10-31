@@ -104,6 +104,11 @@ public struct PushNote: Sendable {
             guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }
             guard let taskId = fields["taskId"], !taskId.isEmpty else { return .project(projectId) }
             return .task(projectId: projectId, taskId: taskId)
+        // A member of Who decides answered a card: its project, whose
+        // Decisions tab holds it.
+        case "decided":
+            guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }
+            return .project(projectId)
         // Several at once: the list of what waits, each opened from there.
         // A device asking to pair waits there too.
         case "needs", "pairing":

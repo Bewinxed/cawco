@@ -27,8 +27,10 @@ import {
   addKind,
   addMember,
   type FleetOffer,
+  type MemberRecord,
   readFleet,
   readProject,
+  readRecord,
   readTypes,
   readWaiting,
   removeKind,
@@ -81,6 +83,12 @@ export interface Facts {
   text: string;
 }
 
+/** A member's record as its settings read it. */
+export type RecordRead =
+  | { state: "reading" }
+  | { state: "failed"; reason: string }
+  | { state: "read"; record: MemberRecord };
+
 /** A write the hub refused: what it moved, its words, and the way to ask again. */
 export interface Fault {
   again: () => Promise<boolean>;
@@ -104,6 +112,8 @@ export class WhoDecides {
   readonly asker = new Asker<AskHereRequest>();
   /** The project's Caw, whose switch and harness his settings change; null on the fleet's page. */
   lead: CawLead | null = null;
+  /** The record of the member whose settings stand open, by its id. */
+  record = $state<{ member: string; read: RecordRead } | null>(null);
   /** Kinds of choice stands open, hung from the head's button. */
   kindsOpen = $state(false);
   /** A kind being added: kept while Kinds of choice is closed, and across a reload. */
@@ -461,6 +471,26 @@ export class WhoDecides {
       return;
     }
     this.setup = new Setup(key, this.#draftOf(member), parked);
+    if (this.rowsOf(this.setup).includes("record")) {
+      this.readRecord(member.id);
+    }
+  };
+
+  /** Reads `member`'s record for its settings' Record row; Caw's with this project's conversations. */
+  readRecord = async (member: string): Promise<void> => {
+    this.record = { member, read: { state: "reading" } };
+    const read = await readRecord(
+      member,
+      this.member(member)?.type === "caw" ? this.projectId : null
+    )
+      .then((record): RecordRead => ({ state: "read", record }))
+      .catch((error): RecordRead => ({
+        state: "failed",
+        reason: decidesWords.record.unread(failureWords(error)),
+      }));
+    if (this.record?.member === member) {
+      this.record = { member, read };
+    }
   };
 
   /** ×, Escape or a press elsewhere: the draft is parked, unless nothing changed. */

@@ -6,8 +6,9 @@
    * The head: the member's face (a press opens its picture picker under the
    * head), its name, the line saying what it is, and ×. Then its rows, by
    * who it is: an agent's What it does → Runs on → Knows → Decides → How you
-   * hear; Common practice's Runs on and How you hear; Caw's What he does →
-   * Leads this project → Runs on → Knows → Decides. A member's rows stand
+   * hear → Record; Common practice's Runs on, How you hear and Record;
+   * Caw's What he does → Leads this project → Runs on → Knows → Decides →
+   * Record (MemberRecord, read as the settings open). A member's rows stand
    * folded, each with Change; Add a member asks which kind first (an agent;
    * a person and a channel wait on a connection), then unfolds one step at a
    * time, Continue folding each into its summary.
@@ -43,6 +44,7 @@
   import { showFirstProblem } from "./first-problem";
   import { kindGlyph } from "./kind-glyph";
   import MemberFace from "./MemberFace.svelte";
+  import MemberRecord from "./MemberRecord.svelte";
   import PicturePicker from "./PicturePicker.svelte";
   import SetupRow from "./SetupRow.svelte";
   import { NEW, type RowId, readOnly, type Setup } from "./setup.svelte";
@@ -188,6 +190,7 @@
           ? [draft.name, draft.job].filter(Boolean).join(" · ")
           : draft.job;
       case "lead":
+      case "record":
         return "";
       case "runs":
         return draft.harness === null
@@ -606,8 +609,15 @@
     {@render knows()}
   {:else if row === "decides"}
     {@render decides()}
-  {:else}
+  {:else if row === "hear"}
     {@render hear()}
+  {:else if member && who.record?.member === member.id}
+    <MemberRecord
+      now={Date.now()}
+      onretry={() => who.readRecord(member.id)}
+      projectId={who.projectId}
+      read={who.record.read}
+    />
   {/if}
 {/snippet}
 

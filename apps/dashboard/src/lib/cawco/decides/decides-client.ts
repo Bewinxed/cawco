@@ -131,13 +131,26 @@ export const readWaiting = (
 ): Promise<{ count: number; projects: string[] }> =>
   send(`${kind(id)}/waiting`);
 
-/** A member's record: what it decided, and what waits on it now. */
-export const readRecord = (
-  id: string
-): Promise<{
+/** A member's record (hub `GET /api/decides/members/:id/record`): what it decided, and what waits on it now. */
+export interface MemberRecord {
+  /** Caw, read from a project's page: that project's conversations; null otherwise. */
+  caw: {
+    lastTurnAt: string | null;
+    spendUsd: number;
+    threads: number;
+  } | null;
   decided: number;
   lastAt: string | null;
   spendUsd: number;
   takenBack: number;
   waiting: number;
-}> => send(`${member(id)}/record`);
+}
+
+/** A member's record; Caw's with project `projectId`'s conversations. */
+export const readRecord = (
+  id: string,
+  projectId: string | null = null
+): Promise<MemberRecord> =>
+  send(
+    `${member(id)}/record${projectId === null ? "" : `?project=${encodeURIComponent(projectId)}`}`
+  );
