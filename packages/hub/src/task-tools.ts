@@ -384,17 +384,32 @@ export function taskTools(context: TaskToolContext | undefined) {
       "Your project's tasks: the stages and a line per task, filtered by the other parameters; with `id`, one task whole, its Waits on and Unblocks lines included (`history` adds its changes).",
       {
         id: taskRef().optional(),
-        history: z.boolean().optional(),
-        stage: z.string().optional(),
-        q: z.string().optional(),
-        label: z.string().optional(),
-        type: z.string().optional(),
+        history: z.boolean().optional().describe("With id: adds its changes."),
+        stage: z.string().optional().describe("Only tasks in this stage."),
+        q: z
+          .string()
+          .optional()
+          .describe("Words to find in its id, title or description."),
+        label: z.string().optional().describe("A label it carries."),
+        type: z.string().optional().describe("Its delegate type."),
         part_of: z.string().optional().describe("The whole: lists its parts."),
         link: z.string().optional().describe("A URL or #12."),
-        fields: z.record(z.string(), z.string()).optional(),
-        blocked: z.boolean().optional(),
-        needsYou: z.boolean().optional(),
-        archived: z.boolean().optional(),
+        fields: z
+          .record(z.string(), z.string())
+          .optional()
+          .describe("The project's own fields, each to equal the value."),
+        blocked: z
+          .boolean()
+          .optional()
+          .describe("true: a wait unsettled; false: none."),
+        needsYou: z
+          .boolean()
+          .optional()
+          .describe("true: only those that need the person; false: the rest."),
+        archived: z
+          .boolean()
+          .optional()
+          .describe("true: the archived ones, instead of the board's."),
       },
       async ({ id, history, part_of, ...rest }, format) => {
         const filter = { ...rest, partOf: part_of };
@@ -621,8 +636,8 @@ export function taskTools(context: TaskToolContext | undefined) {
         steps: z.array(stepParameter()).optional(),
         spec: z.string().optional(),
         task: z.string().optional().describe("Default: your work item's."),
-        tick: lines(),
-        untick: lines(),
+        tick: lines("To-dos by id or position."),
+        untick: lines("To-dos by id or position."),
         add: z
           .array(
             z.object({
@@ -691,17 +706,35 @@ export function taskTools(context: TaskToolContext | undefined) {
       "task_result",
       "Hand in your task's work before finish_item: what you did, what to check, what you made. Show it with artifact_create and hand that artifact in first, primary (its name or handle); files by folder path. Again replaces it.",
       {
-        summary: z.string().trim().min(1),
-        check: z.array(z.string()).optional(),
+        summary: z
+          .string()
+          .trim()
+          .min(1)
+          .describe("What you did, in a few sentences."),
+        check: z
+          .array(z.string())
+          .optional()
+          .describe("What the reviewer should look at, one line each."),
         artifacts: z
           .array(
             z.object({
               kind: z.enum(RESULT_ARTIFACT_KINDS),
-              path: z.string().optional(),
-              url: z.string().optional(),
-              artifactId: z.string().optional(),
-              name: z.string().optional(),
-              primary: z.boolean().optional(),
+              path: z
+                .string()
+                .optional()
+                .describe(
+                  "A file or a post: its path in the project's folder."
+                ),
+              url: z.string().optional().describe("A link: its URL."),
+              artifactId: z
+                .string()
+                .optional()
+                .describe("An artifact: its name, handle or id."),
+              name: z.string().optional().describe("The name it is shown by."),
+              primary: z
+                .boolean()
+                .optional()
+                .describe("The one the review draws first."),
             })
           )
           .optional(),
