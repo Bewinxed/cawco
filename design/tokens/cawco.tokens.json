@@ -4186,16 +4186,19 @@
     },
     "c-pin": {
       "$type": "dimension",
-      "$value": "{size.c-pointer-floor}",
-      "$description": "A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: the 24 Pointer Rule's floor, so the bubble holds its number and is a whole target under a mouse (DESIGN.md, A pin's pill)."
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      },
+      "$description": "A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: past the 24 Pointer Rule's floor, so the bubble has room round its number and is a whole target under a mouse (DESIGN.md, A pin's pill)."
     },
     "c-pin-pad": {
       "$type": "dimension",
       "$value": {
-        "value": 6,
+        "value": 8,
         "unit": "px"
       },
-      "$description": "A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 and 42 are 24px wide, 128 about 32px (DESIGN.md, A pin's pill)."
+      "$description": "A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, a hollow pill's edge adding 4px past one figure (DESIGN.md, A pin's pill)."
     },
     "c-pin-gone-ring": {
       "$type": "dimension",

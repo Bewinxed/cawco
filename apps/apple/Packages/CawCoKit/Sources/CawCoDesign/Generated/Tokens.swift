@@ -555,10 +555,10 @@ public enum Size {
     public static let cRailRowHCompact: Double = 44
     /// A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink).
     public static let cArtifactRowH: Double = 44
-    /// A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: the 24 Pointer Rule's floor, so the bubble holds its number and is a whole target under a mouse (DESIGN.md, A pin's pill).
-    public static let cPin: Double = 24
-    /// A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 and 42 are 24px wide, 128 about 32px (DESIGN.md, A pin's pill).
-    public static let cPinPad: Double = 6
+    /// A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: past the 24 Pointer Rule's floor, so the bubble has room round its number and is a whole target under a mouse (DESIGN.md, A pin's pill).
+    public static let cPin: Double = 28
+    /// A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, a hollow pill's edge adding 4px past one figure (DESIGN.md, A pin's pill).
+    public static let cPinPad: Double = 8
     /// A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (DESIGN.md, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form).
     public static let cPinGoneRing: Double = 1
     /// The Comments rail beside the page (DESIGN.md, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot.

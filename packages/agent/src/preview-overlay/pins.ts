@@ -93,8 +93,6 @@ import {
 
 const SVG = "http://www.w3.org/2000/svg";
 
-/** A pill holding two or three figures takes this much room each side of them, px (comment design §4). */
-const PILL_PAD = 6;
 /** The ring round a pill, then the focus ring round that, px. */
 const RING = 2;
 /** The radius of a pill's tail corner: `--radius-hair`. */
@@ -102,9 +100,9 @@ const TAIL_R = 2;
 /** The longest text whose lines a pin's point is read against (`lineEnd`), characters. Our call: a paragraph's, never a page's. */
 const LINE_READ_MOST = 4000;
 /** The room a pill needs past its line's end to stand there, px: a three-figure pill and its rings. Our call. */
-const PILL_ROOM = 40;
+const PILL_ROOM = 44;
 /** The room a pill needs before its line's start, px: a one- or two-figure pill and its ring, in a page's margin. Our call. */
-const PILL_ROOM_START = 24;
+const PILL_ROOM_START = 28;
 /** Room round a mark's crop, px. Our call. */
 const CROP_PAD = 24;
 /** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
@@ -622,6 +620,7 @@ export function startPins(deps: PinsDeps): Pins {
       attn: ["--status-attn-glyph"],
       font: ["--type-label", "font"],
       height: ["--c-pin", "width"],
+      pad: ["--c-pin-pad", "width"],
       deck: ["--deck-step", "width"],
       gap: ["--space-1", "width"],
       inset: ["--space-2", "width"],
@@ -645,7 +644,8 @@ export function startPins(deps: PinsDeps): Pins {
       dot: read.dot,
       attn: read.attn,
       font: read.font,
-      height: Number.parseFloat(read.height) || 20,
+      height: Number.parseFloat(read.height) || 28,
+      pad: Number.parseFloat(read.pad) || 8,
       deck: Number.parseFloat(read.deck) || 1.25,
       gap: Number.parseFloat(read.gap) || 4,
       inset: Number.parseFloat(read.inset) || 8,
@@ -678,7 +678,7 @@ export function startPins(deps: PinsDeps): Pins {
     );
     return Math.max(
       paint.height,
-      Math.ceil(digit * label.length + 2 * PILL_PAD)
+      Math.ceil(digit * label.length + 2 * paint.pad)
     );
   };
 
