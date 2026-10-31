@@ -67,19 +67,19 @@ export const ahead = (at: Date | string | number, now = Date.now()): string => {
   return `on ${dayOf(ms)}`;
 };
 
-/** A span as long as it lasted: "25 min", "3 h", "2 days". */
+/** A count with its noun: "1 pin", "3 pins". */
+export const count = (n: number, one: string, many = `${one}s`): string =>
+  `${n} ${n === 1 ? one : many}`;
+
+/** A span as long as it lasted: "25 min", "3 h", "1 day", "2 days". */
 export const lasted = (ms: number): string => {
   if (ms < HOUR_MS) {
     return `${Math.max(1, Math.round(ms / MINUTE_MS))} min`;
   }
   return ms < DAY_MS
     ? `${Math.round(ms / HOUR_MS)} h`
-    : `${Math.round(ms / DAY_MS)} days`;
+    : count(Math.round(ms / DAY_MS), "day");
 };
-
-/** A count with its noun: "1 pin", "3 pins". */
-export const count = (n: number, one: string, many = `${one}s`): string =>
-  `${n} ${n === 1 ? one : many}`;
 
 /** Words as said, cut at `max` characters, in quotes. */
 export const quote = (text: string, max = 200): string => {
