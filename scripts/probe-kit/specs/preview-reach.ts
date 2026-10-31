@@ -204,9 +204,7 @@ const SAMPLE_PREVIEW = () => {
   const seen: string[] = [];
   (window as unknown as { previewSeen: string[] }).previewSeen = seen;
   setInterval(() => {
-    const stage = document.querySelector(
-      '[data-slot="media"] [data-slot="media-stage"]'
-    );
+    const stage = document.querySelector('[data-slot="media"]');
     if (!stage) {
       return;
     }

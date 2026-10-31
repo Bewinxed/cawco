@@ -35,6 +35,7 @@
     picture,
     ratio,
     said = "",
+    status,
   }: {
     action?: Snippet;
     caption?: string;
@@ -47,6 +48,8 @@
     ratio?: number;
     /** A refusal of the action, in the hub's words. */
     said?: string;
+    /** Its piece's status while it isn't there yet (a Preview's wait): over the piece at its top, held at the page's top while any of the piece is in view. */
+    status?: Snippet;
   } = $props();
 
   /** The card's and the page's ear for this well's width (Decision, Decisions). */
@@ -70,15 +73,26 @@
   style:--picture-w={picture === undefined ? undefined : `${picture}px`}
   style:--ratio={ratio}
 >
-  <div
-    class={[
-      "relative flex min-w-0 flex-1 items-center-safe justify-center-safe",
-      picture !== undefined &&
-        "kit-edge-fade fade-len-c-edge-fade-len contain-inline-size overflow-x-auto overscroll-x-contain",
-    ]}
-    data-slot="media-stage"
-  >
-    {@render children()}
+  <!-- The stage and, over it, its piece's status. The status stands outside the stage, which is a sideways scroller for a piece of a known width (and so the box a sticky child would hold to): sticky in the page's scroller, it keeps to the page's top while any of the stage is in view, and never moves with the stage's sideways scroll. -->
+  <div class="relative flex min-w-0 flex-1 flex-col" data-slot="media-body">
+    <div
+      class={[
+        "relative flex min-w-0 flex-1 items-center-safe justify-center-safe",
+        picture !== undefined &&
+          "kit-edge-fade fade-len-c-edge-fade-len contain-inline-size overflow-x-auto overscroll-x-contain",
+      ]}
+      data-slot="media-stage"
+    >
+      {@render children()}
+    </div>
+    {#if status}
+      <div
+        class="pointer-events-none absolute inset-0"
+        data-slot="media-status"
+      >
+        <div class="sticky top-0">{@render status()}</div>
+      </div>
+    {/if}
   </div>
   {#if caption || action}
     <figcaption

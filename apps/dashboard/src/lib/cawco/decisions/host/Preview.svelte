@@ -687,6 +687,23 @@
   />
 {/snippet}
 
+{#snippet wait()}
+  <!-- The well's wait (DESIGN.md, Browser view, Waiting): one muted meta line at the well's top, `--space-5` in, after the live dot, arriving after the wait grace. The well stands it over its piece and holds it at the page's top while any of the piece is in view (Well.svelte `status`), so a frame taller than the view says it however far it is scrolled, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
+  <p
+    class="m-0 p-space-5 text-ink-muted type-meta"
+    data-slot="wait-row"
+    role="status"
+  >
+    {#if waitLine}
+      <span class="mark-line flex items-start gap-space-2 animate-wait-grace-in"
+        ><span class="mark-cell"><LiveDot /></span><span
+          class="min-w-0 wrap-anywhere">{waitLine}</span
+        ></span
+      >
+    {/if}
+  </p>
+{/snippet}
+
 {#snippet full()}
   <Button
     data-open-full
@@ -703,6 +720,7 @@
   fills={pageSized && picture === undefined}
   {picture}
   said={refusal}
+  status={held?.embed && !fault ? wait : undefined}
 >
   {#if held?.kind === "page"}
     <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. -->
@@ -848,21 +866,6 @@
             {/if}
           </div>
         {/if}
-        <!-- The well's wait (DESIGN.md, Browser view, Waiting): one muted meta line at the box's top, `--space-5` in, after the live dot, arriving after the wait grace; at the top, so a frame taller than the view says it from its first line, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
-        <p
-          class="pointer-events-none absolute inset-x-0 top-0 m-0 p-space-5 text-ink-muted type-meta"
-          data-slot="wait-row"
-          role="status"
-        >
-          {#if waitLine}
-            <span
-              class="mark-line flex items-start gap-space-2 animate-wait-grace-in"
-              ><span class="mark-cell"><LiveDot /></span><span
-                class="min-w-0 wrap-anywhere">{waitLine}</span
-              ></span
-            >
-          {/if}
-        </p>
       {/if}
     </div>
   {:else}

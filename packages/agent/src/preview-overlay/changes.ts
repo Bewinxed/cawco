@@ -41,6 +41,7 @@ import {
 } from "./anchor-names";
 import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
+import { bringInto, scrollersOf, scrollMoves } from "./scrollers";
 
 /** A ring's ping, as `getAnimations()` names it. */
 const PING = "cawco-change-ping";
@@ -348,12 +349,16 @@ export function startChanges(deps: ChangesDeps): Changes {
       return;
     }
     clearTimeout(flashTimer);
+    // Up and down only, by the scrollers round it (scrollers.ts, as a pin is
+    // brought out): `scrollIntoView` also scrolled every scroller round it
+    // sideways, a page's column off its fixed foot among them.
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.scrollIntoView({
-      block: "center",
-      inline: "nearest",
-      behavior: reduce ? "auto" : "smooth",
-    });
+    const moves = bringInto(scrollersOf(el), el.getBoundingClientRect().top, [
+      { top: 0, bottom: innerHeight },
+    ]);
+    if (moves) {
+      scrollMoves(moves, reduce ? "auto" : "smooth");
+    }
     deps.outline(el);
     const ring = drawn.get(anchor);
     if (ring) {
