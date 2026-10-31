@@ -465,7 +465,7 @@
             ? 'text-status-fail-ink'
             : 'text-ink-muted'}"
         >
-          <MorphText text={colourHelp} wrap />
+          {colourHelp}
         </p>
       </div>
     </fieldset>
@@ -594,11 +594,9 @@
         {/each}
       </div>
 
-      <div
-        id={sizeHelpId}
-        class="flex min-w-0 flex-col gap-space-2"
-        {@attach morph()}
-      >
+      <!-- One driver per box: each fault row unfolds, so this block does
+           not morph as well (two tweens on one height clipped the rows). -->
+      <div id={sizeHelpId} class="flex min-w-0 flex-col gap-space-2">
         {#each sideFaults as fault (fault.side)}
           <div
             class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1"
@@ -628,14 +626,15 @@
             <span
               >{words.ratio}
               {ratioWords(both.width, both.height)}{locked
-                ? words.ratioKept
+                ? words.ratioLocked
                 : ""}</span
             >
             <span aria-hidden="true"> · </span>
             <span>{megapixels(both.width, both.height)} {words.megapixels}</span
             >
           {:else}
-            <span>{words.readoutWaits}</span>
+            <span>{locked ? words.readoutWaitsLocked : words.readoutWaits}</span
+            >
           {/if}
         </p>
       </div>
@@ -646,7 +645,7 @@
       {@attach morph()}
     >
       <p
-        class="mark-line type-meta m-0 flex min-w-0 items-center gap-space-1 {failure !==
+        class="mark-line type-meta m-0 flex min-w-0 flex-1 items-center gap-space-1 {failure !==
           null && !pending
           ? 'text-status-fail-ink'
           : 'text-ink-muted'}"
@@ -658,10 +657,11 @@
             aria-hidden="true"
           />
         {/if}
-        <span class="text-pretty"><MorphText text={status} wrap /></span>
+        <span class="min-w-0 flex-1 text-pretty"
+          ><MorphText text={status} wrap /></span
+        >
       </p>
       <Button
-        class="ms-auto"
         disabled={!(canApply || pending)}
         failed={failure !== null}
         label={words.apply}
