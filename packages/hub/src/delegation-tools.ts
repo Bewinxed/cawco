@@ -172,8 +172,7 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
     " Your parent reads this report alone; chat messages reach no one. A report pointing at a chat message is refused.";
   const proof =
     " Your parent reads this report alone; chat messages reach no one. `summary` carries the deliverable whole, or names the file (committed, or in $TMPDIR/outputs/) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.";
-  const gate =
-    "the merge checks your project's gate.md names (for CawCo: the dependency install, `bun run check --all`, and the iOS build when the app changed)";
+  const gate = "the merge checks your project's gate.md names";
   const back =
     " A failed check or a conflict comes back with its output: fix, commit, call again.";
   const outputs =
@@ -198,7 +197,7 @@ const HANDOFF_DESCRIPTION =
   "Message another session: guide your delegate while it works, or brief a session that already owns the work; for new standalone work, delegate. " +
   "An idle target starts on it at once; a busy one reads it at its next step, its running command kept going. " +
   "To your delegate after it reported, it reopens its item in the same session; prefer a fresh delegate unless that session is warm. " +
-  "A cold target (cache expired; never your parent) with uncommitted changes gets it; one with only unpushed commits is refused once, naming delegate's `from`; otherwise Jev decides when the hub has it, and that is final. " +
+  "A cold target (cache expired; never your parent) with uncommitted changes gets it; one with only unpushed commits is refused once, naming delegate's `from`; otherwise CawCo's Jev model decides when the hub has its route, and that is final. " +
   "Repeat a call any other cold refusal answered to deliver it.";
 
 /** `handoff`'s target and message, every session's. */
@@ -328,9 +327,24 @@ export function handoffTools(deps: HandoffDeps) {
           .describe("Git URL or host/path; omitted, this project's."),
         title: z.string().trim().min(1).optional(),
         body: z.string().optional(),
-        head: z.string().trim().min(1).optional(),
-        base: z.string().trim().min(1).optional(),
-        number: z.number().int().positive().optional(),
+        head: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("The pushed branch."),
+        base: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("The branch it merges into."),
+        number: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("The issue or pull request the comment is on."),
         on: z
           .enum(FORGE_POST_ON)
           .optional()
@@ -363,7 +377,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "list_delegate_types",
-      "The live delegate types: what each is for and what it runs. Read it before choosing a type; a project's own types replace the fleet's of the same name.",
+      "The live delegate types: what each is for and what it runs. A project's own types replace the fleet's of the same name. They rarely change, so one read serves a session. Running sessions are list_sessions'.",
       {},
       () => actions.listDelegateTypes(),
       delegateTypesWords
@@ -394,7 +408,7 @@ export function handoffTools(deps: HandoffDeps) {
         ),
     tool(
       "start_session",
-      "Start a NEW session of its own and give it work: its own sidebar row under this session and its own transcript, outliving this turn. " +
+      "Start a new session of its own and give it work: its own sidebar row under this session and its own transcript, outliving this turn. " +
         "Unlike a delegate it reports nothing back. Use it when the user asks to spin something off, or for work in another directory or machine where no session runs yet; " +
         "prefer handoff to a session already running there. It runs on a delegate type ('medium' by default).",
       {
@@ -455,15 +469,14 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate",
-      "Run bounded work as a delegate: a new session with fresh context (with `fork`, a copy of this one) in a workspace of its own, a clone on its own branch. It reports back once its work passes the hub's merge checks, quoting the output of the commands that prove it.\n\n" +
-        "Delegate SUBSTANTIAL work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs. " +
-        "Do menial work yourself: git status/log/diff, grep, reading a few files, port checks, a log tail, a restart, the reads a brief needs. " +
-        "Never delegate a single command whose exact output you need, edits to files you are changing, or what the user wants to watch.\n\n" +
-        "Unless forked it cannot see this conversation: `prompt` stands alone with intent, constraints, acceptance criteria, the commands whose output proves the work, and what not to do. Ask for evidence and conclusions, not file dumps.\n\n" +
+      "Run bounded work as a delegate: a new session with fresh context (with `fork`, a copy of this one) in a workspace of its own, a clone on its own branch cut from the default branch. It reports back once its work passes the hub's merge checks, quoting the output of the commands that prove it.\n\n" +
+        "Use it for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs. " +
+        "Do yourself: a single command whose exact output you need, git status/log/diff, grep, reading a few files, port checks, a log tail, a restart, edits to files you are changing, and what the user wants to watch.\n\n" +
+        "Unless forked it cannot see this conversation: `prompt` stands alone with intent, constraints, acceptance criteria and the commands whose output proves the work. Ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` (list_delegate_types) over harness and model. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
         "Its commands run in a boundary: they write only its clone, its scratch dir and the workspaces' cache; no credential store, SSH key, key agent or service manager; another machine only through a delegate there. " +
         "When the machine itself is the subject (an audit, containment, ops on its services, containers or network), set `host`: the delegate runs on that machine with no clone and no boundary, as a session started there does, lands nothing, and still reports back. " +
-        "To follow up, handoff to the delegate or delegate with its `workspace`; to finish an ended delegate's commits in a fresh session, delegate with `from`. Prefer a fresh delegate unless the old session is warm and holds context the task needs.",
+        "To follow up on the same work, handoff to the delegate or delegate with its `workspace`; to finish an ended delegate's commits in a fresh session, delegate with `from`. New or clean-slate work leaves both out. Prefer a fresh delegate unless the old session is warm and holds context the task needs.",
       {
         prompt: z
           .string()
@@ -473,7 +486,7 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "From list_delegate_types: sets harness, model, effort and skills. Default: Jev's pick, else 'medium'."
+            "From list_delegate_types: sets harness, model, effort and skills. Default: CawCo's Jev model's pick, else 'medium'."
           ),
         harness: z
           .enum(HARNESSES)
@@ -509,7 +522,7 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "An ended delegate's workspace: the new one is cut at its branch head, its commits included."
+            "An ended delegate's workspace: the new one is cut at its branch head, its commits included. New or clean-slate work leaves it out."
           ),
         fork: z
           .boolean()
@@ -593,7 +606,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate_list",
-      "Your delegates, newest first, theirs nested: each one's state, cache warmth and report; then those queued for owned files and the workspaces held with unlanded work. Read it before handing off, calling one stuck, or recapping a span.",
+      "Your delegates, newest first, theirs nested: each one's state, cache warmth and report; then those queued for owned files and the workspaces held with unlanded work. Use it when you need where one stands; reports and refusals reach you by themselves.",
       {
         include: z
           .enum(["live", "all"])
@@ -718,7 +731,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "stop_delegate",
-      "Stop one of YOUR delegates: its item is cancelled; a later handoff reopens it. A queued delegate's id withdraws it from the queue.",
+      "Stop one of your delegates: its item is cancelled; a later handoff reopens it. A queued delegate's id withdraws it from the queue.",
       {
         target: z
           .string()
@@ -729,7 +742,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "discard_workspace",
-      "Let go of a held workspace of YOUR delegates' whose work you will not continue: what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes.",
+      "Let go of a held workspace of your delegates' whose work you will not continue: what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes.",
       {
         workspace: z.string().describe("Its id, as the hub's notice names it."),
       },
@@ -738,7 +751,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "interrupt_delegate",
-      "Interrupt one of YOUR delegates mid-turn without ending it. It keeps its state and stays idle: " +
+      "Interrupt one of your delegates mid-turn without ending it. It keeps its state and stays idle: " +
         "nothing automatic wakes it, only your handoff or the person's message.",
       {
         target: z.string().describe("Its handle, directory or id."),
@@ -750,9 +763,22 @@ export function handoffTools(deps: HandoffDeps) {
       "machine_pause",
       "Pause a machine for some minutes: its turns stop and nothing starts there until then; work for it waits. resume: true ends it.",
       {
-        machine: z.string(),
-        minutes: z.number().int().min(1).max(1440).optional(),
-        resume: z.boolean().optional(),
+        machine: z
+          .string()
+          .describe(
+            "A hostname (list_sessions names those online) or machineId."
+          ),
+        minutes: z
+          .number()
+          .int()
+          .min(1)
+          .max(1440)
+          .optional()
+          .describe("How long to pause it; give this or resume."),
+        resume: z
+          .boolean()
+          .optional()
+          .describe("true ends its pause; give this or minutes."),
       },
       ({ machine, minutes, resume }) =>
         actions.machinePause(machine, minutes, resume),
@@ -760,12 +786,15 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "answer_delegate",
-      'Answer an ask your delegate routed to you: answers keyed by the EXACT question text, each the chosen option label, copied from its "[delegate-ask ...]" message; deny refuses it; neither allows it as asked.',
+      'Answer an ask your delegate routed to you: answers keyed by the exact question text, each the chosen option label, copied from its "[delegate-ask ...]" message; deny refuses it; neither allows it as asked.',
       {
         target: z.string().describe("Its handle, directory or id."),
-        requestId: z.string(),
-        answers: z.record(z.string(), z.string()).optional(),
-        deny: z.boolean().optional(),
+        requestId: z.string().describe("The message's request=."),
+        answers: z
+          .record(z.string(), z.string())
+          .optional()
+          .describe("Question text → chosen option label."),
+        deny: z.boolean().optional().describe("true refuses the ask."),
       },
       ({ target, requestId, answers, deny }) =>
         Promise.resolve(
@@ -775,7 +804,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "send_to_user",
-      "Show the user a message in this session's transcript, pushed to their phone: what they must see as written before the task finishes.",
+      "Show the user a message in this session's transcript, pushed to their phone: what they must see as written before the task finishes, like a result they asked to hear at once. A question goes by ask, a choice by a decision card, and progress in your plan with todo_write.",
       {
         message: z
           .string()
@@ -792,7 +821,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "open_items",
-      "Your open items, word for word, as every compaction lists them.",
+      "Your open items, word for word, as every compaction lists them: your plan's open steps and spec, your task's open to-dos, the open tasks you filed, your undecided decision pages with their cards, your notes still in the memory inbox and your asks still waiting on the person.",
       {},
       () => actions.openItems(),
       sentence,
@@ -824,7 +853,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       NO_REPLY_TOOL,
-      "End this turn with no reply to the person. Call it last, when the turn has nothing for them.",
+      "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it last, when the turn has nothing for them, and write nothing after it: text after it reaches them as a reply. It changes nothing else. A work item still ends on finish_item, and three such turns in a row with nothing running fail it.",
       {},
       () => Promise.resolve("This turn ends here with no reply."),
       sentence,
@@ -1179,7 +1208,7 @@ const CORE_TASK_TOOLS: ReadonlySet<string> = new Set([
 const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   {
     prefixes: ["find"],
-    what: "anything said or made, as the dashboard's Find finds it; search it before reading transcripts, files or the database",
+    what: "anything said or made, as the dashboard's Find finds it; the first place to look for what was said or decided",
   },
   { prefixes: ["admin_"], what: "fleet configuration" },
   { prefixes: ["task_"], what: "project tasks" },
@@ -1285,20 +1314,19 @@ export function handoffInstructions(
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")
-    ? "\n\ngenerate_image makes images on any model, through the machine's ChatGPT login; never hand image generation to another model."
+    ? "\n\ngenerate_image makes images on any model, through the machine's ChatGPT login, so this session makes its own."
     : "";
   const loading = `\n\n${loadingLine(listable)}`;
   if (deps.canDelegate === false) {
-    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use wait_item for a bounded wait on a command you started. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${naming}${loading}${images}`;
+    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done. Use wait_item for a bounded wait on a command you started. Use handoff to reach your parent or a session that already owns related work.\n\n${naming}${loading}${images}`;
   }
   // The orchestrator's seat, the same on every model: an Opus orchestrator
   // made 387 shell and about 50 browser calls in one day (killing dev
   // servers, probing sockets, reading journals) where a brief belonged.
   return [
-    "This session orchestrates: it plans, briefs, reads reports and decides. Run reads yourself: git status, log or diff, a grep, a file, a log tail, a port check, a curl for a status. Hand substantial execution to a delegate: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. The brief keeps intent, decisions and acceptance here, names the commands whose output proves the work, and asks for evidence and conclusions, not file dumps. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
+    "This session orchestrates: it plans, briefs, reads reports and decides. It reads what the next decision needs (git status, log or diff, a grep, a file, a log tail, a port check, a curl for a status) and takes a delegate's report as the evidence for its work. Substantial execution goes to a delegate: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. Finished work goes to the person as it is; a review runs when they ask for one. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
     `${naming}${loading}${images}`,
-    "Call list_delegate_types for the live catalog of delegate types (model, effort and harness each routes to) rather than guessing a model. Claude names these tools mcp__cawco__list_delegate_types and mcp__cawco__delegate; OpenCode names them cawco_list_delegate_types and cawco_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.",
-    "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Each delegate runs one work item in a workspace; use mcp__cawco__handoff to guide it while that item runs, and handoff again to follow up after it reports — that continues its own session on its cached transcript. Use start_session only for a separate persistent session.",
-    "If delegation fails or no suitable type is available, report the blocker; do not silently move bulk exploration onto this session.",
+    "Give each delegate a concrete deliverable and bounded file ownership. Reports arrive by themselves, so independent parent work keeps moving. Each delegate runs one work item in a workspace: handoff guides it while that item runs and follows up on the same work after it reports, on its cached transcript; new or clean-slate work goes to a fresh delegate. Use start_session only for a separate persistent session.",
+    "When delegation fails or no type fits, report the blocker; bulk exploration stays a delegate's.",
   ].join("\n\n");
 }
