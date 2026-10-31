@@ -338,7 +338,8 @@ quarter = Option("quarter", "A quarter", "Time for a team to settle in.", false,
 /**
  * What the prompt is generated with: no tools, no bindings, no built-in
  * functions (a page holds the agent's words and the person's picks, never
- * data), edit mode for revisions, and the rules that keep picks by id.
+ * data), and the rules that keep picks by id and say how a revision merges
+ * (lang-core's own edit-mode section speaks of filters and tabs, so it is off).
  */
 export const decisionPromptOptions = (): PromptOptions => ({
   preamble:
@@ -346,9 +347,10 @@ export const decisionPromptOptions = (): PromptOptions => ({
   toolCalls: false,
   bindings: false,
   builtinFunctions: false,
-  editMode: true,
+  editMode: false,
   examples: [EXAMPLE, EDIT],
   additionalRules: [
+    "Use a revision's statements for what changes only: a statement under an existing name replaces it, one under a new name is added, and the rest of the page stays as it was (the second example is a revision: a reworded decision and a new option). Use the existing names exactly. To remove a card, restate its parent without it; what only it referred to goes with it.",
     "Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets), its cost and its builds (what picking it means building or changing, never how long it takes); exactly one is recommended, and the Decision's why says why: the card shows it after that option's label (Recommended: Per machine. A machine is what the fleet costs to run.), so the why never names the option again. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.",
     "Every Decision names its kind, the 9th argument (pass [], [], false, null before it when the others are left out). A \"look\" Decision, about how something looks, gives every Option a picture in its media (Image, Preview or Canvas); a picture in the Decision's media too is media its Options share, drawn once above them. As a verdict on one design, it puts the picture in the Decision's media and none in its Options. The hub refuses a look Decision that leaves some Options bare.",
     "Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.",

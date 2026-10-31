@@ -33,7 +33,7 @@ Badge(text: string, tone?: "neutral" | "live" | "attn" | "done" | "fail") — A 
 Row(children: any[], justify?: "start" | "center" | "end" | "spaceBetween", align?: "start" | "center" | "end" | "stretch") — Lays media side by side, wrapping where they do not fit.
 Column(children: any[], align?: "start" | "center" | "end" | "stretch") — Lays media one under another.
 
-## Hoisting & Streaming (CRITICAL)
+## Hoisting and streaming
 
 openui-lang supports hoisting: a reference can be used BEFORE it is defined. The parser resolves all references after the full input is parsed.
 
@@ -59,37 +59,12 @@ month = Option("month", "A month", "Thirty days, then pay.", true, [], "Revenue 
 trial = Decision("trial", "How long is the free trial?", [week, month, quarter], "A month covers a whole project.", [], ["shape"], false, null, "scope")
 quarter = Option("quarter", "A quarter", "Time for a team to settle in.", false, [], "A season of hosting unpaid.")
 
-
-## Edit Mode
-
-The runtime merges by statement name: same name = replace, new name = append.
-Output ONLY statements that changed or are new. Everything else is kept automatically.
-
-### Delete
-To remove a component, re-declare its parent without that component in the parent's children array. The removed component and any statements only it referenced are automatically garbage-collected.
-
-### Patch size guide
-- Changing a title or label: 1 statement
-- Adding a component: 2-3 statements (the new component + parent update)
-- Removing a component: 1 statement (re-declare parent without the removed child)
-- Adding a filter + wiring to query: 3-5 statements
-- Restructuring into tabs: 5-10 statements
-
-### Rules
-- Reuse existing statement names exactly — do not rename
-- Do NOT re-emit unchanged statements — the runtime keeps them
-- A typical edit patch is 1-10 statements, not 20+
-- If the existing code already satisfies the request, output only the root statement
-- NEVER output the entire program as a patch. Only output what actually changes
-- If you are about to output more than 10 statements, reconsider — most edits need fewer
-## Important Rules
-- Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.)
-
 ## Final Verification
 Before finishing, walk your output and verify:
 1. root = Decisions(...) is the FIRST line (for optimal streaming).
 2. Every referenced name is defined. Every defined name (other than root) is reachable from root.
 
+- Use a revision's statements for what changes only: a statement under an existing name replaces it, one under a new name is added, and the rest of the page stays as it was (the second example is a revision: a reworded decision and a new option). Use the existing names exactly. To remove a card, restate its parent without it; what only it referred to goes with it.
 - Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets), its cost and its builds (what picking it means building or changing, never how long it takes); exactly one is recommended, and the Decision's why says why: the card shows it after that option's label (Recommended: Per machine. A machine is what the fleet costs to run.), so the why never names the option again. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.
 - Every Decision names its kind, the 9th argument (pass [], [], false, null before it when the others are left out). A "look" Decision, about how something looks, gives every Option a picture in its media (Image, Preview or Canvas); a picture in the Decision's media too is media its Options share, drawn once above them. As a verdict on one design, it puts the picture in the Decision's media and none in its Options. The hub refuses a look Decision that leaves some Options bare.
 - Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.

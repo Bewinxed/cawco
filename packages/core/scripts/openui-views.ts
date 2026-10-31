@@ -19,6 +19,7 @@
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { SystemPromptSpec } from "@openuidev/lang-core";
 import { z } from "zod";
 
 // lang-core's runtime telemetry is opt-in and these turn it off outright,
@@ -78,6 +79,31 @@ if (trusting.length > 0) {
   );
 }
 
+/** lang-core's "## Important Rules" section, to the next heading. */
+const IMPORTANT_RULES = /^## Important Rules\n[\s\S]*?(?=^## )/mu;
+/** lang-core's streaming heading. */
+const STREAMING_HEADING = /^## Hoisting & Streaming \(CRITICAL\)$/mu;
+
+/**
+ * `generateSystemPrompt` as these libraries need it. lang-core 1.0.2 always
+ * appends an "## Important Rules" section naming tables, charts and forms,
+ * which neither library has, and heads the streaming section "(CRITICAL)";
+ * `PromptOptions` has no setting for either. This drops the first and renames
+ * the second, its body kept. It fails once either is gone, so a lang-core
+ * release with a setting replaces it.
+ */
+const systemPrompt = (promptSpec: SystemPromptSpec): string => {
+  const prompt = generateSystemPrompt(promptSpec);
+  if (!(IMPORTANT_RULES.test(prompt) && STREAMING_HEADING.test(prompt))) {
+    throw new Error(
+      "openui: lang-core's prompt no longer has the Important Rules section or the CRITICAL streaming heading: use its setting and remove systemPrompt from scripts/openui-views.ts."
+    );
+  }
+  return prompt
+    .replace(IMPORTANT_RULES, "")
+    .replace(STREAMING_HEADING, "## Hoisting and streaming");
+};
+
 const library = viewLibrary(
   Object.fromEntries(VIEW_COMPONENTS.map((name) => [name, null])) as Record<
     (typeof VIEW_COMPONENTS)[number],
@@ -91,7 +117,7 @@ const spec = {
   components: [...VIEW_COMPONENTS],
   schema: library.toJSONSchema(),
   tools: viewToolSpecs(),
-  prompt: generateSystemPrompt({
+  prompt: systemPrompt({
     library: { ...library.toSpec(), schema: library.toJSONSchema() },
     promptOptions: viewPromptOptions(),
   }),
@@ -102,7 +128,7 @@ const decisions = decisionLibrary(
     null
   >
 );
-const decisionPrompt = generateSystemPrompt({
+const decisionPrompt = systemPrompt({
   library: { ...decisions.toSpec(), schema: decisions.toJSONSchema() },
   promptOptions: decisionPromptOptions(),
 });
