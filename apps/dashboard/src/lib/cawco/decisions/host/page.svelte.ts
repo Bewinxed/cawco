@@ -55,6 +55,8 @@ export const sent = $state<{ at: string | null }>({ at: null });
 export type MediaArtifact = {
   /** A dev server's preview or a sheet: the address of the origin the hub opened for it. */
   embed?: string;
+  /** The version the page draws: the artifact's newest, a next version its owner's panel has not opened yet included (hub artifacts service `newestVersion`). */
+  id: string;
   kind: string;
   name: string;
   /** A component canvas's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */

@@ -20,7 +20,10 @@ export const artifactToolWords = {
     "Handed to your parent, not opened: it opens in their panel when they call artifact_show.",
   /** A maker's change while the parent has it open. */
   heldAsNext:
-    "Your parent opened it, so this change waits as its next version: their panel keeps the version they opened until they call artifact_show.",
+    "Your parent opened it, so this change waits as its next version: their panel keeps the version they opened until they call artifact_show, and decision pages, artifact_read and artifact_browse have this one now.",
+  /** An `artifact_read` of an artifact with a next version its panel hasn't opened, `next` that version's id. */
+  readsNext: (next: string) =>
+    `This read shows its next version, artifact ${next}: decision pages draw it, and the panel keeps the opened version, where the person's picks are, until artifact_show opens it.`,
   /** A preview that never loaded, so nothing went to the parent. */
   notHanded: "It wasn't handed to your parent.",
   /** An artifact another session in the tree made: `what` ("The page …"), `session` its short id. */

@@ -15041,9 +15041,9 @@ export const createServer = (
     const { key, address, path } = browsedOrigin(row);
     const embeds = Object.entries(
       artifacts.programServed(row.id)?.media ?? {}
-    ).flatMap(([id, held]) =>
+    ).flatMap(([, held]) =>
       held?.kind === "preview" || held?.kind === "component"
-        ? [embedKey(id)]
+        ? [embedKey(held.id)]
         : []
     );
     return {
@@ -15190,10 +15190,13 @@ export const createServer = (
 
   /**
    * A decision page's Preview of a dev-server preview, a folder's preview or
-   * a sheet of its session's: whatever machine serves it (a port or a
-   * folder), whether or not a panel shows it, its target kept under its own
-   * key ({@link embedKey}), its origin's listener started, and its address
-   * as the page reached it, the source's start path on it. A preview no
+   * a sheet of its session's, at the version its media draws (`artifactId`,
+   * artifacts service `newestVersion`): whatever machine serves it (a port
+   * or a folder), whether or not a panel shows it, its target kept under its
+   * own key ({@link embedKey}), so a next version held for the owner's panel
+   * stands on an origin apart from the one the panel shows; its origin's
+   * listener started, and its address as the page reached it, the source's
+   * start path on it. A preview no
    * machine serves (a browser's, `{ page }`) has no embed. On the session's
    * own port: the same name, the
    * embed's port. On a host-mode name: the embed's name, which the browser's
@@ -15323,12 +15326,12 @@ export const createServer = (
       }
       const media: Record<
         string,
-        { embed?: string; kind: string; name: string } | null
+        { embed?: string; id: string; kind: string; name: string } | null
       > = {};
       for (const [id, held] of Object.entries(served.media)) {
         media[id] =
           held && (held.kind === "preview" || held.kind === "component")
-            ? { ...held, ...embedAt(artifactId, id, reachedAt) }
+            ? { ...held, ...embedAt(artifactId, held.id, reachedAt) }
             : held;
       }
       return {

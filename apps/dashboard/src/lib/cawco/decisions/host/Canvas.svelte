@@ -1,6 +1,7 @@
 <!--
   A drawing: a canvas artifact of the session's, shown live in its well. Its
-  host page in a frame (`/__cawco/canvas/<id>/?embed=1`), which runs its own
+  host page in a frame (`/__cawco/canvas/<id>/?embed=1`, `<id>` the version
+  the page's media draws: the canvas's newest), which runs its own
   overlay, joins the canvas's doc and draws it read-only (canvas-host
   host.tsx `EMBEDDED`); this page names the canvas to it as the panel would,
   in the page's theme. The frame is the drawing's own box at its real size:
@@ -56,8 +57,12 @@
     frame?.contentWindow?.postMessage(
       {
         type: "cawco:hello",
-        artifact: { id, kind: "canvas", name: held?.name ?? "canvas" },
-        sync: `/__cawco/artifact/${id}`,
+        artifact: {
+          id: held?.id ?? id,
+          kind: "canvas",
+          name: held?.name ?? "canvas",
+        },
+        sync: `/__cawco/artifact/${held?.id ?? id}`,
         theme: scheme.now,
       },
       location.origin
@@ -129,7 +134,7 @@
         !shape && "absolute opacity-0",
       ]}
       onload={hello}
-      src={`/__cawco/canvas/${id}/?embed=1`}
+      src={`/__cawco/canvas/${held.id}/?embed=1`}
       style:block-size={shape ? `${shape.height}px` : undefined}
       style:inline-size={shape ? `${shape.width}px` : "100%"}
       tabindex="-1"

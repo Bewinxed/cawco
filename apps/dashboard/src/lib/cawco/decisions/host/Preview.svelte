@@ -10,8 +10,10 @@
   `screenHeight`: upright under a desk's width, 16:10 from there up), the
   media cap aside: wider than its well it scrolls sideways, as a story does.
   Open full size brings it to the front of the session's panel,
-  as Canvas's Open to draw does. A page stands at its own address on this
-  page's origin (`/__cawco/page/<id>/`); naming no width it is as tall as
+  as Canvas's Open to draw does. Each draws the version the page's media
+  names, the artifact's newest, whatever version its panel keeps open. A
+  page stands at its own address on this page's origin
+  (`/__cawco/page/<id>/`); naming no width it is as tall as
   its content up to the media cap. One taller than its frame scrolls inside
   it, the house edge fade over its head and foot while more is past them,
   so nothing is cut off without a way to see it. A dev server's or a
@@ -764,7 +766,7 @@
       data-more-below={more.below || undefined}
       data-slot="embed"
       onload={sized}
-      src={`/__cawco/page/${id}/`}
+      src={`/__cawco/page/${held.id}/`}
       style:--fade="var(--c-edge-fade-len)"
       style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
       style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}

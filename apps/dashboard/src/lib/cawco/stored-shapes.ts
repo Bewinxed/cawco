@@ -195,6 +195,7 @@ const CanvasShapesShape = z.object({
 const MediaArtifactShape = z
   .object({
     embed: z.string().optional(),
+    id: z.string(),
     kind: z.string(),
     name: z.string(),
     shapes: CanvasShapesShape.optional(),

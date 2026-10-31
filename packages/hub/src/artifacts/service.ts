@@ -289,6 +289,8 @@ const unmerged = (error: unknown): ArtifactRefusal =>
  * Canvas and Preview pieces): its kind and name; a component canvas's shapes.
  */
 export interface ServedMedia {
+  /** The version the page draws: the artifact's newest, a next version held for its owner's panel included (service `newestVersion`). */
+  id: string;
   kind: ArtifactKind;
   name: string;
   shapes?: CanvasShapes;
@@ -2452,11 +2454,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (!row) {
       throw new ArtifactRefusal(404, "This session has made no artifact yet.");
     }
-    if (row.instanceId !== instance.id && row.madeBy === instance.id) {
-      return db.heldOf(row.id) ?? row;
-    }
-    return row;
+    return row.instanceId !== instance.id && row.madeBy === instance.id
+      ? newestVersion(row)
+      : row;
   };
+
+  /**
+   * Artifact `row`'s newest version: the next one its maker's change waits
+   * as ({@link holdNext}), else itself. The one rule for what stands for an
+   * artifact by its id: a decision page's Canvas and Preview pieces
+   * ({@link mediaSeen}), `artifact_browse`, and what `artifact_read` says
+   * it is ({@link readOf}). Only the owner's panel keeps the version it
+   * opened, until artifact_show opens the next ({@link show}).
+   */
+  const newestVersion = (row: ArtifactRow): ArtifactRow =>
+    db.heldOf(row.id) ?? row;
 
   /** A decision page's program, for a whole read: a revision re-emits a statement of it. Nothing for any other artifact. */
   const programRead = (row: ArtifactRow): { program?: string } => {
@@ -3287,10 +3299,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Artifact `id` as decision page `page` shows it now: one its session
-   * sees ({@link sees}), as {@link mediaHeld} let it in; a project's page
-   * whose session is gone, another such page. Undefined once the hub no
-   * longer holds it.
+   * Artifact `id` as decision page `page` draws it now, at its newest
+   * version ({@link newestVersion}): one its session sees ({@link sees}), as
+   * {@link mediaHeld} let it in; a project's page whose session is gone,
+   * another such page. Undefined once the hub no longer holds it.
    */
   const mediaSeen = (
     page: ArtifactRow,
@@ -3304,7 +3316,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const seen = owner
       ? sees(owner, shown)
       : page.instanceId === null && shown.instanceId === null;
-    return seen ? shown : undefined;
+    return seen ? newestVersion(shown) : undefined;
   };
 
   /**
@@ -5713,14 +5725,70 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       : {};
 
   /**
-   * An answer about a held next version, said as its artifact's: that one's
-   * id, and the next version's as `held`; with the artifact's link
-   * (`[name](cawco:artifact/<id>)`), which the agent names it by.
+   * Canvas `row` as `artifact_read` reads it: the person's strokes on the
+   * version they have before them, its outline and picture its newest
+   * version's, `now` ({@link newestVersion}), `held` naming that one when
+   * its panel hasn't opened it.
    */
+  const canvasNow = (
+    row: ArtifactRow,
+    now: ArtifactRow,
+    since: number | undefined,
+    drawn: boolean,
+    ownersRead: boolean
+  ): ArtifactRead => {
+    const theirs = readCanvas(row, since, drawn && now === row, ownersRead);
+    if (now === row) {
+      return theirs;
+    }
+    const { outline, pictureAt, png } = readCanvas(
+      now,
+      undefined,
+      drawn,
+      false
+    );
+    return {
+      ...theirs,
+      outline,
+      pictureAt,
+      ...(png === undefined ? {} : { png }),
+      held: now.id,
+    };
+  };
+
+  /**
+   * Page or preview `row` as `artifact_read` reads it: the person's picks,
+   * notes and Sends on the version they have before them, the server and
+   * stage its newest version's, `now` ({@link newestVersion}), `held` naming
+   * that one when its panel hasn't opened it.
+   */
+  const pageNow = (
+    row: ArtifactRow,
+    now: ArtifactRow,
+    since: number | undefined,
+    ownersRead: boolean
+  ): ArtifactRead => {
+    const theirs = read(row, since, ownersRead);
+    if (now === row) {
+      return theirs;
+    }
+    const { stage: _stage, workspace: _workspace, ...done } = theirs;
+    const { stage, workspace } = read(now, undefined, false);
+    return {
+      ...done,
+      ...(stage === undefined ? {} : { stage }),
+      ...(workspace === undefined ? {} : { workspace }),
+      held: now.id,
+    };
+  };
+
   /**
    * `artifact_read` of `row` for `instance`, its picture drawn when `drawn`:
    * a canvas's latest; a preview or a page now, at its state's link when
-   * `ask` names one; a component's frames by its stage.
+   * `ask` names one; a component's frames by its stage. What it is (its
+   * picture, program, outline, server) is its newest version's
+   * ({@link newestVersion}); what the person did on it is the version's
+   * they have before them ({@link canvasNow}, {@link pageNow}).
    */
   const readOf = async (
     instance: InstanceRow,
@@ -5730,20 +5798,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     { link, ...ask }: PictureAsk
   ): Promise<ArtifactRead> => {
     const ownersRead = readsForOwner(instance, row);
+    const now = newestVersion(row);
     if (row.kind === "canvas") {
-      return heldAnswer(readCanvas(row, since, drawn, ownersRead));
+      return heldAnswer(canvasNow(row, now, since, drawn, ownersRead));
     }
     if (row.kind !== "component") {
       // Drawn before the read, which then says what the picture shows.
       const picture = drawn
-        ? await deps.picture(instance, row, {
+        ? await deps.picture(instance, now, {
             width: ask.width ?? PICTURE_VIEW.width,
             ...(link === undefined ? {} : { link }),
           })
         : undefined;
       return heldAnswer({
-        ...read(row, since, ownersRead),
-        ...(since === undefined ? programRead(row) : {}),
+        ...pageNow(row, now, since, ownersRead),
+        ...(since === undefined ? programRead(now) : {}),
         ...(picture === undefined ? {} : { png: picture }),
       });
     }
@@ -5772,6 +5841,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return deps.keepPicture(instance, save, told.png);
   };
 
+  /**
+   * An answer about a held next version, said as its artifact's: that one's
+   * id, and the next version's as `held`; with the artifact's link
+   * (`[name](cawco:artifact/<id>)`), which the agent names it by.
+   */
   const heldAnswer = <T extends { held?: string; id: string }>(
     answer: T
   ): T & { link?: string } => {
@@ -7074,6 +7148,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           continue;
         }
         media[shown] = {
+          id: shownRow.id,
           kind: shownRow.kind,
           name: shownRow.name,
           ...(shownRow.kind === "component"
@@ -7116,13 +7191,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Whether decision page `pageId` shows artifact `id` as a Canvas or
-     * Preview piece its session sees ({@link mediaSeen}): its origin then
-     * serves that artifact inside it, a delegate's as its own.
+     * Whether decision page `pageId` shows artifact `id`, or the newest
+     * version it draws of one, as a Canvas or Preview piece its session sees
+     * ({@link mediaSeen}): its origin then serves that artifact inside it, a
+     * delegate's as its own.
      */
     pageShows: (pageId: string, id: string): boolean => {
       const page = db.get(pageId);
-      return !!page && mediaOf(page).includes(id) && !!mediaSeen(page, id);
+      const piece = db.get(id)?.heldFor ?? id;
+      return (
+        !!page && mediaOf(page).includes(piece) && !!mediaSeen(page, piece)
+      );
     },
 
     /** A decision page's program as the hub keeps it; undefined for an HTML page, any other artifact, or none. */
@@ -7684,9 +7763,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * `artifact_browse`: where session `instanceId`'s own browser opens
      * artifact `id`, for any artifact `artifact_read` reads ({@link
-     * readTarget}): its maker opens what it changed, the next version held
-     * for its parent. A browser artifact is the browser itself, and opens
-     * nothing. A session in a workspace whose boundary cannot reach the
+     * readTarget}), at its newest version ({@link newestVersion}): a next
+     * version held for its owner's panel is what every browser opens. A
+     * browser artifact is the browser itself, and opens nothing. A session in a workspace whose boundary cannot reach the
      * address ({@link ArtifactServiceDeps.workspaceReach}) is refused, in
      * words saying why, rather than handed an address it cannot open.
      */
@@ -7695,7 +7774,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: string
     ): Promise<Browsed & { link: string }> => {
       const instance = sessionOf(instanceId);
-      const row = readTarget(instance, id);
+      const row = newestVersion(readTarget(instance, id));
       if (row.kind === "browser") {
         throw new ArtifactRefusal(
           409,
@@ -7714,7 +7793,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`
         );
       }
-      return { ...pass, link: artifactLink(row.id, row.name) };
+      return { ...pass, link: artifactLink(row.heldFor ?? row.id, row.name) };
     },
 
     /**

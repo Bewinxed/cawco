@@ -402,7 +402,7 @@ export const artifactReadWords = (read: ArtifactRead): Presented => {
     `${named(read)}, revision ${read.revision}.`,
     sentWords(read, now),
     read.draft && "The person has it open in the composer and has not sent it.",
-    read.held,
+    read.held && artifactToolWords.readsNext(read.held),
     pickLines(read, now),
     canvasLines(read, now),
     writeLines(read),

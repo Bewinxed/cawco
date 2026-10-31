@@ -667,9 +667,9 @@ export const artifactSavesNotice = (
  * Told once per hand-off: when it starts waiting on the parent, or arrives
  * from another delegate; that delegate's updates while it waits are not told.
  * With `next`, the delegate changed an artifact the parent had opened: the
- * change waits as that next version, which artifact_read reads, and the
- * panel keeps the version opened until the parent's artifact_show opens
- * it; told once per held version. Sent under the system origin
+ * change waits as that next version, which decision pages, artifact_read
+ * and artifact_browse have at once, and the panel keeps the version opened
+ * until the parent's artifact_show opens it; told once per held version. Sent under the system origin
  * {@link import("./harness").ARTIFACT_ORIGIN}; a transcript draws it as one
  * quiet note.
  */
@@ -689,7 +689,7 @@ export const artifactHandedNotice = ({
 }: ArtifactHanded): string =>
   next === undefined
     ? `${markerTag("artifact-handed", { from, id, kind, name })}[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`
-    : `${markerTag("artifact-handed", { from, id, kind, name, next })}[CawCo] ${from} changed the ${kind} "${name}" (artifact ${id}): your panel keeps the version you opened until artifact_show opens the new one, which artifact_read reads as artifact ${next}.`;
+    : `${markerTag("artifact-handed", { from, id, kind, name, next })}[CawCo] ${from} changed the ${kind} "${name}" (artifact ${id}): your panel keeps the version you opened until artifact_show opens the new one, artifact ${next}, which decision pages, artifact_read and artifact_browse have now.`;
 
 /** A handed-up artifact's notice read back into who handed what, and the next version a change waits as. */
 export function parseArtifactHanded(text: string): ArtifactHanded | null {
