@@ -54,18 +54,6 @@ export const DesignReviewerDecides = {
   parameters: { viewport: 680 },
 };
 
-/** Removing Design reviewer: the question stands in the settings' flow. */
-export const RemovingMember = {
-  args: { open: "design-reviewer", removing: true },
-  parameters: { viewport: 1440 },
-};
-
-/** Removing Design reviewer on a phone. */
-export const RemovingMemberPhone = {
-  args: { open: "design-reviewer", removing: true },
-  parameters: { viewport: 390 },
-};
-
 /** Release checker can't run: OpenCode is on no machine, so its Runs on says so once Save is pressed. */
 export const CantRun = {
   args: {

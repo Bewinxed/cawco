@@ -10,11 +10,13 @@
   import { decidesWords } from "@cawco/core/words/decides";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   import { untrack } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { WhoDecides } from "../decides.svelte";
   import type { FleetOffer } from "../decides-client";
   import Roster from "../Roster.svelte";
+  import { drawSetupInPlace } from "../SetupPopover.svelte";
   import { type Draft, NEW, type RowId } from "../setup.svelte";
   import { added, fleetRoutes, kinds, project as projectName } from "./records";
   import { harnesses, skills, types } from "./setup-records";
@@ -57,6 +59,41 @@
     /** Members whose settings were closed before saving, with a change each. */
     parked?: string[];
   } = $props();
+
+  drawSetupInPlace();
+
+  /** The page as tall as the settings standing under their card reach, and its own padding past them. */
+  function holdsSetup(page: HTMLElement) {
+    const fit = () => {
+      const panel = page.querySelector<HTMLElement>("[data-still-setup]");
+      const pad = Number.parseFloat(getComputedStyle(page).paddingBlockEnd);
+      page.style.minBlockSize = panel
+        ? `${panel.offsetTop + panel.offsetHeight + pad}px`
+        : "";
+    };
+    const watch = frameObserver(fit);
+    let watched: Element | null = null;
+    const seen = new MutationObserver(() => {
+      const panel = page.querySelector("[data-still-setup]");
+      if (panel !== watched) {
+        if (watched) {
+          watch.unobserve(watched);
+        }
+        if (panel) {
+          watch.observe(panel);
+        }
+        watched = panel;
+      }
+      watch.request();
+    });
+    seen.observe(page, { childList: true, subtree: true });
+    watch.observe(page);
+    fit();
+    return () => {
+      watch.disconnect();
+      seen.disconnect();
+    };
+  }
 
   const projectId = untrack(() => (project === null ? null : "cawco-dev"));
   const who = new WhoDecides(projectId);
@@ -188,13 +225,11 @@
 </script>
 
 <Tooltip.Provider>
-  <!-- The frame holds the room the settings hang into: their popover
-       stands outside the page's flow, and a frame is as tall as its flow. -->
+  <!-- The settings draw in place under their card (SetupPopover), and the
+       page grows to hold them whole: a frame is as tall as its page. -->
   <div
-    class={[
-      "bg-surface-page p-space-5 max-desk:p-space-4",
-      open !== null && "min-h-c-member-setup-max-w",
-    ]}
+    class="relative bg-surface-page p-space-5 max-desk:p-space-4"
+    {@attach holdsSetup}
   >
     <Roster
       asking={who.asking}

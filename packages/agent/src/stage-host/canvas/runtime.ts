@@ -820,7 +820,26 @@ export function boot(options: BootOptions): void {
     touched = widthFrames().find((frame) => frame.body === body) ?? null;
   };
   document.addEventListener("pointerdown", touchedIn, true);
-  document.addEventListener("focusin", touchedIn, true);
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      if (acted) {
+        touchedIn(event);
+      }
+    },
+    true
+  );
+  /** The person has pressed, typed or scrolled here: what moves the view from then on is theirs. */
+  let acted = false;
+  for (const input of ["pointerdown", "keydown", "wheel"] as const) {
+    document.addEventListener(
+      input,
+      () => {
+        acted = true;
+      },
+      { capture: true, passive: true }
+    );
+  }
   /** The ids a floating layer holds: its own and its parts' (a menu's content inside its positioned wrapper). */
   const idsIn = (layer: Element): string[] =>
     [layer, ...layer.querySelectorAll("[id]")]
@@ -920,10 +939,17 @@ export function boot(options: BootOptions): void {
     place();
     return true;
   };
-  /** A layer as it opens, once placed (the frame after it asks): in sight, once. */
+  /**
+   * A layer as it opens, once placed (the frame after it asks): in sight,
+   * once, where the person opened it (a press or focus in its frame). A
+   * layer a story stands open as its frame mounts stands where it opens:
+   * a states file whose every story opens one would otherwise move the
+   * canvas once per frame, each move past the last, and leave the person's
+   * first view on no frame at all.
+   */
   const keepInSight = (layer: Element, frame: Frame) => {
     layersAt.set(layer, frame);
-    if (sighted.has(layer)) {
+    if (sighted.has(layer) || touched !== frame) {
       return;
     }
     sighted.add(layer);
@@ -2716,6 +2742,14 @@ export function boot(options: BootOptions): void {
   // transform stays the one place a frame stands.
   canvas.addEventListener("scroll", () => {
     if (canvas.scrollTop === 0 && canvas.scrollLeft === 0) {
+      return;
+    }
+    // A story that takes the focus as it mounts (a question asking in its
+    // page) moves nothing: the view is the person's until they press, type
+    // or scroll.
+    if (!acted) {
+      canvas.scrollTop = 0;
+      canvas.scrollLeft = 0;
       return;
     }
     letGo();
