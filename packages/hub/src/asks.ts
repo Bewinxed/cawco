@@ -440,11 +440,13 @@ export const createAsks = (deps: AsksDeps) => {
      * A harness's permission prompt whose process went before the person
      * answered, kept as the hub's own ask under the same request id, so the
      * same card stays on every screen and push, and its session parks on it.
-     * The prompt's own frame is replaced, not settled.
+     * The prompt's own frame is replaced, not settled; a prompt routed to
+     * its session's parent stays routed there.
      */
     keep(prompt: Envelope, asker: InstanceRow): void {
-      const { raisedAt, toolUseId } = prompt.payload as {
+      const { raisedAt, routedTo, toolUseId } = prompt.payload as {
         raisedAt?: number;
+        routedTo?: string;
         toolUseId?: string;
       };
       const asked = callOf(prompt);
@@ -454,6 +456,7 @@ export const createAsks = (deps: AsksDeps) => {
         state: "open",
         raisedAt: raisedAt ?? Date.now(),
         asked,
+        ...(routedTo === "parent" ? { routedTo } : {}),
         ...(toolUseId ? { toolUseId } : {}),
       };
       deps.asks.add(ask);

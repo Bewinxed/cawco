@@ -5776,9 +5776,7 @@ export const createServer = (
       if (routedRecipient(parked) !== recipientId) {
         continue;
       }
-      const payload = parked.payload as { routedTo?: unknown };
-      // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present on `payload`, which is broadcast verbatim — the field must be genuinely absent, not present-but-undefined.
-      delete payload.routedTo;
+      pending.unroute(parked.requestId ?? "");
       console.log(
         `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
       );
@@ -22159,8 +22157,16 @@ export const createServer = (
   ): Promise<void> => {
     // An ask the hub owns (asks.ts), named by its id alone: taken once
     // from its row, which runs what it asked as it was shown; a second
-    // answer is refused there, saying who gave the first and when.
+    // answer is refused there, saying who gave the first and when. One told
+    // to the asker's parent (a question, a routed permit) is filed as its
+    // answer there too, as a live prompt's is below.
     if (hubAsks.answer(requestId, answer, from)) {
+      const [asker] = db.getInstancesByIds([
+        db.asks.get(requestId)?.instanceId ?? "",
+      ]);
+      if (asker) {
+        recordDelegateAnswer(asker.machineId, asker.id, requestId, answer);
+      }
       return;
     }
     const parked = pending.get(requestId);
@@ -26860,17 +26866,18 @@ export const createServer = (
           throw new Error("A permission answer names no request.");
         }
         // A question the hub owns (asks.ts) is its asker's parent's to
-        // answer too; an approve ask is a change only the person answers.
+        // answer too, and a permit is, as the prompt it was kept from was;
+        // an approve ask is a change only the person answers.
         const owned = db.asks.get(answer.requestId);
         if (
           owned &&
-          (owned.asked.kind !== "question" || owned.instanceId !== row.id)
+          (owned.asked.kind === "approve" || owned.instanceId !== row.id)
         ) {
           throw new WorkItemRefusal(
             403,
-            owned.asked.kind === "question"
-              ? "That question isn't this delegate's."
-              : "That ask is a change waiting on the person; only they answer it."
+            owned.asked.kind === "approve"
+              ? "That ask is a change waiting on the person; only they answer it."
+              : "That ask isn't this delegate's."
           );
         }
         if (heldPostOf(pending.get(answer.requestId))) {
@@ -36599,10 +36606,33 @@ export const createServer = (
                 }
                 // A replayed ask (the daemon re-announces unresolved asks after
                 // every register) refreshes the parked copy without a second
-                // push or a second routing decision.
+                // push or a second routing decision: it keeps the routing its
+                // first copy has now.
                 const parkedBefore = pending.get(message.requestId);
                 const alreadyParked = parkedBefore !== undefined;
                 const { requestId } = message;
+                // A delegate's ask routes to its parent; the user is only the
+                // fallback. The parent must be live, or asleep with a
+                // conversation to wake from: a parent waiting on its
+                // delegates is put to sleep after half an hour at rest, and
+                // the ask wakes it as its delegate's report does
+                // (`deliverSend`). Otherwise the ask is the user's exactly as
+                // it was before this feature.
+                const sender =
+                  !alreadyParked && message.instanceId
+                    ? db.listedInstancesByIds([message.instanceId])[0]
+                    : undefined;
+                const parent = sender ? delegateAskParent(sender) : undefined;
+                const routed = alreadyParked
+                  ? peek(parkedBefore.payload, "routedTo") === "parent"
+                  : parent !== undefined;
+                // Routed before it is kept, so the copy kept across a hub
+                // restart, and the permit kept when its process goes (asks.ts
+                // `keep`), stay the parent's.
+                if (routed) {
+                  (message.payload as Record<string, unknown>).routedTo =
+                    "parent";
+                }
                 // Its publish is the fan-out below, which every frame no
                 // transcript folds goes out by, after its routing here.
                 if (
@@ -36617,21 +36647,7 @@ export const createServer = (
                 if (alreadyParked) {
                   break;
                 }
-                // A delegate's ask routes to its parent; the user is only the
-                // fallback. The parent must be live, or asleep with a
-                // conversation to wake from: a parent waiting on its
-                // delegates is put to sleep after half an hour at rest, and
-                // the ask wakes it as its delegate's report does
-                // (`deliverSend`). Otherwise the ask is the user's exactly as
-                // it was before this feature.
-                const sender = message.instanceId
-                  ? db.listedInstancesByIds([message.instanceId])[0]
-                  : undefined;
-                const parent = sender ? delegateAskParent(sender) : undefined;
-                const routed = sender !== undefined && parent !== undefined;
-                if (routed) {
-                  (message.payload as Record<string, unknown>).routedTo =
-                    "parent";
+                if (sender && parent) {
                   deliverDelegateAsk(sender, parent, clientCopy(message));
                 } else if (!internal) {
                   push.onAsk(message);

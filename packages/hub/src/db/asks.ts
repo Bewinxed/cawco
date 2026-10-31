@@ -48,6 +48,8 @@ export interface AsksDb {
   readonly open: () => AskRecord[];
   /** `instanceId`'s open asks. */
   readonly openOf: (instanceId: string) => AskRecord[];
+  /** An ask routed to its session's parent made the person's (`routedTo` gone). */
+  readonly unroute: (id: string) => void;
   /** An open ask withdrawn by the hub; undefined when it was not open. */
   readonly withdraw: (
     id: string,
@@ -173,6 +175,13 @@ export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
           .find(matches);
         return granted && put({ ...granted, used: { at } });
       }),
+    unroute: (id) => {
+      const row = read(id);
+      if (row?.record.routedTo) {
+        const { routedTo: _routedTo, ...ask } = recordOf(row);
+        put(ask);
+      }
+    },
     open: () =>
       db
         .select()

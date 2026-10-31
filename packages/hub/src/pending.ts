@@ -58,6 +58,13 @@ export interface PendingShape {
     outcome?: "answered" | "cancelled",
     said?: Settlement
   ) => boolean;
+  /**
+   * A parked ask routed to its session's parent made the person's: its
+   * `routedTo` gone from the parked copy and from what the hub keeps of it
+   * (the process's kept copy, or the hub's own ask's row), so a restart
+   * reads it back as the person's.
+   */
+  readonly unroute: (requestId: string) => void;
 }
 
 /** What the hub can say of how an ask ended, beyond answered or cancelled. */
@@ -88,7 +95,9 @@ type Presenter = (envelope: Envelope) => void;
  * an {@link ASK_USER_QUESTION}, which every card, push and answer path
  * draws and answers as a question, its `blocks` with it for the card's line
  * (core permission-presentation.ts); an approve ask as the CawCo call it
- * approves. `askId` marks both as the hub's own.
+ * approves. `askId` marks both as the hub's own. A permit routed to its
+ * session's parent carries `routedTo`, as its live prompt did, so every
+ * screen and push that left the prompt to the parent leaves the permit too.
  */
 export const askEnvelope = (
   ask: AskRecord,
@@ -97,6 +106,7 @@ export const askEnvelope = (
   const where = {
     askId: ask.id,
     raisedAt: ask.raisedAt,
+    ...(ask.routedTo ? { routedTo: ask.routedTo } : {}),
     ...(ask.toolUseId ? { toolUseId: ask.toolUseId } : {}),
   };
   const { asked } = ask;
@@ -265,6 +275,21 @@ const make = (db: DbShape): PendingShape => {
       return true;
     },
     get: (requestId) => requests.get(requestId),
+    unroute: (requestId) => {
+      const envelope = requests.get(requestId);
+      const payload = envelope?.payload as
+        { askId?: unknown; routedTo?: unknown } | undefined;
+      if (!(envelope && payload?.routedTo !== undefined)) {
+        return;
+      }
+      // biome-ignore lint/performance/noDelete: the payload is broadcast verbatim, so the field must be absent, not present-but-undefined.
+      delete payload.routedTo;
+      if (payload.askId === undefined) {
+        kept.save(requestId, envelope);
+      } else {
+        db.asks.unroute(requestId);
+      }
+    },
     resolve,
     forget: (instanceId) => {
       for (const [requestId, envelope] of requests) {

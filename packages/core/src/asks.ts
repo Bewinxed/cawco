@@ -149,6 +149,13 @@ export const ASK_STORED = z.object({
   /** The tool call the card is drawn at. */
   toolUseId: z.string().optional(),
   asked: z.discriminatedUnion("kind", [APPROVE, QUESTION, PERMIT]),
+  /**
+   * A permit whose prompt the hub routed to its session's parent (server.ts
+   * `deliverDelegateAsk`): kept so, it stays that parent's to answer and off
+   * the person's screens and push until the parent's process goes
+   * (server.ts `escalateRoutedAsks`).
+   */
+  routedTo: z.literal("parent").optional(),
   answer: z
     .object({ at: z.number(), by: ANSWER_BY, result: RESULT })
     .optional(),
