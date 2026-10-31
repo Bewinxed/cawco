@@ -1095,10 +1095,13 @@ const syncPlugins = async (
   // only what it could NOT resolve is left for the CLI to go and fetch, which
   // is the path that needs this machine to reach github on its own account.
   const payloads = config.pluginPayloads;
+  const turnedOff = config.plugins
+    .filter((plugin) => !plugin.enabled)
+    .map(({ id }) => id);
   const vendored = await syncVendoredPlugins(
     bin,
     payloads,
-    wantedPlugins,
+    { wanted: wantedPlugins, turnedOff },
     managed.vendoredPlugins ?? {},
     report.plugins
   );
@@ -1149,9 +1152,10 @@ const syncPlugins = async (
     if (plugins.includes(id)) {
       continue;
     }
-    // A vendored plugin is uninstalled under the name it was installed with;
-    // `syncVendoredPlugins` has already done that one.
-    if (!carried.has(id)) {
+    // A vendored plugin is uninstalled under the name it was installed with,
+    // and a row turned off at every scope; `syncVendoredPlugins` has already
+    // done both.
+    if (!(carried.has(id) || turnedOff.includes(id))) {
       await runClaude(bin, [
         "plugin",
         "uninstall",
@@ -1589,6 +1593,11 @@ const NOT_FROM_A_MARKETPLACE = new Set(["skills-dir", "inline", "synced"]);
 /** The scopes `claude plugin uninstall --scope` takes. */
 const UNINSTALL_SCOPES = new Set(["user", "project", "local"]);
 
+/** Whether `one` is an install `claude plugin uninstall` can take back. */
+const uninstallable = (one: ListedPlugin): boolean =>
+  UNINSTALL_SCOPES.has(one.scope) &&
+  !NOT_FROM_A_MARKETPLACE.has(marketplaceOf(one.id));
+
 /**
  * Every install of plugin `name` from a marketplace that is not one of the
  * fleet's vendored ones (`vendored`), at every scope it is recorded under: a
@@ -1601,45 +1610,106 @@ const upstreamCopies = (
   vendored: ReadonlySet<string>,
   listed: readonly ListedPlugin[]
 ): ListedPlugin[] =>
-  listed.filter((one) => {
-    const [plugin, marketplace = ""] = one.id.split("@");
-    return (
-      plugin === name &&
-      !vendored.has(marketplace) &&
-      !NOT_FROM_A_MARKETPLACE.has(marketplace) &&
-      UNINSTALL_SCOPES.has(one.scope)
-    );
-  });
+  listed.filter(
+    (one) =>
+      uninstallable(one) &&
+      pluginNameOf(one.id) === name &&
+      !vendored.has(marketplaceOf(one.id))
+  );
 
 /**
- * Uninstalls each copy at its own scope: `claude plugin uninstall <id>
- * --scope <scope>`, run in the copy's project for a project or local one,
+ * A carried plugin's own records outside user scope. A carried plugin lives
+ * at user scope only: a project or local record of it is one an earlier
+ * install left, at the version it was installed at.
+ */
+const outsideUserScope = (
+  vendoredId: string,
+  listed: readonly ListedPlugin[]
+): ListedPlugin[] =>
+  listed.filter(
+    (one) => one.id === vendoredId && one.scope !== "user" && uninstallable(one)
+  );
+
+/**
+ * Uninstalls each record at its own scope: `claude plugin uninstall <id>
+ * --scope <scope>`, run in the record's project for a project or local one,
  * because those scopes are the project the command runs in
  * (https://code.claude.com/docs/en/plugins/cli-reference#plugin-uninstall:
- * "Remove an installed plugin from one scope"). A copy whose project folder
- * is gone is skipped: no session starts there. Answers each copy that stays,
- * with what the CLI said.
+ * "Remove an installed plugin from one scope"). A record whose project folder
+ * is gone is skipped: no session starts there. Answers what was uninstalled
+ * and each record that stays, with what the CLI said.
  */
-const dropUpstreamCopies = async (
+const dropRecords = async (
   bin: string,
-  copies: readonly ListedPlugin[]
-): Promise<string[]> => {
+  records: readonly ListedPlugin[]
+): Promise<{ dropped: number; left: string[] }> => {
   const left: string[] = [];
-  for (const copy of copies) {
-    const project = copy.scope === "user" ? undefined : copy.projectPath;
-    if (copy.scope !== "user" && !(project && (await dirExists(project)))) {
+  let dropped = 0;
+  // One record named twice (a turned-off plugin's vendored id is also an
+  // upstream copy once its marketplace is gone) is uninstalled once.
+  const once = new Map(
+    records.map((record) => [
+      `${record.id}\0${record.scope}\0${record.projectPath ?? ""}`,
+      record,
+    ])
+  );
+  for (const record of once.values()) {
+    const project = record.scope === "user" ? undefined : record.projectPath;
+    if (record.scope !== "user" && !(project && (await dirExists(project)))) {
       continue;
     }
     const ran = await runClaude(
       bin,
-      ["plugin", "uninstall", copy.id, "--scope", copy.scope],
+      ["plugin", "uninstall", record.id, "--scope", record.scope],
       project
     );
-    const where = project ? `${copy.scope} scope in ${project}` : "user scope";
+    const where = project
+      ? `${record.scope} scope in ${project}`
+      : "user scope";
     if (ran.code === 0) {
-      console.info(`[fleet] ${copy.id}: uninstalled at ${where}`);
+      dropped += 1;
+      console.info(`[fleet] ${record.id}: uninstalled at ${where}`);
     } else {
-      left.push(`${copy.id} at ${where}: ${ran.output}`);
+      left.push(`${record.id} at ${where}: ${ran.output}`);
+    }
+  }
+  return { dropped, left };
+};
+
+/**
+ * Whether the user settings turn `id` on. A project's settings file is the
+ * user's own when the project is the home folder (`~/.claude/settings.json`
+ * both), so uninstalling a record at project scope there takes the user
+ * scope's `enabledPlugins` entry with it (2.1.311).
+ */
+const enabledForUser = async (id: string): Promise<boolean> =>
+  (await readJson<{ enabledPlugins?: Record<string, unknown> }>(SETTINGS_PATH))
+    ?.enabledPlugins?.[id] === true;
+
+/**
+ * Takes away a carried plugin's records outside user scope and its upstream
+ * copies, then turns its user install back on when an uninstall in the home
+ * folder turned it off: `claude plugin enable <id> --scope user`. Answers each
+ * record that stays and why.
+ */
+const keepUserScopeOnly = async (
+  bin: string,
+  vendoredId: string,
+  records: readonly ListedPlugin[]
+): Promise<string[]> => {
+  const { dropped, left } = await dropRecords(bin, records);
+  if (dropped > 0 && !(await enabledForUser(vendoredId))) {
+    const ran = await runClaude(bin, [
+      "plugin",
+      "enable",
+      vendoredId,
+      "--scope",
+      "user",
+    ]);
+    if (await enabledForUser(vendoredId)) {
+      console.info(`[fleet] ${vendoredId}: turned back on at user scope`);
+    } else {
+      left.push(`${vendoredId} is off at user scope: ${ran.output}`);
     }
   }
   return left;
@@ -1657,7 +1727,7 @@ const dropUpstreamCopies = async (
 const syncVendoredPlugins = async (
   bin: string,
   payloads: FleetPluginPayload[],
-  wanted: readonly { id: string }[],
+  rows: { turnedOff: readonly string[]; wanted: readonly { id: string }[] },
   managed: Record<string, string>,
   report: Record<string, FleetItemState>
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes, links and installs every vendored plugin and reports each one's outcome, missing bytes included
@@ -1717,17 +1787,26 @@ const syncVendoredPlugins = async (
     }
   }
 
+  // What the fleet wants loaded here no more: a row turned off, and a
+  // vendored plugin it carries no more.
+  const unwanted = [
+    ...new Set([
+      ...rows.turnedOff,
+      ...Object.keys(managed).filter((id) => !byId.has(id)),
+    ]),
+  ];
   // What Claude Code holds installed, read once: whether each plugin is
   // installed at all, whether its record lags the folder it loads from, and
-  // which upstream copies of it are installed beside it.
-  const carried = wanted.filter(({ id }) => byId.has(id));
+  // which other records of it are installed beside it.
+  const carried = rows.wanted.filter(({ id }) => byId.has(id));
   const listed =
-    carried.length > 0
+    carried.length > 0 || unwanted.length > 0
       ? await listPlugins(bin)
       : { ok: true as const, plugins: [] };
   const installs = listed.ok
     ? {
         ok: true as const,
+        all: listed.plugins,
         plugins: new Map(
           listed.plugins
             .filter((one) => one.scope === "user")
@@ -1773,15 +1852,16 @@ const syncVendoredPlugins = async (
       continue;
     }
 
-    // The copies this one replaces. A machine that installed the plugin the
-    // old way, from its upstream marketplace, at any scope, still carries it,
-    // and a session there would load the same skills and subagents twice.
-    // Checked on every sync rather than only on the install, because the
-    // machine that most needs it is the one already holding both.
-    const left = await dropUpstreamCopies(
-      bin,
-      upstreamCopies(plugin.name, vendored, listed.ok ? listed.plugins : [])
-    );
+    // The records this one replaces: its own outside user scope, and the
+    // copies a machine that installed it the old way, from its upstream
+    // marketplace, still carries at any scope. A session there would load an
+    // older copy, or the same skills and subagents twice. Checked on every
+    // sync rather than only on the install, because the machine that most
+    // needs it is the one already holding both.
+    const left = await keepUserScopeOnly(bin, vendoredId, [
+      ...outsideUserScope(vendoredId, installs.all),
+      ...upstreamCopies(plugin.name, vendored, installs.all),
+    ]);
     written[id] = plugin.hash;
     report[id] =
       left.length === 0
@@ -1792,18 +1872,26 @@ const syncVendoredPlugins = async (
           };
   }
 
-  for (const id of Object.keys(managed)) {
-    if (byId.has(id)) {
-      continue;
-    }
-    await runClaude(bin, [
-      "plugin",
-      "uninstall",
-      vendoredIdOf(id),
-      "--scope",
-      "user",
-      "-y",
+  // Each one's vendored record goes at every scope, and a row turned off
+  // takes its upstream copies with it: off in the fleet is loaded nowhere on
+  // this machine.
+  const all = listed.ok ? listed.plugins : [];
+  if (!listed.ok && unwanted.length > 0) {
+    console.warn(
+      `[fleet] plugins the fleet turned off stay installed: claude plugin list --json: ${listed.why}`
+    );
+  }
+  for (const id of unwanted) {
+    const vendoredId = vendoredIdOf(id);
+    const { left } = await dropRecords(bin, [
+      ...all.filter((one) => one.id === vendoredId && uninstallable(one)),
+      ...(rows.turnedOff.includes(id)
+        ? upstreamCopies(pluginNameOf(id), vendored, all)
+        : []),
     ]);
+    if (left.length > 0) {
+      console.warn(`[fleet] ${id} stays installed: ${left.join("; ")}`);
+    }
   }
   // A vendored marketplace the fleet carries nothing from any more: its
   // plugins are uninstalled above and its folder is gone, so its link goes.
