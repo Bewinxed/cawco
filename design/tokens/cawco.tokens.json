@@ -6432,6 +6432,14 @@
       },
       "$description": "A member's settings and Add a member, in the popover hung from its card: their greatest width."
     },
+    "c-kinds-max-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "rem"
+      },
+      "$description": "Kinds of choice, in the popover hung from Who decides' head: its greatest width."
+    },
     "c-pose-tile": {
       "$type": "dimension",
       "$value": {

@@ -15,6 +15,10 @@
    * so no scope glyph, legend or put-back; a hand-over writes the fleet's
    * table.
    *
+   * Both heads end with Kinds of choice (its count beside its name), which
+   * opens every kind and who decides it across the fleet in a popover hung
+   * from it (KindsOfChoice); under the phone line it stands under the lede.
+   *
    * A read that failed stands in the page with the hub's words and Try
    * again; decides.md that doesn't read is said under the head, every kind
    * his until it does.
@@ -32,7 +36,8 @@
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconFolder, IconGlobe } from "#lib/icons.js";
   import { WhoDecides } from "./decides.svelte";
-  import Roster from "./Roster.svelte";
+  import KindsOfChoice from "./KindsOfChoice.svelte";
+  import WhoRoster from "./WhoRoster.svelte";
 
   let { projectId }: { projectId: string | null } = $props();
 
@@ -80,6 +85,9 @@
     who.read.state === "read" && (projectId === null || project !== undefined)
   );
   const facts = (member: Member) => who.facts(member, project);
+  /** Projects' names by their ids, for what waits under a kind. */
+  const named = (ids: string[]) =>
+    ids.map((id) => cawco.projects.find((one) => one.id === id)?.name ?? id);
   const projectHref = $derived(
     projectId === null ? "" : `/project/${encodeURIComponent(projectId)}`
   );
@@ -103,19 +111,10 @@
         {decidesWords.fileProblems(who.problems.join(" "))}
       </p>
     {/if}
-    <Roster
-      asking={who.asking}
+    <WhoRoster
       {facts}
-      fault={who.fault}
-      fleetRoutes={who.fleetRoutes}
-      bind:handing={who.handing}
-      kinds={who.kinds}
-      members={who.members}
-      onhand={who.handTo}
-      onputback={(kind) => who.useFleet([kind])}
-      own={who.own}
       project={projectId === null ? null : name}
-      routes={who.routes}
+      settings
       {who}
     />
   {/if}
@@ -139,14 +138,20 @@
       <div
         class="flex max-w-c-config-max-w min-w-0 flex-col gap-space-5 py-space-6"
       >
-        <header class="flex min-w-0 flex-col gap-space-1">
-          <h1
-            class="m-0 type-title tracking-title text-balance text-ink-strong"
-          >
-            {section.label}
-          </h1>
-          <p class="m-0 text-pretty">{section.purpose}</p>
-        </header>
+        <div
+          class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
+          style:--head-cols="minmax(0, 1fr) auto"
+        >
+          <header class="flex min-w-0 flex-col gap-space-1">
+            <h1
+              class="m-0 type-title tracking-title text-balance text-ink-strong"
+            >
+              {section.label}
+            </h1>
+            <p class="m-0 text-pretty">{section.purpose}</p>
+          </header>
+          <KindsOfChoice {named} {who} />
+        </div>
         {@render roster()}
       </div>
     </div>
@@ -185,49 +190,58 @@
             href="{projectHref}?view=decisions">{decidesWords.decisions}</a
           >
         </nav>
-        <header class="flex min-w-0 flex-col gap-space-2">
-          {#if project}
-            <h1
-              class="m-0 type-title text-balance text-ink-strong wrap-anywhere"
-            >
-              {decidesWords.title(name)}
-            </h1>
-          {:else}
-            <Skeleton line="title" radius="text" width="title" />
-          {/if}
-          {#if ready}
-            <p class="m-0 type-body text-pretty text-ink-muted">
-              {who.own.length === 0
-                ? decidesWords.follows(name)
-                : decidesWords.except(name, who.own.length)}
-              {#if who.own.length > 0}
-                <button
-                  aria-disabled={who.asking !== null || undefined}
-                  class="text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
-                  onclick={() => {
-                    if (who.asking === null) {
-                      who.useFleet(who.own);
-                    }
-                  }}
-                  type="button"
-                  >{decidesWords.putAllBack(who.own.length)}</button
-                >
-              {/if}
-            </p>
-            <ul
-              class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-1 p-0 type-meta text-ink-muted"
-            >
-              <li class="mark-line flex items-center gap-x-space-1">
-                <IconGlobe aria-hidden="true" class="size-icon-sm" />
-                <span>{decidesWords.followsFleet}</span>
-              </li>
-              <li class="mark-line flex min-w-0 items-center gap-x-space-1">
-                <IconFolder aria-hidden="true" class="size-icon-sm flex-none" />
-                <span class="wrap-anywhere">{decidesWords.own(name)}</span>
-              </li>
-            </ul>
-          {/if}
-        </header>
+        <div
+          class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
+          style:--head-cols="minmax(0, 1fr) auto"
+        >
+          <header class="flex min-w-0 flex-col gap-space-2">
+            {#if project}
+              <h1
+                class="m-0 type-title text-balance text-ink-strong wrap-anywhere"
+              >
+                {decidesWords.title(name)}
+              </h1>
+            {:else}
+              <Skeleton line="title" radius="text" width="title" />
+            {/if}
+            {#if ready}
+              <p class="m-0 type-body text-pretty text-ink-muted">
+                {who.own.length === 0
+                  ? decidesWords.follows(name)
+                  : decidesWords.except(name, who.own.length)}
+                {#if who.own.length > 0}
+                  <button
+                    aria-disabled={who.asking !== null || undefined}
+                    class="text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
+                    onclick={() => {
+                      if (who.asking === null) {
+                        who.useFleet(who.own);
+                      }
+                    }}
+                    type="button"
+                    >{decidesWords.putAllBack(who.own.length)}</button
+                  >
+                {/if}
+              </p>
+              <ul
+                class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-1 p-0 type-meta text-ink-muted"
+              >
+                <li class="mark-line flex items-center gap-x-space-1">
+                  <IconGlobe aria-hidden="true" class="size-icon-sm" />
+                  <span>{decidesWords.followsFleet}</span>
+                </li>
+                <li class="mark-line flex min-w-0 items-center gap-x-space-1">
+                  <IconFolder
+                    aria-hidden="true"
+                    class="size-icon-sm flex-none"
+                  />
+                  <span class="wrap-anywhere">{decidesWords.own(name)}</span>
+                </li>
+              </ul>
+            {/if}
+          </header>
+          <KindsOfChoice {named} {who} />
+        </div>
         {@render roster()}
       </div>
     </div>

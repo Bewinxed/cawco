@@ -24,17 +24,31 @@ import { modelLabel } from "#lib/cawco/models.svelte.js";
 import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
 import {
   type AgentBody,
+  addKind,
   addMember,
   type FleetOffer,
   readFleet,
   readProject,
   readTypes,
+  readWaiting,
+  removeKind,
   removeMember,
+  renameKind,
   saveMember,
   setPicture,
   writeFleetRoutes,
   writeProjectRoutes,
 } from "./decides-client";
+import {
+  KIND_STEPS,
+  KindAdd,
+  type KindProblems,
+  KindRename,
+  kindProblems,
+  readParkedKind,
+  stepOfRefusal,
+  writeParkedKind,
+} from "./kinds.svelte";
 import {
   blankDraft,
   draftOf,
@@ -90,10 +104,27 @@ export class WhoDecides {
   readonly asker = new Asker<AskHereRequest>();
   /** The project's Caw, whose switch and harness his settings change; null on the fleet's page. */
   lead: CawLead | null = null;
+  /** Kinds of choice stands open, hung from the head's button. */
+  kindsOpen = $state(false);
+  /** A kind being added: kept while Kinds of choice is closed, and across a reload. */
+  kindAdd = $state<KindAdd | null>(null);
+  /** A kind being renamed in its row. */
+  kindRename = $state<KindRename | null>(null);
+  /** The kind whose waiting decisions are being counted, before its removal is asked. */
+  counting = $state<string | null>(null);
+  /** A kind's rename or count the hub refused, under its row. */
+  kindFault = $state<{
+    kind: string;
+    reason: string;
+    again: () => Promise<unknown>;
+  } | null>(null);
+  /** The kind a removed kind's choices go to, picked in its question. */
+  moveTo = $state<string | null>(null);
 
   constructor(projectId: string | null) {
     this.projectId = projectId;
     this.parked = readParked(projectId);
+    this.kindAdd = readParkedKind(projectId);
   }
 
   async load(): Promise<void> {
@@ -683,6 +714,256 @@ export class WhoDecides {
     if (this.setup?.key === id) {
       this.setup = null;
     }
+    await this.#refresh();
+  };
+
+  // ── Kinds of choice (build spec §3.6) ───────────────────────────────────
+
+  /** Who decides `kind` across the fleet. */
+  fleetHolder = (kind: string): Member | undefined =>
+    this.member(this.fleetRoutes[kind]);
+
+  /**
+   * Opens or closes Kinds of choice. Closed, a kind half added is kept (in
+   * the session's storage too) and comes back where it was on the next
+   * open; a rename and a removal's question are put away.
+   */
+  showKinds = (open: boolean): void => {
+    this.kindsOpen = open;
+    if (!open) {
+      writeParkedKind(this.projectId, this.kindAdd);
+      if (this.kindAdd && !this.kindAdd.changed) {
+        this.kindAdd = null;
+      }
+      this.kindRename = null;
+      this.kindFault = null;
+      if (this.asker.pending?.at.startsWith("remove-kind:")) {
+        this.asker.dismiss();
+      }
+    }
+  };
+
+  /** Add a kind: its first step unfolds, or a kind half added comes back where it was. */
+  startKind = (): void => {
+    this.kindAdd ??= new KindAdd();
+  };
+
+  /** Cancel: the one discard. */
+  cancelKind = (): void => {
+    this.kindAdd = null;
+    writeParkedKind(this.projectId, null);
+  };
+
+  /** What keeps `add` from being added, by step, the hub's refusal at the step it names. */
+  kindAddProblems = (add: KindAdd): KindProblems => {
+    const problems = kindProblems(add, this.kinds);
+    const step = add.fault?.step;
+    if (step && add.fault && !problems[step]) {
+      problems[step] = add.fault.reason;
+    }
+    return problems;
+  };
+
+  /** A folded step's Change: it opens, the one open before it folds. */
+  openKindStep = (step: (typeof KIND_STEPS)[number]): void => {
+    if (this.kindAdd) {
+      this.kindAdd.open = step;
+    }
+  };
+
+  /** The press would add the kind now. */
+  kindLastStep = (add: KindAdd): boolean => {
+    const last = KIND_STEPS.length - 1;
+    return add.reached >= last && add.open === KIND_STEPS[last];
+  };
+
+  /**
+   * Continue: the open step folds into its summary and the next unfolds; a
+   * step with a problem stays, its problem shown. On the last, the kind is
+   * added.
+   */
+  nextKind = async (): Promise<void> => {
+    const add = this.kindAdd;
+    if (!add?.open) {
+      return;
+    }
+    if (this.kindAddProblems(add)[add.open]) {
+      add.tried = true;
+      add.shown += 1;
+      return;
+    }
+    if (this.kindLastStep(add)) {
+      await this.addKind();
+      return;
+    }
+    const at = KIND_STEPS.indexOf(add.open);
+    add.reached = Math.max(add.reached, at + 1);
+    add.open = KIND_STEPS[add.reached] ?? null;
+  };
+
+  /**
+   * Add kind: the problems first (the first step holding one opens); then
+   * the hub adds it, decided by its member across the fleet, and the page
+   * reads the fleet again so its tile stands on that member's card. A
+   * refusal stands at the step it names, else under the steps.
+   */
+  addKind = async (): Promise<void> => {
+    const add = this.kindAdd;
+    if (!add || add.saving) {
+      return;
+    }
+    add.tried = true;
+    add.fault = null;
+    const problems = this.kindAddProblems(add);
+    const first = KIND_STEPS.find((step) => problems[step]);
+    if (first) {
+      add.open = first;
+      add.shown += 1;
+      return;
+    }
+    add.saving = true;
+    try {
+      await addKind({
+        name: add.name.trim(),
+        example: add.example.trim(),
+        to: add.to,
+      });
+      if (this.kindAdd === add) {
+        this.kindAdd = null;
+      }
+      writeParkedKind(this.projectId, null);
+      await this.#refresh();
+    } catch (error) {
+      const reason = failureWords(error);
+      add.fault = { reason, step: stepOfRefusal(reason) };
+      if (add.fault.step) {
+        add.open = add.fault.step;
+        add.shown += 1;
+      }
+    } finally {
+      add.saving = false;
+    }
+  };
+
+  /** A row's Rename: its name and examples open in place. */
+  startRename = (id: string): void => {
+    const kind = this.kinds.find((one) => one.id === id);
+    if (kind) {
+      this.kindRename = new KindRename(kind);
+      this.kindFault = null;
+    }
+  };
+
+  /** What keeps the rename from being written, by field. */
+  renameProblems = (rename: KindRename): KindProblems =>
+    kindProblems(rename, this.kinds, rename.id);
+
+  /**
+   * Done: the hub renames the kind and its answer replaces it, so its tile
+   * says the new name at once (decides.md says it on its next write). Nothing
+   * changed folds the row; a refusal stands under it with Try again, the
+   * fields kept.
+   */
+  doneRename = async (): Promise<void> => {
+    const rename = this.kindRename;
+    const kind = this.kinds.find((one) => one.id === rename?.id);
+    if (!(rename && kind) || rename.saving) {
+      return;
+    }
+    const name = rename.name.trim();
+    const example = rename.example.trim();
+    if (name === kind.name && example === kind.example) {
+      this.kindRename = null;
+      return;
+    }
+    if (Object.keys(this.renameProblems(rename)).length > 0) {
+      return;
+    }
+    rename.saving = true;
+    this.kindFault = null;
+    try {
+      const renamed = await renameKind(kind.id, { name, example });
+      if (this.read.state === "read") {
+        this.#replace({
+          fleet: {
+            ...this.read.fleet,
+            kinds: this.read.fleet.kinds.map((one) =>
+              one.id === renamed.id ? renamed : one
+            ),
+          },
+        });
+      }
+      if (this.kindRename === rename) {
+        this.kindRename = null;
+      }
+    } catch (error) {
+      this.kindFault = {
+        kind: kind.id,
+        reason: failureWords(error),
+        again: () => this.doneRename(),
+      };
+    } finally {
+      rename.saving = false;
+    }
+  };
+
+  /**
+   * A row's Remove: what waits under the kind is counted first, then the
+   * question stands in its row; a count the hub refused stands under the
+   * row with Try again. `named` gives the projects' names by their ids.
+   */
+  askRemoveKind = async (
+    id: string,
+    named: (projects: string[]) => string[]
+  ): Promise<void> => {
+    if (this.counting !== null) {
+      return;
+    }
+    this.counting = id;
+    this.kindFault = null;
+    this.kindRename = null;
+    try {
+      const waiting = await readWaiting(id);
+      this.askRemoveWith(id, waiting.count, named(waiting.projects));
+    } catch (error) {
+      this.kindFault = {
+        kind: id,
+        reason: decidesWords.waitingUnread(failureWords(error)),
+        again: () => this.askRemoveKind(id, named),
+      };
+    } finally {
+      this.counting = null;
+    }
+  };
+
+  /** Asks in kind `id`'s row before it goes, `count` decisions waiting under it in `projects`. */
+  askRemoveWith = (id: string, count: number, projects: string[]): void => {
+    const kind = this.kinds.find((one) => one.id === id);
+    if (!kind) {
+      return;
+    }
+    this.moveTo = null;
+    this.asker.ask({
+      at: `remove-kind:${id}`,
+      title: decidesWords.removeKindAsk(kind.name),
+      body: [
+        `${decidesWords.waitingUnder(count, projects)} ${decidesWords.fileUnder(count)}`,
+      ],
+      cancelLabel: decidesWords.keep,
+      confirmLabel: decidesWords.removeAndMove(count),
+      pendingLabel: decidesWords.removingKind,
+      run: () => this.removeKind(id),
+    });
+  };
+
+  /** Removes a kind he added, its open cards moved to the kind picked; a refusal throws its words. */
+  removeKind = async (id: string): Promise<void> => {
+    const to = this.moveTo;
+    if (to === null) {
+      throw new Error(decidesWords.pickMoveTo);
+    }
+    await removeKind(id, to);
+    this.moveTo = null;
     await this.#refresh();
   };
 }

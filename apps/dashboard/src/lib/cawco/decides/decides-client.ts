@@ -10,6 +10,7 @@ import type {
   DecidesTable,
   FleetDecides,
   Hear,
+  Kind,
   Member,
 } from "@cawco/core/decides";
 import type { DelegateType } from "@cawco/core/delegate-types";
@@ -101,6 +102,34 @@ export const removeMember = (
   id: string
 ): Promise<{ kindsReturned: string[]; projectsRewritten: string[] }> =>
   send(member(id), { method: "DELETE" });
+
+const kind = (id: string) => `/api/decides/kinds/${encodeURIComponent(id)}`;
+
+/** Adds a kind of choice, decided by `to` across the fleet; answers the kind as the hub holds it. */
+export const addKind = (body: {
+  example: string;
+  name: string;
+  to: string;
+}): Promise<Kind> => send("/api/decides/kinds", json("POST", body));
+
+/** Renames a kind in place, a built-in's too. */
+export const renameKind = (
+  id: string,
+  body: { example: string; name: string }
+): Promise<Kind> => send(kind(id), json("PUT", body));
+
+/** Removes a kind he added; its open cards, on every page, move to `moveTo`. */
+export const removeKind = (
+  id: string,
+  moveTo: string
+): Promise<{ moved: number; projects: string[] }> =>
+  send(kind(id), json("DELETE", { moveTo }));
+
+/** The open decision cards filed under a kind, and the projects they wait in, by id. */
+export const readWaiting = (
+  id: string
+): Promise<{ count: number; projects: string[] }> =>
+  send(`${kind(id)}/waiting`);
 
 /** A member's record: what it decided, and what waits on it now. */
 export const readRecord = (

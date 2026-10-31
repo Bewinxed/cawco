@@ -1,6 +1,7 @@
 <script lang="ts">
   /**
-   * One row of a member's settings (build spec §3.3). Folded: its label in
+   * One row of a member's settings (build spec §3.3), or a step of Add a
+   * kind (§3.6); its host is the `member-setup` container. Folded: its label in
    * the label column, its value on one line, clipped, and Change at the end;
    * where the settings stand under 560px wide, the label stands over the
    * value and Change spans both. Open: the label strong over its fields,
@@ -10,7 +11,6 @@
   import type { Snippet } from "svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import type { RowId } from "./setup.svelte";
 
   let {
     id,
@@ -22,7 +22,8 @@
     onopen,
     children,
   }: {
-    id: RowId;
+    /** Its row's id (setup.svelte `RowId`, kinds.svelte `KindStep`). */
+    id: string;
     label: string;
     /** Its value in a line, while folded. */
     value: string;

@@ -616,6 +616,7 @@ export type TokenSize =
   | "size.c-roster-row-min"
   | "size.c-roster-face"
   | "size.c-member-setup-max-w"
+  | "size.c-kinds-max-w"
   | "size.c-pose-tile"
   | "size.c-setup-label-w"
   | "size.c-stat-tile-min"

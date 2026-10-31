@@ -1,5 +1,6 @@
 <script lang="ts">
   import { bringIntoView } from "@cawco/core/bring-into-view";
+  import type { Snippet } from "svelte";
   /**
    * A question standing in the page, under the control that asked it
    * (ask-here.svelte.ts; DESIGN.md, The Open Page Rule). It unfolds where it
@@ -9,6 +10,9 @@
    * stays under the question in the refuser's words, the button the way to
    * try again, and only work that went closes it. Cancel and Escape put it
    * away; once the work is sent, it can't be called back, so Cancel waits.
+   *
+   * `children`: what the question asks him to choose before he confirms
+   * (a kind to move decisions to), drawn under its words.
    *
    * `indent` and `end`: where it starts and stops, to line up with the
    * control above; a host that sets `--ask-indent` and `--ask-end` for every
@@ -29,6 +33,7 @@
     class: className,
     indent = "var(--ask-indent, 0)",
     end = "var(--ask-end, 0)",
+    children,
     ...rest
   }: {
     asker: Asker<AskHereRequest>;
@@ -39,6 +44,8 @@
     indent?: string;
     /** Its inline-end inset: a space token or a calc() of tokens. */
     end?: string;
+    /** A choice the question holds, under its words. */
+    children?: Snippet;
     /** Data attributes for the host's styling (`data-compact`). */
     [key: `data-${string}`]: unknown;
   } = $props();
@@ -141,6 +148,7 @@
       {#if items.length > 0}
         <AskItems {items} label="What this reaches" />
       {/if}
+      {@render children?.()}
       <RowFault reason={failure} />
       <div data-slot="actions" class="flex flex-wrap justify-end gap-space-2">
         <Button

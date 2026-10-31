@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * A member's settings, and Add a member (build spec §3.4), in the popover
    * hung from the card that opened it: nothing on the page moves or is held.
@@ -23,7 +22,6 @@
   import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
   import { unhandled } from "@cawco/core/unhandled";
   import { decidesWords } from "@cawco/core/words/decides";
-  import { tick } from "svelte";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { EFFORT_OPTIONS } from "#lib/cawco/effort-levels.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -42,6 +40,7 @@
   import { IconClose, IconFolder, IconGlobe, IconPen } from "#lib/icons.js";
   import type { WhoDecides } from "./decides.svelte";
   import { readRecord } from "./decides-client";
+  import { showFirstProblem } from "./first-problem";
   import { kindGlyph } from "./kind-glyph";
   import MemberFace from "./MemberFace.svelte";
   import PicturePicker from "./PicturePicker.svelte";
@@ -231,18 +230,9 @@
 
   // The first problem in view once Save or Continue found it, its field in hand.
   $effect(() => {
-    if (setup.shown === 0) {
-      return;
+    if (setup.shown > 0) {
+      showFirstProblem(body);
     }
-    tick().then(() => {
-      const at = body?.querySelector<HTMLElement>("[data-problem]");
-      if (at) {
-        bringIntoView(at);
-      }
-      at?.closest("[data-row]")
-        ?.querySelector<HTMLElement>("[aria-invalid='true']")
-        ?.focus({ preventScroll: true });
-    });
   });
 
   async function askRemove() {

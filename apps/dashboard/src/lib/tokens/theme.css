@@ -566,6 +566,7 @@
   --spacing-c-roster-row-min: var(--c-roster-row-min);
   --spacing-c-roster-face: var(--c-roster-face);
   --spacing-c-member-setup-max-w: var(--c-member-setup-max-w);
+  --spacing-c-kinds-max-w: var(--c-kinds-max-w);
   --spacing-c-pose-tile: var(--c-pose-tile);
   --spacing-c-setup-label-w: var(--c-setup-label-w);
   --spacing-c-stat-tile-min: var(--c-stat-tile-min);

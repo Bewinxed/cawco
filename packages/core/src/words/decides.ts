@@ -376,6 +376,69 @@ export const decidesWords = {
   /** The setup's commit on a project's decides.md. */
   setupCommit: (name: string) => `${name}'s kinds changed`,
 
+  // ── Kinds of choice ─────────────────────────────────────────────────────
+  /** The head's button, and the popover's head. */
+  kindsHead: "Kinds of choice",
+  /** The button's count, as a screen reader hears it after the name. */
+  kindsCount: (count: number) => `${count} ${count === 1 ? "kind" : "kinds"}`,
+  /** A kind half added and closed before adding, beside the button. */
+  kindUnsaved: "Unsaved kind",
+  closeKinds: "Close Kinds of choice",
+  kindsIntro:
+    "Agents file every choice under one of these kinds, by the examples under its name. Beside each is who decides it across the fleet.",
+  /** The key for the pen glyph a kind he added wears. */
+  addedKey: "A kind you added",
+  addKind: "Add a kind",
+  /** Add a kind's steps, in their order. */
+  kindSteps: {
+    name: "Name",
+    example: "What agents read",
+    to: "Who decides it",
+  },
+  kindNamePlaceholder: "Data and migrations",
+  kindExamplePlaceholder: "a schema change, a backfill, a data fix",
+  kindNameMissing: "Give it a name; agents file choices under it.",
+  kindExampleMissing: "Say what agents file under it, as a few examples.",
+  addKindAct: "Add kind",
+  addingKind: "Adding…",
+  /** A kind's row: who decides it, as a screen reader hears it. */
+  whoAcrossFleet: (member: string) =>
+    `Who decides it across the fleet: ${member}`,
+  rename: (name: string) => `Rename ${name}`,
+  renameDone: "Done",
+  renaming: "Saving…",
+  removeKind: (name: string) => `Remove ${name}`,
+  removeKindAsk: (name: string) => `Remove ${name}?`,
+  /** What waits under a kind being removed, and the projects it waits in. */
+  waitingUnder: (count: number, projects: readonly string[]) => {
+    if (count === 0) {
+      return "No decisions are waiting under it.";
+    }
+    const where = projects.length > 0 ? ` (${andList(projects)})` : "";
+    return count === 1
+      ? `1 decision is waiting under it${where}.`
+      : `${count} decisions are waiting under it${where}.`;
+  },
+  fileUnder: (count: number) =>
+    count === 0
+      ? "From now on agents file these choices under the kind you pick."
+      : `From now on agents file these choices under the kind you pick, and the waiting ${count === 1 ? "decision moves" : "decisions move"} there too.`,
+  /** The kinds to move them to, as a screen reader names the list. */
+  moveToLabel: "The kind they go to",
+  pickMoveTo: "Pick the kind they go to.",
+  removeAndMove: (count: number) => {
+    if (count === 0) {
+      return "Remove kind";
+    }
+    return count === 1
+      ? "Remove and move the decision"
+      : "Remove and move the decisions";
+  },
+  removingKind: "Removing…",
+  /** What waits under a kind could not be counted. */
+  waitingUnread: (reason: string) =>
+    `Couldn't count what waits under it: ${reason}`,
+
   // ── The project's details: its Who decides row ─────────────────────────
   detailsLabel: "Who decides",
   detailsFollows: "Follows the fleet",
