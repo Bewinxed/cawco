@@ -30,7 +30,7 @@
  *   PORT=4300 bun scripts/design-graph-preview.ts
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import {
@@ -85,6 +85,13 @@ const decoding = await fromHub<Decoding>("lib0/decoding");
 const DASHBOARD = join(ROOT, "apps/dashboard");
 const VITE = join(DASHBOARD, "node_modules/.bin/vite");
 const PORT = Number(process.env.PORT ?? 4300);
+/**
+ * This serve's own build, which its `vite preview` serves (the config's
+ * `CAWCO_KIT_OUT_DIR`): another serve's build, or a plain `vite build`, in
+ * this workspace replaces the hashed assets in the shared one, and the page
+ * this one served named files no longer there. Removed as it ends.
+ */
+const OUT = join(DASHBOARD, `node_modules/.cache/design-graph-preview-${PORT}`);
 
 /** The canvas: the task column's states file, its flow the slider's steps, its list's records the dials'. */
 const FILE = "src/lib/cawco/tasks/TaskColumn.stories.ts";
@@ -143,6 +150,7 @@ process.on("exit", () => {
   for (const child of children) {
     child.kill("SIGTERM");
   }
+  rmSync(OUT, { recursive: true, force: true });
 });
 for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
   process.on(signal, () => process.exit(0));
@@ -444,6 +452,13 @@ const hub = Bun.serve({
 });
 ports.hub = hub.port as number;
 const HUB = `http://127.0.0.1:${ports.hub}`;
+/** What the dashboard's build and its preview run with: the stand-in hub, and this serve's own build. */
+const DASHBOARD_ENV = {
+  ...process.env,
+  CAWCO_DEV_HUB_URL: HUB,
+  CAWCO_HUB_URL: HUB,
+  CAWCO_KIT_OUT_DIR: OUT,
+};
 
 /* --- The dashboard, built in its bench mode, and served --------------------- */
 
@@ -452,7 +467,7 @@ console.log("… building the dashboard (bench mode)");
 // One of its children, so it ends with it however it ends.
 const build = spawn(VITE, ["build", "--mode", "bench"], {
   cwd: DASHBOARD,
-  env: { ...process.env, CAWCO_DEV_HUB_URL: HUB, CAWCO_HUB_URL: HUB },
+  env: DASHBOARD_ENV,
   stdio: "inherit",
 });
 children.push(build);
@@ -476,7 +491,7 @@ children.push(
     ],
     {
       cwd: DASHBOARD,
-      env: { ...process.env, CAWCO_DEV_HUB_URL: HUB, CAWCO_HUB_URL: HUB },
+      env: DASHBOARD_ENV,
       stdio: "inherit",
     }
   )

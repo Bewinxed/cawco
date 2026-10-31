@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import type http from "node:http";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import {
   BROWSER_HEADERS,
   crossSiteRefusal,
@@ -45,10 +45,25 @@ import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
  * a tool that loads this config as a `serve` starts no server.
  */
 /**
- * adapter-node's output tree. scripts/publish-build.ts renames it to `build/`,
- * and the build that one replaces to `.build-old/`.
+ * Where a build writes and `vite preview` serves from: SvelteKit's `outDir`
+ * (`.svelte-kit`), whose `output/` holds the built app, and adapter-node's
+ * tree. SvelteKit sets Vite's `build.outDir` itself and overrides any other
+ * ("The value for build.outDir specified in config is overridden by
+ * SvelteKit", kit 3.1.0 exports/vite/utils.js), and its preview serves
+ * `kit.outDir/output`, so `kit.outDir` is the one knob.
+ *
+ * `CAWCO_KIT_OUT_DIR` names a folder of the build's own: a server that
+ * builds and previews in a workspace another build also writes in (the
+ * design graph's preview, scripts/design-graph-preview.ts) keeps its pages
+ * and the hashed assets they name, whatever the other build replaces. Both
+ * trees go inside it. Unset, the build is the published one: `.svelte-kit`,
+ * and adapter-node's `.build-next`, which scripts/publish-build.ts renames
+ * to `build/`, and the build that one replaces to `.build-old/`.
  */
-const BUILD_OUT = ".build-next";
+const KIT_OUT_ENV = "CAWCO_KIT_OUT_DIR";
+const KIT_OUT = process.env[KIT_OUT_ENV];
+const KIT_DIR = KIT_OUT ?? ".svelte-kit";
+const BUILD_OUT = KIT_OUT ? join(KIT_OUT, "adapter") : ".build-next";
 
 const DEV_HUB_ENV = "CAWCO_DEV_HUB_URL";
 const DEV_HUB = process.env[DEV_HUB_ENV];
@@ -234,7 +249,8 @@ function answerRunningVersion(
  * does, so their pages run the same served-build check as production instead
  * of logging a 404 on every load. Dev answers the body SvelteKit writes to
  * `_app/version.json`; preview answers the built one (SvelteKit previews
- * `.svelte-kit/output/client`), read once at start as serve.js reads its own.
+ * `output/client` in its `outDir`, {@link KIT_DIR}), read once at start as
+ * serve.js reads its own.
  */
 const runningVersion = (): Plugin => ({
   name: "cawco:running-version",
@@ -245,7 +261,7 @@ const runningVersion = (): Plugin => ({
     answerRunningVersion(
       server,
       readFileSync(
-        join(server.config.root, ".svelte-kit/output/client/_app/version.json"),
+        resolve(server.config.root, KIT_DIR, "output/client/_app/version.json"),
         "utf8"
       )
     );
@@ -496,6 +512,7 @@ export default defineConfig(({ command }) => {
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },
         adapter: adapter({ out: BUILD_OUT }),
+        outDir: KIT_DIR,
         experimental: { remoteFunctions: true },
         version: { name: BUILD_VERSION },
         // The dashboard's one CSRF rule is its own gate (hooks.server.ts,
