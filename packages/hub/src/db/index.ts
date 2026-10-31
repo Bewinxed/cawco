@@ -1378,8 +1378,14 @@ export interface DbShape {
     projectId: string;
     taskId: string;
   }) => void;
-  /** The session's turn ended at `at`, on the hub's clock (`turnEndedAt`). */
-  readonly noteTurnEnded: (id: string, at: Date) => void;
+  /**
+   * The session's turn ended at `at`, on the hub's clock (`turnEndedAt`). A
+   * `silent` turn (it ended on no_reply_needed, saying nothing) leaves
+   * nothing unseen: when the owner had seen it through its last end, they
+   * have seen it through this one (`seenAt`), so no screen lists it as news.
+   * One whose last end is still unseen stays news, as it was.
+   */
+  readonly noteTurnEnded: (id: string, at: Date, silent: boolean) => void;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
   readonly noteWatchLine: (id: string, line: WatchLine) => void;
   /** What a device was shown and what has been cleared, by collapse id (notifications.ts). */
@@ -8962,9 +8968,25 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
     },
     // `updatedAt` deliberately untouched: a turn's end is not the session moving.
-    noteTurnEnded: (id, at) => {
+    noteTurnEnded: (id, at, silent) => {
+      const [was] = silent
+        ? db
+            .select({
+              seenAt: instances.seenAt,
+              turnEndedAt: instances.turnEndedAt,
+            })
+            .from(instances)
+            .where(eq(instances.id, id))
+            .all()
+        : [];
+      const seenThrough =
+        was !== undefined &&
+        (was.turnEndedAt === null ||
+          (was.seenAt !== null &&
+            was.seenAt.getTime() >= was.turnEndedAt.getTime())) &&
+        !(was.seenAt && was.seenAt.getTime() >= at.getTime());
       db.update(instances)
-        .set({ turnEndedAt: at })
+        .set({ turnEndedAt: at, ...(seenThrough ? { seenAt: at } : {}) })
         .where(eq(instances.id, id))
         .run();
     },

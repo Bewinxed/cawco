@@ -1149,7 +1149,9 @@ export interface InstanceRow {
   runningDelegates?: number;
   /**
    * When the owner last looked at it (its tab in front, after it ended) or
-   * archived it off Finished, on any device. Null on one never seen.
+   * archived it off Finished, on any device, or the end of a turn that had
+   * nothing for them when nothing before it was unseen. Null on one never
+   * seen.
    */
   seenAt?: string | number | Date | null;
   /** The harness's own session id, once the session has named itself. */

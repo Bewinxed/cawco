@@ -58960,7 +58960,7 @@
             "type": "number"
           },
           "seenAt": {
-            "description": "When the owner last looked at it (its tab in front, after it ended) or\narchived it off Finished, on any device. Null on one never seen.",
+            "description": "When the owner last looked at it (its tab in front, after it ended) or\narchived it off Finished, on any device, or the end of a turn that had\nnothing for them when nothing before it was unseen. Null on one never\nseen.",
             "anyOf": [
               {
                 "type": "string",

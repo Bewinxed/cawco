@@ -314,6 +314,7 @@ import {
   memoryDocProblem,
   memoryScopeProblem,
   type NeutralSystemMessage,
+  NO_REPLY_TOOL,
   namedAccount,
   OVER_STATUSES,
   PAIRING_REQUIRED,
@@ -981,6 +982,7 @@ import { createUpstreamAsks, heldPostOf } from "./upstream-asks";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
+import { CAWCO_TOOL } from "./web-reads";
 import { WelcomeConverge } from "./welcome-converge";
 import {
   caughtUp,
@@ -10253,6 +10255,18 @@ export const createServer = (
    * message can arrive as several text frames.
    */
   const finalMessage = new Map<string, string[]>();
+  /**
+   * Sessions whose turn in flight last called no_reply_needed. Ended with no
+   * text after that call ({@link finalMessage} empty), the turn has nothing
+   * for the person: its end is no news on any screen (db `noteTurnEnded`) and
+   * pushes nothing (push.ts `turnEnded`).
+   */
+  const endsOnNoReply = new Set<string>();
+  /** A turn's end, whatever ended it: what it said and how it ended go. */
+  const turnSpeechOver = (instanceId: string): void => {
+    finalMessage.delete(instanceId);
+    endsOnNoReply.delete(instanceId);
+  };
   /**
    * The tokens each Claude session's latest top-level request sent (its
    * uncached input plus cache reads and writes), by session: its context as
@@ -36187,7 +36201,7 @@ export const createServer = (
                     console.error(
                       `[hub] completion ${message.instanceId} has no harness result identity`
                     );
-                    finalMessage.delete(message.instanceId);
+                    turnSpeechOver(message.instanceId);
                     break;
                   }
                   if (
@@ -36198,7 +36212,7 @@ export const createServer = (
                       neutral.recovered === true
                     )
                   ) {
-                    finalMessage.delete(message.instanceId);
+                    turnSpeechOver(message.instanceId);
                     break;
                   }
                   const [claimed] = db.getInstancesByIds([message.instanceId]);
@@ -36727,13 +36741,20 @@ export const createServer = (
                     .join("");
                   // A tool call means the turn goes on: everything said up
                   // to it, this frame's own text included, was narration.
-                  if (
-                    neutral.message.content.some(
-                      (block) => block.type === "tool_use"
-                    )
-                  ) {
+                  const lastCall = neutral.message.content.findLast(
+                    (block) => block.type === "tool_use"
+                  );
+                  if (lastCall) {
                     finalMessage.delete(message.instanceId);
                     workedTurns.add(message.instanceId);
+                    // OpenCode's `cawco_` and pi's bare name alike.
+                    if (
+                      lastCall.name.replace(CAWCO_TOOL, "") === NO_REPLY_TOOL
+                    ) {
+                      endsOnNoReply.add(message.instanceId);
+                    } else {
+                      endsOnNoReply.delete(message.instanceId);
+                    }
                   } else if (text) {
                     const acc = finalMessage.get(message.instanceId);
                     if (acc) {
@@ -36752,7 +36773,7 @@ export const createServer = (
                   const ended = message.instanceId;
                   credentialTurns.delete(ended);
                   limitRefused.delete(ended);
-                  finalMessage.delete(ended);
+                  turnSpeechOver(ended);
                   atLimit.signedOut(ended).catch((error: unknown) => {
                     limitAnswerFailed(ended, "its refused sign-in", error);
                   });
@@ -36765,7 +36786,7 @@ export const createServer = (
                   // session is held, moved or continued; no report goes up,
                   // no rule answers it, and what a refused request says of
                   // the context is not the session's context.
-                  finalMessage.delete(message.instanceId);
+                  turnSpeechOver(message.instanceId);
                   const refused = message.instanceId;
                   // A move it owes to an account with room is its turn's
                   // end, as any turn's end is.
@@ -36831,8 +36852,14 @@ export const createServer = (
                     }
                   }
                   const parts = finalMessage.get(message.instanceId);
-                  finalMessage.delete(message.instanceId);
                   const text = parts?.length ? parts.join("\n\n") : undefined;
+                  // It ended on no_reply_needed and said nothing after: no
+                  // news, no push. A failed turn is news whatever it called.
+                  const silent =
+                    endsOnNoReply.has(message.instanceId) &&
+                    !text &&
+                    neutral.is_error !== true;
+                  turnSpeechOver(message.instanceId);
                   // Every turn's end: its own row, by its key.
                   const [row] = db.listedInstancesByIds([message.instanceId]);
                   const parentId = row?.parentInstanceId;
@@ -36854,7 +36881,8 @@ export const createServer = (
                   const endedAt = new Date();
                   // The end on the hub's clock, on the row every screen reads:
                   // against `seenAt`, also the hub's, it says "ended since the
-                  // owner last looked" without any device's clock.
+                  // owner last looked" without any device's clock; a silent
+                  // end leaves nothing unseen.
                   // What this turn left waiting on the person, and what the
                   // one before it asked that it moved on from (Needs you's rule 2).
                   let artifactLeft: ArtifactNeed | undefined;
@@ -36862,7 +36890,7 @@ export const createServer = (
                     const before = row.turnEndedAt
                       ? new Date(row.turnEndedAt)
                       : null;
-                    db.noteTurnEnded(turnId, endedAt);
+                    db.noteTurnEnded(turnId, endedAt, silent);
                     publishInstances(row.machineId);
                     artifacts.turnEnded(turnId, before, endedAt);
                     artifactLeft = unparked(artifactLane.now().needs)
@@ -36987,6 +37015,7 @@ export const createServer = (
                               text || harnessError,
                               endedAt,
                               neutral.wakes,
+                              silent,
                               artifactLeft
                             );
                           }

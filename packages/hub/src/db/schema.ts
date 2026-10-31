@@ -972,8 +972,10 @@ export const instances = sqliteTable("instances", {
   derivedTitle: text("derived_title"),
   /**
    * When the owner last looked at the session (its tab in front, after it
-   * ended) or archived it off Finished, on any device: a turn that ended
-   * after this is news. Null on one never seen.
+   * ended) or archived it off Finished, on any device, or the end of a turn
+   * that had nothing for them when nothing before it was unseen (db
+   * `noteTurnEnded`): a turn that ended after this is news. Null on one
+   * never seen.
    */
   seenAt: timestamp("seen_at"),
   /**

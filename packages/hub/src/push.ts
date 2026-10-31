@@ -1833,7 +1833,10 @@ export const createPush = ({
      * owner started: top level, not a delegate or a continuation's worker; not stopped by them; and
      * waiting on them, not on work of its own ({@link ownWork}, read as the
      * turn ends): that work's end starts its next turn, and the end of the
-     * turn that leaves it waiting on nothing pushes.
+     * turn that leaves it waiting on nothing pushes. A `silent` turn (it
+     * ended on no_reply_needed with no text after, server.ts
+     * `endsOnNoReply`) has nothing for them and pushes nothing: its push
+     * would replace the last turn's, which quoted words, with none.
      * It waits {@link LOOK_GRACE_MS} first: a dashboard or an app that
      * opens the session marks it looked at (`/api/seen` `look`), and then
      * nothing goes. Then it joins the burst, which drops it if the session
@@ -1847,9 +1850,10 @@ export const createPush = ({
       reply: string | undefined,
       endedAt: Date,
       wakes: TurnWakes | undefined,
+      silent: boolean,
       left?: ArtifactNeed
     ): void {
-      if (stopped.delete(instanceId)) {
+      if (stopped.delete(instanceId) || silent) {
         return;
       }
       const own = ownWork(instanceId, wakes);
