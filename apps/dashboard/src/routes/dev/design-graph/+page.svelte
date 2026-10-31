@@ -11,8 +11,10 @@
    */
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { benchFleet } from "#lib/cawco/preview/bench-fleet.js";
+  import { keptKeyOf } from "#lib/cawco/preview/graph/design-graph.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import { setPaneFleet } from "#lib/cawco/preview/pane-fleet.js";
+  import { unstore } from "#lib/cawco/storage.js";
   import { page } from "$app/state";
 
   const INSTANCE = "design-graph-preview";
@@ -40,6 +42,10 @@
     source: { port, path },
     state: "open" as const,
   };
+  // Every frame of this preview on one origin shares one instance, and so one kept graph: a frame whose Graph was
+  // pressed opened the next cold load (another option's frame, or a reload) on the graph, not as its address says.
+  // A load here is a fresh frame: it opens as its address says, and keeps what it changes only until it goes.
+  unstore("local", keptKeyOf(INSTANCE));
   setPaneFleet(benchFleet(INSTANCE, () => preview, "preview"));
   // The page never scrolls (its tab is h-dvh, overflow hidden), so its root keeps no gutter: the preview proxy's floor
   // (core preview-proxy.ts GUTTER_FLOOR) would otherwise hold a classic scrollbar's width open down its inline end.
