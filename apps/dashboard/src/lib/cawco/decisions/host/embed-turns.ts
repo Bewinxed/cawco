@@ -44,8 +44,9 @@
  * A whole screen (a dev server's or a folder's preview) has no graph to
  * tell: its page loads its own, of a size nobody here knows, a whole app's,
  * so it takes its turn alone (`alone`), no other embed fetching beside it
- * and none starting while it loads, and holds it until it stands at its
- * shape. It tells an empty graph once its origin answers: until then it
+ * and none starting while it loads, and holds it until its app has mounted
+ * (core `EMBED_DRAWN`, its overlay's word that it shows something of its
+ * own), else until {@link TURN_MS} passes. It tells an empty graph once its origin answers: until then it
  * holds those after it, as an untold graph does. Seven
  * dashboards on one page, loaded at once, each held the page's frames white
  * for most of a minute.

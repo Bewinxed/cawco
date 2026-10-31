@@ -33,6 +33,7 @@ import type {
   PageAnchor,
   PinnedElement,
 } from "@cawco/core/comments";
+import { EMBED_DRAWN } from "@cawco/core/stage";
 import {
   contentBox,
   type FrameElement,
@@ -306,6 +307,67 @@ export function answerEmbedder(deps: EmbeddedDeps): void {
     });
   }
   window.parent.postMessage({ type: EMBEDDED }, "*");
+  tellDrawn(deps.own);
+}
+
+/** The elements that draw something of their own with no words: a picture, a drawing, a video, a frame. */
+const DRAWS = "img, svg, canvas, video, picture, iframe, object, embed";
+
+/** Whether the page shows something of its own now: a word, or an element that draws ({@link DRAWS}), seen, the overlay's own left out. */
+function showsAny(own: (node: Node) => boolean): boolean {
+  const seen = (el: Element | null, node: Node) =>
+    !!el &&
+    !own(node) &&
+    el.checkVisibility({
+      visibilityProperty: true,
+      contentVisibilityAuto: true,
+    });
+  const words = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = words.nextNode(); node; node = words.nextNode()) {
+    if (node.textContent?.trim() && seen(node.parentElement, node)) {
+      return true;
+    }
+  }
+  return [...document.body.querySelectorAll(DRAWS)].some((el) => seen(el, el));
+}
+
+/**
+ * Tells the page holding this one, once, that it has loaded and shows
+ * something of its own (core `EMBED_DRAWN`), to any parent: nothing else.
+ * Read at its load and at each change to its document after, until it does:
+ * an app whose root keeps the window's size (a dashboard) shows nothing at
+ * its load and mounts later. Watched by its changes, never an animation
+ * frame, which Chromium gives no cross-origin frame off screen or unseen.
+ */
+function tellDrawn(own: (node: Node) => boolean): void {
+  const start = () => {
+    const tell = () => {
+      if (!(document.body && showsAny(own))) {
+        return false;
+      }
+      window.parent.postMessage({ type: EMBED_DRAWN }, "*");
+      return true;
+    };
+    if (tell()) {
+      return;
+    }
+    const changes = new MutationObserver((records) => {
+      if (records.some((record) => !own(record.target)) && tell()) {
+        changes.disconnect();
+      }
+    });
+    changes.observe(document.documentElement, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  };
+  if (document.readyState === "complete") {
+    start();
+  } else {
+    addEventListener("load", start, { once: true });
+  }
 }
 
 /** What the page's overlay gives the bridge (page.ts). */

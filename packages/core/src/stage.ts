@@ -83,6 +83,16 @@ export const sectionName = (
 export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 
 /**
+ * A whole screen framed by another page (a decision page's Preview of a dev
+ * server's or a folder's preview): the message its overlay posts to the page
+ * holding it, `{ type }`, once, when the page has loaded and shows something
+ * of its own (a word, a picture, a drawing): its app has mounted. Its Preview
+ * holds the page's turn until then (dashboard decisions host embed-turns.ts),
+ * so the next screen loads only once this one has painted.
+ */
+export const EMBED_DRAWN = "cawco:embed-drawn";
+
+/**
  * A canvas embed that can't draw what its Preview names, in place of its
  * shape: `{ type, why }`, why in plain words (a story that threw as it
  * mounted, a states file that didn't load). The Preview says it in its own

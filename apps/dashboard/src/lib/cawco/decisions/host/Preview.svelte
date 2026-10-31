@@ -19,8 +19,9 @@
   for it (hub server.ts `embedAt`), open in the panel or not, named in the
   page's media, loaded on its turn among the page's embeds and alone in it
   (one dashboard's load at a time, the one in view first, embed-turns.ts),
-  once its card is close to the view (`DRAW_MARGIN`), and shown once its
-  frame has loaded. A
+  once its card is close to the view (`DRAW_MARGIN`), holding that turn
+  until its app has mounted (core `EMBED_DRAWN`), and shown once its frame
+  has loaded. A
   component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
@@ -69,6 +70,7 @@
     CANVAS_EMBED_READY,
     CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
+    EMBED_DRAWN,
     type EmbedShape,
     screenHeight,
     storiesKey,
@@ -245,6 +247,12 @@
       // Its graph, told before it fetches any of it: it fetches on its turn.
       if (said?.type === CANVAS_EMBED_GRAPH && Array.isArray(said.urls)) {
         turn?.graph(said.urls.map(String));
+        return;
+      }
+      // A whole screen's app has mounted (its overlay saw it show something of its own): the page's turn is the next screen's.
+      if (said?.type === EMBED_DRAWN) {
+        turnState = "fetched";
+        turn?.done();
         return;
       }
       // Its share arrived: those modules are the page's, and the budget they held is free.
@@ -490,13 +498,6 @@
    * canvas, an import that never settles) is otherwise an empty box for good.
    */
   const DRAW_MS = 30_000;
-  // A whole screen's turn (embed-turns.ts, alone) ends once it stands at its shape.
-  $effect(() => {
-    if (screen && shaped) {
-      turnState = "fetched";
-      turn?.done();
-    }
-  });
   $effect(() => {
     if (!told || shaped || failed) {
       return;
