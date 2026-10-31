@@ -192,4 +192,46 @@ export const decidesWords = {
     `Hand ${kind.toLowerCase()} to, for choices raised from now on`,
   /** The member the fleet names for this kind, at the end of its row. */
   fleetsChoice: "Fleet's choice",
+  /** A member's card with no kind, on the fleet's page. */
+  holdsNothingFleet: "Holds nothing in your fleet.",
+  /** A hand-over the hub is writing, said to a screen reader. */
+  handing: (kind: string, member: string) => `Handing ${kind} to ${member}…`,
+  /** A put-back the hub is writing, said to a screen reader. */
+  givingBack: (kinds: readonly string[]) =>
+    `Giving ${andList(kinds)} back to the fleet's choice…`,
+  /** A project's hand-over, as its decides.md commit says it. */
+  handCommit: (kind: string, member: string) => `${kind} goes to ${member}`,
+  /** A project's put-back, as its decides.md commit says it. */
+  backCommit: (kinds: readonly string[]) =>
+    `${andList(kinds)} ${kinds.length === 1 ? "follows" : "follow"} the fleet again`,
+
+  // ── The page: its bar and head ──────────────────────────────────────────
+  /** The fleet, as the bar's first crumb names it until he names it. */
+  fleet: "Your fleet",
+  /** The bar, as a screen reader names it. */
+  crumbs: "Breadcrumb",
+  /** The bar's trailing link: the project's Decisions tab. */
+  decisions: "Decisions",
+  /** The project page's title. */
+  title: (project: string) => `Who decides in ${project}`,
+  /** The lede, every kind following the fleet. */
+  follows: (project: string) =>
+    `${project} follows the fleet on every kind of choice.`,
+  /** The lede, with kinds it handed over itself. */
+  except: (project: string, count: number) =>
+    `${project} follows the fleet, except for ${count} ${count === 1 ? "kind" : "kinds"} it handed over.`,
+  /** The lede's way back for every kind it handed over. */
+  putAllBack: (count: number) =>
+    count === 1 ? "Put it back" : "Put them all back",
+  /** The legend: a kind following the fleet. */
+  followsFleet: "Follows the fleet",
+  /** The legend: a kind this project set itself. */
+  own: (project: string) => `${project}'s own`,
+  /** Who decides could not be read. */
+  unread: (reason: string) => `Who decides didn't load: ${reason}`,
+  /** An agent member's facts line: "Claude Code · Opus 5.5 · high effort". */
+  runsOn: (harness: string, model: string, effort: string | null) =>
+    effort
+      ? `${harness} · ${model} · ${effort} effort`
+      : `${harness} · ${model}`,
 };

@@ -31,6 +31,7 @@ export type ConfigSlug =
   | "rules"
   | "hooks"
   | "delegate-types"
+  | "decides"
   | "subagents"
   | "cli-tools"
   | "mcp"
@@ -108,6 +109,16 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     badge: "fleet-faults",
     icon: "users-group-rounded-bold-duotone",
     hue: "hue-blue-500",
+  },
+  {
+    slug: "decides",
+    group: "Agents",
+    label: "Who decides",
+    purpose: "Who settles each kind of choice an agent can't make alone",
+    counted: false,
+    badge: "fleet-faults",
+    icon: "scale-bold-duotone",
+    hue: "hue-green-600",
   },
   {
     slug: "subagents",

@@ -40,6 +40,7 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
       return cawco.accounts?.accounts.length ?? null;
     case "browsers":
     case "connections":
+    case "decides":
     case "devices":
     case "models":
     case "phone":

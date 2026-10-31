@@ -16,6 +16,7 @@ import {
   IconExternal,
   IconGlobe,
   IconHook,
+  IconJev,
   IconLock,
   IconPhone,
   IconRules,
@@ -63,6 +64,7 @@ const GLYPHS: Record<string, Component> = {
   "lock-keyhole-minimalistic-bold-duotone": IconLock,
   "square-top-down-bold-duotone": IconExternal,
   "global-bold-duotone": IconGlobe,
+  "scale-bold-duotone": IconJev,
   "download-bold-duotone": IconDownload,
 };
 

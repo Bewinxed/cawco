@@ -1,88 +1,59 @@
 <script lang="ts">
   /**
    * Who decides' members as cards on one grid, each holding the kinds it
-   * decides. A press on a kind's tile opens who it can go to in the one slot
-   * under that card's line, joined to the card; a press on a member hands it
-   * over, a press elsewhere or Escape closes it and still lands. Props in,
-   * events out: what a hand-over writes is its owner's.
+   * decides. A press on a kind's tile opens who it can go to in a popover
+   * hung from that tile (KindTile): nothing on the page moves. A press on a
+   * member hands it over; the tile flies to its new card once the hub has
+   * written it, and the focus follows it there. Props in, events out: what a
+   * hand-over writes is its owner's.
    */
-  import { bringIntoView } from "@cawco/core/bring-into-view";
   import type { Kind, Member } from "@cawco/core/decides";
-  import { decidesWords } from "@cawco/core/words/decides";
-  import { untrack } from "svelte";
+  import { tick } from "svelte";
   import { crossfade } from "svelte/transition";
-  import { frameObserver } from "../frame-observer";
   import { dur, easeOut, motionOk } from "../motion/curves.svelte";
-  import HandOver from "./HandOver.svelte";
+  import type { Facts, Fault } from "./decides.svelte";
+  import HandOver, { handOverWidth } from "./HandOver.svelte";
   import KindTile from "./KindTile.svelte";
   import MemberCard from "./MemberCard.svelte";
-  import Slot, { type SlotPlacement } from "./Slot.svelte";
 
   let {
     members,
     kinds,
     routes,
     fleetRoutes,
+    own,
     facts,
     project,
-    placement = "card",
-    handing: openFirst = null,
+    asking,
+    fault,
+    handing = $bindable(null),
     onhand,
     onputback,
   }: {
-    /** Each member's facts line, by member id. */
-    facts: Record<string, string>;
+    /** A write the hub has not answered: the kinds it moves, and what it does in words. */
+    asking: { kinds: string[]; said: string } | null;
+    /** Each member's facts line. */
+    facts: (member: Member) => Facts | null;
+    /** A write the hub refused. */
+    fault: Fault | null;
     /** The fleet's member for each kind, by kind id. */
     fleetRoutes: Record<string, string>;
-    /** A hand-over open from the start. */
+    /** The kind whose hand-over is open. */
     handing?: string | null;
     kinds: Kind[];
     members: Member[];
-    onhand: (kind: string, member: string) => void;
-    onputback: (kind: string) => void;
-    /** Where the list opens under the pressed card. */
-    placement?: SlotPlacement;
-    project: string;
+    /** Hands `kind` to `member`; answers whether it went. */
+    onhand: (kind: string, member: string) => Promise<boolean>;
+    /** Puts `kind` back on the fleet's choice; answers whether it went. */
+    onputback: (kind: string) => Promise<boolean>;
+    /** The kinds this project set itself. */
+    own: string[];
+    /** The project's name; null on the fleet's page. */
+    project: string | null;
     /** This table's member for each kind, by kind id. */
     routes: Record<string, string>;
   } = $props();
 
-  let handing = $state(untrack(() => openFirst));
-  /** The press that opened it, to give focus back on Escape. */
-  let pressed: HTMLElement | null = null;
-  let cols = $state(1);
-  const listId = "who-decides-handover";
-
-  /** The grid's columns, as many as fit: read from the grid itself. */
-  function measure(grid: HTMLElement) {
-    const read = () => {
-      cols = getComputedStyle(grid).gridTemplateColumns.split(" ").length;
-    };
-    read();
-    const watch = frameObserver(read);
-    watch.observe(grid);
-    return () => watch.disconnect();
-  }
-
-  const held = $derived(handing === null ? undefined : routes[handing]);
-  const heldAt = $derived(members.findIndex((one) => one.id === held));
-  /** The pressed card's column, and the last card of its line, after which the slot stands. */
-  const at = $derived(
-    heldAt < 0
-      ? null
-      : {
-          col: heldAt % cols,
-          end: Math.min(
-            members.length - 1,
-            (Math.floor(heldAt / cols) + 1) * cols - 1
-          ),
-        }
-  );
-  const heldKind = $derived(kinds.find((one) => one.id === handing));
-  const others = $derived(members.filter((one) => one.id !== held));
-
-  const memberNamed = (id: string | undefined): Member =>
-    members.find((one) => one.id === id) ?? members[0];
   const kindsOf = (member: string) =>
     kinds.filter((kind) => routes[kind.id] === member);
 
@@ -91,100 +62,99 @@
     easing: easeOut,
   });
 
-  const press = (kind: string, from: HTMLElement) => {
-    pressed = from;
-    handing = handing === kind ? null : kind;
-  };
-
-  /** A press outside the list and the tiles closes it, and lands where it lands. */
-  const pressElsewhere = (event: MouseEvent) => {
-    const { target } = event;
+  /**
+   * After a write moved `kind`, its tile in its new place takes the focus
+   * where the focus was on its tile in the old place or fell to nothing:
+   * the old one leaves inert as it flies (Svelte's outro), and is skipped.
+   */
+  const land = async (kind: string, went: Promise<boolean>) => {
+    if (!(await went)) {
+      return;
+    }
+    await tick();
+    const at = document.activeElement;
+    const wrap = (node: Element | null) =>
+      node?.closest<HTMLElement>("[data-kind]") ?? null;
     if (
-      handing !== null &&
-      target instanceof Element &&
-      !target.closest(`[data-slot="handover"], [data-kind-press]`)
+      at === null ||
+      at === document.body ||
+      wrap(at)?.dataset.kind === kind
     ) {
-      handing = null;
+      const fresh = [
+        ...document.querySelectorAll<HTMLElement>(
+          `[data-kind="${CSS.escape(kind)}"]`
+        ),
+      ].find((one) => one !== wrap(at) && !one.closest("[inert]"));
+      fresh
+        ?.querySelector<HTMLElement>("[data-kind-press]")
+        ?.focus({ preventScroll: true });
     }
   };
-
-  const key = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && handing !== null) {
-      handing = null;
-      pressed?.focus();
-    }
-  };
-
-  /** Opened by a press, not at the start: its list comes into view and takes the keyboard. */
-  let first = true;
-  $effect(() => {
-    if (handing === null) {
-      first = false;
-      return;
-    }
-    if (first) {
-      first = false;
-      return;
-    }
-    const list = document.getElementById(listId);
-    if (list) {
-      bringIntoView(list);
-      list.focus({ preventScroll: true });
-    }
-  });
 </script>
-
-<svelte:document onclickcapture={pressElsewhere} onkeydown={key} />
 
 <div
   class="grid grid-cols-(--roster-cols) gap-space-3"
   style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--c-roster-card-min)), calc((100% - 3 * var(--space-3)) / 4)), 1fr))"}
-  {@attach measure}
 >
-  {#each members as member, index (member.id)}
+  {#each members as member (member.id)}
     {@const holds = kindsOf(member.id)}
+    {@const others = members.filter((one) => one.id !== member.id)}
     {#snippet tiles()}
       {#each holds as kind (kind.id)}
-        <div in:receive={{ key: kind.id }} out:send={{ key: kind.id }}>
+        <div
+          class="min-w-0"
+          data-kind={kind.id}
+          in:receive={{ key: kind.id }}
+          out:send={{ key: kind.id }}
+        >
+          {#snippet list(headId: string)}
+            <HandOver
+              fleetChoice={project === null ? null : fleetRoutes[kind.id]}
+              {headId}
+              {kind}
+              members={others}
+              onpick={(to) => {
+                document
+                  .querySelector<HTMLElement>(
+                    `[data-kind-press="${CSS.escape(kind.id)}"]`
+                  )
+                  ?.focus({ preventScroll: true });
+                handing = null;
+                land(kind.id, onhand(kind.id, to));
+              }}
+            />
+          {/snippet}
           <KindTile
-            fleetWho={memberNamed(fleetRoutes[kind.id])}
+            asking={asking?.kinds.includes(kind.id) ? asking.said : null}
+            fault={fault?.kinds.includes(kind.id) ? fault : null}
+            fleetWho={members.find((one) => one.id === fleetRoutes[kind.id])}
             handing={handing === kind.id}
             holder={member}
             {kind}
-            {listId}
-            onhand={(from) => press(kind.id, from)}
-            onputback={() => onputback(kind.id)}
-            own={routes[kind.id] !== fleetRoutes[kind.id]}
+            {list}
+            onhanding={(open) => {
+              if (open && asking !== null) {
+                return;
+              }
+              if (open) {
+                handing = kind.id;
+              } else if (handing === kind.id) {
+                handing = null;
+              }
+            }}
+            onputback={() => land(kind.id, onputback(kind.id))}
+            own={own.includes(kind.id)}
             {project}
+            width={handOverWidth(others.length)}
           />
         </div>
       {/each}
     {/snippet}
     <MemberCard
-      facts={facts[member.id] ?? null}
-      joined={heldAt === index}
+      facts={facts(member)}
       {member}
       {project}
       tiles={holds.length > 0 ? tiles : undefined}
     />
-    {#if at && at.end === index && heldKind}
-      <Slot
-        col={at.col}
-        {cols}
-        id={listId}
-        label={decidesWords.handTo(heldKind.name)}
-        {placement}
-      >
-        <HandOver
-          fleetChoice={fleetRoutes[heldKind.id]}
-          kind={heldKind}
-          members={others}
-          onpick={(to) => {
-            onhand(heldKind.id, to);
-            handing = null;
-          }}
-        />
-      </Slot>
-    {/if}
   {/each}
 </div>
