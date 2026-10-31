@@ -38,6 +38,12 @@
           (use-drawer-root.svelte.js), which only an important
           declaration outranks;
           https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier */
+      /** A sheet kept mounted while closed (`forceMount`, the preview's
+          sheet of a tab off screen): closed, it is never drawn, from the
+          moment it closes. */
+      closed: {
+        unseen: "data-closed:invisible",
+      },
       look: {
         "new-session":
           "ns-theme m-0 outline-off motion-reduce:transition-none!",
@@ -79,6 +85,7 @@
     pad,
     height,
     width,
+    closed,
     look,
     title,
     titleHidden = false,
@@ -114,7 +121,8 @@
        * The sheet fills a host of its own (the preview standing on the
        * composer): the host places it, and the kit leaves its place alone.
        * It fills the host whole and draws no surface or grabber of its own
-       * (the host draws both); closed, it is not seen.
+       * (the host draws both). Closed, it slides down on vaul's curve; a
+       * holder that keeps it mounted while closed hides it (`closed`).
        */
       hosted?: boolean;
       /** As its root's `modal`: false, the page under it stays live, to a screen reader too. */
@@ -208,9 +216,9 @@
   <DrawerPrimitive.Content
     class={cn(
       "motion-reduce:sheet-fade group/drawer-content fixed z-(--layer-float) flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-1 before:rounded-lg before:border before:border-border before:bg-surface-raised data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(--spacing(4)+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
-      drawerContentVariants({ pad, height, width, look }),
+      drawerContentVariants({ pad, height, width, closed, look }),
       hosted &&
-        "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-closed:invisible data-[vaul-drawer-direction=bottom]:pb-0",
+        "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-[vaul-drawer-direction=bottom]:pb-0",
       className
     )}
     data-placed={hosted ? undefined : ""}

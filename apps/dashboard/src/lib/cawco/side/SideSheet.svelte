@@ -751,8 +751,11 @@
     bind:activeSnapPoint={snap}
   >
     <!-- Kept mounted while closed (bits-ui's `forceMount`), so the page in
-         it stays loaded while its conversation's tab is off screen. -->
+         it stays loaded while its conversation's tab is off screen; closed,
+         it is never drawn (`closed="unseen"`), so the sheet of a tab off screen
+         never stands over the one in front. -->
     <Drawer.Content
+      closed="unseen"
       data-preview-sheet
       forceMount
       hosted
