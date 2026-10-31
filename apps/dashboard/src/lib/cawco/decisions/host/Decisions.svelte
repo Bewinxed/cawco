@@ -252,7 +252,7 @@
 
 <svelte:window onkeydown={sendKey} />
 
-<!-- The page is the panel's height: its cards scroll in the first row and the foot stands in the second, the panel's full width, its parts on the column's edges, so the foot never stands over a card. A host's docked composer is the page's own bottom padding (its inset). The scroller and the foot keep the same gutter for a scrollbar, so the column and the foot's parts share their edges; under the phone's line neither keeps one and its bar is drawn by nothing (`no-scrollbar`), as a phone draws none in the page's room: a window's scrollbar took 20px of it, so a 390 story stood in a 370 well and lost its last 20px. -->
+<!-- The page is the panel's height: its cards scroll in the first row and the foot stands in the second, the panel's full width, its parts on the column's edges, so the foot never stands over a card. A host's docked composer is the page's own bottom padding (its inset). The column and the foot's row stand at one width (`--column-w`, design.css `decision-page-insets`) and the scroller and the foot keep the same gutter for a scrollbar, so the column and the foot's parts share their edges. The column clips sideways (`overflow-x-clip`, which no script can scroll), so the scroller has nothing to scroll sideways: a frame wider than its well for the frame before its well clips it (a window narrowed), with anything scrolled into view meanwhile, scrolled the column off the foot's edges, the foot standing outside the scroller; under the phone's line neither keeps one and its bar is drawn by nothing (`no-scrollbar`), as a phone draws none in the page's room: a window's scrollbar took 20px of it, so a 390 story stood in a 370 well and lost its last 20px. -->
 <main
   class="group/page decision-page-insets grid h-dvh min-w-0 grid-rows-page-foot pb-(--page-inset-bottom)"
   data-pictured={storyWidth > 0 ? "" : undefined}
@@ -266,7 +266,7 @@
     data-slot="page-scroll"
   >
     <div
-      class="mx-auto flex w-full min-w-0 max-w-(--page-w) flex-col gap-space-5 px-(--page-in) pt-(--page-in) pb-space-5 has-data-fills:max-w-none"
+      class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col gap-space-5 overflow-x-clip px-(--page-in) pt-(--page-in) pb-space-5"
       data-slot="page-column"
     >
       <header
@@ -308,7 +308,7 @@
     data-slot="page-foot"
   >
     <div
-      class="mx-auto flex w-full min-w-0 max-w-(--page-w) flex-wrap items-center justify-between gap-space-3 px-(--page-in) group-has-data-fills/page:max-w-none"
+      class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-wrap items-center justify-between gap-space-3 px-(--page-in)"
     >
       <p
         class="mark-line type-meta num flex min-w-0 grow items-center gap-space-3 text-ink-muted"

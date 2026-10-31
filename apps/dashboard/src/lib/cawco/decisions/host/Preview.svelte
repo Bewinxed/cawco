@@ -35,16 +35,15 @@
   canvases runs only the ones near what the person sees, and once drawn a
   frame stays, so what was done in it survives a scroll. Each stands in its well, which hugs it
   and scrolls it sideways where it is wider (Well.svelte). While a screen's
-  origin is asked and its turn waited for, the well holds its shape, a skeleton until the wait
-  outlasts its grace; a canvas waiting its turn or loading holds its
+  origin is asked and its turn waited for, the well holds its shape as a
+  skeleton for the whole wait; a canvas waiting its turn or loading holds its
   skeleton at its picture's own shape as the page's media knows it (what an
   embed of its stories said, in any browser, else its stories as the stage
   drew them; the kit's picture where none was ever drawn) until it stands
-  drawn, never an empty box; past the
-  grace of its draw (a canvas's from when its card comes close; held back
-  farther out it rests as its skeleton, saying nothing) Caw and the line
-  stand over either (DESIGN.md, Skeleton, The Claim
-  Of Nothing Rule, The Real Wait Rule). One that can't stand says why in
+  drawn, never an empty box. Every one not yet drawn says so past the wait
+  grace, one muted line after the live dot at its box's top (DESIGN.md,
+  Browser view, Waiting; Skeleton; The Claim Of Nothing Rule): waiting its
+  turn, or opening. One that can't stand says why in
   one line in its place and shape, with Try again: an origin unreached, the
   proxy's own page in its frame (`cawco:down`: its workspace not running,
   its server stopped, its session closed it), a canvas that says it can't
@@ -83,16 +82,14 @@
   } from "#lib/cawco/frame-observer.js";
   import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconRefresh } from "#lib/icons.js";
-  import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-working.webp";
-  import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-working.webp";
   import { hubRefusal } from "../../hub-read.js";
   import { dur, reveal, revealHere } from "../../motion/curves.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { type EmbedTurn, embedTurn, scrollerOf } from "./embed-turns.js";
   import { served } from "./page.svelte.js";
-  import { scheme } from "./scheme.svelte.js";
   import Well from "./Well.svelte";
 
   let {
@@ -405,7 +402,7 @@
         return hop satisfies never;
     }
   };
-  /** Its draw's wait ({@link drawing}) has outlasted `--dur-wait-grace`: its line, or the failure, may show. */
+  /** Its draw's wait ({@link drawing}) has outlasted `--dur-wait-grace`: the failure may show. */
   let slow = $state(false);
   /** Each Try again asks the origin again from the start. */
   let attempt = $state(0);
@@ -622,10 +619,9 @@
   });
 
   /**
-   * Its draw has begun, so a wait is a wait: once its card is {@link close}.
-   * One held back farther from the view (a canvas fetching its graph, or
-   * either asking nothing yet) is not loading, so it rests as its skeleton,
-   * no Caw and no line, and its grace counts from when it comes close.
+   * Its draw has begun: once its card is {@link close}. A failure shows only
+   * once this has outlasted the grace, so one held back farther from the view
+   * says why only once it comes close.
    */
   const drawing = $derived(!!held?.embed && close);
   $effect(() => {
@@ -640,12 +636,23 @@
     return () => clearTimeout(after);
   });
 
-  /** What the embed's status says: nothing until its draw's wait outlasts its grace ({@link drawing}), nothing once it stands at its shape or failed. */
+  /** It stands drawn: a screen once its frame has loaded, a canvas once it has also said its shape. */
+  const standing = $derived(screen ? shaped : shaped && drawn);
+  /**
+   * What the embed's status says while it isn't drawn: waiting for its turn
+   * among the page's embeds (or for its card to come near the view), or
+   * opening on its turn; nothing once it stands drawn or failed. Its line
+   * arrives after `--dur-wait-grace` by CSS (`animate-wait-grace-in`), from
+   * the moment it mounts, so every Preview not yet drawn says so, wherever it
+   * is in the queue.
+   */
   const waitLine = $derived.by(() => {
-    if (!held?.embed || shaped || failed || !slow) {
+    if (!held?.embed || standing || failed) {
       return "";
     }
-    return `Opening the ${held.kind} ${held.name}…`;
+    return turnState === "waiting"
+      ? decisionsWords.previewQueued(held.kind, held.name)
+      : decisionsWords.previewOpening(held.kind, held.name);
   });
   /** The failure stands once the grace is over: inside it the wait shows nothing of its own. */
   const fault = $derived(slow ? failed : null);
@@ -724,7 +731,7 @@
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at its picture's own shape as the page's media knows it (the kit's picture where none was ever drawn), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace Caw and the wait's line stand over the screen's place or the canvas's skeleton (The Real Wait Rule), until it stands at its shape; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at its picture's own shape as the page's media knows it (the kit's picture where none was ever drawn), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace the wait's line stands at the box's top over the skeleton, until it stands drawn; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div
       bind:this={box}
       class={["relative", picture === undefined ? "w-full" : "flex-none"]}
@@ -809,26 +816,14 @@
               }
             }}
           ></iframe>
-          {#if !(shaped || slow) && screen}
-            <!-- Inside the grace, the screen's skeleton over the frame still loading; it goes in its reveal. -->
+          {#if !shaped && screen}
+            <!-- The screen's skeleton over the frame still loading, for the whole wait; it goes in its reveal. -->
             <div class="absolute inset-0" out:reveal>
               {@render screenWait()}
             </div>
           {/if}
         {:else if screen}
-          {#if slow}
-            <div
-              class={[
-                "w-full",
-                screenTall === null && "aspect-16/10 max-h-c-media-max-h",
-              ]}
-              style:block-size={screenTall === null
-                ? undefined
-                : `${screenTall}px`}
-            ></div>
-          {:else}
-            {@render screenWait()}
-          {/if}
+          {@render screenWait()}
         {/if}
         {#if !(screen || (shaped && drawn))}
           <!-- A canvas waiting its turn or loading: its skeleton at its picture's own shape as the page's media knows it (`known`: what an embed of these stories said, else each story as drawn, one under another; the kit's picture where none was ever drawn), pulsing, over its frame once that holds its height; it goes in its reveal as the frame comes. -->
@@ -853,25 +848,21 @@
             {/if}
           </div>
         {/if}
-        <div
-          class="mark-line pointer-events-none absolute inset-0 flex items-center justify-center gap-space-2"
+        <!-- The well's wait (DESIGN.md, Browser view, Waiting): one muted meta line at the box's top, `--space-5` in, after the live dot, arriving after the wait grace; at the top, so a frame taller than the view says it from its first line, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
+        <p
+          class="pointer-events-none absolute inset-x-0 top-0 m-0 p-space-5 text-ink-muted type-meta"
           data-slot="wait-row"
+          role="status"
         >
-          {#if slow && !shaped}
-            <img
-              alt=""
-              height="40"
-              src={scheme.now === "dark" ? cawDark : cawLight}
-              width="40"
-            />
+          {#if waitLine}
+            <span
+              class="mark-line flex items-start gap-space-2 animate-wait-grace-in"
+              ><span class="mark-cell"><LiveDot /></span><span
+                class="min-w-0 wrap-anywhere">{waitLine}</span
+              ></span
+            >
           {/if}
-          <p
-            class="type-meta min-w-0 text-ink-muted wrap-anywhere"
-            role="status"
-          >
-            {waitLine}
-          </p>
-        </div>
+        </p>
       {/if}
     </div>
   {:else}

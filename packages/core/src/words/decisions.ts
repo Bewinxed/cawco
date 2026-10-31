@@ -100,6 +100,15 @@ export const decisionsWords = {
   /** A canvas told to draw that said neither its shape nor why within `seconds`. */
   previewLate: (seconds: number) =>
     `its stage didn't draw it within ${seconds} s. Try again; if it stays empty, open the canvas in its session to see why.`,
+  /**
+   * A Preview not yet drawn, its wait's line (dashboard Preview.svelte):
+   * waiting for its turn among the page's previews, or opening on its turn;
+   * `kind` and `name` are its artifact's (`the preview bench-look`).
+   */
+  previewQueued: (kind: string, name: string) =>
+    `Waiting to open the ${kind} ${name}…`,
+  previewOpening: (kind: string, name: string) =>
+    `Opening the ${kind} ${name}…`,
   /** A decided card's fold: the options turned down. */
   others: (count: number) =>
     `${count} other ${count === 1 ? "option" : "options"}`,

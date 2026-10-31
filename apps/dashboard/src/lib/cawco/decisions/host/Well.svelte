@@ -9,8 +9,11 @@
   piece and the well's insets, never wider than what holds it, so no empty
   well stands beside it; the well tells the card and the page that width
   (`MEDIA_WIDTHS`), which lay their options and their column out by it. A
-  piece wider than the well scrolls sideways inside it under the house edge
-  fade at its full 40px on every width (over words cut mid-word a phone's
+  piece that knows its width stands in a sideways scroller from its first
+  paint, never only once the well has measured itself, so a piece wider than
+  the well (a window narrowed under it) is clipped and scrolls inside it in
+  the very frame it is wider, never past its card onto the page; under the
+  house edge fade at its full 40px on every width (over words cut mid-word a phone's
   16px reads as a clip), on the side where more is hidden. Under it the
   caption in meta at the start and the piece's one action at the end; an
   action's refusal stands under them in the error formula's ink. Standing
@@ -22,7 +25,6 @@
 -->
 <script lang="ts">
   import { getContext, type Snippet } from "svelte";
-  import { frameObserver } from "../../frame-observer.js";
   import { MEDIA_WIDTHS, type MediaWidths } from "./page.svelte.js";
 
   let {
@@ -47,9 +49,6 @@
     said?: string;
   } = $props();
 
-  /** The box the piece stands in. */
-  let stage = $state<HTMLDivElement>();
-
   /** The card's and the page's ear for this well's width (Decision, Decisions). */
   const tell = getContext<MediaWidths | undefined>(MEDIA_WIDTHS);
   const key = {};
@@ -57,31 +56,6 @@
     tell?.(key, picture ?? null);
     return () => tell?.(key, null);
   });
-
-  /**
-   * The stage's own width, px, as layout has it (fractional: a well hugging
-   * a 471.875px drawing is 471.875px wide, where `clientWidth` rounds to
-   * 471 and called the drawing wider than its own well; its computed width,
-   * which no transform round it scales): a piece wider than it scrolls
-   * sideways. The stage draws no border or padding of its own.
-   */
-  let room = $state(0);
-  $effect(() => {
-    const box = stage;
-    if (!box) {
-      return;
-    }
-    const read = () => {
-      room = Number.parseFloat(getComputedStyle(box).width) || 0;
-    };
-    read();
-    const sizes = frameObserver(read);
-    sizes.observe(box);
-    return () => sizes.disconnect();
-  });
-  const wide = $derived(
-    picture !== undefined && room > 0 && picture > room + 0.5
-  );
 </script>
 
 <figure
@@ -97,15 +71,12 @@
   style:--ratio={ratio}
 >
   <div
-    bind:this={stage}
     class={[
       "relative flex min-w-0 flex-1 items-center-safe justify-center-safe",
-      picture !== undefined && "contain-inline-size",
-      wide &&
-        "kit-edge-fade fade-len-c-edge-fade-len overflow-x-auto overscroll-x-contain",
+      picture !== undefined &&
+        "kit-edge-fade fade-len-c-edge-fade-len contain-inline-size overflow-x-auto overscroll-x-contain",
     ]}
     data-slot="media-stage"
-    data-wide={wide || undefined}
   >
     {@render children()}
   </div>

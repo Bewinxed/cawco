@@ -1973,6 +1973,15 @@ public enum Words {
             "its stage didn't draw it within \(seconds) s. Try again; if it stays empty, open the canvas in its session to see why."
         }
 
+        /// A Preview not yet drawn, its wait's line (dashboard Preview.svelte): waiting for its turn among the page's previews, or opening on its turn; `kind` and `name` are its artifact's (`the preview bench-look`).
+        public static func previewQueued(kind: String, name: String) -> String {
+            "Waiting to open the \(kind) \(name)…"
+        }
+
+        public static func previewOpening(kind: String, name: String) -> String {
+            "Opening the \(kind) \(name)…"
+        }
+
         /// A decided card's fold: the options turned down.
         public static func others(count: Int) -> String {
             "\(count) other \(count == 1 ? "option" : "options")"

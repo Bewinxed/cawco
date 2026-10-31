@@ -126,7 +126,7 @@ const READY_POLL_MS = 100;
  * Whether a document is ready ({@link watchReadiness}): its fonts loaded, its
  * content painted, nothing of its own in flight, all of it still for `settle`
  * ms, and no decision page's Preview still waiting in its view: the skeleton
- * in its well, or Caw over its wait (decisions host Preview.svelte). A
+ * in its well, which stands for the whole wait (decisions host Preview.svelte). A
  * skeleton inside a frame is that design's own, a story of its loading state.
  * A frame's painted content is its words as well: one that stood at no height
  * while it painted (a canvas, until it says its shape) is never told a
@@ -156,7 +156,7 @@ const documentReady = ({
   };
   const waiting = [
     ...doc.document.querySelectorAll(
-      '[data-slot="media"] [data-slot="skeleton"], [data-slot="wait-row"] img'
+      '[data-slot="media"] [data-slot="skeleton"]'
     ),
   ].some((one) => {
     const box = one.getBoundingClientRect();

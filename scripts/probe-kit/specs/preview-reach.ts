@@ -40,7 +40,7 @@
  *    without its CORS header (the ping sent on to a server that answers so:
  *    Playwright's `route.fulfill` adds the header to a CORS request's
  *    answer itself). The Preview, sampled every 100 ms in its frame from its first
- *    paint, is never an empty box: a skeleton or Caw and his line, then the
+ *    paint, is never an empty box: a skeleton and the wait's line, then the
  *    cause with Try again.
  * 5. The hub can't reach the origin either: the dashboard opened on a name
  *    only this browser resolves (`--host-resolver-rules`), so the hub's own
@@ -198,7 +198,7 @@ const CAUSES: Cause[] = [
 /**
  * In every frame, from its first paint: what a decision page's Preview
  * shows every 100 ms, each change once. "empty" is a box with none of a
- * skeleton, Caw and his line, the frame drawn, or the cause.
+ * skeleton, the wait's line, the frame drawn, or the cause.
  */
 const SAMPLE_PREVIEW = () => {
   const seen: string[] = [];
@@ -210,9 +210,8 @@ const SAMPLE_PREVIEW = () => {
     if (!stage) {
       return;
     }
-    const caw = stage.querySelector<HTMLElement>('[data-slot="wait-row"] img');
     const line =
-      stage.querySelector('p[role="status"]')?.textContent?.trim() ?? "";
+      stage.querySelector('[data-slot="wait-row"]')?.textContent?.trim() ?? "";
     let now = "empty";
     if (stage.querySelector('[data-slot="embed-fault"]')) {
       now = "cause";
@@ -220,8 +219,8 @@ const SAMPLE_PREVIEW = () => {
       now = "drawn";
     } else if (stage.querySelector('[data-slot="skeleton"]')) {
       now = "skeleton";
-    } else if (caw?.checkVisibility() && line) {
-      now = "caw and line";
+    } else if (line) {
+      now = "line";
     }
     if (seen.at(-1) !== now) {
       seen.push(now);
