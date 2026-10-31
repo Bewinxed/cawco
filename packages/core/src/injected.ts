@@ -440,9 +440,11 @@ export const withMovedLine = (text: string, move: CheckoutMove): string =>
  *   came back from being away since `recap.since` (the hub's own word on
  *   when they left), and the notes the session kept meanwhile (its plan's
  *   "Since `recap.section`" section) ride along for it to recap or point to;
- * - `elsewhere`: here, on another chat or another app: work quietly;
+ * - `elsewhere`: here, on another chat or another app: work silent, writing
+ *   only with a question or a choice for them;
  * - `away`: away since `since` (HH:MM on the hub's clock; null when no
- *   device has ever said): work without talking, and keep the notes.
+ *   device has ever said): work silent, ask only when blocked, and keep the
+ *   notes.
  */
 export type PresenceSaid =
   | {
@@ -517,10 +519,10 @@ export const presenceLine = (said: PresenceSaid): string => {
         ? `[CawCo presence] The person is back on this chat; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nIf their message asks something specific, answer it in full and point to "Since ${said.recap.section}" in your plan in one line. Otherwise open with a recap of those notes in one to three sentences, then answer. Then fold that section into the rest of your plan's spec with todo_write.`
         : "[CawCo presence] The person is on this chat now: talk to them normally.";
     case "elsewhere":
-      return "[CawCo presence] The person is at their desk but not on this chat. Work quietly: keep your plan current with todo_write, and write to them only for what needs them.";
+      return "[CawCo presence] The person is at their desk but not on this chat. Work silent: keep your plan current with todo_write. Write to them when a turn has a question or a choice for them; every other turn ends silent, on its last tool call.";
     case "away": {
       const heading = awayNotesHeading(said.since ?? "now");
-      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Work without talking: no narration, and no questions in this chat unless you are blocked. Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Something waiting on them is a step of your plan: name the step by its link as todo_write answers it, labelled by its words, never a copy of its state. Tick steps as they finish.`;
+      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Work silent: each turn ends on its last tool call, and a question comes to this chat only when you are blocked. Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Something waiting on them is a step of your plan: name the step by its link as todo_write answers it, labelled by its words, never a copy of its state. Tick steps as they finish.`;
     }
   }
 };
