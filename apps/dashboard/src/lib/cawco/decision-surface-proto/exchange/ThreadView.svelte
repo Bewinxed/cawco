@@ -19,7 +19,7 @@
   import LineMessage from "./LineMessage.svelte";
   import type { Decision, Moment, Thread } from "./model.js";
   import { clock, since } from "./model.js";
-  import { ARRIVE, RETINT } from "./motion.js";
+  import { ARRIVE } from "./motion.js";
   import PickList from "./PickList.svelte";
   import { KIND, WORDS } from "./words.js";
 
@@ -78,6 +78,18 @@
   let sentPicks = $state<Record<string, string[]>>({});
   let sentWords = $state("");
   let settledBy = $state<"" | "changed" | "kept">("");
+  let scroller = $state<HTMLElement>();
+
+  /** Opened from a search result: the thread scrolls to that record, not its top. */
+  $effect(() => {
+    const target = found
+      ? scroller?.querySelector<HTMLElement>("[data-found]")
+      : null;
+    if (scroller && target) {
+      const gap = scroller.getBoundingClientRect().top;
+      scroller.scrollTop += target.getBoundingClientRect().top - gap;
+    }
+  });
 
   const allDecisions = $derived(
     thread.messages.flatMap((m) => {
@@ -166,7 +178,7 @@
     </div>
   </div>
 
-  <div class="min-h-0 flex-1 overflow-y-auto">
+  <div class="min-h-0 flex-1 overflow-y-auto" bind:this={scroller}>
     <div class="mx-auto flex w-full min-w-0 flex-col @phone:max-w-c-composer-w">
       <header class="flex min-w-0 flex-col gap-space-2 pt-space-3 pb-space-7">
         <h2 class="type-title text-balance text-ink-strong">
@@ -239,16 +251,7 @@
             </li>
           {/if}
           {#each thread.messages as m (m.id)}
-            <li
-              class={cn(
-                "min-w-0",
-                RETINT,
-                found &&
-                  m.kind === "ask" &&
-                  m.decisions.some((d) => d.id === found) &&
-                  "-mx-space-3 rounded-lg bg-surface-fill p-space-3"
-              )}
-            >
+            <li class="min-w-0">
               {#if m.kind === "ask"}
                 <LineMessage
                   at={speakerAt(m.at)}
@@ -256,6 +259,7 @@
                   speaker="{thread.harness} asked"
                 >
                   <AskMessage
+                    {found}
                     goesTo={goes}
                     message={m}
                     {onkind}

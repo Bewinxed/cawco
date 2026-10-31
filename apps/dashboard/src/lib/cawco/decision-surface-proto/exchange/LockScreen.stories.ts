@@ -32,7 +32,7 @@ export const Sent = {
   args: { push: "sent" },
   parameters: { viewport: 390 },
   play: (async ({ canvas, userEvent }) => {
-    await userEvent.click(canvas.getByText(STOPS));
+    await userEvent.click(canvas.getByRole("button", { name: STOPS }));
   }) satisfies Play,
 };
 

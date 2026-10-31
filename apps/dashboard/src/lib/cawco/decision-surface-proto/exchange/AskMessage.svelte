@@ -18,6 +18,7 @@
    */
   let {
     message,
+    found,
     picks = {},
     stoppedSince,
     goesTo,
@@ -27,6 +28,8 @@
     onpickagain,
   }: {
     message: Ask;
+    /** The record a search result opened the thread at. */
+    found?: string;
     picks?: Record<string, string[]>;
     /** When work stopped behind it, for the cost line. */
     stoppedSince: string;
@@ -107,6 +110,7 @@
         {#each decided as d (d.id)}
           <DecisionRecord
             decision={d}
+            found={found === d.id}
             number={group ? numberOf(d) : undefined}
             onpickagain={d.settled ? undefined : () => onpickagain?.(d.id)}
           />

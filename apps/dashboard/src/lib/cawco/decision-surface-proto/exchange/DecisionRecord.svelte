@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
+  import { cn } from "#lib/utils.js";
   import type { Decision } from "./model.js";
+  import { RETINT } from "./motion.js";
   import { WORDS } from "./words.js";
 
   /**
@@ -10,10 +12,13 @@
    */
   let {
     decision,
+    found = false,
     number,
     onpickagain,
   }: {
     decision: Decision;
+    /** A search result opened the thread here: marked, and scrolled to. */
+    found?: boolean;
     number?: number;
     onpickagain?: () => void;
   } = $props();
@@ -29,7 +34,14 @@
   );
 </script>
 
-<div class="grid min-w-0 grid-cols-auto-fluid gap-x-space-3 gap-y-space-1">
+<div
+  class={cn(
+    "grid min-w-0 grid-cols-auto-fluid gap-x-space-3 gap-y-space-1 rounded-md",
+    RETINT,
+    found && "-m-space-3 bg-surface-fill p-space-3"
+  )}
+  data-found={found ? "" : undefined}
+>
   <span class="type-meta pt-px text-ink-muted tabular-nums">{number ?? ""}</span
   >
   <div class="flex min-w-0 flex-col gap-space-1">
