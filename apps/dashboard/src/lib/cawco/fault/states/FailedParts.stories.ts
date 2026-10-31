@@ -11,45 +11,43 @@ import FailedParts from "./FailedParts.svelte";
 export default {
   title: "Failure states",
   component: FailedParts,
-  args: { place: "side", stuck: false, height: 800 },
+  args: { place: "side", stuck: false, width: 1540, height: 800 },
 };
 
 const DESK = { parameters: { viewport: 1540 } };
 const PHONE = { parameters: { viewport: 390 } };
+/** A desk window, 1540 by 800. */
+const desk = (args: Record<string, unknown>) => ({
+  ...DESK,
+  args: { width: 1540, height: 800, ...args },
+});
+/** A phone, 390 by 844. */
+const phone = (args: Record<string, unknown>) => ({
+  ...PHONE,
+  args: { width: 390, height: 844, ...args },
+});
 
 /** The task beside a conversation, on a desk: its name and Close stand round the face. */
-export const SidePanel = { ...DESK, args: { place: "side" } };
+export const SidePanel = desk({ place: "side" });
 /** The task beside a conversation, every rebuild throwing: Try again turns to Reload page. */
-export const SidePanelStuck = { ...DESK, args: { place: "side", stuck: true } };
+export const SidePanelStuck = desk({ place: "side", stuck: true });
 /** The preview's sheet on a phone: its grabber, name and Close stand round the face. */
-export const PreviewSheet = { ...PHONE, args: { place: "sheet", height: 844 } };
+export const PreviewSheet = phone({ place: "sheet" });
 /** The preview's sheet on a phone, every rebuild throwing. */
-export const PreviewSheetStuck = {
-  ...PHONE,
-  args: { place: "sheet", height: 844, stuck: true },
-};
+export const PreviewSheetStuck = phone({ place: "sheet", stuck: true });
 /** One comment that can't be drawn fails as one line; the others stand. */
-export const OneComment = { ...DESK, args: { place: "comments" } };
+export const OneComment = desk({ place: "comments" });
 /** One comment that can't be drawn, on a phone. */
-export const OneCommentPhone = {
-  ...PHONE,
-  args: { place: "comments", height: 844 },
-};
+export const OneCommentPhone = phone({ place: "comments" });
 /** A decision card that can't be drawn, in its place on the page, on a desk. */
-export const DecisionCard = { ...DESK, args: { place: "decision" } };
+export const DecisionCard = desk({ place: "decision" });
 /** A decision card that can't be drawn, on a phone. */
-export const DecisionCardPhone = {
-  ...PHONE,
-  args: { place: "decision", height: 844 },
-};
+export const DecisionCardPhone = phone({ place: "decision" });
 /** A whole page that can't be drawn, under its bar, on a desk. */
-export const Page = { ...DESK, args: { place: "page" } };
+export const Page = desk({ place: "page" });
 /** A whole page that can't be drawn, on a phone. */
-export const PagePhone = { ...PHONE, args: { place: "page", height: 844 } };
+export const PagePhone = phone({ place: "page" });
 /** A pane's tabs that can't be drawn, under the phone's bar. */
-export const TabsPhone = { ...PHONE, args: { place: "tabs", height: 844 } };
+export const TabsPhone = phone({ place: "tabs" });
 /** The composer that can't be drawn, in its pill's place, on a phone. */
-export const ComposerPhone = {
-  ...PHONE,
-  args: { place: "composer", height: 844 },
-};
+export const ComposerPhone = phone({ place: "composer" });
