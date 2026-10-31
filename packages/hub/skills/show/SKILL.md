@@ -36,5 +36,5 @@ The person's panel is where they act, never where they look. An artifact is open
 | Every state, width and scheme stacked down one page, or desk and phone in one frame | One frame per state on a component canvas, phone and desk in separate rows; a behaviour or flow choice is a state machine (that canvas with edges labelled by what the person does), embedded in a decision page's option through `Preview` or `Canvas` |
 | Captures of a desk page shown in the panel | The real component on the canvas, or the preview at its path |
 | Today beside each proposal, a legend, a size caption | Nothing on it that is not a question or a thing to judge |
-| A preview to prove a change | Build, lint, type-check and the probe, in your words |
+| A preview to prove a change | Build, lint and type-check, in your words |
 | Listing the options in chat | They are on the page; your message is one line on what to look at |
