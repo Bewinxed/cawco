@@ -18,9 +18,9 @@
  *   together they hold every character of the file and every glyph text
  *   reaches through the layout features the face keeps (all of Figtree's
  *   that a browser can apply; {@link HouseFace.leaves}). The cut is
- *   HarfBuzz's subsetter (subset-font 2.9.0, which keeps the `wght` axis),
- *   the compression Google's woff2 encoder (woff2-encoder 2.0.0), both
- *   WebAssembly.
+ *   HarfBuzz's subsetter (subset-font 2.9.0, which keeps the `wght` axis
+ *   and drops the mono face's hinting), the compression Google's woff2
+ *   encoder (woff2-encoder 2.0.0), both WebAssembly.
  * - The decision host serves them on every preview origin (decision-host.ts),
  *   the stage host beside the canvas page (agent stage-host/build.ts), the
  *   dashboard from its own build (its vite.config.ts `houseFaces`).
@@ -69,6 +69,12 @@ interface HouseFace {
   /** Its file in {@link FONTS_DIR}. */
   file: string;
   /**
+   * Whether its pieces keep the file's TrueType hinting (`prep`, `gasp` and
+   * each glyph's instructions); without, HarfBuzz drops it (subset-font's
+   * `noHinting`, `hb-subset --no-hinting`).
+   */
+  hinting: boolean;
+  /**
    * The layout features its pieces leave out, and with them any glyph only
    * they reach (the faces script counts them; the sans face may leave none).
    */
@@ -102,6 +108,7 @@ const HOUSE_FACES: readonly HouseFace[] = [
     role: "sans",
     family: "Figtree Variable",
     file: "Figtree.ttf",
+    hinting: true,
     axis: "300 900",
     weight: "300 900",
     leaves: PICKER_ONLY,
@@ -111,6 +118,8 @@ const HOUSE_FACES: readonly HouseFace[] = [
     role: "mono",
     family: "JetBrains Mono Variable",
     file: "JetBrainsMono.ttf",
+    // Dropped by the owner's pick on decision page small-calls-1029.
+    hinting: false,
     axis: "100 800",
     fallback: { metrics: "courierNew", alike: ["Liberation Mono", "Cousine"] },
     // Every weight a house surface sets code in: 400 and 500 from the
@@ -136,6 +145,7 @@ const HOUSE_FACES: readonly HouseFace[] = [
     role: "wordmark",
     family: "Nunito Variable",
     file: "Nunito.ttf",
+    hinting: true,
     axis: "200 1000",
     weight: "200 1000",
     leaves: PICKER_ONLY,
@@ -438,12 +448,13 @@ export const featuresOf = (font: {
 /**
  * HarfBuzz's subset options for `face`: its wght axis instanced to the
  * range it serves when that is narrower than its file's, the layout
- * features `keep` (subset-font's default keeps every one), and each glyph's
- * name when `glyphNames`. `keepFeatures`, `glyphNames` and
+ * features `keep` (subset-font's default keeps every one), its hinting
+ * dropped unless it keeps it ({@link HouseFace.hinting}), and each glyph's
+ * name when `glyphNames`. `keepFeatures`, `noHinting`, `glyphNames` and
  * `variationAxes` are subset-font's options its types leave out.
  */
 export const subsetOptions = (
-  face: Pick<HouseFace, "axis" | "weight">,
+  face: Pick<HouseFace, "axis" | "hinting" | "weight">,
   keep: readonly string[],
   glyphNames: boolean
 ): { targetFormat: "sfnt" } => {
@@ -452,11 +463,13 @@ export const subsetOptions = (
     targetFormat: "sfnt";
     glyphNames: boolean;
     keepFeatures: string[];
+    noHinting: boolean;
     variationAxes?: { wght: { min: number; max: number } };
   } = {
     targetFormat: "sfnt",
     glyphNames,
     keepFeatures: [...keep],
+    noHinting: !face.hinting,
     ...(face.weight === face.axis
       ? {}
       : { variationAxes: { wght: { min, max } } }),
