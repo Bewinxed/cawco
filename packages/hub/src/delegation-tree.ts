@@ -209,19 +209,23 @@ export const treeSessions = (
     above.add(parent.id);
     top = parent;
   }
-  const tree = new Set<string>([top.id, ...above]);
+  // The walk down keeps its own set: seeded with the sessions above, it
+  // skipped each of them as it reached it, and everything under them, so
+  // a session with a parent never had its own delegates in its tree
+  // (2026-10-31: an orchestrator's page refused its delegate's preview).
+  const walked = new Set<string>([top.id]);
   let level = [top.id];
   while (level.length > 0) {
     const below = [
       ...db.itemSessionsOfParents(level),
       ...db.childIdsOfParents(level),
     ];
-    level = [...new Set(below)].filter((id) => !tree.has(id));
+    level = [...new Set(below)].filter((id) => !walked.has(id));
     for (const id of level) {
-      tree.add(id);
+      walked.add(id);
     }
   }
-  return tree;
+  return new Set([...walked, ...above]);
 };
 
 export const createDelegationTree = (deps: DelegationTreeDeps) => {

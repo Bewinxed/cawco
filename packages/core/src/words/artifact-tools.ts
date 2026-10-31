@@ -38,9 +38,9 @@ export const artifactToolWords = {
     `Its ${runs === "serve" ? "server" : "stage"} ${dir === "." ? "at the repo's root" : `in ${dir}`}: ${status}`,
   /** Where `artifact_read`'s `save` kept the picture, as the session named it. */
   pictureSaved: (path: string) => `Its picture is saved at ${path}.`,
-  /** A decision page's Canvas or Preview (`component`) naming `id`, which is neither the session's nor its delegation tree's. */
+  /** A decision page's Canvas or Preview (`component`) naming `id`, which is neither its panel's, its delegation tree's nor a page of its project. */
   noMediaArtifact: (component: string, id: string) =>
-    `${component}("${id}"): this session's panel has no artifact ${id}.`,
+    `${component}("${id}"): no artifact ${id} is this page's session's, its delegation tree's or a page of its project.`,
   /** A pin on no artifact the session reads: its own, its delegation tree's, its project's pages, what its project's cold sessions left. */
   noPin: (pin: string) =>
     `No artifact this session reads holds pin ${pin}: not its own, its delegation tree's, its project's pages or what its project's cold sessions left. comment_read with the artifact lists its pins with their ids.`,

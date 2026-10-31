@@ -2402,8 +2402,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * Whether `instance` may show and read `row` without changing it: its
    * own, one it made, or another session's of its delegation tree
-   * ({@link inTree}). The one rule for a look ({@link viewable}) and for
-   * what a decision page's Canvas and Preview pieces show ({@link mediaHeld}).
+   * ({@link inTree}). The one rule for a look ({@link viewable}), and the
+   * heart of what a decision page's Canvas and Preview pieces show
+   * ({@link embeds}).
    */
   const sees = (instance: InstanceRow, row: ArtifactRow): boolean =>
     row.instanceId === instance.id ||
@@ -2524,6 +2525,45 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
     }
     return parent;
+  };
+
+  /**
+   * Who makes a create and whose panel it lands in: the caller's own, or
+   * its parent's with `to: "parent"` ({@link ownerFor}). A preview its own
+   * panel has no artifact of that name for lands on its delegation tree's
+   * of that name in its project ({@link ofTree}), when several the one
+   * nearest up its line ({@link above}), else the newest: made again where it stands, as a `to: "parent"` create lands on the
+   * parent's, so its id stays, its server moves to the caller's
+   * ({@link keepServed}) and every page embedding it follows. Keyed by the
+   * caller's panel alone, a delegate in another workspace made a second
+   * artifact of the same name (2026-10-31).
+   */
+  const makingFor = (maker: InstanceRow, input: ArtifactInput): Making => {
+    const owner = ownerFor(maker, input);
+    if (
+      input.kind !== "preview" ||
+      owner.id !== maker.id ||
+      db.byName(maker.id, "preview", input.name)
+    ) {
+      return { maker, owner };
+    }
+    const up = [...above(maker)];
+    const rank = (row: ArtifactRow): number => {
+      const at = up.indexOf(row.instanceId ?? "");
+      return at === -1 ? up.length : at;
+    };
+    const nearest = ofTree(maker)
+      .filter((row) => row.kind === "preview" && row.name === input.name)
+      .reduce<ArtifactRow | undefined>(
+        (best, row) =>
+          best &&
+          (rank(best) < rank(row) ||
+            (rank(best) === rank(row) && best.updatedAt >= row.updatedAt))
+            ? best
+            : row,
+        undefined
+      );
+    return { maker, owner: (nearest && holder(nearest)) ?? owner };
   };
 
   /**
@@ -3335,16 +3375,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Whether a decision page held by `owner` may draw `row` in its Canvas
+   * and Preview pieces: one the owner sees ({@link sees}: its own, one it
+   * made, its delegation tree's) or a page of its project
+   * ({@link projectPage}). Never another project's.
+   */
+  const embeds = (owner: InstanceRow, row: ArtifactRow): boolean =>
+    sees(owner, row) || projectPage(owner, row.id) !== undefined;
+
+  /**
    * The artifacts a program's Canvas and Preview pieces name, each one the
-   * panel owner sees ({@link sees}: its own or its delegation tree's) of
-   * the kind it shows: refused, every reason at once, when one is not.
+   * panel owner may draw ({@link embeds}) of the kind it shows: refused,
+   * every reason at once, when one is not.
    */
   const mediaHeld = (owner: InstanceRow, program: BuiltProgram) => {
     const problems = program.read.artifacts.flatMap(({ component, id }) => {
       const held = db.get(id);
       const kinds: ArtifactKind[] =
         component === "Canvas" ? ["canvas"] : ["page", "preview", "component"];
-      if (!(held && sees(owner, held))) {
+      if (!(held && embeds(owner, held))) {
         return [artifactToolWords.noMediaArtifact(component, id)];
       }
       return kinds.includes(held.kind)
@@ -3365,9 +3414,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Artifact `id` as decision page `page` draws it now, at its newest
-   * version ({@link newestVersion}): one its session sees ({@link sees}), as
-   * {@link mediaHeld} let it in; a project's page whose session is gone,
-   * another such page. Undefined once the hub no longer holds it.
+   * version ({@link newestVersion}): one its session may draw
+   * ({@link embeds}), as {@link mediaHeld} let it in; a project's page
+   * whose session is gone, another such page. Undefined once the hub no
+   * longer holds it.
    */
   const mediaSeen = (
     page: ArtifactRow,
@@ -3379,7 +3429,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return undefined;
     }
     const seen = owner
-      ? sees(owner, shown)
+      ? embeds(owner, shown)
       : page.instanceId === null && shown.instanceId === null;
     return seen ? newestVersion(shown) : undefined;
   };
@@ -6902,7 +6952,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * A preview handed so is loaded first ({@link ArtifactServiceDeps.reachable}),
      * and one with a hop down is refused, nothing kept. A page or preview the panel's owner already has under
      * the same kind and name is replaced in place: its doc, and so every
-     * pick, stays, and the caller becomes its maker. What it is made from (a
+     * pick, stays, and the caller becomes its maker; a preview of that name
+     * its delegation tree holds, when its own panel has none, too
+     * ({@link makingFor}). What it is made from (a
      * page's folder, a preview's workspace, a sheet's stage) is the caller's.
      */
     create: async (
@@ -6921,10 +6973,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         throw new ArtifactRefusal(400, stray);
       }
       asksFirst(input);
-      const making: Making = {
-        maker: instance,
-        owner: ownerFor(instance, input),
-      };
+      const making = makingFor(instance, input);
       const ownWay = madeOwnWay(making, input);
       if (ownWay !== null) {
         const made = linked(await ownWay);
