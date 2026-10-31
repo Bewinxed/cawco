@@ -18,6 +18,7 @@
   const INSTANCE = "design-graph-preview";
   const params = page.url.searchParams;
   const bare = params.has("bare");
+  const path = params.get("path") ?? "/";
   const port = Number(
     location.port || (location.protocol === "https:" ? 443 : 80)
   );
@@ -33,8 +34,10 @@
     artifacts: ["00000000-0000-4000-8000-00000000d6a1"],
     origin: location.origin,
     port,
-    revision: "design-graph-1",
-    source: { port, path: params.get("path") ?? "/" },
+    // The pane keeps where it had gone per revision on this origin, which every
+    // preview here shares: one per canvas address, so another address opens at its own.
+    revision: `design-graph-1:${path}`,
+    source: { port, path },
     state: "open" as const,
   };
   setPaneFleet(benchFleet(INSTANCE, () => preview, "preview"));
