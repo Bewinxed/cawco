@@ -18,7 +18,9 @@ import {
   CANVAS_LIMITS,
   type CanvasEntry,
   type CanvasRequestKind,
+  type CanvasRequestPayload,
   type CanvasRequestResult,
+  keptOnRemake,
   NO_SCREEN,
 } from "@cawco/core/canvas";
 import {
@@ -104,7 +106,7 @@ export const convertOnScreen = async (
   docs: ArtifactDocs,
   artifactId: string,
   kind: CanvasRequestKind,
-  payload: unknown
+  payload: CanvasRequestPayload
 ): Promise<string[]> => {
   if (docs.screens(artifactId) === 0) {
     throw new ArtifactRefusal(503, NO_SCREEN);
@@ -198,4 +200,19 @@ export const deleteElements = (
     deleted: deleted.reverse(),
     missing: ids.filter((id) => !present.has(id)),
   };
+};
+
+/**
+ * A canvas made again with nothing to draw: its drawing deleted on the hub,
+ * every element but those {@link keptOnRemake} (the person's ink and
+ * images). A create that draws replaces it on its screen, in the write.
+ */
+export const clearDrawing = (docs: ArtifactDocs, artifactId: string): void => {
+  const drawing = canvasEntries(docs, artifactId)
+    .map((entry) => entry.el)
+    .filter((el) => !keptOnRemake(el))
+    .map((el) => el.id);
+  if (drawing.length > 0) {
+    deleteElements(docs, artifactId, drawing);
+  }
 };

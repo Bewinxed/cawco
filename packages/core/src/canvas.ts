@@ -43,6 +43,15 @@ export interface CanvasEntry {
 /** A request the agent's tool leaves for a screen to convert (the doc's `requests`). */
 export type CanvasRequestKind = "elements" | "mermaid";
 
+/**
+ * A request's payload: skeleton elements or Mermaid, and `replace` on a
+ * create, whose drawing replaces every element but those
+ * {@link keptOnRemake}, in the one write.
+ */
+export type CanvasRequestPayload = (
+  { elements: unknown[] } | { mermaid: string }
+) & { replace?: true };
+
 /** What a screen writes on a request it converted. */
 export type CanvasRequestResult = { ids: string[] } | { error: string };
 
@@ -113,6 +122,16 @@ export const SKELETON_TYPES = [
   "text",
   "frame",
 ] as const;
+
+/**
+ * What a canvas made again under its name keeps: the person's own marks,
+ * the kinds no agent writes ({@link SKELETON_TYPES}), their ink (a freedraw)
+ * and the images they added. Every other element is the drawing, which the
+ * create replaces, as a page made again replaces its HTML and keeps its ink
+ * and pins.
+ */
+export const keptOnRemake = (element: Pick<CanvasElement, "type">): boolean =>
+  element.type === "freedraw" || element.type === "image";
 
 /** The refusal when no screen can convert (DESIGN.md's error formula). */
 export const NO_SCREEN =

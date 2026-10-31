@@ -184,6 +184,7 @@ import {
 } from "../project-folder";
 import {
   canvasEntries,
+  clearDrawing,
   convertOnScreen,
   deleteElements,
   screenJoined,
@@ -4704,13 +4705,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * What a canvas's create or update draws: skeleton elements or Mermaid,
-   * converted on a screen; the ids written. A canvas handed to its parent
-   * and not opened is drawn on the hub machine's headless screen
-   * ({@link headlessScreen}), so the parent reads it before anyone sees it.
+   * converted on a screen; the ids written. A create's (`replace`) replaces
+   * the drawing in the same write (core `keptOnRemake`); an update's adds,
+   * or replaces by id. A canvas handed to its parent and not opened is
+   * drawn on the hub machine's headless screen ({@link headlessScreen}), so
+   * the parent reads it before anyone sees it.
    */
   const draw = async (
     row: ArtifactRow,
-    change: { elements: SkeletonElement[] } | { mermaid: string }
+    change: { elements: SkeletonElement[] } | { mermaid: string },
+    replace = false
   ): Promise<string[]> => {
     if ("elements" in change) {
       if (change.elements.length > CANVAS_LIMITS.elementsPerCall) {
@@ -4725,13 +4729,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         `Mermaid is at most ${CANVAS_LIMITS.mermaid} characters; split the diagram.`
       );
     }
+    const replacing = replace ? { replace: true as const } : {};
     const convert = () =>
       "elements" in change
         ? convertOnScreen(docs, row.id, "elements", {
             elements: change.elements,
+            ...replacing,
           })
         : convertOnScreen(docs, row.id, "mermaid", {
             mermaid: change.mermaid,
+            ...replacing,
           });
     if (!(
       isHanded(row) &&
@@ -4863,9 +4870,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A create's drawing on canvas `row`: on its panel's screen once one
-   * joins, or, handed up, on its headless screen ({@link draw}); the ids
-   * written.
+   * A create's drawing on canvas `row`, replacing what it held: on its
+   * panel's screen once one joins, or, handed up, on its headless screen
+   * ({@link draw}); the ids written.
    */
   const drawnOn = async (
     row: ArtifactRow,
@@ -4880,7 +4887,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         `The canvas ${row.name} is made (id ${row.id}) and empty. ${NO_SCREEN}`
       );
     }
-    return await draw(row, change);
+    return await draw(row, change, true);
   };
 
   /**
@@ -4903,10 +4910,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Makes a canvas in `owner`'s panel (or opens the one of that name) and
-   * shows it, or hands it to its parent unopened ({@link handOver}); with
-   * elements or Mermaid, draws them ({@link drawnOn}) before the parent
-   * hears of it. `maker` is whose call it was.
+   * Makes a canvas in `owner`'s panel, or makes the one of that name
+   * again: its drawing replaced by this one's elements or Mermaid
+   * ({@link drawnOn}), or by nothing ({@link clearDrawing}), the person's
+   * ink, images and pins kept, as a page made again keeps them. Shows it, or
+   * hands it to its parent unopened ({@link handOver}), drawn before the
+   * parent hears of it. `maker` is whose call it was.
    */
   const createCanvas = async (
     making: Making,
@@ -4922,6 +4931,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const { before, holding, row } = canvasPlaced(making, input);
     stampMeta(row, null);
     const change = drawingOf(input);
+    const was = canvasEntries(docs, row.id);
     let wrote: string[] | undefined;
     let shown: Opened;
     try {
@@ -4930,11 +4940,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           making,
           before,
           row,
-          change
-            ? async () => {
-                wrote = await drawnOn(row, change);
-              }
-            : undefined,
+          async () => {
+            if (change) {
+              wrote = await drawnOn(row, change);
+            } else {
+              clearDrawing(docs, row.id);
+            }
+          },
           holding
         )
       );
@@ -4951,6 +4963,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       making.owner.id === making.maker.id
     );
     const said = heldId(row);
+    // Made again, what it changed is marked, as a page made again marks it.
+    const changed = before ? markSceneChanges(row, was) : [];
     const made = {
       ...said,
       kind: row.kind,
@@ -4958,6 +4972,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       route: routeOf(said.id),
       ...shown,
       outline,
+      ...markedLinks(said.id, changed),
     };
     if (wrote) {
       return { ...made, wrote };

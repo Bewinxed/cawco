@@ -2,7 +2,9 @@ import {
   boxOf,
   CANVAS_LIMITS,
   type CanvasAuthor,
+  type CanvasRequestPayload,
   type CanvasRequestResult,
+  keptOnRemake,
 } from "@cawco/core/canvas";
 import { toSegment } from "@cawco/core/shapes";
 /**
@@ -31,6 +33,7 @@ import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
   exportToBlob,
+  FONT_FAMILY,
   getSceneVersion,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
@@ -865,14 +868,28 @@ const tellPresses = (api: ExcalidrawImperativeAPI): (() => void) => {
 /** A skeleton as the agent sent it. */
 type Skeleton = { id?: string; type: string } & Record<string, unknown>;
 
-/** The live elements by id, with their maps. */
-const entriesOf = (live: Doc) =>
+/** The live elements by id, with their maps; on a remake (`kept`) only those it keeps (core `keptOnRemake`). */
+const entriesOf = (live: Doc, kept = false) =>
   new Map(
     live
       .getArray<Entry>("elements")
       .toArray()
-      .map((map) => [(map.get("el") as ExcalidrawElement).id, map])
+      .map((map) => [(map.get("el") as ExcalidrawElement).id, map] as const)
+      .filter(
+        ([, map]) => !kept || keptOnRemake(map.get("el") as ExcalidrawElement)
+      )
   );
+
+/** A remake's drop: every element of the drawing it doesn't write again, so what it writes stands alone beside the person's marks. */
+const dropDrawing = (live: Doc, ids: Set<string>) => {
+  const array = live.getArray<Entry>("elements");
+  for (let index = array.length - 1; index >= 0; index -= 1) {
+    const el = array.get(index).get("el") as ExcalidrawElement;
+    if (!(keptOnRemake(el) || ids.has(el.id))) {
+      array.delete(index, 1);
+    }
+  }
+};
 
 /**
  * A skeleton replacing an element fills what it leaves out from that
@@ -911,16 +928,26 @@ const filled = (
   return out;
 };
 
-/** Writes converted elements into live as the agent's: replaced in place by id, else added after the last. */
+/**
+ * Writes converted elements into live as the agent's: replaced in place by
+ * id, else added after the last. A remake (`replace`) drops the rest of the
+ * drawing in the same transaction; an id it writes again is still replaced
+ * in place, its version past the old one, which every screen's reconcile
+ * rule needs to take it.
+ */
 const write = (
   live: Doc,
   elements: readonly OrderedExcalidrawElement[],
   bound: readonly OrderedExcalidrawElement[],
-  ink: CanvasInk
+  ink: CanvasInk,
+  replace = false
 ) => {
   const array = live.getArray<Entry>("elements");
   const at = new Date().toISOString();
   live.transact(() => {
+    if (replace) {
+      dropDrawing(live, new Set(elements.map((el) => el.id)));
+    }
     dropOldLabels(live, elements);
     const entries = entriesOf(live);
     const all = array.toArray();
@@ -938,7 +965,7 @@ const write = (
           : converted;
       const map = entries.get(el.id);
       if (map) {
-        replaceElement(map, el, at);
+        replaceElement(map, el, at, entries);
       } else {
         array.push([
           new YMap<unknown>(
@@ -979,16 +1006,18 @@ const dropOldLabels = (
   }
 };
 
-/** The agent's element in place of the one of its id: its order kept, the arrows bound to it kept, a version past the old. */
+/** The agent's element in place of the one of its id: its order kept, the arrows still bound to it kept, a version past the old. */
 const replaceElement = (
   map: Entry,
   el: OrderedExcalidrawElement,
-  at: string
+  at: string,
+  entries: Map<string, Entry>
 ) => {
   const old = map.get("el") as ExcalidrawElement;
   const arrows = (old.boundElements ?? []).filter(
     (one) =>
       one.type === "arrow" &&
+      entries.has(one.id) &&
       !(el.boundElements ?? []).some((mine) => mine.id === one.id)
   );
   map.set("el", {
@@ -1116,19 +1145,110 @@ const framed = (
   });
 };
 
-/** Skeleton elements: added, or replacing the element of the id they carry. */
-const fromSkeletons = (
+/**
+ * Excalidraw's font list for a family, as its `getFontFamilyString` writes
+ * it (not exported): the family's name, then its fallbacks
+ * (`getFontFamilyFallbacks`): Xiaolai for CJK after Excalifont, Segoe UI
+ * Emoji after every family. What it measures text in is what loads here.
+ */
+const familyNames = new Map<number, string>(
+  Object.entries(FONT_FAMILY).map(([name, id]) => [id, name])
+);
+const fontList = (family: number): string | null => {
+  const name = familyNames.get(family);
+  if (name === undefined) {
+    return null;
+  }
+  const fallbacks =
+    family === FONT_FAMILY.Excalifont
+      ? ["Xiaolai", "Segoe UI Emoji"]
+      : ["Segoe UI Emoji"];
+  return [name, ...fallbacks].join(", ");
+};
+
+/** Excalidraw's default family, its `DEFAULT_FONT_FAMILY` (not exported), which a skeleton without one is measured in. */
+const DEFAULT_FAMILY = FONT_FAMILY.Excalifont;
+
+/**
+ * Helvetica (2) is a `local:` face Excalidraw doesn't ship: each machine
+ * draws it in whatever its system calls Helvetica, so a width measured on
+ * one machine is wrong on another. A skeleton asking for it takes Liberation
+ * Sans (9), the face Excalidraw ships for Helvetica's metrics.
+ */
+const SHIPPED_FAMILY: ReadonlyMap<number, number> = new Map([
+  [FONT_FAMILY.Helvetica, FONT_FAMILY["Liberation Sans"]],
+]);
+
+/** A skeleton's text, or label, in a family Excalidraw ships ({@link SHIPPED_FAMILY}). */
+const shippedFonts = (skeleton: Skeleton): Skeleton => {
+  const shipped = (family: unknown) =>
+    typeof family === "number" ? SHIPPED_FAMILY.get(family) : undefined;
+  const label = skeleton.label as { fontFamily?: unknown } | undefined;
+  const own = shipped(skeleton.fontFamily);
+  const labels = label ? shipped(label.fontFamily) : undefined;
+  return own === undefined && labels === undefined
+    ? skeleton
+    : {
+        ...skeleton,
+        ...(own === undefined ? {} : { fontFamily: own }),
+        ...(labels === undefined
+          ? {}
+          : { label: { ...label, fontFamily: labels } }),
+      };
+};
+
+/**
+ * The faces the skeletons' text is measured in, loaded before Excalidraw's
+ * conversion measures it: `convertToExcalidrawElements` measures each text
+ * at once with the canvas's `measureText`, so a family still unloaded was
+ * measured in a fallback and its width stayed too narrow once its face
+ * drew. Excalidraw registers its faces in `document.fonts` as its first
+ * scene loads (`loadSceneFonts`), before the scene is bound (host.tsx).
+ */
+const fontsLoaded = async (skeletons: readonly Skeleton[]): Promise<void> => {
+  const texts = new Map<number, string>();
+  const add = (family: unknown, text: unknown) => {
+    if (typeof text !== "string" || text === "") {
+      return;
+    }
+    const key = Number(family) || DEFAULT_FAMILY;
+    texts.set(key, (texts.get(key) ?? "") + text);
+  };
+  for (const skeleton of skeletons) {
+    if (skeleton.type === "text") {
+      add(skeleton.fontFamily, skeleton.text);
+    }
+    const label = skeleton.label as
+      { fontFamily?: unknown; text?: unknown } | undefined;
+    add(label?.fontFamily, label?.text);
+  }
+  await Promise.all(
+    [...texts].map(([family, text]) => {
+      const list = fontList(family);
+      return list ? document.fonts.load(`16px ${list}`, text) : null;
+    })
+  );
+};
+
+/**
+ * Skeleton elements: added, or replacing the element of the id they carry;
+ * on a remake (`replace`), the drawing, which nothing it held fills or binds.
+ */
+const fromSkeletons = async (
   live: Doc,
   skeletons: Skeleton[],
-  ink: CanvasInk
-): string[] => {
-  const entries = entriesOf(live);
+  ink: CanvasInk,
+  replace: boolean
+): Promise<string[]> => {
+  const entries = entriesOf(live, replace);
   const sent = skeletons.map((skeleton) => {
     const map = skeleton.id ? entries.get(skeleton.id) : undefined;
-    return withEnds(
-      map
-        ? filled(skeleton, map.get("el") as ExcalidrawElement, entries)
-        : skeleton
+    return shippedFonts(
+      withEnds(
+        map
+          ? filled(skeleton, map.get("el") as ExcalidrawElement, entries)
+          : skeleton
+      )
     );
   });
   // An arrow may bind to an element already drawn: it converts beside them.
@@ -1141,13 +1261,15 @@ const fromSkeletons = (
       }
     }
   }
+  const skeletonsOf = [
+    ...[...context].map((id) => entries.get(id)?.get("el")),
+    ...sent,
+  ] as Skeleton[];
+  await fontsLoaded(skeletonsOf);
   const converted = framed(
     freeEnds(
       convertToExcalidrawElements(
-        [
-          ...[...context].map((id) => entries.get(id)?.get("el")),
-          ...sent,
-        ] as ExcalidrawElementSkeleton[],
+        skeletonsOf as unknown as ExcalidrawElementSkeleton[],
         { regenerateIds: false }
       ),
       sent
@@ -1159,22 +1281,28 @@ const fromSkeletons = (
     live,
     drawn,
     converted.filter((el) => context.has(el.id)),
-    ink
+    ink,
+    replace
   );
   return drawn.map((el) => el.id);
 };
 
-/** Mermaid, drawn below what the canvas holds. */
+/** Mermaid, drawn below what the canvas holds; on a remake (`replace`), in the drawing's place. */
 const fromMermaid = async (
   live: Doc,
   text: string,
-  ink: CanvasInk
+  ink: CanvasInk,
+  replace: boolean
 ): Promise<string[]> => {
   const { parseMermaidToExcalidraw } =
     await import("@excalidraw/mermaid-to-excalidraw");
   const parsed = await parseMermaidToExcalidraw(text);
+  const skeletons = (parsed.elements as unknown as Skeleton[]).map(
+    shippedFonts
+  );
+  await fontsLoaded(skeletons);
   const converted = convertToExcalidrawElements(
-    parsed.elements as ExcalidrawElementSkeleton[]
+    skeletons as unknown as ExcalidrawElementSkeleton[]
   );
   const existing = [...entriesOf(live).values()]
     .map((map) => map.get("el") as ExcalidrawElement)
@@ -1183,7 +1311,7 @@ const fromMermaid = async (
   const boxes = converted.map((el) => boxOf(el));
   let dx = 0;
   let dy = 0;
-  if (existing.length > 0 && boxes.length > 0) {
+  if (!replace && existing.length > 0 && boxes.length > 0) {
     const left = Math.min(...existing.map((box) => box.x));
     const bottom = Math.max(...existing.map((box) => box.y + box.height));
     dx = left - Math.min(...boxes.map((box) => box.x));
@@ -1196,7 +1324,7 @@ const fromMermaid = async (
       files.set(id, file as BinaryFileData);
     }
   }, AGENT);
-  write(live, placed, [], ink);
+  write(live, placed, [], ink, replace);
   return placed.map((el) => el.id);
 };
 
@@ -1206,15 +1334,22 @@ const serveRequests = (live: Doc, ink: CanvasInk): (() => void) => {
   const mine = `claim-${live.clientID}`;
   const working = new Set<string>();
   const convert = async (request: Entry): Promise<CanvasRequestResult> => {
-    const payload = request.get("payload") as {
-      elements?: Skeleton[];
-      mermaid?: string;
-    };
+    const payload = request.get("payload") as CanvasRequestPayload;
+    const replace = payload.replace === true;
     try {
-      if (request.get("kind") === "mermaid") {
-        return { ids: await fromMermaid(live, payload.mermaid ?? "", ink) };
+      if ("mermaid" in payload) {
+        return {
+          ids: await fromMermaid(live, payload.mermaid, ink, replace),
+        };
       }
-      return { ids: fromSkeletons(live, payload.elements ?? [], ink) };
+      return {
+        ids: await fromSkeletons(
+          live,
+          payload.elements as Skeleton[],
+          ink,
+          replace
+        ),
+      };
     } catch (error) {
       return {
         error: (error instanceof Error ? error.message : String(error)).slice(
