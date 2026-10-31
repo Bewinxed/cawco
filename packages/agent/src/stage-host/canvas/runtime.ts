@@ -1493,18 +1493,17 @@ export function boot(options: BootOptions): void {
   }
 
   let saidShape = "";
+  /** A measure of the embed's shape waits on its world to settle ({@link settledHeight}): the calls meanwhile are answered by it. */
+  let shaping = false;
   /**
    * The page holding an embed (a decision page's Preview) makes its frame
    * this tall and, where a story says its own width, as wide as the widest
    * (null where none does): every frame at its own size, 1 CSS px per px,
    * never scaled, the frames whole, no inner scroll; the page holding it
    * scrolls it where its room is narrower. Said whenever it changes: from
-   * the world's resize observer while the frame is on the page's screen,
-   * and as its sections draw. A cross-origin frame off the page's screen
-   * gets no rendering steps until it is scrolled to, so no observer
-   * delivery: said only from there, nine of ten Previews of one canvas below
-   * the fold stood in a 16:10 box at 252px beside the first at its own
-   * 760px. Its height read here lays it out, rendering steps or none.
+   * the world's resize observer and as its sections draw, each time only
+   * once the world has settled ({@link settledHeight}), so the first height
+   * it says is its last.
    *
    * Said once every section has drawn or says why it didn't, never of its
    * stand-ins: the page holding it ends this embed's turn at its shape
@@ -1513,9 +1512,9 @@ export function boot(options: BootOptions): void {
    * drawn, let the next start while this one still fetched its graph; a
    * page of 33 such Previews had ten say "didn't load".
    *
-   * An embed that can't draw what its Preview names says why instead
-   * (`CANVAS_EMBED_FAILED`, {@link embedFailure}): a shape of nothing drawn
-   * stood in its Preview as an empty box.
+   * An embed that can't draw what its Preview names says why instead, at
+   * once (`CANVAS_EMBED_FAILED`, {@link embedFailure}): a shape of nothing
+   * drawn stood in its Preview as an empty box.
    */
   function sayShape(): void {
     if (
@@ -1532,7 +1531,23 @@ export function boot(options: BootOptions): void {
       }
       return;
     }
-    const height = Math.ceil(world.offsetHeight);
+    if (shaping) {
+      return;
+    }
+    shaping = true;
+    quietly(
+      settledHeight().then((height) => {
+        shaping = false;
+        // A story that threw meanwhile said why from its own call.
+        if (embedFailure() === null) {
+          postShape(height);
+        }
+      })
+    );
+  }
+
+  /** The shape `height` tall said to the page holding the embed, unless it is the one said last. */
+  function postShape(height: number): void {
     const widths = sections.flatMap((section) =>
       [...section.frames.values()].flatMap(
         (frame) => widthOf(frame.story, frame.column.width) ?? []
@@ -1545,6 +1560,51 @@ export function boot(options: BootOptions): void {
     }
     saidShape = shape;
     window.parent.postMessage({ type: CANVAS_EMBED_SIZE, height, width }, "*");
+  }
+
+  /** The page's animations running now that end: a story's transitions (a Svelte `in:`/`out:`, a fold), never a loop. */
+  const ending = (): Animation[] =>
+    document
+      .getAnimations()
+      .filter(
+        (run) =>
+          run.playState === "running" &&
+          Number.isFinite(Number(run.effect?.getComputedTiming().endTime))
+      );
+
+  /**
+   * The world's height once it has settled: the faces loaded, every
+   * animation that ends ended, and the height the same across a frame. A
+   * story mounted lays itself out over its first frames: it measures itself
+   * in a frame's callbacks or its observers (the dashboard's frameObserver),
+   * and what that changes runs its transitions on the Web Animations API,
+   * an outro's element taken away only as it finishes. A browser runs all
+   * of that only in a frame's rendering steps, which a cross-origin frame
+   * off the page's screen is not given (Chromium throttles it) until it is
+   * scrolled to, while its height read here lays it out whatever: read
+   * there, a who-decides roster said 829, 1263, 985 and 960 off the page's
+   * screen, 3 transitions mid-flight, and 795 once scrolled to, every
+   * Preview under it moving 165px. Here an embed off the page's screen says
+   * its shape once it has its frames, and the page holding it stands its
+   * skeleton at the shape it last said until then.
+   */
+  async function settledHeight(): Promise<number> {
+    for (;;) {
+      await Promise.allSettled([
+        document.fonts.ready,
+        ...ending().map((run) => run.finished),
+      ]);
+      const before = Math.ceil(world.offsetHeight);
+      await frameTick();
+      const height = Math.ceil(world.offsetHeight);
+      if (
+        height === before &&
+        document.fonts.status === "loaded" &&
+        ending().length === 0
+      ) {
+        return height;
+      }
+    }
   }
 
   /**
@@ -1766,9 +1826,6 @@ export function boot(options: BootOptions): void {
     if (embed) {
       unnamedInEmbed();
       sayShape();
-      // Once what the stories mounted has settled (their own effects, the faces).
-      setTimeout(sayShape);
-      document.fonts.ready.then(sayShape, () => undefined);
     } else {
       quietly(settle(section));
     }

@@ -438,6 +438,8 @@
   let near = $state(false);
   /** Its card came within {@link DRAW_MARGIN} of the view: its frame loads its stories and draws once its graph is in. */
   let close = $state(false);
+  /** Its box stood in the view: a canvas told to draw has its frames from then (runtime.ts `settledHeight`), so its {@link DRAW_MS} runs from then. */
+  let seen = $state(false);
   /** Watches its card until it comes within `margin` of its scroller's view, then calls `came` once. */
   const watchNear = (place: Element, margin: string, came: () => void) => {
     const comes = new IntersectionObserver(
@@ -470,6 +472,15 @@
       close = true;
     });
   });
+  $effect(() => {
+    const place = box;
+    if (!place || seen || !held?.embed) {
+      return;
+    }
+    return watchNear(place, "0px", () => {
+      seen = true;
+    });
+  });
   /** The rest of its graph once every module of it is in (embed-turns.ts `ready`), held until its card is {@link close}; and the frame's origin to tell it to. */
   // Raw: a structured clone takes no proxy (postMessage refuses one with a DataCloneError).
   let rest = $state.raw<{ origin: string; urls: string[] } | null>(null);
@@ -486,17 +497,21 @@
     }
   });
   /**
-   * How long a canvas told to draw may take to say its shape or why it
-   * can't before its Preview says it didn't load: its graph is already in
-   * this browser by then, so what is left is evaluating it and mounting its
-   * stories (caw-panel's 839 modules drew 2.3 s after they arrived, stage
-   * host.ts). Our call: past any page's evaluation, short of a wait nobody
-   * reads as loading. A frame that says neither (a page that isn't the
-   * canvas, an import that never settles) is otherwise an empty box for good.
+   * How long a canvas told to draw may take, once its box has stood in the
+   * view, to say its shape or why it can't before its Preview says it didn't
+   * load: its graph is already in this browser by then, so what is left is
+   * evaluating it and mounting its stories (caw-panel's 839 modules drew
+   * 2.3 s after they arrived, stage host.ts). It says its shape once its
+   * stories have settled over their frames (runtime.ts `settledHeight`),
+   * which a browser gives a cross-origin frame off the page's screen only
+   * once it is scrolled to, so the clock runs from {@link seen}. Our call:
+   * past any page's evaluation, short of a wait nobody reads as loading. A
+   * frame that says neither (a page that isn't the canvas, an import that
+   * never settles) is otherwise an empty box for good.
    */
   const DRAW_MS = 30_000;
   $effect(() => {
-    if (!told || shaped || failed) {
+    if (!(told && seen) || shaped || failed) {
       return;
     }
     const late = setTimeout(() => {
@@ -677,6 +692,15 @@
     const sum = known.parts.reduce((all, part) => all + part.h, 0);
     return `calc(${sum}px + ${known.parts.length - 1} * var(--space-3))`;
   });
+  /**
+   * A component canvas's box holds its picture's shape from its first paint
+   * ({@link heldHeight}, else the kit picture's 16:10), whatever stands in
+   * it: its skeleton is a layer over the box, never in its flow, so while
+   * the skeleton goes in its reveal and the frame comes at its own height,
+   * the two never stand one under the other (the box stood at both, 795
+   * over 819, for the reveal's 400 ms, and the page moved under it twice).
+   */
+  const reserved = $derived(!(screen || fault));
 </script>
 
 {#snippet screenWait()}
@@ -750,10 +774,15 @@
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it stands drawn (said and loaded) its skeleton holds its place at its picture's own shape as the page's media knows it (the kit's picture where none was ever drawn), its frame loading at no height beside it, then under the skeleton at its own height. Past the grace the wait's line stands at the box's top over the skeleton, until it stands drawn; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so its box holds its picture's own shape as the page's media knows it from its first paint (the kit's picture where none was ever drawn), its skeleton a layer over it until it stands drawn (said and loaded), its frame loading at no height under that layer, then at its own height. Past the grace the wait's line stands at the box's top over the skeleton, until it stands drawn; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div
       bind:this={box}
-      class={["relative", picture === undefined ? "w-full" : "flex-none"]}
+      class={[
+        "relative",
+        picture === undefined ? "w-full" : "flex-none",
+        reserved && (heldHeight === null ? "aspect-16/10" : "min-h-(--held-h)"),
+      ]}
+      style:--held-h={reserved ? heldHeight : undefined}
       style:inline-size={picture === undefined ? undefined : `${picture}px`}
     >
       {#if fault}
@@ -846,11 +875,7 @@
         {/if}
         {#if !(screen || (shaped && drawn))}
           <!-- A canvas waiting its turn or loading: its skeleton at its picture's own shape as the page's media knows it (`known`: what an embed of these stories said, else each story as drawn, one under another; the kit's picture where none was ever drawn), pulsing, over its frame once that holds its height; it goes in its reveal as the frame comes. -->
-          <div
-            class={tall === null ? "w-full" : "absolute inset-0"}
-            data-slot="embed-wait"
-            out:reveal
-          >
+          <div class="absolute inset-0" data-slot="embed-wait" out:reveal>
             {#if tall === null && known}
               <div class="flex flex-col items-start gap-space-3">
                 {#each known.parts as part, at (at)}
