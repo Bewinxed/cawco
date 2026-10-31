@@ -17,6 +17,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
+  CANVAS_WROTE_AT,
   type CanvasEntry,
   type CanvasRequestKind,
   type CanvasRequestPayload,
@@ -98,6 +99,73 @@ export const screenJoined = async (
   return docs.screens(artifactId) > 0;
 };
 
+/** The agent's write landed now ({@link CANVAS_WROTE_AT}): the picture is owed until a screen posts one after it. */
+const stampWrote = (docs: ArtifactDocs, artifactId: string): void =>
+  docs.transact(artifactId, "hub", (doc) =>
+    doc.getMap("meta").set(CANVAS_WROTE_AT, new Date().toISOString())
+  );
+
+/**
+ * Whether the canvas's picture shows the agent's last write: no write
+ * stamped, a picture posted at or after it, or no picture of a canvas that
+ * holds nothing (a screen posts none for an empty scene).
+ */
+export const pictureShowsWrite = (
+  docs: ArtifactDocs,
+  artifactId: string
+): boolean => {
+  const meta = docs.doc(artifactId).getMap("meta");
+  const wrote = meta.get(CANVAS_WROTE_AT) as string | undefined;
+  const at = meta.get("pictureAt") as string | null | undefined;
+  if (!wrote) {
+    return true;
+  }
+  return at
+    ? at >= wrote
+    : canvasEntries(docs, artifactId).every((entry) => entry.el.isDeleted);
+};
+
+/**
+ * Waits for the picture owed after the agent's last write, from whichever
+ * screen draws it (a person's, or the hub machine's headless one), until
+ * `screenHoldMs` after that write: the hold the headless screen keeps for
+ * the same picture. Whether the picture shows the write once it returns.
+ */
+export const pictureOfWrite = async (
+  docs: ArtifactDocs,
+  artifactId: string
+): Promise<boolean> => {
+  if (pictureShowsWrite(docs, artifactId)) {
+    return true;
+  }
+  const meta = docs.doc(artifactId).getMap("meta");
+  const wrote = Date.parse(meta.get(CANVAS_WROTE_AT) as string);
+  const left = wrote + CANVAS_LIMITS.screenHoldMs - Date.now();
+  if (left <= 0) {
+    return false;
+  }
+  let observer: (() => void) | undefined;
+  try {
+    const waited = await readWithin(
+      left,
+      () =>
+        new Promise<true>((resolve) => {
+          observer = () => {
+            if (pictureShowsWrite(docs, artifactId)) {
+              resolve(true);
+            }
+          };
+          meta.observe(observer);
+        })
+    );
+    return waited.kind === "answered";
+  } finally {
+    if (observer) {
+      meta.unobserve(observer);
+    }
+  }
+};
+
 /**
  * Hands the agent's write to a screen and waits for it: the ids it wrote.
  * Refused with {@link NO_SCREEN} when the screen it was handed to has left,
@@ -161,6 +229,7 @@ export const convertOnScreen = async (
         `The canvas wasn't changed: ${result.error} Fix it, then try again.`
       );
     }
+    stampWrote(docs, artifactId);
     return result.ids;
   } finally {
     if (observer) {
@@ -198,6 +267,9 @@ export const deleteElements = (
       }
     }
   });
+  if (deleted.length > 0) {
+    stampWrote(docs, artifactId);
+  }
   return {
     deleted: deleted.reverse(),
     missing: ids.filter((id) => !present.has(id)),

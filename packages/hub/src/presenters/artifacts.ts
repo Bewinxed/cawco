@@ -368,9 +368,17 @@ const canvasLines = (read: ArtifactRead, now: number): string[] => {
   const changed = read.changed?.length
     ? `The person changed ${listed(read.changed)}.`
     : "The person changed nothing since.";
-  const picture = read.pictureAt
-    ? `Its picture was drawn ${ago(read.pictureAt, now)}.`
+  const drawnAt = read.pictureAt
+    ? `Its picture was drawn ${ago(read.pictureAt, now)}`
+    : null;
+  let picture = drawnAt
+    ? `${drawnAt}.`
     : "No picture of it has been drawn yet.";
+  if (read.pictureBehind) {
+    picture = drawnAt
+      ? `${drawnAt}, before your last write: no screen drew it again in time.`
+      : "No picture of it has been drawn since your last write: no screen drew it in time.";
+  }
   return [
     outline,
     changed,

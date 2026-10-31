@@ -40148,8 +40148,13 @@
               "string"
             ]
           },
+          "pictureBehind": {
+            "description": "A canvas's picture is from before your last write to it: no screen drew it again within the wait.",
+            "const": true,
+            "type": "boolean"
+          },
           "png": {
-            "description": "Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage.",
+            "description": "Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, the one after your last write once a screen draws it, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage.",
             "type": [
               "null",
               "string"

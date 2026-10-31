@@ -186,6 +186,8 @@ import {
   clearDrawing,
   convertOnScreen,
   deleteElements,
+  pictureOfWrite,
+  pictureShowsWrite,
   screenJoined,
 } from "./canvas";
 import {
@@ -608,7 +610,9 @@ export interface ArtifactRead {
   pageHash: string | null;
   /** When the canvas's latest picture was drawn; null when it has none. */
   pictureAt?: string | null;
-  /** Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage. */
+  /** A canvas's picture is from before your last write to it: no screen drew it again within the wait. */
+  pictureBehind?: true;
+  /** Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, the one after your last write once a screen draws it, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage. */
   png?: string | null;
   /** A decision page's program as the hub keeps it, on a read without `since`: re-emit a statement from it to revise one. */
   program?: string;
@@ -4688,6 +4692,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       pictureAt: (meta.get("pictureAt") as string | null | undefined) ?? null,
       draft: meta.get("draft") === true,
       ...(png ? { png: pictureOf(row.id) } : {}),
+      // Asked for after the wait for it (canvasNow): one still behind is said so.
+      ...(png && !pictureShowsWrite(docs, row.id)
+        ? { pictureBehind: true as const }
+        : {}),
     };
   };
 
@@ -5873,20 +5881,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Canvas `row` as `artifact_read` reads it: the person's strokes on the
    * version they have before them, its outline and picture its newest
    * version's, `now` ({@link newestVersion}), `held` naming that one when
-   * its panel hasn't opened it.
+   * its panel hasn't opened it. A picture asked for (`drawn`) waits for the one
+   * owed after the last write ({@link pictureOfWrite}).
    */
-  const canvasNow = (
+  const canvasNow = async (
     row: ArtifactRow,
     now: ArtifactRow,
     since: number | undefined,
     drawn: boolean,
     ownersRead: boolean
-  ): ArtifactRead => {
+  ): Promise<ArtifactRead> => {
+    if (drawn) {
+      // The picture owed after the last write, so it shows that write.
+      await pictureOfWrite(docs, now.id);
+    }
     const theirs = readCanvas(row, since, drawn && now === row, ownersRead);
     if (now === row) {
       return theirs;
     }
-    const { outline, pictureAt, png } = readCanvas(
+    const { outline, pictureAt, pictureBehind, png } = readCanvas(
       now,
       undefined,
       drawn,
@@ -5896,6 +5909,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...theirs,
       outline,
       pictureAt,
+      ...(pictureBehind ? { pictureBehind } : {}),
       ...(png === undefined ? {} : { png }),
       held: now.id,
     };
@@ -5945,7 +5959,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const ownersRead = readsForOwner(instance, row);
     const now = newestVersion(row);
     if (row.kind === "canvas") {
-      return heldAnswer(canvasNow(row, now, since, drawn, ownersRead));
+      return heldAnswer(await canvasNow(row, now, since, drawn, ownersRead));
     }
     if (row.kind !== "component") {
       // Drawn before the read, which then says what the picture shows.
