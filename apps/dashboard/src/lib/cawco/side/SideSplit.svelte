@@ -28,7 +28,6 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { cawco, closePreview } from "../client.svelte";
-  import { dur, motionOk } from "../motion/curves.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import { besideOf, putAway } from "../tasks/beside.svelte";
@@ -118,23 +117,24 @@
    * The sheet stays mounted while its conversation's tab is off screen,
    * closed (SideSheet), so its preview keeps its page as a desk's split
    * does (preview/loaded.svelte.ts holds or unloads it); only the sheet of
-   * the tab in front is open.
+   * the tab in front is open. Put away while it stands in front (its
+   * Close, Escape, an agent closing the preview), it slides down and goes
+   * once it has (`sheetClosing`, until SideSheet's `onclosed`); put away
+   * while its tab is off screen, nothing of it is drawn and it goes at once.
    */
-  let sheetMounted = $state(false);
   const sheetOpen = $derived(previewOpen && visible && active);
+  let sheetClosing = $state(false);
+  let sheetWas = untrack(() => sheetOpen);
   $effect(() => {
-    if (phone && previewOpen) {
-      sheetMounted = true;
-      return;
+    const now = sheetOpen;
+    if (now) {
+      sheetClosing = false;
+    } else if (sheetWas && !previewOpen) {
+      sheetClosing = true;
     }
-    const timer = setTimeout(
-      () => {
-        sheetMounted = false;
-      },
-      motionOk.current ? dur("--dur-panel") : 1
-    );
-    return () => clearTimeout(timer);
+    sheetWas = now;
   });
+  const sheetMounted = $derived(previewOpen || sheetClosing);
 
   const LABEL: Record<Shown, string> = {
     preview: sideWords.preview,
@@ -214,6 +214,10 @@
     <SideSheet
       content={root}
       instanceId={viewId}
+      away={!(visible && active)}
+      onclosed={() => {
+        sheetClosing = false;
+      }}
       onkeyescape={(event) => previewPane?.parentEscape(event)}
       open={sheetOpen}
     >

@@ -26,17 +26,37 @@
   let {
     instanceId,
     open,
+    away,
+    onclosed,
     content,
     onkeyescape,
     children,
   }: {
     instanceId: string;
     open: boolean;
+    /** Its conversation's tab is off screen: closed, it is hidden at once, so it never slides over the tab in front. */
+    away: boolean;
+    /** Closed and done sliding down (bits-ui's `onOpenChangeComplete`). */
+    onclosed: () => void;
     content?: HTMLDivElement;
     /** Escape inside the sheet, past the lightbox: what it holds handles it. */
     onkeyescape?: (event: KeyboardEvent) => void;
     children: Snippet;
   } = $props();
+  /**
+   * Closed with its slide down over, or never opened: not drawn. Each open
+   * starts it over; a close that started in front slides the sheet down
+   * whole, and bits-ui's word that it finished (`onOpenChangeComplete`)
+   * hides it.
+   */
+  let everOpen = false;
+  let settled = $derived.by(() => {
+    if (open) {
+      everOpen = true;
+      return false;
+    }
+    return !everOpen;
+  });
   /**
    * How the sheet arrives, decided once as it mounts. It settles on its
    * open stop (on a phone over the composer; in a desk's narrow pane on
@@ -745,17 +765,24 @@
     handleOnly
     modal={false}
     noBodyStyles
+    onOpenChangeComplete={(next) => {
+      if (!next) {
+        settled = true;
+        onclosed();
+      }
+    }}
     {open}
     shouldScaleBackground={false}
     {snapPoints}
     bind:activeSnapPoint={snap}
   >
     <!-- Kept mounted while closed (bits-ui's `forceMount`), so the page in
-         it stays loaded while its conversation's tab is off screen; closed,
-         it is never drawn (`closed="unseen"`), so the sheet of a tab off screen
-         never stands over the one in front. -->
+         it stays loaded while its conversation's tab is off screen. Closed,
+         it is not drawn (`closed="unseen"`): at once when its tab went off
+         screen (`away`), so it never stands over the tab in front; once its
+         slide down is over when it was put away in front (`settled`). -->
     <Drawer.Content
-      closed="unseen"
+      closed={away || settled ? "unseen" : undefined}
       data-preview-sheet
       forceMount
       hosted
