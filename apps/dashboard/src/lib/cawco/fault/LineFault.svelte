@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * What a part that is one list or one strip shows where it stood when it
-   * stops on a render error (RegionBoundary): one row on the house
+   * stops on a render error (FaultBoundary): one row on the house
    * row grid (DESIGN.md, Caw's panel): Caw's still in the lead column, the
    * words, and at the trailing edge the action that leads, an outline, with
    * Show details stepped back beside it in a quiet ghost. The rest of its
@@ -16,8 +16,8 @@
   import { commonWords } from "@cawco/core/words/common";
   import { regionFaultWords } from "@cawco/core/words/region-fault";
   import { Button } from "#lib/components/ui/button/index.js";
-  import CawFace from "../home/CawFace.svelte";
   import { appearOnMount } from "../motion/curves.svelte";
+  import type { FaultCaw } from "./caw";
   import FaultDetails from "./FaultDetails.svelte";
   import ShowDetails from "./ShowDetails.svelte";
 
@@ -27,6 +27,7 @@
     details,
     open = false,
     strip = false,
+    caw,
     onretry,
     onreload,
   }: {
@@ -38,6 +39,8 @@
     /** Show details starts open. */
     open?: boolean;
     strip?: boolean;
+    /** Caw as the bundle draws him (fault/caw.ts): his head beside the words. */
+    caw: FaultCaw;
     onretry: () => void;
     onreload: () => void;
   } = $props();
@@ -59,7 +62,7 @@
     data-strip={strip || undefined}
   >
     <span class="flex-none">
-      <CawFace status="needs-you" size={strip ? 24 : 28} />
+      {@render caw({ again, size: strip ? 24 : 28, head: true })}
     </span>
     <div
       data-strip={strip || undefined}

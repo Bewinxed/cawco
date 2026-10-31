@@ -5,16 +5,6 @@
  * from the hub (a reload is safe: DESIGN.md, Update toast).
  */
 
-/** What a part's fault face is handed: the error, and its two ways on. */
-export interface Fault {
-  /** The rebuild threw again at once: Reload page leads. */
-  again: boolean;
-  /** The error word for word, under Show details. */
-  details: string;
-  reload: () => void;
-  retry: () => void;
-}
-
 /** How soon after Try again a throw counts as the rebuild's own. */
 const AT_ONCE_MS = 1000;
 

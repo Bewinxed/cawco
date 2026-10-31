@@ -27,10 +27,11 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { cawco } from "../client.svelte";
+  import { cawco, closePreview } from "../client.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
+  import { besideOf, putAway } from "../tasks/beside.svelte";
   import FailedSurface from "./FailedSurface.svelte";
   import SideSheet from "./SideSheet.svelte";
   import Split from "./Split.svelte";
@@ -139,6 +140,18 @@
     preview: sideWords.preview,
     task: sideWords.task,
   };
+
+  /** What a failed card's head names (FailedSurface): the artifact, or the task's id where no switch says Task. */
+  function failedTitle(what: Shown, switched: boolean): string | undefined {
+    if (what === "task") {
+      return switched ? undefined : besideOf(viewId)?.taskId;
+    }
+    const preview = cawco.previews[viewId];
+    return preview?.artifact?.name ?? preview?.title;
+  }
+  /** A failed card's Close: what was on show goes, as its own Close puts it away. */
+  const closeFailed = (what: Shown) =>
+    what === "task" ? putAway(viewId) : closePreview(viewId);
 </script>
 
 <!-- The switch, while more than one has something to show. -->
@@ -181,7 +194,12 @@
     <RegionBoundary part={shown}>
       {@render surface()}
       {#snippet chrome(face)}
-        <FailedSurface switcher={switched} {viewId} what={shown}>
+        <FailedSurface
+          onclose={() => closeFailed(shown)}
+          switcher={switched}
+          title={failedTitle(shown, !!switched)}
+          what={shown}
+        >
           {@render face()}
         </FailedSurface>
       {/snippet}
@@ -207,8 +225,13 @@
           bind:this={previewPane}
         />
         {#snippet chrome(face)}
-          <FailedSurface {viewId} what="preview">{@render face()}</FailedSurface
+          <FailedSurface
+            onclose={() => closeFailed("preview")}
+            title={failedTitle("preview", false)}
+            what="preview"
           >
+            {@render face()}
+          </FailedSurface>
         {/snippet}
       </RegionBoundary>
     </SideSheet>

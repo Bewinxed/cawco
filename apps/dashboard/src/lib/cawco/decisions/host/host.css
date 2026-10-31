@@ -14,7 +14,10 @@
 @source "./";
 @source "../../views/openui/OpenUiRenderer.svelte";
 @source "../../fault/FaultActions.svelte";
+@source "../../fault/FaultBoundary.svelte";
 @source "../../fault/FaultDetails.svelte";
+@source "../../fault/LineFault.svelte";
+@source "../../fault/RegionFault.svelte";
 @source "../../fault/ShowDetails.svelte";
 @source "../../../components/ui/alert/";
 @source "../../../components/ui/badge/";

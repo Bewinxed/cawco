@@ -39,9 +39,9 @@ export const PreviewSheetStuck = phone({ place: "sheet", stuck: true });
 export const OneComment = desk({ place: "comments" });
 /** One comment that can't be drawn, on a phone. */
 export const OneCommentPhone = phone({ place: "comments" });
-/** A decision card that can't be drawn, in its place on the page, on a desk. */
+/** A decision card that can't be drawn stands as its card; a diagram that can't, as a line in its card. On a desk. */
 export const DecisionCard = desk({ place: "decision" });
-/** A decision card that can't be drawn, on a phone. */
+/** A decision card and a diagram that can't be drawn, on a phone. */
 export const DecisionCardPhone = phone({ place: "decision" });
 /** A whole page that can't be drawn, under its bar, on a desk. */
 export const Page = desk({ place: "page" });

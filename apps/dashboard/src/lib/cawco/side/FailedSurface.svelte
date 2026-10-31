@@ -3,52 +3,39 @@
    * The card beside a conversation (SideSplit), its pane stopped on a render
    * error: the switch, the name and Close outlive the pane that threw, round
    * the fault's face (RegionBoundary's `chrome`), on the desk's split and in
-   * the phone's sheet alike. Close puts away what was on show, as the pane's
-   * own Close does: the preview closes on the hub, a task goes from beside
-   * the conversation.
+   * the phone's sheet alike. Close puts away what was on show as the pane's
+   * own Close does (its caller's `onclose`), pending while it goes and
+   * marked failed if it did not.
    */
   import { sideWords } from "@cawco/core/words/side";
   import type { Snippet } from "svelte";
-  import { cawco, closePreview } from "../client.svelte";
-  import { besideOf, putAway } from "../tasks/beside.svelte";
   import SideSurface from "./SideSurface.svelte";
 
   let {
     what,
-    viewId,
+    title,
     switcher,
+    onclose,
     children,
   }: {
     /** What stood in the card. */
     what: "preview" | "task";
-    /** The conversation it stands beside. */
-    viewId: string;
+    /** What the pane's head named: the artifact, or the task's id where no switch says Task. */
+    title?: string;
     /** The switch, while more than one has something to show. */
     switcher?: Snippet;
+    onclose: () => void | Promise<void>;
     /** The fault's face. */
     children: Snippet;
   } = $props();
 
-  /** What the pane's head named: the artifact, or the task's id where no switch says Task. */
-  const title = $derived.by(() => {
-    if (what === "task") {
-      return switcher ? undefined : besideOf(viewId)?.taskId;
-    }
-    const preview = cawco.previews[viewId];
-    return preview?.artifact?.name ?? preview?.title;
-  });
-
   let closing = $state(false);
   let closeFailed = $state(false);
   async function close() {
-    if (what === "task") {
-      putAway(viewId);
-      return;
-    }
     closing = true;
     closeFailed = false;
     try {
-      await closePreview(viewId);
+      await onclose();
     } catch {
       closeFailed = true;
     } finally {

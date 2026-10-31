@@ -10,17 +10,20 @@
    * dashboard stopped on a render error, drawn by the real boundary and face
    * in the real place it is wired, with what stands round it working.
    *
-   * - `side`: the real SideSplit beside a conversation on a desk, a task
-   *   standing in its card; the task's pane throws (Throws). Its Close puts
-   *   the task away, and the card goes.
+   * - `side`: the real split beside a conversation on a desk, a task's
+   *   card in it as SideSplit draws a failed one (RegionBoundary with
+   *   FailedSurface round it); the task's pane throws (Throws). Its Close
+   *   puts the card away.
    * - `sheet`: the preview's sheet on a phone (SideSplit's sheets): the
    *   boundary and the card round its face as SideSplit draws them.
    * - `comments`: the real Comments rail given three comments, the middle
    *   one's reply carrying no words, so its row throws and fails as one
    *   line, its siblings standing.
-   * - `decision`: the real renderer drawing a decision page's three cards,
-   *   the middle one throwing (ThrowingDecision), with the host's fault
-   *   in its place (decisions/host/Host).
+   * - `decision`: the real renderer drawing a decision page's three cards
+   *   as its host does (decisions/host/Host: `cardOf`, the kit's still Caw),
+   *   the middle card throwing (ThrowingDecision) and the first card's
+   *   diagram (ThrowingDiagram): a card fails as its card, the diagram as a
+   *   line in its place.
    * - `page`, `tabs`, `composer`: a page's body, a pane's tab strip under
    *   the phone's bar, the composer's pill (RegionBoundary's faces).
    *
@@ -32,25 +35,25 @@
   import Badge from "../../decisions/host/Badge.svelte";
   import Canvas from "../../decisions/host/Canvas.svelte";
   import Column from "../../decisions/host/Column.svelte";
-  import Diagram from "../../decisions/host/Diagram.svelte";
+  import { decisionCardOf } from "../../decisions/host/card-fault";
   import Dials from "../../decisions/host/Dials.svelte";
-  import { decisionFault } from "../../decisions/host/Host.svelte";
   import Image from "../../decisions/host/Image.svelte";
   import Option from "../../decisions/host/Option.svelte";
   import Preview from "../../decisions/host/Preview.svelte";
   import Row from "../../decisions/host/Row.svelte";
   import Section from "../../decisions/host/Section.svelte";
+  import { stillCaw } from "../../decisions/host/StillCaw.svelte";
   import Text from "../../decisions/host/Text.svelte";
   import CommentRail from "../../preview/CommentRail.svelte";
   import RegionBoundary from "../../RegionBoundary.svelte";
   import FailedSurface from "../../side/FailedSurface.svelte";
-  import SideSplit from "../../side/SideSplit.svelte";
-  import { besideOf, standBeside } from "../../tasks/beside.svelte";
+  import Split from "../../side/Split.svelte";
   import OpenUiRenderer, {
     type OpenUIComponent,
   } from "../../views/openui/OpenUiRenderer.svelte";
   import DecisionColumn from "./DecisionColumn.svelte";
   import ThrowingDecision from "./ThrowingDecision.svelte";
+  import ThrowingDiagram from "./ThrowingDiagram.svelte";
   import Throws from "./Throws.svelte";
 
   let {
@@ -66,12 +69,9 @@
     height: number;
   } = $props();
 
-  /** The conversation the side card stands beside. */
-  const VIEW = "failed-parts";
-  if (!besideOf(VIEW)) {
-    standBeside(VIEW, { projectId: "cawco-dev", taskId: "tsk-165" });
-  }
   const builds = { n: 0 };
+  /** The side card's Close, live: the card goes, as the split's does. */
+  let closed = $state(false);
 
   const LIBRARY = decisionLibrary<OpenUIComponent>({
     Decisions: DecisionColumn,
@@ -79,7 +79,7 @@
     Decision: ThrowingDecision,
     Option,
     Image,
-    Diagram,
+    Diagram: ThrowingDiagram,
     Canvas,
     Preview,
     Dials,
@@ -88,9 +88,10 @@
     Row,
     Column,
   });
-  /** caw-off-calls, as the hub keeps it: its second card throws. */
+  /** caw-off-calls, as the hub keeps it: its second card throws, and the first card's diagram. */
   const PROGRAM = `root = Decisions("Turning Caw off: the tray you asked for", [build, throws, keeps])
-build = Decision("build", "Build this tray for turning Caw off?", [yes, later], "When you turn Caw off, it lists every session and task Caw started, all checked.", [], [], false, null, "scope")
+build = Decision("build", "Build this tray for turning Caw off?", [yes, later], "When you turn Caw off, it lists every session and task Caw started, all checked.", [flow], [], false, null, "scope")
+flow = Diagram("flowchart LR\nTray --> ")
 yes = Option("yes", "Yes, build it", "The tray lists what Caw started.", true, [], "One more step before Caw is off.")
 later = Option("later", "Not yet", "Caw turns off as today.", false, [], "What Caw started keeps running unseen.")
 throws = Decision("throws", "With many sessions running, does the list stop at about ten rows?", [ten, all], "A long list scrolls inside the tray.", [], [], false, null, "look")
@@ -163,6 +164,27 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
   </div>
 {/snippet}
 
+{#snippet conversation()}
+  {@render transcript()}
+{/snippet}
+
+{#snippet sideCard()}
+  <RegionBoundary part="task">
+    <Throws {builds} {stuck}>{@render stand()}</Throws>
+    {#snippet chrome(face)}
+      <FailedSurface
+        onclose={() => {
+          closed = true;
+        }}
+        title="tsk-165"
+        what="task"
+      >
+        {@render face()}
+      </FailedSurface>
+    {/snippet}
+  </RegionBoundary>
+{/snippet}
+
 <div
   data-slot="failed-parts"
   class="relative flex h-(--frame-h) w-(--frame-w) min-w-0 flex-col overflow-hidden bg-surface-recess text-ink-strong"
@@ -170,18 +192,20 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
   style:--frame-w="{width}px"
 >
   {#if place === "side"}
-    <SideSplit
+    <!-- The real split beside a conversation, the task's card in it as
+         SideSplit draws a failed one: its name and Close round the face. -->
+    <Split
       active
-      phone={false}
-      taskOpen={!!besideOf(VIEW)}
-      viewId={VIEW}
+      backLabel="Back to conversation"
+      keys={{
+        width: "cawco.failed-parts.width",
+        expanded: "cawco.failed-parts.expanded",
+      }}
+      main={conversation}
+      open={!closed}
+      side={sideCard}
       visible
-    >
-      {@render transcript()}
-      {#snippet task()}
-        <Throws {builds} {stuck}>{@render stand()}</Throws>
-      {/snippet}
-    </SideSplit>
+    />
   {:else if place === "sheet"}
     {@render transcript()}
     <div class="absolute inset-x-0 top-2/5 bottom-0 flex flex-col">
@@ -196,9 +220,13 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
         <RegionBoundary part="preview">
           <Throws {builds} {stuck}>{@render stand()}</Throws>
           {#snippet chrome(face)}
-            <FailedSurface viewId={VIEW} what="preview"
-              >{@render face()}</FailedSurface
+            <FailedSurface
+              onclose={() => undefined}
+              title="goo-card"
+              what="preview"
             >
+              {@render face()}
+            </FailedSurface>
           {/snippet}
         </RegionBoundary>
       </div>
@@ -230,7 +258,8 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
   {:else if place === "decision"}
     <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <OpenUiRenderer
-        fault={decisionFault}
+        cardOf={decisionCardOf}
+        caw={stillCaw}
         label="the failure states' decision page"
         library={LIBRARY}
         response={PROGRAM}

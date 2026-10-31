@@ -7,19 +7,13 @@
   `cawco:hmr` with the program's hash, so the overlay re-reads its pins and
   marks every option again from the stored picks.
 -->
-<script lang="ts" module>
-  import type { ElementNode } from "@openuidev/lang-core";
-  import type { Fault } from "../../fault/rebuild.svelte";
-  import DecisionFault from "./DecisionFault.svelte";
-
-  export { decisionFault };
-</script>
-
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import OpenUiRenderer from "../../views/openui/OpenUiRenderer.svelte";
+  import { decisionCardOf } from "./card-fault";
   import { DECISION_LIBRARY } from "./library.js";
   import { overlayTag, programIn, takeServed } from "./page.svelte.js";
+  import { stillCaw } from "./StillCaw.svelte";
 
   let program = $state(programIn(document));
   const SERVED_HASH = /data-page-hash="([0-9a-f]{64})"/u;
@@ -59,22 +53,12 @@
   });
 </script>
 
-<!-- A decision card that throws stands as its fault face in its place, its
-     question named; the page's other cards and Send go on working. -->
-{#snippet decisionFault(node: ElementNode, failed: Fault)}
-  {#if node.typeName === "Decision"}
-    <DecisionFault
-      again={failed.again}
-      details={failed.details}
-      onreload={failed.reload}
-      onretry={failed.retry}
-      question={String(node.props.question ?? "")}
-    />
-  {/if}
-{/snippet}
-
+<!-- A part that throws stands as its fault face in its place: a Decision
+     as its card, its question named, anything else as a line; the page's
+     other cards and Send go on working. -->
 <OpenUiRenderer
-  fault={decisionFault}
+  cardOf={decisionCardOf}
+  caw={stillCaw}
   library={DECISION_LIBRARY}
   label={`decision page "${document.title}" (${location.pathname})`}
   response={program}

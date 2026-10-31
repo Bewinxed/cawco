@@ -13,6 +13,7 @@
   import { viewTool } from "#lib/cawco/views-api.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { animatedCaw } from "../home/FaultCaw.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import { setViewContext } from "./openui/context";
   import { VIEW_LIBRARY } from "./openui/library";
@@ -78,6 +79,7 @@
     <!-- Until each Query has answered once, the view stands as its skeleton:
          its defaults (a count of 0) are never shown as the project's data. -->
     <OpenUiRenderer
+      caw={animatedCaw}
       class="min-w-0"
       library={VIEW_LIBRARY}
       label={`view "${view.name}"`}
