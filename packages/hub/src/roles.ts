@@ -267,7 +267,7 @@ export const refusal = (row: InstanceRow, name: string): string => {
     case "overseer":
       return `${name} isn't available to fleet-watch triage: it reads the fleet and decides once with triage_decide.`;
     case "delegate":
-      return `${name} isn't available here: only sessions you started file, change or start tasks or change fleet settings, and this one is a delegate or work item. Hand the change to the session that started it.`;
+      return `${name} isn't available here: only sessions the person started file, change or start tasks or change fleet settings, and this one is a delegate or work item. Hand the change to the session that started it.`;
     case "curator":
       return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
     case "worker":
