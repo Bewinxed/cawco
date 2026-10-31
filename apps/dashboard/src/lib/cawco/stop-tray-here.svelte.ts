@@ -6,6 +6,7 @@
  */
 
 import { untrack } from "svelte";
+import { bringIntoView } from "#lib/cawco/bring-into-view.js";
 import { cawco } from "./client.svelte";
 import { frameObserver } from "./frame-observer";
 import { span } from "./home/home-state.svelte";
@@ -78,7 +79,7 @@ export function trayHere(job: () => StopJob, leave: () => void) {
       () => {
         if (measured !== height && job().open) {
           height = measured;
-          node.scrollIntoView({ block: "nearest" });
+          bringIntoView(node);
         }
       },
       {

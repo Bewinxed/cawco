@@ -5,6 +5,7 @@
    * screen under 900px — the same entries at a touch height.
    */
   import { configureWords as words } from "@cawco/core/words/configure";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import {
     dur,
     easeOut,
@@ -41,16 +42,17 @@
   /**
    * The chosen section stands whole in the rail: a rail shorter than its
    * sections scrolls the chosen row into view when the section changes, by
-   * the least it takes (`block: "nearest"`), never cut at the rail's foot.
+   * the least it takes (`bringIntoView`), never cut at the rail's foot.
    */
   function shown(rail: HTMLElement) {
     // Read so the attachment runs again when the section changes.
     if (!current) {
       return;
     }
-    rail
-      .querySelector<HTMLElement>('[aria-current="page"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const row = rail.querySelector('[aria-current="page"]');
+    if (row) {
+      bringIntoView(row);
+    }
   }
 
   function badge(

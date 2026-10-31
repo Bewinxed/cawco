@@ -9,6 +9,7 @@
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import CantStart from "#lib/cawco/CantStart.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
@@ -321,9 +322,10 @@
       return;
     }
     untrack(() => {
-      place
-        ?.querySelector(`[data-routine="${CSS.escape(id)}"]`)
-        ?.scrollIntoView({ block: "nearest" });
+      const row = place?.querySelector(`[data-routine="${CSS.escape(id)}"]`);
+      if (row) {
+        bringIntoView(row);
+      }
       bring = null;
     });
   });

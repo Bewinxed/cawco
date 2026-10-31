@@ -40,6 +40,7 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
@@ -158,9 +159,10 @@
     }
     const within = box;
     const scroll = requestAnimationFrame(() => {
-      within
-        .querySelector('[aria-current="page"]')
-        ?.scrollIntoView({ block: "nearest" });
+      const row = within.querySelector('[aria-current="page"]');
+      if (row) {
+        bringIntoView(row);
+      }
     });
     return () => cancelAnimationFrame(scroll);
   });

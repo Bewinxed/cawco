@@ -58,6 +58,7 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { IconClose } from "#lib/icons.js";
@@ -172,8 +173,7 @@
       return;
     }
     takePlan(instanceId);
-    row.scrollIntoView({
-      block: "nearest",
+    bringIntoView(row, {
       behavior: motionOk.current ? "smooth" : "auto",
     });
     row.setAttribute("data-linked", "");

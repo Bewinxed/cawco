@@ -23,6 +23,7 @@
    */
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -230,9 +231,10 @@
       return;
     }
     untrack(() => {
-      scroller
-        ?.querySelector<HTMLElement>(`#${CSS.escape(target)}`)
-        ?.scrollIntoView({ block: "start" });
+      const named = scroller?.querySelector(`#${CSS.escape(target)}`);
+      if (named) {
+        bringIntoView(named, { at: "third" });
+      }
     });
   });
 </script>

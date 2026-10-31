@@ -25,6 +25,7 @@
    */
   import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { tick, untrack } from "svelte";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -216,9 +217,10 @@
     }
     untrack(() => {
       tick().then(() => {
-        document
-          .getElementById(idOf(key))
-          ?.scrollIntoView({ block: "nearest" });
+        const row = document.getElementById(idOf(key));
+        if (row) {
+          bringIntoView(row);
+        }
       });
     });
   });

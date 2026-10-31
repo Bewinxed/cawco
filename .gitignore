@@ -81,3 +81,7 @@ assets/mascot/scripts/.regress/
 
 # TypeScript build mode: checked declarations and build info (scripts/check.ts).
 /.tsbuild/
+
+# Impeccable's hook cache and a person's own settings, wherever its hook fires.
+**/.impeccable/hook.cache.json
+**/.impeccable/config.local.json

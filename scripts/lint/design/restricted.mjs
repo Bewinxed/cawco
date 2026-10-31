@@ -13,6 +13,10 @@
 //   c4313c3d8). The markup half of biome.jsonc's ResizeObserver ban
 //   (aca304eaf), which reads no Svelte markup. A site that must write inside
 //   the delivery says why in a `golar-ignore-next-line` comment.
+// - house/no-scroll-into-view: `scrollIntoView` moves every box round its
+//   element on both axes, `overflow: hidden` ones too, a page's column off
+//   the foot beside its scroller among them. bring-into-view.ts moves the
+//   one axis, through the boxes a person scrolls.
 import { eachNode } from "./model.mjs";
 
 const DURATION_TOKEN = /^--dur-/u;
@@ -60,6 +64,26 @@ export function dimensionBindings(model) {
         end: node.end,
         message:
           "A dimension binding writes inside its ResizeObserver's delivery. Measure with frameObserver ($lib/cawco/frame-observer): `{@attach frameSize((node) => { … })}` reads the size as it mounts and a change in the next frame, as PaneTabs' details height and ModelSection's chosen row do.",
+      });
+    }
+  });
+  return findings;
+}
+
+export function scrollIntoViews(model) {
+  const findings = [];
+  eachNode(model, (node) => {
+    const callee = node.type === "CallExpression" ? node.callee : null;
+    if (
+      callee?.type === "MemberExpression" &&
+      !callee.computed &&
+      callee.property.name === "scrollIntoView"
+    ) {
+      findings.push({
+        start: node.start,
+        end: node.end,
+        message:
+          "scrollIntoView moves every box round the element, sideways too. Use bringIntoView or bringIntoStrip (lib/cawco/bring-into-view.ts), which move one axis.",
       });
     }
   });

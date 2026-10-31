@@ -9,7 +9,11 @@ import { clipWithMove } from "./clip-move.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
 import { rawClassValues } from "./raw-values.mjs";
-import { dimensionBindings, rawDurationReads } from "./restricted.mjs";
+import {
+  dimensionBindings,
+  rawDurationReads,
+  scrollIntoViews,
+} from "./restricted.mjs";
 import {
   arbitraryValues,
   inlineStyles,
@@ -287,6 +291,7 @@ const FIND = {
   "house/group-not-needs-ancestor": groupNotNeedsAncestor,
   "house/no-raw-duration-read": rawDurationReads,
   "house/no-dimension-binding": dimensionBindings,
+  "house/no-scroll-into-view": scrollIntoViews,
   "house/no-clip-with-move": clipWithMove,
   "house/no-class-join": classJoins,
   "house/no-raw-class-values": rawClassValues,

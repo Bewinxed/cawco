@@ -17,3 +17,6 @@ export const cut = (node: HTMLElement, frame: Keyframe): void => {
   frame.clipPath = "inset(2px)";
   node.style.clipPath = "inset(2px)";
 };
+export const reveals = (node: HTMLElement): void => {
+  node.scrollIntoView({ block: "nearest" });
+};

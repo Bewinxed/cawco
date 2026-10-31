@@ -16,6 +16,7 @@
    */
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { pressOutside } from "#lib/cawco/press-outside.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
@@ -422,7 +423,12 @@
                 open = null;
               }}
               ondelete={async () => undefined}
-              onfind={() => pills[pin.id]?.scrollIntoView({ block: "center" })}
+              onfind={() => {
+                const pill = pills[pin.id];
+                if (pill) {
+                  bringIntoView(pill, { at: "third" });
+                }
+              }}
               onplace={() => undefined}
               onreply={() => undefined}
               onresolve={() => undefined}

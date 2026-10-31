@@ -8,6 +8,7 @@
     workspaceNeedsReason,
     workspaceNeedsWords,
   } from "@cawco/core/words/workspace-needs";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
    * The machines as a list: every install under way or waiting on the
@@ -118,7 +119,7 @@
     }
     barGlass.machine = null;
     row.focus({ preventScroll: true });
-    row.scrollIntoView({ block: "nearest" });
+    bringIntoView(row);
   });
 
   const faultOf = (machineId: string): string | undefined =>

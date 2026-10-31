@@ -11,6 +11,7 @@
    */
   import { todoGroups } from "@cawco/core/plan";
   import { tick } from "svelte";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import type { Todo } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -54,12 +55,13 @@
     }
     broughtFor = ref;
     tick().then(() => {
-      document
-        .querySelector(`[data-todo="${CSS.escape(ref)}"]`)
-        ?.scrollIntoView({
-          block: "center",
+      const row = document.querySelector(`[data-todo="${CSS.escape(ref)}"]`);
+      if (row) {
+        bringIntoView(row, {
+          at: "third",
           behavior: motionOk.current ? "smooth" : "auto",
         });
+      }
       marked = ref;
       setTimeout(
         () => {

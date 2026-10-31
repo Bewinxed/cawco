@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   /**
    * A question standing in the page, under the control that asked it
    * (ask-here.svelte.ts; DESIGN.md, The Open Page Rule). It unfolds where it
@@ -87,7 +88,7 @@
    */
   function arrive(node: HTMLElement) {
     const frame = requestAnimationFrame(() => {
-      node.scrollIntoView({ block: "nearest" });
+      bringIntoView(node);
       node.querySelector<HTMLElement>("[data-ask-cancel]")?.focus();
     });
     const onEscape = (event: KeyboardEvent) => {

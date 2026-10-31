@@ -42,6 +42,7 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { bringIntoStrip } from "#lib/cawco/bring-into-view.js";
   import {
     dur,
     ease,
@@ -866,11 +867,7 @@
         // A new tab can open past the strip's scrolled edge (after the tab
         // in front, or at the end): it is brought into view now, before a
         // flight measures where it is.
-        node.scrollIntoView({
-          block: "nearest",
-          inline: "nearest",
-          behavior: "instant",
-        });
+        bringIntoStrip(node, "instant");
         if (!motionOk.current) {
           return forget(id, node, frame);
         }

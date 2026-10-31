@@ -3,6 +3,7 @@
   import { unhandled } from "@cawco/core/unhandled";
   import { configurePage } from "@cawco/core/words/configure";
   import { machineWords } from "@cawco/core/words/machine";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -142,9 +143,7 @@
 
   /** In view as it opens, and Escape inside it puts it away. */
   function arrive(node: HTMLElement) {
-    const frame = requestAnimationFrame(() =>
-      node.scrollIntoView({ block: "nearest" })
-    );
+    const frame = requestAnimationFrame(() => bringIntoView(node));
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();

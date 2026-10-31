@@ -56,6 +56,7 @@
   import { type Component, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
+  import { bringIntoView } from "#lib/cawco/bring-into-view.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
@@ -283,7 +284,7 @@
     event.preventDefault();
     reached = to.dataset.artifact ?? null;
     to.focus({ preventScroll: true });
-    to.scrollIntoView({ block: "nearest" });
+    bringIntoView(to);
   }
 </script>
 
