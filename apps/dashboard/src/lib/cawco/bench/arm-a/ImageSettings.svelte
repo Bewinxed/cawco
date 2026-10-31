@@ -16,6 +16,8 @@
 </script>
 
 <script lang="ts">
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   /**
    * The image settings: the colour and the size of an image about to be
    * generated, applied once. Every value stays as it was typed; a value that
@@ -26,6 +28,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
     OptionGroup,
     OptionGroupItem,
@@ -103,7 +106,18 @@
     if (swatch) {
       return swatch.name;
     }
-    return chosenValue ? words.custom : words.noColour;
+    // A custom colour typed but not yet read is still the person's pick.
+    return customColour.trim() === "" ? words.noColour : words.custom;
+  });
+  /** The line under the custom field: its fault, why it is idle, or the hint. */
+  const colourHelp = $derived.by(() => {
+    if (colourFault) {
+      return colourFault;
+    }
+    if (swatch && customColour.trim() !== "") {
+      return words.customIdle(swatch.name);
+    }
+    return words.customHint;
   });
   const colourFault = $derived.by(() => {
     if (swatch || custom.ok || custom.fault === "empty") {
@@ -373,7 +387,7 @@
           for="{uid}-custom"
         >
           <span class="type-label text-ink-row">
-            {chosenName}
+            <MorphText text={chosenName} />
           </span>
           {#if chosenValue}
             <span class="type-code wrap-anywhere text-ink-muted">
@@ -383,26 +397,32 @@
         </output>
       </div>
 
-      <OptionGroup
-        aria-label={words.accents}
-        onenter={() => form?.requestSubmit()}
-        {disabled}
-        bind:value={() => (swatch ? [swatch.id] : []), (v) => pickSwatch(v[0])}
-      >
-        {#each SWATCHES as s (s.id)}
-          <OptionGroupItem value={s.id}>
-            <span
-              class="size-icon-md flex-none rounded-xs bg-(--swatch) outline outline-border-hairline -outline-offset-1"
-              aria-hidden="true"
-              data-box
-              style:--swatch={s.value}
-            ></span>
-            <span>{s.name}</span>
-          </OptionGroupItem>
-        {/each}
-      </OptionGroup>
+      <!-- The kit's option chip draws no disabled look of its own (ui/chip
+           `option`): the group fades here, as the kit's other controls do. -->
+      <div class={disabled ? "opacity-50" : undefined}>
+        <OptionGroup
+          aria-label={words.accents}
+          onenter={() => form?.requestSubmit()}
+          {disabled}
+          bind:value={
+            () => (swatch ? [swatch.id] : []), (v) => pickSwatch(v[0])
+          }
+        >
+          {#each SWATCHES as s (s.id)}
+            <OptionGroupItem value={s.id}>
+              <span
+                class="size-icon-md flex-none rounded-xs bg-(--swatch) outline outline-border-hairline -outline-offset-1"
+                aria-hidden="true"
+                data-box
+                style:--swatch={s.value}
+              ></span>
+              <span>{s.name}</span>
+            </OptionGroupItem>
+          {/each}
+        </OptionGroup>
+      </div>
 
-      <div class="flex min-w-0 flex-col gap-space-2">
+      <div class="flex min-w-0 flex-col gap-space-2" {@attach morph()}>
         <div
           class="flex min-w-0 flex-wrap items-center justify-between gap-space-2"
         >
@@ -428,7 +448,6 @@
           aria-invalid={colourFault ? true : undefined}
           autocapitalize="off"
           autocomplete="off"
-          placeholder="#e65d46"
           spellcheck="false"
           bind:value={customColour}
           onblur={() => {
@@ -446,7 +465,7 @@
             ? 'text-status-fail-ink'
             : 'text-ink-muted'}"
         >
-          {colourFault ?? words.customHint}
+          <MorphText text={colourHelp} wrap />
         </p>
       </div>
     </fieldset>
@@ -459,43 +478,45 @@
         {words.size}
       </legend>
 
-      <OptionGroup
-        aria-label={words.presets}
-        onenter={() => form?.requestSubmit()}
-        {disabled}
-        bind:value={() => [preset], (v) => pickPreset(v[0])}
-      >
-        {#each PRESETS as p (p.id)}
-          <OptionGroupItem value={p.id}>
+      <div class={disabled ? "opacity-50" : undefined}>
+        <OptionGroup
+          aria-label={words.presets}
+          onenter={() => form?.requestSubmit()}
+          {disabled}
+          bind:value={() => [preset], (v) => pickPreset(v[0])}
+        >
+          {#each PRESETS as p (p.id)}
+            <OptionGroupItem value={p.id}>
+              <span
+                class="grid size-icon-md flex-none place-items-center"
+                aria-hidden="true"
+                data-box
+              >
+                <span
+                  class="aspect-(--ratio) rounded-hair border border-current {p.width >=
+                  p.height
+                    ? 'w-icon-sm'
+                    : 'h-icon-sm'}"
+                  style:--ratio="{p.width} / {p.height}"
+                ></span>
+              </span>
+              <span class="tabular-nums">{p.id}</span>
+            </OptionGroupItem>
+          {/each}
+          <OptionGroupItem value={CUSTOM}>
             <span
               class="grid size-icon-md flex-none place-items-center"
               aria-hidden="true"
               data-box
             >
               <span
-                class="aspect-(--ratio) rounded-hair border border-current {p.width >=
-                p.height
-                  ? 'w-icon-sm'
-                  : 'h-icon-sm'}"
-                style:--ratio="{p.width} / {p.height}"
+                class="size-icon-sm rounded-hair border border-dashed border-current"
               ></span>
             </span>
-            <span class="tabular-nums">{p.id}</span>
+            <span>{words.customSize}</span>
           </OptionGroupItem>
-        {/each}
-        <OptionGroupItem value={CUSTOM}>
-          <span
-            class="grid size-icon-md flex-none place-items-center"
-            aria-hidden="true"
-            data-box
-          >
-            <span
-              class="size-icon-sm rounded-hair border border-dashed border-current"
-            ></span>
-          </span>
-          <span>{words.customSize}</span>
-        </OptionGroupItem>
-      </OptionGroup>
+        </OptionGroup>
+      </div>
 
       <div class="flex items-end gap-space-2">
         {#each ["width", "height"] as const as side, i (side)}
@@ -573,10 +594,16 @@
         {/each}
       </div>
 
-      <div id={sizeHelpId} class="flex min-w-0 flex-col gap-space-2">
+      <div
+        id={sizeHelpId}
+        class="flex min-w-0 flex-col gap-space-2"
+        {@attach morph()}
+      >
         {#each sideFaults as fault (fault.side)}
           <div
             class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1"
+            in:unfold
+            out:unfold
           >
             <p class="type-meta m-0 min-w-0 text-pretty text-status-fail-ink">
               {fault.text}
@@ -598,7 +625,12 @@
         {/each}
         <p class="type-meta m-0 tabular-nums text-ink-muted" aria-live="polite">
           {#if both}
-            <span>{words.ratio} {ratioWords(both.width, both.height)}</span>
+            <span
+              >{words.ratio}
+              {ratioWords(both.width, both.height)}{locked
+                ? words.ratioKept
+                : ""}</span
+            >
             <span aria-hidden="true"> · </span>
             <span>{megapixels(both.width, both.height)} {words.megapixels}</span
             >
@@ -611,6 +643,7 @@
 
     <div
       class="flex flex-wrap items-center justify-between gap-x-space-4 gap-y-space-3 border-t border-border-hairline pt-space-5"
+      {@attach morph()}
     >
       <p
         class="mark-line type-meta m-0 flex min-w-0 items-center gap-space-1 {failure !==
@@ -625,7 +658,7 @@
             aria-hidden="true"
           />
         {/if}
-        <span class="text-pretty">{status}</span>
+        <span class="text-pretty"><MorphText text={status} wrap /></span>
       </p>
       <Button
         class="ms-auto"

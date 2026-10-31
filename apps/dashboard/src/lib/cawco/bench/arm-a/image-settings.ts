@@ -14,7 +14,8 @@ export interface Swatch {
 
 /**
  * The house accents: coral (`coral-9`, `brand-solid`) and the eight identity
- * accents (`mark-1` … `mark-8`), at their day values in
+ * accents (`mark-1` … `mark-8`), named for the colour each draws (mark-3 at
+ * 0.5 L is an ochre, mark-4 an olive, mark-5 a teal), at their day values in
  * design/tokens/cawco.tokens.json. An image's colour is the same in both
  * schemes, so the swatch carries one value, never `light-dark()`.
  */
@@ -22,9 +23,9 @@ export const SWATCHES: readonly Swatch[] = [
   { id: "coral", name: "Coral", value: "oklch(0.645 0.175 33)" },
   { id: "red", name: "Red", value: "oklch(0.51 0.168 27.9)" },
   { id: "orange", name: "Orange", value: "oklch(0.53 0.15 47.4)" },
-  { id: "yellow", name: "Yellow", value: "oklch(0.5 0.115 86.8)" },
-  { id: "green", name: "Green", value: "oklch(0.51 0.132 121.2)" },
-  { id: "cyan", name: "Cyan", value: "oklch(0.51 0.093 186.7)" },
+  { id: "ochre", name: "Ochre", value: "oklch(0.5 0.115 86.8)" },
+  { id: "olive", name: "Olive", value: "oklch(0.51 0.132 121.2)" },
+  { id: "teal", name: "Teal", value: "oklch(0.51 0.093 186.7)" },
   { id: "blue", name: "Blue", value: "oklch(0.51 0.14 251.4)" },
   { id: "purple", name: "Purple", value: "oklch(0.51 0.15 292.5)" },
   { id: "magenta", name: "Magenta", value: "oklch(0.51 0.165 349.8)" },

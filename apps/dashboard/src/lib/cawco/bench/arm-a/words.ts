@@ -13,6 +13,8 @@ export const imageSettingsWords = {
   accents: "House accents",
   custom: "Custom colour",
   customHint: "Hex or oklch, like #e65d46 or oklch(0.6 0.2 30)",
+  customIdle: (swatch: string) =>
+    `Not in use while ${swatch} is chosen. Edit it to use it.`,
   pickFromScreen: "Pick from screen",
   picking: "Picking…",
   chosen: "Chosen colour",
@@ -25,6 +27,7 @@ export const imageSettingsWords = {
   px: "px",
   lock: "Keep aspect ratio",
   ratio: "Ratio",
+  ratioKept: ", kept",
   megapixels: "MP",
   readoutWaits: "Ratio and megapixels show once the size is valid",
   apply: "Apply settings",
@@ -32,7 +35,7 @@ export const imageSettingsWords = {
   applied: "Applied to the next image",
   fixToApply: "Fix the flagged value to apply",
   applyFailed: (why: string) =>
-    `The settings didn’t apply (${why}). They’re kept here: press Apply settings again.`,
+    `${why.charAt(0).toUpperCase()}${why.slice(1)}, so the settings didn’t apply. They’re kept here: press Apply settings again.`,
   disabled: "Settings are locked while an image generates",
   colourFault: {
     unknown: (typed: string) =>
