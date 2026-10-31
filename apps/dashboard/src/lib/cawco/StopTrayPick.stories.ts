@@ -6,8 +6,10 @@
  * (`CawRunning`, an attempt named by its task's title), and what each is
  * doing as the rail has it.
  */
+
 import type { PickRow } from "./StopTrayPick.svelte";
 import StopTrayPick from "./StopTrayPick.svelte";
+import CawOffPanel from "./stop-preview/CawOffPanel.svelte";
 
 const row = (
   id: string,
@@ -202,6 +204,8 @@ export default {
   title: "Caw off/Pick what stops",
   component: StopTrayPick,
   args: { projectName: "cockpit", rows: EIGHT, checked: ids(EIGHT) },
+  /* Its width under the switch in Caw's popover on a desk: 380 less the popover's and the panel's insets. */
+  parameters: { viewport: 334 },
 };
 
 /** One task's attempt still runs: its box checked, the confirm counts one. */
@@ -279,4 +283,145 @@ export const Off = {
 /** A long list: 24 rows stand about ten tall and scroll, the edge fading where more is past it. */
 export const Long = {
   args: { rows: TWENTY_FOUR, checked: ids(TWENTY_FOUR) },
+};
+
+/* ── How turning him off ends (calls-1031-evening) ──────────────────── */
+
+/**
+ * What Caw started in Cawco-Dev, by the fleet's own session and task titles
+ * on 10-31: three tasks' attempts and five delegates, two nested, the
+ * longest task title there is, one on a machine that is away.
+ */
+const FLEET: PickRow[] = [
+  row("t128", {
+    kind: "attempt",
+    title:
+      "Model external items as structured links on tasks, with comments and state mirrored as data, for any source",
+    ran: "14m",
+  }),
+  row("ccd88", {
+    kind: "delegate",
+    parentId: "t128",
+    title: "Design decisions inbox structure options",
+    ran: "3m",
+  }),
+  row("t185", {
+    kind: "attempt",
+    title: "Make the component canvas fast in iPhone Safari",
+    activity: "blocked",
+    ran: "22m",
+  }),
+  row("t186", {
+    kind: "attempt",
+    title: "Style the update toast and reload when idle",
+    machineName: "Omars-MacBook-Pro",
+    offline: true,
+    ran: "1h",
+  }),
+  row("d952b", {
+    kind: "delegate",
+    title: "Keep routing on kept permits",
+    ran: "6m",
+  }),
+  row("48f84", {
+    kind: "delegate",
+    title: "Fix thread sheet close and paste dedupe",
+    activity: "idle",
+    ran: "",
+  }),
+  row("d8e2e", {
+    kind: "delegate",
+    title: "Build Who decides kinds slice",
+    ran: "9m",
+  }),
+  row("734b3", {
+    kind: "delegate",
+    parentId: "d8e2e",
+    title: "Add admin subagents read/write tools",
+    ran: "1m",
+  }),
+];
+
+/** The confirm's name while it asks: "Stop 8 and turn off". */
+const CONFIRM = /and turn off/u;
+
+/** The confirm pressed, the stops landing, him off: the move's end, read at off before the section folds. */
+const pressConfirm = async ({
+  canvas,
+  userEvent,
+}: {
+  canvas: { getByRole: (role: string, options: { name: RegExp }) => Element };
+  userEvent: {
+    click: (el: Element) => Promise<void>;
+    wait: (ms: number) => Promise<void>;
+  };
+}) => {
+  await userEvent.click(canvas.getByRole("button", { name: CONFIRM }));
+  await userEvent.wait(4400);
+};
+
+/** Caw's settings drawn around the section, at a form, ending one way, from a step. */
+const panel = (
+  form: "desk" | "phone",
+  endsOn: "title" | "confirm",
+  step: "pick" | "off"
+) => ({
+  component: CawOffPanel,
+  args: { projectName: "Cawco-Dev", rows: FLEET, form, endsOn, step },
+});
+
+/** On a desk, today: the title says Caw is off for Cawco-Dev, the list folds, the buttons go. */
+export const OffTitleDesk = {
+  ...panel("desk", "title", "off"),
+  parameters: { viewport: 402 },
+  from: "TurningOffTitleDesk",
+  play: pressConfirm,
+};
+
+/** On a phone, today: the title says Caw is off for Cawco-Dev, the list folds, the buttons go. */
+export const OffTitlePhone = {
+  ...panel("phone", "title", "off"),
+  parameters: { viewport: 390 },
+  from: "TurningOffTitlePhone",
+  play: pressConfirm,
+};
+
+/** On a desk, today's way: press Stop 8 and turn off to play it; the switch asks again. */
+export const TurningOffTitleDesk = {
+  ...panel("desk", "title", "pick"),
+  parameters: { viewport: 402 },
+};
+
+/** On a phone, today's way: press Stop 8 and turn off to play it; the switch asks again. */
+export const TurningOffTitlePhone = {
+  ...panel("phone", "title", "pick"),
+  parameters: { viewport: 390 },
+};
+
+/** On a desk, Forget's way: the question stays, the confirm ends on Caw is off beside Close. */
+export const OffConfirmDesk = {
+  ...panel("desk", "confirm", "off"),
+  parameters: { viewport: 402 },
+  from: "TurningOffConfirmDesk",
+  play: pressConfirm,
+};
+
+/** On a phone, Forget's way: the question stays, the confirm ends on Caw is off beside Close. */
+export const OffConfirmPhone = {
+  ...panel("phone", "confirm", "off"),
+  parameters: { viewport: 390 },
+  from: "TurningOffConfirmPhone",
+  play: pressConfirm,
+};
+
+/** On a desk, Forget's way: press Stop 8 and turn off to play it; the switch asks again. */
+export const TurningOffConfirmDesk = {
+  ...panel("desk", "confirm", "pick"),
+  parameters: { viewport: 402 },
+};
+
+/** On a phone, Forget's way: press Stop 8 and turn off to play it; the switch asks again. */
+export const TurningOffConfirmPhone = {
+  ...panel("phone", "confirm", "pick"),
+  parameters: { viewport: 390 },
 };

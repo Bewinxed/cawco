@@ -29,6 +29,12 @@ export const cawOffWords = {
   turnOff: "Turn Caw off",
   /** The confirm while the stops land. */
   stopping: (count: number) => `Stopping ${count}…`,
+  /**
+   * The confirm's word once he is off, where the confirm ends on it as
+   * Forget's ends on "Forgotten" (StopTrayPick `endsOn: "confirm"`): the
+   * owner's open call on calls-1031-evening.
+   */
+  isOff: "Caw is off",
   /** Puts the ask away; Caw stays on. */
   cancel: "Cancel",
   /** Puts the section away while the stops land; they go on. */

@@ -93,6 +93,7 @@
     step = "pick",
     checked = $bindable([]),
     refusal = null,
+    endsOn = "title",
     onpick,
     oncancel,
     onconfirm,
@@ -107,6 +108,14 @@
     checked?: string[];
     /** Turning him off was refused: the hub's words, in the head. */
     refusal?: string | null;
+    /**
+     * Where turning him off lands: the title says he is off and the
+     * actions fold (`title`, what ships), or the title stays the question
+     * and the confirm ends on "Caw is off", as Forget's ends on "Forgotten"
+     * (`confirm`). Only a story sets `confirm`: the owner's open call on
+     * calls-1031-evening; the pick's build keeps one and deletes this.
+     */
+    endsOn?: "title" | "confirm";
     /** A box changed: the ids now checked. */
     onpick?: (ids: string[]) => void;
     /** Cancel, Stop waiting or Close. */
@@ -166,8 +175,14 @@
   /* ── What each step says ────────────────────────────────────────── */
 
   const title = $derived(
-    step === "pick" ? words.ask(projectName) : words.off(projectName)
+    step === "pick" || endsOn === "confirm"
+      ? words.ask(projectName)
+      : words.off(projectName)
   );
+  /** The head says he is off: its glyph turns to the moon. */
+  const saysOff = $derived(step === "off" && endsOn === "title");
+  /** The actions stand: always, where the confirm carries the landing. */
+  const actions = $derived(step !== "off" || endsOn === "confirm");
 
   /** Once he is off: what stopped, and what waits for its machine. */
   const line = $derived.by(() => {
@@ -187,18 +202,31 @@
     if (step === "failed") {
       return commonWords.tryAgain;
     }
+    if (step === "off") {
+      return words.isOff;
+    }
     return picked.length === 0 ? words.turnOff : words.stop(picked.length);
+  });
+  /** The confirm's look: plain once he is off or with nothing to stop, else destructive. */
+  const confirmLook = $derived.by(() => {
+    if (step === "off") {
+      return "outline";
+    }
+    return step === "pick" && picked.length === 0 ? "default" : "destructive";
   });
   const cancelLabel = $derived.by(() => {
     if (step === "stopping") {
       return words.stopWaiting;
     }
-    return step === "failed" ? words.close : words.cancel;
+    return step === "failed" || step === "off" ? words.close : words.cancel;
   });
   /** The ring's share, from the press on. */
-  const progress = $derived(
-    step === "pick" || picked.length === 0 ? undefined : landed / picked.length
-  );
+  const progress = $derived.by(() => {
+    if (step === "pick" || picked.length === 0) {
+      return;
+    }
+    return step === "off" ? 1 : landed / picked.length;
+  });
 
   /* ── A row ──────────────────────────────────────────────────────── */
 
@@ -411,13 +439,13 @@
         data-box
         class="grid block-lh flex-none place-items-center type-label text-ink-muted"
       >
-        {#key step === "off"}
+        {#key saysOff}
           <span
             class="col-start-1 row-start-1 inline-grid"
             in:glyphIn
             out:glyphOut
           >
-            {#if step === "off"}
+            {#if saysOff}
               <OffGlyph class="size-icon-md" />
             {:else}
               <StopGlyph class="size-icon-md" />
@@ -491,7 +519,7 @@
       </div>
     {/if}
 
-    {#if step !== "off"}
+    {#if actions}
       <div
         data-slot="actions"
         class="flex flex-wrap justify-end gap-space-2"
@@ -508,14 +536,14 @@
           data-stop-confirm
           failed={step === "failed"}
           label={confirmLabel}
-          onclick={step === "stopping" ? undefined : onconfirm}
+          onclick={step === "stopping" || step === "off"
+            ? undefined
+            : onconfirm}
           pending={step === "stopping"}
           pendingLabel={words.stopping(Math.max(picked.length - landed, 1))}
           {progress}
           size="sm"
-          variant={step === "pick" && picked.length === 0
-            ? "default"
-            : "destructive"}
+          variant={confirmLook}
         />
       </div>
     {/if}
