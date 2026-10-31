@@ -434,7 +434,8 @@
       </p>
     {/if}
 
-    <div class="flex min-h-0 flex-1 gap-space-2">
+    <!-- Clipped to its room: folded to the dock's head, the lanes' padding and the sticky ruler stand inside it, never under the dock's edge. -->
+    <div class="flex min-h-0 flex-1 gap-space-2 overflow-clip">
       <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <div
           aria-hidden="true"
