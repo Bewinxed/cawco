@@ -91,6 +91,7 @@
     "./words/relaunch": "./src/words/relaunch.ts",
     "./words/notices": "./src/words/notices.ts",
     "./words/design-graph": "./src/words/design-graph.ts",
+    "./words/graph-proto": "./src/words/graph-proto.ts",
     "./words/containers": "./src/words/containers.ts",
     "./words/spawn": "./src/words/spawn.ts",
     "./words/machine-reads": "./src/words/machine-reads.ts",
