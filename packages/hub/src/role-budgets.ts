@@ -51,9 +51,12 @@ import type { Tasks } from "./tasks";
  * 2026-10-31: only a session that talks with the person lists no_reply_needed,
  * so no work item and no triage run does (worker 28,632, delegate 10,550,
  * curator 1,166 measured). The delegate's and curator's budgets are lowered to it.
+ * 2026-10-31: admin_subagents_read and admin_subagents_write, so a fleet
+ * subagent is changed with the owner's approval like every other kind of
+ * fleet configuration (worker 29,065 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 28_700,
+  worker: 29_100,
   delegate: 10_600,
   overseer: 770,
   "web-facing": 3400,

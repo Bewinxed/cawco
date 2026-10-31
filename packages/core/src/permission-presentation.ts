@@ -104,7 +104,8 @@ export type AdminGroup =
   | "plugins"
   | "previews"
   | "rules"
-  | "skills";
+  | "skills"
+  | "subagents";
 
 /**
  * Where an install fetches from, as the hub read it when the call was
@@ -852,6 +853,49 @@ function hooksWrite(
   }
 }
 
+/**
+ * `admin_subagents_write`: a subagent's file, its change as the changed lines
+ * alone ({@link hunkOf}), as a memory document's is.
+ */
+function subagentsWrite(
+  input: Record<string, unknown>,
+  context: PresentationContext
+): Presented {
+  const name = text(input.name) ?? "(unnamed)";
+  const now = text(input.name)
+    ? text(context.current("subagents", name)?.content)
+    : undefined;
+  const file = `${name}.md`;
+  if (input.action === "remove") {
+    if (now === undefined) {
+      return only(`Remove subagent ${name}`, [
+        { key: "note", value: "The fleet keeps no subagent of this name." },
+      ]);
+    }
+    const { change: made, detail } = hunkOf(file, now, "");
+    return {
+      summary: `Remove subagent ${name}`,
+      detail,
+      changes: [made],
+      fields: [
+        {
+          key: "machines",
+          value: "keep their copy until their next sync",
+        },
+      ],
+    };
+  }
+  const content = typeof input.content === "string" ? input.content : "";
+  const { change: made, detail } = hunkOf(file, now ?? "", content);
+  return {
+    summary:
+      now === undefined ? `Add subagent ${name}` : `Change subagent ${name}`,
+    detail,
+    changes: [made],
+    fields: [{ key: "loads in", value: "every machine's Claude Code" }],
+  };
+}
+
 function rulesWrite(
   input: Record<string, unknown>,
   context: PresentationContext
@@ -1088,6 +1132,8 @@ function adminGroupWrite(
       return hooksWrite(input, context);
     case "rules":
       return rulesWrite(input, context);
+    case "subagents":
+      return subagentsWrite(input, context);
     case "plugins":
       return pluginsWrite(input, context);
     case "delegate_types":

@@ -1,13 +1,14 @@
 /**
  * The fleet's settings as an agent reads them (admin-tools.ts): one line per
- * delegate type, connection, skill, plugin, MCP server, rule, hook, memory
- * document, Claude Code settings row, OpenCode plugin or pi extension, each
+ * delegate type, connection, skill, plugin, MCP server, rule, hook, subagent,
+ * memory document, Claude Code settings row, OpenCode plugin or pi extension, each
  * by the name its write takes; a write answers the row it
  * saved, a removal what the dashboard can still undo.
  */
 import {
   type ConnectionView,
   type DelegateType,
+  type FleetAgent,
   type FleetHarnessConfig,
   type FleetHook,
   type FleetMarketplace,
@@ -19,6 +20,7 @@ import {
   type HarnessConfigKind,
   harnessConfigLabel,
   type MemoryScope,
+  parseAgentFrontMatter,
   type RuleRow,
 } from "@cawco/core";
 import {
@@ -282,6 +284,60 @@ export const hookSettingsWords = (answer: unknown, asked: Asked): Presented => {
     );
   }
   return lines("Saved:", hookLine(answer as FleetHook));
+};
+
+/** A refusal the subagent routes answer (admin-tools.ts `AGENT_REFUSALS`). */
+interface AgentRefused {
+  answer: FleetAgent | string;
+  refused: number;
+}
+
+const isAgentRefused = (answer: unknown): answer is AgentRefused =>
+  typeof answer === "object" && answer !== null && "refused" in answer;
+
+/** One subagent's file, under the hash put and remove take back. */
+const agentFileWords = (agent: FleetAgent, lead = ""): string =>
+  lines(
+    `${lead}Subagent ${agent.name}, hash ${agent.hash.slice(0, HASH_HANDLE)} (expectedHash takes it):`,
+    agent.content
+  );
+
+/** admin_subagents: each name and description, one file, or what a write did. */
+export const subagentSettingsWords = (
+  answer: unknown,
+  asked: Asked
+): Presented => {
+  if (isAgentRefused(answer)) {
+    return typeof answer.answer === "string"
+      ? `Refused: ${answer.answer}; list names them.`
+      : agentFileWords(
+          answer.answer,
+          `Refused, nothing written: ${asked.expectedHash === "" ? "the name is taken" : "it moved since your read"}. Now: `
+        );
+  }
+  if (isDeleted(answer)) {
+    return `${removedWords(`subagent ${asked.name}`, answer)} Each machine keeps its copy of the file until its next sync.`;
+  }
+  switch (asked.action) {
+    case "list": {
+      const { agents } = answer as { agents: FleetAgent[] };
+      return agents.length === 0
+        ? 'No subagents: put with expectedHash "" adds one.'
+        : lines(
+            `${count(agents.length, "subagent")}; get takes the name:`,
+            agents.map(
+              (agent) =>
+                `- ${agent.name}: ${parseAgentFrontMatter(agent.content).description ?? "no description"}`
+            )
+          );
+    }
+    case "get":
+      return agentFileWords(answer as FleetAgent);
+    default: {
+      const agent = answer as FleetAgent;
+      return `Saved subagent ${agent.name}, ${count(agent.content.split("\n").length, "line")}, hash ${agent.hash.slice(0, HASH_HANDLE)}.`;
+    }
+  }
 };
 
 const scopeWords = (scope: MemoryScope | undefined): string => {

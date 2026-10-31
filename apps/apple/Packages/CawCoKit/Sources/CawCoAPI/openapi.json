@@ -24629,6 +24629,9 @@
                 "properties": {
                   "content": {
                     "type": "string"
+                  },
+                  "expectedHash": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -24660,6 +24663,36 @@
               }
             }
           },
+          "404": {
+            "description": "putApiFleetAgentsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiFleetAgentsByName404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiFleetAgentsByName 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiFleetAgentsByName409"
+                }
+              }
+            }
+          },
           "422": {
             "description": "putApiFleetAgentsByName 422",
             "content": {
@@ -24678,6 +24711,14 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedHash",
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -24701,6 +24742,36 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiFleetAgentsByName404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiFleetAgentsByName 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiFleetAgentsByName409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiFleetAgentsByName 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -30999,6 +31070,122 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "putApiFleetAgentsByName404": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When the hub last stored it, ms epoch.",
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "content": {
+            "type": "string"
+          },
+          "hash": {
+            "description": "sha256 hex of `content` — what tells a machine's copy apart from the fleet's.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "bytes",
+          "content",
+          "hash",
+          "name"
+        ]
+      },
+      "putApiFleetAgentsByName409": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When the hub last stored it, ms epoch.",
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "content": {
+            "type": "string"
+          },
+          "hash": {
+            "description": "sha256 hex of `content` — what tells a machine's copy apart from the fleet's.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "bytes",
+          "content",
+          "hash",
+          "name"
+        ]
+      },
+      "deleteApiFleetAgentsByName404": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When the hub last stored it, ms epoch.",
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "content": {
+            "type": "string"
+          },
+          "hash": {
+            "description": "sha256 hex of `content` — what tells a machine's copy apart from the fleet's.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "bytes",
+          "content",
+          "hash",
+          "name"
+        ]
+      },
+      "deleteApiFleetAgentsByName409": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When the hub last stored it, ms epoch.",
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "content": {
+            "type": "string"
+          },
+          "hash": {
+            "description": "sha256 hex of `content` — what tells a machine's copy apart from the fleet's.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "bytes",
+          "content",
+          "hash",
+          "name"
         ]
       },
       "postApiFleetAgentsPush200": {

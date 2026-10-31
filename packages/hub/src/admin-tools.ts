@@ -1,6 +1,6 @@
 /**
  * Fleet administration tools: agents manage cawco's settings (delegate types,
- * skills, plugins, MCP servers, rules, hooks, memory) through the same MCP server
+ * skills, plugins, MCP servers, rules, hooks, subagents, memory) through the same MCP server
  * the handoff tools ride.
  *
  * Every write goes through the hub's own REST API so it shares the same
@@ -10,6 +10,7 @@
 import {
   type ConnectionAuth,
   EFFORT_LEVELS,
+  type FleetAgent,
   type FleetHook,
   type FleetMemory,
   type FleetMemoryDoc,
@@ -43,6 +44,7 @@ import {
   previewSettingsWords,
   ruleSettingsWords,
   skillSettingsWords,
+  subagentSettingsWords,
 } from "./presenters/fleet-settings";
 
 /**
@@ -60,11 +62,22 @@ const MADE_AUTHS = [
   "oauth",
 ] as const satisfies readonly ConnectionAuth[];
 
-/** JSON helper — calls a hub route and returns the parsed response, or throws a sentence. */
-const api = async (
+/** A hub route's refusal the caller reads itself ({@link request}'s `statuses`). */
+interface Refused {
+  answer: unknown;
+  refused: number;
+}
+
+/**
+ * Calls a hub route and returns the parsed response, or throws a sentence. A
+ * status in `statuses` answers as {@link Refused} with its body instead: a
+ * stale-hash refusal carries what is really there.
+ */
+const request = async (
   method: string,
   path: string,
-  body?: unknown
+  body: unknown,
+  statuses: readonly number[]
 ): Promise<unknown> => {
   const url = `${hubHttpUrl()}${path}`;
   const asked = await readWithin(TIMEOUT_MS, async (signal) => {
@@ -79,16 +92,21 @@ const api = async (
           }),
       signal,
     });
+    const contentType = response.headers.get("content-type") ?? "";
+    const parsed = async (): Promise<unknown> =>
+      (await (contentType.includes("json")
+        ? response.json()
+        : response.text())) as unknown;
+    if (statuses.includes(response.status)) {
+      return { refused: response.status, answer: await parsed() } as Refused;
+    }
     if (!response.ok) {
       const text = await response.text();
       throw new Error(
         `${method} ${path} → ${response.status}: ${text.slice(0, 500)}`
       );
     }
-    const contentType = response.headers.get("content-type") ?? "";
-    return (await (contentType.includes("json")
-      ? response.json()
-      : response.text())) as unknown;
+    return await parsed();
   });
   switch (asked.kind) {
     case "answered":
@@ -101,6 +119,20 @@ const api = async (
       unhandled("read", asked);
   }
 };
+
+/** JSON helper — calls a hub route and returns the parsed response, or throws a sentence. */
+const api = (method: string, path: string, body?: unknown): Promise<unknown> =>
+  request(method, path, body, []);
+
+/**
+ * The subagent routes' refusals a write answers with rather than throws: the
+ * file it named is gone (404), or moved since its read (409, the stored file).
+ */
+const AGENT_REFUSALS = [404, 409] as const;
+
+/** Every subagent's name, for a refusal that names what there is. */
+const listedNames = (agents: readonly FleetAgent[]): string =>
+  agents.length === 0 ? "none" : agents.map((agent) => agent.name).join(", ");
 
 /** The fields a call gave: none undefined, no empty list. */
 const fieldsGiven = (
@@ -1115,6 +1147,85 @@ export function adminTools() {
       },
       hookSettingsWords,
       " 'create' adds one (the hub mints the id), 'update' edits by id, 'remove' deletes by id."
+    ),
+
+    // ── subagents ────────────────────────────────────────────────────────
+    ...admin(
+      "subagents",
+      `the fleet's Claude Code subagents, the files in every machine's ${userLayerLabel("agents")}/. ` +
+        "'list': names and descriptions; 'get': one file and its hash.",
+      ["list", "get"],
+      ["put", "remove"],
+      {
+        name: z
+          .string()
+          .optional()
+          .describe("Its front matter's `name`. Required but for list."),
+        content: z
+          .string()
+          .optional()
+          .describe(
+            "The whole file: front matter (name, description) over the prompt. Required for put."
+          ),
+        expectedHash: z
+          .string()
+          .optional()
+          .describe(
+            'Required: the hash get answered, "" for a new one. A moved file is refused with what it holds now.'
+          ),
+      },
+      async ({ action, name, content, expectedHash }) => {
+        const { agents = [] } = (await api("GET", "/api/fleet")) as {
+          agents?: FleetAgent[];
+        };
+        if (action === "list") {
+          return { agents };
+        }
+        if (!name) {
+          throw new Error(`name is required to ${action} a subagent`);
+        }
+        const kept = agents.find((agent) => agent.name === name);
+        if (action === "get") {
+          if (!kept) {
+            throw new Error(
+              `the fleet keeps no subagent ${name}; it keeps ${listedNames(agents)}`
+            );
+          }
+          return kept;
+        }
+        if (expectedHash === undefined) {
+          throw new Error(
+            `expectedHash is required to ${action} a subagent: the hash get answered, or "" for a new one`
+          );
+        }
+        // The handle a read shows stands for the stored hash it starts.
+        const hash =
+          expectedHash.length >= HASH_HANDLE &&
+          kept?.hash.startsWith(expectedHash)
+            ? kept.hash
+            : expectedHash;
+        const path = `/api/fleet/agents/${encodeURIComponent(name)}`;
+        if (action === "remove") {
+          return await request(
+            "DELETE",
+            `${path}?expectedHash=${encodeURIComponent(hash)}`,
+            undefined,
+            AGENT_REFUSALS
+          );
+        }
+        if (content === undefined) {
+          throw new Error("content is required to put a subagent");
+        }
+        return await request(
+          "PUT",
+          path,
+          { content, expectedHash: hash },
+          AGENT_REFUSALS
+        );
+      },
+      subagentSettingsWords,
+      " A removal leaves each machine's copy until its next sync.",
+      ["name"]
     ),
 
     // ── Claude Code settings, OpenCode plugins, pi extensions ────────────

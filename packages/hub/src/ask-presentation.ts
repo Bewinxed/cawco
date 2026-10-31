@@ -172,6 +172,10 @@ export const createAskPresenter = (
           }
         );
       }
+      case "subagents": {
+        const agent = db.listFleetAgents().find((one) => one.name === key);
+        return agent && { content: agent.content };
+      }
       case "previews":
         return { ...db.previews.settings() };
       default:
