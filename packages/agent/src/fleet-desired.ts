@@ -174,6 +174,11 @@ export class FleetDesired {
     this.#keep({ ...this.#converged, generation });
   }
 
+  /** The agent build whose converge of every part last ended (fleet-converged.ts `build`). */
+  get convergedBuild(): string | undefined {
+    return this.#converged.build;
+  }
+
   /** The report the machine last sent, as the disk keeps it; none before its first converge. */
   get report(): FleetSyncReport | undefined {
     return this.#converged.report;
@@ -281,14 +286,16 @@ export class FleetDesired {
    * A converge came to `statuses` over `ids` and to `report`, and every
    * generation up to `generation` has converged: a force on any of them is
    * spent, each that came out ok is converged at its hash, each no longer
-   * held is converged away, and the report is the one kept. Kept on disk; a
+   * held is converged away, and the report is the one kept; `build`, the
+   * build that converged every part, when this one did. Kept on disk; a
    * write that fails is said, and the next converge writes again.
    */
   converged(
     ids: readonly string[],
     statuses: readonly FleetItemStatus[],
     report: FleetSyncReport | undefined,
-    generation: number
+    generation: number,
+    build?: string
   ): void {
     const items = { ...this.#converged.items };
     for (const id of ids) {
@@ -302,7 +309,9 @@ export class FleetDesired {
         items[status.id] = status.hash;
       }
     }
+    const kept = build ?? this.#converged.build;
     this.#keep({
+      ...(kept ? { build: kept } : {}),
       generation,
       items,
       report: report ?? this.#converged.report,

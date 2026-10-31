@@ -31987,12 +31987,18 @@ export const createServer = (
         if (!row) {
           return status(404, `no plugin ${params.id} in this fleet`);
         }
-        // The machines are told only when the fleet's copy changed.
+        // A copy that changed goes to the machines as the item it moved; one
+        // that came back the same is sent forced, so every machine online
+        // converges its plugins again all the same: a refresh is the person's
+        // way to have them do it.
         detach(
           fetchPlugins([params.id]).then((changed) => {
             if (changed) {
               fanOutFetched(`plugin ${params.id}`);
+              return;
             }
+            fleetSyncs.forceReady([`plugin:${params.id}`]);
+            fleetChanged(`a refresh of plugin ${params.id}, its copy the same`);
           }),
           "plugin refresh"
         );

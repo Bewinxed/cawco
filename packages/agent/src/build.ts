@@ -22,3 +22,14 @@ export const buildInfo = (): Promise<BuildInfo> => {
   });
   return reported;
 };
+
+/**
+ * This build, in one string: its version, its commit, and whether its checkout
+ * was dirty. What the fleet converge keeps beside the build that last
+ * converged every part (fleet-converged.ts `build`), so a new build converges
+ * every part once under its own rules.
+ */
+export const buildKey = async (): Promise<string> => {
+  const { version, commit, dirty } = await buildInfo();
+  return `${version}${commit ? ` ${commit}` : ""}${dirty ? " dirty" : ""}`;
+};

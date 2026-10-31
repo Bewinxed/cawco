@@ -297,6 +297,17 @@ export class FleetSync {
     this.#forced.set(machineId, owed);
   }
 
+  /**
+   * `ids` forced on every machine the next delta goes to (the ones online):
+   * each converges them again though their hashes did not move, as a
+   * refresh whose fetch came back the same asks.
+   */
+  forceReady(ids: readonly string[]): void {
+    for (const machineId of this.#ready) {
+      this.force(machineId, ids);
+    }
+  }
+
   /** The machine's heartbeat: a delta it refused a minute ago or more goes again. */
   heartbeat(machineId: string): void {
     const refusedAt = this.#owed.get(machineId);

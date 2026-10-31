@@ -20,6 +20,14 @@ import { z } from "zod";
 
 export interface FleetConverged {
   /**
+   * The agent build (build.ts `buildKey`) whose converge of every part last
+   * ended. A build that is not it converges every part once as the hub
+   * welcomes it: what an earlier build's rules left (a plugin record at a
+   * scope it did not look at) is the new build's to take away, with nothing
+   * moved at the hub. None before the first such converge.
+   */
+  build?: string;
+  /**
    * The generation of the desired state whose converge has ended: every
    * item a delta up to it moved was converged (ok or failed), its
    * `convergedGeneration` beside the `observedGeneration` it kept (core
@@ -33,6 +41,7 @@ export interface FleetConverged {
 }
 
 const FleetConvergedShape = z.object({
+  build: z.string().optional(),
   generation: z.number().optional(),
   items: z.record(z.string(), z.string()),
   report: FleetSyncReportSchema.optional(),

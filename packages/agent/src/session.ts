@@ -184,6 +184,7 @@ import {
   closeBrowserDoor,
   forgetBrowserDoor,
 } from "./browser/door";
+import { buildKey } from "./build";
 import {
   closeCanvasScreen,
   closeCanvasScreens,
@@ -5713,6 +5714,18 @@ export class SessionSupervisor {
       }
     }
     this.#reconvergeValue ||= delta.reconverge === true;
+    // A build that has not converged every part yet (an update, a first
+    // start) does, as the hub welcomes it: what an earlier build's rules
+    // left behind is this one's to take away, though nothing moved at the hub.
+    if (delta.welcome) {
+      const build = await buildKey();
+      if (this.#desired.convergedBuild !== build) {
+        console.info(
+          `[fleet] this build (${build}) converges every part once: the last to converge them all was ${this.#desired.convergedBuild ?? "none on record"}`
+        );
+        this.#reconvergeValue = true;
+      }
+    }
     const denied = this.#desired.deniedTools;
     if (denied && (applied.policy || delta.welcome)) {
       this.#writePolicy(denied, applied.policy);
@@ -5960,7 +5973,8 @@ export class SessionSupervisor {
         ids,
         statuses,
         report,
-        owedSince ? generation : (this.#desired.generation ?? generation)
+        owedSince ? generation : (this.#desired.generation ?? generation),
+        all && !thrown ? await buildKey() : undefined
       );
       this.#converging(generation, statuses);
       if (report) {
