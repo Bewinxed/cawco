@@ -80,7 +80,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { resolveClaudeExecutable } from "./auth";
-import { excludeFromCheckout } from "./checkout-exclude";
+import { excludeFromCheckout, gitIn } from "./checkout-exclude";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { readFleetDenials, sidecarTurn } from "./denied-tools";
 import { readyHarnessRows, syncHarnessConfig } from "./fleet-harness-config";
@@ -1631,6 +1631,21 @@ const outsideUserScope = (
   );
 
 /**
+ * Whether the project `project`'s `.claude/settings.json` is a file its
+ * repository tracks: the file a project-scope uninstall edits, and one the
+ * sync never writes. The home folder's is the user's own settings file
+ * (`~/.claude/settings.json`), whatever a dotfiles repository says of it.
+ */
+const committedSettings = async (project: string): Promise<boolean> =>
+  project !== dirname(dirname(SETTINGS_PATH)) &&
+  (await gitIn(project, [
+    "ls-files",
+    "--error-unmatch",
+    "--",
+    projectClaudeDir(project, "settings.json"),
+  ])) !== undefined;
+
+/**
  * Uninstalls each record at its own scope: `claude plugin uninstall <id>
  * --scope <scope>`, run in the record's project for a project or local one,
  * because those scopes are the project the command runs in
@@ -1658,6 +1673,16 @@ const dropRecords = async (
     if (record.scope !== "user" && !(project && (await dirExists(project)))) {
       continue;
     }
+    if (
+      record.scope === "project" &&
+      project &&
+      (await committedSettings(project))
+    ) {
+      left.push(
+        `${record.id} is also installed in ${project}'s committed settings; remove it there`
+      );
+      continue;
+    }
     const ran = await runClaude(
       bin,
       ["plugin", "uninstall", record.id, "--scope", record.scope],
@@ -1670,7 +1695,7 @@ const dropRecords = async (
       dropped += 1;
       console.info(`[fleet] ${record.id}: uninstalled at ${where}`);
     } else {
-      left.push(`${record.id} at ${where}: ${ran.output}`);
+      left.push(`${record.id} stays installed at ${where}: ${ran.output}`);
     }
   }
   return { dropped, left };
@@ -1868,7 +1893,7 @@ const syncVendoredPlugins = async (
         ? { state: "applied" }
         : {
             state: "applied",
-            detail: `an upstream copy stays installed: ${left.join("; ")}`,
+            detail: left.join("; "),
           };
   }
 
