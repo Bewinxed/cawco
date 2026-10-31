@@ -5,7 +5,7 @@ description: Triage a project's tasks into needs-info, ready-for-agent, ready-fo
 
 # Triage
 
-Every task gets one of four **states**. A state is a label on the task plus the stage it sits in. The stage does the work: the dispatcher starts any task in a stage of kind `todo` whose `after` tasks are done, and Needs you shows every task in a stage of kind `you`. So a task that is not ready for an agent must leave its `todo` stage.
+Every task gets one of four **states**. A state is a label on the task plus the stage it sits in. The stage does the work: the dispatcher starts any task in a stage of kind `todo` whose `waits_on` targets have settled, and Needs you shows every task in a stage of kind `you`. So a task that is not ready for an agent must leave its `todo` stage.
 
 | State | Label | Stage | Before it moves there |
 |---|---|---|---|
