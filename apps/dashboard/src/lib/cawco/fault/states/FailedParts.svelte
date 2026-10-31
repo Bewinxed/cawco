@@ -145,7 +145,7 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
   <div class="size-full bg-surface-well"></div>
 {/snippet}
 
-{#snippet transcript()}
+{#snippet transcript(pill = true)}
   <div
     class="flex min-h-0 flex-1 flex-col justify-end gap-space-4 bg-tab-sheet px-space-6 pb-space-4"
   >
@@ -153,11 +153,13 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
       The side panel crash: your console shows a list that got two items with
       the same key.
     </p>
-    <div
-      class="flex h-c-input-h max-w-c-composer-w items-center rounded-lg border border-border-control bg-surface-raised px-space-3 text-ink-subtle shadow-tile type-body"
-    >
-      Write to Claude Code
-    </div>
+    {#if pill}
+      <div
+        class="flex h-c-input-h max-w-c-composer-w items-center rounded-lg border border-border-control bg-surface-raised px-space-3 text-ink-subtle shadow-tile type-body"
+      >
+        Write to Claude Code
+      </div>
+    {/if}
   </div>
 {/snippet}
 
@@ -252,7 +254,7 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
     {@render transcript()}
   {:else}
     <div class="relative flex min-h-0 flex-1 flex-col">
-      {@render transcript()}
+      {@render transcript(false)}
       <div class="pointer-events-none absolute inset-0 z-1">
         <RegionBoundary face="composer" part="composer">
           <Throws {builds} {stuck} />
