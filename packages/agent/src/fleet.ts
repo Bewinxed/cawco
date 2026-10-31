@@ -722,9 +722,15 @@ const ranFailed = (ran: Ran): FleetItemState => ({
  * install into. Killed rather than left running if it hangs: a marketplace
  * behind a dead network would otherwise hold the whole sync open forever.
  */
-const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
+const runClaude = async (
+  bin: string,
+  args: string[],
+  cwd?: string
+): Promise<Ran> => {
   const ran = await readWithin(CLI_TIMEOUT_MS, async (signal) => {
     const child = Bun.spawn([bin, ...args], {
+      // A project or local scope is the project the command runs in.
+      ...(cwd ? { cwd } : {}),
       // `$HOME/.claude`, the dir every path in this file names, whatever
       // config dir the daemon itself was started in.
       env: claudeHomeEnv(),
@@ -866,6 +872,7 @@ const ListedPlugin = z.object({
   folderVersion: z.string().optional(),
   id: z.string(),
   installPath: z.string().optional(),
+  projectPath: z.string().optional(),
   readFromFolder: z.string().optional(),
   scope: z.string(),
   version: z.string(),
@@ -1576,6 +1583,68 @@ const installCarried = async (
   };
 };
 
+/** The ids Claude Code lists for plugins that come from no marketplace. */
+const NOT_FROM_A_MARKETPLACE = new Set(["skills-dir", "inline", "synced"]);
+
+/** The scopes `claude plugin uninstall --scope` takes. */
+const UNINSTALL_SCOPES = new Set(["user", "project", "local"]);
+
+/**
+ * Every install of plugin `name` from a marketplace that is not one of the
+ * fleet's vendored ones (`vendored`), at every scope it is recorded under: a
+ * second copy beside the carried one, whose skills sessions would list under
+ * the same `<name>:` prefix. A managed install is the organization's and is
+ * left as it is.
+ */
+const upstreamCopies = (
+  name: string,
+  vendored: ReadonlySet<string>,
+  listed: readonly ListedPlugin[]
+): ListedPlugin[] =>
+  listed.filter((one) => {
+    const [plugin, marketplace = ""] = one.id.split("@");
+    return (
+      plugin === name &&
+      !vendored.has(marketplace) &&
+      !NOT_FROM_A_MARKETPLACE.has(marketplace) &&
+      UNINSTALL_SCOPES.has(one.scope)
+    );
+  });
+
+/**
+ * Uninstalls each copy at its own scope: `claude plugin uninstall <id>
+ * --scope <scope>`, run in the copy's project for a project or local one,
+ * because those scopes are the project the command runs in
+ * (https://code.claude.com/docs/en/plugins/cli-reference#plugin-uninstall:
+ * "Remove an installed plugin from one scope"). A copy whose project folder
+ * is gone is skipped: no session starts there. Answers each copy that stays,
+ * with what the CLI said.
+ */
+const dropUpstreamCopies = async (
+  bin: string,
+  copies: readonly ListedPlugin[]
+): Promise<string[]> => {
+  const left: string[] = [];
+  for (const copy of copies) {
+    const project = copy.scope === "user" ? undefined : copy.projectPath;
+    if (copy.scope !== "user" && !(project && (await dirExists(project)))) {
+      continue;
+    }
+    const ran = await runClaude(
+      bin,
+      ["plugin", "uninstall", copy.id, "--scope", copy.scope],
+      project
+    );
+    const where = project ? `${copy.scope} scope in ${project}` : "user scope";
+    if (ran.code === 0) {
+      console.info(`[fleet] ${copy.id}: uninstalled at ${where}`);
+    } else {
+      left.push(`${copy.id} at ${where}: ${ran.output}`);
+    }
+  }
+  return left;
+};
+
 /**
  * Installs the vendored plugins, and answers with what each one came to.
  *
@@ -1649,7 +1718,8 @@ const syncVendoredPlugins = async (
   }
 
   // What Claude Code holds installed, read once: whether each plugin is
-  // installed at all, and whether its record lags the folder it loads from.
+  // installed at all, whether its record lags the folder it loads from, and
+  // which upstream copies of it are installed beside it.
   const carried = wanted.filter(({ id }) => byId.has(id));
   const listed =
     carried.length > 0
@@ -1666,6 +1736,7 @@ const syncVendoredPlugins = async (
       }
     : listed;
 
+  const vendored = new Set([...groups.keys()].map(vendorName));
   for (const { id } of carried) {
     const plugin = byId.get(id);
     if (!plugin) {
@@ -1702,24 +1773,23 @@ const syncVendoredPlugins = async (
       continue;
     }
 
-    // The copy this one replaces. A machine that installed the plugin the old
-    // way — from its upstream marketplace — is still carrying it, and leaving
-    // both would load the same skills and subagents twice. Checked on every
-    // sync rather than only on the install, because the machine that most needs
-    // it is the one already holding both: it takes the fast path from here on,
-    // and a hand-over that only ran once would never reach it.
-    if (id !== vendoredId && (await isInstalled(id))) {
-      await runClaude(bin, [
-        "plugin",
-        "uninstall",
-        id,
-        "--scope",
-        "user",
-        "-y",
-      ]);
-    }
+    // The copies this one replaces. A machine that installed the plugin the
+    // old way, from its upstream marketplace, at any scope, still carries it,
+    // and a session there would load the same skills and subagents twice.
+    // Checked on every sync rather than only on the install, because the
+    // machine that most needs it is the one already holding both.
+    const left = await dropUpstreamCopies(
+      bin,
+      upstreamCopies(plugin.name, vendored, listed.ok ? listed.plugins : [])
+    );
     written[id] = plugin.hash;
-    report[id] = { state: "applied" };
+    report[id] =
+      left.length === 0
+        ? { state: "applied" }
+        : {
+            state: "applied",
+            detail: `an upstream copy stays installed: ${left.join("; ")}`,
+          };
   }
 
   for (const id of Object.keys(managed)) {
