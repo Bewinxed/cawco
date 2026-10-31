@@ -173,8 +173,11 @@
   }
 </script>
 
+<!-- Nothing here clips: the track's touch area stands outside its box
+     (DESIGN.md, The 44 Touch Rule), and a clip round it would take the press
+     away with the drawing. The fill and pips clip in their own layer. -->
 <div
-  class="relative grid overflow-hidden rounded-md border border-border-hairline bg-surface-recess p-space-3 data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0"
+  class="relative grid rounded-md border border-border-hairline bg-surface-recess p-space-3 data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0"
   data-embedded={embedded || undefined}
 >
   <div
@@ -186,7 +189,7 @@
       data-slot="track"
       data-focus={focused || undefined}
       data-ready={ready || undefined}
-      class="group relative h-c-btn-h-sm max-phone:h-c-effort-track-h-phone cursor-ew-resize touch-none overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
+      class="group touch-hit hit-edge-hair relative h-c-btn-h-sm max-phone:h-c-effort-track-h-phone cursor-ew-resize touch-none rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
       onpointercancel={() => {
         draft = null;
         drag = false;
@@ -201,87 +204,92 @@
       {@attach measureTrack}
     >
       <div
-        data-slot="fill"
-        class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-md bg-surface-recess-deep p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out group-not-data-ready:transition-none"
-        style:width={`calc(var(--kw) + ${p} * (100% - var(--kw)))`}
+        data-slot="clip"
+        class="pointer-events-none absolute inset-0 overflow-hidden rounded-md"
       >
         <div
-          data-slot="knob"
-          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-knob transition-[color,opacity] pointer-events-none duration-(--dur-control) ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
-          data-active={active || undefined}
-          style:--bars={n}
-          style:opacity={n ? 1 : 0.7}
-          {@attach measureKnob}
+          data-slot="fill"
+          class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-md bg-surface-recess-deep p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out group-not-data-ready:transition-none"
+          style:width={`calc(var(--kw) + ${p} * (100% - var(--kw)))`}
         >
-          <!-- The chip is as wide as its longest label so the rail never moves.
+          <div
+            data-slot="knob"
+            class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-knob transition-[color,opacity] pointer-events-none duration-(--dur-control) ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
+            data-active={active || undefined}
+            style:--bars={n}
+            style:opacity={n ? 1 : 0.7}
+            {@attach measureKnob}
+          >
+            <!-- The chip is as wide as its longest label so the rail never moves.
                The ghost holds that width; the icon and the label sit together,
                centred in it, so a short label leaves no gap beside it. -->
-          <span
-            data-slot="ghost"
-            aria-hidden="true"
-            class="invisible col-start-1 row-start-1 grid justify-items-start ps-(--ps)"
-            style:--ps={"calc(var(--bars) * var(--space-1) - var(--space-row) + var(--space-1))"}
-          >
-            {#each efforts as level (level)}
-              <span class="col-start-1 row-start-1">{level}</span>
-            {/each}
-          </span>
-          <span
-            class="mark-line col-start-1 row-start-1 flex items-center gap-space-1"
-          >
-            {#if n}
-              <!-- One bar per level, all the same size on whole pixels; the lit
+            <span
+              data-slot="ghost"
+              aria-hidden="true"
+              class="invisible col-start-1 row-start-1 grid justify-items-start ps-(--ps)"
+              style:--ps={"calc(var(--bars) * var(--space-1) - var(--space-row) + var(--space-1))"}
+            >
+              {#each efforts as level (level)}
+                <span class="col-start-1 row-start-1">{level}</span>
+              {/each}
+            </span>
+            <span
+              class="mark-line col-start-1 row-start-1 flex items-center gap-space-1"
+            >
+              {#if n}
+                <!-- One bar per level, all the same size on whole pixels; the lit
                    ones say where the level sits. -->
-              <svg
-                aria-hidden="true"
-                class="block flex-none"
-                height="10"
-                viewBox={`0 0 ${n * 4 - 2} 10`}
-                width={n * 4 - 2}
-              >
-                {#each efforts as level, i (level)}
-                  <rect
-                    class="fill-ink-strong opacity-22"
-                    height="10"
-                    rx="1"
-                    width="2"
-                    x={i * 4}
-                  />
-                  <rect
-                    data-slot="bar-fill"
-                    class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:duration-(--dur-morph) motion-safe:ease-out group-not-data-ready:transition-none"
-                    height="10"
-                    rx="1"
-                    style:--delay={staggered(barStep(i))}
-                    style:--t={i <= effortIdx ? "scaleY(1)" : "scaleY(0)"}
-                    width="2"
-                    x={i * 4}
-                  />
-                {/each}
-              </svg>
-            {/if}
-            {#if n}
-              <!-- The word morphs letter by letter into the next. The chip is as wide
+                <svg
+                  aria-hidden="true"
+                  class="block flex-none"
+                  height="10"
+                  viewBox={`0 0 ${n * 4 - 2} 10`}
+                  width={n * 4 - 2}
+                >
+                  {#each efforts as level, i (level)}
+                    <rect
+                      class="fill-ink-strong opacity-22"
+                      height="10"
+                      rx="1"
+                      width="2"
+                      x={i * 4}
+                    />
+                    <rect
+                      data-slot="bar-fill"
+                      class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:duration-(--dur-morph) motion-safe:ease-out group-not-data-ready:transition-none"
+                      height="10"
+                      rx="1"
+                      style:--delay={staggered(barStep(i))}
+                      style:--t={i <= effortIdx ? "scaleY(1)" : "scaleY(0)"}
+                      width="2"
+                      x={i * 4}
+                    />
+                  {/each}
+                </svg>
+              {/if}
+              {#if n}
+                <!-- The word morphs letter by letter into the next. The chip is as wide
                    as its longest label, so the word never leaves it. -->
-              <span class="whitespace-nowrap normal-case"
-                ><MorphText text={capital(label)} /></span
-              >
-            {:else}
-              <span class="whitespace-nowrap normal-case">{label}</span>
-            {/if}
-          </span>
+                <span class="whitespace-nowrap normal-case"
+                  ><MorphText text={capital(label)} /></span
+                >
+              {:else}
+                <span class="whitespace-nowrap normal-case">{label}</span>
+              {/if}
+            </span>
+          </div>
         </div>
+        {#each pips as pip, i (i)}
+          <span
+            data-slot="pip"
+            class="pointer-events-none absolute top-1/2 size-space-1 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-strong transition-[opacity] duration-(--dur-control) ease-out group-not-data-ready:transition-none motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
+            style:--pip-durs="var(--ns-fill-ms), var(--dur-control)"
+            style:--pip-eases="var(--ease-in-out), var(--ease-out)"
+            style:left={`calc(var(--kw) / 2 + ${pip.frac} * (100% - var(--kw)))`}
+            style:opacity={pip.on ? 0.3 : 0}
+          ></span>
+        {/each}
       </div>
-      {#each pips as pip, i (i)}
-        <span
-          data-slot="pip"
-          class="pointer-events-none absolute top-1/2 size-space-1 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-strong transition-[opacity] duration-(--dur-control) ease-out group-not-data-ready:transition-none motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
-          style:--pip-durs="var(--ns-fill-ms), var(--dur-control)"
-          style:--pip-eases="var(--ease-in-out), var(--ease-out)"
-          style:left={`calc(var(--kw) / 2 + ${pip.frac} * (100% - var(--kw)))`}
-          style:opacity={pip.on ? 0.3 : 0}
-        ></span>
-      {/each}
       <input
         aria-label={spawnWords.effort.name}
         aria-valuetext={label}

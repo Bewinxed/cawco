@@ -5837,7 +5837,7 @@
         "value": 38,
         "unit": "px"
       },
-      "$description": "The effort track on a phone (DESIGN.md Effort chip: \"38px on a phone\")."
+      "$description": "The effort track's drawn height on a phone (DESIGN.md Effort chip: \"38px on a phone\"); its touch area is the 44 Touch Rule's, through touch-hit."
     },
     "c-model-list-h": {
       "$type": "dimension",

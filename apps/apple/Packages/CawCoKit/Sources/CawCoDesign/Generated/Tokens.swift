@@ -1034,7 +1034,7 @@ public enum Size {
     public static let cSideGripW: Double = 6
     /// A side surface's floor (SideSurface SIDE_FLOOR_PX).
     public static let cSideSurfaceMin: Double = 320
-    /// The effort track on a phone (DESIGN.md Effort chip: "38px on a phone").
+    /// The effort track's drawn height on a phone (DESIGN.md Effort chip: "38px on a phone"); its touch area is the 44 Touch Rule's, through touch-hit.
     public static let cEffortTrackHPhone: Double = 38
     /// The model list's viewport: fixed, so the section keeps its height while filtering.
     public static let cModelListH: Double = 300
