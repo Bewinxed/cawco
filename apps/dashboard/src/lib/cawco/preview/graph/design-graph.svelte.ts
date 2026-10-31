@@ -154,6 +154,10 @@ const holds = (section: GraphSection, point: StagePoint): boolean => {
   );
 };
 
+/** Where a session keeps its graph (`Kept`), by the pane's instance. */
+export const keptKeyOf = (instanceId: string): string =>
+  `cawco-design-graph:${instanceId}`;
+
 /** Two timings that run alike. */
 const sameTiming = (a: ClipTiming, b: ClipTiming): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
@@ -273,7 +277,7 @@ export class DesignGraph {
 
   /** `post`: to the page, on its own origin (the pane's). */
   constructor(instanceId: string, post: (message: object) => void) {
-    this.#key = `cawco-design-graph:${instanceId}`;
+    this.#key = keptKeyOf(instanceId);
     this.#post = post;
     const kept = keptOf(this.#key);
     this.#opening = addressedStep();

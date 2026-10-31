@@ -1724,13 +1724,17 @@ export function boot(options: BootOptions): void {
     frame.mounted = undefined;
     frame.body.replaceChildren();
     dress(frame);
+    const args = { ...argsOf(frame.section, frame.story.name), ...dialArgs };
     frame.mounted = mountInto(
       frame.body,
       frame.section,
       frame.story.name,
-      { ...argsOf(frame.section, frame.story.name), ...dialArgs },
+      args,
       frame
     );
+    if (frame.mounted) {
+      standingArgs.set(frame.mounted, args);
+    }
     dialArgsBy.set(frame, JSON.stringify(dialArgs));
   }
 
@@ -2286,12 +2290,74 @@ export function boot(options: BootOptions): void {
       .map((one) => ({ from: one.from as string, to: one.name }));
 
   let movePlaying: Section | null = null;
+  /** The frame a move plays in now: a dial moved meanwhile reaches it once the move has ended (`playVisible`), never mid-move. */
+  let movingFrame: Frame | null = null;
 
-  /** Plays move `to` (from its `from`) in `body`: mounted from the start story's args, then its `play`; every animation it fired, read as it started. */
+  /**
+   * The story `live` stands with put back to `args` in place, its DOM
+   * kept: every arg it was given that `args` doesn't name goes back to the
+   * component's own default (undefined).
+   */
+  function standAt(live: Mounted, args: Record<string, unknown>): void {
+    const was = standingArgs.get(live) ?? {};
+    const gone = Object.fromEntries(
+      Object.keys(was)
+        .filter((key) => !(key in args))
+        .map((key) => [key, undefined])
+    );
+    live.update({ ...gone, ...args });
+    standingArgs.set(live, args);
+  }
+
+  /**
+   * Whatever motion standing a story back started, played to its end at
+   * once, so the move that follows starts from the start story as drawn and
+   * none of it is read as the move's. Run a frame after the change: a
+   * row's exit is a ghost its list's observer adds after the update
+   * (motion/rows.svelte.ts `reflow`). A loop that never ends runs on, as it
+   * would on a story mounted anew.
+   */
+  function playOut(body: HTMLElement): void {
+    for (const one of body.getAnimations({ subtree: true })) {
+      if (
+        one.effect?.getComputedTiming().endTime !== Number.POSITIVE_INFINITY
+      ) {
+        one.finish();
+      }
+    }
+  }
+
+  /**
+   * The args a play's `update` gives, through the dials: a record arg the
+   * update sets as a list is ordered and counted as the dials say, and an
+   * arg a dial sets keeps the dial's value, so a move never draws past what
+   * the dials show (a count of 3 holds at 3 through the move into a story
+   * whose list holds 5).
+   */
+  function dialed(next: Record<string, unknown>): Record<string, unknown> {
+    const dials = dialArgsOver(next, dialValues);
+    return {
+      ...next,
+      ...Object.fromEntries(
+        Object.entries(dials).filter(([key]) => key in next)
+      ),
+    };
+  }
+
+  /**
+   * Plays move `to` (from its `from`) in `body`: from the start story's
+   * args, through the dials, then its `play`, every update through them
+   * too; every animation it fired, read as it started. `live`: the
+   * story already mounted in `body`, put back to the start story in place
+   * (a step on the stage updates what changed, never a mount anew); with
+   * none, the start story is mounted (a move played off screen for the
+   * report).
+   */
   async function playIn(
     section: Section,
     to: string,
-    body: HTMLElement
+    body: HTMLElement,
+    live?: Mounted
   ): Promise<Played> {
     const mod = section.mod?.module ?? {};
     const csf = csfOf(mod, to) ?? {};
@@ -2312,8 +2378,20 @@ export function boot(options: BootOptions): void {
       return { move, records };
     }
     const into: { error?: PageError } = {};
-    const args = argsOf(section, from);
-    const mounted = mountInto(body, section, from, args, into);
+    const own = argsOf(section, from);
+    const args = { ...own, ...dialArgsOver(own, dialValues) };
+    let mounted = live;
+    if (live) {
+      try {
+        standAt(live, args);
+      } catch (error) {
+        into.error = pageError(error, root, base);
+      }
+      await frameTick();
+      playOut(body);
+    } else {
+      mounted = mountInto(body, section, from, args, into);
+    }
     await frameTick();
     // What stood before the move, each with its words: a clip whose element's words changed with it is a text swap.
     const wordsBefore = new Map<Element, string>(
@@ -2360,8 +2438,9 @@ export function boot(options: BootOptions): void {
           userEvent: userEventIn(body),
           step: async (_name: string, run: () => Promise<void>) => await run(),
           update: async (next: Record<string, unknown>) => {
-            current = { ...current, ...next };
-            mounted?.update(next);
+            const shaped = dialed(next);
+            current = { ...current, ...shaped };
+            mounted?.update(shaped);
             await frameTick();
           },
         })
@@ -2387,6 +2466,9 @@ export function boot(options: BootOptions): void {
     }
     markWords(records, wordsBefore);
     move.animations = records.map((one) => one.read);
+    if (mounted) {
+      standingArgs.set(mounted, current);
+    }
     (body as HTMLElement & { __cawcoMounted?: Mounted }).__cawcoMounted =
       mounted;
     return { move, records };
@@ -2444,15 +2526,30 @@ export function boot(options: BootOptions): void {
       return null;
     }
     movePlaying = section;
-    frame.mounted?.unmount();
-    frame.mounted = undefined;
-    frame.body.replaceChildren();
+    movingFrame = frame;
+    const dialsAtStart = JSON.stringify(dialArgsFor(section, to, dialValues));
+    // The frame's story stands mounted: the move plays on it in place. One whose mount failed has nothing to keep.
+    const live = frame.mounted;
+    if (!live) {
+      frame.body.replaceChildren();
+    }
     dress(frame);
     try {
-      const played = await playIn(section, to, frame.body);
+      const played = await playIn(section, to, frame.body, live);
       frame.mounted = (
         frame.body as HTMLElement & { __cawcoMounted?: Mounted }
       ).__cawcoMounted;
+      // It stands as the move left it, with the dials it started with; a dial moved while it played is drawn now.
+      const dials = dialArgsFor(section, to, dialValues);
+      const dialsNow = JSON.stringify(dials);
+      dialArgsBy.set(frame, dialsNow);
+      if (dialsNow !== dialsAtStart && frame.mounted) {
+        frame.mounted.update(dials);
+        standingArgs.set(frame.mounted, {
+          ...standingArgs.get(frame.mounted),
+          ...dials,
+        });
+      }
       const kept = section.moves.findIndex((one) => one.to === to);
       if (kept === -1) {
         section.moves.push(played.move);
@@ -2463,6 +2560,7 @@ export function boot(options: BootOptions): void {
       return played;
     } finally {
       movePlaying = null;
+      movingFrame = null;
     }
   }
 
@@ -3202,6 +3300,8 @@ export function boot(options: BootOptions): void {
   const dialVars = new Map<string, string>();
   /** The args each frame was last given by the dials: a frame updates only when its own change. */
   const dialArgsBy = new WeakMap<Frame, string>();
+  /** The whole args each mounted story stands with now: a move put back to its start story in place clears what that story doesn't name (`standAt`). */
+  const standingArgs = new WeakMap<Mounted, Record<string, unknown>>();
   const isRecordDial = (dial: CanvasDial) =>
     dial.kind === "count" || dial.kind === "longest";
   /** The record set a story mounts under `arg`, its own array arg (a fixture import), or null when it holds no list. */
@@ -3220,18 +3320,26 @@ export function boot(options: BootOptions): void {
         ? ((record as Record<string, unknown>)[field] ?? "")
         : record
     ).length;
-  /**
-   * The args the dials give story `name` of `section`: each arg dial's
-   * value, and each record arg the story holds as a list: its records with
-   * the longest `by` first when a longest dial is on, then the first `count`
-   * (1 to the list's length) when a count dial is set. The records are the
-   * story's own; none is invented. A record arg with no dial set gives the
-   * story's own list back, so turning a dial off restores it.
-   */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: arg dials, then each record arg's order and count, in one pass over the agent's dials
+  /** The args the dials give story `name` of `section`, over its own args ({@link dialArgsOver}). */
   function dialArgsFor(
     section: Section,
     name: string,
+    values: Record<string, unknown>
+  ): Record<string, unknown> {
+    return dialArgsOver(argsOf(section, name), values);
+  }
+  /**
+   * The args the dials give over `given` (a story's own args, or what a
+   * play's update sets): each arg dial's value, and each record arg `given`
+   * holds as a list: its records with the longest `by` first when a longest
+   * dial is on, then the first `count` (1 to the list's length) when a count
+   * dial is set. The records are the story's own; none is invented. A
+   * record arg with no dial set gives the list back, so turning a dial off
+   * restores it.
+   */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: arg dials, then each record arg's order and count, in one pass over the agent's dials
+  function dialArgsOver(
+    given: Record<string, unknown>,
     values: Record<string, unknown>
   ): Record<string, unknown> {
     const args: Record<string, unknown> = {};
@@ -3242,7 +3350,8 @@ export function boot(options: BootOptions): void {
       }
       const { arg } = dial.target;
       if (isRecordDial(dial)) {
-        const own = lists.get(arg) ?? recordsOf(section, name, arg);
+        const listed = given[arg];
+        const own = lists.get(arg) ?? (Array.isArray(listed) ? listed : null);
         if (own) {
           lists.set(arg, own);
         }
@@ -3291,11 +3400,20 @@ export function boot(options: BootOptions): void {
         for (const [name, value] of dialVars) {
           frame.body.style.setProperty(name, value);
         }
+        if (frame === movingFrame) {
+          continue;
+        }
         const args = dialArgsFor(section, frame.story.name, values);
         const text = JSON.stringify(args);
         if (Object.keys(args).length > 0 && dialArgsBy.get(frame) !== text) {
           dialArgsBy.set(frame, text);
-          frame.mounted?.update(args);
+          if (frame.mounted) {
+            frame.mounted.update(args);
+            standingArgs.set(frame.mounted, {
+              ...standingArgs.get(frame.mounted),
+              ...args,
+            });
+          }
         }
       }
     }
