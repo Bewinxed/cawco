@@ -3236,13 +3236,14 @@
    * row's box (`preview:<session>`), so as it closes, a stand-in the size of
    * the pane shrinks into that row and fades (closeInto, --ease-drawer) while
    * the pane itself leaves. A row scrolled away or not mounted has nothing
-   * to land in, and the pane simply leaves.
+   * to land in, and the pane simply leaves. In the phone's sheet the sheet
+   * sliding down is its one exit (SideSheet), so nothing flies.
    */
   let section = $state<HTMLElement>();
   let shown = false;
   $effect(() => {
     const open = preview?.state === "open";
-    if (shown && !open && section && artifact) {
+    if (shown && !open && !sheet && section && artifact) {
       closeToRow(section, artifact.id);
     }
     shown = open;
