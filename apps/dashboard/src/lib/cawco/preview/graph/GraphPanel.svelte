@@ -142,18 +142,21 @@
           Math.max(graphFloor(), Math.min(hostHeight - 2 * inset, graph.graphH))
         )
   );
+  /** The dock folded as far as it goes: its head row whole, under its top padding (`pt-space-1`) inside its border. */
+  const dockFloor = () =>
+    numberOf("--c-row-h") +
+    numberOf("--space-1") +
+    2 * numberOf("--border-width");
   /** The dock's height: the person's, else its rows', never past what leaves the page its floor. */
   const dockCeil = () =>
     Math.max(
-      numberOf("--c-row-h"),
+      dockFloor(),
       hostHeight - 2 * inset - numberOf("--c-page-h-floor")
     );
   const dockHeight = $derived(
     graph.dockH === null
       ? null
-      : Math.round(
-          Math.max(numberOf("--c-row-h"), Math.min(dockCeil(), graph.dockH))
-        )
+      : Math.round(Math.max(dockFloor(), Math.min(dockCeil(), graph.dockH)))
   );
 
   /* --- The drawer's stops: its head alone, peek, full ---------------------- */
@@ -469,7 +472,7 @@
       const dy = one.clientY - y0;
       if (which === "dock") {
         graph.resize({
-          dockH: Math.max(numberOf("--c-row-h"), Math.min(dockCeil(), d0 - dy)),
+          dockH: Math.max(dockFloor(), Math.min(dockCeil(), d0 - dy)),
         });
         return;
       }
@@ -529,7 +532,7 @@
         event.preventDefault();
         graph.resize({
           dockH: Math.max(
-            numberOf("--c-row-h"),
+            dockFloor(),
             Math.min(dockCeil(), (dockHeight ?? dockBox.h) + dy)
           ),
         });
