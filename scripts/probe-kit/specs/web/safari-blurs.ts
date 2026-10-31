@@ -420,9 +420,9 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
     "claude",
     "Probe blur question",
     fleet.workdir,
-    // Its question is CawCo's ask, parked by the hub whatever the mode; in
-    // bypass the call itself is put without a permission card first.
-    { permissionMode: "bypassPermissions" }
+    // Default mode: CawCo's ask runs unasked in every mode (core
+    // PERSON_AND_READ_TOOLS), so its question card comes with no approval.
+    { permissionMode: "default" }
   );
   page = await phone(kit);
   await open(page, `${base}/session/${asker}`, FIELD, 90_000);

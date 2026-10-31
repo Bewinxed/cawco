@@ -106,6 +106,7 @@ import {
   mcpGatewayPort,
   type OfferedMode,
   offeredMode,
+  PERSON_AND_READ_TOOLS,
   type PermissionMode,
   RATE_LIMIT_READ,
   READ_HOOK_SCRIPT,
@@ -2345,6 +2346,12 @@ class ClaudeSession implements HarnessSession {
             ...(denyTools ?? []),
           ]),
         ],
+        // CawCo's own tools that only reach the person or read, run in every
+        // mode as the CLI's own question tool and reads do (core
+        // `PERSON_AND_READ_TOOLS`): a denial above still wins over these.
+        allowedTools: PERSON_AND_READ_TOOLS.map(
+          (tool) => `mcp__${MCP_SERVER_NAME}__${tool}`
+        ),
         ...(resume
           ? {
               resume: resume.sessionKey,

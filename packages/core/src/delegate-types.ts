@@ -181,6 +181,46 @@ export const QUESTION_TOOL_DENIED: readonly string[] =
   NATIVE_TOOLS.questions.claude;
 
 /**
+ * CawCo's own tools that only reach the person or only read, by their bare
+ * names: allowed to every session in every mode, as Claude Code's own
+ * question tool and its reads were. Each changes nothing a person would want
+ * to approve first, and a person's ask (`ask`, `browser_ask`,
+ * `connect_ask`) is parked by the hub as the person's card whatever the mode,
+ * so a harness's own approval in front of it only asked twice.
+ *
+ * Only Claude Code asks for an MCP tool by default (its `default` mode), so
+ * only its spawn needs them (claude.ts `allowedTools`): OpenCode 2.0 starts
+ * from allowing everything and asks only for a shell or an edit
+ * (opencode.ts `STATIC_POLICY`), and pi raises no permission prompt.
+ *
+ * A tool that writes anything (an artifact, a title, a task, a wait, a
+ * memory note) is not here: it asks as the session's mode says.
+ */
+export const PERSON_AND_READ_TOOLS = [
+  // Reach the person: an ask the hub parks, a line or a picture in the
+  // transcript, an artifact brought to the front of the panel.
+  "ask",
+  "browser_ask",
+  "connect_ask",
+  "send_to_user",
+  "show_image",
+  "artifact_show",
+  // Reads.
+  "open_items",
+  "list_sessions",
+  "list_delegate_types",
+  "delegate_list",
+  "find",
+  "task_read",
+  "folder_read",
+  "artifact_list",
+  "artifact_read",
+  "comment_read",
+  "design_map",
+  "memory_read",
+] as const;
+
+/**
  * The toolsets a session runs in (Projects spec §5.3: one `cawco` server, a
  * toolset per role). A session's credential names its row, and the row its
  * role: `web-facing` a session that reads the outside world and so gets no
