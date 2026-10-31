@@ -14229,7 +14229,40 @@ export const createServer = (
   /** The machines online now, as the hub's registry holds them (Who decides). */
   const machinesOnline = () =>
     db.listAgents().filter((machine) => registry.agent(machine.machineId));
-  /** Each harness on an online machine, with the models it reports (Who decides' setup). */
+  /**
+   * The models `harness` offers on `machineIds`, as the dashboard's picker
+   * reads them (models.svelte.ts): Claude's from the catalog of each account
+   * signed in there (its machines report none: the catalog is each
+   * account's, HarnessReport.models), every other harness's from the
+   * machines' own reports.
+   */
+  const harnessModels = (
+    harness: HarnessKind,
+    machineIds: ReadonlySet<string>
+  ): ModelInfo[] => {
+    if (harness !== "claude") {
+      return db
+        .listAgents()
+        .filter((machine) => machineIds.has(machine.machineId))
+        .flatMap((machine) => machine.harnesses ?? [])
+        .filter((report) => report.harness === harness)
+        .flatMap((report) => report.models ?? []);
+    }
+    const signedIn = new Set(
+      db.accounts
+        .signins()
+        .filter(
+          (signin) =>
+            signin.state === "signed-in" && machineIds.has(signin.machineId)
+        )
+        .map((signin) => signin.accountId)
+    );
+    return db.accounts
+      .catalogs()
+      .filter((catalog) => signedIn.has(catalog.accountId))
+      .flatMap((catalog) => catalog.models);
+  };
+  /** Each harness on an online machine, with the models it offers there (Who decides' setup). */
   const harnessOffers = (): HarnessOffer[] => {
     const fleet = db.listAgents();
     const online = machinesOnline();
@@ -14240,14 +14273,15 @@ export const createServer = (
           .map((report) => ({ machine, report }))
       );
       const models = new Map<string, HarnessOffer["models"][number]>();
-      for (const { report } of reports) {
-        for (const model of report.models ?? []) {
-          models.set(model.value, {
-            id: model.value,
-            name: model.displayName,
-            default: model.value === "default",
-          });
-        }
+      for (const model of harnessModels(
+        harness,
+        new Set(reports.map(({ machine }) => machine.machineId))
+      )) {
+        models.set(model.value, {
+          id: model.value,
+          name: model.displayName,
+          default: model.value === "default",
+        });
       }
       return {
         id: harness,
@@ -14263,14 +14297,17 @@ export const createServer = (
       };
     });
   };
-  /** A model's name as its harness reports it on any machine; its id when none does. */
-  const modelNamed = (harness: string, model: string): string =>
-    db
-      .listAgents()
-      .flatMap((machine) => machine.harnesses ?? [])
-      .filter((report) => report.harness === harness)
-      .flatMap((report) => report.models ?? [])
-      .find((one) => one.value === model)?.displayName ?? model;
+  /** A model's name as its harness offers it on any machine; its id when none does. */
+  const modelNamed = (named: string, model: string): string => {
+    const harness = harnessNamed(named);
+    const offered = harness
+      ? harnessModels(
+          harness,
+          new Set(db.listAgents().map((machine) => machine.machineId))
+        )
+      : [];
+    return offered.find((one) => one.value === model)?.displayName ?? model;
+  };
   // Who decides (settling.ts): each card sent to its member and said to its
   // writer: a run started under it the way dispatch starts an attempt, or a
   // warm session of the member handed the cards, or Caw's conversation; a
