@@ -7,7 +7,7 @@
  * holds. Within a role a session's own context still narrows what it gets
  * (a leaf gets no spawning tools, only a work item gets `finish_item`).
  *
- * - **worker**: a session you started. Everything, fleet settings included
+ * - **worker**: a session you or another session started. Everything, fleet settings included
  *   (an `admin_*_write` is your ask, run once you approve it, asks.ts;
  *   in Full Send it runs at once).
  * - **delegate**: a delegated session or work item: the session tools, reads
@@ -279,7 +279,7 @@ export const refusal = (row: InstanceRow, name: string): string => {
     case "overseer":
       return `${name} isn't available to fleet-watch triage: it reads the fleet and decides once with triage_decide.`;
     case "delegate":
-      return `${name} isn't available here: only sessions the person started file, change or start tasks or change fleet settings, and this one is a delegate or work item. Hand the change to the session that started it.`;
+      return `${name} isn't available here: a delegate or work item files, changes or starts no tasks and changes no fleet settings. Hand the change to the session that started it.`;
     case "curator":
       return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
     case "worker":

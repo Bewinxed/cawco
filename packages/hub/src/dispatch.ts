@@ -13,7 +13,8 @@
  *   active stage (the stage that runs it, else the first of kind
  *   `active`), as `hub`.
  * - **Who it reports to.** A work item needs a parent session. `task_start`
- *   from a session you started (or Caw) makes that session the parent; the
+ *   from any session of the project but a delegate (`parentProblem`) makes
+ *   that session the parent; the
  *   project's conversation, Caw (caw.ts), takes the reports of every attempt
  *   nobody asked for, its session started for the first one while Caw is
  *   on. With Caw off there is no conversation to take them: such an attempt
@@ -144,6 +145,7 @@ import {
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
+import { roleOf } from "./roles";
 import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
 import { waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
@@ -302,7 +304,7 @@ const HOOK_ORIGIN: Record<TaskMover, Origin | undefined> = {
 };
 
 const NO_LEAD =
-  "Turn the project's events on so its conversation takes the report, name a session you started in the project, or start it with task_start from one.";
+  "Turn the project's events on so its conversation takes the report, name a session of the project that is no delegate, or start it with task_start from one.";
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
@@ -351,9 +353,14 @@ const named = (row: InstanceRow): string =>
   `“${row.title?.trim() || row.derivedTitle?.trim() || `session ${short(row.id)}`}”`;
 
 /**
- * Why `row` cannot take an attempt's reports for `projectId` (as its conversation,
- * or as the session starting it), or undefined when it can: it must be a
- * session you started, in that project.
+ * The one rule for who takes a project's reports: why `row` cannot take an
+ * attempt's for `projectId` (as its conversation, as the session starting it,
+ * or as the session that moved its task in), or undefined when it can. It
+ * must be a worker (roles.ts `roleOf`) of that project, and not a delegate's
+ * work: `origin` stays `delegate` on a session that goes on from one, whose
+ * row names no work item. A worker's parent says nothing here: a session
+ * another session started is one the person talks to like any other, and a
+ * `/clear` or a continuation keeps its row's parent.
  */
 const parentProblem = (
   row: InstanceRow | undefined,
@@ -366,8 +373,8 @@ const parentProblem = (
   if (row.projectId !== projectId) {
     return `${named(row)} is not a session of this project.`;
   }
-  if (row.parentInstanceId || row.workItemId || row.canDelegate === false) {
-    return `${named(row)} is a delegate or a work item; only a session you started takes a project's reports.`;
+  if (row.origin === "delegate" || roleOf(row) !== "worker") {
+    return `${named(row)} is a delegate or a work item, so its reports go to the session that started it; it takes none of a project's.`;
   }
 };
 

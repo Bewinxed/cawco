@@ -231,7 +231,7 @@ export const PERSON_AND_READ_TOOLS = [
  * posting or admin tools, `overseer` fleet-watch
  * triage, `curator` a project's memory curator run (the hub starts it, never
  * a type). A row with none is a `delegate` when something delegated it, else
- * a `worker` (a session you started).
+ * a `worker` (a session you or another session started).
  */
 export const SESSION_ROLES = [
   "worker",
