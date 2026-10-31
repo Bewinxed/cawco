@@ -9506,13 +9506,15 @@ export const createServer = (
    * after its text ({@link personSaid}, core `withPresenceLine`), read fresh
    * at every hand, a hand again included, on every harness alike. The
    * record keeps the send as it was accepted: the person's bubble is their
-   * words alone. A keep-alive ping goes as it is.
+   * words alone. A keep-alive ping goes as it is, and so does every send to
+   * a delegate on a work item: it asks its parent, never the person.
    */
   const presenced = (
     envelope: Envelope<SendPayload>
   ): Envelope<SendPayload> => {
     const { instanceId, message } = envelope.payload;
-    if (isKeepAlive(message)) {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (isKeepAlive(message) || (row?.workItemId && row.parentInstanceId)) {
       return envelope;
     }
     const said = personSaid(instanceId, message.origin.kind === "human");
