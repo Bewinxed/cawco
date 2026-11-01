@@ -146,6 +146,7 @@
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, unstore, writeJson } from "../storage";
   import { toast } from "../toasts";
+  import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import { floor as visibleFloor } from "../visible-viewport.svelte";
   import { afterPaint, warm } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
@@ -180,7 +181,6 @@
   import CanvasMap from "./map/CanvasMap.svelte";
   import PinFloat from "./PinFloat.svelte";
   import { markFace, markState } from "./PinMark.svelte";
-  import PinPeek from "./PinPeek.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
   import { enterPreviews, turnedAwayWords } from "./pass";
@@ -2817,24 +2817,32 @@
   }
 
   /**
-   * The pill the pointer rests on, its peek beside it (comment design §4):
-   * after `--dur-peek` the first time, at once while one is up or
-   * just went; never under a finger.
+   * The pill the pointer rests on, its peek beside it: its thread's card
+   * holding his words and the latest reply (PinCard `peek`), after
+   * `--dur-peek` the first time, at once while one is up or just went;
+   * never under a finger. The pointer may leave the pill for the peek: it
+   * goes `--dur-peek` after the pointer left them both.
    */
   let peekAt = $state<{ id: string; mark: PreviewPinAt["mark"] } | null>(null);
   let peekTimer: ReturnType<typeof setTimeout> | undefined;
   /** When the last peek went: the next within `--dur-peek` comes at once. */
   let peekWent = 0;
+  /** The pointer rests on the peek itself. */
+  let onPeek = false;
   function heardPeek(message: Record<string, unknown>) {
     clearTimeout(peekTimer);
     const id = previewPinId(message.id);
     const mark = previewBox(message.mark);
     // None under a finger, and none while a thread or a composer stands.
-    if (!(id && mark) || coarse.current || openPin || composing) {
-      if (peekAt) {
-        peekWent = performance.now();
+    if (coarse.current || openPin || composing) {
+      dropPeek();
+      return;
+    }
+    if (!(id && mark)) {
+      // Off its pill: onto the peek, which stays, or away.
+      if (peekAt && !onPeek) {
+        peekTimer = setTimeout(dropPeek, dur("--dur-peek"));
       }
-      peekAt = null;
       return;
     }
     const wait = dur("--dur-peek");
@@ -2846,10 +2854,22 @@
       peekAt = { id, mark };
     }, wait);
   }
+  /** The pointer came onto the peek (it stays) or left it (it goes after `--dur-peek`, unless the pointer is back on its pill). */
+  function restOnPeek(on: boolean) {
+    onPeek = on;
+    clearTimeout(peekTimer);
+    if (!on) {
+      peekTimer = setTimeout(dropPeek, dur("--dur-peek"));
+    }
+  }
   /** Every peek goes as a thread or a composer opens: one left up would stand over what it opens on. */
   function dropPeek() {
     clearTimeout(peekTimer);
+    if (peekAt) {
+      peekWent = performance.now();
+    }
     peekAt = null;
+    onPeek = false;
   }
   /** No peek while a thread or a composer stands: the card is what the person reads then. */
   const peekPin = $derived(
@@ -4579,40 +4599,45 @@
         />
       </PinFloat>
     {/if}
+    <!-- A pin's thread as its card holds it: the drawn pin's whole, or the
+         rested-on pin's as its peek (`peek`), the same card. -->
+    {#snippet thread(pin: Pin, draft: ComposerDraft, peek: boolean)}
+      {#if kit}
+        {@const Card = kit.PinCard}
+        <Card
+          agentName={owner ? ownerName : "The session"}
+          changes={(view?.activity[pin.id]?.length ?? 0) > 0
+            ? threadChanges
+            : undefined}
+          marked={peek || !!pinAt?.mark}
+          session={owner ? instanceId : null}
+          {draft}
+          link={pinLink(pin.number)}
+          live={live.has(pin.id)}
+          name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
+          onclose={() => closeCard()}
+          ondelete={deleteOpenPin}
+          ondraft={() => drafts?.changed(pin.id)}
+          onfind={() => focusPin(pin.id, true)}
+          onplace={placeElsewhere}
+          onreply={(text) => reply(text)}
+          onresolve={(resolved) => resolvePin(resolved)}
+          onretry={() => retryPin(pin.id)}
+          parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
+          {peek}
+          {pin}
+          placing={placing === pin.id}
+          problem={peek ? null : cardError}
+          sending={!peek && replying}
+          retrying={pinsRetrying.has(pin.id)}
+          whyNotSent={notSentWhy(pin)}
+        />
+      {/if}
+    {/snippet}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
          another's never moves to it. -->
     {#if cardPin && kit && replyDraft}
-      {@const Card = kit.PinCard}
       {#key cardPin.id}
-        {#snippet thread(pin: Pin)}
-          <Card
-            agentName={owner ? ownerName : "The session"}
-            changes={(view?.activity[pin.id]?.length ?? 0) > 0
-              ? threadChanges
-              : undefined}
-            marked={!!pinAt?.mark}
-            session={owner ? instanceId : null}
-            draft={replyDraft}
-            link={pinLink(pin.number)}
-            live={live.has(pin.id)}
-            name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
-            onclose={() => closeCard()}
-            ondelete={deleteOpenPin}
-            ondraft={() => drafts?.changed(pin.id)}
-            onfind={() => focusPin(pin.id, true)}
-            onplace={placeElsewhere}
-            onreply={(text) => reply(text)}
-            onresolve={(resolved) => resolvePin(resolved)}
-            onretry={() => retryPin(pin.id)}
-            parent={cardParent?.id === pin.id ? cardParent.name : null}
-            {pin}
-            placing={placing === pin.id}
-            problem={cardError}
-            sending={replying}
-            retrying={pinsRetrying.has(pin.id)}
-            whyNotSent={notSentWhy(pin)}
-          />
-        {/snippet}
         {#if floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
                bottom sheet, dragged between its stops (ThreadSheet). -->
@@ -4627,7 +4652,7 @@
             open={openPin !== null}
             bind:surface={cardFloat}
           >
-            {@render thread(cardPin)}
+            {@render thread(cardPin, replyDraft, false)}
           </ThreadSheet>
         {:else}
           <PinFloat
@@ -4646,13 +4671,33 @@
             slot="pin-card"
             bind:float={cardFloat}
           >
-            {@render thread(cardPin)}
+            {@render thread(cardPin, replyDraft, false)}
           </PinFloat>
         {/if}
       {/key}
     {/if}
-    {#if peekPin && peekAt}
-      <PinPeek mark={peekAt.mark} pin={peekPin} room={{ w: roomW, h: roomH }} />
+    <!-- The rested-on pin's peek: the same card beside its pill, his words
+         and the latest reply alone; a press on it opens the whole thread. -->
+    {#if peekPin && peekAt && drafts}
+      {#key peekPin.id}
+        <PinFloat
+          face={markFace(markState(peekPin))}
+          label={`Comment ${peekPin.number}`}
+          mark={peekAt.mark}
+          onpress={() => {
+            const id = peekPin?.id;
+            if (id) {
+              openCard(id);
+            }
+          }}
+          onrest={restOnPeek}
+          pin={peekPin.number}
+          room={{ w: roomW, h: roomH }}
+          slot="pin-peek"
+        >
+          {@render thread(peekPin, drafts.draft(peekPin.id), true)}
+        </PinFloat>
+      {/key}
     {/if}
   </div>
   {#if failure || paneRefused}

@@ -31,6 +31,11 @@
    *
    * It closes by its Close or Esc, or a press on another row or pin, never
    * by a press on the page. Delete is asked in the card itself.
+   *
+   * As a pin's peek (`peek`: a mouse resting on its pill), the same card
+   * holds what it stands on, his words and only the latest reply: no
+   * actions, no status lines, no change lines and no reply, since a press
+   * anywhere on it opens the whole thread (PinFloat `onpress`).
    */
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
@@ -92,7 +97,10 @@
     ondraft,
     changes,
     fromChip = false,
+    peek = false,
   }: {
+    /** A pin's peek: what it stands on, his words and the latest reply alone, taking no press of its own. */
+    peek?: boolean;
     /**
      * Opened from its chip in a conversation (the transcript's popover): its
      * head keeps Resolve or Reopen and Close, without Delete comment and ⋯,
@@ -147,14 +155,16 @@
    * an id held twice is reported with both entries (repeated-keys.ts)
    * before the keyed each throws on it.
    */
-  const thread = $derived(
-    keysChecked(
+  const thread = $derived.by(() => {
+    const all = keysChecked(
       `comment ${pin.number}'s thread`,
       pin.thread,
       (entry) => entry.id,
       (entry) => `${entry.by}'s entry at ${entry.at}`
-    )
-  );
+    );
+    // The peek: his words, and the latest reply after them.
+    return peek && all.length > 2 ? [all[0], ...all.slice(-1)] : all;
+  });
   let roomEl = $state<HTMLDivElement | null>(null);
   /** The thread stands where it opened and the person hasn't scrolled it: a new entry keeps it there. */
   let atPlace = true;
@@ -165,7 +175,7 @@
     const newest = holder.querySelector<HTMLElement>(
       '[data-slot="thread"] > li:last-child'
     );
-    if (fromChip && pin.thread.length <= 2) {
+    if ((fromChip && pin.thread.length <= 2) || peek) {
       holder.scrollTop = 0;
     } else {
       holder.scrollTop = newest ? newest.offsetTop : holder.scrollHeight;
@@ -404,65 +414,78 @@
         on {parent}
       </p>
     {/if}
-    <span
-      class="ms-auto flex flex-none items-center gap-space-2 coarse:gap-space-5"
-      data-box
-    >
-      {#if pin.resolvedAt}
+    {#if !peek}
+      <span
+        class="ms-auto flex flex-none items-center gap-space-2 coarse:gap-space-5"
+        data-box
+      >
+        {#if pin.resolvedAt}
+          <Button
+            aria-label={said.reopen}
+            icon={IconReopen}
+            onclick={() => onresolve(false)}
+            size="icon-sm"
+            title={said.reopen}
+            variant="ghost"
+          />
+        {:else}
+          <Button
+            aria-label={said.resolve}
+            icon={IconSuccess}
+            onclick={() => onresolve(true)}
+            size="icon-sm"
+            title={said.resolve}
+            variant="ghost"
+          />
+        {/if}
+        {#if !fromChip}
+          <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
+          <Button
+            aria-label={said.deleteComment}
+            data-slot="delete"
+            icon={IconTrash}
+            onclick={askDelete}
+            size="icon-sm"
+            title={said.deleteComment}
+            variant="ghost"
+          />
+          <span class="flex flex-none">
+            <RowMenu actions={moreActions} label={`comment ${pin.number}`} />
+          </span>
+        {/if}
         <Button
-          aria-label={said.reopen}
-          icon={IconReopen}
-          onclick={() => onresolve(false)}
+          aria-label={said.close}
+          icon={IconClose}
+          onclick={onclose}
           size="icon-sm"
-          title={said.reopen}
+          title={said.close}
           variant="ghost"
         />
-      {:else}
-        <Button
-          aria-label={said.resolve}
-          icon={IconSuccess}
-          onclick={() => onresolve(true)}
-          size="icon-sm"
-          title={said.resolve}
-          variant="ghost"
-        />
-      {/if}
-      {#if !fromChip}
-        <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
-        <Button
-          aria-label={said.deleteComment}
-          data-slot="delete"
-          icon={IconTrash}
-          onclick={askDelete}
-          size="icon-sm"
-          title={said.deleteComment}
-          variant="ghost"
-        />
-        <span class="flex flex-none">
-          <RowMenu actions={moreActions} label={`comment ${pin.number}`} />
-        </span>
-      {/if}
-      <Button
-        aria-label={said.close}
-        icon={IconClose}
-        onclick={onclose}
-        size="icon-sm"
-        title={said.close}
-        variant="ghost"
-      />
-    </span>
+      </span>
+    {/if}
   </div>
   <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. -->
-  <button
-    data-slot="name"
-    class="min-w-0 px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
-    onclick={onfind}
-    title={name}
-    type="button"
-    ><span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span></button
-  >
+  {#if peek}
+    <p
+      data-slot="name"
+      class="m-0 min-w-0 text-start text-ink-strong type-label"
+      title={name}
+    >
+      <span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span>
+    </p>
+  {:else}
+    <button
+      data-slot="name"
+      class="min-w-0 px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+      onclick={onfind}
+      title={name}
+      type="button"
+      ><span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span
+      ></button
+    >
+  {/if}
 </header>
-{#if pin.movedAt}
+{#if !peek && pin.movedAt}
   <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
   <div
     data-slot="gone"
@@ -479,7 +502,7 @@
       variant="link"
     />
   </div>
-{:else if pin.resolvedAt}
+{:else if !peek && pin.resolvedAt}
   <div
     data-slot="resolved"
     class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
@@ -496,7 +519,7 @@
     />
   </div>
 {/if}
-{#if whyNotSent && markState(pin) === "unsent"}
+{#if !peek && whyNotSent && markState(pin) === "unsent"}
   <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
   <div
     data-slot="not-sent"
@@ -590,59 +613,61 @@
       </li>
     {/each}
   </ol>
-  {#if changes}
+  {#if changes && !peek}
     <div class="mt-space-2" data-slot="pin-changes">{@render changes(pin)}</div>
   {/if}
 </div>
-<div
-  bind:this={foot}
-  data-slot="foot"
-  class="flex shrink-0 flex-col gap-space-2"
->
-  {#if sent && session}
-    <!-- Who has the comment, as its status, never as a reply: "Sent to" the
+{#if !peek}
+  <div
+    bind:this={foot}
+    data-slot="foot"
+    class="flex shrink-0 flex-col gap-space-2"
+  >
+    {#if sent && session}
+      <!-- Who has the comment, as its status, never as a reply: "Sent to" the
          session's chip, and while the session is on it "· working on it"
          with the live dot (core `words/comments.ts`). -->
-    <p
-      data-slot="sent-to"
-      class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-1 gap-y-0 text-ink-muted type-meta"
-    >
-      <span>{said.sentTo}</span>
-      <SessionReference id={session} />
-      {#if live}
-        <span
-          class="inline-flex items-center gap-space-1 mark-line"
-          data-slot="working"
-          ><span aria-hidden="true">·</span><span
-            class="grid place-items-center"
-            data-box><LiveDot /></span
-          ><span>{said.workingOnIt}</span></span
-        >
-      {/if}
-    </p>
-  {/if}
-  <!-- A Copy link the browser refused, over the reply, with Try again and
+      <p
+        data-slot="sent-to"
+        class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-1 gap-y-0 text-ink-muted type-meta"
+      >
+        <span>{said.sentTo}</span>
+        <SessionReference id={session} />
+        {#if live}
+          <span
+            class="inline-flex items-center gap-space-1 mark-line"
+            data-slot="working"
+            ><span aria-hidden="true">·</span><span
+              class="grid place-items-center"
+              data-box><LiveDot /></span
+            ><span>{said.workingOnIt}</span></span
+          >
+        {/if}
+      </p>
+    {/if}
+    <!-- A Copy link the browser refused, over the reply, with Try again and
        the link under Show details: the menu that asked has closed. -->
-  <RowFault
-    again={copyLink}
-    data-copy-refused
-    details={link}
-    end="var(--space-3)"
-    indent="var(--space-3)"
-    reason={linkRefused ? copyRefused("Link") : null}
-  />
-  <!-- The reply takes the keyboard only when he reaches for it (a tap or a
+    <RowFault
+      again={copyLink}
+      data-copy-refused
+      details={link}
+      end="var(--space-3)"
+      indent="var(--space-3)"
+      reason={linkRefused ? copyRefused("Link") : null}
+    />
+    <!-- The reply takes the keyboard only when he reaches for it (a tap or a
        click in the field, Tab): a thread opens to be read, and a phone's
        keyboard rising with it covered most of what it says. Its caret is its
        focus (The Caret Rule). -->
-  <CommentComposer
-    action="Reply"
-    {draft}
-    onchange={ondraft}
-    onsubmit={onreply}
-    {placeholder}
-    sendError={problem ?? ""}
-    {sending}
-  />
-  <AskHere asker={asks} at="delete" />
-</div>
+    <CommentComposer
+      action="Reply"
+      {draft}
+      onchange={ondraft}
+      onsubmit={onreply}
+      {placeholder}
+      sendError={problem ?? ""}
+      {sending}
+    />
+    <AskHere asker={asks} at="delete" />
+  </div>
+{/if}

@@ -59,6 +59,7 @@
   `--dur-control`.
 -->
 <script lang="ts">
+  import { commentWords as said } from "@cawco/core/words/comments";
   import { type Snippet, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { popMotion } from "#lib/components/ui/popover/index.js";
@@ -92,6 +93,8 @@
     pin,
     open = true,
     onclosed,
+    onpress,
+    onrest,
     float = $bindable(),
     children,
   }: {
@@ -118,7 +121,15 @@
     /** What it is, read out. */
     label: string;
     /** Its `data-slot`: what the pane and the probes call it. */
-    slot: "pin-card" | "pin-composer";
+    slot: "pin-card" | "pin-composer" | "pin-peek";
+    /**
+     * The peek's: a press anywhere on it opens what it peeks, its pin's whole
+     * thread (one button over all it holds, named for that). What it holds
+     * takes no press of its own.
+     */
+    onpress?: () => void;
+    /** The peek's: the pointer came onto it (true) or left it (false). */
+    onrest?: (on: boolean) => void;
     /** The thread's pin, by its number: its hook (`data-pin-card`). */
     pin?: number;
     float?: HTMLElement;
@@ -466,6 +477,8 @@
   data-slot={slot}
   data-state={popState}
   data-pin-card={pin}
+  onpointerenter={onrest ? () => onrest(true) : undefined}
+  onpointerleave={onrest ? () => onrest(false) : undefined}
   role="dialog"
   bind:this={float}
   style:--float-x={place ? `${place.left}px` : undefined}
@@ -505,4 +518,14 @@
   >
     {@render children()}
   </div>
+  {#if onpress && pin !== undefined}
+    <!-- The peek pressed anywhere: its whole thread opens. -->
+    <button
+      aria-label={said.openThread(pin)}
+      class="absolute inset-0 z-1 m-0 p-0 border-none bg-transparent rounded-lg outline-off focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+      data-slot="pin-peek-open"
+      onclick={onpress}
+      type="button"
+    ></button>
+  {/if}
 </div>

@@ -1370,7 +1370,7 @@ public enum Motion {
     public static let durControl: TimeInterval = 0.12
     /// In seconds.
     public static let durMenu: TimeInterval = 0.14
-    /// How long the pointer rests on a comment's pill before its peek comes; one within this of the last goes at once (DESIGN.md, A pin's pill).
+    /// How long the pointer rests on a comment's pill before its peek comes, one within this of the last coming at once; and how long the peek stays once the pointer has left the pill and the peek (DESIGN.md, A pin's pill).
     /// In seconds.
     public static let durPeek: TimeInterval = 0.3
     /// A switch's knob and a checkbox's tick.

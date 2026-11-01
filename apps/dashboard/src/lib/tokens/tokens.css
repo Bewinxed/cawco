@@ -1529,7 +1529,7 @@
     --dur-ghost: 80ms;
     --dur-control: 120ms;
     --dur-menu: 140ms;
-    /* How long the pointer rests on a comment's pill before its peek comes; one within this of the last goes at once (DESIGN.md, A pin's pill). */
+    /* How long the pointer rests on a comment's pill before its peek comes, one within this of the last coming at once; and how long the peek stays once the pointer has left the pill and the peek (DESIGN.md, A pin's pill). */
     --dur-peek: 300ms;
     /* A switch's knob and a checkbox's tick. */
     --dur-toggle: 160ms;
