@@ -32,6 +32,7 @@ import type {
   HookHandler,
   HookVersion,
   InstanceStatus,
+  MayStart,
   McpPlatform,
   MemoryScope,
   MemoryVersion,
@@ -1446,8 +1447,8 @@ export interface DbShape {
     /** The settled spawn mode; null only when the harness reports no modes. */
     permissionMode: string | null;
     model?: string;
-    /** `false` makes the row a leaf delegate; absent leaves the column alone. */
-    canDelegate?: boolean;
+    /** The delegate types it may start (core `MayStart`); absent leaves the column alone. */
+    mayStart?: MayStart;
     /** The work item the session runs; set once, at its spawn. */
     workItemId?: string;
     /** The toolset it runs in; set once, at its first spawn. */
@@ -4004,7 +4005,7 @@ const make = async (path: string): Promise<DbShape> => {
         role: first("role"),
         delegateType: first("delegateType"),
         delegateTypeProject: first("delegateTypeProject"),
-        canDelegate: first("canDelegate"),
+        mayStart: first("mayStart"),
         derivedTitle: root.derivedTitle ?? survivor.derivedTitle,
         ...(survivor.titleSource === "owner"
           ? {}
@@ -5230,7 +5231,7 @@ const make = async (path: string): Promise<DbShape> => {
       kind,
       permissionMode,
       model,
-      canDelegate,
+      mayStart,
       workItemId,
       role,
       delegateType,
@@ -5303,7 +5304,7 @@ const make = async (path: string): Promise<DbShape> => {
           kind,
           permissionMode,
           model,
-          canDelegate,
+          mayStart,
           workItemId,
           role,
           delegateType: delegateType?.name,
@@ -5334,8 +5335,8 @@ const make = async (path: string): Promise<DbShape> => {
             kind,
             permissionMode,
             ...(model ? { model } : {}),
-            // Presence, not truth: a leaf's `false` has to land.
-            ...(canDelegate === undefined ? {} : { canDelegate }),
+            // Presence, not truth: a leaf's empty list has to land.
+            ...(mayStart === undefined ? {} : { mayStart }),
             // A session keeps the account it started on: its transcript and
             // its prompt cache are that account's.
             ...(accountId

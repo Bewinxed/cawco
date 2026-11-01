@@ -27,6 +27,7 @@ import { join } from "node:path";
 import type {
   EffortLevel,
   FleetMcpChange,
+  MayStart,
   McpServerStatus,
   ModelInfo,
   ModelTurnUsage,
@@ -72,6 +73,8 @@ import {
   REPEATED_FAILURE_LIMIT,
   SERVER_STOPPED_MID_TURN,
   SPAWNING_TOOLS,
+  sessionMayStart,
+  spawningToolAllowed,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -306,8 +309,15 @@ const deny = (action: string): OpencodeRule => ({
   effect: "deny",
 });
 
-/** The CawCo tools that start or steer other sessions, by OpenCode's names for them: off for a session that may not delegate. */
-const DELEGATION_TOOLS = [...SPAWNING_TOOLS].map((name) => `cawco_${name}`);
+/**
+ * The CawCo tools that start or steer other sessions a session that may
+ * start `mayStart` is denied, by OpenCode's names for them (core
+ * `spawningToolAllowed`): every one for a leaf that starts nothing.
+ */
+const deniedSpawningTools = (mayStart: readonly string[]): string[] =>
+  [...SPAWNING_TOOLS]
+    .filter((name) => !spawningToolAllowed(name, mayStart))
+    .map((name) => `cawco_${name}`);
 
 /** What OpenCode makes of a server's name in its tools' ids. */
 const MCP_NAME_UNSAFE = /[^a-zA-Z0-9_-]/gu;
@@ -645,7 +655,6 @@ export interface OpencodeSessionOptions {
   account: string | undefined;
   /** The settings it was created or last opened with. */
   applied: Applied;
-  canDelegate?: boolean;
   client: OpencodeClient;
   ctx: HarnessContext;
   /** Tools denied to this session (fleet, type and spawn), as session rules. */
@@ -663,6 +672,8 @@ export interface OpencodeSessionOptions {
    * which a server being retired does not hold.
    */
   isConfigGateHeld: (joinsTurn?: boolean) => boolean;
+  /** The delegate types it may start (core `MayStart`); absent, any. */
+  mayStart?: MayStart;
   model: string | undefined;
   onRelease: () => void;
   permissionMode: PermissionMode | undefined;
@@ -761,7 +772,8 @@ export class OpencodeSession implements HarnessSession {
   readonly #applied: Applied;
   readonly #deniedRules: OpencodeRule[];
   readonly #fence: boolean;
-  readonly #canDelegate?: boolean;
+  /** The delegate types it may start (core `MayStart`); absent, any. */
+  readonly #mayStart?: MayStart;
   /** The instruction entries put on the session, by key, as the hash of the value put. */
   readonly #instructions = new Map<string, string>();
   /** Its scoped memory documents, as it launched with them; none on an attach. */
@@ -890,7 +902,7 @@ export class OpencodeSession implements HarnessSession {
     this.#applied = { ...options.applied };
     this.#deniedRules = options.deniedRules;
     this.#fence = options.fence;
-    this.#canDelegate = options.canDelegate;
+    this.#mayStart = options.mayStart;
     this.#scopedInstructions = options.instructions ?? [];
     this.#registerChild = options.registerChild;
     this.#turnOutcome = options.turnOutcome;
@@ -1015,7 +1027,9 @@ export class OpencodeSession implements HarnessSession {
    */
   async #rules(): Promise<OpencodeRule[]> {
     return [
-      ...(this.#canDelegate === false ? DELEGATION_TOOLS.map(deny) : []),
+      ...deniedSpawningTools(sessionMayStart({ mayStart: this.#mayStart })).map(
+        deny
+      ),
       ...this.#deniedRules,
       ...(this.#fence ? await mcpFence(this.#client, this.#directory) : []),
     ];

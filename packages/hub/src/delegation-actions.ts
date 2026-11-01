@@ -18,6 +18,7 @@ import type {
   ImageGenerationRequest,
   InstanceRow,
   LandsMode,
+  MayStart,
   PermissionMode,
   PermissionResult,
   SendPayload,
@@ -708,11 +709,6 @@ export interface HandoffDeps {
    * the caller's own machine cuts its turn once this call is answered.
    */
   readonly callId?: string;
-  /**
-   * Whether THIS session may spawn sessions of its own. `false` on a leaf
-   * delegate (spawned with `can_delegate: false`); absent means allowed.
-   */
-  readonly canDelegate?: boolean;
   /** What it is working on, so the receiver knows who is calling. */
   readonly cwd: string;
   /** This session's own delegation tree, read by the hub (delegation-tree.ts). */
@@ -758,6 +754,11 @@ export interface HandoffDeps {
   readonly lands?: ItemEnd;
   /** Whether this session is the conversation of the project of the work item a session runs: it may steer, answer and stop it. */
   readonly ledBy?: (instanceId: string) => boolean;
+  /**
+   * The delegate types THIS session may start (core `MayStart`): its row's
+   * list; absent, a session nobody delegated, which may start any.
+   */
+  readonly mayStart?: MayStart;
   /** The session's project: its delegate types shadow the fleet's. */
   readonly projectId?: string;
   /**
@@ -856,10 +857,11 @@ export interface HandoffActions {
        */
       type?: string;
       /**
-       * Whether the new delegate may itself delegate/start sessions; default
-       * false — a delegate is a leaf unless granted.
+       * The delegate types the new delegate may start (core `MayStart`);
+       * default its type's list, else none: a delegate is a leaf unless
+       * granted.
        */
-      canDelegate?: boolean;
+      mayStart?: MayStart;
       /** An existing workspace's id: the new item is its follow-up. */
       workspace?: string;
       /** A workspace of this session's delegates: the new workspace is cut at its branch's head. */

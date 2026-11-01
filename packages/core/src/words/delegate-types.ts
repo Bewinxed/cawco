@@ -30,7 +30,9 @@ export const delegateTypesWords = {
   skillCount: (count: number) => `${count} skill${count === 1 ? "" : "s"}`,
   deniedCount: (count: number) =>
     `${count} tool${count === 1 ? "" : "s"} denied`,
-  mayDelegateShort: "may delegate",
+  /** What its sessions may start, on the row's line: every type, or the ones named (`names`, joined). */
+  mayStartAny: "may start any type",
+  mayStartShort: (names: string) => `may start ${names}`,
 
   /** The editor. */
   what: "delegate type",
@@ -61,18 +63,23 @@ export const delegateTypesWords = {
   unset: "Unset",
   reach: "What it can reach",
   reachNote:
-    "Comma-separated. Both are optional narrowings — empty means the delegate has the harness's ordinary defaults.",
+    "Comma-separated. Skills and tools denied are optional narrowings — empty means the delegate has the harness's ordinary defaults.",
   skills: "Skills",
   skillsPlaceholder: "svelte-foundations:coding, impeccable",
   denied: "Tools denied",
   deniedPlaceholder: "Write, Edit, NotebookEdit",
-  mayDelegate: "May delegate",
-  mayDelegateOn: "It can spawn delegates and sessions of its own.",
-  mayDelegateOff: "Leaf — it does the work itself and cannot delegate further.",
+  mayStart: "Types it may start",
+  mayStartPlaceholder: "browser, research",
+  mayStartHint:
+    "The delegate types its sessions may hand work to, or any for every type. Empty: it does the work itself and starts none.",
 
   /** What a type's fields are refused for before the hub sees them. */
   problemName:
-    "a delegate type needs a name: lowercase letters, digits and hyphens only",
+    "a delegate type needs a name: lowercase letters, digits and hyphens only, and not “any”",
+  problemMayStartAny:
+    "“any” already means every type: list it alone, or name the types",
+  problemMayStartName: (name: string) =>
+    `“${name}” in Types it may start is not a type name: lowercase letters, digits and hyphens`,
   problemDescription:
     "a delegate type needs a description — it is the whole of how the calling model routes to it",
   problemModel: "a delegate type needs a model",

@@ -462,7 +462,7 @@ export function createDelegationMcp(options: {
         formerIds: options.formerIds,
         fleet: options.fleet,
         cwd: "",
-        canDelegate: actor?.canDelegate ?? undefined,
+        mayStart: actor?.mayStart ?? undefined,
         hasParent: !actor || !!actor.parentInstanceId,
         lands: landsOf(actor),
         workItem: !actor || !!actor.workItemId,
@@ -1021,7 +1021,7 @@ export function createDelegationMcp(options: {
       callId,
       cwd: actor.cwd,
       harness: actor.harness as HarnessKind,
-      canDelegate: actor.canDelegate ?? undefined,
+      mayStart: actor.mayStart ?? undefined,
       hasParent: !!actor.parentInstanceId,
       lands: landsOf(actor),
       ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
@@ -1178,7 +1178,6 @@ export function createDelegationMcp(options: {
   /** The server's instructions for the session `bound`. */
   const instructionsFor = (
     bound: InstanceRow | undefined,
-    canDelegate: boolean | undefined,
     binding: string | null
   ): string =>
     handoffInstructions(
@@ -1189,7 +1188,7 @@ export function createDelegationMcp(options: {
         fleet: options.fleet,
         cwd: bound?.cwd ?? "",
         harness: bound?.harness as HarnessKind | undefined,
-        canDelegate,
+        mayStart: bound?.mayStart ?? undefined,
         deliver: () => {
           throw new Error("Instructions send nothing");
         },
@@ -1222,14 +1221,11 @@ export function createDelegationMcp(options: {
    */
   const open = async (binding: string | null, initialize: boolean) => {
     const bound = boundRow(binding);
-    const canDelegate = bound?.canDelegate ?? undefined;
     const server = new Server(
       { name: "cawco", version: "1.0.0" },
       {
         capabilities: { tools: { listChanged: true } },
-        instructions: initialize
-          ? instructionsFor(bound, canDelegate, binding)
-          : undefined,
+        instructions: initialize ? instructionsFor(bound, binding) : undefined,
       }
     );
     const transport = new WebStandardStreamableHTTPServerTransport({

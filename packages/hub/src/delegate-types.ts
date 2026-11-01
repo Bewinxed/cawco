@@ -11,6 +11,7 @@
 import type { Database } from "bun:sqlite";
 import type { DelegateType } from "@cawco/core";
 import {
+  ANY_TYPE,
   DEFAULT_DELEGATE_TYPES,
   delegateTypeProblem,
   EFFORT_LEVELS,
@@ -22,14 +23,14 @@ import { undoable } from "./db/trash";
 interface DelegateTypeRow {
   /** The account its sessions prefer; NULL: the provider's strategy chooses. */
   account: string | null;
-  /** sqlite has no boolean: 1, 0, or NULL (the column arrived after the table). */
-  can_delegate: number | null;
   /** The connections its sessions may call, as a JSON array; NULL: none. */
   connections: string | null;
   deny_tools: string | null;
   description: string;
   effort: string | null;
   harness: string;
+  /** The delegate types its sessions may start, as a JSON array; NULL: none. */
+  may_start: string | null;
   model: string;
   name: string;
   skills: string | null;
@@ -43,7 +44,7 @@ const rowToType = (row: DelegateTypeRow): DelegateType => ({
   ...(row.effort ? { effort: row.effort as DelegateType["effort"] } : {}),
   ...(row.skills ? { skills: JSON.parse(row.skills) } : {}),
   ...(row.deny_tools ? { denyTools: JSON.parse(row.deny_tools) } : {}),
-  ...(row.can_delegate === null ? {} : { canDelegate: row.can_delegate === 1 }),
+  ...(row.may_start ? { mayStart: JSON.parse(row.may_start) } : {}),
   cawcoTodos: true,
   ...(row.account ? { account: row.account } : {}),
   ...(row.connections ? { connections: JSON.parse(row.connections) } : {}),
@@ -80,8 +81,18 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
       name: string;
     }[]
   ).map((column) => column.name);
-  if (!columns.includes("can_delegate")) {
-    sqlite.run("ALTER TABLE delegate_types ADD COLUMN can_delegate INTEGER");
+  // What its sessions may start is a list of type names (core `MayStart`):
+  // a type that could delegate, `can_delegate = 1`, may start any.
+  if (!columns.includes("may_start")) {
+    sqlite.run("ALTER TABLE delegate_types ADD COLUMN may_start TEXT");
+    if (columns.includes("can_delegate")) {
+      sqlite.run(
+        `UPDATE delegate_types SET may_start = '["${ANY_TYPE}"]' WHERE can_delegate = 1`
+      );
+    }
+  }
+  if (columns.includes("can_delegate")) {
+    sqlite.run("ALTER TABLE delegate_types DROP COLUMN can_delegate");
   }
   // A sentinel independent of row count: `count() === 0` also describes "the
   // operator deleted every type on purpose", and reseeding on the next hub
@@ -128,11 +139,9 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
       .get("seeded") !== null;
 
   const put = (draft: DelegateType): DelegateType => {
-    const canDelegate =
-      draft.canDelegate === undefined ? null : Number(draft.canDelegate);
     sqlite
       .query(
-        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, account, connections, created_at)
+        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, may_start, account, connections, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(name) DO UPDATE SET
            description = excluded.description,
@@ -141,7 +150,7 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
            effort = excluded.effort,
            skills = excluded.skills,
            deny_tools = excluded.deny_tools,
-           can_delegate = excluded.can_delegate,
+           may_start = excluded.may_start,
            account = excluded.account,
            connections = excluded.connections`
       )
@@ -153,7 +162,7 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
         draft.effort ?? null,
         draft.skills ? JSON.stringify(draft.skills) : null,
         draft.denyTools ? JSON.stringify(draft.denyTools) : null,
-        canDelegate,
+        draft.mayStart?.length ? JSON.stringify(draft.mayStart) : null,
         draft.account ?? null,
         draft.connections?.length ? JSON.stringify(draft.connections) : null,
         Date.now()
@@ -199,7 +208,7 @@ export const delegateTypesRoutes = (
           ),
           skills: t.Optional(t.Array(t.String())),
           denyTools: t.Optional(t.Array(t.String())),
-          canDelegate: t.Optional(t.Boolean()),
+          mayStart: t.Optional(t.Array(t.String())),
           account: t.Optional(t.String()),
           connections: t.Optional(t.Array(t.String())),
         }),

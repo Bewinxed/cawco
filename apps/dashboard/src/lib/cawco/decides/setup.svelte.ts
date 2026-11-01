@@ -13,7 +13,7 @@ import {
   type Member,
   slugOf,
 } from "@cawco/core/decides";
-import type { DelegateType } from "@cawco/core/delegate-types";
+import { ANY_TYPE, type DelegateType } from "@cawco/core/delegate-types";
 import {
   EFFORT_LEVELS,
   type EffortLevel,
@@ -221,7 +221,7 @@ export const draftOf = (
   harness: caw?.harness ?? type?.harness ?? null,
   model: caw ? caw.model : (type?.model ?? null),
   effort: type?.effort ?? null,
-  delegates: type?.canDelegate ?? false,
+  delegates: type?.mayStart?.includes(ANY_TYPE) ?? false,
   skills: type?.skills ?? [],
   instructions: type?.description ?? "",
   kinds,

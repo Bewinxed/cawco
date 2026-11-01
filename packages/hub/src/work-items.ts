@@ -77,6 +77,7 @@ import type {
   WorkspaceWorkEnd,
 } from "@cawco/core";
 import {
+  ANY_TYPE,
   byPerson,
   CODE_MODE_TOOL,
   CONTROL_CLONE_HOLDING,
@@ -100,11 +101,16 @@ import {
   holdingWords,
   INPUTS_LIMIT_BYTES,
   isWorkspaceNeedsRefusal,
+  type MayStart,
   machineCalled,
+  mayStartType,
   NO_REPLY_TOOL,
+  narrowMayStart,
   OUTPUTS_DIR,
   sessionLink,
+  sessionMayStart,
   sizeWords,
+  startsAny,
   type TurnWakes,
   todoLink,
   WORK_ITEM_ORIGIN,
@@ -233,9 +239,25 @@ export const titleProblem = (title: string): string | undefined => {
     : undefined;
 };
 
-/** What a leaf delegate hears when it tries to spawn — relayed verbatim to the model. */
-export const LEAF_DELEGATE_REFUSAL =
-  "This session is a leaf delegate — it was spawned with can_delegate=false and may not delegate or start sessions. Do the work yourself, or handoff to your parent session.";
+/**
+ * Why `parent` may not start a delegate of `type`, or a session (`type`
+ * null), in the words its model reads; nothing when it may. What a session
+ * may start is its row's list (core `MayStart`): `["any"]` anything, any
+ * other list those types alone, so a leaf that may start `browser` starts a
+ * browser delegate and nothing else. Checked before anything spawns.
+ */
+export const mayStartRefusal = (
+  parent: Pick<InstanceRow, "delegateType" | "mayStart">,
+  type: string | null
+): string | undefined => {
+  const may = sessionMayStart(parent);
+  if (startsAny(may) || (type !== null && mayStartType(may, type))) {
+    return undefined;
+  }
+  return may.length === 0
+    ? workWords.leafRefusal
+    : workWords.mayStartOnly(parent.delegateType ?? null, may);
+};
 
 /**
  * Who an item is started for: the session that delegated it, or, for a
@@ -245,11 +267,12 @@ export const LEAF_DELEGATE_REFUSAL =
  */
 export type Parent = Pick<
   InstanceRow,
-  | "canDelegate"
   | "cwd"
+  | "delegateType"
   | "id"
   | "launchDir"
   | "machineId"
+  | "mayStart"
   | "model"
   | "projectId"
   | "sessionId"
@@ -302,8 +325,9 @@ export const verifierParent = (builder: {
   harness: null,
   model: null,
   sessionId: null,
-  // The hub starts it: its own session is the leaf (its request's canDelegate).
-  canDelegate: true,
+  delegateType: null,
+  // The hub starts it: its own session is the leaf (its request's mayStart).
+  mayStart: [ANY_TYPE],
 });
 
 /**
@@ -326,7 +350,8 @@ export const routineParent = (routine: {
   harness: null,
   model: null,
   sessionId: null,
-  canDelegate: true,
+  delegateType: null,
+  mayStart: [ANY_TYPE],
 });
 
 /** The states that take messages; every other one is finished work. */
@@ -723,7 +748,6 @@ export interface WorkItemRequest {
    * dispatcher for an attempt he started from the dashboard.
    */
   byPerson?: boolean;
-  canDelegate?: boolean;
   /** The repository a new workspace is cut from; the parent's directory by default. */
   cwd?: string;
   /**
@@ -766,6 +790,11 @@ export interface WorkItemRequest {
   lands?: LandsMode;
   /** The machine a new workspace is cut on; the parent's by default. */
   machineId?: string;
+  /**
+   * The delegate types it may start (core `MayStart`); its type's list when
+   * absent. Never past what its parent may start itself ({@link Settings}).
+   */
+  mayStart?: MayStart;
   model?: string;
   /**
    * Whose work it is (work_items.origin). Left out, its parent's: Caw's, the
@@ -1245,9 +1274,10 @@ const SETTLE_FAILS_LASTING = 3;
  */
 interface Settings {
   account?: string;
-  canDelegate: boolean;
   forkOf?: string;
   harness: HarnessKind;
+  /** The delegate types it may start: its request's or its type's, within its parent's. */
+  mayStart: MayStart;
   model?: string;
   /** The request's role, over its type's ({@link WorkItemRequest.role}). */
   role?: SessionRole;
@@ -1323,7 +1353,7 @@ const sessionOf = (
   instanceId: string,
   title: string,
   parent: Parent,
-  { account, canDelegate, forkOf, harness, model, role, skills, type }: Settings
+  { account, forkOf, harness, mayStart, model, role, skills, type }: Settings
 ): Omit<NamedSpawn, "cwd"> => ({
   instanceId,
   harness,
@@ -1353,7 +1383,7 @@ const sessionOf = (
   scratch: {},
   parent: { instanceId: parent.id },
   spawnedBy: { instanceId: parent.id },
-  canDelegate,
+  mayStart,
 });
 
 /**
@@ -5469,7 +5499,10 @@ export const createWorkItems = ({
       harness,
       model,
       skills: request.skills?.length ? request.skills : type?.skills,
-      canDelegate: request.canDelegate ?? type?.canDelegate ?? false,
+      mayStart: narrowMayStart(
+        request.mayStart ?? type?.mayStart ?? [],
+        sessionMayStart(parent)
+      ),
       ...(request.account ? { account: request.account } : {}),
       ...(request.role ? { role: request.role } : {}),
     };
@@ -5513,10 +5546,13 @@ export const createWorkItems = ({
    */
   const briefingOf = (request: WorkItemRequest): string | undefined => {
     const [parent] = db.getInstancesByIds([request.parentInstanceId]);
-    if (!parent || parent.canDelegate === false) {
+    if (!parent) {
       return undefined;
     }
-    return briefingFor(db, parent.id, briefTarget(request, parent));
+    const target = briefTarget(request, parent);
+    return mayStartRefusal(parent, target.delegateType)
+      ? undefined
+      : briefingFor(db, parent.id, target);
   };
 
   /**
@@ -5815,6 +5851,25 @@ export const createWorkItems = ({
   };
 
   /**
+   * Refuses a start its parent may not make (its may-start list, core
+   * `MayStart`), before anything spawns: a leaf starts only the types its
+   * list names, judged by the type this start runs as (a follow-up's, its
+   * session's). A card-settling start is the hub's, whoever asks.
+   */
+  const mayStartIt = (request: WorkItemRequest, parent: Parent): void => {
+    if (request.settlesCards || startsAny(sessionMayStart(parent))) {
+      return;
+    }
+    const refused = mayStartRefusal(
+      parent,
+      briefTarget(request, parent).delegateType
+    );
+    if (refused) {
+      throw new WorkItemRefusal(403, refused);
+    }
+  };
+
+  /**
    * The request as {@link start} files it (its outputs as paths), its parent,
    * and the project it works for; refused when any of it cannot stand.
    */
@@ -5843,9 +5898,7 @@ export const createWorkItems = ({
         `unknown session ${request.parentInstanceId}`
       );
     }
-    if (parent.canDelegate === false && !request.settlesCards) {
-      throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
-    }
+    mayStartIt(request, parent);
     const problem = requestProblem(request);
     if (problem) {
       throw new WorkItemRefusal(400, problem);
@@ -6456,7 +6509,7 @@ export const createWorkItems = ({
   ): WorkItemStart => {
     notPaused(workspace.machineId);
     modelOffered(workspace.machineId, settings);
-    const { harness, canDelegate } = settings;
+    const { harness, mayStart } = settings;
     // A queued delegate's session and item take the ids its chip stood under.
     const instanceId =
       ahead?.instanceId ?? request.queuedAs?.instanceId ?? crypto.randomUUID();
@@ -6593,9 +6646,7 @@ export const createWorkItems = ({
           : `work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}).`) +
         ` ${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${label}", ...): the message lands in the same session and its cached transcript.` +
-        (canDelegate
-          ? " It may spawn delegates of its own."
-          : " It is a leaf: it cannot delegate further.") +
+        ` ${workWords.startsDelegates(mayStart)}` +
         extrasLine(item) +
         inputsSaid(inputs),
     };

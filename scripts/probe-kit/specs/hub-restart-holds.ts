@@ -503,7 +503,7 @@ const legB = async (legs: Legs) => {
 /** (c) A completing item lands only after its own delegate, across a crash. */
 const legC = async (legs: Legs) => {
   const { check, fleet } = legs;
-  const owner = await delegate(legs, legs.parent, "C", { canDelegate: true });
+  const owner = await delegate(legs, legs.parent, "C", { mayStart: ["any"] });
   const ownerSession = itemOf(fleet, owner)?.instance_id ?? "";
   const child = await delegate(legs, ownerSession, "CHILD");
   stepsOf("C").armed = true;

@@ -106,7 +106,7 @@ function seedSessions(db: HubDb, projects: string[]): Seeded[] {
       harness: pick(HARNESSES),
       origin: parent ? "delegate" : "person",
       projectId,
-      ...(parent ? { parentInstanceId: parent.id, canDelegate: false } : {}),
+      ...(parent ? { parentInstanceId: parent.id, mayStart: [] } : {}),
       title: pick(WORDS),
       kind: s % 25 === 0 ? "scratch" : "mainline",
       permissionMode: "bypassPermissions",

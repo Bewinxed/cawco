@@ -20,8 +20,8 @@
  * The file's name is the type's name; the body is its brief, and also its
  * description (what a calling model routes by) unless the front matter gives
  * one. A type is a preset: there is no persona text. `deny` (Claude's tool
- * names) and `can_delegate` mean what a fleet type's `denyTools` and
- * `canDelegate` mean, and `account:` names the account its sessions prefer
+ * names) and `may_start` (`[browser]`, or `any`) mean what a fleet type's
+ * `denyTools` and `mayStart` mean, and `account:` names the account its sessions prefer
  * (an account id).
  *
  * Files are the truth: the catalog is read from the folder each time it is
@@ -40,6 +40,7 @@ import {
   frontMatterBlock,
   LANDS_MODES,
   type LandsMode,
+  mayStartProblem,
   SESSION_ROLES,
   type SessionRole,
 } from "@cawco/core";
@@ -101,7 +102,7 @@ const KNOWN_FIELDS = new Set([
   "budget",
   "lands",
   "deny",
-  "can_delegate",
+  "may_start",
   "account",
   "description",
 ]);
@@ -175,7 +176,7 @@ const projectFieldsOf = (
   | string
   | Pick<
       CatalogType,
-      "budget" | "lands" | "connections" | "role" | "canDelegate"
+      "budget" | "lands" | "connections" | "role" | "mayStart"
     > => {
   const role = fields.scalar("role");
   if (!oneOf(role, TYPE_ROLES)) {
@@ -185,9 +186,11 @@ const projectFieldsOf = (
   if (!oneOf(lands, LANDS_MODES)) {
     return `lands is one of ${LANDS_MODES.join(", ")}, not “${lands}”`;
   }
-  const canDelegate = fields.scalar("can_delegate");
-  if (!oneOf(canDelegate, ["true", "false"])) {
-    return `can_delegate is true or false, not “${canDelegate}”`;
+  // `may_start: any` reads as the list `[any]`.
+  const mayStart = fields.list("may_start");
+  const mayStartWrong = mayStart ? mayStartProblem(mayStart) : undefined;
+  if (mayStartWrong) {
+    return `may_start: ${mayStartWrong}`;
   }
   const budgetLine = fields.line("budget");
   const budget = budgetLine ? budgetOf(budgetLine) : undefined;
@@ -202,7 +205,7 @@ const projectFieldsOf = (
     ...(role ? { role: role as SessionRole } : {}),
     ...(budget && Object.keys(budget).length > 0 ? { budget } : {}),
     ...(lands ? { lands: lands as LandsMode } : {}),
-    ...(canDelegate ? { canDelegate: canDelegate === "true" } : {}),
+    ...(mayStart?.length ? { mayStart } : {}),
   };
 };
 
@@ -253,9 +256,7 @@ const parseTypeFile = (
     ...(deny?.length ? { denyTools: deny } : {}),
     ...(account ? { account } : {}),
     ...(extra.connections ? { connections: extra.connections } : {}),
-    ...(extra.canDelegate === undefined
-      ? {}
-      : { canDelegate: extra.canDelegate }),
+    ...(extra.mayStart ? { mayStart: extra.mayStart } : {}),
   };
   const problem = delegateTypeProblem(draft);
   if (problem) {
@@ -275,7 +276,7 @@ const parseTypeFile = (
 
 /** The words naming the fields a type file had no use for. */
 const ignoredWords = (ignored: string[]): string =>
-  `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, can_delegate, account and description`;
+  `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, may_start, account and description`;
 
 /**
  * Why `content` written at `path` (`delegates/<name>.md`) would not make a

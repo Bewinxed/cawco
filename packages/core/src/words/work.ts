@@ -24,6 +24,25 @@ export const workWords = {
     "This item belongs to no project, so nothing in $TMPDIR is collected: what your parent needs goes in your report or a commit.",
   /** The heading of a report's merge checks section, over its checks' lines. */
   gateHeading: "Merge checks, run by the hub:",
+  /**
+   * A start refused by its caller's may-start list (core `MayStart`; hub
+   * work-items.ts `startRefusal`), before anything spawns: a leaf that may
+   * start nothing, or none of what it asked for.
+   */
+  leafRefusal:
+    "This session is a leaf: it may not delegate or start sessions. Do the work yourself, or handoff to your parent session.",
+  /** `type`: the caller's own delegate type, when it has one. */
+  mayStartOnly: (type: string | null, allowed: readonly string[]) =>
+    `${type ? `This session's type ${type}` : "This session"} may start only: ${allowed.join(", ")}.`,
+  /** What a delegate is told it may start, as `delegate` answers its parent. */
+  startsDelegates: (allowed: readonly string[]) => {
+    if (allowed.includes("any")) {
+      return "It may spawn delegates of its own.";
+    }
+    return allowed.length === 0
+      ? "It is a leaf: it cannot delegate further."
+      : `It is a leaf that may start only: ${allowed.join(", ")}.`;
+  },
   /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
   reportArrives:
     "Its report arrives once it calls finish_item and its work passes the hub's merge checks; the report quotes the commands it ran.",

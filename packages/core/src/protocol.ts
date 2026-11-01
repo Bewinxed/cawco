@@ -3,6 +3,7 @@
 import type { ACTIVITIES } from "./activity";
 import type { ArtifactKind } from "./artifact-kinds";
 import { CAWCO_ENV, readEnv } from "./cawco-env";
+import type { MayStart } from "./delegate-types";
 import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
 import type { LastErrorKind } from "./relaunch";
@@ -122,14 +123,6 @@ export interface SpawnPayload {
    * git into a subdirectory of `baseDir` and runs the session in the clone.
    */
   bootstrap?: { repo: string; baseDir: string };
-  /**
-   * Whether this session may spawn sessions of its own (`delegate` and
-   * `start_session`). Set by the `delegate` tool's `can_delegate` param; a
-   * delegate that is not granted it is a leaf: claude and pi never give it the
-   * spawning tools, and the hub refuses any spawn naming it as parent. Absent
-   * on a session nobody delegated (a mainline session may always delegate).
-   */
-  canDelegate?: boolean;
   cwd: string;
   /**
    * The delegate type it was started as: its name, and the project whose
@@ -191,6 +184,15 @@ export interface SpawnPayload {
   instructions?: import("./fleet").SessionInstruction[];
   /** The in-flight maintenance send a surviving Claude process is answering. */
   keepAliveTurn?: string;
+  /**
+   * The delegate types this session may start ({@link MayStart}): `["any"]`
+   * an orchestrator's; any other list a leaf's, which never gets the
+   * spawning tools but `delegate` (for a list that names a type), and whose
+   * every other start the hub refuses. Set by the `delegate` call's
+   * `may_start`, else its type's. Absent on a session nobody delegated (a
+   * mainline session may always delegate).
+   */
+  mayStart?: MayStart;
   /**
    * Which model answers, from the session's first turn. Hoisted for the same
    * reason as `permissionMode`. Absent leaves the choice to the harness.
@@ -1038,12 +1040,6 @@ export interface InstanceRow {
    */
   accountId?: string | null;
   /**
-   * Whether the session may spawn delegates of its own — `false` on a leaf
-   * delegate (spawned with `can_delegate: false`, the default). Null on a
-   * session nobody delegated, which may.
-   */
-  canDelegate?: boolean | null;
-  /**
    * The effort the operator chose for the session: its spawn's level, or the
    * last `setEffort` sent it. The hub starts every process of the session at
    * it, whatever brings it back; a reading never moves it. Null: nobody
@@ -1107,6 +1103,12 @@ export interface InstanceRow {
    */
   launchDir: "known" | "unread" | "unknown";
   machineId: string;
+  /**
+   * The delegate types the session may start ({@link MayStart}): `["any"]`
+   * an orchestrator's, any other list a leaf's (the empty one by default).
+   * Null on a session nobody delegated, which may start any.
+   */
+  mayStart?: MayStart | null;
   model?: string | null;
   /**
    * Who started it ({@link SessionOrigin}), as the hub stamped it at its

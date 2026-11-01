@@ -1025,7 +1025,7 @@ const DELEGATE_TYPE_FIELDS = [
   "effort",
   "skills",
   "denyTools",
-  "canDelegate",
+  "mayStart",
   "connections",
 ] as const;
 

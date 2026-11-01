@@ -63,7 +63,10 @@ import type {
 } from "./connections";
 import { CONNECTION_AUTHS, CONNECTION_TRANSPORTS } from "./connections";
 import type { Extracted as ExtractedType } from "./continuation-read";
-import type { SessionRole as SessionRoleType } from "./delegate-types";
+import type {
+  MayStart as MayStartType,
+  SessionRole as SessionRoleType,
+} from "./delegate-types";
 import { SESSION_ROLES } from "./delegate-types";
 import type {
   AttemptResult as AttemptResultType,
@@ -1910,6 +1913,8 @@ const SessionInstructionShape = z.object({
   path: z.string(),
 });
 
+const MayStartShape = z.array(z.string());
+
 const SessionRoleShape = z.enum(SESSION_ROLES);
 
 const WorkspaceRefShape = z.object({ id: z.string(), path: z.string() });
@@ -1918,7 +1923,6 @@ const SpawnPayloadShape = z.object({
   account: z.string().optional(),
   accountDir: z.object({ accountId: z.string() }).optional(),
   bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
-  canDelegate: z.boolean().optional(),
   cwd: z.string(),
   delegateType: z
     .object({ name: z.string(), projectId: z.string().optional() })
@@ -1932,6 +1936,7 @@ const SpawnPayloadShape = z.object({
   instanceId: z.string(),
   instructions: z.array(SessionInstructionShape).optional(),
   keepAliveTurn: z.string().optional(),
+  mayStart: MayStartShape.optional(),
   model: z.string().optional(),
   options: z.unknown().optional(),
   parent: z
@@ -2405,6 +2410,7 @@ prove<
     Same<z.output<typeof SkillFileShape>, SkillFileType>,
     Same<z.output<typeof IngestMarkShape>, IngestMarkType>,
     Same<z.output<typeof SessionInstructionShape>, SessionInstructionType>,
+    Same<z.output<typeof MayStartShape>, MayStartType>,
     Same<z.output<typeof SessionRoleShape>, SessionRoleType>,
     Same<z.output<typeof WorkspaceRefShape>, WorkspaceRefType>,
     Same<z.output<typeof SpawnPayloadShape>, SpawnPayloadType>,

@@ -106,6 +106,7 @@
  * again as a safety net and starts nothing when nothing is ready.
  */
 import {
+  ANY_TYPE,
   artifactName,
   deliverableKind,
   type InstanceRow,
@@ -1176,7 +1177,7 @@ export const createDispatcher = ({
         type,
         lands,
         // A whole's attempt coordinates its parts: it delegates.
-        ...(task.parts.length > 0 ? { canDelegate: true } : {}),
+        ...(task.parts.length > 0 ? { mayStart: [ANY_TYPE] } : {}),
         waitedOn: witnessesOf(task),
         ...taskLimits(task),
         ...placed,

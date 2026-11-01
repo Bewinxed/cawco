@@ -6,9 +6,11 @@
  */
 import {
   type DelegateType,
+  delegateTypesWords as delegateTypesUiWords,
   type GeneratedImage,
   planLink,
   sessionLink,
+  startsAny,
 } from "@cawco/core";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import type { DelegateList, DelegateNode } from "../delegation-tree";
@@ -160,7 +162,13 @@ const typeLine = (type: DelegateType & { source?: string }): string => {
     ...(type.connections?.length
       ? [`connections ${type.connections.join(", ")}`]
       : []),
-    ...(type.canDelegate ? ["may delegate"] : []),
+    ...(type.mayStart?.length
+      ? [
+          startsAny(type.mayStart)
+            ? delegateTypesUiWords.mayStartAny
+            : delegateTypesUiWords.mayStartShort(type.mayStart.join(", ")),
+        ]
+      : []),
     ...(type.source === "project" ? ["the project's own"] : []),
   ];
   return `- ${type.name}: ${type.description.replace(/\s+/gu, " ").trim()} (${runs.join("; ")})`;

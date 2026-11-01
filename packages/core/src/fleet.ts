@@ -650,9 +650,10 @@ export interface FleetMemoryDoc {
 
 /**
  * The two kinds of session a role-scoped document is for. An orchestrator
- * is a session holding the spawning tools (`delegate`): its role's toolset
- * has them and it was not started as a leaf (`canDelegate: false`). Every
- * other session is a leaf. The hub decides which a session is (roles.ts
+ * is a session that may start any delegate type: its role's toolset has the
+ * spawning tools and its may-start list is `["any"]` (delegate-types.ts
+ * `MayStart`). Every other session is a leaf, one that may start a few
+ * named types included. The hub decides which a session is (roles.ts
  * `memoryRoleOf`).
  */
 export const MEMORY_ROLES = ["orchestrator", "leaf"] as const;

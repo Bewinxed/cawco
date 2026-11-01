@@ -381,7 +381,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
           cwd: workspace.path,
           machineId: workspace.machineId,
           origin: brief.origin,
-          canDelegate: false,
+          mayStart: [],
           // Checked out by the hub before the verifier starts, as a move: a
           // commit that changes a path the boundary keeps is written on the
           // host, never dropped by the verifier's own checkout.

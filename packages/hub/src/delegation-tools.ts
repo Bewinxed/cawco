@@ -9,7 +9,9 @@ import {
   NO_REPLY_TOOL,
   REFERENCE_GUIDANCE,
   SESSION_CHOSEN_MODES,
-  SPAWNING_TOOLS,
+  sessionMayStart,
+  spawningToolAllowed,
+  startsAny,
 } from "@cawco/core";
 import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
 import type { DesignMap } from "@cawco/core/stage";
@@ -389,9 +391,9 @@ export function handoffTools(deps: HandoffDeps) {
       () => Promise.resolve(actions.listSessions()),
       sentence
     ),
-    // A leaf has no delegate of its own to hand inputs to: only a session
-    // that may delegate is listed `inputs`.
-    deps.canDelegate === false
+    // A leaf that starts nothing has no delegate of its own to hand inputs
+    // to: only a session that may start one is listed `inputs`.
+    sessionMayStart(deps).length === 0
       ? tool(
           "handoff",
           HANDOFF_DESCRIPTION,
@@ -530,11 +532,11 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "Start as a copy of this conversation, on this session's harness and model."
           ),
-        can_delegate: z
-          .boolean()
+        may_start: z
+          .array(z.string())
           .optional()
           .describe(
-            "Let it start delegates of its own; default its type's, else false. Only for an orchestrator that fans out."
+            'Types it may start; ["any"] for an orchestrator that fans out. Default its type\'s, else none.'
           ),
         inputs: inputsParameter(),
         lands: z
@@ -571,7 +573,7 @@ export function handoffTools(deps: HandoffDeps) {
         workspace,
         from,
         fork,
-        can_delegate,
+        may_start,
         inputs,
         machine,
         lands,
@@ -592,7 +594,7 @@ export function handoffTools(deps: HandoffDeps) {
           from,
           fork,
           type,
-          canDelegate: can_delegate,
+          mayStart: may_start,
           inputs,
           machine,
           lands,
@@ -1144,7 +1146,7 @@ export function handoffTools(deps: HandoffDeps) {
   ];
   return all.filter(
     (entry) =>
-      (deps.canDelegate !== false || !SPAWNING_TOOLS.has(entry.name)) &&
+      spawningToolAllowed(entry.name, sessionMayStart(deps)) &&
       (!["finish_item", "wait_item"].includes(entry.name) || !!deps.workItem)
   );
 }
@@ -1318,8 +1320,15 @@ export function handoffInstructions(
     ? "\n\ngenerate_image makes images on any model, through the machine's ChatGPT login, so this session makes its own."
     : "";
   const loading = `\n\n${loadingLine(listable)}`;
-  if (deps.canDelegate === false) {
-    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done. Use wait_item for a bounded wait on a command you started. Use handoff to reach your parent or a session that already owns related work.\n\n${naming}${loading}${images}`;
+  const mayStart = sessionMayStart(deps);
+  if (!startsAny(mayStart)) {
+    // A leaf that may start a few types hands them the work they name and
+    // waits on their reports like any parent.
+    const starts =
+      mayStart.length > 0
+        ? ` It may delegate to these types alone: ${mayStart.join(", ")}. A delegate's report wakes this session, so end your turn to wait for one.`
+        : "";
+    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done.${starts} Use wait_item for a bounded wait on a command you started. Use handoff to reach your parent or a session that already owns related work.\n\n${naming}${loading}${images}`;
   }
   // The orchestrator's seat, the same on every model: an Opus orchestrator
   // made 387 shell and about 50 browser calls in one day (killing dev

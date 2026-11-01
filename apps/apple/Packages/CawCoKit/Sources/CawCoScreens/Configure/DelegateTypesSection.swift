@@ -151,7 +151,9 @@ final class DelegateTypesSectionController: ConfigSectionController {
         if let effort = type.effort { parts.append(Words.DelegateTypes.effortOf(effort: effort.rawValue)) }
         if let skills = type.skills, !skills.isEmpty { parts.append(Words.DelegateTypes.skillCount(count: skills.count)) }
         if let denied = type.denyTools, !denied.isEmpty { parts.append(Words.DelegateTypes.deniedCount(count: denied.count)) }
-        if type.canDelegate == true { parts.append(Words.DelegateTypes.mayDelegateShort) }
+        if let starts = type.mayStart, !starts.isEmpty {
+            parts.append(starts.contains("any") ? Words.DelegateTypes.mayStartAny : Words.DelegateTypes.mayStartShort(names: starts.joined(separator: ", ")))
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -227,7 +229,6 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
     private let original: DelegateType?
     private var harness: String
     private var effort: String?
-    private var canDelegate: Bool
     private var created = false
     private var attempted = false
     private var touched: Set<String> = []
@@ -246,7 +247,8 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
     private let effortChoice = ChoiceField(label: Words.DelegateTypes.effort)
     private let skills = KitField(placeholder: Words.DelegateTypes.skillsPlaceholder, mono: true)
     private let denied = KitField(placeholder: Words.DelegateTypes.deniedPlaceholder, mono: true)
-    private let delegates = SwitchField(label: Words.DelegateTypes.mayDelegate)
+    private let starts = KitField(placeholder: Words.DelegateTypes.mayStartPlaceholder, mono: true)
+    private var startsField: ConfigField!
 
     /// The fields as the form holds them: what a draft keeps, and what Save writes from.
     private struct Fields: Equatable {
@@ -257,7 +259,7 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
         var effort: String?
         var skills: String
         var denied: String
-        var canDelegate: Bool
+        var starts: String
     }
 
     /// What is saved, as the form would hold it: fields that come back to it are no edit.
@@ -270,13 +272,12 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
         original = type
         baseline = Fields(name: type?.name ?? "", description: type?.description ?? "", harness: type?.harness.rawValue ?? "claude",
                           model: type?.model ?? "", effort: type?.effort?.rawValue, skills: type?.skills?.joined(separator: ", ") ?? "",
-                          denied: type?.denyTools?.joined(separator: ", ") ?? "", canDelegate: type?.canDelegate == true)
+                          denied: type?.denyTools?.joined(separator: ", ") ?? "", starts: type?.mayStart?.joined(separator: ", ") ?? "")
         let path = ConfigDrafts.path("delegate-types", type?.name)
         restored = ConfigDrafts.shared.kept(path, as: Fields.self)
         let start = restored ?? baseline
         harness = start.harness
         effort = start.effort
-        canDelegate = start.canDelegate
         super.init(section: section, context: context, title: type?.name ?? Words.DelegateTypes.newTitle,
                    saveLabel: type == nil ? Words.DelegateTypes.create : Words.DelegateTypes.save,
                    deleteLabel: type == nil ? nil : Words.DelegateTypes.remove)
@@ -321,18 +322,16 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
         }
         skills.text = start.skills
         denied.text = start.denied
-        for field in [skills, denied] { field.addAction(UIAction { [weak self] _ in self?.changed() }, for: .editingChanged) }
-        delegates.onChange = { [weak self] on in
-            self?.canDelegate = on
-            self?.draw()
-        }
+        starts.text = start.starts
+        for field in [skills, denied, starts] { field.addAction(UIAction { [weak self] _ in self?.changed() }, for: .editingChanged) }
+        startsField = ConfigField(label: Words.DelegateTypes.mayStart, control: starts)
 
         parts.addArrangedSubview(editorSection(.document, hue: Palette.hueBlue500, Words.DelegateTypes.description, [descriptionField]))
         parts.addArrangedSubview(editorSection(.cpu, hue: Palette.hueBlue500, Words.DelegateTypes.runsOn,
                                                [metaLine(Words.DelegateTypes.runsOnNote), harnessChoice, modelField, effortChoice]))
         parts.addArrangedSubview(editorSection(.key, hue: Palette.hueBlue500, Words.DelegateTypes.reach,
                                                [metaLine(Words.DelegateTypes.reachNote), ConfigField(label: Words.DelegateTypes.skills, control: skills),
-                                                ConfigField(label: Words.DelegateTypes.denied, control: denied), delegates]))
+                                                ConfigField(label: Words.DelegateTypes.denied, control: denied), startsField]))
         draw()
     }
 
@@ -370,16 +369,23 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
         made.effort = effort.map(Components.Schemas.EffortLevel.init(rawValue:))
         made.skills = list(skills.text)
         made.denyTools = list(denied.text)
-        made.canDelegate = canDelegate
+        made.mayStart = list(starts.text)
         return made
     }
 
     /// The field a draft is refused for, and why (core `delegateTypeProblem`, the fields this editor holds).
     private func problem(of draft: DelegateType?) -> (field: String, words: String)? {
         guard let draft else { return nil }
-        if draft.name.range(of: "^[a-z][a-z0-9-]*$", options: .regularExpression) == nil { return ("name", Words.DelegateTypes.problemName) }
+        if draft.name.range(of: "^[a-z][a-z0-9-]*$", options: .regularExpression) == nil || draft.name == "any" {
+            return ("name", Words.DelegateTypes.problemName)
+        }
         if draft.description.isEmpty { return ("description", Words.DelegateTypes.problemDescription) }
         if draft.model.isEmpty { return ("model", Words.DelegateTypes.problemModel) }
+        let starts = draft.mayStart ?? []
+        if starts.contains("any") && starts.count > 1 { return ("mayStart", Words.DelegateTypes.problemMayStartAny) }
+        if let bad = starts.first(where: { $0.range(of: "^[a-z][a-z0-9-]*$", options: .regularExpression) == nil }) {
+            return ("mayStart", Words.DelegateTypes.problemMayStartName(name: bad))
+        }
         return nil
     }
 
@@ -394,7 +400,7 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
 
     private var fields: Fields {
         Fields(name: nameInput.text ?? "", description: descriptionArea.text, harness: harness, model: model.text, effort: effort,
-               skills: skills.text ?? "", denied: denied.text ?? "", canDelegate: canDelegate)
+               skills: skills.text ?? "", denied: denied.text ?? "", starts: starts.text ?? "")
     }
 
     private func draw() {
@@ -414,7 +420,7 @@ final class DelegateTypeEditorController: ConfigEditorController, UITextFieldDel
         harnessChoice.set(ModelCatalog.harnesses.map { ($0, $0) }, value: harness)
         effortChoice.set([("unset", Words.DelegateTypes.unset)] + Words.DelegateTypes.effortLevels.map { ($0, $0) }, value: effort ?? "unset")
         model.offer(ModelCatalog.models(hub.fleet, harness: harness, machineIds: []).map(\.value))
-        delegates.set(on: canDelegate, hint: canDelegate ? Words.DelegateTypes.mayDelegateOn : Words.DelegateTypes.mayDelegateOff)
+        startsField.say(hint: Words.DelegateTypes.mayStartHint, problem: problemFor("mayStart"))
         canSave = refused == nil && !duplicate
         navigationItem.title = original?.name ?? Words.DelegateTypes.newTitle
     }

@@ -121,7 +121,7 @@ export const types: DelegateType[] = [
     harness: "claude",
     model: "claude-fable-5-1",
     effort: "high",
-    canDelegate: false,
+    mayStart: [],
   },
   {
     name: "research",
@@ -130,7 +130,7 @@ export const types: DelegateType[] = [
     harness: "claude",
     model: "sonnet",
     effort: "medium",
-    canDelegate: false,
+    mayStart: [],
   },
   {
     name: "design-reviewer",
@@ -140,7 +140,7 @@ export const types: DelegateType[] = [
     model: "opus",
     effort: "high",
     skills: ["defensive-css", "clean-copy"],
-    canDelegate: false,
+    mayStart: [],
   },
   {
     name: "release-checker",
@@ -149,7 +149,7 @@ export const types: DelegateType[] = [
     harness: "opencode",
     model: "openai/gpt-6.1-sol",
     effort: "medium",
-    canDelegate: true,
+    mayStart: ["any"],
   },
 ];
 

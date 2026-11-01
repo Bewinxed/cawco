@@ -383,7 +383,9 @@ import {
   SUMMARY_CAP_TOKENS,
   sameIdentity,
   sessionLink,
+  sessionMayStart,
   startRefused,
+  startsAny,
   stepNamesArtifact,
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
@@ -1003,7 +1005,7 @@ import {
   type ItemPlacement,
   isHubParent,
   isLive,
-  LEAF_DELEGATE_REFUSAL,
+  mayStartRefusal,
   outputsFolder,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
@@ -2160,16 +2162,6 @@ const resolveDelegatePermissionMode = (
   }
   return undefined;
 };
-
-/**
- * Whether a session spawned under `parentInstanceId` may be a delegate at all.
- * A leaf delegate — a row whose `canDelegate` is `false` — may not spawn
- * delegates or start sessions, so its spawns are refused. No walk up the tree:
- * the flag is per-row, granted (or withheld) by the immediate parent when it
- * delegated. An unknown parent is refused; null or true allows.
- */
-const resolveCanDelegate = (parent: InstanceRow | undefined): boolean =>
-  !!parent && parent.canDelegate !== false;
 
 /** The report beat's word on what each harness adapter on the machine can do. */
 const peekHarnesses = (
@@ -8266,7 +8258,7 @@ export const createServer = (
     ...(row.model ? { model: row.model } : {}),
     ...(row.projectId ? { projectId: row.projectId } : {}),
     // A leaf stays a leaf whatever brings it back (as `restore` says).
-    ...(row.canDelegate === false ? { canDelegate: false } : {}),
+    ...(row.mayStart ? { mayStart: row.mayStart } : {}),
     ...typeSettingsOf(row),
   });
 
@@ -16430,7 +16422,7 @@ export const createServer = (
       kind: peekKind(payload),
       permissionMode: settled.permissionMode,
       model: payload.model,
-      canDelegate: payload.canDelegate,
+      mayStart: payload.mayStart,
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
       ...(payload.role ? { role: payload.role } : {}),
@@ -19045,8 +19037,8 @@ export const createServer = (
       ...(row.projectId ? { projectId: row.projectId } : {}),
       // A leaf stays a leaf across a restart: the daemon builds the toolset
       // from the payload, and a restore that dropped this would hand a leaf
-      // delegate the `delegate` tool back.
-      ...(row.canDelegate === false ? { canDelegate: false } : {}),
+      // delegate the spawning tools back.
+      ...(row.mayStart ? { mayStart: row.mayStart } : {}),
       ...typeSettingsOf(row),
     } satisfies NamedSpawn);
     if ("refusal" in launched) {
@@ -19128,7 +19120,7 @@ export const createServer = (
       kind: row.kind === "scratch" ? "scratch" : "mainline",
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
-      canDelegate: row.canDelegate ?? undefined,
+      mayStart: row.mayStart ?? undefined,
       // The turn its last launch had open is handed back once this one is up.
       keepTurn: true,
     });
@@ -26031,8 +26023,8 @@ export const createServer = (
     }
   };
   /**
-   * Delegate type (§5.9) for a `delegate` call that names no type, harness
-   * or model and continues no session: Jev's choice from the parent's
+   * Delegate type (§5.9) for a `delegate` call from an orchestrator that
+   * names no type, harness or model and continues no session: Jev's choice from the parent's
    * project's catalog while Jev is on; off, the delegating session named
    * none, so "medium" (work-items' default, undefined here). A Jev that does
    * not answer refuses the call in its words (the route's 502).
@@ -26056,8 +26048,13 @@ export const createServer = (
     ) {
       return {};
     }
-    const projectId =
-      db.getInstancesByIds([request.parentInstanceId])[0]?.projectId ?? null;
+    const [parent] = db.getInstancesByIds([request.parentInstanceId]);
+    // A leaf picks from the few types it may start: Jev's pick from the
+    // whole catalog would only be refused.
+    if (parent && !startsAny(sessionMayStart(parent))) {
+      return {};
+    }
+    const projectId = parent?.projectId ?? null;
     const access = jevAccess(db);
     if (!access) {
       offLine(
@@ -26838,14 +26835,16 @@ export const createServer = (
       return Promise.resolve(sessionSend(envelope, requester));
     },
     // A session's start_session: the caller's own machine unless it named
-    // one, refused to a session that may not delegate, held until in place.
+    // one, refused to a leaf (one that may not start any type), held until
+    // in place.
     spawn: (envelope, actor) => {
       const [requester] = db.getInstancesByIds([actor.id]);
       if (!requester) {
         throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
       }
-      if (!resolveCanDelegate(requester)) {
-        throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
+      const refused = mayStartRefusal(requester, null);
+      if (refused) {
+        throw new WorkItemRefusal(403, refused);
       }
       const { fallbackPermissionMode, ...asked } = envelope.payload;
       // The agent's check, nested under the agent whatever its call named.
@@ -29454,8 +29453,8 @@ export const createServer = (
       model: payload.model,
       // A start that is a leaf is one on its row too: its machine withholds
       // the spawning tools from it, and the hub reads its row for every
-      // other answer about it (who may spawn, its memory role, a restore).
-      canDelegate: payload.canDelegate,
+      // other answer about it (what it may start, its memory role, a restore).
+      mayStart: payload.mayStart,
       ...parent,
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
@@ -33603,7 +33602,7 @@ export const createServer = (
             model: t.Optional(t.String()),
             account: t.Optional(t.String()),
             skills: t.Optional(t.Array(t.String())),
-            canDelegate: t.Optional(t.Boolean()),
+            mayStart: t.Optional(t.Array(t.String())),
             cwd: t.Optional(t.String()),
             machineId: t.Optional(t.String()),
             workspace: t.Optional(t.String()),
@@ -37697,19 +37696,19 @@ export const createServer = (
               // the one rule's (`settleMode`): one the person chose for a
               // harness with modes, refused when omitted, and none for one
               // that has none.
-              // Whether it may delegate is never the client's to say: only
+              // What it may start is never the client's to say: only
               // `delegate` makes a leaf, and a leaf stays one whatever brings
               // it back, so its row's word goes to its machine (as `restore`
               // sends it). A relaunch without it gave an OpenCode or pi leaf
               // its spawning tools back while its row stayed a leaf.
-              const { model: named, canDelegate: _asked, ...rest } = start;
+              const { model: named, mayStart: _asked, ...rest } = start;
               const [known] = message.instanceId
                 ? db.getInstancesByIds([message.instanceId])
                 : [];
               const spawning: NamedSpawn = {
                 ...rest,
                 ...(named ? { model: named } : {}),
-                ...(known?.canDelegate === false ? { canDelegate: false } : {}),
+                ...(known?.mayStart ? { mayStart: known.mayStart } : {}),
               };
               // pi's `default` is first named by what pi picks in the
               // session's directory, which its machine answers; every other

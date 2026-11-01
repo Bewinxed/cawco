@@ -3050,7 +3050,12 @@ public enum Words {
             "\(count) tool\(count == 1 ? "" : "s") denied"
         }
 
-        public static let mayDelegateShort = "may delegate"
+        /// What its sessions may start, on the row's line: every type, or the ones named (`names`, joined).
+        public static let mayStartAny = "may start any type"
+
+        public static func mayStartShort(names: String) -> String {
+            "may start \(names)"
+        }
 
         /// The editor.
         public static let what = "delegate type"
@@ -3093,7 +3098,7 @@ public enum Words {
 
         public static let reach = "What it can reach"
 
-        public static let reachNote = "Comma-separated. Both are optional narrowings — empty means the delegate has the harness's ordinary defaults."
+        public static let reachNote = "Comma-separated. Skills and tools denied are optional narrowings — empty means the delegate has the harness's ordinary defaults."
 
         public static let skills = "Skills"
 
@@ -3103,14 +3108,20 @@ public enum Words {
 
         public static let deniedPlaceholder = "Write, Edit, NotebookEdit"
 
-        public static let mayDelegate = "May delegate"
+        public static let mayStart = "Types it may start"
 
-        public static let mayDelegateOn = "It can spawn delegates and sessions of its own."
+        public static let mayStartPlaceholder = "browser, research"
 
-        public static let mayDelegateOff = "Leaf — it does the work itself and cannot delegate further."
+        public static let mayStartHint = "The delegate types its sessions may hand work to, or any for every type. Empty: it does the work itself and starts none."
 
         /// What a type's fields are refused for before the hub sees them.
-        public static let problemName = "a delegate type needs a name: lowercase letters, digits and hyphens only"
+        public static let problemName = "a delegate type needs a name: lowercase letters, digits and hyphens only, and not “any”"
+
+        public static let problemMayStartAny = "“any” already means every type: list it alone, or name the types"
+
+        public static func problemMayStartName(name: String) -> String {
+            "“\(name)” in Types it may start is not a type name: lowercase letters, digits and hyphens"
+        }
 
         public static let problemDescription = "a delegate type needs a description — it is the whole of how the calling model routes to it"
 

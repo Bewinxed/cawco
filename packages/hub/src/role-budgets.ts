@@ -75,7 +75,7 @@ const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
   delegate: {
     parentInstanceId: "parent",
     workItemId: "item",
-    canDelegate: false,
+    mayStart: [],
     projectId: "project",
   },
   overseer: { role: "overseer" },
@@ -83,14 +83,14 @@ const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
     role: "web-facing",
     parentInstanceId: "parent",
     workItemId: "item",
-    canDelegate: false,
+    mayStart: [],
   },
   curator: {
     role: "curator",
     projectId: "project",
     parentInstanceId: "routine:curator",
     workItemId: "item",
-    canDelegate: false,
+    mayStart: [],
   },
 };
 

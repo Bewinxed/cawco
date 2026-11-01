@@ -1018,12 +1018,13 @@ export const instances = sqliteTable("instances", {
    */
   chosenEffort: text("chosen_effort").$type<EffortLevel>(),
   /**
-   * Whether the session may delegate or start sessions of its own. `false` on a
-   * leaf delegate — one spawned with `can_delegate: false`, which is what a
-   * `delegate` call means unless it says otherwise. Every spawn with a parent
-   * says which; null is a session nobody delegated, and it may.
+   * The delegate types the session may start (core `MayStart`): `["any"]` an
+   * orchestrator's; any other list a leaf's, the empty one what a `delegate`
+   * call means unless it or its type says otherwise. Every spawn with a
+   * parent says which; null is a session nobody delegated, and it may start
+   * any.
    */
-  canDelegate: integer("can_delegate", { mode: "boolean" }),
+  mayStart: storedJson(z.array(z.string()))("may_start"),
   /**
    * The toolset the session runs in (§5.3), written once by its first spawn:
    * a delegate type's `role` for its work item's session. Null: derived

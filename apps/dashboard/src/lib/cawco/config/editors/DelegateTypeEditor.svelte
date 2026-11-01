@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { delegateTypeProblem } from "@cawco/core/delegate-types";
+  import {
+    delegateTypeProblem,
+    mayStartProblem,
+  } from "@cawco/core/delegate-types";
   import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness";
   import { delegateTypesWords as words } from "@cawco/core/words/delegate-types";
   import { untrack } from "svelte";
@@ -22,7 +25,6 @@
   import EditorSection from "../EditorSection.svelte";
   import { EditorForm, takenName } from "../editor-form.svelte";
   import Field from "../Field.svelte";
-  import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
 
@@ -42,7 +44,7 @@
   );
   let skillsText = $state(untrack(() => (type?.skills ?? []).join(", ")));
   let denyToolsText = $state(untrack(() => (type?.denyTools ?? []).join(", ")));
-  let canDelegate = $state(untrack(() => type?.canDelegate === true));
+  let mayStartText = $state(untrack(() => (type?.mayStart ?? []).join(", ")));
 
   const name = $derived(type?.name ?? null);
 
@@ -50,18 +52,18 @@
     draft: from,
     skillsText: (from.skills ?? []).join(", "),
     denyToolsText: (from.denyTools ?? []).join(", "),
-    canDelegate: from.canDelegate === true,
+    mayStartText: (from.mayStart ?? []).join(", "),
   });
   /** What is saved: the fields differ from it by what is unsaved. */
   const baseline = $derived(fieldsOf(type ? { ...type } : blankDelegateType()));
   const kept = keepDraft(
     page.url.pathname,
     () => {
-      const now = { draft, skillsText, denyToolsText, canDelegate };
+      const now = { draft, skillsText, denyToolsText, mayStartText };
       return sameFields(now, baseline) ? null : now;
     },
     (stored) => {
-      ({ draft, skillsText, denyToolsText, canDelegate } = stored);
+      ({ draft, skillsText, denyToolsText, mayStartText } = stored);
     }
   );
 
@@ -82,12 +84,19 @@
     model: draft.model.trim(),
     skills: parsedList(skillsText),
     denyTools: parsedList(denyToolsText),
-    canDelegate,
+    mayStart: parsedList(mayStartText),
   });
 
   const problem = $derived(delegateTypeProblem(submission));
   const problemFor = (field: string): string | undefined =>
     form.seen(field) && problem?.includes(field) ? problem : undefined;
+
+  /** The may-start list's own problem, once its field was left or Save pressed. */
+  const mayStartShown = $derived(
+    form.seen("mayStart")
+      ? mayStartProblem(submission.mayStart ?? [])
+      : undefined
+  );
 
   const duplicate = $derived(
     takenName(submission.name, taken, words.duplicate)
@@ -109,7 +118,7 @@
       if (!name) {
         return saved.name;
       }
-      ({ draft, skillsText, denyToolsText, canDelegate } = fieldsOf({
+      ({ draft, skillsText, denyToolsText, mayStartText } = fieldsOf({
         ...saved,
       }));
       return null;
@@ -258,11 +267,23 @@
         bind:value={denyToolsText}
       />
     </Field>
-    <SwitchField
-      hint={canDelegate ? words.mayDelegateOn : words.mayDelegateOff}
-      id="type-delegate"
-      label={words.mayDelegate}
-      bind:checked={canDelegate}
-    />
+    <Field
+      hint={words.mayStartHint}
+      id="type-may-start"
+      label={words.mayStart}
+      problem={mayStartShown}
+    >
+      <Input
+        aria-invalid={mayStartShown ? "true" : undefined}
+        autocomplete="off"
+        id="type-may-start"
+        onblur={() => {
+          form.touched.mayStart = true;
+        }}
+        placeholder={words.mayStartPlaceholder}
+        spellcheck="false"
+        bind:value={mayStartText}
+      />
+    </Field>
   </EditorSection>
 </EditorFrame>

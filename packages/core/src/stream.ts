@@ -211,12 +211,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    fleet's members, kinds and routes by member id, and a project's table
  *    names no advisor. A page built for 41 reads an `advisor` and the six
  *    fixed kinds the hub no longer sends, so it reloads first.
+ * 43: what a session or a delegate type may start is a list of type names,
+ *    `mayStart` (`["any"]` every type), where a `canDelegate` yes or no
+ *    stood. A page built for 42 reads a `canDelegate` the hub no longer
+ *    sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 42;
+export const WIRE_PROTOCOL = 43;
 
 /**
  * What a session's stream carries: the changes each frame made to its

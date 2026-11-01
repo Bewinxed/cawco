@@ -11,7 +11,7 @@
  * instructions the type's description. Both are written together.
  */
 import type { DelegateType, EffortLevel, HarnessKind } from "@cawco/core";
-import { EFFORT_LEVELS, HARNESSES } from "@cawco/core";
+import { ANY_TYPE, EFFORT_LEVELS, HARNESSES } from "@cawco/core";
 import {
   BUILT_IN_MEMBERS,
   CAW_POSE_IDS,
@@ -206,7 +206,11 @@ export const decidesRoutes = (deps: DecidesDeps) => {
       model: agent.model,
       ...(agent.effort ? { effort: agent.effort } : {}),
       skills: agent.skills,
-      canDelegate: agent.delegates,
+      // Its switch is every type or none of its own choosing: off keeps
+      // the types the type's own settings name.
+      mayStart: agent.delegates
+        ? [ANY_TYPE]
+        : (was?.mayStart?.filter((kept) => kept !== ANY_TYPE) ?? []),
     };
     if (!type.description.trim()) {
       throw new DecidesRefusal(422, decidesWords.instructionsMissing);

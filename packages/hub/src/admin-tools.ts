@@ -493,11 +493,11 @@ export function adminTools() {
           .describe(
             "Tool names denied to delegates of this type. Optional for put."
           ),
-        canDelegate: z
-          .boolean()
+        mayStart: z
+          .array(z.string())
           .optional()
           .describe(
-            "Whether delegates of this type may themselves delegate. Default false."
+            'Type names its sessions may start; ["any"] every type. Default none.'
           ),
         connections: z
           .array(z.string())
@@ -515,7 +515,7 @@ export function adminTools() {
         effort,
         skills,
         denyTools,
-        canDelegate,
+        mayStart,
         connections,
       }) => {
         if (action === "list") {
@@ -547,7 +547,7 @@ export function adminTools() {
               effort,
               skills,
               denyTools,
-              canDelegate,
+              mayStart,
               connections,
             }),
           }

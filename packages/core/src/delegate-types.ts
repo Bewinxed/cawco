@@ -25,13 +25,6 @@ export interface DelegateType {
    */
   account?: string;
   /**
-   * Whether a delegate of this type may itself delegate (or start sessions)
-   * when the `delegate` call did not say. `false` (and absent) means a leaf —
-   * the same default a bare `delegate` call gets; `true` makes the type a
-   * coordinator by default. An explicit `can_delegate` on the call still wins.
-   */
-  canDelegate?: boolean;
-  /**
    * Always true: every session keeps CawCo's list, whatever its type. Still
    * sent because the apps on TestFlight 20261015 through 20261018 read it
    * (hub openapi.ts's wire check) and send it back on a save, which the hub
@@ -52,6 +45,14 @@ export interface DelegateType {
   /** How hard the model thinks: the same {@link EffortLevel} scale every other effort control uses. */
   effort?: EffortLevel;
   harness: HarnessKind;
+  /**
+   * The delegate types its sessions may start, by name ({@link MayStart}):
+   * `["any"]` every type, an orchestrator's; any other list keeps them leaves
+   * that may start those types alone; empty (and absent) none. A `delegate`
+   * call's `may_start` sets it for one delegate, never past what its caller
+   * may start itself ({@link narrowMayStart}).
+   */
+  mayStart?: MayStart;
   model: string;
   /** Unique across the fleet; what a `delegate` call's `type` param names. */
   name: string;
@@ -65,6 +66,66 @@ export interface DelegateType {
 
 /** What a name may be. Mirrors a subagent's own `AGENT_NAME` — no reason to invent a second rule. */
 export const DELEGATE_TYPE_NAME = /^[a-z][a-z0-9-]*$/u;
+
+/**
+ * The delegate types a session may start, by name. `["any"]` ({@link
+ * ANY_TYPE}) is every type: the session orchestrates. Any other list, the
+ * empty one included, makes it a leaf for every role rule (its toolset, its
+ * memory, its budget): a leaf may start the types it names and nothing else,
+ * and the hub refuses any other start before anything spawns.
+ */
+export type MayStart = string[];
+
+/** The one word in a {@link MayStart} list that is every type; no type may be named it. */
+export const ANY_TYPE = "any";
+
+/**
+ * What a session may start, off its row or its spawn: none said (null or
+ * absent) is a session nobody delegated, which may start any.
+ */
+export const sessionMayStart = (session: {
+  mayStart?: MayStart | null;
+}): MayStart => session.mayStart ?? [ANY_TYPE];
+
+/** Whether a session that may start `mayStart` orchestrates: it may start any type. */
+export const startsAny = (mayStart: readonly string[]): boolean =>
+  mayStart.includes(ANY_TYPE);
+
+/** Whether a session that may start `mayStart` may start a delegate of type `name`. */
+export const mayStartType = (
+  mayStart: readonly string[],
+  name: string
+): boolean => startsAny(mayStart) || mayStart.includes(name);
+
+/**
+ * What a new session may start: what it was granted (`asked`, its call's or
+ * its type's), within what the session starting it may start itself
+ * (`holder`), so no session grants more than it holds.
+ */
+export const narrowMayStart = (
+  asked: readonly string[],
+  holder: readonly string[]
+): MayStart => {
+  if (startsAny(holder)) {
+    return [...asked];
+  }
+  return startsAny(asked)
+    ? [...holder]
+    : asked.filter((name) => holder.includes(name));
+};
+
+/** Why a {@link MayStart} list cannot be stored, in a sentence, or nothing when it can. */
+export const mayStartProblem = (
+  mayStart: readonly string[]
+): string | undefined => {
+  if (startsAny(mayStart) && mayStart.length > 1) {
+    return delegateTypesWords.problemMayStartAny;
+  }
+  const bad = mayStart.find((name) => !DELEGATE_TYPE_NAME.test(name));
+  return bad === undefined
+    ? undefined
+    : delegateTypesWords.problemMayStartName(bad);
+};
 
 /**
  * What a connection's name may be (`github-petra`, `x-brand`): no `_`, so a
@@ -97,7 +158,10 @@ export const parseConnectionTool = (
 export const delegateTypeProblem = (
   draft: Partial<DelegateType>
 ): string | undefined => {
-  if (!(draft.name && DELEGATE_TYPE_NAME.test(draft.name))) {
+  if (
+    !(draft.name && DELEGATE_TYPE_NAME.test(draft.name)) ||
+    draft.name === ANY_TYPE
+  ) {
     return delegateTypesWords.problemName;
   }
   if (!draft.description?.trim()) {
@@ -111,6 +175,10 @@ export const delegateTypeProblem = (
   }
   if (draft.effort && !EFFORT_LEVELS.includes(draft.effort)) {
     return `“${draft.effort}” is not an effort level`;
+  }
+  const mayStart = mayStartProblem(draft.mayStart ?? []);
+  if (mayStart) {
+    return mayStart;
   }
   const badConnection = (draft.connections ?? []).find(
     (name) => !CONNECTION_NAME.test(name)
@@ -317,8 +385,10 @@ export const WEB_FETCH_TOOLS = harnessToolsOf("fetch");
 export const WEB_SEARCH_TOOLS = harnessToolsOf("search");
 
 /**
- * The CawCo tools a leaf delegate (`canDelegate === false`) never gets:
- * everything that spawns, steers a spawn or reads its spawns. The hub leaves
+ * The CawCo tools a leaf (a session whose {@link MayStart} list is not
+ * `["any"]`) never gets: everything that spawns, steers a spawn or reads its
+ * spawns, but what a leaf whose list names a type keeps ({@link
+ * spawningToolAllowed}). The hub leaves
  * them out of a claude or pi session's toolset (hub delegation-tools.ts); an
  * OpenCode session's permission rules deny them by their `cawco_` names
  * (agent opencode-session.ts). Fixed for the session's life, so the prompt
@@ -336,6 +406,25 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   // It stops every turn on a machine: an orchestrator's, never a leaf's.
   "machine_pause",
 ]);
+
+/**
+ * The {@link SPAWNING_TOOLS} a leaf whose list names a type keeps: starting
+ * a delegate of a type it may start, and answering what that delegate asks
+ * it (its asks route to its parent).
+ */
+const LEAF_STARTING_TOOLS: ReadonlySet<string> = new Set([
+  "delegate",
+  "answer_delegate",
+]);
+
+/** Whether a session that may start `mayStart` gets the CawCo tool `name`, as far as spawning goes. */
+export const spawningToolAllowed = (
+  name: string,
+  mayStart: readonly string[]
+): boolean =>
+  !SPAWNING_TOOLS.has(name) ||
+  startsAny(mayStart) ||
+  (mayStart.length > 0 && LEAF_STARTING_TOOLS.has(name));
 
 /**
  * What a session on the board alone may never call: no subagent, monitor,
@@ -660,6 +749,6 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
     model: "claude-sonnet-5-5",
     effort: "low",
     denyTools: ["mcp__claude-in-chrome__*"],
-    canDelegate: false,
+    mayStart: [],
   },
 ];

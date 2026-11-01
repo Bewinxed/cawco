@@ -660,7 +660,8 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         let type = started ? "session" : (input["type"] as? String ?? "")
         kind.attributedText = Styled.string(type, TypeScale.typeMeta, color: Palette.inkStrong, leading: Size.cRowMark / TypeScale.textMeta)
         kind.isHidden = type.isEmpty
-        let mayDelegate = f.row?.canDelegate == true || input["can_delegate"] as? Bool == true
+        // It orchestrates: it may start any type, as its row or its call says.
+        let mayDelegate = f.row?.mayStart?.contains("any") == true || (input["may_start"] as? [String])?.contains("any") == true
         may.attributedText = Styled.string("may delegate", TypeScale.typeMeta, color: Palette.brandInk, leading: TypeScale.leadingRoot)
         may.isHidden = !mayDelegate
         jump.isHidden = id == nil

@@ -71,6 +71,7 @@ import type {
 } from "@cawco/core";
 
 import {
+  ANY_TYPE,
   LANDS_MODES,
   MADE_ROUTINE_TARGETS,
   type OfferedMode,
@@ -941,7 +942,7 @@ export const createRoutines = ({
     kind: {
       lead: string;
       input: string;
-      fields: Pick<WorkItemRequest, "role" | "lands" | "canDelegate" | "host">;
+      fields: Pick<WorkItemRequest, "role" | "lands" | "mayStart" | "host">;
       noted: string;
     }
   ): Promise<void> => {
@@ -1017,7 +1018,7 @@ export const createRoutines = ({
     fireWorkItem(routine, run, {
       lead: "You orchestrate it: delegate its work, read your delegates' reports, and decide. ",
       input: inputOf(run),
-      fields: { canDelegate: true, host: true },
+      fields: { mayStart: [ANY_TYPE], host: true },
       noted: "orchestrator, ",
     });
 

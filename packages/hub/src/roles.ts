@@ -53,6 +53,8 @@ import {
   NO_REPLY_TOOL,
   type SessionRole,
   SPAWNING_TOOLS,
+  sessionMayStart,
+  startsAny,
 } from "@cawco/core";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
 import type { TaskTool } from "./task-tools";
@@ -66,7 +68,9 @@ export const roleOf = (row: InstanceRow): SessionRole => {
   if (row.role) {
     return row.role;
   }
-  return row.workItemId || row.canDelegate === false ? "delegate" : "worker";
+  return row.workItemId || !startsAny(sessionMayStart(row))
+    ? "delegate"
+    : "worker";
 };
 
 /**
@@ -240,12 +244,12 @@ export const allows = (row: InstanceRow, name: string): boolean => {
 
 /**
  * Which role-scoped memory a session loads (core fleet.ts `MemoryRole`): an
- * orchestrator's when it holds the spawning tools, its role's toolset having
- * `delegate` and its spawn not marking it a leaf (`canDelegate: false`, which
- * keeps the spawning tools from it whatever its role); a leaf's otherwise.
+ * orchestrator's when its role's toolset has `delegate` and it may start any
+ * type (core `MayStart`); a leaf's otherwise, one that may start a few named
+ * types included.
  */
 export const memoryRoleOf = (row: InstanceRow): MemoryRole =>
-  row.canDelegate !== false && listed(roleOf(row), "delegate")
+  startsAny(sessionMayStart(row)) && listed(roleOf(row), "delegate")
     ? "orchestrator"
     : "leaf";
 

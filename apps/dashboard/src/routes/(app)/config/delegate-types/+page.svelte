@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { startsAny } from "@cawco/core/delegate-types";
   import { delegateTypesWords as words } from "@cawco/core/words/delegate-types";
   import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
   import { deleteDelegateType } from "#lib/cawco/config/deletes.js";
@@ -46,8 +47,12 @@
     if (row.denyTools?.length) {
       parts.push(words.deniedCount(row.denyTools.length));
     }
-    if (row.canDelegate) {
-      parts.push(words.mayDelegateShort);
+    if (row.mayStart?.length) {
+      parts.push(
+        startsAny(row.mayStart)
+          ? words.mayStartAny
+          : words.mayStartShort(row.mayStart.join(", "))
+      );
     }
     return parts.join(" · ");
   }

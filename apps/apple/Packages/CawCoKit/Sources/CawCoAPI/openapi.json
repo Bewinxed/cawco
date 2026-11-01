@@ -803,8 +803,11 @@
                       "type": "string"
                     }
                   },
-                  "canDelegate": {
-                    "type": "boolean"
+                  "mayStart": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   },
                   "account": {
                     "type": "string"
@@ -30023,12 +30026,6 @@
                   "string"
                 ]
               },
-              "canDelegate": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
-              },
               "chosenEffort": {
                 "$ref": "#/components/schemas/EffortLevel"
               },
@@ -30099,6 +30096,12 @@
               },
               "machineId": {
                 "type": "string"
+              },
+              "mayStart": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               },
               "model": {
                 "type": [
@@ -30182,7 +30185,6 @@
             },
             "required": [
               "accountId",
-              "canDelegate",
               "continuedInto",
               "createdAt",
               "cwd",
@@ -30249,12 +30251,6 @@
               "type": [
                 "null",
                 "string"
-              ]
-            },
-            "canDelegate": {
-              "type": [
-                "null",
-                "boolean"
               ]
             },
             "chosenEffort": {
@@ -30334,6 +30330,12 @@
             },
             "machineId": {
               "type": "string"
+            },
+            "mayStart": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
             "model": {
               "type": [
@@ -30438,7 +30440,6 @@
           },
           "required": [
             "accountId",
-            "canDelegate",
             "continuedInto",
             "createdAt",
             "cwd",
@@ -34300,10 +34301,6 @@
               "repo"
             ]
           },
-          "canDelegate": {
-            "description": "Whether this session may spawn sessions of its own (`delegate` and\n`start_session`). Set by the `delegate` tool's `can_delegate` param; a\ndelegate that is not granted it is a leaf: claude and pi never give it the\nspawning tools, and the hub refuses any spawn naming it as parent. Absent\non a session nobody delegated (a mainline session may always delegate).",
-            "type": "boolean"
-          },
           "cwd": {
             "type": "string"
           },
@@ -34383,6 +34380,13 @@
           "keepAliveTurn": {
             "description": "The in-flight maintenance send a surviving Claude process is answering.",
             "type": "string"
+          },
+          "mayStart": {
+            "description": "The delegate types this session may start ({@link MayStart}): `[\"any\"]`\nan orchestrator's; any other list a leaf's, which never gets the\nspawning tools but `delegate` (for a list that names a type), and whose\nevery other start the hub refuses. Set by the `delegate` call's\n`may_start`, else its type's. Absent on a session nobody delegated (a\nmainline session may always delegate).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "model": {
             "description": "Which model answers, from the session's first turn. Hoisted for the same\nreason as `permissionMode`. Absent leaves the choice to the harness.",
@@ -35408,10 +35412,6 @@
             "description": "The account its sessions prefer, when placement allows it (the machine,\nproject and task allow it, and it is not benched or past its reserve).\nAbsent: the provider's strategy chooses.",
             "type": "string"
           },
-          "canDelegate": {
-            "description": "Whether a delegate of this type may itself delegate (or start sessions)\nwhen the `delegate` call did not say. `false` (and absent) means a leaf —\nthe same default a bare `delegate` call gets; `true` makes the type a\ncoordinator by default. An explicit `can_delegate` on the call still wins.",
-            "type": "boolean"
-          },
           "cawcoTodos": {
             "description": "Always true: every session keeps CawCo's list, whatever its type. Still\nsent because the apps on TestFlight 20261015 through 20261018 read it\n(hub openapi.ts's wire check) and send it back on a save, which the hub\nignores; nothing reads it here. It goes in the change that expires those\nbuilds.",
             "const": true,
@@ -35440,6 +35440,13 @@
           },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
+          },
+          "mayStart": {
+            "description": "The delegate types its sessions may start, by name ({@link MayStart}):\n`[\"any\"]` every type, an orchestrator's; any other list keeps them leaves\nthat may start those types alone; empty (and absent) none. A `delegate`\ncall's `may_start` sets it for one delegate, never past what its caller\nmay start itself ({@link narrowMayStart}).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "model": {
             "type": "string"
@@ -59071,13 +59078,6 @@
               "string"
             ]
           },
-          "canDelegate": {
-            "description": "Whether the session may spawn delegates of its own — `false` on a leaf\ndelegate (spawned with `can_delegate: false`, the default). Null on a\nsession nobody delegated, which may.",
-            "type": [
-              "null",
-              "boolean"
-            ]
-          },
           "chosenEffort": {
             "$ref": "#/components/schemas/EffortLevel",
             "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
@@ -59204,6 +59204,13 @@
           },
           "machineId": {
             "type": "string"
+          },
+          "mayStart": {
+            "description": "The delegate types a session may start, by name. `[\"any\"]` ({@link * ANY_TYPE}) is every type: the session orchestrates. Any other list, the\nempty one included, makes it a leaf for every role rule (its toolset, its\nmemory, its budget): a leaf may start the types it names and nothing else,\nand the hub refuses any other start before anything spawns.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "model": {
             "type": [

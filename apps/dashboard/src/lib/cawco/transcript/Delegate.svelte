@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Activity } from "@cawco/core/activity";
+  import { startsAny } from "@cawco/core/delegate-types";
   import { detach } from "@cawco/core/detach";
   import type { DelegateAskStatus } from "@cawco/core/protocol";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -131,8 +132,11 @@
   const model = $derived(
     branch?.model ?? row?.model ?? String(toolInput.model ?? "")
   );
+  /** It orchestrates: it may start any type (core `MayStart`), as its row or its call says. */
   const mayDelegate = $derived(
-    row?.canDelegate === true || toolInput.can_delegate === true
+    startsAny(row?.mayStart ?? []) ||
+      (Array.isArray(toolInput.may_start) &&
+        startsAny(toolInput.may_start.map(String)))
   );
   const brief = $derived(meta.handoffBrief ?? "");
   /** Whose folder its outputs are in: its own project's. */
