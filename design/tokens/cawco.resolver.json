@@ -29,7 +29,8 @@
           "contexts": {
             "dark": {
               "scheme": "dark",
-              "selector": ":root.dark"
+              "selector": ":root.dark, [data-scheme=\"dark\"]",
+              "lightSelector": "[data-scheme=\"light\"]"
             }
           }
         }
