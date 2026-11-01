@@ -78,7 +78,7 @@ import {
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import { absences } from "./absent";
-import { artifact } from "./artifact";
+import { artifact, PLACED } from "./artifact";
 import { type Box, clipOf, grow, meets, pageBox, rectOf } from "./frames";
 import { fitToPage, insetFoot } from "./ink";
 import { motionOk } from "./motion";
@@ -303,9 +303,10 @@ const corners = (
   ];
 };
 
-/** A pin's pill as drawn: its `<g>`, its box and tail, and its number. */
+/** A pin's pill as drawn: its `<g>`, its pin's id, its box and tail, and its number. */
 interface DrawnPill {
   group: SVGGElement;
+  id: string;
   number: number;
   pill: Pill;
 }
@@ -326,18 +327,39 @@ function meetingGroups(drawn: DrawnPill[]): DrawnPill[][] {
 }
 
 /**
- * One stack of pills that meet, in its own `<g>`: the newest in front, at
+ * `into` brought to hold `nodes`, in order: a node is moved only where it
+ * stands elsewhere, so one drawn again where it stood never leaves the page
+ * (a press that started on it lands on it); what else it held is taken out.
+ */
+function holdIn(into: Element, nodes: Element[]) {
+  for (const [i, node] of nodes.entries()) {
+    const at = into.children[i];
+    if (at !== node) {
+      into.insertBefore(node, at ?? null);
+    }
+  }
+  while (into.children.length > nodes.length) {
+    into.lastElementChild?.remove();
+  }
+}
+
+/** Each stack's way of laying its pills, stacked or fanned, as its last draw made it. */
+const lays = new WeakMap<SVGGElement, (fan: boolean) => void>();
+
+/**
+ * One stack of pills that meet, in its `holder`: the newest in front, at
  * most {@link BEHIND} behind it a `--deck-step` ×2 further down-right each,
  * the rest left out until it fans; resting on it fans every pill into a row
- * `--space-1` apart, over `--dur-control` where motion is welcome.
+ * `--space-1` apart, over `--dur-control` where motion is welcome. Drawn
+ * again while the pointer rests on it, it stays fanned.
  */
 function drawStack(
+  holder: SVGGElement,
   group: DrawnPill[],
   look: { deck: number; gap: number; motion: string }
-): SVGGElement {
+) {
   // Newest first: the front pill is the highest number.
   const ordered = group.toSorted((a, b) => b.number - a.number);
-  const holder = document.createElementNS(SVG, "g");
   holder.setAttribute("data-pin-stack", String(ordered.length));
   holder.style.pointerEvents = "auto";
   const front = ordered[0].pill.box;
@@ -368,14 +390,19 @@ function drawStack(
       one.group.style.pointerEvents = !fan && k > 0 ? "none" : "auto";
     }
   };
-  for (const { one } of steps.toReversed()) {
+  for (const { one } of steps) {
     one.group.style.transition = look.motion;
-    holder.append(one.group);
   }
-  lay(false);
-  holder.addEventListener("pointerenter", () => lay(true));
-  holder.addEventListener("pointerleave", () => lay(false));
-  return holder;
+  holdIn(
+    holder,
+    steps.toReversed().map(({ one }) => one.group)
+  );
+  if (!lays.has(holder)) {
+    holder.addEventListener("pointerenter", () => lays.get(holder)?.(true));
+    holder.addEventListener("pointerleave", () => lays.get(holder)?.(false));
+  }
+  lays.set(holder, lay);
+  lay(holder.matches(":hover"));
 }
 
 /** Whether the page is under a finger now: a pill's hit area grows to {@link FINGER}. */
@@ -587,11 +614,12 @@ export function startPins(deps: PinsDeps): Pins {
 
   /**
    * The anchors whose element is found under another selector or text now
-   * (a revision moved or reworded it), written back so the next look finds
-   * it by its selector. One that still reads as it was is left alone: a
-   * write here draws the pins again. A moved pin whose anchor finds its
-   * element again (the page drew it back, a revision restored it) stands on
-   * the page again, out of the moved tray.
+   * (a revision moved or reworded it), to be written back so the next look
+   * finds it by its selector; one that still reads as it was, or whose words
+   * alone changed where its selector still finds it, is left alone (core
+   * `changedAnchor`). A moved pin whose anchor finds its element again (the
+   * page drew it back, a revision restored it) stands on the page again,
+   * out of the moved tray. Each as it is to be written.
    */
   const reanchor = (pins: Pin[]) => {
     const moves: Pin[] = [];
@@ -601,7 +629,7 @@ export function startPins(deps: PinsDeps): Pins {
       }
       const found = deps.locate(pin.anchor);
       const now = found && deps.anchorOf(found.el);
-      if (now && (pin.movedAt || changedAnchor(pin.anchor, now))) {
+      if (now && (pin.movedAt || changedAnchor(pin.anchor, now, found.by))) {
         const { movedAt: _moved, ...rest } = pin;
         moves.push({ ...rest, anchor: now });
       }
@@ -734,27 +762,34 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   /**
-   * One pill drawn: its focus ring when the keyboard reached it, its raised ring
-   * with the xs shadow, its face by state (DESIGN.md, A pin's pill), its
-   * number, and its dot.
+   * One pill painted into its `<g>`, every part it held before replaced and
+   * the group itself kept (a press on it lands whatever is drawn under it
+   * meanwhile): `under` first (its hit area), then its focus ring when the
+   * keyboard reached it, its raised ring with the xs shadow, its face by
+   * state (DESIGN.md, A pin's pill), its number, its dot, and `over`.
    */
-  const pillShape = (
+  const paintPill = (
+    g: SVGGElement,
     pin: Pin | null,
     pill: Pill,
-    paint: Paint
-  ): SVGGElement => {
-    const g = document.createElementNS(SVG, "g");
+    paint: Paint,
+    {
+      under = [],
+      over = [],
+    }: { under?: SVGElement[]; over?: SVGElement[] } = {}
+  ) => {
     const state = stateOf(pin);
     g.setAttribute("data-state", state);
     g.setAttribute("data-tail", pill.tail);
     const { box, tail } = pill;
+    const parts: SVGElement[] = [...under];
     if (pin && keyed && pin.id === focused) {
       const focus = pathEl(
         shapePath(grow(box, 2 * RING), corners(box.h, tail, 2 * RING)),
         paint.focus
       );
       focus.setAttribute("data-focus-ring", "");
-      g.append(focus);
+      parts.push(focus);
     }
     const ring = pathEl(
       shapePath(grow(box, RING), corners(box.h, tail, RING)),
@@ -762,7 +797,7 @@ export function startPins(deps: PinsDeps): Pins {
     );
     ring.style.filter = `drop-shadow(0 1px 1px ${paint.shadow})`;
     ring.setAttribute("data-ring", "");
-    g.append(ring);
+    parts.push(ring);
     const faces: Record<PinState, { edge: string; face: string; ink: string }> =
       {
         provisional: { edge: paint.action, face: paint.raised, ink: "" },
@@ -778,10 +813,10 @@ export function startPins(deps: PinsDeps): Pins {
     const face = pathEl(shapePath(box, corners(box.h, tail, 0)), look.edge);
     // The pill's own box, its tail corner on the pressed point.
     face.setAttribute("data-face", "");
-    g.append(face);
+    parts.push(face);
     if (look.face !== look.edge) {
       // Hollow: a 2px edge in the action ink, the face raised inside it.
-      g.append(
+      parts.push(
         pathEl(
           shapePath(grow(box, -RING), corners(box.h, tail, -RING)),
           look.face
@@ -799,12 +834,13 @@ export function startPins(deps: PinsDeps): Pins {
       number.style.fontVariantNumeric = "tabular-nums";
       number.style.userSelect = "none";
       number.textContent = String(pin.number);
-      g.append(number);
+      parts.push(number);
     }
     if (pin && (live.has(pin.id) || unread.has(pin.id))) {
-      g.append(...dotOf(pin.id, box, paint));
+      parts.push(...dotOf(pin.id, box, paint));
     }
-    return g;
+    parts.push(...over);
+    g.replaceChildren(...parts);
   };
 
   /**
@@ -893,29 +929,47 @@ export function startPins(deps: PinsDeps): Pins {
     return ring;
   };
 
-  /** A pin's pill, pressable, at `pill`; resting on it chooses its element and asks for its peek. */
-  const pinPill = (
-    pin: Pin,
-    where: Standing,
-    pill: Pill,
-    paint: Paint
-  ): SVGGElement => {
-    const g = pillShape(pin, pill, paint);
-    g.setAttribute("data-pin", String(pin.number));
-    g.setAttribute("data-pin-id", pin.id);
+  /**
+   * Each drawn pill's `<g>`, by its pin's id, kept from draw to draw while
+   * its pin is drawn: a draw paints it again in place (`paintPill`), so a
+   * press that started on it still lands on it, whatever is drawn under the
+   * pointer between its pointerdown and its pointerup.
+   */
+  const pills = new Map<string, SVGGElement>();
+  /** Each stack's `<g>`, by its pins' ids, kept while the same pills meet. */
+  const stacks = new Map<string, SVGGElement>();
+  /** The comment being written's pill, kept as its pins' are. */
+  let draftPill: SVGGElement | null = null;
+
+  /**
+   * Pin `id`'s pill, pressable: made once, with what resting on it and
+   * pressing it do read where it stands now ({@link placed}); resting on it
+   * chooses its element and asks for its peek.
+   */
+  const pillOf = (id: string): SVGGElement => {
+    const kept = pills.get(id);
+    if (kept) {
+      return kept;
+    }
+    const g = document.createElementNS(SVG, "g");
+    g.setAttribute("data-pin-id", id);
     g.style.pointerEvents = "auto";
     g.style.cursor = "pointer";
-    g.prepend(hitArea(pill.box));
     g.addEventListener("pointerenter", () => {
+      const where = placed.get(id);
+      if (!where?.pill) {
+        return;
+      }
+      const { box } = where.pill;
       deps.outline(where.el, true);
       const shown = where.page ? 0 : 1;
       deps.post("cawco:peek", {
-        id: pin.id,
+        id,
         mark: {
-          x: pill.box.x - shown * scrollX,
-          y: pill.box.y - shown * scrollY,
-          w: pill.box.w,
-          h: pill.box.h,
+          x: box.x - shown * scrollX,
+          y: box.y - shown * scrollY,
+          w: box.w,
+          h: box.h,
         },
       });
     });
@@ -927,15 +981,26 @@ export function startPins(deps: PinsDeps): Pins {
       event.preventDefault();
       event.stopPropagation();
       deps.post("cawco:peek", { id: null });
-      open(pin.id);
+      open(id);
     });
+    pills.set(id, g);
+    return g;
+  };
+
+  /** A pin's pill painted at `pill`, in its kept `<g>`. */
+  const pinPill = (pin: Pin, pill: Pill, paint: Paint): SVGGElement => {
+    const g = pillOf(pin.id);
+    g.setAttribute("data-pin", String(pin.number));
+    paintPill(g, pin, pill, paint, { under: [hitArea(pill.box)] });
     return g;
   };
 
   /**
    * Writes the pins found again by their source, text or the page, and moves
    * aside those no anchor finds; never one the doc holds deleted (core
-   * `goneOf`), nor one gone from the doc since it was read.
+   * `goneOf`), nor one gone from the doc since it was read. Written as the
+   * overlay's own placing (artifact.ts `PLACED`): the draw that wrote it
+   * has drawn it, so it draws nothing again here.
    */
   const settle = (moves: Pin[], missing: Pin[]) => {
     const pins = pinsMap();
@@ -955,7 +1020,7 @@ export function startPins(deps: PinsDeps): Pins {
       for (const pin of aside) {
         placePin(doc, pin.id, { ...placeOf(pin), movedAt: at });
       }
-    });
+    }, PLACED);
   };
 
   /** Whether a pin no anchor finds is missing, not waiting on a frame still loading. */
@@ -964,29 +1029,47 @@ export function startPins(deps: PinsDeps): Pins {
   /** How long each pin has stood missing: one is gone only after a while, the page drawn again then. */
   const absent = absences(() => draw());
 
-  /** Stacks the pills that meet ({@link meetingGroups}, {@link drawStack}). */
-  const stack = (into: SVGSVGElement, drawn: DrawnPill[], paint: Paint) => {
-    for (const group of meetingGroups(drawn)) {
-      into.append(
-        group.length === 1
-          ? group[0].group
-          : drawStack(group, {
-              deck: paint.deck,
-              gap: paint.gap,
-              motion: motionOk()
-                ? `transform ${paint.control}ms ${paint.ease}, opacity ${paint.control}ms ${paint.ease}`
-                : "",
-            })
-      );
-    }
-  };
+  /**
+   * The pills that meet, stacked ({@link meetingGroups}, {@link drawStack}),
+   * each stack in its kept `<g>`; a pill alone stands as itself, any look a
+   * stack gave it taken off. What its layer holds, in order.
+   */
+  const stacked = (drawn: DrawnPill[], paint: Paint): SVGElement[] =>
+    meetingGroups(drawn).map((group) => {
+      if (group.length === 1) {
+        const { style } = group[0].group;
+        style.transform = "";
+        style.opacity = "";
+        style.transition = "";
+        style.pointerEvents = "auto";
+        return group[0].group;
+      }
+      const key = group
+        .map((one) => one.id)
+        .sort()
+        .join(" ");
+      let holder = stacks.get(key);
+      if (!holder) {
+        holder = document.createElementNS(SVG, "g");
+        stacks.set(key, holder);
+      }
+      drawStack(holder, group, {
+        deck: paint.deck,
+        gap: paint.gap,
+        motion: motionOk()
+          ? `transform ${paint.control}ms ${paint.ease}, opacity ${paint.control}ms ${paint.ease}`
+          : "",
+      });
+      return holder;
+    });
 
   /**
-   * Places each pin on the page, drawing a pill for each its frames show;
-   * answers those that are gone: no anchor finds them, no frame they stand
-   * in is loading, and they have stood so for a while ({@link absences}).
+   * Places each pin on the page, painting a pill for each its frames show;
+   * answers those drawn on the page and in the layer fixed to the viewport,
+   * and those that are gone: no anchor finds them, no frame they stand in is
+   * loading, and they have stood so for a while ({@link absences}).
    */
-  const placeAll = (all: Pin[], paint: Paint): Pin[] => {
+  const placeAll = (all: Pin[], paint: Paint) => {
     const missing: Pin[] = [];
     // A resolved pin stands on the page only while its thread is open.
     const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
@@ -1003,15 +1086,18 @@ export function startPins(deps: PinsDeps): Pins {
       // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
       if (where.shown) {
         (where.page ? drawnFixed : drawn).push({
-          group: pinPill(pin, where, pill, paint),
+          group: pinPill(pin, pill, paint),
+          id: pin.id,
           pill,
           number: pin.number,
         });
       }
     }
-    stack(layer, drawn, paint);
-    stack(fixed, drawnFixed, paint);
-    return goneOf(missing);
+    return {
+      layer: stacked(drawn, paint),
+      fixed: stacked(drawnFixed, paint),
+      gone: goneOf(missing),
+    };
   };
 
   /** Of the pins no anchor finds now, those gone: no frame they stand in loading, and missing a while ({@link absences}). */
@@ -1021,61 +1107,101 @@ export function startPins(deps: PinsDeps): Pins {
     return waited.filter((pin) => absent.missed(pin.id));
   };
 
-  /** The comment being written, drawn as its hollow pill with no number. */
-  const drawDraft = (paint: Paint) => {
-    if (!drafted) {
-      return;
-    }
-    let where: Standing | null = null;
-    if (drafted.ink) {
-      const box = deps.groupBox(drafted.ink);
-      where = box
+  /** Where the comment being written stands now: on its ink, or on its element (the one the page holds now); null where neither stands. */
+  const draftStanding = (
+    draft: DraftTarget & { standing?: Standing; pill?: Pill },
+    paint: Paint
+  ): Standing | null => {
+    if (draft.ink) {
+      const box = deps.groupBox(draft.ink);
+      return box
         ? {
             at: [box.x + box.w, box.y],
             box,
-            el: drafted.el,
+            el: draft.el,
             page: false,
             shown: true,
           }
         : null;
-    } else {
-      // The page drew its element again: the pill stands on the one there now.
-      const now = drafted.el.isConnected ? null : deps.redraft();
-      if (now) {
-        drafted = { ...now };
-      }
-      if (drafted.el.isConnected) {
-        where = standingOn(drafted.el, drafted.point, paint);
-      }
     }
-    if (!where) {
-      drafted.standing = undefined;
-      drafted.pill = undefined;
-      return;
+    // The page drew its element again: the pill stands on the one there now.
+    const now = draft.el.isConnected ? null : deps.redraft();
+    if (now) {
+      drafted = { ...now };
+    }
+    const el = now?.el ?? draft.el;
+    return el.isConnected ? standingOn(el, (now ?? draft).point, paint) : null;
+  };
+
+  /** The comment being written's kept `<g>`: a press on it, while it is parked, opens its composer again. */
+  const draftPillOf = (): SVGGElement => {
+    if (draftPill) {
+      return draftPill;
+    }
+    const g = document.createElementNS(SVG, "g");
+    g.setAttribute("data-pin", "new");
+    g.addEventListener("click", (event) => {
+      if (!drafted?.parked) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      open(DRAFT_PIN);
+    });
+    draftPill = g;
+    return g;
+  };
+
+  /**
+   * The comment being written, painted as its hollow pill with no number in
+   * its kept `<g>`; parked, an ellipsis in the action ink says it holds
+   * words not yet sent, and one press (a finger's 44px) opens its composer
+   * again with them (The Work Outlives Its Surface Rule). Null while it
+   * stands nowhere; else its pill and whether it stands on the page as a
+   * whole.
+   */
+  const drawDraft = (
+    paint: Paint
+  ): { g: SVGGElement; page: boolean } | null => {
+    if (!drafted) {
+      return null;
+    }
+    const where = draftStanding(drafted, paint);
+    if (!(where && drafted)) {
+      if (drafted) {
+        drafted.standing = undefined;
+        drafted.pill = undefined;
+      }
+      return null;
     }
     const pill = pillAt(where, paint.height, paint);
     drafted.standing = where;
     drafted.pill = pill;
-    const g = pillShape(null, pill, paint);
-    g.setAttribute("data-pin", "new");
-    if (drafted.parked) {
-      parkedPill(g, pill, paint);
+    const g = draftPillOf();
+    const parked = !!drafted.parked;
+    g.toggleAttribute("data-parked", parked);
+    if (parked) {
+      g.setAttribute("data-pin-id", DRAFT_PIN);
+    } else {
+      g.removeAttribute("data-pin-id");
     }
-    (where.page ? fixed : layer).append(g);
+    g.style.pointerEvents = parked ? "auto" : "";
+    g.style.cursor = parked ? "pointer" : "";
+    paintPill(
+      g,
+      null,
+      pill,
+      paint,
+      parked
+        ? { under: [hitArea(pill.box)], over: parkedMarks(pill, paint) }
+        : {}
+    );
+    return { g, page: where.page };
   };
 
-  /**
-   * A parked draft's pill (The Work Outlives Its Surface Rule): hollow at its
-   * target as it stood while written, an ellipsis in the action ink saying
-   * it holds words not yet sent, and one press (a finger's 44px) opens its
-   * composer again with them.
-   */
-  const parkedPill = (g: SVGGElement, pill: Pill, paint: Paint) => {
+  /** A parked draft's name and its ellipsis, over its hollow pill. */
+  const parkedMarks = (pill: Pill, paint: Paint): SVGElement[] => {
     const { box } = pill;
-    g.setAttribute("data-parked", "");
-    g.setAttribute("data-pin-id", DRAFT_PIN);
-    g.style.pointerEvents = "auto";
-    g.style.cursor = "pointer";
     const name = document.createElementNS(SVG, "title");
     name.textContent = "Draft comment, not sent";
     const dots = document.createElementNS(SVG, "text");
@@ -1087,43 +1213,76 @@ export function startPins(deps: PinsDeps): Pins {
     dots.style.font = paint.font;
     dots.style.userSelect = "none";
     dots.textContent = "…";
-    g.prepend(hitArea(box));
-    g.append(name, dots);
-    g.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      open(DRAFT_PIN);
-    });
+    return [name, dots];
   };
 
+  /**
+   * The pins drawn where their elements stand now. Each pin's anchor is read
+   * again first ({@link reanchor}), so a pin found again stands in this very
+   * draw; what that and the pins gone write is written once the pills stand
+   * ({@link settle}), as the overlay's own placing, which wakes no draw.
+   * Every pill, stack and the draft keeps its node: each layer is brought to
+   * hold what is drawn now, a node moved only where it stands elsewhere.
+   */
   function draw() {
-    for (const node of [...layer.children, ...fixed.children]) {
-      node.remove();
-    }
     placed.clear();
     if (!(onPage() && artifact.keeps())) {
+      holdIn(layer, []);
+      holdIn(fixed, []);
+      forgetUnheld();
       fitToPage(layer, false);
       return;
     }
-    const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
+    const read = [...pinsMap().values()].sort((a, b) => a.number - b.number);
+    const moves = settled() ? reanchor(read) : [];
+    const found = new Map(moves.map((pin) => [pin.id, pin]));
+    const all = read.map((pin) => found.get(pin.id) ?? pin);
     const drawing = all.length > 0 || !!drafted;
     fitToPage(layer, drawing);
     // The paint is read off the page's style, which forces its style and
     // layout there and then: a page with no pins is not made to pay for it.
     let gone: Pin[] = [];
+    const onLayer: SVGElement[] = [];
+    const onFixed: SVGElement[] = [];
     if (drawing) {
       const paint = paintOf();
-      gone = placeAll(all, paint);
-      drawDraft(paint);
+      const at = placeAll(all, paint);
+      ({ gone } = at);
+      onLayer.push(...at.layer);
+      onFixed.push(...at.fixed);
+      const draft = drawDraft(paint);
+      if (draft) {
+        (draft.page ? onFixed : onLayer).push(draft.g);
+      }
     }
+    holdIn(layer, onLayer);
+    holdIn(fixed, onFixed);
+    forgetUnheld();
     if (settled()) {
-      settle(reanchor(all), gone);
+      settle(moves, gone);
     }
     if (focused) {
       deps.outline(placed.get(focused)?.el ?? null);
     }
     tell();
   }
+
+  /** The kept pills and stacks no layer holds now let go. */
+  const forgetUnheld = () => {
+    for (const [id, g] of pills) {
+      if (!g.isConnected) {
+        pills.delete(id);
+      }
+    }
+    for (const [key, g] of stacks) {
+      if (!g.isConnected) {
+        stacks.delete(key);
+      }
+    }
+    if (draftPill && !draftPill.isConnected) {
+      draftPill = null;
+    }
+  };
 
   /** A pill's box in the viewport, px. */
   const shownBox = (where: Standing, pill: Pill): Box =>

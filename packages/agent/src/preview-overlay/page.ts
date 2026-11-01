@@ -48,7 +48,6 @@ import {
   answerEmbedder,
   EMBED_ARTIFACT,
   type Remote,
-  STAND_INS,
   startEmbeds,
 } from "./embeds";
 import { fillFields, trackFields } from "./fields";
@@ -66,7 +65,7 @@ import {
 } from "./frames";
 import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
-import { startInk } from "./ink";
+import { OVERLAY_OWN, startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks, optionOf } from "./pick";
 import { cropPicture } from "./picture";
@@ -749,8 +748,11 @@ artifact.watch({
     toldSent();
     tellDoc();
   },
-  ink: () => {
-    ink.changed();
+  ink: (placed) => {
+    // The overlay's own placing was written by the draw that placed it.
+    if (!placed) {
+      ink.changed();
+    }
     tellDoc();
   },
   marked: () => picturesLater(),
@@ -1571,9 +1573,6 @@ function elementAt(x: number, y: number): Element | null {
   layer.style.removeProperty("pointer-events");
   return element === host ? null : deepElementAt(element, x, y);
 }
-
-/** The overlay's own: its host, and the ink and pin layers it puts in the page. */
-const OVERLAY_OWN = `cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed], [${STAND_INS}]`;
 
 /**
  * The page's own deepest element at each of the viewport's points, seen

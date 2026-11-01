@@ -1887,13 +1887,22 @@ export const pinStandsOn = (pin: Pin, url?: string): string[] => {
 /**
  * Whether the element an anchor finds now reads otherwise than the anchor
  * says (another selector, source or text): the anchor is written again. Its
- * box moving is no change, so placing a mark never writes it by itself.
+ * box moving is no change, so placing a mark never writes it by itself. Nor
+ * are its words changing while the anchor's own selector still finds it
+ * (`by`): a live element's words (a zoom percent, a clock, a count) change
+ * where it stands, and two readings of them (two views of the page at their
+ * own widths, two stand-ins of one embedded element) wrote the anchor back
+ * and forth on every draw.
  */
-export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
+export const changedAnchor = (
+  was: PageAnchor,
+  now: PageAnchor,
+  by: AnchorFound<unknown>["by"]
+): boolean =>
   was.selector !== now.selector ||
   (was.frames ?? []).join("\u0000") !== (now.frames ?? []).join("\u0000") ||
   was.embed?.artifact !== now.embed?.artifact ||
-  (was.text ?? "") !== (now.text ?? "") ||
+  (by !== "selector" && (was.text ?? "") !== (now.text ?? "")) ||
   JSON.stringify(was.source) !== JSON.stringify(now.source) ||
   JSON.stringify(was.chain ?? []) !== JSON.stringify(now.chain ?? []) ||
   JSON.stringify(was.sheet ?? null) !== JSON.stringify(now.sheet ?? null);

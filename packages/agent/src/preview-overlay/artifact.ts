@@ -98,9 +98,20 @@ export interface Link {
 /** How long a lost link stands before the canvas refuses the pen: the brief's 5 s. */
 const LOST_REFUSES_MS = 5000;
 
+/**
+ * The origin of the overlay's own placing writes: a pin's or an ink group's
+ * anchor read again, or its mark moved aside (pins.ts and ink.ts `settle`),
+ * written by the draw that placed them, which has drawn them already.
+ */
+export const PLACED = "placed";
+
 export interface Watchers {
-  /** The ink, its moved groups or its pins changed, here or elsewhere; or the doc was replaced. */
-  ink: () => void;
+  /**
+   * The ink, its moved groups or its pins changed, here or elsewhere; or the
+   * doc was replaced. `placed`: by this page's own placing ({@link PLACED}),
+   * which its draw has drawn already, so it draws nothing again.
+   */
+  ink: (placed: boolean) => void;
   /** The doc's link to the hub changed. */
   link: (link: Link) => void;
   /** The person's ink or pins changed in this page: what the hub delivers, with this page's pictures of them. */
@@ -290,7 +301,9 @@ mirror.getMap("state").observe((event) => {
 mirror.getMap("meta").observe(() => watchers?.meta());
 for (const name of ["ink", "moved", ...PIN_MAPS]) {
   mirror.getMap(name).observe((event) => {
-    watchers?.ink();
+    watchers?.ink(
+      event.transaction.local && event.transaction.origin === PLACED
+    );
     if (name !== "moved" && event.transaction.local) {
       watchers?.marked();
     }
@@ -346,7 +359,7 @@ const restart = (generation: number) => {
     whenSynced = resolve;
   });
   watchers?.state(null, true);
-  watchers?.ink();
+  watchers?.ink(false);
   handed();
 };
 
@@ -442,7 +455,7 @@ const keepRefused = () => {
   ];
   refusedReplies = replies;
   storeRefused();
-  watchers?.ink();
+  watchers?.ink(false);
 };
 
 /** What the worker says. */
@@ -476,7 +489,7 @@ const heard = (message: FromWorker) => {
       return;
     case "stored":
       stored = true;
-      watchers?.ink();
+      watchers?.ink(false);
       handed();
       return;
     case "refused":

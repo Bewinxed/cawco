@@ -52,7 +52,8 @@ import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { boxOf } from "@cawco/core/shapes";
 import { getStroke } from "perfect-freehand";
 import { absences } from "./absent";
-import { artifact } from "./artifact";
+import { artifact, PLACED } from "./artifact";
+import { STAND_INS } from "./embeds";
 import {
   type Box,
   clipOf,
@@ -300,16 +301,21 @@ const pathOf = (points: Point[]): string => {
 /** The overlay's layers that hold a mark now (a stroke, a disc), each as its own draw said. */
 const holding = new Set<SVGSVGElement>();
 
-/** The overlay's own elements in the page: its host, its ink and pin layers, and its stand-ins over frames of another origin (embeds.ts). */
-const OWN =
-  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], [data-cawco-stand-ins]";
+/**
+ * The overlay's own elements in the page: its host, its ink, pin and change
+ * layers (the pins' fixed layer among them), and its stand-ins over frames
+ * of another origin (embeds.ts). What changes in them is never the page's:
+ * a pill painted in the fixed layer, read as the page's, placed every mark
+ * again on the next frame, which painted the pill again, every frame.
+ */
+export const OVERLAY_OWN = `cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed], svg[data-cawco-changes], [${STAND_INS}]`;
 /** Whether `node` is the overlay's own or stands in it (a node of a frame's document included). */
 const ownNode = (node: Node | null): boolean => {
   const el =
     node?.nodeType === Node.ELEMENT_NODE
       ? (node as Element)
       : (node?.parentElement ?? null);
-  return !!el?.closest(OWN);
+  return !!el?.closest(OVERLAY_OWN);
 };
 /** Every change a mark's element may move by: nodes, attributes, words, anywhere in the document. */
 const MOVES: MutationObserverInit = {
@@ -927,10 +933,11 @@ export function startInk(deps: InkDeps): Ink {
     );
     // Read only for a group to draw: a token is the page's style, read there and then.
     const brand = groups.length > 0 ? chrome.token("--brand-solid") : "";
-    const located = groups.map((group) => ({
-      group,
-      el: "selector" in group.anchor ? deps.locate(group.anchor)?.el : null,
-    }));
+    const located = groups.map((group) => {
+      const found =
+        "selector" in group.anchor ? deps.locate(group.anchor) : null;
+      return { group, el: found?.el ?? null, by: found?.by ?? "selector" };
+    });
     // Missing for a while, not for one read of a page drawing itself again (absent.ts).
     const missing = located.filter(({ group, el }) => !el && goneFrom(group));
     const gone = missing
@@ -939,11 +946,11 @@ export function startInk(deps: InkDeps): Ink {
     absent.keep(missing.map(({ group }) => group.id));
     const found: InkGroup[] = [];
     const standing = new Set<Element>();
-    for (const { group, el } of located) {
+    for (const { group, el, by } of located) {
       if (!el) {
         continue;
       }
-      const reread = rereadOn(group, el);
+      const reread = rereadOn(group, el, by);
       if (reread) {
         found.push(reread);
       }
@@ -963,9 +970,13 @@ export function startInk(deps: InkDeps): Ink {
    * anchor (moved, renamed, reworded); null when it reads as it was, since
    * a write draws the ink again.
    */
-  function rereadOn(group: InkGroup, el: Element): InkGroup | null {
+  function rereadOn(
+    group: InkGroup,
+    el: Element,
+    by: AnchorFound<Element>["by"]
+  ): InkGroup | null {
     const now = deps.anchorOf(el);
-    return "selector" in group.anchor && changedAnchor(group.anchor, now)
+    return "selector" in group.anchor && changedAnchor(group.anchor, now, by)
       ? { ...group, anchor: now }
       : null;
   }
@@ -1020,6 +1031,7 @@ export function startInk(deps: InkDeps): Ink {
       return;
     }
     const { doc, ink, moved } = maps();
+    // The overlay's own placing: this draw has drawn it (artifact.ts `PLACED`).
     doc.transact(() => {
       for (const group of found) {
         ink.set(group.id, group);
@@ -1028,7 +1040,7 @@ export function startInk(deps: InkDeps): Ink {
         ink.delete(group.id);
         moved.set(group.id, group);
       }
-    });
+    }, PLACED);
   }
 
   // --- picks ----------------------------------------------------------------
