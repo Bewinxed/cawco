@@ -126,7 +126,7 @@ export function gitSection(changes: GitChanges, since: string): string {
 
 const SECTIONS = [
   "## Goal and constraints",
-  "(the user's stated requirements, quoted verbatim where short)",
+  "(the user's stated requirements, in plain words, never quoting them)",
   "## Decisions and reasons",
   "## Tried and rejected, and why",
   "## Current state",
