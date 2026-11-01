@@ -130,6 +130,8 @@
   // The differences, once both drawings have laid out, and again as either lays itself out anew (a read-back the hub answered).
   let found = $state<Difference[]>([]);
   let laidOut = $state(0);
+  /** The kept drawing's height while comparing: the frame stands at least that tall, so a ring where something went stands whole inside it. */
+  let keptTall = $state(0);
   const relaid = frameSize(() => {
     laidOut += 1;
   });
@@ -389,20 +391,28 @@
     <p class="m-0 mb-space-3 type-label text-ink-muted">{words.sameAsKept}</p>
   {/if}
 
-  <!-- The field: the stage's room, which scrolls when the drawing is taller. -->
+  <!-- The field: the stage's room, which scrolls when the drawing is taller.
+       Its pad is the room a change ring takes outside an element's box
+       (--c-change-ring-offset and -width, 5px, under --space-2), so a ring
+       on an element at the drawing's edge stands whole. -->
   <div
     data-slot="stage-scroll"
-    class="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain rounded-lg border border-border-hairline bg-surface-recess-deep"
+    class="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain rounded-lg border border-border-hairline bg-surface-recess-deep p-space-2"
     {@attach frameSize((node: HTMLElement) => {
-      room = node.clientWidth;
+      const style = getComputedStyle(node);
+      room =
+        node.clientWidth -
+        Number.parseFloat(style.paddingInlineStart) -
+        Number.parseFloat(style.paddingInlineEnd);
     })}
   >
     <div class="relative w-(--frame-w)" style:--frame-w="{drawnWidth}px">
       <div
         data-slot="stage-frame"
         data-scheme={scheme}
+        style:--kept-h="{kept ? keptTall : 0}px"
         class={[
-          "relative w-(--frame-w) bg-surface-page text-ink-strong",
+          "relative min-h-(--kept-h) w-(--frame-w) bg-surface-page text-ink-strong",
           scheme === "dark" ? "scheme-dark" : "scheme-light",
           stale && "opacity-(--account-stale-opacity)",
         ]}
@@ -413,6 +423,9 @@
           <div
             bind:this={hidden}
             {@attach relaid}
+            {@attach frameSize((node: HTMLElement) => {
+              keptTall = node.offsetHeight;
+            })}
             aria-hidden="true"
             inert
             class="pointer-events-none invisible absolute inset-x-0 top-0"
