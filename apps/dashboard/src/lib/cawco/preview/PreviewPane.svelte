@@ -2055,8 +2055,12 @@
             : [];
         })
       : [];
-  /** A step of the tag: by one stop each way, or the first when it starts; brought out, chosen and seen. */
-  function stepChange(by: 1 | -1 | 0) {
+  /**
+   * A step of the tag: by one stop each way, or the first when it starts;
+   * brought out, chosen and seen. `via`, a key or a press: a pin's thread a
+   * press opens wears no keyboard ring on its pill.
+   */
+  function stepChange(by: 1 | -1 | 0, via: "key" | "pointer") {
     const stops = tour ?? changeStops;
     if (stops.length === 0) {
       return;
@@ -2077,7 +2081,7 @@
     }
     seeSoon(stop.anchors);
     if (stop.pin) {
-      openCard(stop.pin, "key");
+      openCard(stop.pin, via);
     }
   }
   /** The person pressed a ringed element in Interact mode: he has looked at it. */
@@ -2284,7 +2288,7 @@
     }
     if (key === "j" || key === "k") {
       event.preventDefault();
-      stepChange(key === "j" ? 1 : -1);
+      stepChange(key === "j" ? 1 : -1, "key");
     }
   }
 
@@ -4146,7 +4150,8 @@
           data-box
           data-slot="change-previous"
           onkeydown={tagKey}
-          onclick={() => stepChange(-1)}
+          onclick={(event) =>
+            stepChange(-1, event.detail === 0 ? "key" : "pointer")}
           title={commentWords.previousChange}
           type="button"
         >
@@ -4156,7 +4161,8 @@
           class="touch-hit min-w-0 h-full px-space-1 overflow-clip text-ellipsis whitespace-nowrap num can-hover:hover:bg-surface-hover"
           data-slot="change-count"
           onkeydown={tagKey}
-          onclick={() => stepChange(tour ? 0 : 1)}
+          onclick={(event) =>
+            stepChange(tour ? 0 : 1, event.detail === 0 ? "key" : "pointer")}
           type="button"
         >
           {tour
@@ -4169,7 +4175,8 @@
           data-box
           data-slot="change-next"
           onkeydown={tagKey}
-          onclick={() => stepChange(1)}
+          onclick={(event) =>
+            stepChange(1, event.detail === 0 ? "key" : "pointer")}
           title={commentWords.nextChange}
           type="button"
         >
