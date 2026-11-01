@@ -2,30 +2,45 @@
   /**
    * The design graph in a frame of its own (its states files'): a window's
    * height at the frame's width, so the surface lays itself out as it does
-   * in the panel, holding the routine form and the roster from their own
-   * states files.
+   * in the panel, holding the routine form from its own states file, and
+   * the roster beside it when the ask names it too (loaded only then).
    */
   import { screenHeight } from "@cawco/core/stage";
   import type { ComponentProps } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import DesignGraph from "../DesignGraph.svelte";
-  import { roster, routineForm } from "../reviews";
+  import type { ReviewInput } from "../model";
+  import { routineForm } from "../routine-form-review";
 
   let {
     arrangement,
     ask,
     stale = false,
-    components = "both",
-  }: Pick<ComponentProps<typeof DesignGraph>, "arrangement" | "ask" | "stale"> & {
-    /** Which components the ask names. */
-    components?: "both" | "form" | "roster";
+    withRoster = false,
+  }: Pick<
+    ComponentProps<typeof DesignGraph>,
+    "arrangement" | "ask" | "stale"
+  > & {
+    /** Whether the ask names the roster beside the routine form. */
+    withRoster?: boolean;
   } = $props();
 
-  const INPUTS = {
-    both: [routineForm, roster],
-    form: [routineForm],
-    roster: [roster],
-  };
+  let roster = $state<ReviewInput | null>(null);
+  $effect(() => {
+    if (!withRoster) {
+      return;
+    }
+    let live = true;
+    import("../roster-review").then((one) => {
+      if (live) {
+        ({ roster } = one);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  });
+  const inputs = $derived(roster ? [routineForm, roster] : [routineForm]);
   let tall = $state(0);
   /** When the agent opened the surface, as the records name it. */
   const opened = new Date();
@@ -38,11 +53,5 @@
     tall = screenHeight(node.clientWidth);
   })}
 >
-  <DesignGraph
-    {arrangement}
-    {ask}
-    inputs={INPUTS[components]}
-    recordsAt={opened}
-    {stale}
-  />
+  <DesignGraph {arrangement} {ask} {inputs} recordsAt={opened} {stale} />
 </div>

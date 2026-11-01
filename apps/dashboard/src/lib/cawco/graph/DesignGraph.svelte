@@ -374,8 +374,8 @@
   const capShare = $derived(
     Number.parseFloat(rootValue("--c-sheet-max-h")) / 100 || 1
   );
-  const shareOf = (shown: number) =>
-    Math.min(1, shown / windowHeight + (1 - capShare));
+  const shareOf = (px: number) =>
+    Math.min(1, px / windowHeight + (1 - capShare));
   const head = $derived(shareOf(numberOf("--c-graph-drawer-head")));
   const SNAPS = $derived([head, shareOf(windowHeight / 2), 1]);
   let snap = $state<number | string | null>(null);
@@ -502,311 +502,317 @@
 {/snippet}
 
 <TooltipProvider>
-<div
-  data-slot="design-graph"
-  data-arrangement={arrangement}
-  class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page"
-  {@attach frameSize((node: HTMLElement) => {
-    surface = node.clientWidth;
-  })}
->
-  <!-- The bar: one row, no ground of its own. -->
-  <header
-    data-slot="graph-bar"
-    class="flex h-c-top-bar-h min-w-0 flex-none items-center gap-space-3 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+  <div
+    data-slot="design-graph"
+    data-arrangement={arrangement}
+    class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page"
+    {@attach frameSize((node: HTMLElement) => {
+      surface = node.clientWidth;
+    })}
   >
-    <div class="flex min-w-0 flex-1 items-center">
-      {#if reviews.length > 1}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <button
-                {...props}
-                aria-label={words.components}
-                class="mark-line pointer-hit touch-hit inline-flex h-c-btn-h-sm min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
-                type="button"
-              >
-                <span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                  >{review.name}</span
+    <!-- The bar: one row, no ground of its own. -->
+    <header
+      data-slot="graph-bar"
+      class="flex h-c-top-bar-h min-w-0 flex-none items-center gap-space-3 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+    >
+      <div class="flex min-w-0 flex-1 items-center">
+        {#if reviews.length > 1}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  aria-label={words.components}
+                  class="mark-line pointer-hit touch-hit inline-flex h-c-btn-h-sm min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
+                  type="button"
                 >
-                <IconChevronDown
-                  aria-hidden="true"
-                  class="size-icon-sm flex-none text-ink-muted"
-                  data-box
-                />
-              </button>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="start" width="regular">
-            <DropdownMenu.RadioGroup
-              bind:value={
-                () => String(front),
-                (next: string) => {
-                  front = Number(next);
-                  preview = null;
-                  compared = null;
-                }
-              }
-            >
-              {#each reviews as one, index (one.name)}
-                <DropdownMenu.RadioItem value={String(index)}>
-                  <span class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap">{one.name}</span>
-                  <span class="type-meta text-ink-muted num"
-                    >{words.stateCount(one.order.length)}</span
+                  <span
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                    >{review.name}</span
                   >
-                </DropdownMenu.RadioItem>
-              {/each}
-            </DropdownMenu.RadioGroup>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      {:else}
-        <h1 class="m-0 min-w-0 truncate px-space-2 type-label text-ink-strong">
-          {review.name}
-        </h1>
-      {/if}
-    </div>
-
-    {#if desk && !single && arrangement !== "stage"}
-      <div class="flex-none">{@render seeingSwitch(true)}</div>
-    {/if}
-
-    <div class="flex flex-1 justify-end">
-      <BarGlass form="group">
-        <Tip label={comparing ? words.compareOff : words.compareOn}>
-          {#snippet children(tip)}
-            <button
-              data-bar-item
-              {...mergeProps(tip, {
-                onclick: () => {
-                  comparing = !comparing;
-                  compared = null;
-                  preview = null;
-                },
-              })}
-              aria-label={words.compare}
-              aria-pressed={comparing}
-              class="select-none touch-hit press-tint aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
-              type="button"
-            >
-              <IconColumns data-slot="bar-symbol" aria-hidden="true" />
-            </button>
-          {/snippet}
-        </Tip>
-        <DropdownMenu.Root>
-          <Tip label={words.stageView}>
-            {#snippet children(tip)}
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <button
-                    data-bar-item
-                    {...mergeProps(tip, props)}
-                    aria-label={words.stageView}
-                    class="select-none touch-hit press-tint"
-                    type="button"
-                  >
-                    <IconLayers data-slot="bar-symbol" aria-hidden="true" />
-                  </button>
-                {/snippet}
-              </DropdownMenu.Trigger>
-            {/snippet}
-          </Tip>
-          <DropdownMenu.Content align="end" width="regular">
-            <DropdownMenu.Group>
-              <DropdownMenu.GroupHeading
-                >{words.width}</DropdownMenu.GroupHeading
-              >
+                  <IconChevronDown
+                    aria-hidden="true"
+                    class="size-icon-sm flex-none text-ink-muted"
+                    data-box
+                  />
+                </button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start" width="regular">
               <DropdownMenu.RadioGroup
                 bind:value={
-                  () => String(width ?? "own"),
+                  () => String(front),
                   (next: string) => {
-                    width = next === "own" ? null : Number(next);
+                    front = Number(next);
+                    preview = null;
+                    compared = null;
                   }
                 }
               >
-                <DropdownMenu.RadioItem value="own"
-                  >{words.ownWidth(ownWidth)}</DropdownMenu.RadioItem
-                >
-                {#each WIDTHS as one (one)}
-                  <DropdownMenu.RadioItem value={String(one)}
-                    >{words.widthPx(one)}</DropdownMenu.RadioItem
-                  >
+                {#each reviews as one, index (one.name)}
+                  <DropdownMenu.RadioItem value={String(index)}>
+                    <span
+                      class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
+                      >{one.name}</span
+                    >
+                    <span class="type-meta text-ink-muted num"
+                      >{words.stateCount(one.order.length)}</span
+                    >
+                  </DropdownMenu.RadioItem>
                 {/each}
               </DropdownMenu.RadioGroup>
-            </DropdownMenu.Group>
-            <DropdownMenu.Separator />
-            <DropdownMenu.Group>
-              <DropdownMenu.GroupHeading
-                >{words.scheme}</DropdownMenu.GroupHeading
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        {:else}
+          <h1
+            class="m-0 min-w-0 truncate px-space-2 type-label text-ink-strong"
+          >
+            {review.name}
+          </h1>
+        {/if}
+      </div>
+
+      {#if desk && !single && arrangement !== "stage"}
+        <div class="flex-none">{@render seeingSwitch(true)}</div>
+      {/if}
+
+      <div class="flex flex-1 justify-end">
+        <BarGlass form="group">
+          <Tip label={comparing ? words.compareOff : words.compareOn}>
+            {#snippet children(tip)}
+              <button
+                data-bar-item
+                {...mergeProps(tip, {
+                  onclick: () => {
+                    comparing = !comparing;
+                    compared = null;
+                    preview = null;
+                  },
+                })}
+                aria-label={words.compare}
+                aria-pressed={comparing}
+                class="select-none touch-hit press-tint aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
+                type="button"
               >
-              <DropdownMenu.RadioGroup bind:value={scheme}>
-                <DropdownMenu.RadioItem value="light"
-                  >{words.light}</DropdownMenu.RadioItem
+                <IconColumns data-slot="bar-symbol" aria-hidden="true" />
+              </button>
+            {/snippet}
+          </Tip>
+          <DropdownMenu.Root>
+            <Tip label={words.stageView}>
+              {#snippet children(tip)}
+                <DropdownMenu.Trigger>
+                  {#snippet child({ props })}
+                    <button
+                      data-bar-item
+                      {...mergeProps(tip, props)}
+                      aria-label={words.stageView}
+                      class="select-none touch-hit press-tint"
+                      type="button"
+                    >
+                      <IconLayers data-slot="bar-symbol" aria-hidden="true" />
+                    </button>
+                  {/snippet}
+                </DropdownMenu.Trigger>
+              {/snippet}
+            </Tip>
+            <DropdownMenu.Content align="end" width="regular">
+              <DropdownMenu.Group>
+                <DropdownMenu.GroupHeading
+                  >{words.width}</DropdownMenu.GroupHeading
                 >
-                <DropdownMenu.RadioItem value="dark"
-                  >{words.dark}</DropdownMenu.RadioItem
-                >
-              </DropdownMenu.RadioGroup>
-            </DropdownMenu.Group>
-            <DropdownMenu.Separator />
-            <DropdownMenu.CheckboxItem bind:checked={reduce}
-              >{words.reduceMotion}</DropdownMenu.CheckboxItem
-            >
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-        <Tip label={roomOpen ? words.closeRoom : words.openRoom}>
-          {#snippet children(tip)}
-            <button
-              data-bar-item
-              {...mergeProps(tip, {
-                onclick: () => {
-                  roomOpen = !roomOpen;
-                  if (roomOpen) {
-                    snap = head;
+                <DropdownMenu.RadioGroup
+                  bind:value={
+                    () => String(width ?? "own"),
+                    (next: string) => {
+                      width = next === "own" ? null : Number(next);
+                    }
                   }
-                },
-              })}
-              aria-label={roomOpen ? words.closeRoom : words.openRoom}
-              aria-pressed={roomOpen}
-              class="select-none touch-hit press-tint"
-              type="button"
-            >
-              <IconSidebar data-slot="bar-symbol" aria-hidden="true" />
-            </button>
-          {/snippet}
-        </Tip>
-      </BarGlass>
-    </div>
-  </header>
+                >
+                  <DropdownMenu.RadioItem value="own"
+                    >{words.ownWidth(ownWidth)}</DropdownMenu.RadioItem
+                  >
+                  {#each WIDTHS as one (one)}
+                    <DropdownMenu.RadioItem value={String(one)}
+                      >{words.widthPx(one)}</DropdownMenu.RadioItem
+                    >
+                  {/each}
+                </DropdownMenu.RadioGroup>
+              </DropdownMenu.Group>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Group>
+                <DropdownMenu.GroupHeading
+                  >{words.scheme}</DropdownMenu.GroupHeading
+                >
+                <DropdownMenu.RadioGroup bind:value={scheme}>
+                  <DropdownMenu.RadioItem value="light"
+                    >{words.light}</DropdownMenu.RadioItem
+                  >
+                  <DropdownMenu.RadioItem value="dark"
+                    >{words.dark}</DropdownMenu.RadioItem
+                  >
+                </DropdownMenu.RadioGroup>
+              </DropdownMenu.Group>
+              <DropdownMenu.Separator />
+              <DropdownMenu.CheckboxItem bind:checked={reduce}
+                >{words.reduceMotion}</DropdownMenu.CheckboxItem
+              >
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+          <Tip label={roomOpen ? words.closeRoom : words.openRoom}>
+            {#snippet children(tip)}
+              <button
+                data-bar-item
+                {...mergeProps(tip, {
+                  onclick: () => {
+                    roomOpen = !roomOpen;
+                    if (roomOpen) {
+                      snap = head;
+                    }
+                  },
+                })}
+                aria-label={roomOpen ? words.closeRoom : words.openRoom}
+                aria-pressed={roomOpen}
+                class="select-none touch-hit press-tint"
+                type="button"
+              >
+                <IconSidebar data-slot="bar-symbol" aria-hidden="true" />
+              </button>
+            {/snippet}
+          </Tip>
+        </BarGlass>
+      </div>
+    </header>
 
-  <!-- The page: the stage, and on a desk the room beside or under it. -->
-  <div
-    data-slot="graph-page"
-    class={[
-      "flex min-h-0 min-w-0 flex-1 gap-space-5 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
-      desk && arrangement === "below" ? "flex-col" : "flex-row",
-      !desk && roomOpen ? "pb-c-graph-drawer-head" : "pb-space-6",
-    ]}
-    style:--stage-w="{width ?? ownWidth}px"
-  >
+    <!-- The page: the stage, and on a desk the room beside or under it. -->
     <div
+      data-slot="graph-page"
       class={[
-        "flex min-h-0 min-w-0 flex-col",
-        desk && roomOpen && arrangement !== "below"
-          ? "shrink grow-0 basis-(--stage-w) min-w-c-graph-stage-min"
-          : "flex-1",
+        "flex min-h-0 min-w-0 flex-1 gap-space-5 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
+        desk && arrangement === "below" ? "flex-col" : "flex-row",
+        !desk && roomOpen ? "pb-c-graph-drawer-head" : "pb-space-6",
       ]}
+      style:--stage-w="{width ?? ownWidth}px"
     >
-      {#if timeWords && hasRecords}
-        <p class="m-0 mb-space-2 type-meta text-ink-muted">
-          {words.recordsAsOf(timeWords)}
-        </p>
-      {/if}
-      <Stage
-        bind:this={stage}
-        against={drawOf(kept).name}
-        kept={keptArgs}
-        {review}
-        {role}
-        {scheme}
-        {shown}
-        {stale}
-        {width}
-      />
-      {#if desk && arrangement === "stage" && !single}
-        <!-- The steps on the stage's own foot, the region names beside them. -->
-        <div
-          class="flex min-w-0 flex-wrap items-center justify-between gap-space-3 pt-space-3"
-        >
-          <div class="min-w-0 flex-1">{@render stepper()}</div>
-          {@render machinesNav()}
-        </div>
-      {/if}
-    </div>
-
-    {#if desk && roomOpen}
-      <!-- The room: one surface, two faces, closed by Close or Esc. -->
-      <aside
-        data-slot="graph-room"
-        aria-label={words.statesFace}
+      <div
         class={[
-          "relative flex min-h-0 min-w-0 flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile",
-          arrangement === "below"
-            ? "h-2/5 flex-none"
-            : "grow basis-c-graph-room-w min-w-c-graph-room-w",
+          "flex min-h-0 min-w-0 flex-col",
+          desk && roomOpen && arrangement !== "below"
+            ? "shrink grow-0 basis-(--stage-w) min-w-c-graph-stage-min"
+            : "flex-1",
         ]}
       >
-        <div class="flex min-w-0 items-center gap-space-2">
-          {@render faces()}
-          {#if arrangement === "below" && face === "states" && !single}
-            <div class="min-w-0 flex-1">{@render seeingSwitch(false)}</div>
-          {/if}
-          <button
-            type="button"
-            aria-label={words.closeRoom}
-            title={words.closeRoom}
-            class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-            onclick={() => {
-              roomOpen = false;
-            }}
-          >
-            <IconClose aria-hidden="true" class="size-icon-md" />
-          </button>
-        </div>
-        {#if face === "states"}
-          {@render statesFace(
-            arrangement === "below" ? "row" : "column",
-            arrangement !== "stage"
-          )}
-        {:else}
-          {@render moveFace()}
+        {#if timeWords && hasRecords}
+          <p class="m-0 mb-space-2 type-meta text-ink-muted">
+            {words.recordsAsOf(timeWords)}
+          </p>
         {/if}
-      </aside>
-    {/if}
-  </div>
+        <Stage
+          bind:this={stage}
+          against={drawOf(kept).name}
+          kept={keptArgs}
+          {review}
+          {role}
+          {scheme}
+          {shown}
+          {stale}
+          {width}
+        />
+        {#if desk && arrangement === "stage" && !single}
+          <!-- The steps on the stage's own foot, the region names beside them. -->
+          <div
+            class="flex min-w-0 flex-wrap items-center justify-between gap-space-3 pt-space-3"
+          >
+            <div class="min-w-0 flex-1">{@render stepper()}</div>
+            {@render machinesNav()}
+          </div>
+        {/if}
+      </div>
 
-  {#if !desk}
-    <!-- Under the desk line: the room is the kit's bottom drawer, its stops
-         head (the faces and the steps), half and whole; the page above it
-         stays live. -->
-    <Drawer.Root
-      bind:activeSnapPoint={snap}
-      bind:open={roomOpen}
-      dismissible={false}
-      modal={false}
-      shouldScaleBackground={false}
-      snapPoints={SNAPS}
-    >
-      <Drawer.Content
-        height="cap"
-        modal={false}
-        onOpenAutoFocus={(event: Event) => event.preventDefault()}
-        ownHead
-        title={words.statesFace}
-      >
-        <div
-          class="flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop)"
-          style:--snap-drop="calc((1 - {typeof snap === 'number' ? snap : 0}) *
-          100dvh)"
+      {#if desk && roomOpen}
+        <!-- The room: one surface, two faces, closed by Close or Esc. -->
+        <aside
+          data-slot="graph-room"
+          aria-label={words.statesFace}
+          class={[
+            "relative flex min-h-0 min-w-0 flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile",
+            arrangement === "below"
+              ? "h-2/5 flex-none"
+              : "grow basis-c-graph-room-w min-w-c-graph-room-w",
+          ]}
         >
           <div class="flex min-w-0 items-center gap-space-2">
             {@render faces()}
-            <Drawer.Close aria-label={words.closeRoom} />
-          </div>
-          {#if !single}
-            {@render stepper()}
-          {/if}
-          {#if face === "states"}
-            {#if !single}
-              {@render seeingSwitch(false)}
+            {#if arrangement === "below" && face === "states" && !single}
+              <div class="min-w-0 flex-1">{@render seeingSwitch(false)}</div>
             {/if}
-            {@render statesFace("column", true)}
+            <button
+              type="button"
+              aria-label={words.closeRoom}
+              title={words.closeRoom}
+              class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+              onclick={() => {
+                roomOpen = false;
+              }}
+            >
+              <IconClose aria-hidden="true" class="size-icon-md" />
+            </button>
+          </div>
+          {#if face === "states"}
+            {@render statesFace(
+              arrangement === "below" ? "row" : "column",
+              arrangement !== "stage"
+            )}
           {:else}
             {@render moveFace()}
           {/if}
-        </div>
-      </Drawer.Content>
-    </Drawer.Root>
-  {/if}
-</div>
+        </aside>
+      {/if}
+    </div>
+
+    {#if !desk}
+      <!-- Under the desk line: the room is the kit's bottom drawer, its stops
+         head (the faces and the steps), half and whole; the page above it
+         stays live. -->
+      <Drawer.Root
+        bind:activeSnapPoint={snap}
+        bind:open={roomOpen}
+        dismissible={false}
+        modal={false}
+        shouldScaleBackground={false}
+        snapPoints={SNAPS}
+      >
+        <Drawer.Content
+          height="cap"
+          modal={false}
+          onOpenAutoFocus={(event: Event) => event.preventDefault()}
+          trapFocus={false}
+          ownHead
+          title={words.statesFace}
+        >
+          <div
+            class="flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop)"
+            style:--snap-drop="calc((1 - {typeof snap === 'number' ? snap : 0})
+            * 100dvh)"
+          >
+            <div class="flex min-w-0 items-center gap-space-2">
+              {@render faces()}
+              <Drawer.Close aria-label={words.closeRoom} />
+            </div>
+            {#if !single}
+              {@render stepper()}
+            {/if}
+            {#if face === "states"}
+              {#if !single}
+                {@render seeingSwitch(false)}
+              {/if}
+              {@render statesFace("column", true)}
+            {:else}
+              {@render moveFace()}
+            {/if}
+          </div>
+        </Drawer.Content>
+      </Drawer.Root>
+    {/if}
+  </div>
 </TooltipProvider>

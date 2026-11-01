@@ -5,6 +5,7 @@
  * with its kind, else its kind with its first words. Tailwind's classes
  * name nothing, so no class is read.
  */
+import { FORM_CONTROLS } from "@cawco/core/pin-name";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { storyWords } from "./model";
 
@@ -28,13 +29,7 @@ const KIND: Record<string, string> = {
 };
 
 /** Controls a person names by what they are and say, whatever their part's name: a button is "Button “Create routine”". */
-const CONTROLS: ReadonlySet<string> = new Set([
-  "a",
-  "button",
-  "input",
-  "select",
-  "textarea",
-]);
+const CONTROLS: ReadonlySet<string> = new Set(["a", ...FORM_CONTROLS]);
 
 const SPACES = /\s+/gu;
 const SEPARATORS = /[-_]+/gu;
@@ -49,6 +44,19 @@ const quoted = (text: string): string =>
   text.length > QUOTED
     ? `“${text.slice(0, QUOTED - 1).trimEnd()}…”`
     : `“${text}”`;
+
+/** Its words a reader is told: every text inside it but what an `aria-hidden` part holds. */
+function saidOf(el: Element): string {
+  const said: string[] = [];
+  const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const hider = node.parentElement?.closest("[aria-hidden='true']");
+    if (!(hider && el.contains(hider))) {
+      said.push(node.textContent ?? "");
+    }
+  }
+  return said.join(" ").replace(SPACES, " ").trim();
+}
 
 /** The element in words. */
 export function nameOf(el: Element): string {
@@ -70,10 +78,8 @@ export function nameOf(el: Element): string {
   if (label) {
     return `${kind ?? words.element} ${quoted(label.replace(SPACES, " ").trim())}`;
   }
-  // The words drawn (a pending label waiting hidden says nothing), else every word it holds.
-  const text =
-    (el instanceof HTMLElement && el.innerText.replace(SPACES, " ").trim()) ||
-    wordsOf(el);
+  // The words it says (a pending label waiting, hidden from a reader, says nothing), else every word it holds.
+  const text = saidOf(el) || wordsOf(el);
   if (text) {
     return `${kind ?? words.element} ${quoted(text)}`;
   }

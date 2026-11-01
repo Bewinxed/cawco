@@ -2,7 +2,8 @@
   import DesignGraph, {
     type Arrangement,
   } from "#lib/cawco/graph/DesignGraph.svelte";
-  import { roster, routineForm } from "#lib/cawco/graph/reviews.js";
+  import { roster } from "#lib/cawco/graph/roster-review.js";
+  import { routineForm } from "#lib/cawco/graph/routine-form-review.js";
   /**
    * The design graph, mounted once with its real records: the routine form
    * and Who decides' roster from their own states files, as an agent opens

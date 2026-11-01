@@ -13,7 +13,9 @@
   data-slot="machine"
   class="size-full rounded-lg border border-border-control"
 >
-  <h3 class="m-0 truncate px-space-4 pt-space-3 type-label text-ink-muted">
+  <h3
+    class="m-0 ms-space-3 mt-space-2 inline-block max-w-full truncate rounded-sm bg-surface-recess-deep px-space-1 py-space-1 type-label text-ink-muted"
+  >
     {data.name}
   </h3>
 </div>

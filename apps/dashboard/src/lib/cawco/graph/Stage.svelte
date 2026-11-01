@@ -77,12 +77,11 @@
 
   /** A width no state names: the desk form (core stage.ts `FORMS.desk`). */
   const DESK = 1280;
+  let room = $state(0);
   /** The width it is laid out at: his pick, else its own up to its room's. */
   const drawnWidth = $derived(
     width ?? Math.min(shown.width ?? DESK, room > 0 ? room : DESK)
   );
-
-  let room = $state(0);
   let frame = $state<HTMLElement>();
   let hidden = $state<HTMLElement>();
 
@@ -183,6 +182,22 @@
     }
   }
 
+  /** The play pressed inside the stage: the person's focus goes back where it was, or off the stage. */
+  function giveBack(holder: HTMLElement, had: Element | null): void {
+    if (!holder.contains(document.activeElement)) {
+      return;
+    }
+    if (
+      had instanceof HTMLElement &&
+      had !== document.body &&
+      had.isConnected
+    ) {
+      had.focus({ preventScroll: true });
+    } else {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+  }
+
   /** Waits until the from state has come to rest: no animation started on it for {@link REST_MS}, at most {@link MOTION_MS}. */
   async function restOf(holder: HTMLElement): Promise<void> {
     const end = performance.now() + MOTION_MS;
@@ -220,10 +235,28 @@
       return [];
     }
     await restOf(holder);
+    const had = document.activeElement;
     const t0 = performance.now();
     const seen = new Map<Animation, number>();
     /** Each clip as the engine had it when it was first seen: a transition's engine drops its effect once it ends. */
     const clips: Clip[] = [];
+    /** A new animation read as a clip (a loop is a state's own, not the move's); with `still`, landed at once. */
+    const take = (animation: Animation) => {
+      if (endless(animation)) {
+        return;
+      }
+      const clip = clipOf(
+        animation,
+        Math.round(performance.now() - t0),
+        clips.length
+      );
+      if (clip.duration > 0) {
+        clips.push(clip);
+      }
+      if (still) {
+        animation.finish();
+      }
+    };
     let watching = true;
     const watch = () => {
       if (!watching) {
@@ -232,19 +265,7 @@
       for (const animation of holder.getAnimations({ subtree: true })) {
         if (!seen.has(animation)) {
           seen.set(animation, performance.now() - t0);
-          if (!endless(animation)) {
-            const clip = clipOf(
-              animation,
-              Math.round(performance.now() - t0),
-              clips.length
-            );
-            if (clip.duration > 0) {
-              clips.push(clip);
-            }
-          }
-          if (still && !endless(animation)) {
-            animation.finish();
-          }
+          take(animation);
         }
       }
       requestAnimationFrame(watch);
@@ -267,8 +288,8 @@
     } finally {
       watching = false;
       mounted = true;
+      giveBack(holder, had);
     }
-    // A loop (a spinner's turn) is a state's own, not the move's.
     return clips;
   }
 
