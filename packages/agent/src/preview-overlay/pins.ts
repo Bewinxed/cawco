@@ -1179,13 +1179,22 @@ export function startPins(deps: PinsDeps): Pins {
     }
   };
   addEventListener("scroll", onScroll, { capture: true, passive: true });
-  // A press ends keyboard focus: the focused pin's ring goes.
+  // A press ends keyboard focus: the focused pin's ring is taken off its
+  // pill, every pill kept as it stands. Drawn again here, each pill was a
+  // new node by the press's pointerup, so the browser sent its click to the
+  // layer, and a press on a pill after a key had opened a thread opened
+  // nothing.
   addEventListener(
     "pointerdown",
     () => {
-      if (keyed) {
-        keyed = false;
-        draw();
+      if (!keyed) {
+        return;
+      }
+      keyed = false;
+      for (const ring of [layer, fixed].flatMap((one) => [
+        ...one.querySelectorAll("[data-focus-ring]"),
+      ])) {
+        ring.remove();
       }
     },
     { capture: true, passive: true }
