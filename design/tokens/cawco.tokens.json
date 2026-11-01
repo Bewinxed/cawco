@@ -364,6 +364,31 @@
       "$type": "color",
       "$value": "{color.mark-7}"
     },
+    "clip-opacity": {
+      "$type": "color",
+      "$value": "{color.mark-5}",
+      "$description": "A design graph clip's kind (the owner's pick \"Its own colour per kind\", design-graph-finish): each kind on an identity-mark hue, unfold far from opacity, so a crowded timeline groups by kind without reading its glyphs."
+    },
+    "clip-position": {
+      "$type": "color",
+      "$value": "{color.mark-6}"
+    },
+    "clip-size": {
+      "$type": "color",
+      "$value": "{color.mark-3}"
+    },
+    "clip-colour": {
+      "$type": "color",
+      "$value": "{color.mark-8}"
+    },
+    "clip-text": {
+      "$type": "color",
+      "$value": "{color.mark-7}"
+    },
+    "clip-unfold": {
+      "$type": "color",
+      "$value": "{color.mark-4}"
+    },
     "account-week-toward": {
       "$type": "color",
       "$value": {
@@ -3693,6 +3718,29 @@
         "unit": "px"
       },
       "$description": "An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink)."
+    },
+    "c-graph-node-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 200,
+        "unit": "px"
+      },
+      "$description": "A state's node on the design graph's map: its title and two lines of its doc comment."
+    },
+    "c-graph-node-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 80,
+        "unit": "px"
+      }
+    },
+    "c-dock-label-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 184,
+        "unit": "px"
+      },
+      "$description": "The design graph dock's label column: a clip's target and kind, the play button standing on its start."
     },
     "c-map-node-w": {
       "$type": "dimension",

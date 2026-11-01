@@ -61,6 +61,13 @@ public enum Palette {
     /// Rose is mark-8 by day; at night half a step lighter than mark-8 (70.5%, not 70%), so its disc holds the dial's 3.9:1 on the border-control track (mark-8 measured 3.86:1).
     public static let accountRose = Palette.named("account-rose")
     public static let accountViolet = Palette.named("account-violet")
+    /// A design graph clip's kind (the owner's pick "Its own colour per kind", design-graph-finish): each kind on an identity-mark hue, unfold far from opacity, so a crowded timeline groups by kind without reading its glyphs.
+    public static let clipOpacity = Palette.named("clip-opacity")
+    public static let clipPosition = Palette.named("clip-position")
+    public static let clipSize = Palette.named("clip-size")
+    public static let clipColour = Palette.named("clip-colour")
+    public static let clipText = Palette.named("clip-text")
+    public static let clipUnfold = Palette.named("clip-unfold")
     /// What an account's week rim is mixed toward from its hue (account-week-mix, in oklch, so the hue holds): black by day, a deeper shade on paper; white at night, a lighter one. The disc keeps the hue itself, so the 5-hour and the week read apart at a glance.
     public static let accountWeekToward = Palette.named("account-week-toward")
     /// The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial. By day half a step under neutral-7 (80.5%), which measured 1.59:1.
@@ -553,6 +560,11 @@ public enum Size {
     public static let cCanvasSkeletonH: Double = 96
     /// An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink).
     public static let cGraphEdge: Double = 1.5
+    /// A state's node on the design graph's map: its title and two lines of its doc comment.
+    public static let cGraphNodeW: Double = 200
+    public static let cGraphNodeH: Double = 80
+    /// The design graph dock's label column: a clip's target and kind, the play button standing on its start.
+    public static let cDockLabelW: Double = 184
     /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
     public static let cMapNodeW: Double = 264
     /// The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines.

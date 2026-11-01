@@ -59,6 +59,13 @@
     /* Rose is mark-8 by day; at night half a step lighter than mark-8 (70.5%, not 70%), so its disc holds the dial's 3.9:1 on the border-control track (mark-8 measured 3.86:1). */
     --account-rose: light-dark(var(--mark-8), oklch(70.5% 0.17 349.8));
     --account-violet: var(--mark-7);
+    /* A design graph clip's kind (the owner's pick "Its own colour per kind", design-graph-finish): each kind on an identity-mark hue, unfold far from opacity, so a crowded timeline groups by kind without reading its glyphs. */
+    --clip-opacity: var(--mark-5);
+    --clip-position: var(--mark-6);
+    --clip-size: var(--mark-3);
+    --clip-colour: var(--mark-8);
+    --clip-text: var(--mark-7);
+    --clip-unfold: var(--mark-4);
     /* What an account's week rim is mixed toward from its hue (account-week-mix, in oklch, so the hue holds): black by day, a deeper shade on paper; white at night, a lighter one. The disc keeps the hue itself, so the 5-hour and the week read apart at a glance. */
     --account-week-toward: light-dark(oklch(0% 0 none), oklch(100% 0 none));
     /* The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial. By day half a step under neutral-7 (80.5%), which measured 1.59:1. */
@@ -729,6 +736,11 @@
     --c-canvas-skeleton-h: 96px;
     /* An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink). */
     --c-graph-edge: 1.5px;
+    /* A state's node on the design graph's map: its title and two lines of its doc comment. */
+    --c-graph-node-w: 200px;
+    --c-graph-node-h: 80px;
+    /* The design graph dock's label column: a clip's target and kind, the play button standing on its start. */
+    --c-dock-label-w: 184px;
     /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink). */
     --c-map-node-w: 264px;
     /* The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines. */
