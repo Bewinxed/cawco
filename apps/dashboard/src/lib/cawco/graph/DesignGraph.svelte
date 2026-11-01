@@ -194,8 +194,11 @@
     }
     keptOf = { ...keptOf, [review.name]: { state, variant } };
   };
+  /** A fine pointer resting on a state shows it, unless it is what the stage already shows. */
   const onpreview = (state: string, variant: string | null) => {
-    preview = variant && fine.current ? { state, variant } : null;
+    const shownNow = comparing ? compared : kept;
+    const same = shownNow?.state === state && shownNow.variant === variant;
+    preview = variant && fine.current && !same ? { state, variant } : null;
   };
 
   // --- The move into the kept state ------------------------------------------
