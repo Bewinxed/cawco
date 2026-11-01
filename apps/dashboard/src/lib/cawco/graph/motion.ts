@@ -41,6 +41,8 @@ export interface Clip {
   element: string;
   /** Whether its curve is drawn into its frames, so only its length can change. */
   framed: boolean;
+  /** Its frames, as the engine ran them: what a replay draws. */
+  frames: Keyframe[];
   /** How it moves, in words. */
   how: string;
   id: string;
@@ -49,8 +51,6 @@ export interface Clip {
   start: number;
   /** The element it moves, as the engine ran it. */
   target: Element | null;
-  /** Its frames, as the engine ran them: what a replay draws. */
-  frames: Keyframe[];
   /** Its length's token, when one names it. */
   token: string | null;
   /** What it was before the person tuned it, when they did. */
@@ -152,11 +152,7 @@ const framedOf = (animation: Animation): boolean => {
 };
 
 /** A clip from an animation the engine ran, `start` ms after the move began. */
-export function clipOf(
-  animation: Animation,
-  start: number,
-  at: number
-): Clip {
+export function clipOf(animation: Animation, start: number, at: number): Clip {
   const effect = animation.effect as KeyframeEffect | null;
   const timing = effect?.getComputedTiming();
   const property = propertyOf(animation);
@@ -202,7 +198,7 @@ export const lengthOf = (clips: readonly Clip[]): number =>
  * Svelte's). Each lasts until it ends, then lets the element go.
  */
 export class Replays {
-  #running = new Map<string, Animation>();
+  readonly #running = new Map<string, Animation>();
 
   #of(clip: Clip): Animation | null {
     this.#running.get(clip.id)?.cancel();

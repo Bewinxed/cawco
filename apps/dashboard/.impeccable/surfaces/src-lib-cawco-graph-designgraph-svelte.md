@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "rd-src-lib-cawco-graph-designgraph-svelte-4fa6344e"
-primary_target: "apps/dashboard/src/lib/cawco/graph/DesignGraph.svelte"
+slug: "src-lib-cawco-graph-designgraph-svelte"
+primary_target: "src/lib/cawco/graph/DesignGraph.svelte"
 related_targets: []
 ---
 

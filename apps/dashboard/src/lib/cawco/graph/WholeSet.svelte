@@ -56,9 +56,18 @@
       Boolean(review.states[id]?.failure) || !holes.reaches || !holes.leaves
     );
   };
+  let room = $state({ w: 0, h: 0 });
   /** Each card's height as Svelte Flow measured it: the layout is drawn again from them. */
   let measured = $state<Record<string, number>>({});
-  const layout = $derived(layoutOf(review, direction, marked, measured));
+  /** Down a tall room the columns wrap at its width; across a strip they run on and it scrolls sideways. */
+  const layout = $derived(
+    layoutOf(
+      review,
+      marked,
+      measured,
+      direction === "down" ? Math.max(0, room.w - 2 * AIR) : null
+    )
+  );
 
   const nodesNow = $derived<Node[]>([
     ...review.machines.map((machine) => {
@@ -73,7 +82,8 @@
         selectable: false,
         draggable: false,
         focusable: false,
-        zIndex: -1,
+        // Over the moves, so none crosses a machine's name; its body lets them through.
+        zIndex: 1,
       } satisfies Node;
     }),
     ...review.order.map((id) => {
@@ -89,14 +99,13 @@
           kept: id === kept,
           keptVariant: id === kept ? keptVariant : null,
           compared: id === compared,
-          direction,
           onpreview: (variant: string | null) => onpreview(id, variant),
           onpress: (variant: string) => onpress(id, variant),
         },
         selectable: false,
         draggable: false,
         focusable: false,
-        zIndex: 1,
+        zIndex: 2,
       } satisfies Node;
     }),
   ]);
@@ -144,7 +153,6 @@
     edges = edgesNow;
   });
 
-  let room = $state({ w: 0, h: 0 });
   const at = (machine: string): Viewport => {
     const box = layout.machines[machine] ?? { x: 0, y: 0 };
     return { x: AIR - box.x, y: AIR - box.y, zoom: 1 };

@@ -1,14 +1,9 @@
 /**
- * The two components the design graph's own page reviews, as an agent
- * would open them (artifact_create `kind: "component"` with `file`,
- * `group` and `edges`): the routine form and Who decides' roster, each
- * from its own states file with its own records. The page's route and the
- * graph's states file both mount these.
+ * The routine form under review, as an agent would open it
+ * (artifact_create `kind: "component"` with `file`, `group` and `edges`):
+ * its own states file with its own records, its states in four machines.
  */
 
-// biome-ignore lint/performance/noNamespaceImport: a states file is read whole: each of its exports is a story.
-import * as RosterStates from "../decides/Roster.stories";
-import rosterSource from "../decides/Roster.stories.ts?raw";
 // biome-ignore lint/performance/noNamespaceImport: a states file is read whole: each of its exports is a story.
 import * as RoutineFormStates from "../routines/RoutineForm.stories";
 import routineFormSource from "../routines/RoutineForm.stories.ts?raw";
@@ -59,37 +54,5 @@ export const routineForm: ReviewInput = {
     { from: "FailedSave", to: "Saving", label: "Try again" },
     { from: "Saving", to: "FailedType", label: "Type refused" },
     { from: "FailedType", to: "Filled", label: "Choose another" },
-  ],
-};
-
-const FOLLOWING = "Following the fleet";
-const HANDING = "Handing a kind over";
-
-export const roster: ReviewInput = {
-  file: "apps/dashboard/src/lib/cawco/decides/Roster.stories.ts",
-  module: RosterStates as unknown as ReviewInput["module"],
-  source: rosterSource,
-  group: {
-    FollowingDesk: FOLLOWING,
-    FollowingTablet: "FollowingDesk",
-    FollowingPhone: "FollowingDesk",
-    ChangedDesk: HANDING,
-    ChangedPhone: "ChangedDesk",
-    FleetPage: FOLLOWING,
-    OpenFirstColumn: HANDING,
-    OpenLastColumn: HANDING,
-    OpenPhone: "OpenFirstColumn",
-    OpenOneMember: HANDING,
-    OpenManyMembers: HANDING,
-    ManyMembersDesk: FOLLOWING,
-    Handing: HANDING,
-    Refused: HANDING,
-  },
-  edges: [
-    { from: "FollowingDesk", to: "OpenFirstColumn", label: "Press a tile" },
-    { from: "OpenFirstColumn", to: "Handing", label: "Press a member" },
-    { from: "Handing", to: "ChangedDesk", label: "Handed over" },
-    { from: "Handing", to: "Refused", label: "Refused" },
-    { from: "Refused", to: "Handing", label: "Try again" },
   ],
 };
