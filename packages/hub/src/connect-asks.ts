@@ -16,6 +16,10 @@
  * already is answered at once. A session has one connect ask open at a
  * time; one whose session ends before it is answered is withdrawn, and the
  * call refused. A waiting call ends with the hub that held it.
+ *
+ * A session whose denied tools cover every tool of the server (its
+ * delegate type's, or the fleet baseline's) is refused at once, before any
+ * card, in words that say which: a sign-in would bring it nothing.
  */
 import type {
   ConnectAccess,
@@ -26,7 +30,12 @@ import type {
   InstanceRow,
   PermissionResult,
 } from "@cawco/core";
-import { CONNECT_ASK_TOOL, connectAnsweredWords } from "@cawco/core";
+import {
+  askWords,
+  CONNECT_ASK_TOOL,
+  connectAnsweredWords,
+  mcpServerDeniedBy,
+} from "@cawco/core";
 import { z } from "zod";
 import type { AskFacts } from "./fleet-mcp";
 import { tool } from "./mcp-tool";
@@ -43,7 +52,17 @@ const DESCRIPTION =
   "It waits for them; once they connect, its tools reach this session. No credential reaches you.";
 
 /** How connect asks reach the rest of the hub. */
+/** What a session is denied, by where each denial comes from. */
+export interface SessionDenials {
+  /** The fleet baseline, which every session is denied. */
+  readonly fleet: readonly string[];
+  /** Its delegate type's own, when it was started as one. */
+  readonly type?: { name: string; denyTools: readonly string[] };
+}
+
 export interface ConnectAsksDeps {
+  /** What `actor`'s session is denied, as its spawn resolved it. */
+  readonly denials: (actor: InstanceRow) => SessionDenials;
   /** What an ask for the server says (fleet-mcp.ts `askFacts`); throws the sentence the agent reads. */
   readonly facts: (server: string) => AskFacts;
   /** Parks the ask for the person: the pending ledger, every screen, push. */
@@ -95,6 +114,16 @@ const serverNamed = (asked: string, servers: readonly string[]): string => {
   );
 };
 
+/** Throws the sentence the agent reads when `denials` cover every tool of `server`. */
+const refuseDenied = (server: string, denials: SessionDenials): void => {
+  if (mcpServerDeniedBy(denials.fleet, server)) {
+    throw new Error(askWords.connectDeniedByFleet(server));
+  }
+  if (denials.type && mcpServerDeniedBy(denials.type.denyTools, server)) {
+    throw new Error(askWords.connectDeniedByType(server, denials.type.name));
+  }
+};
+
 export const createConnectAsks = (deps: ConnectAsksDeps) => {
   /** Calls waiting on the person, by the ask's request id. */
   const waiting = new Map<string, Waiter>();
@@ -107,6 +136,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
       toolUseId?: string
     ): Promise<ConnectAnswer> {
       const server = serverNamed(input.server, deps.servers(actor));
+      refuseDenied(server, deps.denials(actor));
       const facts = deps.facts(server);
       if (facts.signedIn) {
         return {

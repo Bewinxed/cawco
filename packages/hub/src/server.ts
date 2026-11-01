@@ -3782,6 +3782,17 @@ export const createServer = (
   // A session's ask that the person sign the hub in to a fleet MCP server
   // (connect-asks.ts), answered by the hub's own sign-in landing.
   const connectAsks = createConnectAsks({
+    // The fleet baseline and the type's denials, as a wake or restore
+    // re-spawns the session with them (`typeSettingsOf`).
+    denials: (actor) => {
+      const { delegateType, denyTools } = typeSettingsOf(actor);
+      return {
+        fleet: db.getSupervisorConfig().deniedTools,
+        ...(delegateType && denyTools
+          ? { type: { name: delegateType.name, denyTools } }
+          : {}),
+      };
+    },
     facts: (server) => fleetMcp.askFacts(server),
     // A project's own server reaches that project's sessions alone.
     servers: (actor) =>

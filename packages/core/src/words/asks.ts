@@ -85,6 +85,15 @@ export const askWords = {
   recordReadWrite: "read and write",
   recordNotConnected: (server: string) => `${server} not connected`,
   recordExpired: "sign-in expired",
+  /**
+   * A connect ask refused before any card, as the asking agent reads it:
+   * the server's tools are denied to its session, by its delegate type or
+   * by the fleet's own denied tools, so a sign-in would bring it nothing.
+   */
+  connectDeniedByType: (server: string, type: string) =>
+    `${server}'s tools are denied to this session by its delegate type ${type}. Tell the person, or ask your parent for a delegate whose type allows them.`,
+  connectDeniedByFleet: (server: string) =>
+    `${server}'s tools are denied to every session by the fleet's denied tools. Tell the person; the fleet's list is theirs to change.`,
   /** The record's tail, the server's name, opens the MCP page. */
   recordOnMcpPage: (server: string) => `${server} on the MCP page`,
   /** A question's own answer field. */

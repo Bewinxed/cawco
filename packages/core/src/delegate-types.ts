@@ -423,6 +423,32 @@ const OPENCODE_UNSAFE = /[^A-Za-z0-9_-]/gu;
 const LOWERCASE_START = /^[a-z]/u;
 
 /**
+ * A denied-tool name's MCP server and tool, in Claude's form: `*` for a bare
+ * `mcp__server` or `mcp__server__*`, every tool of it; undefined for a name
+ * that is no MCP tool.
+ */
+const mcpDenial = (
+  name: string
+): { server: string; tool: string } | undefined => {
+  const mcp = CLAUDE_MCP_TOOL.exec(name);
+  return mcp ? { server: mcp[1], tool: mcp[2] ?? "*" } : undefined;
+};
+
+/**
+ * The name in a denied-tool list that denies every tool of the MCP server
+ * `server`, read as each harness's spawn reads it ({@link harnessToolsFor});
+ * undefined when the list leaves some of them.
+ */
+export const mcpServerDeniedBy = (
+  names: readonly string[],
+  server: string
+): string | undefined =>
+  names.find((name) => {
+    const mcp = mcpDenial(name);
+    return mcp?.server === server && mcp.tool === "*";
+  });
+
+/**
  * A harness's tool ids for a denied-tool list: a Claude name through
  * `equivalents`; `mcp__server__tool` through `mcpId`, with each character
  * `unsafe` matches as `_` (a bare `mcp__server` or `mcp__server__*` is every
@@ -438,13 +464,12 @@ const harnessToolsFor = (
   const tools = new Set<string>();
   const unmapped: string[] = [];
   for (const name of names) {
-    const mcp = CLAUDE_MCP_TOOL.exec(name);
+    const mcp = mcpDenial(name);
     if (mcp) {
-      const tool = mcp[2] ?? "*";
       tools.add(
         mcpId(
-          mcp[1].replace(unsafe, "_"),
-          tool === "*" ? "*" : tool.replace(unsafe, "_")
+          mcp.server.replace(unsafe, "_"),
+          mcp.tool === "*" ? "*" : mcp.tool.replace(unsafe, "_")
         )
       );
     } else if (equivalents[name]) {

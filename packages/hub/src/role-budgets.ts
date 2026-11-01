@@ -302,6 +302,7 @@ export const listRoleTools = (): RoleTools[] => {
     // The connect ask, from the one list the server gives sessions.
     connectTools: (actor) =>
       createConnectAsks({
+        denials: () => ({ fleet: [] }),
         facts: () => {
           throw new Error("measuring");
         },
