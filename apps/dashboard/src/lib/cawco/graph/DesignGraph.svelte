@@ -366,6 +366,22 @@
    * leaves above the sheet. Its head (the faces and the steps), half, and
    * whole.
    */
+  /** What takes the focus when pressed: a control or a field. */
+  const FOCUSABLE =
+    "button, input, select, textarea, a[href], [contenteditable='true'], [tabindex]:not([tabindex='-1'])";
+  /**
+   * A press on the drawer's own surface (its grabber, its head, the space
+   * between its rows) leaves the focus where it was: the drawer's content
+   * is the dialog's (bits-ui gives it `tabindex="-1"`), and a browser hands
+   * the focus to the focusable box round whatever a mouse press, or a
+   * finger's press as it ends, lands on, so a drag of the drawer moved the
+   * focus into it. A press on a control still focuses that control.
+   */
+  const keepFocusOnPage = (event: MouseEvent) => {
+    if (!(event.target as Element | null)?.closest(FOCUSABLE)) {
+      event.preventDefault();
+    }
+  };
   /** A root token's value as the page computes it. */
   const rootValue = (name: string): string =>
     typeof document === "undefined"
@@ -792,6 +808,7 @@
           modal={false}
           onOpenAutoFocus={(event: Event) => event.preventDefault()}
           portalProps={{ disabled: true }}
+          onmousedown={keepFocusOnPage}
           trapFocus={false}
           ownHead
           title={words.statesFace}
