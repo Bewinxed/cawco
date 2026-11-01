@@ -3,7 +3,9 @@
    * The design graph in a frame of its own (its states files'): a window's
    * height at the frame's width, so the surface lays itself out as it does
    * in the panel, holding the routine form from its own states file, and
-   * the roster beside it when the ask names it too (loaded only then).
+   * the roster beside it when the ask names it too (loaded only then); or,
+   * for the surface's own edge states, a states file of one story (the
+   * kit's menu) or one whose component throws as it mounts.
    */
   import { screenHeight } from "@cawco/core/stage";
   import type { ComponentProps } from "svelte";
@@ -17,12 +19,15 @@
     ask,
     stale = false,
     withRoster = false,
+    alone = null,
   }: Pick<
     ComponentProps<typeof DesignGraph>,
     "arrangement" | "ask" | "stale"
   > & {
     /** Whether the ask names the roster beside the routine form. */
     withRoster?: boolean;
+    /** The one component under review in place of the routine form. */
+    alone?: ReviewInput | null;
   } = $props();
 
   let roster = $state<ReviewInput | null>(null);
@@ -40,7 +45,12 @@
       live = false;
     };
   });
-  const inputs = $derived(roster ? [routineForm, roster] : [routineForm]);
+  const inputs = $derived.by(() => {
+    if (alone) {
+      return [alone];
+    }
+    return roster ? [routineForm, roster] : [routineForm];
+  });
   let tall = $state(0);
   /** When the agent opened the surface, as the records name it. */
   const opened = new Date();
