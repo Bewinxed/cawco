@@ -10315,7 +10315,10 @@ export const createServer = (
    * Sessions whose turn in flight last called no_reply_needed. Ended with no
    * text after that call ({@link finalMessage} empty), the turn has nothing
    * for the person: its end is no news on any screen (db `noteTurnEnded`) and
-   * pushes nothing (push.ts `turnEnded`).
+   * pushes nothing (push.ts `turnEnded`). On Claude Code and pi the call
+   * ends the turn (core no-reply.ts `END_TURN_META`): its tool result is the
+   * turn's last frame before a `success` result, with no assistant frame
+   * after it, so no text can follow.
    */
   const endsOnNoReply = new Set<string>();
   /** A turn's end, whatever ended it: what it said and how it ended go. */

@@ -13,8 +13,11 @@
  * whenever it carries one, with or without an `outputSchema` (measured
  * 2026-10-22: a stub tool's `content` never reached either model), so a
  * result carries none: what the model reads is this text. pi reads
- * `content` (agent delegation.ts).
+ * `content` (agent delegation.ts). Beside it a tool that ends the turn
+ * carries one `_meta` mark ({@link ToolOptions.endsTurn}).
  */
+
+import { END_TURN_META } from "@cawco/core";
 import type {
   CallToolResult,
   ToolAnnotations,
@@ -65,6 +68,11 @@ export interface ToolOptions<R, A> {
   annotations?: ToolAnnotations;
   /** The detailed form, when it is more than the answer as JSON (a picture beside it). */
   detailed?: Presenter<R, A>;
+  /**
+   * Its result ends the turn at the call: no model step follows, so nothing
+   * is written after it (core no-reply.ts {@link END_TURN_META}).
+   */
+  endsTurn?: true;
   /**
    * A tool with its own input error refuses unknown keys itself, as it
    * parses. What a harness is shown never says `additionalProperties:
@@ -134,12 +142,13 @@ export function tool<T extends z.ZodRawShape, R>(
       } & z.infer<z.ZodObject<T>>;
       const asked = rest as z.infer<z.ZodObject<T>>;
       const answer = await run(asked, format ?? "concise");
-      if (format === "detailed") {
-        return resultOf(
-          options.detailed ? options.detailed(answer, asked) : asJson(answer)
-        );
-      }
-      return resultOf(present(answer, asked));
+      const detailed = options.detailed ?? asJson;
+      const result = resultOf(
+        format === "detailed" ? detailed(answer, asked) : present(answer, asked)
+      );
+      return options.endsTurn
+        ? { ...result, _meta: { [END_TURN_META]: true } }
+        : result;
     },
   };
 }

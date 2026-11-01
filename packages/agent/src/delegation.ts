@@ -1,6 +1,7 @@
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  END_TURN_META,
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
@@ -109,8 +110,10 @@ export async function callDelegationTool(
         `CawCo tool ${name}: HTTP ${response.status}${why ? `: ${why}` : ""}`
       );
     }
-    // The hub's answer is its content alone: words, and a picture beside them (hub mcp-tool.ts).
+    // The hub's answer is its content: words, and a picture beside them,
+    // and the mark of a call that ends the turn (hub mcp-tool.ts).
     const result = (await response.json()) as {
+      _meta?: Record<string, unknown>;
       content: (
         | { type: "text"; text: string }
         | { type: "image"; data: string; mimeType: string }
@@ -124,7 +127,13 @@ export async function callDelegationTool(
           .join("\n")
       );
     }
-    return { content: result.content, details: {} };
+    // pi ends the turn after a tool batch whose every result says
+    // `terminate` (core no-reply.ts END_TURN_META).
+    return {
+      content: result.content,
+      details: {},
+      ...(result._meta?.[END_TURN_META] === true ? { terminate: true } : {}),
+    };
   };
   // A long call (workspace creation, continuation, checks, image generation)
   // may take minutes without a response byte, and a wait (on the person, on a

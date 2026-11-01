@@ -30,6 +30,11 @@ import { MCP_SERVER_NAME } from "./delegation";
  * The same set marks the turn ended for a resume
  * (`qTe().has(G.name)&&!y.is_error?{endsTurn:!0,…}`). So CawCo's
  * `no_reply_needed` is named here.
+ *
+ * The set does not stop the loop: after a successful call in it the model
+ * still takes its next step. What ends the turn at the call is the call's
+ * own result, marked `_meta` `claude/endTurn` by the hub (core no-reply.ts
+ * `END_TURN_META`).
  */
 export const CLAUDE_QUIET_ENV = {
   CLAUDE_CODE_SILENT_TURN_REMINDER: "0",
