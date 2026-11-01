@@ -99,11 +99,8 @@
   let when = $state<When>(
     untrack(() => (opening.cron ? choiceOf(opening.cron) : { ...FIRST_WHEN }))
   );
-  // Its own while it runs, and the props' again when they change: a states
-  // file's move (Filled to Saving, Saving to Failed) gives this instance new
-  // props, and the button and the failure line play their own motion.
-  let saving = $derived(openSaving);
-  let failure = $derived<string | null>(openFailure);
+  let saving = $state(untrack(() => openSaving));
+  let failure = $state<string | null>(untrack(() => openFailure));
   /** Create was pressed: every blank field says what it needs. */
   let attempted = $state(false);
   let touched = $state<Record<"name" | "prompt" | "time" | "custom", boolean>>({

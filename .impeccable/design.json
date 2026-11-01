@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-01T10:33:46Z",
+  "generatedAt": "2026-10-31T21:28:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -2308,108 +2308,6 @@
         "role": "neutral",
         "displayName": "Night Ring",
         "canonical": "light-dark(transparent, oklch(0.934 0.01 82 / 0.07))"
-      },
-      "clip-opacity": {
-        "role": "identity",
-        "displayName": "Clip Opacity",
-        "canonical": "light-dark(oklch(51.00% 0.0930 186.70), oklch(70.00% 0.0950 186.70))",
-        "hex": "#00776f",
-        "hexDark": "#4cb2a8",
-        "tonalRamp": [
-          "#001411",
-          "#00312c",
-          "#00504a",
-          "#007169",
-          "#33948b",
-          "#5bb7ae",
-          "#80dcd2",
-          "#a6fff8"
-        ]
-      },
-      "clip-position": {
-        "role": "identity",
-        "displayName": "Clip Position",
-        "canonical": "light-dark(oklch(51.00% 0.1400 251.40), oklch(70.00% 0.1450 251.40))",
-        "hex": "#1468b3",
-        "hexDark": "#53a2f5",
-        "tonalRamp": [
-          "#000043",
-          "#001f65",
-          "#004188",
-          "#0a63ad",
-          "#3885d3",
-          "#5da9fa",
-          "#81ceff",
-          "#a6f5ff"
-        ]
-      },
-      "clip-size": {
-        "role": "identity",
-        "displayName": "Clip Size",
-        "canonical": "light-dark(oklch(50.00% 0.1150 86.80), oklch(70.00% 0.1200 86.80))",
-        "hex": "#7f5d00",
-        "hexDark": "#bf9939",
-        "tonalRamp": [
-          "#1e0200",
-          "#3c1d00",
-          "#5b3b00",
-          "#7d5b00",
-          "#a07c30",
-          "#c49f55",
-          "#e9c479",
-          "#ffe99d"
-        ]
-      },
-      "clip-colour": {
-        "role": "identity",
-        "displayName": "Clip Colour",
-        "canonical": "light-dark(oklch(51.00% 0.1650 349.80), oklch(70.00% 0.1700 349.80))",
-        "hex": "#a63273",
-        "hexDark": "#e96cae",
-        "tonalRamp": [
-          "#300014",
-          "#550030",
-          "#7a004e",
-          "#a02c6e",
-          "#c75190",
-          "#ef75b3",
-          "#ff99d8",
-          "#ffbffe"
-        ]
-      },
-      "clip-text": {
-        "role": "identity",
-        "displayName": "Clip Text",
-        "canonical": "light-dark(oklch(51.00% 0.1500 292.50), oklch(70.00% 0.1550 292.50))",
-        "hex": "#6b51b3",
-        "hexDark": "#a28af5",
-        "tonalRamp": [
-          "#160042",
-          "#2c0065",
-          "#482988",
-          "#664cad",
-          "#866ed3",
-          "#a991fa",
-          "#ccb6ff",
-          "#f2dbff"
-        ]
-      },
-      "clip-unfold": {
-        "role": "identity",
-        "displayName": "Clip Unfold",
-        "canonical": "light-dark(oklch(51.00% 0.1320 121.20), oklch(70.00% 0.1350 121.20))",
-        "hex": "#5b7000",
-        "hexDark": "#92ab41",
-        "tonalRamp": [
-          "#060f00",
-          "#1d2c00",
-          "#384a00",
-          "#566b00",
-          "#778d2e",
-          "#99b154",
-          "#bcd678",
-          "#e1fc9d"
-        ]
       }
     },
     "typographyMeta": {

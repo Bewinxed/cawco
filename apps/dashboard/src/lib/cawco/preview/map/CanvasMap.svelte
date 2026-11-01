@@ -28,7 +28,6 @@
   import { fetchCanvasMap } from "#lib/cawco/artifact-api.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { tokenLengths } from "#lib/cawco/token-lengths.js";
   import { track } from "#lib/cawco/track.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
@@ -170,12 +169,21 @@
     if (!at) {
       return;
     }
-    lengths = tokenLengths(at, {
-      card: "--c-map-node-w",
-      across: "--space-5",
-      between: "--space-6",
-      down: "--space-8",
-    });
+    const of = (token: string) => {
+      const probe = document.createElement("div");
+      probe.style.position = "absolute";
+      probe.style.inlineSize = `var(${token})`;
+      at.append(probe);
+      const { width } = probe.getBoundingClientRect();
+      probe.remove();
+      return width;
+    };
+    lengths = {
+      card: of("--c-map-node-w"),
+      across: of("--space-5"),
+      between: of("--space-6"),
+      down: of("--space-8"),
+    };
   });
   /** A card's height as Svelte Flow measured it (MapFit); its width until then. */
   let rowHeight = $state(0);
