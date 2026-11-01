@@ -731,6 +731,14 @@
     --c-graph-edge: 1.5px;
     /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink). */
     --c-map-node-w: 264px;
+    /* The design graph's room beside its stage on a desk (DESIGN.md, Artifact panel, canvas and ink; the graph's surface brief): a state's name and its one-line note at the body size beside its glyph cell and its marks, and a clip's row with its bar under its name, without wrapping a typical note past two lines. */
+    --c-graph-room-w: 400px;
+    /* A state in the design graph's whole set (Svelte Flow node): its name in the label role and its note in meta over two lines, at 1:1 so no type renders under 12px; four across a desk room past 900px. */
+    --c-graph-node-w: 208px;
+    /* The design graph's drawer at its head stop under the desk line: the grabber, the faces' segmented row and the journey's steps, each 44px to a finger, so the stage above stands whole (spec, Widths: 390). */
+    --c-graph-drawer-head: 148px;
+    /* The narrowest the design graph's stage stands beside its room on a desk (spec: at 1440 the stage never under 600px); under it the room becomes the drawer. */
+    --c-graph-stage-min: 600px;
     /* The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines. */
     --c-pin-list-share: 0.3;
     /* The Comments panel at its narrowest: a row's text column of 225px beside its disc, where a six-word comment in the body role stands on one line and a 48-word one wraps to its four-line cut. */

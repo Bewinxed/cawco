@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./stage-play": "./src/stage-play.ts",
     "./bring-into-view": "./src/bring-into-view.ts",
     "./build-info": "./src/build-info.ts",
     "./run-captured": "./src/run-captured.ts",
@@ -82,6 +83,7 @@
     "./words/decisions": "./src/words/decisions.ts",
     "./words/decides": "./src/words/decides.ts",
     "./words/routines": "./src/words/routines.ts",
+    "./words/graph": "./src/words/graph.ts",
     "./words/leaks": "./src/words/leaks.ts",
     "./words/loop": "./src/words/loop.ts",
     "./words/search": "./src/words/search.ts",
