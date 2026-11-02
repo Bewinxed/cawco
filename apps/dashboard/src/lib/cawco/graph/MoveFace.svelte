@@ -94,6 +94,19 @@
    * stopped the move after one frame.
    */
   const handle = $derived(Math.round(Math.min(playhead, length)));
+  /**
+   * Page Up and Page Down step the playhead a ruler's mark (100 ms), as a
+   * slider's large step does (WAI-ARIA APG, Slider: "Page Up: increments
+   * the value by an amount larger than the step"); bits-ui's Slider keys
+   * the arrows, Home and End alone.
+   */
+  const pageKey = (event: KeyboardEvent) => {
+    const by = { PageUp: STEP, PageDown: -STEP }[event.key];
+    if (by !== undefined) {
+      event.preventDefault();
+      onseek(Math.max(0, Math.min(length, handle + by)));
+    }
+  };
 </script>
 
 <div data-slot="move" class="flex min-h-0 min-w-0 flex-1 flex-col gap-space-3">
@@ -193,6 +206,7 @@
                 )}
                 class="pointer-hit touch-hit block size-space-3 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2"
                 index={0}
+                onkeydown={pageKey}
               />
             </Slider.Root>
             <div class="relative h-space-5" aria-hidden="true">
