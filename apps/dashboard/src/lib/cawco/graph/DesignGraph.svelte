@@ -401,6 +401,19 @@
   ] as const;
   const DESK_FORM = 1280;
   const ownWidth = $derived(drawOf(kept, null).width ?? DESK_FORM);
+  /**
+   * The stage's share of a wide surface: the widest of the component's own
+   * widths, so it holds still from state to state. Taken from the kept
+   * state's own width, a press on a state written at 680 after one at
+   * 1440 narrowed the stage and widened the room beside it, and the list's
+   * rows wrapped anew.
+   */
+  const stageWidth = $derived(
+    Math.max(
+      0,
+      ...review.order.map((id) => review.states[id]?.width ?? DESK_FORM)
+    ) || DESK_FORM
+  );
   /** The head's glass, which the view's card hangs from, and whether it hangs. */
   let glass = $state<HTMLElement | null>(null);
   let viewJoined = $state(false);
@@ -762,7 +775,7 @@
         desk && arrangement === "below" ? "flex-col" : "flex-row",
         !desk && roomOpen ? "pb-c-graph-drawer-head" : "pb-space-6",
       ]}
-      style:--stage-w="{width ?? ownWidth}px"
+      style:--stage-w="{width ?? stageWidth}px"
     >
       <div
         class={[
