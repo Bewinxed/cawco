@@ -48,8 +48,6 @@
     return roster ? [routineForm, roster] : [routineForm];
   });
   let tall = $state(0);
-  /** When the agent opened the surface, as the records name it. */
-  const opened = new Date();
 </script>
 
 <div
@@ -59,5 +57,5 @@
     tall = screenHeight(node.clientWidth);
   })}
 >
-  <DesignGraph {ask} {inputs} recordsAt={opened} {stale} />
+  <DesignGraph {ask} {inputs} {stale} />
 </div>

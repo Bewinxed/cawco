@@ -161,10 +161,13 @@
     return `M2 22 C${x(x1)} ${y(y1)} ${x(x2)} ${y(y2)} 22 2`;
   };
   const SHAPES: Shape[] = ["linear", "smooth", "slowDown", "speedUp", "spring"];
+  /** The house's own timing, named only when the clip's timing is one (its length a token, its curve a token's or its frames'). */
   const token = $derived(
-    [first.token?.replace("--dur-", ""), first.framed ? null : first.curve]
-      .filter(Boolean)
-      .join(" · ")
+    first.adHoc
+      ? ""
+      : [first.token?.replace("--dur-", ""), first.framed ? null : first.curve]
+          .filter(Boolean)
+          .join(" · ")
   );
   const slider = $derived.by(() => {
     if (curve.shape === "spring") {
@@ -314,11 +317,6 @@
             </button>
           {/each}
         </div>
-        {#if first.spring}
-          <p class="m-0 type-meta text-ink-muted num">
-            {words.settles(duration)}
-          </p>
-        {/if}
       </fieldset>
 
       <!-- mark-line: a column; the curve's graph stands under the shapes, beside no words -->

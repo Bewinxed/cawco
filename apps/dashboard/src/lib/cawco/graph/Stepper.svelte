@@ -11,15 +11,12 @@
   let {
     path,
     at,
-    name,
     onstep,
   }: {
     /** The component's path, its states in the list's order. */
     path: readonly string[];
     /** Where the kept state stands on it. */
     at: number;
-    /** The kept state's name. */
-    name: string;
     onstep: (state: string) => void;
   } = $props();
 
@@ -53,7 +50,7 @@
       class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-center type-label text-ink-row num"
       aria-live="polite"
     >
-      {words.position(at + 1, path.length, name)}
+      {words.position(at + 1, path.length)}
     </p>
     <button
       type="button"
