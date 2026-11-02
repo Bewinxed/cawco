@@ -140,6 +140,21 @@ const runtimeSocketDenies = (
  * - A write deny reaches srt only where the policy allows writes: everywhere
  *   else writes are refused anyway, and srt would make a mount point for each
  *   that does not exist yet.
+ * - `mandatoryDenySearchDepth: 1`, srt's least: its own names are bound at
+ *   its working directory alone, the clone's root, as the policy's are. srt
+ *   lists `.mcp.json`, `.gitconfig`, `.vscode`, `.claude/commands`, a
+ *   repository's `.git/hooks`, … with ripgrep down to this depth on every
+ *   command and binds each it finds read-only (`linuxGetMandatoryDenyPaths`
+ *   in linux-sandbox-utils.js at 0.0.81; a file down to the depth, a
+ *   directory one level higher). At its default 3, a worktree or clone a
+ *   session made in its clone held its checkout's copies under binds no
+ *   command could undo: `rm` met "Device or resource busy" on a bound file
+ *   and "Read-only file system" in a bound directory (2026-11-02, a
+ *   worktree `.worktree-baseline/` with `.mcp.json` and `.vscode/`). What a
+ *   host program loads is at the clone's root, bound; a nested copy is kept
+ *   out of what lands instead (core clone-denies.ts `cloneDenies`). srt still
+ *   binds whole a directory just below the root that ripgrep could not read
+ *   (`unreadableDirectories`), at any depth setting.
  */
 export const srtSettings = (
   policy: Policy,
@@ -175,7 +190,7 @@ export const srtSettings = (
     allowGitConfig: true,
   },
   ripgrep: { command: place.rg },
-  mandatoryDenySearchDepth: 3,
+  mandatoryDenySearchDepth: 1,
   bwrapPath: place.bwrap,
 });
 
