@@ -2,9 +2,9 @@
  * The design graph's own states (Component Story Format 3, live
  * components): the surface as the agent opens it on the routine form at
  * Save failed, each way it can stand, with the routine form and the roster
- * from their own states files. Its desk arrangement is the recommended
- * one, beside, until the owner's pick on design-graph-arrangement. Under
- * the desk line the room is the kit's drawer, which vaul places by the
+ * from their own states files. On a desk the states and the move stand in
+ * a room beside the stage (the owner's pick on design-graph-arrangement).
+ * Where the surface cannot hold both, the room is the kit's drawer, which vaul places by the
  * window's height: it is judged on the page itself at 390 and 680
  * (/dev/design-graph), where the window is the surface's.
  */
@@ -16,7 +16,6 @@ export default {
   title: "Design graph/Design graph",
   component: DesignGraphFrame,
   args: {
-    arrangement: "beside",
     ask: { component: "Routine form", state: "FailedSave" },
   },
 };
