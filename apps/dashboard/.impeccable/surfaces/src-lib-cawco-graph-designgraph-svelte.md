@@ -30,9 +30,9 @@ The owner of the fleet, from an agent's one-line ask ("Judge the design graph on
 Reading/mounting (skeleton at the stage's size after the wait grace); failed to mount (error formula in the stage's place, Show details); one state, no machine; kept state with no move; the move reading or failed; playing, paused, scrubbed; comparing, a difference brought into view; a tuned row; reduced motion (Play draws the end with a fade); the hub's link lost (the stage keeps its drawing, marked stale, dimmed).
 
 ## Widths
-- **390**: where the surface cannot hold the stage at its least (600px) and the room at its least (400px) side by side with their gap and gutters (1064px of its own width), the room is the kit's bottom drawer, stops head, half, whole; the page ends at the drawer's top at each stop; the grabber steps the stops; the drawer's own Close; every control 44px to a finger.
+- **390**: where the surface cannot hold the stage at its least (600px) and the room at its least (400px) side by side with their gap and gutters (1066px of its own width), the room is the kit's bottom drawer, stops head, half, whole; the page ends at the drawer's top at each stop; the grabber steps the stops; the drawer's own Close; every control 44px to a finger.
 - **680**: the same drawer; the stage never covered.
-- **1064 to 1440**: stage and room in view at once, both inside the surface, the stage at its component's width (never under 600px), the room taking the rest.
+- **1066 to 1440**: stage and room in view at once, both inside the surface, the stage at its component's width (never under 600px), the room taking the rest.
 - **2529**: the surface has about half the window; the stage takes its component's own width, the room the rest, no paper between.
 
 ## Untouched
