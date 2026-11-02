@@ -41,6 +41,7 @@
   import { graphWords as words } from "@cawco/core/words/graph";
   import { mergeProps } from "bits-ui";
   import { onMount, tick, untrack } from "svelte";
+  import { bridge } from "#lib/cawco/decisions/host/page.svelte.js";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import {
     motionOk,
@@ -81,7 +82,7 @@
     IconTablet,
   } from "#lib/icons.js";
   import Journey from "./Journey.svelte";
-  import MoveFace, { type MoveState } from "./MoveFace.svelte";
+  import MoveFace, { type MoveState, type Timings } from "./MoveFace.svelte";
   import {
     type Move,
     moveInto,
@@ -91,7 +92,7 @@
     type ReviewInput,
     reviewOf,
   } from "./model";
-  import { type Clip, lengthOf, Replays, untune } from "./motion";
+  import { type Clip, lengthOf, Replays, tunedRecord, untune } from "./motion";
   import Stage, { type Shown } from "./Stage.svelte";
   import Stepper from "./Stepper.svelte";
   import WholeSet from "./WholeSet.svelte";
@@ -252,7 +253,14 @@
     playing = false;
     cancelAnimationFrame(clock);
   };
-  const clipsNow = (): Clip[] => (move.kind === "ready" ? move.clips : []);
+  /** The animation as read, or as he changed it: what the rows show and Play plays. */
+  let timings = $state<Timings>("edited");
+  const clipsNow = (): Clip[] => {
+    if (move.kind !== "ready") {
+      return [];
+    }
+    return timings === "original" ? move.clips.map(untune) : move.clips;
+  };
 
   /** The state the live instance stands in, by component, and the pick it was reached for. */
   let onStage: { key: string; review: string; state: string } | null = null;
@@ -302,6 +310,7 @@
     run += 1;
     const mine = run;
     playhead = 0;
+    timings = "edited";
     const to = nameIn(on, pick.state) || pick.state;
     const into = pick.variant === null ? moveInto(on, pick.state) : null;
     const played = into && on.states[pick.state]?.play ? into : null;
@@ -373,12 +382,16 @@
     });
   });
 
+  /** The rate the move last played at, and the one a scrub resumes at once let go. */
+  let lastRate = 1;
+  let resumeRate: number | null = null;
   const play = (rate: number) => {
     const clips = clipsNow();
     if (clips.length === 0) {
       return;
     }
     stop();
+    lastRate = rate;
     const length = lengthOf(clips);
     if (still) {
       replays.seek(clips, length);
@@ -401,10 +414,40 @@
     };
     clock = requestAnimationFrame(step);
   };
+  /** A scrub while the move plays pauses it; let go, it plays on from there (DialKit's rule). */
   const scrub = (t: number) => {
+    if (playing) {
+      resumeRate = lastRate;
+    }
     stop();
     playhead = t;
     replays.seek(clipsNow(), t);
+  };
+  const scrubbed = () => {
+    if (resumeRate !== null) {
+      const rate = resumeRate;
+      resumeRate = null;
+      play(rate);
+    }
+  };
+  /**
+   * Every change he made goes to the artifact as the component canvas's
+   * `tuned` record (stage-host canvas chrome.ts `openMove`), the tuned clips
+   * alone, 300 ms after the last change, through the preview's bridge;
+   * `artifact_read` answers it. A reset clip leaves the record.
+   */
+  const SEND_AFTER_MS = 300;
+  let sending: ReturnType<typeof setTimeout> | undefined;
+  const sendTuned = () => {
+    clearTimeout(sending);
+    const now = move;
+    sending = setTimeout(() => {
+      if (now.kind === "ready") {
+        bridge()
+          ?.set("tuned", tunedRecord(words.move(now.from, now.to), now.clips))
+          .catch(() => undefined);
+      }
+    }, SEND_AFTER_MS);
   };
   /**
    * The clips he tuned put in the move, which plays at once from where the
@@ -422,6 +465,10 @@
       ...move,
       clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
     };
+    if (!move.clips.some((clip) => clip.was)) {
+      timings = "edited";
+    }
+    sendTuned();
     playhead = Math.min(...changed.map((clip) => clip.start + clip.delay));
     play(1);
   };
@@ -669,7 +716,6 @@
 
 {#snippet moveFace()}
   <MoveFace
-    coarse={!desk}
     {move}
     onlight={(thing) => {
       lit = thing;
@@ -684,9 +730,18 @@
       )}
     onretime={retime}
     onseek={scrub}
+    onseekend={scrubbed}
+    ontimings={(next) => {
+      timings = next;
+      stop();
+      replays.release();
+      playhead = 0;
+      play(1);
+    }}
     {playhead}
     {playing}
     {still}
+    {timings}
   />
 {/snippet}
 

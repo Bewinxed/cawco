@@ -97,8 +97,58 @@ const shapeOf = (easing: string): string =>
 const tokenOf = (ms: number): string | null =>
   LADDER.find((name) => Math.round(dur(name)) === Math.round(ms)) ?? null;
 
+/** The ladder's length nearest `ms`: where a held bar's length snaps (the owner's "Snap, and ⌥ frees it"). */
+export const snapLength = (ms: number): number =>
+  LADDER.map((name) => Math.round(dur(name))).reduce((best, one) =>
+    Math.abs(one - ms) < Math.abs(best - ms) ? one : best
+  );
+
+/** What a clip changes, as the timeline colours it (the `c-clip-*` tokens). */
+export type ClipKind = "size" | "move" | "fade" | "tint" | "effect" | "other";
+// golar-ignore-next-line house/no-clip-with-move -- a table from a property to its colour, no animation effect
+const KINDS: Record<string, ClipKind> = {
+  height: "size",
+  "block-size": "size",
+  width: "size",
+  "inline-size": "size",
+  "clip-path": "size",
+  transform: "move",
+  translate: "move",
+  scale: "move",
+  rotate: "move",
+  opacity: "fade",
+  "background-color": "tint",
+  color: "tint",
+  "border-color": "tint",
+  filter: "effect",
+  "box-shadow": "effect",
+};
+/** A property's kind: its family of change. */
+const kindOf = (property: string): ClipKind => KINDS[property] ?? "other";
+
+/** One timing as the component canvas's `tuned` record says it (stage-host canvas chrome.ts `openMove`): the agent writes it into the CSS or the motion call. */
+export interface TunedRecord {
+  animation: string;
+  delay: number;
+  duration: number;
+  easing: string;
+  move: string;
+}
+
+/** The clips the person tuned, as the canvas's `tuned` record: the move, the animation by its element and property, its begin from the move's start, its length and its curve. */
+export const tunedRecord = (move: string, clips: readonly Clip[]) =>
+  clips
+    .filter((clip) => clip.was)
+    .map((clip): TunedRecord => ({
+      move,
+      animation: `${clip.element} ${clip.property}`,
+      delay: Math.round(clip.start + clip.delay),
+      duration: Math.round(clip.duration),
+      easing: clip.easing,
+    }));
+
 /** The token whose curve is `easing`, when one is; `linear` is its own. */
-function curveTokenOf(easing: string): string | null {
+export function curveTokenOf(easing: string): string | null {
   if (easing.trim() === "linear") {
     return "linear";
   }
@@ -268,6 +318,15 @@ export class Replays {
 /** The clip run with the person's tuning; the clip as the engine ran it kept as `was`. */
 function tune(clip: Clip, tuning: Tuning): Clip {
   const was = clip.was ?? clip;
+  // Brought back to the timing the engine ran: no change, and nothing to send.
+  if (
+    tuning.delay === was.delay &&
+    tuning.duration === was.duration &&
+    tuning.easing === was.easing &&
+    !tuning.shaped
+  ) {
+    return was;
+  }
   const token = tokenOf(tuning.duration);
   // A curve chosen for a clip whose curve lived in its frames: it runs from its first frame to its last on that curve.
   const unframe = clip.framed && tuning.shaped;
@@ -316,10 +375,16 @@ export interface Track {
   how: string;
   /** Its first clip's id. */
   id: string;
+  /** What it changes, by its first clip: its colour on the timeline. */
+  kind: ClipKind;
   /** The one length its stretches share, else null. */
   length: number | null;
   name: string;
+  /** The moment the move set it off, ms: its earliest clip's start, before any delay. */
+  setOff: number;
   spans: { from: number; to: number }[];
+  /** It runs on a spring: its true end is where it settles. */
+  sprung: boolean;
   thing: Element | null;
 }
 
@@ -368,6 +433,9 @@ export function tracksOf(clips: readonly Clip[]): Track[] {
         thing: first.thing,
         name: first.element,
         how: howOf(sorted),
+        kind: kindOf(first.property),
+        setOff: Math.min(...sorted.map((clip) => clip.start)),
+        sprung: sorted.some((clip) => clip.spring !== null),
         begins: beginOf(first),
         ends: Math.max(...sorted.map(endOf)),
         spans,
