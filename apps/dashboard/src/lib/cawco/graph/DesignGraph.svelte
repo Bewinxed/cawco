@@ -886,7 +886,7 @@
         !desk && roomOpen ? "pb-(--drawer-cover)" : "pb-space-6",
       ]}
       style:--stage-w="{width ?? stageWidth}px"
-      style:--drawer-cover="{cover + numberOf('--space-3')}px"
+      style:--drawer-cover="{cover}px"
     >
       <div
         class={[
