@@ -1280,7 +1280,28 @@
 
   const pending = $derived(sending || canvasWorking());
 
-  function submit(): void {
+  /**
+   * The words handed to the session. `cuts` is mod+Enter's "interrupt and
+   * send": on a busy session the turn in flight is stopped first, through
+   * the Stop control's own `onstop`, and the words follow through the same
+   * send Enter uses; on an idle session it is that send and nothing else.
+   * Busy is read here, as the words leave, so a send that waited (a canvas
+   * being drawn) stops the turn running then, and none that has ended.
+   */
+  function deliver(
+    text: string,
+    extras: SendExtras,
+    id: string,
+    cuts: boolean
+  ): void {
+    if (cuts && busy) {
+      onstop();
+    }
+    onsubmit(text, extras, id);
+  }
+
+  /** Sends the draft; `cuts` stops a busy session's turn first ({@link deliver}). */
+  function submit(cuts = false): void {
     if (held) {
       sendBlock = "Finish switching conversations before sending.";
       return;
@@ -1305,7 +1326,7 @@
       return;
     }
     if (draft.canvas) {
-      sendWithCanvas();
+      sendWithCanvas(cuts);
       return;
     }
     // The text leaves the field for the one row it becomes (motion/share),
@@ -1315,7 +1336,7 @@
     const id = newId();
     departBox(`sent:${id}`, field as HTMLDivElement);
     dismissed = true;
-    onsubmit(text, extras, id);
+    deliver(text, extras, id, cuts);
   }
 
   /**
@@ -1362,7 +1383,7 @@
    * message becomes when no words go with it; the words do otherwise. What
    * cannot go says why under the chips and nothing is sent.
    */
-  async function sendWithCanvas(): Promise<void> {
+  async function sendWithCanvas(cuts: boolean): Promise<void> {
     const writing = draft;
     const { canvas } = draft;
     const extra = await room?.extras();
@@ -1383,7 +1404,7 @@
       ...(extra.attachments ?? []),
     ];
     extras.images = [...(extras.images ?? []), ...(extra.images ?? [])];
-    onsubmit(text, extras, id);
+    deliver(text, extras, id, cuts);
     if (canvas) {
       room?.sent(canvas.id);
     }
@@ -1446,11 +1467,12 @@
     }
     // BEFORE the menu: mod+Enter sends what is written as it stands, a
     // half-picked menu included; the submit itself dismisses the menu. It is
-    // the same send as Enter, and like every send it never stops a turn: only
-    // the Stop control does (`onstop`).
+    // "interrupt and send": on a busy session it stops the turn (the Stop
+    // control's `onstop`) and then sends; on an idle one it is Enter's send.
+    // Enter never stops a turn.
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
-      submit();
+      submit(true);
       return;
     }
     if (menuOpen ? menuKey(event) : chipKey(event)) {
@@ -1470,7 +1492,8 @@
   /**
    * The keys recall answers, never over the `/` and `@` menu: while a
    * queued message is edited, Enter and mod+Enter put the words in its
-   * place and Esc gives them back as they were; otherwise ↑ with nothing
+   * place (mod+Enter then stops a busy session's turn, so they are taken
+   * now) and Esc gives them back as they were; otherwise ↑ with nothing
    * before the caret lifts your queued message, or brings up what you sent.
    * True when the key was recall's.
    */
@@ -1481,7 +1504,7 @@
     if (draft.lifted) {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        replaceLifted();
+        replaceLifted(event.ctrlKey || event.metaKey);
         return true;
       }
       if (event.key === "Escape") {
@@ -2051,8 +2074,9 @@
         });
       }
     }
+    // The wheel sends only on mod+Enter, so its send is mod+Enter's.
     if (send) {
-      submit();
+      submit(true);
     }
   }
 
@@ -2480,8 +2504,14 @@
     landingWords.delete(lift.id);
   }
 
-  /** Enter while editing: the field's words go in the queued message's place. */
-  async function replaceLifted(): Promise<void> {
+  /**
+   * Enter while editing: the field's words go in the queued message's place.
+   * `cuts` (mod+Enter) then stops a busy session's turn, so the message is
+   * taken now: the replace goes first, so the turn's end never hands the
+   * session the words as they were. Unchanged words keep the queued message
+   * and stop the turn all the same; a failed replace stops nothing.
+   */
+  async function replaceLifted(cuts = false): Promise<void> {
     const lift = draft.lifted;
     const message = recalled?.messages.find((m) => m.id === lift?.id);
     if (!(fleet && lift && message)) {
@@ -2495,10 +2525,16 @@
     }
     if (words === lift.words.trim()) {
       returnEdit();
+      if (cuts && busy) {
+        onstop();
+      }
       return;
     }
     try {
       const sent = await fleet.replaceQueued(message, words);
+      if (cuts && busy) {
+        onstop();
+      }
       // Read while the replace was on its way out: the edit is already
       // back in the field, and the withdraw can only say so again.
       if (draft.lifted !== lift) {
