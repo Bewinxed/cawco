@@ -9,14 +9,6 @@
 
   /** The room's three faces: the states list with its steps, the whole set, the move. */
   export type Face = "states" | "whole" | "move";
-
-  /**
-   * Where the states and the move stand on a desk: the explore's one axis.
-   * `beside`, a room at the stage's trailing side; `below`, a strip under
-   * the stage; `stage`, the steps on the stage's own foot and a room for
-   * the whole set and the move, put away until asked for.
-   */
-  export type Arrangement = "beside" | "below" | "stage";
 </script>
 
 <script lang="ts">
@@ -104,7 +96,6 @@
     ask = {},
     recordsAt = null,
     stale = false,
-    arrangement = "beside",
   }: {
     /** The components under review, each its states file and the agent's spec. */
     inputs: ReviewInput[];
@@ -113,7 +104,6 @@
     recordsAt?: Date | null;
     /** The hub's link is down. */
     stale?: boolean;
-    arrangement?: Arrangement;
   } = $props();
 
   const reviews = $derived(inputs.map(reviewOf));
@@ -160,7 +150,7 @@
   /** The state the kept one is compared with, while comparing. */
   let against = $state<string | null>(null);
   let face = $state<Face>(untrack(() => ask.face ?? "states"));
-  let roomOpen = $state(untrack(() => arrangement !== "stage"));
+  let roomOpen = $state(true);
   let width = $state<number | null>(null);
   let scheme = $state<"light" | "dark">(
     typeof document !== "undefined" &&
@@ -171,16 +161,13 @@
   let reduce = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
-  /** DESIGN.md's desk line (Breakpoints: 900px). */
-  const DESK_LINE = 900;
   /**
    * The room stands beside the stage only where the surface holds both
    * whole: the stage at its least (`c-graph-stage-min`), the room at its
    * least (`c-graph-room-w`), the gap between them and the page's gutters.
    * Under that (1064px today) the room is the drawer, as the stage's least
    * width says it becomes ("under it the room becomes the drawer"); a
-   * narrower desk ran the room past the surface's edge. Under the stage,
-   * the room needs no more than the desk line.
+   * narrower desk ran the room past the surface's edge.
    */
   const besideLine = $derived(
     numberOf("--c-graph-stage-min") +
@@ -189,10 +176,7 @@
       numberOf("--space-7") +
       numberOf("--space-6")
   );
-  const desk = $derived(
-    surface === 0 ||
-      surface >= (arrangement === "below" ? DESK_LINE : besideLine)
-  );
+  const desk = $derived(surface === 0 || surface >= besideLine);
 
   /**
    * A state as the stage draws it: a record set's args when one is picked;
@@ -567,7 +551,7 @@
   /** Whether the stage stands at its component's own width, narrower than its room. */
   let stageFits = $state(false);
   /** The room stands beside the stage on a desk. */
-  const beside = $derived(desk && roomOpen && arrangement !== "below");
+  const beside = $derived(desk && roomOpen);
 </script>
 
 {#snippet statesFace(stepperHere: boolean)}
@@ -669,7 +653,6 @@
 <TooltipProvider>
   <div
     data-slot="design-graph"
-    data-arrangement={arrangement}
     class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
     {@attach frameSize((node: HTMLElement) => {
       surface = node.clientWidth;
@@ -908,7 +891,6 @@
       data-slot="graph-page"
       class={[
         "flex min-h-0 min-w-0 flex-1 gap-space-5 overflow-clip ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
-        desk && arrangement === "below" ? "flex-col" : "flex-row",
         !desk && roomOpen ? "pb-(--drawer-cover)" : "pb-space-6",
       ]}
       style:--stage-w="{width ?? stageWidth}px"
@@ -940,35 +922,20 @@
             {words.recordsAsOf(timeWords)}
           </p>
         {/if}
-        {#if desk && arrangement === "stage" && !single}
-          <!-- The steps on the stage's own foot. -->
-          <div class="min-w-0 pt-space-3">{@render stepper()}</div>
-        {/if}
       </div>
 
       {#if desk && roomOpen}
         <!-- The room: one surface, three faces, closed by its Close or Esc.
              It comes in from its edge and goes back there, as the app's
              panels do (the sheet recipe's motion, `sheetSlide`: the
-             inspector's): from the trailing edge beside the stage, from the
-             foot under it. It takes the room the stage leaves. -->
+             inspector's): from the trailing edge beside the stage. It takes
+             the room the stage leaves. -->
         <aside
           data-slot="graph-room"
           aria-label={words.statesFace}
-          in:sheetSlide={{
-            axis: arrangement === "below" ? "Y" : "X",
-            leaving: false,
-          }}
-          out:sheetSlide={{
-            axis: arrangement === "below" ? "Y" : "X",
-            leaving: true,
-          }}
-          class={[
-            "relative flex min-h-0 min-w-0 flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile",
-            arrangement === "below"
-              ? "h-2/5 flex-none"
-              : "grow basis-c-graph-room-w min-w-c-graph-room-w",
-          ]}
+          in:sheetSlide={{ axis: "X", leaving: false }}
+          out:sheetSlide={{ axis: "X", leaving: true }}
+          class="relative flex min-h-0 min-w-0 grow basis-c-graph-room-w flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile min-w-c-graph-room-w"
         >
           <div class="flex min-w-0 items-center gap-space-2">
             {@render faces()}
@@ -993,7 +960,7 @@
           {#if face === "move"}
             {@render moveFace()}
           {:else}
-            {@render statesFace(arrangement !== "stage")}
+            {@render statesFace(true)}
           {/if}
         </aside>
       {/if}
