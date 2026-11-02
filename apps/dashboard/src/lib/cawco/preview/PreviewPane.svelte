@@ -1234,6 +1234,15 @@
     artifact?.kind === "component" || served ? (view?.stage ?? null) : null
   );
   /**
+   * The stage the cover waits on: none once this load's page answered
+   * (`connected`, its overlay's `cawco:ready`), whatever the doc last said of
+   * the stage. The doc's word is the agent's last frame, which can trail the
+   * stage (a frame missed, a version opened over another's); a page that
+   * answered is the stage serving. One that answered and then went silent is
+   * the proxy's `down` and the doc's `docDown`, never a wait again.
+   */
+  const awaited = $derived(connected ? null : staged);
+  /**
    * The hub's last read couldn't reach the stage (the doc's `meta.unreached`,
    * which the agent's read says too): said as the proxy's own down is, with
    * its why and since when, once this pane's own load has had its say and
@@ -1261,11 +1270,11 @@
     if (neverDrawn) {
       return null;
     }
-    switch (staged?.status) {
+    switch (awaited?.status) {
       case "starting":
         return served
           ? { line: sheetWords.serverStarting }
-          : { dir: staged.dir };
+          : { dir: awaited.dir };
       case "waking":
       case "asleep":
         return { line: sheetWords.waking };
@@ -1282,24 +1291,23 @@
   );
   /** A sheet's page still compiling: its stage serves, the page hasn't said it is ready, and no compile error has ended the compile. */
   const compiling = $derived(
-    staged?.status === "live" &&
-      !(connected || served) &&
-      compileErrors.length === 0
+    awaited?.status === "live" && !served && compileErrors.length === 0
   );
   /**
    * How long the cover may stand: the time the daemon gives a stage to serve
    * once started (core `STAGE_READY_MS`), and a place's stage its clone and
    * install first (`STAGE_CLONE_MS`), counted on this pane's clock from when
-   * it began waiting. A page still on its way past it was never drawn: the
-   * stage's word stopped coming, or the page never compiled, and the pane
-   * says so with the ways out, never an endless cover.
+   * it began waiting; none once the page answered ({@link awaited}). A page
+   * still on its way past it was never drawn: the stage's word stopped
+   * coming, or the page never compiled, and the pane says so with the ways
+   * out, never an endless cover.
    */
   const waitingFor = $derived.by(() => {
     // A failure the proxy named says its own words (`down`).
     if (down) {
       return null;
     }
-    switch (staged?.status) {
+    switch (awaited?.status) {
       case "starting":
         return STAGE_CLONE_MS + STAGE_READY_MS;
       case "waking":
