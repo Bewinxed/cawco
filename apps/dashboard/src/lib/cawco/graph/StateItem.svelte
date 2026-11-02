@@ -7,8 +7,11 @@
    * compares the kept state with it instead. Resting the pointer on it
    * lights the row and nothing else.
    *
-   * The state on the stage wears the selection wash with every word in
-   * `selected-ink` (the Comments rail's open row), and only it shows its
+   * The state on the stage is the list's selection, as the app's own lists
+   * mark their current row (the sidebar, the Comments rail; DESIGN.md,
+   * Colors: Selected): the selection pill under it (Journey's `highlight`)
+   * with every word in `selected-ink`; the hover ghost is the list's too.
+   * Only it shows its
    * record sets, as the kit's toggle group under its name: the state as
    * written is the one with none picked. The state it is compared with
    * wears the change ring's edge, the stage's mark for what differs.
@@ -48,7 +51,6 @@
   data-against={against ? "" : undefined}
   class={[
     "relative flex min-w-0 flex-col rounded-sm",
-    kept && "bg-selected-bg",
     against &&
       "outline-solid outline-(length:--c-change-ring-width) outline-c-change-ring",
   ]}
@@ -57,10 +59,7 @@
        ::before), so a press anywhere on it is the button's and a pin on it
        is named by the name alone. -->
   <div
-    class={[
-      "relative flex min-h-c-touch-floor min-w-0 flex-col justify-center gap-space-row rounded-sm px-space-3 py-space-2 transition-control",
-      !kept && "can-hover:has-[button:hover]:bg-surface-hover",
-    ]}
+    class="relative flex min-h-c-touch-floor min-w-0 flex-col justify-center gap-space-row rounded-sm px-space-3 py-space-2"
   >
     <button
       type="button"
