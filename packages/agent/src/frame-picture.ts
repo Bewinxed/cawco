@@ -72,13 +72,15 @@ export async function findFrame(
  * the window lacks to hold it whole at its own size; the window grown by
  * that, and the frame posed again in the room; then settled: its fonts
  * loaded, every finite animation on it, in it or on what holds it (the
- * world's move) landed. All within `timeout` ms.
+ * world's move) landed. All before `deadline` (epoch ms): the render's one
+ * limit, which every wait of its draw shares.
  */
 export async function poseFrame(
   page: Page,
   key: string,
-  timeout: number
+  deadline: number
 ): Promise<void> {
+  const left = () => Math.max(1, deadline - Date.now());
   const pose = (one: string) =>
     (globalThis as unknown as Pictures).__cawcoCanvas?.pose(one) ?? null;
   const lacks = await page.evaluate(pose, key);
@@ -103,7 +105,7 @@ export async function poseFrame(
           return !!room && room.w === 0 && room.h === 0;
         },
         key,
-        { timeout }
+        { timeout: left() }
       )
       .catch(() => {
         throw new FramePictureRefusal(
@@ -118,11 +120,11 @@ export async function poseFrame(
         (globalThis as unknown as Pictures).__cawcoCanvas?.settled(one) ??
         false,
       key,
-      { timeout }
+      { timeout: left() }
     )
     .catch(() => {
       throw new FramePictureRefusal(
-        `Frame ${key} did not settle within ${timeout} ms: its fonts or animations are still going.`
+        `Frame ${key} did not settle within the render's time: its fonts or animations are still going.`
       );
     });
 }

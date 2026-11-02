@@ -39677,6 +39677,13 @@
             "description": "Its form, from `parameters.viewport` (the story's, else the meta's); null when it names none.",
             "$ref": "#/components/schemas/Form"
           },
+          "formUnread": {
+            "description": "Why its `parameters.viewport` can't be read from its states file (an imported const, code), naming the story; null when it reads or names none. Its frames say it as their failure.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "from": {
             "description": "The story its flow move starts from (`from`), when it declares one with a `play`.",
             "type": [
@@ -39723,6 +39730,7 @@
           "code",
           "column",
           "component",
+          "formUnread",
           "from",
           "label",
           "line",

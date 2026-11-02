@@ -666,34 +666,106 @@ const BLANK_BETWEEN = /\n[ \t]*\n/u;
 /** A label's longest. Ours: a frame's caption, one line. */
 const LABEL_LIMIT = 160;
 
+/** A form as read, or why the reader can't read it. */
+type FormRead = { form: Form | null } | { why: string };
+
 /**
- * A story's form from `parameters.viewport`: a width (`390`), a preset's
- * name (`"phone"`, `"tablet"`, `"desk"`), `{ width }`, or Storybook's
- * `{ defaultViewport }` with its own preset names. Null when it names none.
+ * A story's form from its `parameters.viewport`: a width (`390`), a
+ * preset's name (`"phone"`, `"tablet"`, `"desk"`), `{ width }`, or
+ * Storybook's `{ defaultViewport }` with its own preset names. `parameters`
+ * is followed as a story is (a local const, a spread, a local helper's
+ * return), and the viewport through the file's own consts. Null when it
+ * names none; why, when what it names is not in this file (an imported
+ * const) or is computed: the frame says so, never a width it guessed.
  */
-function formOf(parameters: Node | null): Form | null {
-  const viewport = bare(
-    child(propertyOf(parameters, "viewport") ?? { type: "" }, "value")
-  );
-  const value = literal(viewport)?.value;
+function formOf(reading: Reading, parameters: Bound | null): FormRead {
+  if (!parameters) {
+    return { form: null };
+  }
+  const viewport = ownViewport(parameters) ?? lastViewport(reading, parameters);
+  if (viewport && "why" in viewport) {
+    return viewport;
+  }
+  if (!viewport) {
+    return { form: null };
+  }
+  const read = constOf(reading, { node: viewport.value, env: viewport.env });
+  if ("why" in read) {
+    return read;
+  }
+  const { value } = read;
   const width = (n: unknown): Form | null =>
     typeof n === "number" && n > 0 ? presetOf(n) : null;
   if (typeof value === "number") {
-    return width(value);
+    return { form: width(value) };
   }
   if (typeof value === "string") {
-    return namedForm(value);
+    return { form: namedForm(value) };
   }
   if (value && typeof value === "object") {
     const one = value as { defaultViewport?: unknown; width?: unknown };
     if (typeof one.width === "number") {
-      return width(one.width);
+      return { form: width(one.width) };
     }
     if (typeof one.defaultViewport === "string") {
-      return namedForm(one.defaultViewport);
+      return { form: namedForm(one.defaultViewport) };
     }
   }
-  return null;
+  return { form: null };
+}
+
+/** The `viewport` an object literal writes itself after every spread in it: read whatever the spreads hold. */
+function ownViewport(parameters: Bound): Entry | null {
+  const { node, env } = deref(parameters);
+  const object = bare(node);
+  if (object?.type !== "ObjectExpression") {
+    return null;
+  }
+  const properties = children(object, "properties");
+  const at = properties.findLastIndex(
+    (one) => one.type === "ObjectProperty" && keyOf(one) === "viewport"
+  );
+  const value = at < 0 ? null : child(properties[at] as Node, "value");
+  return value &&
+    !properties.slice(at + 1).some((one) => one.type === "SpreadElement")
+    ? { key: "viewport", value, env, via: null }
+    : null;
+}
+
+/** The `viewport` an object ends up with, its spreads, names and local helpers followed; null when it has none, or why the reader can't follow it. */
+function lastViewport(
+  reading: Reading,
+  parameters: Bound
+): Entry | { why: string } | null {
+  const flat = flatten(reading, parameters);
+  if ("why" in flat) {
+    return flat;
+  }
+  return flat.entries.findLast((one) => one.key === "viewport") ?? null;
+}
+
+/** An expression's literal value, followed through the helper parameters and the file's top-level consts it names; or why it has none here. */
+function constOf(
+  reading: Reading,
+  at: Bound,
+  depth = 0
+): { value: unknown } | { why: string } {
+  const found = deref(at);
+  const name = identifier(found.node);
+  if (name) {
+    const declared = reading.scope.get(name);
+    if (!declared || declared.type === "FunctionDeclaration") {
+      return { why: elsewhere(reading, name) };
+    }
+    return depth > MAX_DEPTH
+      ? { why: `${name} goes deeper than the reader follows` }
+      : constOf(reading, { node: declared, env: NO_ENV }, depth + 1);
+  }
+  return (
+    literal(found.node, found.env) ?? {
+      why: `\`${sourceOf(reading.text, found.node)}\` is computed, not a value this file writes`,
+    }
+  );
 }
 
 /** Storybook's own viewport preset names (`MINIMAL_VIEWPORTS`), as the canvas's forms. */
@@ -759,29 +831,35 @@ export function readStoryFile(file: string, text: string): StaticSheet {
     metaArgs ? { node: metaArgs, env: NO_ENV } : null
   );
   const assigned = assignedOf(body);
-  const metaParameters = bare(
-    child(propertyOf(meta, "parameters") ?? { type: "" }, "value")
+  const metaParametersNode = child(
+    propertyOf(meta, "parameters") ?? { type: "" },
+    "value"
   );
+  const metaParameters = metaParametersNode
+    ? { node: metaParametersNode, env: NO_ENV }
+    : null;
   const title = literal(
     child(propertyOf(meta, "title") ?? { type: "" }, "value")
   )?.value;
   /** A story's canvas fields: its label (doc comment), form, and flow move. */
   const canvasOf = (
     one: Export
-  ): Pick<Story, "form" | "from" | "label" | "play"> => {
+  ): Pick<Story, "form" | "formUnread" | "from" | "label" | "play"> => {
     const later = assigned.get(one.name);
     const from = literal(
       later?.get("from") ??
         child(propertyOf(one.object, "from") ?? { type: "" }, "value")
     )?.value;
+    const own = formOf(reading, parametersOf(reading, one));
+    const read =
+      "why" in own || own.form ? own : formOf(reading, metaParameters);
     return {
       label: labelOf(text, one.statement),
-      form:
-        formOf(
-          bare(
-            child(propertyOf(one.object, "parameters") ?? { type: "" }, "value")
-          )
-        ) ?? formOf(metaParameters),
+      form: "why" in read ? null : read.form,
+      formUnread:
+        "why" in read
+          ? `${one.name}'s viewport can't be read here: ${read.why}. Write it in the states file, as \`parameters: { viewport: 390 }\`.`
+          : null,
       from: typeof from === "string" ? from : null,
       play: Boolean(propertyOf(one.object, "play") || later?.has("play")),
     };
@@ -810,6 +888,24 @@ export function readStoryFile(file: string, text: string): StaticSheet {
       ...canvasOf(one),
     })),
   };
+}
+
+/** A story's `parameters` as its object builds them (its own key, or one a spread or helper gives it); null when it has none. */
+function parametersOf(reading: Reading, story: Export): Bound | null {
+  if (!story.init) {
+    return null;
+  }
+  const flat = flatten(reading, { node: story.init, env: NO_ENV });
+  if (!("why" in flat)) {
+    const entry = flat.entries.findLast((one) => one.key === "parameters");
+    return entry ? { node: entry.value, env: entry.env } : null;
+  }
+  // Built of what the reader can't follow: its own key, where it writes one.
+  const own = child(
+    propertyOf(story.object, "parameters") ?? { type: "" },
+    "value"
+  );
+  return own ? { node: own, env: NO_ENV } : null;
 }
 
 /** A story whose component and args the reader can't follow: it mounts all the same, and the inspector shows it read-only with `reason`. */

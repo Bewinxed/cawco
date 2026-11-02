@@ -335,6 +335,7 @@ function storyOf(value: unknown): Story | null {
     readOnly: readOnlyOf(raw.readOnly),
     label: text(raw.label, SHEET_BOUNDS.text),
     form: formOf(raw.form),
+    formUnread: text(raw.formUnread, SHEET_BOUNDS.text),
     from: text(raw.from, SHEET_BOUNDS.name),
     play: raw.play === true,
   };

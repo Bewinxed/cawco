@@ -15,6 +15,7 @@
  * port is the host's, and the browser dials it directly.
  */
 
+import { readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_PATH,
   type CanvasSpec,
@@ -23,14 +24,18 @@ import {
   type RenderReport,
   type ReportAnswer,
   STAGE_RENDER_MS,
+  type SweepAt,
 } from "@cawco/core/stage";
 import type { Socket, TCPSocketListener } from "bun";
+import type { Page } from "playwright-core";
 import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
 import { findFrame, framePicture, poseFrame } from "./frame-picture";
 
-/** How long a render may take, page load to the last section's report. */
+/** How long a render may take, Chromium's launch to its picture: one limit, which every wait of the render shares (the hub waits this long on it). */
 const RENDER_WAIT_MS = STAGE_RENDER_MS;
+/** How long a page past the limit has to say where its sweep stood. Ours: a read of one field, past the hub's slack for it. */
+const SAID_WAIT_MS = 5000;
 /** The quiet a page keeps after its last report before it is read. Ours: the canvas posts 200 ms after its last change. */
 const SETTLE_MS = 600;
 /** The window a render opens in: the desk's. A frame its canvas can't hold whole at its own size grows it (frame-picture.ts `poseFrame`). */
@@ -142,6 +147,10 @@ function listenerFor(unix: string): Promise<TCPSocketListener<Pipe>> {
   );
 }
 
+/** Whether Playwright gave up on a wait at its timeout (its `TimeoutError`). */
+const timedOut = (error: unknown): boolean =>
+  error instanceof Error && error.name === "TimeoutError";
+
 /** The canvas's address for a render: its files, the agent's spec, the state's scheme and width, drawn as the stage. */
 const pageUrl = (origin: string, ask: RenderAsk): string => {
   const query = new URLSearchParams();
@@ -161,12 +170,40 @@ const pageUrl = (origin: string, ask: RenderAsk): string => {
   return `${origin}${CANVAS_PATH}?${query}`;
 };
 
-/** What the page itself says once every section has been drawn: its newest report. */
+/** What the page itself says once every section has been drawn: its newest report; and where its sweep stands while it draws. */
 interface CanvasOnPage {
   __cawcoCanvas?: {
     reports: number;
     swept: boolean;
+    sweepAt: SweepAt | null;
   };
+}
+
+/** A step of the sweep, as a render that ran out of time says it. */
+const STEP_WORDS: Record<SweepAt["step"], (story?: string) => string> = {
+  load: () => "loading its states file",
+  draw: () => "drawing its frames",
+  probe: () => "reading its stories' hover, focus and pressed states",
+  move: (story) => `playing ${story ?? "a story"}'s move`,
+  post: () => "posting its report",
+};
+
+/** Why a render ran out of time before every section was drawn: the section and step it was on, as the page says. */
+async function unswept(page: Page): Promise<string> {
+  const limit = `The canvas did not finish drawing within ${RENDER_WAIT_MS / 1000} s`;
+  const said = await readWithin(SAID_WAIT_MS, () =>
+    page.evaluate(
+      () =>
+        (globalThis as unknown as CanvasOnPage).__cawcoCanvas?.sweepAt ?? null
+    )
+  ).catch(() => null);
+  if (said?.kind !== "answered") {
+    return `${limit}, and its page stopped answering.`;
+  }
+  const at = said.value;
+  return at
+    ? `${limit}: it was still ${STEP_WORDS[at.step](at.story)} in ${at.file}.`
+    : `${limit}: it had not begun its first section.`;
 }
 
 /**
@@ -182,6 +219,8 @@ export async function renderCanvas(
   /** Chromium's own sandbox: the daemon's rule ({@link chromiumSandboxed}) unless the caller knows its own. */
   sandbox = chromiumSandboxed()
 ): Promise<Rendered> {
+  const deadline = Date.now() + RENDER_WAIT_MS;
+  const left = () => Math.max(1, deadline - Date.now());
   const listener = reached === "host" ? null : await listenerFor(reached);
   const origin = `http://127.0.0.1:${listener ? listener.port : port}`;
   const browser = await launchChromium(
@@ -196,15 +235,27 @@ export async function renderCanvas(
       viewport: VIEWPORT,
       colorScheme: ask.state?.scheme ?? "light",
     });
-    await page.goto(pageUrl(origin, ask), { timeout: RENDER_WAIT_MS });
-    await page.waitForFunction(
-      () => {
-        const state = (globalThis as unknown as CanvasOnPage).__cawcoCanvas;
-        return !!state?.swept && state.reports > 0;
-      },
-      null,
-      { timeout: RENDER_WAIT_MS }
-    );
+    await page
+      .goto(pageUrl(origin, ask), { timeout: left() })
+      .catch((error: unknown) => {
+        throw timedOut(error)
+          ? new Error(
+              `The canvas page did not load within ${RENDER_WAIT_MS / 1000} s.`
+            )
+          : error;
+      });
+    await page
+      .waitForFunction(
+        () => {
+          const state = (globalThis as unknown as CanvasOnPage).__cawcoCanvas;
+          return !!state?.swept && state.reports > 0;
+        },
+        null,
+        { timeout: left() }
+      )
+      .catch(async (error: unknown) => {
+        throw timedOut(error) ? new Error(await unswept(page)) : error;
+      });
     await page.waitForTimeout(SETTLE_MS);
     // The stage's report: every section as its last draw left it, the ones the sweep took down too.
     const query = new URLSearchParams(
@@ -230,7 +281,7 @@ export async function renderCanvas(
       };
     }
     const key = await findFrame(page, state.story, state.interaction);
-    await poseFrame(page, key, RENDER_WAIT_MS);
+    await poseFrame(page, key, deadline);
     return {
       report,
       png: (await framePicture(page, key)).png.toString("base64"),

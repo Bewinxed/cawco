@@ -248,6 +248,16 @@ export const STAGE_RENDER = "stageRender";
 /** How long a daemon's render of a canvas may take, page load to the last section's report, past the stage's own start. Ours: a screen's first load transforms its modules. */
 export const STAGE_RENDER_MS = 90_000;
 
+/** A step of a stage's sweep of one section: its module loaded, its frames' first draw, its states probed, a move played, its report posted. */
+export type SweepStep = "load" | "draw" | "probe" | "move" | "post";
+
+/** Where a stage's sweep of a canvas stands: the section's states file, its step, and the story a move plays. */
+export interface SweepAt {
+  file: string;
+  step: SweepStep;
+  story?: string;
+}
+
 /** The {@link Interaction}s, in the order the canvas draws them. */
 export const INTERACTIONS = ["rest", "hover", "focus", "pressed"] as const;
 /** The states the canvas derives from a component's CSS, never authored: `rest` is the story as mounted. */
@@ -835,6 +845,8 @@ export interface Story {
   component: string | null;
   /** Its form, from `parameters.viewport` (the story's, else the meta's); null when it names none. */
   form: Form | null;
+  /** Why its `parameters.viewport` can't be read from its states file (an imported const, code), naming the story; null when it reads or names none. Its frames say it as their failure. */
+  formUnread: string | null;
   /** The story its flow move starts from (`from`), when it declares one with a `play`. */
   from: string | null;
   /** Its doc comment in plain words, the frame's label; null when it has none (`unnamed`). */

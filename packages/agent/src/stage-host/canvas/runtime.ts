@@ -50,6 +50,8 @@ import {
   type SheetRead,
   type StageErrorKind,
   type Story,
+  type SweepAt,
+  type SweepStep,
   sectionName,
   sectionPlansOf,
 } from "@cawco/core/stage";
@@ -262,6 +264,8 @@ export interface Section {
 
 /** A section module's address as an HMR update names it: `/@id/__x00__cawco:sheet/<the states file, encoded>.js`. */
 const SECTION_PATH = /cawco:sheet\/([^?]+)\.js(?:\?|$)/u;
+/** The space between an ARIA id reference list's ids. */
+const WHITESPACE = /\s+/u;
 
 /** The states file (from the toolchain root) an update's module path is the section of; null for any other module. */
 const sectionOfPath = (path: string): string | null => {
@@ -382,6 +386,8 @@ export interface CanvasState {
   /** Whether frame `key` is settled: fonts loaded, no finite animation on it, in it or on what holds it still running. */
   settled: (key: string) => boolean;
   setView: (next: Partial<View>) => void;
+  /** The section the stage's sweep is on, and its step; null before it starts and once it has swept. */
+  sweepAt: SweepAt | null;
   /** Every section drawn once: a stage's render reads the stage's report then. */
   swept: boolean;
   view: View;
@@ -805,21 +811,37 @@ export function boot(options: BootOptions): void {
 
   /** The frame last pressed or focused in, where a menu or a popover opens from. */
   let touched: Frame | null = null;
-  /** The frames with a width of their own, drawn now: each is its story's viewport. */
-  const widthFrames = (): Frame[] =>
-    sections.flatMap((section) =>
-      [...section.frames.values()].filter(
-        (frame) =>
-          frame.el.isConnected &&
-          widthOf(frame.story, frame.column.width) !== null
-      )
-    );
+  /** Each frame by its body ({@link frameFor}): an element in a body is that frame's. */
+  const frameOfBody = new WeakMap<Element, Frame>();
+  /** Whether `frame` stands drawn with a width of its own: its story's viewport. */
+  const isWidthFrame = (frame: Frame | null | undefined): frame is Frame =>
+    !!frame &&
+    frame.el.isConnected &&
+    widthOf(frame.story, frame.column.width) !== null;
+  /** The frame with a width of its own that `el` stands in; null for one in no frame (the rig's probes, the chrome) or in one of no width. */
+  const widthFrameOf = (el: Element): Frame | null => {
+    const body = el.closest(".cawco-frame-body");
+    const frame = body ? frameOfBody.get(body) : undefined;
+    return isWidthFrame(frame) ? frame : null;
+  };
+  /** The one frame drawn with a width of its own; null for none or several. */
+  const soleWidthFrame = (): Frame | null => {
+    let sole: Frame | null = null;
+    for (const section of sections) {
+      for (const frame of section.frames.values()) {
+        if (isWidthFrame(frame)) {
+          if (sole) {
+            return null;
+          }
+          sole = frame;
+        }
+      }
+    }
+    return sole;
+  };
   const touchedIn = (event: Event) => {
-    const body =
-      event.target instanceof Element
-        ? event.target.closest(".cawco-frame-body")
-        : null;
-    touched = widthFrames().find((frame) => frame.body === body) ?? null;
+    touched =
+      event.target instanceof Element ? widthFrameOf(event.target) : null;
   };
   document.addEventListener("pointerdown", touchedIn, true);
   document.addEventListener(
@@ -847,33 +869,118 @@ export function boot(options: BootOptions): void {
     [layer, ...layer.querySelectorAll("[id]")]
       .map((one) => one.id)
       .filter(Boolean);
+
+  /*
+   * The world's triggers, kept as the world changes: each id an
+   * `aria-controls` or `aria-describedby` in it names, with the elements
+   * naming it, and the elements standing `aria-expanded="true"`. Script
+   * reads the viewport many times a placement (floating-ui's
+   * `getViewportRect`, for every open layer, on every scroll, resize and
+   * mount near it), and each read asks for its layer's frame: searched
+   * across every frame's elements, a read cost the whole page, and a
+   * canvas's reads grew with its frames, so the cost grew as their square
+   * (who-decides-member-settings' 187 frames: 4,611 reads took 66 s of the
+   * stage's render, the last section's one frame of probes 22 s). Read off
+   * this index, a read costs its layer's own ids.
+   */
+  const NAMING = ["aria-controls", "aria-describedby"] as const;
+  const TRIGGERS = "[aria-controls],[aria-describedby],[aria-expanded]";
+  /** Each id the world's triggers name, and the elements naming it. */
+  const naming = new Map<string, Set<Element>>();
+  /** What each indexed element named as it was indexed: what its drop takes out. */
+  const namedBy = new WeakMap<Element, string[]>();
+  /** The world's elements standing `aria-expanded="true"`. */
+  const expanded = new Set<Element>();
+  const namesOf = (el: Element, attribute: string): string[] =>
+    (el.getAttribute(attribute) ?? "").split(WHITESPACE).filter(Boolean);
+  const dropTrigger = (el: Element) => {
+    expanded.delete(el);
+    for (const id of namedBy.get(el) ?? []) {
+      const set = naming.get(id);
+      set?.delete(el);
+      if (set?.size === 0) {
+        naming.delete(id);
+      }
+    }
+    namedBy.delete(el);
+  };
+  const indexTrigger = (el: Element) => {
+    dropTrigger(el);
+    const ids = NAMING.flatMap((attribute) => namesOf(el, attribute));
+    for (const id of ids) {
+      const set = naming.get(id) ?? new Set<Element>();
+      set.add(el);
+      naming.set(id, set);
+    }
+    if (ids.length > 0) {
+      namedBy.set(el, ids);
+    }
+    if (el.getAttribute("aria-expanded") === "true") {
+      expanded.add(el);
+    }
+  };
+  const eachTrigger = (nodes: NodeList, run: (el: Element) => void) => {
+    for (const node of nodes) {
+      if (node instanceof Element) {
+        run(node);
+        for (const el of node.querySelectorAll(TRIGGERS)) {
+          run(el);
+        }
+      }
+    }
+  };
+  const readTriggers = (records: MutationRecord[]) => {
+    for (const record of records) {
+      if (record.type === "attributes") {
+        indexTrigger(record.target as Element);
+      } else {
+        eachTrigger(record.removedNodes, dropTrigger);
+        eachTrigger(record.addedNodes, indexTrigger);
+      }
+    }
+  };
+  const triggerWatch = new MutationObserver(readTriggers);
+  triggerWatch.observe(world, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: [...NAMING, "aria-expanded"],
+  });
+  /** The index as the world stands now: the changes not yet delivered read first. */
+  const triggersNow = () => readTriggers(triggerWatch.takeRecords());
+
   /**
    * The frame a floating layer belongs to: the one it stands in, or the one
    * holding the trigger that names it (`aria-controls`, a menu's or a
    * popover's; `aria-describedby`, a tooltip's), as a layer portalled out
    * of its frame (bits-ui's Portal, to the body) is named. None for an
-   * element holding frames (the body, the canvas), which is no layer.
+   * element holding frames (the body, the canvas) or standing among them
+   * outside a story (a section's head), which is no layer.
    */
   const layerFrame = (layer: Element | null): Frame | null => {
     if (!layer?.isConnected) {
       return null;
     }
-    const frames = widthFrames();
-    if (frames.some((frame) => layer.contains(frame.body))) {
+    if (layer.closest(".cawco-frame-body")) {
+      return widthFrameOf(layer);
+    }
+    if (layer.contains(world) || world.contains(layer)) {
       return null;
     }
-    const inside = frames.find((frame) => frame.body.contains(layer));
-    if (inside) {
-      return inside;
+    return triggerFrame(layer);
+  };
+  /** The frame holding a trigger that names one of `layer`'s ids; null for none. */
+  const triggerFrame = (layer: Element): Frame | null => {
+    triggersNow();
+    for (const id of idsIn(layer)) {
+      for (const el of naming.get(id) ?? []) {
+        const frame = el.isConnected ? widthFrameOf(el) : null;
+        if (frame) {
+          return frame;
+        }
+      }
     }
-    const names = idsIn(layer).map((id) => {
-      const quoted = CSS.escape(id);
-      return `[aria-controls~="${quoted}"], [aria-describedby~="${quoted}"]`;
-    });
-    return names.length === 0
-      ? null
-      : (frames.find((frame) => frame.body.querySelector(names.join(", "))) ??
-          null);
+    return null;
   };
   /**
    * The frame script asks the viewport of when no layer of a frame asks:
@@ -882,19 +989,21 @@ export function boot(options: BootOptions): void {
    * (the window's own) where that names no one frame.
    */
   const askedFrame = (): Frame | null => {
-    const frames = widthFrames();
-    const open = frames.filter((frame) =>
-      frame.body.querySelector('[aria-expanded="true"]')
-    );
-    if (open.length === 1) {
-      return open[0] ?? null;
+    triggersNow();
+    const open = new Set<Frame>();
+    for (const el of expanded) {
+      const frame = el.isConnected ? widthFrameOf(el) : null;
+      if (frame) {
+        open.add(frame);
+      }
     }
-    if (touched && (open.length === 0 ? frames : open).includes(touched)) {
+    if (open.size === 1) {
+      return open.values().next().value ?? null;
+    }
+    if (isWidthFrame(touched) && (open.size === 0 || open.has(touched))) {
       return touched;
     }
-    return open.length === 0 && frames.length === 1
-      ? (frames[0] ?? null)
-      : null;
+    return open.size === 0 ? soleWidthFrame() : null;
   };
   /** Each layer that asked at a frame, and that frame: the layers a shown frame brings into sight. */
   const layersAt = new Map<Element, Frame>();
@@ -1338,6 +1447,7 @@ export function boot(options: BootOptions): void {
     el.append(label, body, status);
     const frame: Frame = { key, el, label, body, column, section, story };
     section.frames.set(key, frame);
+    frameOfBody.set(body, frame);
     placeFrame(frame);
     return frame;
   }
@@ -2179,9 +2289,11 @@ export function boot(options: BootOptions): void {
           }
           break;
         }
+        sweepOn(section, "load");
         await loadSection(section);
         // An embed draws every section, judging no view, and says its shape only once all have drawn (`sayShape`), so until then its frame is 0px tall and gets no rendering steps: it waits on no frame.
         if (!embed) {
+          sweepOn(section, "draw");
           await frameTick();
         }
         if (sweeping) {
@@ -2189,6 +2301,7 @@ export function boot(options: BootOptions): void {
         }
       }
       if (sweeping) {
+        canvasState.sweepAt = null;
         canvasState.swept = true;
       }
     } finally {
@@ -2201,9 +2314,21 @@ export function boot(options: BootOptions): void {
    * stage keeps each section's report, so one taken down is still said.
    */
   const sweeping = by === "stage";
+  /** Where the stage's sweep stands, for its render to name when it runs out of time (stage-render.ts). */
+  const sweepOn = (section: Section, step: SweepStep, story?: string) => {
+    if (sweeping) {
+      canvasState.sweepAt = {
+        file: section.file,
+        step,
+        ...(story ? { story } : {}),
+      };
+    }
+  };
   const settled = async (section: Section) => {
     // Its columns, probes and moves (the one pass its showing began), then its report.
+    sweepOn(section, "probe");
     await (section.settling ?? settle(section));
+    sweepOn(section, "post");
     await post();
     const mounted = sections.filter((one) => one.loaded);
     for (const one of mounted.slice(0, -SWEEP_KEPT)) {
@@ -2592,6 +2717,7 @@ export function boot(options: BootOptions): void {
       sizeBody(body, story ? widthOf(story, "own") : null);
       rig.append(body);
       try {
+        sweepOn(section, "move", to);
         moves.push((await playIn(section, to, body)).move);
       } finally {
         (
@@ -2760,6 +2886,15 @@ export function boot(options: BootOptions): void {
     } else if (frame.el.getClientRects().length === 0) {
       // Not on screen at this width (a phone shows one frame at a time): it has not drawn nothing, it is not shown.
       state = "unshown";
+    } else if (frame.column.width === "own" && frame.story.formUnread) {
+      // Its own width is one the stage can't read: drawn at none, it would pass for drawn at a width it never asked for.
+      error = {
+        message: frame.story.formUnread,
+        file: null,
+        line: null,
+        column: null,
+      };
+      state = "failed";
     } else if (drew(frame.body)) {
       error = atFloor(frame, box.w) ?? undefined;
       state = error ? "failed" : "drawn";
@@ -3762,6 +3897,7 @@ export function boot(options: BootOptions): void {
     report: null,
     reports: 0,
     swept: false,
+    sweepAt: null,
     go: (key) => go(key),
     pose: (key) => {
       go(key, true);
