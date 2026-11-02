@@ -516,6 +516,8 @@ export class BinaryUpdater {
   #running: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #trialTimer: ReturnType<typeof setInterval> | undefined;
+  /** When this updater was made: no helper an agent before this one launched is younger. */
+  readonly #startedAt = Date.now();
   /** When this agent last launched a helper to resume an open trial. */
   #resumedAt = 0;
   /** When this agent last launched a helper to hand the keeper to its build. */
@@ -825,9 +827,14 @@ export class BinaryUpdater {
   /**
    * AN INSTALL NO HELPER TOOK OVER HAS FAILED, AND IS TRIED AGAIN. The state
    * says installing, yet no helper holds the lock and no trial is open,
-   * {@link HELPER_START_MS} after the install was handed to its helper (by
-   * this agent; after a restart, since the state last moved): the helper never
+   * {@link HELPER_START_MS} after the install was handed to its helper by
+   * this agent, or, when an agent before it handed it over, after this one
+   * started (#startedAt), which is later than that launch: the helper never
    * ran, was ended before it took its lock, or found another's and left.
+   * Never from the state's `updatedAt`: every keeper the watch says moves it
+   * (#sayKeepers, {@link noteKeeperKept}), and a machine whose keepers
+   * changed within each ten seconds stayed installing with no helper for as
+   * long as they did (2026-10-31, 36 minutes).
    * Nothing was applied. The state says failed, with what the service manager
    * says of the helper's job; the failure is recorded with its retry time, and
    * the command that asked for the install stands again, so the build is
@@ -842,7 +849,7 @@ export class BinaryUpdater {
       return;
     }
     if (
-      Date.now() - (launched?.at ?? this.#state.updatedAt) < HELPER_START_MS ||
+      Date.now() - (launched?.at ?? this.#startedAt) < HELPER_START_MS ||
       (await readTrial())
     ) {
       return;
@@ -1230,9 +1237,12 @@ export class BinaryUpdater {
       await this.#lowerFence();
       if (error instanceof HubUnreachable) {
         // Nothing was tried, and the state reaches a person only through the
-        // hub that did not answer: what it says (a rollback and its reason,
-        // after an update restarted this agent before its hub) stays.
+        // hub that did not answer: what the file says (a rollback and its
+        // reason, after an update restarted this agent before its hub) stays,
+        // and what was said in memory alone (a drain's or a launch's
+        // `installing`, #tellHubUnwritten) goes back to it.
         console.warn(`[update] ${error.message}`);
+        await this.#load().catch(logFailure);
         return;
       }
       logFailure(error);
@@ -1337,7 +1347,7 @@ export class BinaryUpdater {
     const running = await readRunningManifest();
     const newer = release.manifest.sequence > running.sequence;
     this.#offered = { newer, version: release.manifest.version };
-    // Only a change is written: every write moves `updatedAt`, and the lost-helper rule (#settleLostHelper) reads it.
+    // Only a change is written: every write moves `updatedAt`, which the board reads as news.
     if (this.#state.channel !== this.#policy.channel) {
       await this.#set({ channel: this.#policy.channel });
     }
@@ -1686,6 +1696,17 @@ export class BinaryUpdater {
     );
   }
 
+  /**
+   * `update` said in memory and to the hub ({@link #tellHub}), not written:
+   * what the file says is what this agent comes back to, and what a pass
+   * that ends on a hub that did not answer puts back ({@link #pass}).
+   */
+  async #tellHubUnwritten(update: Partial<BinaryUpdateState>): Promise<void> {
+    this.#state = { ...this.#state, ...update, updatedAt: Date.now() };
+    this.#report(this.#state);
+    await this.#tellHub();
+  }
+
   /** Runs only from `ready`: the one state in which a build is staged and nothing is applying. */
   async #apply(release: SignedRelease): Promise<void> {
     if (this.#state.phase !== "ready") {
@@ -1737,14 +1758,23 @@ export class BinaryUpdater {
     try {
       await this.#raiseFence(hub, INSTALL_FENCE_MS);
       await putOnPins(version);
-      await this.#set({
+      const installing: Partial<BinaryUpdateState> = {
         phase: "installing",
         heldChildren: undefined,
         waitingOn: undefined,
         waitingSince: undefined,
         cut: cut.length > 0 ? cut : undefined,
-      });
-      await this.#tellHub();
+      };
+      // THE FILE SAYS INSTALLING ONLY ONCE NOTHING BUT THE LAUNCH STANDS
+      // BETWEEN IT AND THE HELPER. The hub is told first: a hub that cannot
+      // be told (restarting into its own new build) ends the pass with the
+      // file still `ready` and no helper, and the next tick tries again. A
+      // file written first said installing with no helper behind it
+      // (2026-10-31, a Mac on 6314: installing 6317 for 36 minutes, 6322 not
+      // taken up). Written before the launch, never after: a helper that
+      // fails at once writes `failed` over it, not under it.
+      await this.#tellHubUnwritten(installing);
+      await this.#set(installing);
       const job = await launch();
       console.info(
         `[update] the update helper for ${this.#state.availableVersion} is started: ${job.name}${this.#flags.commanded ? ", on Install now" : ""}`
@@ -1808,15 +1838,9 @@ export class BinaryUpdater {
     this.#outlasted.clear();
     try {
       await this.#raiseFence(hub, DRAIN_MS + DRAIN_GRACE_MS);
-      // Said in memory and to the hub, never written: an agent that dies
-      // mid-drain comes back `ready`, not `installing` with no helper.
-      this.#state = {
-        ...this.#state,
-        phase: "installing",
-        updatedAt: Date.now(),
-      };
-      this.#report(this.#state);
-      await this.#tellHub();
+      // Never written: an agent that dies mid-drain comes back `ready`, not
+      // `installing` with no helper.
+      await this.#tellHubUnwritten({ phase: "installing" });
       let reading = await readReadiness(hub);
       const deadline = Date.now() + DRAIN_MS;
       while (!reading.ready && Date.now() < deadline) {
