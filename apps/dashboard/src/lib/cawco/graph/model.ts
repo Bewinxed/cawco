@@ -3,7 +3,8 @@
  * the component canvas already speaks (core stage.ts): its states file
  * (CSF 3, `<Component>.stories.ts`) and the agent's canvas spec (`group`,
  * `edges`). Nothing new is asked of either:
- * - a **state** is a story, named by its export in plain words, its note
+ * - a **state** is a story, named by its CSF `name` when it has one, else
+ *   by its export in plain words (CSF 3's own rule), its note
  *   its own doc comment, its width its `parameters.viewport`, an error
  *   state where its CSF `tags` say `failure`;
  * - a **machine** is a heading the spec's `group` names (a story grouped
@@ -37,6 +38,8 @@ export interface PlayContext {
 interface Story {
   args?: Record<string, unknown>;
   from?: string;
+  /** Its display name, where its export can't hold it (CSF 3 `name`: an apostrophe). */
+  name?: string;
   parameters?: { records?: string; viewport?: number | string };
   play?: (context: PlayContext) => Promise<void> | void;
   tags?: string[];
@@ -219,7 +222,7 @@ function stateOf(
   const width = widthOf(story);
   return {
     id: one.name,
-    name: storyWords(one.name),
+    name: story.name ?? storyWords(one.name),
     note: one.note,
     machine,
     line: one.line,
@@ -304,7 +307,7 @@ export function reviewOf(input: ReviewInput): Review {
     held.variants.push({
       id: one.name,
       story: one.name,
-      name: storyWords(one.name),
+      name: story.name ?? storyWords(one.name),
       note: one.note,
       width,
       args,

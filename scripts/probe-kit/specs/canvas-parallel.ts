@@ -49,7 +49,7 @@ const CHROMIUM_CAP = 2700;
 const HOLD_MS = Number(process.env.CANVAS_PARALLEL_HOLD ?? 350);
 /** How many times each page is opened fresh; each paint is its best. */
 const TAKES = 3;
-/** Every page's window: a desk's width, tall enough to hold the page of five whole (RoutineForm's Filled alone stands 1,714px). */
+/** Every page's window: a desk's width, tall enough to hold the page of five whole (RoutineForm's Filled in alone stands 1,714px). */
 const WINDOW = { width: 1440, height: 4800 };
 /** The page of five paints its last within this many times the slowest canvas alone. The brief's. */
 const WITHIN = 1.5;
@@ -57,7 +57,7 @@ const WITHIN = 1.5;
 /** Five canvases of the dashboard, a story each, as a page shows them. */
 const CANVASES = [
   ["needs", "src/lib/cawco/home/NeedsCard.stories.ts", "Budget"],
-  ["routine", "src/lib/cawco/routines/RoutineForm.stories.ts", "Filled"],
+  ["routine", "src/lib/cawco/routines/RoutineForm.stories.ts", "FilledIn"],
   ["suggest", "src/lib/cawco/suggestions/Suggestions.stories.ts", "List"],
   ["sheet", "src/lib/cawco/preview/SheetInspector.stories.ts", "Desk"],
   ["prompt", "src/lib/cawco/transcript/Prompt.stories.ts", "Connected"],

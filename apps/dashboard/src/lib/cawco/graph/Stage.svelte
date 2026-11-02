@@ -621,7 +621,7 @@
          link to its ring: a press brings that ring into view. -->
     <ul
       data-slot="differences"
-      aria-label={words.compare}
+      aria-label={words.differences}
       class="m-0 mb-space-2 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0"
     >
       {#each lines as line, at (at)}

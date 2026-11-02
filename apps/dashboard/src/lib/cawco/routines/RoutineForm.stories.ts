@@ -164,99 +164,94 @@ export default {
   },
 };
 
-/** Opened by Create routine: every day at 09:00 read back, the rest blank. */
-export const Empty = { parameters: { viewport: 1440 } };
+/** Nothing typed yet. When starts at Every day, 09:00. */
+export const JustOpened = { parameters: { viewport: 1440 } };
 
-/** Opened by Create routine, on a phone. */
-export const EmptyPhone = { parameters: { viewport: 390 } };
+export const JustOpenedPhone = { parameters: { viewport: 390 } };
 
-/** Filled, with a long prompt: every weekday at 09:00, read back under When with its week on the strip. */
-export const Filled = {
+/** Everything filled in, with a long prompt. */
+export const FilledIn = {
   args: { draft: filled },
   parameters: { viewport: 1440 },
 };
 
-/** Filled, with a long prompt, on a phone. */
-export const FilledPhone = {
+export const FilledInPhone = {
   args: { draft: filled },
   parameters: { viewport: 390 },
 };
 
-/** Filled, each run an orchestrator: the choice's words under it say what it does. */
-export const Orchestrator = {
+/** Each run starts an orchestrator instead of a delegate. */
+export const RunsAnOrchestrator = {
   args: { draft: { ...filled, target: "orchestrator" as const } },
   parameters: { viewport: 1440 },
 };
 
-/** Each run an orchestrator, on a phone. */
-export const OrchestratorPhone = {
+export const RunsAnOrchestratorPhone = {
   args: { draft: { ...filled, target: "orchestrator" as const } },
   parameters: { viewport: 390 },
 };
 
-/** Every week, on Mondays at 07:30: the day and the time beside the choice. */
-export const Weekly = {
+/** Every week, on Mondays at 07:30. */
+export const EveryWeek = {
   args: { draft: { ...filled, cron: "30 7 * * 1" } },
   parameters: { viewport: 1440 },
 };
 
-/** Every week, on a phone: choice, day, time and zone one under another. */
-export const WeeklyPhone = {
+export const EveryWeekPhone = {
   args: { draft: { ...filled, cron: "30 7 * * 1" } },
   parameters: { viewport: 390 },
 };
 
-/** Every hour: no day and no time to ask. */
-export const Hourly = {
+/** Every hour, so no day or time to choose. */
+export const EveryHour = {
   args: { draft: { ...filled, cron: "0 * * * *" } },
   parameters: { viewport: 1440 },
 };
 
-/** A custom schedule the hub reads: its hint naming the five values, the hub's words under When and its week on the strip. */
-export const Custom = {
+/** A custom schedule the hub could read: twice a day on weekdays. */
+export const CustomSchedule = {
   args: { draft: { ...filled, cron: TWICE_WEEKDAYS } },
   parameters: { viewport: 1440 },
 };
 
-/** A custom schedule the hub reads, on a phone. */
-export const CustomPhone = {
+export const CustomSchedulePhone = {
   args: { draft: { ...filled, cron: TWICE_WEEKDAYS } },
   parameters: { viewport: 390 },
 };
 
-/** A custom schedule the hub can't read: the form's own sentence under it, naming the five values in order with an example, and no read-back. */
+/** A schedule written in words, “every weekday at 9”, which can't be read. */
 export const InvalidSchedule = {
+  name: "Schedule can't be read",
   tags: ["failure"],
   args: { draft: unreadable },
   parameters: { viewport: 1440 },
 };
 
-/** A custom schedule the hub can't read, on a phone. */
 export const InvalidSchedulePhone = {
   args: { draft: unreadable },
   parameters: { viewport: 390 },
 };
 
-/** Create pressed: the button keeps its width and a spinner stands over its label while the hub makes it (the house's pending rule for a button with no rest icon). */
-export const Saving = {
+/** Create routine pressed; the hub is still making it. */
+export const Creating = {
   args: { draft: filled, saving: true },
   parameters: { viewport: 1440 },
-  from: "Filled",
+  from: "FilledIn",
   play: pressCreate,
 };
 
-/** Creating, on a phone. */
-export const SavingPhone = {
+export const CreatingPhone = {
   args: { draft: filled, saving: true },
   parameters: { viewport: 390 },
 };
 
-/** The hub didn't answer the create: why, and try again, every word kept. */
+/** Create routine pressed, and the hub didn't answer (502). */
 export const FailedSave = {
+  name: "Hub didn't answer",
   args: { draft: filled, failure: unanswered },
   parameters: { viewport: 1440 },
   tags: ["failure"],
-  from: "Filled",
+  from: "FilledIn",
   play: async (context: Play) => {
     await context.update({ hub: refusing });
     await pressCreate(context);
@@ -264,21 +259,21 @@ export const FailedSave = {
   },
 };
 
-/** The hub didn't answer the create, on a phone. */
 export const FailedSavePhone = {
   args: { draft: filled, failure: unanswered },
   parameters: { viewport: 390 },
 };
 
-/** The hub refused the delegate type: its words, and choose another. */
-export const FailedType = {
+/** The hub knows no delegate type “research”. */
+export const DelegateTypeRefused = {
   tags: ["failure"],
   args: { draft: filled, failure: noType },
   parameters: { viewport: 1440 },
 };
 
-/** The project's delegate types couldn't be read: why, and the hub's pick stands. */
+/** The project's delegate types couldn't be read (502), so each run takes the hub's pick. */
 export const TypesUnread = {
+  name: "Types couldn't be read",
   tags: ["failure"],
   args: {
     draft: filled,
