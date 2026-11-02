@@ -3,15 +3,18 @@
    * The states list (spec, The states; the journey): every state of the
    * component in front, under its machine's section head (the app's list
    * section, `sectionHeadVariants`), in each machine's path order, one row
-   * each (StateItem). Under it the journey's steps through the kept
-   * state's machine: Previous, where he stands in words ("2 of 2, Failed
-   * save"), Next. The list scrolls, the kept row in view as it is kept;
-   * the steps stay at its foot.
+   * each (StateItem). Under it the journey's steps along the same order:
+   * Previous, where he stands in words ("8 of 11, Failed save"), Next. The
+   * list opens with the kept row in view and a machine's head whole at its
+   * top, never cut; after that a press leaves it where it stands and a
+   * step brings the kept row in by the least it takes. The steps stay at
+   * its foot.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import type { Review } from "./model";
+  import { pathOf, type Review } from "./model";
   import StateItem from "./StateItem.svelte";
   import Stepper from "./Stepper.svelte";
 
@@ -34,12 +37,78 @@
     onstep: (state: string) => void;
   } = $props();
 
-  const machine = $derived(
-    review.machines.find((one) => one.path.includes(kept))
-  );
-  const path = $derived(machine?.path ?? []);
+  const path = $derived(pathOf(review));
   const at = $derived(path.indexOf(kept));
   const many = $derived(review.machines.length > 1);
+
+  let list = $state<HTMLElement>();
+  /** He has scrolled or pressed in the list: its place is his from then on. */
+  let touched = false;
+  /**
+   * The list's place on open: at its top when the kept row stands in view
+   * there; else its machine's head at the top, whole, when that shows the
+   * row; else the row by the least it takes. Placed again as the list lays
+   * itself out anew (the room beside a stage that took its own width)
+   * until he scrolls or presses in it.
+   */
+  const placeOpen = (scroller: HTMLElement, row: HTMLElement) => {
+    const { top } = scroller.getBoundingClientRect();
+    const fold = scroller.clientHeight;
+    const rowFoot =
+      row.getBoundingClientRect().bottom - top + scroller.scrollTop;
+    if (rowFoot <= fold) {
+      scroller.scrollTop = 0;
+      return;
+    }
+    const head = row.closest("section");
+    const headAt = head
+      ? head.getBoundingClientRect().top - top + scroller.scrollTop
+      : 0;
+    scroller.scrollTop = rowFoot - headAt <= fold ? headAt : rowFoot - fold;
+  };
+  const rowOf = (scroller: HTMLElement, id: string) =>
+    scroller.querySelector<HTMLElement>(`[data-state-id="${CSS.escape(id)}"]`);
+  let placedFor: string | null = null;
+  $effect(() => {
+    const scroller = list;
+    const id = kept;
+    const row = scroller ? rowOf(scroller, id) : null;
+    if (!(scroller && row)) {
+      return;
+    }
+    if (placedFor === null) {
+      placedFor = id;
+      placeOpen(scroller, row);
+      return;
+    }
+    if (placedFor !== id) {
+      placedFor = id;
+      touched = true;
+      bringIntoView(row, { at: "nearest" });
+    }
+  });
+  const relaid = frameSize((node: HTMLElement) => {
+    const scroller = node.parentElement;
+    const row = scroller ? rowOf(scroller, kept) : null;
+    if (scroller && row && !touched) {
+      placeOpen(scroller, row);
+    }
+  });
+  /** His own scroll, press or key in the list: its place is his. */
+  const heard = (node: HTMLElement) => {
+    const leave = () => {
+      touched = true;
+    };
+    const kinds = ["wheel", "pointerdown", "touchmove", "keydown"] as const;
+    for (const kind of kinds) {
+      node.addEventListener(kind, leave, { passive: true });
+    }
+    return () => {
+      for (const kind of kinds) {
+        node.removeEventListener(kind, leave);
+      }
+    };
+  };
 </script>
 
 <div data-slot="journey" class="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -47,64 +116,52 @@
        steps at its foot come and go with the kept state's path (Stepper
        draws none for a path of one), and a scrollbar that came with them
        took its width from the rows, which wrapped anew. -->
-  <!-- Hover and the kept row are the list's, as the app's own lists draw
-       them (the sidebar, the Comments rail): one hover ghost, and the
-       selection pill under the kept row, gliding to the next one kept. -->
+  <!-- Hover is the list's one ghost, as the app's own lists draw it; the
+       kept row is marked in its own words (StateItem), never a fill. -->
   <div
+    bind:this={list}
+    {@attach heard}
     class="-mx-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto px-space-1 scrollbar-gutter-stable"
-    {@attach highlight({
-      rows: '[data-slot="state-item"]',
-      selected: "[data-kept]",
-    })}
+    {@attach highlight({ rows: '[data-slot="state-item"]' })}
   >
-    {#each review.machines as one (one.name)}
-      <section
-        aria-label={one.name}
-        class="flex min-w-0 flex-col pb-space-4 last:pb-space-1"
-      >
-        {#if many}
-          <h3 class={sectionHeadVariants({ class: "m-0 mb-space-1" })}>
-            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{one.name}</span
-            >
-          </h3>
-        {/if}
-        <ol class="m-0 flex min-w-0 list-none flex-col gap-space-1 p-0">
-          {#each one.path as id (id)}
-            {@const state = review.states[id]}
-            {#if state}
-              <li
-                class="min-w-0"
-                {@attach (node: HTMLElement) => {
-                  if (id === kept) {
-                    bringIntoView(node, { at: "nearest" });
-                  }
-                }}
+    <div class="min-w-0" {@attach relaid}>
+      {#each review.machines as one (one.name)}
+        <section
+          aria-label={one.name}
+          class="flex min-w-0 flex-col pb-space-4 last:pb-space-1"
+        >
+          {#if many}
+            <h3 class={sectionHeadVariants({ class: "m-0 mb-space-1" })}>
+              <span
+                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                >{one.name}</span
               >
-                <StateItem
-                  against={id === against}
-                  kept={id === kept}
-                  keptVariant={id === kept ? keptVariant : null}
-                  onpress={(variant) => onpress(id, variant)}
-                  {state}
-                />
-              </li>
-            {/if}
-          {/each}
-        </ol>
-      </section>
-    {/each}
+            </h3>
+          {/if}
+          <ol class="m-0 flex min-w-0 list-none flex-col gap-space-1 p-0">
+            {#each one.path as id (id)}
+              {@const state = review.states[id]}
+              {#if state}
+                <li class="min-w-0" data-state-id={id}>
+                  <StateItem
+                    against={id === against}
+                    kept={id === kept}
+                    keptVariant={id === kept ? keptVariant : null}
+                    onpress={(variant) => onpress(id, variant)}
+                    {state}
+                  />
+                </li>
+              {/if}
+            {/each}
+          </ol>
+        </section>
+      {/each}
+    </div>
   </div>
 
   {#if stepper}
     <div class="border-t border-border-hairline pt-space-2">
-      <Stepper
-        {at}
-        machine={machine?.name ?? ""}
-        name={review.states[kept]?.name ?? ""}
-        {onstep}
-        {path}
-      />
+      <Stepper {at} name={review.states[kept]?.name ?? ""} {onstep} {path} />
     </div>
   {/if}
 </div>
