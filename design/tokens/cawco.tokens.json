@@ -974,6 +974,36 @@
         }
       }
     },
+    "c-clip-size": {
+      "$type": "color",
+      "$value": "{color.mark-6}",
+      "$description": "The design graph's Animation timeline: the bar and glyph of a clip that grows or opens a box (unfolds, widens, opens: height, width, clip-path). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance."
+    },
+    "c-clip-move": {
+      "$type": "color",
+      "$value": "{color.mark-7}",
+      "$description": "The design graph's Animation timeline: the bar and glyph of a clip that moves, scales or turns its element (transform, translate, scale, rotate). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance."
+    },
+    "c-clip-fade": {
+      "$type": "color",
+      "$value": "{color.mark-3}",
+      "$description": "The design graph's Animation timeline: the bar and glyph of a clip that fades (opacity). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance."
+    },
+    "c-clip-tint": {
+      "$type": "color",
+      "$value": "{color.mark-8}",
+      "$description": "The design graph's Animation timeline: the bar and glyph of a clip that changes a colour (background, ink, border). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance."
+    },
+    "c-clip-effect": {
+      "$type": "color",
+      "$value": "{color.mark-5}",
+      "$description": "The design graph's Animation timeline: the bar and glyph of a clip that blurs or lifts (filter, box-shadow). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance."
+    },
+    "c-clip-other": {
+      "$type": "color",
+      "$value": "{color.ink-muted}",
+      "$description": "The design graph's Animation timeline: the bar and glyph of a clip whose property is none of the kinds (a custom property's). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance."
+    },
     "c-change-ring": {
       "$type": "color",
       "$value": "{color.status-done-glyph}",
