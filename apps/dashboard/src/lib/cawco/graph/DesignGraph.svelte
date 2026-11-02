@@ -96,14 +96,11 @@
   let {
     inputs,
     ask = {},
-    recordsAt = null,
     stale = false,
   }: {
     /** The components under review, each its states file and the agent's spec. */
     inputs: ReviewInput[];
     ask?: Ask;
-    /** When the agent opened the surface: the records shown are the set as it stood then. */
-    recordsAt?: Date | null;
     /** The hub's link is down. */
     stale?: boolean;
   } = $props();
@@ -470,20 +467,6 @@
     };
   });
 
-  const timeWords = $derived(
-    recordsAt
-      ? new Intl.DateTimeFormat(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-          day: "numeric",
-          month: "short",
-        }).format(recordsAt)
-      : null
-  );
-  const hasRecords = $derived(
-    review.states[kept.state]?.variants.some((one) => one.id.includes(":")) ??
-      false
-  );
   /** The journey's one order: the component's path, as the list shows it. */
   const path = $derived(pathOf(review));
   const at = $derived(path.indexOf(kept.state));
@@ -725,7 +708,6 @@
 {#snippet stepper()}
   <Stepper
     {at}
-    name={review.states[kept.state]?.name ?? ""}
     onstep={(next) => keep(next, null)}
     {path}
   />
@@ -1015,12 +997,6 @@
           {stale}
           {width}
         />
-        {#if timeWords && hasRecords}
-          <!-- Under the stage, never over it: whose records these are. -->
-          <p class="m-0 mt-space-2 type-meta text-ink-muted">
-            {words.recordsAsOf(timeWords)}
-          </p>
-        {/if}
       {/snippet}
       <!-- The stage, and on a desk the room beside it: one resizable split.
            The stage's pane stays while the room comes and goes, so the
@@ -1066,7 +1042,7 @@
                  the inspector's): from the trailing edge beside the stage. -->
             <aside
               data-slot="graph-room"
-              aria-label={words.statesFace}
+              aria-label={words.room}
               in:sheetSlide|global={{ axis: "X", leaving: false }}
               out:sheetSlide|global={{ axis: "X", leaving: true }}
               class="relative ms-space-3 flex min-h-0 min-w-0 flex-1 flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile"
@@ -1126,7 +1102,7 @@
           onmousedown={keepFocusOnPage}
           trapFocus={false}
           ownHead
-          title={words.statesFace}
+          title={words.room}
         >
           <div
             class="flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop)"
