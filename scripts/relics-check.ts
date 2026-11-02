@@ -82,7 +82,7 @@ const SANCTIONED: readonly {
     kind: "important",
     text: /^\s*(visibility|pointer-events): inherit !important;$/u,
     reason:
-      "virtua 0.53.4 (0.53.5, the latest, the same) writes a measuring item's visibility inline (lib/svelte/ListItem.svelte:54) and its container's pointer-events while it scrolls (lib/svelte/Virtualizer.svelte:186), with no option to skip either; only an important declaration outranks an inline style",
+      "virtua 0.54.1 writes a measuring item's visibility inline (lib/svelte/ListItem.svelte:54) and its container's pointer-events while it scrolls (lib/svelte/Virtualizer.svelte:180), with no option to skip either; only an important declaration outranks an inline style",
     docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
   },
 ];

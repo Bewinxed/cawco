@@ -3775,7 +3775,7 @@
    * the rows it mounted styled inside the pin (`tailTop`, 10.1ms of style
    * in one reply frame at 4x CPU throttle). A row that flush mounts (the
    * range grown with the view) is observed at the next frame, not inside
-   * the delivery (patches/virtua@0.53.4.patch): observed there, WebKit
+   * the delivery (virtua 0.54.0, inokawa/virtua#952): observed there, WebKit
    * reported "ResizeObserver loop completed with undelivered notifications"
    * as an ask left under a reader at the tail (composer-layers).
    *

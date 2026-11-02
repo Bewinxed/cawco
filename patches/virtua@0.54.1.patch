@@ -1,0 +1,42 @@
+diff --git a/lib/svelte/Virtualizer.svelte b/lib/svelte/Virtualizer.svelte
+index 2821bbe0c9f8ba5a241c6acd0dfa289f59b79d68..5c95b3cae3024eb49cf557d3df580851751b6691 100644
+--- a/lib/svelte/Virtualizer.svelte
++++ b/lib/svelte/Virtualizer.svelte
+@@ -85,23 +85,32 @@
+     // https://svelte.dev/docs/svelte/await-expressions#Breaking-changes
+     // https://github.com/inokawa/virtua/pull/847
+     // https://github.com/inokawa/virtua/pull/1018
+-    const len = stateVersion && min(data.length, layout.$getLength());
++    //
++    // cawco: the range is still the last length's too. Items added or
++    // removed in front (`shift`) stand that many indexes further on in
++    // `data`: the range is read there, so every item it holds keeps its key,
++    // and none is taken down and built again for that one pass (a page put
++    // in front of a transcript rebuilt every row on screen twice, 44ms of
++    // its task).
++    const storeLen = stateVersion && layout.$getLength();
++    const moved = shift && storeLen !== data.length ? data.length - storeLen : 0;
++    const len = moved !== 0 ? data.length : min(data.length, storeLen);
+ 
+     const [start, end] = range;
+     const arr: number[] = [];
+     if (keepMounted) {
+       const mounted = new Set(keepMounted);
+-      for (let i = start; i <= end; i++) {
++      for (let i = start + moved; i <= end + moved; i++) {
+         mounted.add(i);
+       }
+       for (const index of sort([...mounted])) {
+-        if (index < len) {
++        if (index >= 0 && index < len) {
+           arr.push(index);
+         }
+       }
+     } else {
+-      for (let i = start; i <= end; i++) {
+-        if (i < len) {
++      for (let i = start + moved; i <= end + moved; i++) {
++        if (i >= 0 && i < len) {
+           arr.push(i);
+         }
+       }
