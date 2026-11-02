@@ -7,41 +7,39 @@ related_targets: []
 
 # Surface brief: the design graph
 
-**Mode:** Operate. **Job:** a page inside the product; it keeps DESIGN.md's visual system and lays itself out for its task. **Verdict:** scrap (spec.md §5); designed again from the spec's tasks.
+**Mode:** Operate. **Job:** a page inside the product, in the artifact panel; it keeps DESIGN.md's visual system and lays itself out for its task. **Verdict:** scrap (spec.md §5), designed again from the spec's walk; this brief describes the surface as built.
 
 ## Who arrives, and why
-The owner of the fleet, from an agent's one-line ask ("Judge the Create routine form at Save failed"), for a look of a minute or two, many times a day: at a desk on a wide window with the agent's conversation beside the panel, sometimes on an iPad or a phone. He comes to see the asked state on the real component, step through its other states, compare two, see the whole set and its holes, play the move into a state and nudge its timing, try the list with one, many and the longest records, and leave remarks the agent reads back. Nothing to press when done.
+The owner of the fleet, from an agent's one-line ask ("Judge the design graph on the routine form at Save failed"), for a look of a minute or two, many times a day: at a desk on a wide window with the agent's conversation beside the panel, sometimes on an iPad or a phone. He comes to see the asked state on the real component, step through its other states, compare two, see the whole set and its holes, play the move into a state and tune its timing, try a list with one, many and the longest records, and leave remarks the agent reads back. Nothing to press when done.
 
 ## Parts (by job)
-- **The stage**: the real component mounted live with its states file's records, at a width he picks (390, 680, 1440, its own), in the scheme he picks, reduced motion on ask. The largest thing; nothing of the surface's chrome stands over it. Opens on the kept state, its changed region in view, the state's name at its head.
-- **The states**: every story of the states file, grouped by machine (the canvas spec's `group` to a heading), variants with their state (`group` to a story), failure marked by glyph and word. Rest previews (fine pointer), press keeps; a tap keeps.
-- **Two ways of seeing**: the journey (one machine's path, step previous/next, "3 of 5, Saving") and the whole set (every state and move, the moves between machines too, Svelte Flow at a readable size that scrolls, never a zoom figure, holes marked "Nothing reaches it" / "Nothing leaves it"). One segmented switch; the journey opens, standing at the asked state.
-- **The difference**: a Compare switch that stays on; the stage shows the compared state with the changed ring on what came in or changed, a dashed ring where something went, and one line of words per difference.
-- **The move**: the move into the kept state as clips (what moves, how, how long with its token, which curve), a playhead to scrub, Play and a quarter-speed Play; it plays once as the state arrives, then rests at its start. Out-of-token clips flagged once at the head. Ink bars. A full editor: presets first (the ladder's lengths, the house curves, the house spring), advanced for any length, any cubic-bezier, a spring's bounce, mass, stiffness and damping. A tuned clip says so on its row, before and after.
-- **The remarks**: every stage element, state, variant and clip is a named element the panel's Comment mode pins; no Send, no Done.
-- **Several components**: one in front at its own width, the others behind a switch; the states and move name the one in front.
-- **Records**: a list state offers One, Many (up to twenty) and Longest names as variants, from the set as it stood when the agent opened the surface, that time named.
+- **The bar**: one row, DESIGN.md's Liquid Glass title bar. Leading, the component's name (a menu of the others when the ask names several: one in front, the rest behind it). Trailing, one glass group of bare symbols: Compare, the stage's view, the room. The view is a card hung from the glass (HangCard): widths as device glyphs (390, 680, 1440, its own), scheme as sun and moon, Reduce motion as a switch. The ask itself stays in the panel's head; the page repeats it nowhere.
+- **The stage**: the real component mounted live with its states file's records, always 1:1: at its own width up to its room's, wider widths scrolling sideways, never scaled. It shows the kept state and nothing else, named at its head; it changes only on a press (a step or a press on a state). The component stands on the page's surface with its gutter. Nothing of the surface's own stands over it; the comparison's rings sit in a layer outside each element's box, under the pins, taking no press. Putting the room away never moves it.
+- **The room**: one secondary surface with three faces on one fluid-tabs switch: the states (the default), the whole set, the move. Closed by Close or Esc.
+- **The states (the journey)**: every state of the component in front under its machine's section head, in path order, one list row each with its name and one-line note. The kept row wears the selection wash; only it shows its record sets as a toggle group (one, many, longest). Resting lights the row and never changes the stage. At the list's foot the journey's steps: Previous, "2 of 2, Failed save", Next.
+- **The whole set**: every machine as a section, every state a card with where its moves go said as the person causes them ("Try again → Saving"), moves into other machines included. An error state, a state nothing reaches and one nothing leaves carry a glyph after the name, the words in its tooltip and description. It scrolls; type never under 12px, no zoom figure.
+- **The difference**: Compare, a switch that stays on. On, it compares the kept state with the one before it on its path at once ("Compared with Saving"); a press on another state compares with that one instead. The stage keeps the kept state and rings what came in or changed, a dashed ring where something went, one line of words each. The compared row wears the change ring's edge.
+- **The move**: the move into the kept state as a two-column timeline (clip name and facts; its bar on the move's scale under a ruler). Its head holds Play and Play at a quarter speed; the playhead is the ruler's slider, its line down the bars alone. It plays once as the state arrives, then rests at its start. Each bar drags its start and end (10 ms on the arrows); a clip's editor offers the ladder's lengths and the house curves and spring first, Advanced any length, delay, cubic-bezier and a spring's bounce, mass, stiffness and damping. A tuned clip says so on its row, before and after. Out-of-token clips are flagged once at the head. Ink bars. A state with no move says so in one sentence.
+- **The remarks**: every stage element, state, variant and clip is a named comment target the panel's Comment mode pins; no Send, no Done.
+- **Records**: a list state's sets are the set as it stood when the agent opened the surface, that time named under the stage ("Records as of …").
 
 ## States the surface holds
-Reading/mounting (skeleton after the wait grace); failed to mount (error formula, Show details); one state, no machine; kept state with no move; move playing, paused, scrubbed; a state previewed over the kept one; comparing; a tuned clip; records as of a time; reduced motion (Play draws the end with a fade and says so); the hub's link lost (the stage keeps its drawing, marked stale).
+Reading/mounting (skeleton at the stage's size after the wait grace); failed to mount (error formula in the stage's place, Show details); one state, no machine; kept state with no move; the move reading or failed; playing, paused, scrubbed; comparing; a tuned clip; records as of a time; reduced motion (Play draws the end with a fade and says so); the hub's link lost (the stage keeps its drawing, marked stale, dimmed).
 
 ## Widths
-- **390**: the stage whole above the room's head stop; the room is the kit's drawer (vaul) with head, half and whole stops; every control 44px to a finger.
+- **390**: under the desk line (900px of the surface's own width) the room is the kit's bottom drawer, stops head, half, whole; the stage whole above it at the head stop; every control 44px to a finger.
 - **680**: the same drawer; the stage at its width, never covered.
-- **1440**: stage and room in view at once, the stage never under 600px.
+- **1440**: stage and room in view at once, the room beside the stage, the stage never under 600px.
 - **2529**: the surface has about half the window; the stage takes its component's own width, the room beside it, no paper between.
 
 ## Untouched
 The artifact panel's head, modes, Comments rail, pins, threads, delivery and To check; the canvas view; decision pages; the states file format; the agent's way of opening the surface (`edges`, `group`); the design tokens' existing values.
 
 ## Out of scope
-Token dials; sashes; the component canvas's map mode; comparing two components' moves.
+Token dials; sashes; the component canvas's map mode; comparing two components' moves; the page's own "Clip kinds" switch; the agent's report format.
 
 ## His answers (spec.md, His answers)
-Full move editor, presets first; a tap keeps; the move plays once on arrival then rests at its start; one component in front, the others behind a switch; Compare is a switch that stays on; the journey opens at the asked state; records as they stood when the agent opened the surface, with that time named.
-
-## P0/P1 backlog (spec.md §4)
-P0: the asked state's evidence out of view on open; no remark on a state, variant or move. P1: the dock can't be dismissed; touch targets under 44; fine-pointer targets under 24; the graph cut at its edges; hover washes over the component; the clip control an engineer's editor (superseded by his answer: a full editor, presets first); 1200px of paper at 2529.
+A full move editor, presets first, advanced for any length, curve and spring; a tap keeps, and that is the look; the move plays once on arrival then rests at its start; one component in front, the others behind a switch; Compare is a switch that stays on; the journey opens at the asked state; records as they stood when the agent opened the surface, with that time named. Later, on the preview: the stage changes only on a press; resting never previews.
 
 ## Direction contract
 direction: inherits DESIGN.md
