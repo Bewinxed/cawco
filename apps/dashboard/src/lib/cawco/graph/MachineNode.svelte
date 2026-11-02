@@ -1,0 +1,26 @@
+<script lang="ts">
+  /**
+   * A machine on the whole set's map: a group round its states' cards,
+   * sized from the cards as placed (layout.ts). Three surfaces apart, so
+   * each reads against the one under it: the canvas on the deep recess, the
+   * group on the recess with the control edge, the cards on the raised
+   * surface. Its name in its head, in the label role and the row's ink,
+   * where no card or move stands.
+   */
+  import type { NodeProps } from "@xyflow/svelte";
+
+  let { data }: NodeProps = $props();
+  const name = $derived((data as { name: string }).name);
+</script>
+
+<div
+  data-slot="machine"
+  class="size-full rounded-lg border border-border-control bg-surface-recess"
+>
+  <h3
+    class="m-0 truncate px-space-3 pt-space-2 type-label text-ink-row"
+    title={name}
+  >
+    {name}
+  </h3>
+</div>
