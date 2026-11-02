@@ -466,6 +466,17 @@ const tell = (stage: Stage) => {
   });
 };
 
+/**
+ * Every stage told again where it is now, as the daemon registers with the
+ * hub: a frame sent while no connection was open was dropped (daemon.ts
+ * `supervisor.emit`), and the docs it was owed to are set right here.
+ */
+export const tellStages = (): void => {
+  for (const stage of stages.values()) {
+    tell(stage);
+  }
+};
+
 /** Each dir from `from` up to `top`, both included. */
 const upFrom = (from: string, top: string): string[] => {
   const dirs: string[] = [];

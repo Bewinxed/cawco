@@ -323,6 +323,7 @@ import {
   setStageSink,
   stageComponents,
   stopServed,
+  tellStages,
   warmStage,
   writeSheet,
 } from "./stage";
@@ -2860,6 +2861,8 @@ const attach = (
         // sets off: every frame the hub has not taken, then each running
         // reply so far (outbox.ts).
         supervisor.linkUp(envelope.payload);
+        // Each stage's state now: a frame dropped while no connection was open is said again.
+        tellStages();
         takeSessionLimits(
           (envelope.payload as RegisterAckPayload).sessionLimits
         );
