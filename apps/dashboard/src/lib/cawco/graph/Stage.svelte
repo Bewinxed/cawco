@@ -125,6 +125,17 @@
     });
     return () => cancelAnimationFrame(raf);
   });
+  /** The drawing coming to rest as it mounts, its own arrivals landed (`restOf`); a new drawing ends it. */
+  let resting: Rest | null = null;
+  $effect(() => {
+    const holder = frame;
+    if (mount === 0 || !holder) {
+      return;
+    }
+    const rest = restOf(holder);
+    resting = rest;
+    return () => rest.end();
+  });
 
   // The differences, once both drawings have laid out, and again as either lays itself out anew (a read-back the hub answered).
   let found = $state<Difference[]>([]);
@@ -199,19 +210,56 @@
     }
   }
 
-  /** Waits until the from state has come to rest: no animation started on it for {@link REST_MS}, at most {@link MOTION_MS}. */
-  async function restOf(holder: HTMLElement): Promise<void> {
-    const end = performance.now() + MOTION_MS;
-    const known = new Set<Animation>();
-    let still = performance.now();
-    while (performance.now() < end && performance.now() - still < REST_MS) {
-      await settle();
-      for (const animation of holder.getAnimations({ subtree: true })) {
-        if (!(known.has(animation) || endless(animation))) {
-          known.add(animation);
-          still = performance.now();
+  interface Rest {
+    /** Settles once the drawing has rested, or the watch was ended. */
+    done: Promise<void>;
+    end: () => void;
+  }
+  const nextFrame = () =>
+    new Promise<void>((done) => requestAnimationFrame(() => done()));
+
+  /**
+   * A drawing as it mounts comes to rest: every animation it starts of its
+   * own (a read-back the hub answered unfolding, RoutineForm's schedule
+   * strip) is landed at once, until none has started for {@link REST_MS},
+   * at most {@link MOTION_MS}. The stage shows a state at rest, so a press
+   * changes what it shows and nothing slides in; only a move plays, once
+   * its from state has rested. A loop is the state's own and runs.
+   */
+  function restOf(holder: HTMLElement): Rest {
+    let ended = false;
+    const done = (async () => {
+      const end = performance.now() + MOTION_MS;
+      const known = new Set<Animation>();
+      let still = performance.now();
+      while (performance.now() < end && performance.now() - still < REST_MS) {
+        await nextFrame();
+        if (ended) {
+          return;
+        }
+        for (const animation of holder.getAnimations({ subtree: true })) {
+          if (!(known.has(animation) || endless(animation))) {
+            known.add(animation);
+            land(animation);
+            still = performance.now();
+          }
         }
       }
+    })();
+    return {
+      done,
+      end: () => {
+        ended = true;
+      },
+    };
+  }
+
+  /** An animation at its end at once; one that can't be (paused at no rate) is left as it stands. */
+  function land(animation: Animation): void {
+    try {
+      animation.finish();
+    } catch {
+      // InvalidStateError: a rate of 0 or an endless effect has no end to land on.
     }
   }
 
@@ -235,7 +283,8 @@
     if (!holder) {
       return [];
     }
-    await restOf(holder);
+    // The from state at rest, its own arrivals landed, before the move.
+    await resting?.done;
     const had = document.activeElement;
     const t0 = performance.now();
     const seen = new Map<Animation, number>();
@@ -255,7 +304,7 @@
         clips.push(clip);
       }
       if (still) {
-        animation.finish();
+        land(animation);
       }
     };
     let watching = true;
@@ -381,12 +430,17 @@
   {/if}
 
   <!-- The field: the stage's room, which scrolls when the page is taller
-       or wider. The page's gutter holds the room a change ring takes
-       outside an element's box (5px, under --space-6), so a ring on an
-       element at the drawing's edge stands whole. -->
+       or wider. No well and no edge of its own: the component stands on
+       the page it lives on, which fills the field (a hairline, a recess
+       and then the page round every component was two frames nested). Its
+       one bound is where that page's surface meets the surface's, seen
+       when the scheme picked is the other one, at the panels' corner. The
+       page's gutter holds the room a change ring takes outside an
+       element's box (5px, under --space-6), so a ring on an element at the
+       drawing's edge stands whole. -->
   <div
     data-slot="stage-scroll"
-    class="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain rounded-lg border border-border-hairline bg-surface-recess-deep"
+    class="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain rounded-lg"
     {@attach frameSize((node: HTMLElement) => {
       const style = getComputedStyle(node);
       room =
@@ -402,7 +456,7 @@
       data-slot="stage-page"
       data-scheme={scheme}
       class={[
-        "w-max bg-surface-page p-space-6 text-ink-strong",
+        "min-h-full w-max min-w-full bg-surface-page p-space-6 text-ink-strong",
         scheme === "dark" ? "scheme-dark" : "scheme-light",
         stale && "opacity-(--account-stale-opacity)",
       ]}
