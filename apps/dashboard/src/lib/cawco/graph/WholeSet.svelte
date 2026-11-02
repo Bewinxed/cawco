@@ -15,10 +15,14 @@
    *
    * Three surfaces apart, so each reads (DESIGN.md, The Frame Recesses
    * Rule): the map on the room's raised surface, each group recessed on
-   * it, the cards raised on the group. The map is framed by WholeFit: never
-   * under the zoom where its 12px words stand at 12px, fitted when the
-   * whole map fits its room there, else from its top-leading corner with
-   * the kept card in view; no zoom figure. The kept card wears the list's
+   * it, the cards raised on the group. The map is framed as the house's
+   * task canvas frames its graph (TaskCanvasFit), with the spec's floor:
+   * never under the zoom where its 12px words stand at 12px (spec, The
+   * whole set: "it never scales type under 12px"); fitted whole when it
+   * fits there, else at that zoom from its start, the rest a pan away
+   * ("where the whole set does not fit at its readable size, it
+   * scrolls"). The Fit tool frames the same way, so a view he has not
+   * moved is already its frame. No zoom figure. The kept card wears the list's
    * on-stage face. One press keeps a state, or, while comparing, compares
    * with it; resting on a card changes nothing.
    *
@@ -39,16 +43,15 @@
   } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import TaskCanvasFit from "#lib/cawco/views/canvas/TaskCanvasFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
-
   import { theme } from "#lib/theme.svelte.js";
   import { layoutWhole } from "./layout";
   import MachineNode from "./MachineNode.svelte";
   import { holesOf, type Review } from "./model";
   import RouteEdge, { type RouteData } from "./RouteEdge.svelte";
   import StateNode, { type StateCard } from "./StateNode.svelte";
-  import WholeFit from "./WholeFit.svelte";
   import WholeMeasure from "./WholeMeasure.svelte";
 
   let {
@@ -81,7 +84,6 @@
     pad: numberOf("--space-3"),
     label: numberOf("--c-graph-label"),
     labelLine: numberOf("--space-5"),
-    edge: numberOf("--space-6"),
   });
   /** A hidden line in the label's own type, at its widest: what an act's label takes. */
   let ruler = $state<HTMLElement>();
@@ -213,14 +215,10 @@
 
   /** The view is the person's once he pans or zooms; the tools' frame gives it back. */
   let held = $state(false);
-  let fit = $state<ReturnType<typeof WholeFit>>();
+  let fit = $state<ReturnType<typeof TaskCanvasFit>>();
+  /** Every card is drawn at its measured height and laid out by it: the first frame waits for this. */
+  const measured = $derived(review.order.every((id) => (heights[id] ?? 0) > 0));
   let zoom = $state(1);
-  /** Where every card stands: a new placement refits in place while the view is a fit. */
-  const placement = $derived(
-    Object.values(layout.states)
-      .map((box) => `${box.x},${box.y}`)
-      .join(";")
-  );
 </script>
 
 <div
@@ -257,14 +255,13 @@
         zoom = value;
       }}
     />
-    <WholeFit
+    <TaskCanvasFit
       bind:this={fit}
+      direction="TB"
+      floor={READABLE}
       {held}
-      group={`machine:${review.states[kept]?.machine ?? ""}`}
-      {kept}
-      layout={placement}
-      pad={lengths.edge}
-      zoom={READABLE}
+      nodeCount={nodes.length}
+      ready={measured}
     />
     <WholeMeasure
       {heights}
