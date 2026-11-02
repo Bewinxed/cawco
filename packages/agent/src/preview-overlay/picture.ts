@@ -1123,6 +1123,15 @@ export async function cropPicture(
   const context = first
     ? await createContext(first.el, {
         scale,
+        // A part's root stands at its box's corner, with no margin: the
+        // library deletes the root's copied margins rather than zeroing them
+        // (copy-css-styles.ts in 4.7.0, its newest), so a root `<p>` or `<h3>`
+        // took its tag's default 1em again and its line drew 1em low, cut to
+        // the tops of its letters by the part's own height (pins 20 and 21
+        // on design-graph). The library's `style` option is set on each
+        // part's root after its copy (its `applyCssStyleWithOptions`), the
+        // workaround github.com/qq15725/modern-screenshot/issues/174 names.
+        style: { margin: "0" },
         // Each node's children are copied before it: its own copy stands as
         // made while theirs are slimmed, and the part's root is slimmed last.
         onCloneEachNode: (node) => {
