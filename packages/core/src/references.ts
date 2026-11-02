@@ -211,6 +211,4 @@ export function parseReference(
  * never its id.
  */
 export const REFERENCE_GUIDANCE =
-  "Name every session or delegate you mention by its link, `[its title](cawco:session/cockpit#5a167bde)`, written with the handle CawCo's tools name it by, or its id. " +
-  "Name every pin, spot an update changed, decision card, artifact, task or to-do, plan or step, routine, project and machine by the link CawCo's tool results and deliveries give you for it (`[When](cawco:pin/<artifact>/12)`, `[Fix the tray](cawco:task/<project>/tsk-12)`); they name each thing this way. " +
-  'The link is the one way to name it to the person, who cannot read an id: its label is the thing\'s title as the tool result gave it, and the id stays inside the link\'s destination, out of your words and the label ("tsk-12", "td-3", "pin 12"). CawCo draws each link as a chip that opens the thing where it lives.';
+  "Name each session, task, card, pin or other CawCo thing by the link a tool result gave it, like `[Fix the tray](cawco:session/cockpit#5a167bde)`: the label is its title, the id stays in the destination.";

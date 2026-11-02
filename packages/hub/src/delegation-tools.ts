@@ -475,10 +475,8 @@ export function handoffTools(deps: HandoffDeps) {
         "Use it for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs. " +
         "Do yourself: a single command whose exact output you need, git status/log/diff, grep, reading a few files, port checks, a log tail, a restart, edits to files you are changing, and what the user wants to watch.\n\n" +
         "Unless forked it cannot see this conversation: `prompt` stands alone with intent, constraints, acceptance criteria and the commands whose output proves the work. Ask for evidence and conclusions.\n\n" +
-        "Prefer `type` (list_delegate_types) over harness and model. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
-        "Its commands run in a boundary: they write only its clone, its scratch dir and the workspaces' cache; no credential store, SSH key, key agent or service manager; another machine only through a delegate there. " +
-        "When the machine itself is the subject (an audit, containment, ops on its services, containers or network), set `host`: the delegate runs on that machine with no clone and no boundary, as a session started there does, lands nothing, and still reports back. " +
-        "To follow up on the same work, handoff to the delegate or delegate with its `workspace`; to finish an ended delegate's commits in a fresh session, delegate with `from`. New or clean-slate work leaves both out. Prefer a fresh delegate unless the old session is warm and holds context the task needs.",
+        "Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
+        "When the machine itself is the subject (an audit, containment, ops on its services, containers or network), set `host`: the delegate runs on that machine with no clone and no boundary, as a session started there does, lands nothing, and still reports back.",
       {
         prompt: z
           .string()
@@ -1203,8 +1201,8 @@ const ALWAYS_LOAD: ReadonlySet<string> = new Set([
  * an orchestrator and a project's Caw (roles.ts `memoryRoleOf`): the owner
  * saw the orchestrator grep transcripts and query the hub's database for
  * what a session said, with the dashboard's own search a tool away
- * (2026-10-19). Every other session finds it by the deferred groups' first
- * line ({@link DEFERRED_GROUPS}).
+ * (2026-10-19). Every other session loads it through ToolSearch like any
+ * deferred tool.
  */
 export const loadsUpfront = (
   name: string,
@@ -1228,49 +1226,11 @@ const CORE_TASK_TOOLS: ReadonlySet<string> = new Set([
 ] satisfies readonly TaskTool[]);
 
 /**
- * The deferred groups by prefix, as the server's instructions name them:
- * "Use consistent namespacing … so one search matches the whole group" and
- * "Add a system prompt section describing available tool categories"
- * (tool-search-tool docs).
- */
-const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
-  {
-    prefixes: ["find"],
-    what: "anything said or made, as the dashboard's Find finds it; the first place to look for what was said or decided",
-  },
-  { prefixes: ["admin_"], what: "fleet configuration" },
-  { prefixes: ["task_"], what: "project tasks" },
-  {
-    prefixes: ["todo_write", "open_items"],
-    what: "your plan, your task's to-dos, your open items",
-  },
-  {
-    prefixes: [
-      "routine_",
-      "event_route_",
-      "connector_poll_",
-      "relay_",
-      "action_",
-    ],
-    what: "project automation",
-  },
-  {
-    prefixes: ["artifact_", "comment_", "design_map", "settle"],
-    what: "what you open in the person's panel for them to pick, judge, try or draw on (show skill first), their pins on it; design_map the component library; settle a card Who decides gives you",
-  },
-  { prefixes: ["memory_"], what: "project memory" },
-  { prefixes: ["view_"], what: "the project's views" },
-  { prefixes: ["folder_"], what: "the project's folder on the hub" },
-  { prefixes: ["conn__"], what: "connections granted to this session" },
-];
-
-/**
  * What a session can be listed over its life: its role and whether it may
  * delegate are fixed at its start, its project is not (`project_from_session`
  * makes one). `names` is the union across both; `inProject` and
- * `outsideProject` the ones listed only in a project or only outside one.
- * Claude Code reads a server's instructions once and its tool list again on
- * every `list_changed`, so the instructions name both sides.
+ * `outsideProject` the ones listed only in a project or only outside one;
+ * the instructions read only `names` and `upfront`.
  */
 export interface Listable {
   inProject: ReadonlySet<string>;
@@ -1280,52 +1240,17 @@ export interface Listable {
   upfront: ReadonlySet<string>;
 }
 
-/** Where a name, or a group of them, is listed, when only on one side. */
-const sideOf = (members: readonly string[], listable: Listable): string => {
-  if (members.every((name) => listable.inProject.has(name))) {
-    return " (in a project)";
-  }
-  return members.every((name) => listable.outsideProject.has(name))
-    ? " (outside a project)"
-    : "";
-};
-
 /**
- * One paragraph: which tools load upfront on Claude, and the rest by group
- * prefix, each group only when the session can have one of its tools, then
- * the ungrouped ones by name; a group or name listed on one side of a
- * project only says which.
+ * One sentence: which tools load upfront on Claude. The harness lists every
+ * deferred tool's name itself and ToolSearch says how to load one, so the
+ * line names only what it cannot: the upfront set and the server's prefix.
  */
-const loadingLine = (listable: Listable): string => {
-  const { names } = listable;
-  const upfront = names.filter((name) => listable.upfront.has(name));
-  const deferred = names.filter((name) => !listable.upfront.has(name));
-  const grouped = new Set<string>();
-  const groups = DEFERRED_GROUPS.flatMap(({ prefixes, what }) => {
-    const members = deferred.filter((name) =>
-      prefixes.some((prefix) => name.startsWith(prefix))
-    );
-    for (const name of members) {
-      grouped.add(name);
-    }
-    const present = prefixes.filter((prefix) =>
-      members.some((name) => name.startsWith(prefix))
-    );
-    return present.length > 0
-      ? [
-          `${present.map((prefix) => (prefix.endsWith("_") ? `${prefix}*` : prefix)).join(", ")}: ${what}${sideOf(members, listable)}`,
-        ]
-      : [];
-  });
-  const rest = deferred
-    .filter((name) => !grouped.has(name))
-    .map((name) => `${name}${sideOf([name], listable)}`);
-  return `On Claude, ${upfront.join(", ")} load upfront; every other CawCo tool is deferred: load it with ToolSearch by its name (select:mcp__cawco__<name>) or its group's prefix before saying it is unavailable. ${[...groups, ...(rest.length > 0 ? [`also ${rest.join(", ")}`] : [])].join("; ")}.`;
-};
+const loadingLine = (listable: Listable): string =>
+  `On Claude, ${listable.names.filter((name) => listable.upfront.has(name)).join(", ")} load upfront; every other one loads through ToolSearch by name or prefix.`;
 
-/** How CawCo's tools answer (mcp-tool.ts), said once for every tool's `response_format`. */
+/** How `response_format` answers (mcp-tool.ts), said once for every tool. */
 const ANSWERS =
-  "CawCo's tools answer in words, each thing by the name or handle they take back. response_format: \"detailed\" answers the hub's whole record as JSON instead, every id and time: ask for it only when the words leave out what you need.";
+  'response_format: "detailed" returns the hub\'s whole record as JSON, for when the words leave out what you need.';
 
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
@@ -1338,11 +1263,11 @@ export function handoffInstructions(
   // dashboard draws the link as that session's chip.
   // Who decides' kinds are the fleet's rows: the live list, read as the
   // session starts, so a kind added reaches the next session.
-  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${DECIDES_RULE} ${kindsLine(kinds)}\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
+  const naming = `${DECIDES_RULE} ${kindsLine(kinds)}\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")
-    ? "\n\ngenerate_image makes images on any model, through the machine's ChatGPT login, so this session makes its own."
+    ? "\n\ngenerate_image makes images on any model through the machine's ChatGPT login: this session makes its own."
     : "";
   const loading = `\n\n${loadingLine(listable)}`;
   const mayStart = sessionMayStart(deps);
@@ -1351,17 +1276,19 @@ export function handoffInstructions(
     // waits on their reports like any parent.
     const starts =
       mayStart.length > 0
-        ? ` It may delegate to these types alone: ${mayStart.join(", ")}. A delegate's report wakes this session, so end your turn to wait for one.`
+        ? ` It may delegate only to ${mayStart.join(", ")}, whose reports wake it: end the turn to wait for one.`
         : "";
-    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done.${starts} Use wait_item for a bounded wait on a command you started. Use handoff to reach your parent or a session that already owns related work.\n\n${naming}${loading}${images}`;
+    return `This session is a leaf delegate: do the assigned work yourself and call finish_item when it is done.${starts}\n\n${naming}${loading}${images}`;
   }
   // The orchestrator's seat, the same on every model: an Opus orchestrator
   // made 387 shell and about 50 browser calls in one day (killing dev
   // servers, probing sockets, reading journals) where a brief belonged.
+  // Claude Code cuts a server's instructions at 4,096 characters
+  // (code.claude.com/docs/en/mcp, "For MCP server authors"), so what the
+  // seat must read comes first and the block stays well inside the cap.
   return [
-    "This session orchestrates: it plans, briefs, reads reports and decides. It reads what the next decision needs (git status, log or diff, a grep, a file, a log tail, a port check, a curl for a status) and takes a delegate's report as the evidence for its work. Substantial execution goes to a delegate: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. Finished work goes to the person as it is; a review runs when they ask for one. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
+    "This session orchestrates: it plans, briefs, reads reports and decides, and takes a delegate's report as the evidence for its work. Substantial execution goes to a delegate: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. Give each delegate a concrete deliverable and bounded file ownership; reports arrive by themselves, so independent parent work keeps moving. Finished work goes to the person as it is; a review runs when they ask for one. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
+    "When delegation fails or no type fits, report the blocker and keep bulk exploration for a delegate.",
     `${naming}${loading}${images}`,
-    "Give each delegate a concrete deliverable and bounded file ownership. Reports arrive by themselves, so independent parent work keeps moving. Each delegate runs one work item in a workspace: handoff guides it while that item runs and follows up on the same work after it reports, on its cached transcript; new or clean-slate work goes to a fresh delegate. Use start_session only for a separate persistent session.",
-    "When delegation fails or no type fits, report the blocker; bulk exploration stays a delegate's.",
   ].join("\n\n");
 }
