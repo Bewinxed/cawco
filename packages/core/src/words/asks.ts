@@ -94,6 +94,15 @@ export const askWords = {
     `${server}'s tools are denied to this session by its delegate type ${type}. Tell the person, or ask your parent for a delegate whose type allows them.`,
   connectDeniedByFleet: (server: string) =>
     `${server}'s tools are denied to every session by the fleet's denied tools. Tell the person; the fleet's list is theirs to change.`,
+  /**
+   * A connect ask whose sign-in landed, answered from the asking session's
+   * own take of it (hub connect-asks.ts): its tools did not reach the
+   * session, in its harness's words, or its machine did not say in time.
+   */
+  connectNotTaken: (server: string, said: string) =>
+    `Signed in to ${server}, but its tools did not reach this session: ${said}. A new session gets them.`,
+  connectTakeUnanswered: (server: string) =>
+    `Signed in to ${server}, but this session's machine did not say whether its tools arrived. Search for them before calling one.`,
   /** The record's tail, the server's name, opens the MCP page. */
   recordOnMcpPage: (server: string) => `${server} on the MCP page`,
   /** A question's own answer field. */

@@ -1045,6 +1045,15 @@ public enum Words {
             "\(server)'s tools are denied to every session by the fleet's denied tools. Tell the person; the fleet's list is theirs to change."
         }
 
+        /// A connect ask whose sign-in landed, answered from the asking session's own take of it (hub connect-asks.ts): its tools did not reach the session, in its harness's words, or its machine did not say in time.
+        public static func connectNotTaken(server: String, said: String) -> String {
+            "Signed in to \(server), but its tools did not reach this session: \(said). A new session gets them."
+        }
+
+        public static func connectTakeUnanswered(server: String) -> String {
+            "Signed in to \(server), but this session's machine did not say whether its tools arrived. Search for them before calling one."
+        }
+
         /// The record's tail, the server's name, opens the MCP page.
         public static func recordOnMcpPage(server: String) -> String {
             "\(server) on the MCP page"

@@ -10,10 +10,13 @@
  * Connect is the hub's own sign-in for that server (`POST
  * /api/fleet/mcp/:name/sign-in`, with the ask's access): the hub keeps the
  * credential, sealed, and every session with the server gets its tools.
- * The sign-in landing ({@link ConnectAsks.signedIn}) answers every call
- * waiting on that server with as whom and with what access; Not now
- * answers it as declined. A server the hub is signed in to
- * already is answered at once. A session has one connect ask open at a
+ * The sign-in landing ({@link ConnectAsks.signedIn}) takes the card down;
+ * the call is answered once the asking session has taken the sign-in
+ * ({@link ConnectAsks.taking}: its machine's fleet sync wrote it, and its
+ * harness redialled the server), with as whom and with what access when
+ * the server's tools are in its tool list, and with its harness's words
+ * when they are not. Not now answers it as declined. A server the hub is
+ * signed in to already is answered at once. A session has one connect ask open at a
  * time; one whose session ends before it is answered is withdrawn, and the
  * call refused. A waiting call ends with the hub that held it.
  *
@@ -27,6 +30,8 @@ import type {
   ConnectAnswer,
   ConnectAskFrame,
   Envelope,
+  FleetMcpChange,
+  FleetMcpTaken,
   InstanceRow,
   PermissionResult,
 } from "@cawco/core";
@@ -51,7 +56,6 @@ const DESCRIPTION =
   "Ask the person to sign in to one of the fleet's MCP servers that needs a sign-in, when you need its tools and they are missing or refused for want of one. " +
   "It waits for them; once they connect, its tools reach this session. No credential reaches you.";
 
-/** How connect asks reach the rest of the hub. */
 /** What a session is denied, by where each denial comes from. */
 export interface SessionDenials {
   /** The fleet baseline, which every session is denied. */
@@ -60,6 +64,11 @@ export interface SessionDenials {
   readonly type?: { name: string; denyTools: readonly string[] };
 }
 
+/** What a session's take of fleet MCP changes came to: its harness's answer, or none in time. */
+export type FleetMcpTook =
+  { kind: "taken"; servers: readonly FleetMcpTaken[] } | { kind: "unanswered" };
+
+/** How connect asks reach the rest of the hub. */
 export interface ConnectAsksDeps {
   /** What `actor`'s session is denied, as its spawn resolved it. */
   readonly denials: (actor: InstanceRow) => SessionDenials;
@@ -78,6 +87,8 @@ interface Waiter {
   reject: (error: Error) => void;
   resolve: (answer: ConnectAnswer) => void;
   server: string;
+  /** The hub signed in to the server: the card is down, and the call waits for the session's take. */
+  signedIn: boolean;
 }
 
 /**
@@ -124,6 +135,37 @@ const refuseDenied = (server: string, denials: SessionDenials): void => {
   }
 };
 
+/**
+ * A signed-in ask's call answered by its session's take: connected when the
+ * server's tools are in the session's tool list, else refused in its
+ * harness's words, or because its machine did not say.
+ */
+const answerFromTake = (
+  waiter: Waiter,
+  took: FleetMcpTook,
+  facts: ConnectAsksDeps["facts"]
+): void => {
+  const { server } = waiter;
+  const taken =
+    took.kind === "taken"
+      ? took.servers.find((one) => one.name === server)
+      : undefined;
+  if (!taken) {
+    waiter.reject(new Error(askWords.connectTakeUnanswered(server)));
+  } else if (taken.holds) {
+    const now = facts(server);
+    waiter.resolve({
+      outcome: "connected",
+      server,
+      as: now.as,
+      access: now.held,
+    });
+  } else {
+    const said = `${taken.status}${taken.error ? `, ${taken.error}` : ""}`;
+    waiter.reject(new Error(askWords.connectNotTaken(server, said)));
+  }
+};
+
 export const createConnectAsks = (deps: ConnectAsksDeps) => {
   /** Calls waiting on the person, by the ask's request id. */
   const waiting = new Map<string, Waiter>();
@@ -165,6 +207,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
           resolve,
           reject,
           server,
+          signedIn: false,
         });
       });
       deps.park(
@@ -197,7 +240,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
      */
     answer(requestId: string, result: PermissionResult): Promise<void> {
       const waiter = waiting.get(requestId);
-      if (!waiter) {
+      if (!waiter || waiter.signedIn) {
         return Promise.reject(new Error("That request is no longer pending."));
       }
       if (result.behavior === "allow") {
@@ -217,25 +260,49 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
       return Promise.resolve();
     },
 
-    /** The hub signed in to `server`: every call waiting on it is answered with as whom and the access. */
+    /**
+     * The hub signed in to `server`: every card asking for it comes down.
+     * Each call waits on, for its session to take the sign-in
+     * ({@link taking}): the session's tools are not the hub's to answer for.
+     */
     signedIn(server: string): void {
+      for (const [requestId, waiter] of waiting) {
+        if (waiter.server === server && !waiter.signedIn) {
+          waiter.signedIn = true;
+          deps.settle(requestId);
+        }
+      }
+    },
+
+    /**
+     * `instanceId`'s session is sent `changes` to take (hub server.ts
+     * `sendMcpChanges`, after its machine's fleet sync wrote them): the
+     * answer to each of its calls whose sign-in landed before, on a server
+     * the changes name, is what that take comes to. Called as the take is
+     * sent, so a take sent before the sign-in answers nothing.
+     */
+    taking(
+      instanceId: string,
+      changes: readonly FleetMcpChange[]
+    ): ((took: FleetMcpTook) => void) | undefined {
+      const named = new Set(changes.map(({ name }) => name));
       const mine = [...waiting].filter(
-        ([, waiter]) => waiter.server === server
+        ([, waiter]) =>
+          waiter.instanceId === instanceId &&
+          waiter.signedIn &&
+          named.has(waiter.server)
       );
       if (mine.length === 0) {
         return;
       }
-      const facts = deps.facts(server);
-      for (const [requestId, waiter] of mine) {
-        waiting.delete(requestId);
-        deps.settle(requestId);
-        waiter.resolve({
-          outcome: "connected",
-          server,
-          as: facts.as,
-          access: facts.held,
-        });
-      }
+      return (took) => {
+        for (const [requestId, waiter] of mine) {
+          if (waiting.get(requestId) === waiter) {
+            waiting.delete(requestId);
+            answerFromTake(waiter, took, deps.facts);
+          }
+        }
+      };
     },
 
     /** An ask left the ledger unanswered (its session ended): the call is refused. */

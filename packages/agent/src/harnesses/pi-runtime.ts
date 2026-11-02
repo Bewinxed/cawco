@@ -2,6 +2,7 @@
 import { readFile } from "node:fs/promises";
 import type {
   FleetMcpChange,
+  FleetMcpTakeAnswer,
   HookEvent,
   ModelTurnUsage,
   SentMessage,
@@ -478,7 +479,7 @@ class FleetMcp {
   async take(
     changes: readonly FleetMcpChange[],
     door: BrowserDoor | undefined
-  ): Promise<{ servers: { name: string; kind: string; status: string }[] }> {
+  ): Promise<FleetMcpTakeAnswer> {
     // A sign-in or sign-out at the hub, and a server switched back on, are
     // dialled anew: pi holds a server switched off on its config as it was,
     // and the hub folds a sign-in that lands with the switch into
@@ -497,6 +498,9 @@ class FleetMcp {
           done[name] ??
           (skipped[name] ? `not taken: ${skipped[name]}` : undefined) ??
           (this.#held.has(name) ? "kept" : "not taken"),
+        // Registered with pi: its `tool_search` and codemode wait for a
+        // server still connecting (pi's mcp extension, index.ts head).
+        holds: this.#held.has(name),
       })),
     };
   }
@@ -1279,6 +1283,7 @@ class PiSession implements HarnessSession {
                 name,
                 kind,
                 status: "not taken: the session is fenced",
+                holds: false,
               })),
             };
       }

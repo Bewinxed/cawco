@@ -29,6 +29,7 @@ import type {
   FleetHeld,
   FleetHook,
   FleetMcpConfig,
+  FleetMcpTakeAnswer,
   FleetPlugin,
   FleetReportFrame,
   FleetSkillMeta,
@@ -1125,6 +1126,14 @@ const GH_ASK_MS = 20_000;
 const FIND_TURNS_MS = 5000;
 /** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
 const ABANDON_MS = 5000;
+/**
+ * How long a session is given to take fleet MCP changes and say what each
+ * came to (core `CONTROL_MCP_FLEET_CHANGED`): Claude Code's take waits on
+ * the takes before it, connects the servers it lacks and redials the rest,
+ * each a connect of up to a minute (agent mcp-status.ts `MCP_CONNECT_MS`).
+ * Past it, a connect ask waiting on the take says its machine did not say.
+ */
+const FLEET_MCP_TAKE_MS = 150_000;
 
 /**
  * Who asks `GET /api/find`, as the hub's log names a slow machine's search
@@ -21034,12 +21043,13 @@ export const createServer = (
   /**
    * The fleet MCP changes a landed sync carried, to every live session on
    * that machine: each takes them in place, conversation and all, and its
-   * harness says on the machine what it did with each (or why it took none).
-   * Fire-and-forget like {@link refreshSessions}.
+   * harness says on the machine what it did with each. What a session's
+   * take came to answers its connect asks waiting on a sign-in among them
+   * (connect-asks.ts `taking`): their calls end only once the session holds
+   * the server's tools, or says why not.
    */
   const sendMcpChanges = (
     machineId: string,
-    agent: HubSocket,
     riding: RidingChanges | undefined
   ): void => {
     const changes = riding ? mcpChanges.landed(machineId, riding) : [];
@@ -21051,19 +21061,25 @@ export const createServer = (
       `[fleet-mcp] ${machineName(machineId)}: ${changes.map(({ name, kind }) => `${name} ${kind}`).join(", ")} → ${live.length} live session${live.length === 1 ? "" : "s"}`
     );
     for (const row of live) {
-      const requestId = crypto.randomUUID();
-      sendFrame(agent, {
-        verb: "control",
-        machineId,
-        instanceId: row.id,
-        requestId,
-        payload: {
-          instanceId: row.id,
-          requestId,
-          method: CONTROL_MCP_FLEET_CHANGED,
-          args: [changes],
-        },
-      } satisfies Envelope<ControlPayload>);
+      const took = connectAsks.taking(row.id, changes);
+      detach(
+        callAgent(
+          machineId,
+          CONTROL_MCP_FLEET_CHANGED,
+          [changes],
+          FLEET_MCP_TAKE_MS,
+          undefined,
+          row.id
+        ).then((answer) => {
+          const servers =
+            answer.kind === "answered" && answer.value.ok
+              ? (answer.value.result as Partial<FleetMcpTakeAnswer> | undefined)
+                  ?.servers
+              : undefined;
+          took?.(servers ? { kind: "taken", servers } : { kind: "unanswered" });
+        }),
+        `fleet MCP take in ${row.id}`
+      );
     }
   };
 
@@ -22145,7 +22161,7 @@ export const createServer = (
       ...(skillsChanged && !pluginsChanged ? [CONTROL_RELOAD_SKILLS] : []),
       ...(hooksChanged ? ["reinitialize"] : []),
     ]);
-    sendMcpChanges(machineId, agent, riding);
+    sendMcpChanges(machineId, riding);
   };
 
   /** Why a fleet row cannot be bound to `projectId`, or nothing when it can (null and left out always can). */

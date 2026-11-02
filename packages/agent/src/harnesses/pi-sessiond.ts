@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
   FleetMcpChange,
+  FleetMcpTakeAnswer,
   NeutralMessage,
   SentMessage,
   SpawnPayload,
@@ -525,9 +526,9 @@ class PiRemoteSession implements HarnessSession {
       type: "control",
       method: CONTROL_MCP_FLEET_CHANGED,
       args: [changes, door],
-    })) as { servers?: { kind: string; name: string; status: string }[] };
+    })) as FleetMcpTakeAnswer;
     console.info(
-      `[pi] ${this.#ctx.instanceId}: fleet MCP ${(taken.servers ?? []).map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
+      `[pi] ${this.#ctx.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
     );
     return taken;
   }

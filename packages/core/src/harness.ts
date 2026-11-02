@@ -1913,10 +1913,32 @@ export interface FleetMcpChange {
  * Fleet MCP servers changed at the hub (arg: `FleetMcpChange[]`), sent to
  * every live session on a machine once that machine's fleet sync has written
  * the change to its harness files. The session takes it in place: its
- * conversation stays and no new session starts. Answers what each named
- * server reads in the session afterwards, or why the harness took none.
+ * conversation stays and no new session starts. Answers
+ * {@link FleetMcpTakeAnswer}: what each named server reads in the session
+ * afterwards. A connect ask's call is answered from it (hub connect-asks.ts).
  */
 export const CONTROL_MCP_FLEET_CHANGED = "fleetMcpChanged";
+
+/** What one fleet MCP change came to in one session. */
+export interface FleetMcpTaken {
+  error?: string;
+  /**
+   * The server's tools are in the session's tool list now, or connecting
+   * where the harness's tool search waits for them: Claude Code's ToolSearch
+   * and pi's `tool_search` and codemode wait on a server still connecting.
+   */
+  holds: boolean;
+  kind: FleetMcpChangeKind;
+  name: string;
+  /** The harness's word for it afterwards, `gone`, or why it was kept as it was. */
+  status: string;
+  tools?: number;
+}
+
+/** {@link CONTROL_MCP_FLEET_CHANGED}'s answer, one entry per change. */
+export interface FleetMcpTakeAnswer {
+  servers: FleetMcpTaken[];
+}
 /**
  * The machine's own ask of one live session, at its attach and after each
  * fleet sync: every fleet server the hub proxies that the session holds

@@ -27,6 +27,7 @@ import { join } from "node:path";
 import type {
   EffortLevel,
   FleetMcpChange,
+  FleetMcpTakeAnswer,
   MayStart,
   McpServerStatus,
   ModelInfo,
@@ -3275,16 +3276,35 @@ export class OpencodeSession implements HarnessSession {
           : this.#client.mcp.disconnect(target));
         return;
       }
-      case CONTROL_MCP_FLEET_CHANGED:
+      case CONTROL_MCP_FLEET_CHANGED: {
         // Already taken by the fleet sync that came before this: the fleet's
         // servers ride the launch config, so a change starts a new server and
         // each session moves to it once idle; a fleet server OpenCode holds
         // failed at a live session's directory is started again there
-        // (opencode.ts `#startFailed`).
+        // (opencode.ts `#startFailed`). What each reads at this session's
+        // directory is the answer: OpenCode lists a connected server's
+        // tools at the session's next step.
+        const changes = args[0] as FleetMcpChange[];
+        const listed = await this.#client.mcp.list(at(this.#directory));
+        const taken: FleetMcpTakeAnswer = {
+          servers: changes.map(({ name, kind }) => {
+            const status = listed.data.find(
+              (server) => server.name === name
+            )?.status;
+            return {
+              name,
+              kind,
+              status: status?.status ?? "gone",
+              holds: status?.status === "connected",
+              ...(status && "error" in status ? { error: status.error } : {}),
+            };
+          }),
+        };
         console.info(
-          `[opencode] ${this.instanceId}: fleet MCP ${(args[0] as FleetMcpChange[]).map(({ name, kind }) => `${name} ${kind}`).join(", ")}: taken by the fleet sync`
+          `[opencode] ${this.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
         );
-        return { taken: "fleet sync" };
+        return taken;
+      }
       default:
         // An unsupported control verb is a silent no-op, never a user-facing
         // failure: the hub may send a verb this harness has none for.

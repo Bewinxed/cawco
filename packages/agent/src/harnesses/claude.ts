@@ -50,6 +50,8 @@ import type {
   EffortLevel,
   EndedTask,
   FleetMcpChange,
+  FleetMcpTakeAnswer,
+  FleetMcpTaken,
   MachineHarnessReport,
   ModelInfo,
   MoveEnded,
@@ -1611,17 +1613,7 @@ const dialed = (config: unknown): string => {
   );
 };
 
-/** What one fleet MCP change came to in a session. */
-interface FleetMcpOutcome {
-  error?: string;
-  kind: FleetMcpChange["kind"];
-  name: string;
-  /** The CLI's word for it afterwards, `gone`, or why it was kept as it was. */
-  status: string;
-  tools?: number;
-}
-
-const outcomeLine = ({ name, kind, status, tools, error }: FleetMcpOutcome) =>
+const outcomeLine = ({ name, kind, status, tools, error }: FleetMcpTaken) =>
   `${name} ${kind}: ${status}${tools === undefined ? "" : ` (${tools} tools)`}${error ? ` — ${error}` : ""}`;
 
 /**
@@ -3607,9 +3599,7 @@ class ClaudeSession implements HarnessSession {
    * A server the person turned off in this session stays off. Answers what
    * each named server reads afterwards, and says it on the machine's log.
    */
-  async #takeFleetMcp(
-    changes: FleetMcpChange[]
-  ): Promise<{ servers: FleetMcpOutcome[] }> {
+  async #takeFleetMcp(changes: FleetMcpChange[]): Promise<FleetMcpTakeAnswer> {
     if (this.#fence) {
       console.info(
         `[claude] ${this.instanceId}: fleet MCP ${changes.map(({ name, kind }) => `${name} ${kind}`).join(", ")}: not taken, as a fenced session runs CawCo's MCP server alone`
@@ -3619,6 +3609,7 @@ class ClaudeSession implements HarnessSession {
           name,
           kind,
           status: "fenced",
+          holds: false,
         })),
       };
     }
@@ -3674,7 +3665,7 @@ class ClaudeSession implements HarnessSession {
       ])
     );
     const servers = await Promise.all(
-      changes.map(async ({ name, kind }): Promise<FleetMcpOutcome> => {
+      changes.map(async ({ name, kind }): Promise<FleetMcpTaken> => {
         const now = after.get(name);
         const why = plan.kept.get(name);
         // The CLI keeps a server whose `tools/list` failed after its
@@ -3698,6 +3689,9 @@ class ClaudeSession implements HarnessSession {
           name,
           kind,
           status: why ? `kept: ${why}` : (now?.status ?? "gone"),
+          // ToolSearch reads the session's tool pool when it runs (CLI
+          // 2.1.311 `refreshTools`), so a server connected here is found.
+          holds: now?.status === "connected" && !error,
           ...(now?.tools ? { tools: now.tools.length } : {}),
           ...(error ? { error } : {}),
         };
@@ -3774,7 +3768,7 @@ class ClaudeSession implements HarnessSession {
    * one still connecting, is left as it is; so is one whose proxy list could
    * not be read, or lists nothing.
    */
-  async #healFleetMcp(): Promise<{ healed: FleetMcpOutcome[] }> {
+  async #healFleetMcp(): Promise<{ healed: FleetMcpTaken[] }> {
     if (this.#fence) {
       return { healed: [] };
     }
