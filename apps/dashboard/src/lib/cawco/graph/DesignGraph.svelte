@@ -59,6 +59,7 @@
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
@@ -548,10 +549,43 @@
   };
   let menuTrigger = $state<HTMLElement | null>(null);
   let viewTrigger = $state<HTMLElement | null>(null);
-  /** Whether the stage stands at its component's own width, narrower than its room. */
-  let stageFits = $state(false);
   /** The room stands beside the stage on a desk. */
   const beside = $derived(desk && roomOpen);
+
+  /**
+   * The stage and the room beside it are one resizable split (the kit's
+   * Resizable, paneforge, on the app's own split edge, as side/Split.svelte
+   * draws it): the edge between them drags, the stage never under
+   * `c-graph-stage-min` and the room never under `c-graph-room-w`. Its
+   * panes are sized in shares of the split's width, so each least width is
+   * read as a share of the width it stands in now.
+   */
+  let splitWidth = $state(0);
+  /** The room's width the person dragged the edge to, px; null until he has. */
+  let roomDragged: number | null = null;
+  const splitShare = (px: number) =>
+    splitWidth > 0 ? Math.min(100, (px / splitWidth) * 100) : 0;
+  const stageLeast = $derived(splitShare(numberOf("--c-graph-stage-min")));
+  const roomLeast = $derived(splitShare(numberOf("--c-graph-room-w")));
+  /**
+   * The room's share: the width he dragged it to, else what the stage at
+   * its component's widest leaves, each held between the least widths.
+   * paneforge lays the split out again from it whenever a least width
+   * changes with the split's width; the dragged width is read untracked, so
+   * a drag never lays it out anew.
+   */
+  const roomShare = $derived(
+    Math.min(
+      100 - stageLeast,
+      Math.max(
+        roomLeast,
+        splitShare(
+          untrack(() => roomDragged) ??
+            splitWidth - (width ?? stageWidth) - numberOf("--space-5")
+        )
+      )
+    )
+  );
 </script>
 
 {#snippet statesFace(stepperHere: boolean)}
@@ -890,24 +924,21 @@
     <div
       data-slot="graph-page"
       class={[
-        "flex min-h-0 min-w-0 flex-1 gap-space-5 overflow-clip ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
+        "flex min-h-0 min-w-0 flex-1 overflow-clip ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
         !desk && roomOpen ? "pb-(--drawer-cover)" : "pb-space-6",
       ]}
-      style:--stage-w="{width ?? stageWidth}px"
       style:--drawer-cover="{cover}px"
+      {@attach frameSize((node: HTMLElement) => {
+        const style = getComputedStyle(node);
+        splitWidth =
+          node.clientWidth -
+          Number.parseFloat(style.paddingInlineStart) -
+          Number.parseFloat(style.paddingInlineEnd);
+      })}
     >
-      <div
-        class={[
-          "flex min-h-0 min-w-0 flex-col",
-          stageFits && "flex-initial",
-          !stageFits && beside && "shrink grow-0 basis-(--stage-w)",
-          !(stageFits || beside) && "flex-1",
-          beside && "min-w-c-graph-stage-min",
-        ]}
-      >
+      {#snippet stagePane()}
         <Stage
           bind:this={stage}
-          bind:fits={stageFits}
           against={againstShown}
           {lit}
           {review}
@@ -922,48 +953,85 @@
             {words.recordsAsOf(timeWords)}
           </p>
         {/if}
-      </div>
-
-      {#if desk && roomOpen}
-        <!-- The room: one surface, three faces, closed by its Close or Esc.
-             It comes in from its edge and goes back there, as the app's
-             panels do (the sheet recipe's motion, `sheetSlide`: the
-             inspector's): from the trailing edge beside the stage. It takes
-             the room the stage leaves. -->
-        <aside
-          data-slot="graph-room"
-          aria-label={words.statesFace}
-          in:sheetSlide={{ axis: "X", leaving: false }}
-          out:sheetSlide={{ axis: "X", leaving: true }}
-          class="relative flex min-h-0 min-w-0 grow basis-c-graph-room-w flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile min-w-c-graph-room-w"
+      {/snippet}
+      <!-- The stage, and on a desk the room beside it: one resizable split.
+           The stage's pane stays while the room comes and goes, so the
+           component on it stays the one live instance. -->
+      <Resizable.PaneGroup
+        class="min-w-0 flex-1"
+        direction="horizontal"
+        height="shrink"
+      >
+        <Resizable.Pane
+          defaultSize={beside ? 100 - roomShare : 100}
+          id="stage"
+          look="split"
+          minSize={beside ? stageLeast : 100}
+          order={1}
         >
-          <div class="flex min-w-0 items-center gap-space-2">
-            {@render faces()}
-            <Tip label={words.closeRoom}>
-              {#snippet children(tip)}
-                <button
-                  {...mergeProps(tip, {
-                    onclick: () => {
-                      roomOpen = false;
-                      lit = null;
-                    },
-                  })}
-                  type="button"
-                  aria-label={words.closeRoom}
-                  class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-                >
-                  <IconClose aria-hidden="true" class="size-icon-md" />
-                </button>
-              {/snippet}
-            </Tip>
+          <div
+            class={[
+              "flex min-h-0 min-w-0 flex-1 flex-col",
+              beside && "pe-space-2",
+            ]}
+          >
+            {@render stagePane()}
           </div>
-          {#if face === "move"}
-            {@render moveFace()}
-          {:else}
-            {@render statesFace(true)}
-          {/if}
-        </aside>
-      {/if}
+        </Resizable.Pane>
+        {#if beside}
+          <Resizable.Handle look="split" />
+          <Resizable.Pane
+            defaultSize={roomShare}
+            id="room"
+            look="split"
+            minSize={roomLeast}
+            order={2}
+            onResize={(size) => {
+              if (splitWidth > 0) {
+                roomDragged = (size / 100) * splitWidth;
+              }
+            }}
+          >
+            <!-- The room: one surface, three faces, closed by its Close or
+                 Esc. It comes in from its edge and goes back there, as the
+                 app's panels do (the sheet recipe's motion, `sheetSlide`:
+                 the inspector's): from the trailing edge beside the stage. -->
+            <aside
+              data-slot="graph-room"
+              aria-label={words.statesFace}
+              in:sheetSlide|global={{ axis: "X", leaving: false }}
+              out:sheetSlide|global={{ axis: "X", leaving: true }}
+              class="relative ms-space-3 flex min-h-0 min-w-0 flex-1 flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile"
+            >
+              <div class="flex min-w-0 items-center gap-space-2">
+                {@render faces()}
+                <Tip label={words.closeRoom}>
+                  {#snippet children(tip)}
+                    <button
+                      {...mergeProps(tip, {
+                        onclick: () => {
+                          roomOpen = false;
+                          lit = null;
+                        },
+                      })}
+                      type="button"
+                      aria-label={words.closeRoom}
+                      class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+                    >
+                      <IconClose aria-hidden="true" class="size-icon-md" />
+                    </button>
+                  {/snippet}
+                </Tip>
+              </div>
+              {#if face === "move"}
+                {@render moveFace()}
+              {:else}
+                {@render statesFace(true)}
+              {/if}
+            </aside>
+          </Resizable.Pane>
+        {/if}
+      </Resizable.PaneGroup>
     </div>
 
     {#if !desk}
