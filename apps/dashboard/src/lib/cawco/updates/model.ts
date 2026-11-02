@@ -261,7 +261,9 @@ const failedCell = (u: BinaryUpdateState, v: string, cur: string): Cell =>
         ...EMPTY(15),
         fail: true,
         text: updatesWords.runningUnconfirmed(cur),
-        buttons: ["retry", "error"],
+        // No Retry: Install now of the build that runs installs nothing, and
+        // no path checks a running build's health again outside a trial.
+        buttons: ["error"],
       }
     : {
         ...EMPTY(4),
