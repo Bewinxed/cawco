@@ -58,6 +58,10 @@ function saidOf(el: Element): string {
   return said.join(" ").replace(SPACES, " ").trim();
 }
 
+/** What a person names for an element that moves: the control it is part of, else the element itself. */
+export const thingOf = (el: Element): Element =>
+  el.closest("button, a[href], [role='button']") ?? el;
+
 /** The element in words. */
 export function nameOf(el: Element): string {
   // A part of a control (a button's label, its slot) is the control.
