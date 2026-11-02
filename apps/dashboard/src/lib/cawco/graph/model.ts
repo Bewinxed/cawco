@@ -352,3 +352,27 @@ export function holesOf(review: Review, state: string): Holes {
 /** The move into `state` its states file plays, when it plays one. */
 export const moveInto = (review: Review, state: string): Move | null =>
   review.moves.find((move) => move.to === state && move.played) ?? null;
+
+/**
+ * The component's one path: every state in the order the list shows them,
+ * each machine's path in turn. The journey's steps walk it and say where
+ * he stands on it ("8 of 11"), so the steps and the list count one thing.
+ */
+export const pathOf = (review: Review): string[] =>
+  review.machines.flatMap((machine) => machine.path);
+
+/**
+ * The state before `state`: where the move into it starts, when the states
+ * file plays one (the Move face's "Filled → Failed save"), else the state
+ * before it on the component's path, else the one after. Compare compares
+ * with it and the Move face plays from it, so both name one state.
+ */
+export function previousOf(review: Review, state: string): string | null {
+  const from = moveInto(review, state)?.from;
+  if (from) {
+    return from;
+  }
+  const path = pathOf(review);
+  const at = path.indexOf(state);
+  return path[at - 1] ?? path[at + 1] ?? null;
+}

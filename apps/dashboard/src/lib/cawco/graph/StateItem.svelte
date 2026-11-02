@@ -7,24 +7,28 @@
    * compares the kept state with it instead. Resting the pointer on it
    * lights the row and nothing else.
    *
-   * The state on the stage is the list's selection, as the app's own lists
-   * mark their current row (the sidebar, the Comments rail; DESIGN.md,
-   * Colors: Selected): the selection pill under it (Journey's `highlight`)
-   * with every word in `selected-ink`; the hover ghost is the list's too.
-   * Only it shows its
-   * record sets, as the kit's toggle group under its name: the state as
-   * written is the one with none picked. The state it is compared with
-   * wears the change ring's edge, the stage's mark for what differs.
+   * The state on the stage is marked as a pick is, never by a fill
+   * (DESIGN.md, the pick: "its words … take `selected-ink`. There is no
+   * band behind it"): every word in `selected-ink`, and a small mark that
+   * says it is on the stage, so a wash never reads as the state's status.
+   * Only it shows its record sets, as the kit's toggle group under its
+   * name: the state as written is the one with none picked. The state it
+   * is compared with wears the change ring's edge, the stage's mark for
+   * what differs. A note cut at its two lines shows whole in the house
+   * tooltip.
    *
    * A pin on it is named by its name ("Failed save"), its note its
    * description.
    */
   import { graphWords as words } from "@cawco/core/words/graph";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconEye } from "#lib/icons.js";
   import type { GraphState } from "./model";
 
   let {
-    state,
+    state: item,
     kept = false,
     keptVariant = null,
     against = false,
@@ -43,6 +47,8 @@
 
   const uid = $props.id();
   const noteId = `${uid}-note`;
+  /** Its note is cut at its two lines. */
+  let cut = $state(false);
 </script>
 
 <div
@@ -61,45 +67,64 @@
   <div
     class="relative flex min-h-c-touch-floor min-w-0 flex-col justify-center gap-space-row rounded-sm px-space-3 py-space-2"
   >
-    <button
-      type="button"
-      aria-current={kept ? "true" : undefined}
-      aria-describedby={state.note ? noteId : undefined}
-      title={state.note ?? undefined}
-      class={[
-        "min-w-0 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 before:rounded-sm focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
-        kept ? "text-selected-ink" : "text-ink-row",
-      ]}
-      onclick={() => onpress(null)}
-    >
-      {state.name}{#if against}<span class="sr-only"
-          >, {words.comparedWith(state.name)}</span
-        >{/if}
-    </button>
-    {#if state.note}
+    <Tip disabled={!cut} label={item.note ?? ""} side="left">
+      {#snippet children(tip)}
+        <button
+          {...tip}
+          type="button"
+          aria-current={kept ? "true" : undefined}
+          aria-describedby={item.note ? noteId : undefined}
+          class={[
+            "mark-line flex min-w-0 items-center gap-space-2 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 before:rounded-sm focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
+            kept ? "text-selected-ink" : "text-ink-row",
+          ]}
+          onclick={() => onpress(null)}
+        >
+          <span class="min-w-0 flex-1">
+            {item.name}{#if against}<span class="sr-only"
+                >, {words.comparedWith(item.name)}</span
+              >{/if}
+          </span>
+          {#if kept}
+            <span
+              data-slot="on-stage"
+              class="mark-line flex flex-none items-center gap-space-1 type-meta text-selected-ink"
+              data-box
+            >
+              <IconEye aria-hidden="true" class="size-icon-sm" data-box />
+              <span>{words.onStage}</span>
+            </span>
+          {/if}
+        </button>
+      {/snippet}
+    </Tip>
+    {#if item.note}
       <span
         id={noteId}
+        {@attach frameSize((node: HTMLElement) => {
+          cut = node.scrollHeight > node.clientHeight + 1;
+        })}
         class={[
           "line-clamp-2 min-w-0 type-meta text-pretty wrap-anywhere",
           kept ? "text-selected-ink" : "text-ink-muted",
-        ]}>{state.note}</span
+        ]}>{item.note}</span
       >
     {/if}
   </div>
 
-  {#if kept && state.variants.length > 0}
+  {#if kept && item.variants.length > 0}
     <!-- Its record sets, on the stage's state alone: none picked is the state as written. -->
     <div class="min-w-0 overflow-x-auto px-space-3 pb-space-2">
       <ToggleGroup.Root
-        aria-label={words.variants(state.name)}
+        aria-label={words.variants(item.name)}
         onValueChange={(next: string) => onpress(next || null)}
         type="single"
         value={keptVariant ?? ""}
       >
-        {#each state.variants as variant (variant.id)}
+        {#each item.variants as variant (variant.id)}
           <ToggleGroup.Item value={variant.id}>
             <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              ><span class="sr-only">{words.variantOf(state.name)}</span
+              ><span class="sr-only">{words.variantOf(item.name)}</span
               >{variant.name}</span
             >
           </ToggleGroup.Item>
