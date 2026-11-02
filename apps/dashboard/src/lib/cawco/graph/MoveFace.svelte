@@ -83,11 +83,25 @@
   const figureEvery = $derived(
     Math.max(1, 2 ** Math.ceil(Math.log2(scale / 400)))
   );
-  /** A row as a person says it: one length when its stretches share one, else its whole stretch. */
-  const nameOf = (track: Track) =>
-    track.length === null
+  /**
+   * The stretch a bar's drag holds, by its row: the row's words follow the
+   * drag, as Jitter's Duration follows its bar's end handle
+   * (mobbin.com/screens/034a6cff-5a28-4a89-b950-03a42097d66b, then
+   * mobbin.com/screens/f2af0889-ab63-4cd9-ab2a-ed1fce4d5e66).
+   */
+  let holding = $state<{ from: number; id: string; to: number } | null>(null);
+  /** A row as a person says it: one length when its stretches share one, else its whole stretch; while its bar is held, the held one. */
+  const nameOf = (track: Track) => {
+    const held = holding?.id === track.id ? holding : null;
+    if (held) {
+      return track.spans.length === 1
+        ? words.clipName(track.name, track.how, held.to - held.from)
+        : words.clipSpan(track.name, track.how, held.from, held.to);
+    }
+    return track.length === null
       ? words.clipSpan(track.name, track.how, track.begins, track.ends)
       : words.clipName(track.name, track.how, track.length);
+  };
   /** Before and after, when he tuned it. */
   const tunedOf = (track: Track) => {
     const [first] = track.clips;
@@ -271,6 +285,9 @@
           >
             <ClipBar
               {name}
+              onhold={(span) => {
+                holding = span ? { id: track.id, ...span } : null;
+              }}
               onretime={(from, to) => onretime(retime(track, from, to))}
               {scale}
               {track}

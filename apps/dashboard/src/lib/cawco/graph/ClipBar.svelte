@@ -23,6 +23,7 @@
     name,
     scale,
     onretime,
+    onhold,
   }: {
     track: Track;
     /** The row as a person says it, for each handle's name. */
@@ -31,6 +32,8 @@
     scale: number;
     /** The row's new stretch, ms into the move. */
     onretime: (from: number, to: number) => void;
+    /** The stretch a drag holds, as it moves (null: let go), so the row's words follow it. */
+    onhold: (span: { from: number; to: number } | null) => void;
   } = $props();
 
   const STEP = 10;
@@ -72,10 +75,13 @@
   min={0}
   onValueChange={(next: number[]) => {
     held = within(next);
+    const [from = floor, to = floor] = held;
+    onhold({ from, to });
   }}
   onValueCommit={(next: number[]) => {
     const [from = floor, to = floor] = within(next);
     held = null;
+    onhold(null);
     if (from !== rest[0] || to !== rest[1]) {
       onretime(from, to);
     }
