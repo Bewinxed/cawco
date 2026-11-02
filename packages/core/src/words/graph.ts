@@ -10,13 +10,17 @@ export const graphWords = {
   wholeSet: "Whole set",
   moveFace: "Move",
   faces: "What the panel shows",
-  /** Where the journey stands: "3 of 5, Saving". */
+  /** Where the journey stands on the component's path: "8 of 11, Failed save". */
   position: (at: number, of: number, name: string) => `${at} of ${of}, ${name}`,
   previous: "Previous state",
   next: "Next state",
-  /** The room put away and brought back, a bare symbol's name. */
-  closeRoom: "Hide states",
+  /** The room's one close, its own; and the bar's symbol that brings it back while it is put away. */
+  closeRoom: "Close",
   openRoom: "Show states",
+  /** The phone drawer's grabber: a press steps it to its next stop. */
+  nextStop: "Resize the panel",
+  /** The kept row's mark: the state the stage shows. */
+  onStage: "On stage",
   /** The component in front, when the ask names several: the switch's name. */
   components: "Component",
   /** A state the states file tags as a failure: its glyph's name and tooltip in the whole set. */
@@ -109,16 +113,42 @@ export const graphWords = {
   /** A clip's element when nothing names it. */
   element: "Element",
 
-  /** A clip's row, named as a person says it: "Form failure unfolds, 260 ms". */
+  /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds, 260 ms"; a thing that moves at two moments of different lengths says its whole stretch. */
   clipName: (element: string, how: string, ms: number) =>
     `${element} ${how}, ${ms} ms`,
+  clipSpan: (element: string, how: string, from: number, to: number) =>
+    `${element} ${how}, ${from}–${to} ms`,
   /** The clip editor. */
   edit: (clip: string) => `Change ${clip}`,
   length: "Length",
+  /** Lengths offered first, in plain words with their figure beside each. */
+  lengths: [
+    { name: "Quick", ms: 150 },
+    { name: "Standard", ms: 250 },
+    { name: "Slow", ms: 400 },
+  ],
+  longer: "Longer",
+  shorter: "Shorter",
   curve: "Curve",
+  /** The curves offered first, by their shape (Jitter's presets). */
+  shapes: {
+    linear: "Linear",
+    smooth: "Smooth",
+    slowDown: "Slow down",
+    speedUp: "Speed up",
+    spring: "Spring",
+  } as Record<string, string>,
+  /** A curve no shape is near: its four numbers stand under Advanced. */
+  ownShape: "Its own",
+  /** How strongly the chosen shape bends. */
+  intensity: "Intensity",
+  /** A spring's length: how long it takes to come to rest. */
+  settles: (ms: number) => `Comes to rest in ${ms} ms`,
+  /** The house's own token, when the clip's timing is one: CawCo's words, said inside the editor only. */
+  tokenLine: (token: string) => `CawCo token: ${token}`,
   spring: "Spring",
   advanced: "Advanced",
-  custom: "Custom",
+  custom: "Curve numbers",
   bounce: "Bounce",
   mass: "Mass",
   stiffness: "Stiffness",
@@ -126,6 +156,8 @@ export const graphWords = {
   delay: "Delay",
   reset: "Reset",
   ms: (value: number) => `${value} ms`,
+  /** The ruler's unit, beside the playhead's figure. */
+  msUnit: "ms",
   /** A tuned clip says so on its row, before and after. */
   tuned: (before: string, after: string) => `Tuned: ${before} → ${after}`,
   /** Where a tuning goes, said once in the editor. */
@@ -141,6 +173,8 @@ export const graphWords = {
   stageView: "View",
   width: "Width",
   ownWidth: (px: number) => `Its own width, ${px}`,
+  /** A listed width that is also the component's own. */
+  ownListed: (device: string, px: number) => `${device}, ${px}, its own width`,
   phone: "Phone",
   tablet: "Tablet",
   desk: "Desk",
