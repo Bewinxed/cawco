@@ -7,6 +7,17 @@
  * (each frame with a width is that container; the canvas itself is the one
  * a frame without a width answers to), and script that asks `matchMedia`
  * is answered at the frame's width (runtime.ts).
+ *
+ * A frame with a width is a whole screen, as Storybook's `viewport`
+ * parameter makes its iframe a device's: the viewport units in the
+ * project's sheets (`100dvh`, `50vw`) are answered by the frame's screen,
+ * its width and that screen's height (core `screenHeight`: 390×844,
+ * 768×1024, a desk's 16:10), which its body carries as {@link SCREEN_VW}
+ * and {@link SCREEN_VH}. Read off the window, an `h-dvh` app stood as tall
+ * as the render's window in every frame, a phone's included, and grew with
+ * it as the picture's pose grew the window for its room, so it never had
+ * the room (frame-picture.ts `poseFrame`). Outside a frame with a width
+ * each unit is the window's, as written.
  */
 
 /** The container every frame with a width is, and the canvas around them. */
@@ -148,6 +159,55 @@ export function splitWidth(list: string): WidthSplit {
 
 const CONVERTED = new WeakSet<CSSRule>();
 
+/** One hundredth of the frame's screen across and down, px: set on each body with a width (runtime.ts `sizeBody`). */
+export const SCREEN_VW = "--cawco-vw";
+export const SCREEN_VH = "--cawco-vh";
+
+/** A length in a viewport unit (CSS Values 4 §6.1.2): its number, its `s`/`l`/`d` size, its axis. */
+const VIEWPORT_LENGTH =
+  /(?<![\w-])(-?(?:\d+\.?\d*|\.\d+))([sld]?)v(h|w|b|i|min|max)\b/gu;
+
+/** A viewport length as the frame's screen answers it, the window's own unit where no frame says one. */
+const screenLength = (
+  _match: string,
+  n: string,
+  size: string,
+  axis: string
+): string => {
+  const across = `var(${SCREEN_VW}, 1${size}vw)`;
+  const down = `var(${SCREEN_VH}, 1${size}vh)`;
+  const units: Record<string, string> = {
+    h: down,
+    b: down,
+    w: across,
+    i: across,
+    min: `min(${across}, ${down})`,
+    max: `max(${across}, ${down})`,
+  };
+  const unit = units[axis] ?? across;
+  return `calc(${n} * ${unit})`;
+};
+
+/** A rule's declarations that measure by the viewport, measured by the frame's screen instead. */
+function screenUnits(style: CSSStyleDeclaration): void {
+  const found: [string, string, string][] = [];
+  for (let at = 0; at < style.length; at += 1) {
+    const name = style.item(at);
+    const value = style.getPropertyValue(name);
+    VIEWPORT_LENGTH.lastIndex = 0;
+    if (VIEWPORT_LENGTH.test(value)) {
+      found.push([name, value, style.getPropertyPriority(name)]);
+    }
+  }
+  for (const [name, value, priority] of found) {
+    style.setProperty(
+      name,
+      value.replace(VIEWPORT_LENGTH, screenLength),
+      priority
+    );
+  }
+}
+
 /** One `@media` rule, at `index` of `container`, put as the frame answers it; named in `kept` where the window must. */
 function asFrame(
   container: CSSStyleSheet | CSSGroupingRule | CSSStyleRule,
@@ -178,7 +238,8 @@ function asFrame(
 /**
  * Each width `@media` rule under `container` as the frame answers it: an
  * `@container cawco-width` rule with its rules, inside an `@media` of what
- * the window still answers. A rule kept for the window is named in
+ * the window still answers; and each viewport length as the frame's screen
+ * answers it ({@link screenUnits}). A rule kept for the window is named in
  * `kept`.
  */
 export function frameWidths(
@@ -201,6 +262,9 @@ export function frameWidths(
     }
     const now = container.cssRules[index] as CSSRule;
     CONVERTED.add(now);
+    if ("style" in now && now.style instanceof CSSStyleDeclaration) {
+      screenUnits(now.style);
+    }
     if ("cssRules" in now) {
       frameWidths(now as CSSGroupingRule, kept);
     }

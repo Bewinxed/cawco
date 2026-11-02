@@ -52,6 +52,7 @@ import {
   type Story,
   type SweepAt,
   type SweepStep,
+  screenHeight,
   sectionName,
   sectionPlansOf,
 } from "@cawco/core/stage";
@@ -82,7 +83,13 @@ import {
 } from "./pseudo";
 import { onPageScheme, pageScheme } from "./scheme";
 import { frameAsViewport, windowHeight, windowWidth } from "./viewport";
-import { frameWidths, splitWidth, WIDTH_CONTAINER } from "./width";
+import {
+  frameWidths,
+  SCREEN_VH,
+  SCREEN_VW,
+  splitWidth,
+  WIDTH_CONTAINER,
+} from "./width";
 
 /** What the adapter is handed for one story (Storybook's `decorateStory` inputs). */
 export interface MountSpec {
@@ -1605,10 +1612,68 @@ export function boot(options: BootOptions): void {
    * story's width conditions answer to (width.ts). A body without one shrinks
    * to its story, so it can be no container: it answers the canvas.
    */
-  function sizeBody(body: HTMLElement, width: number | null): void {
+  /**
+   * A body at `width`: that width, the container its width rules answer,
+   * and its screen (width.ts `SCREEN_VW`, `SCREEN_VH`: the device's at that
+   * width, core `screenHeight`), which its viewport lengths answer; `fills`:
+   * as tall as that screen, for a story with no height of its own
+   * ({@link fillsScreen}). None of them with no width: the canvas's.
+   */
+  function sizeBody(
+    body: HTMLElement,
+    width: number | null,
+    fills = false
+  ): void {
     body.style.width = width === null ? "" : `${width}px`;
     body.style.container =
       width === null ? "" : `${WIDTH_CONTAINER} / inline-size`;
+    const screen = width === null ? null : { w: width, h: screenHeight(width) };
+    body.style.setProperty(SCREEN_VW, screen ? `${screen.w / 100}px` : "");
+    body.style.setProperty(SCREEN_VH, screen ? `${screen.h / 100}px` : "");
+    body.style.blockSize = screen && fills ? `${screen.h}px` : "";
+  }
+
+  /**
+   * The stories, by `file|story`, drawn as tall as their screen: each has a
+   * width and no height of its own. An app laid out to fill its window
+   * (`height: 100%` down from its root, its parts placed absolutely or
+   * fixed) stands 0 tall in a body whose height is its content's, so its
+   * frame drew at the body's floor, and no picture of it could be taken. It
+   * fills the screen its width names instead, as it fills a window.
+   */
+  const screenFilled = new Set<string>();
+  const fillKey = (file: string, story: string) => `${file}|${story}`;
+  /** Whether a rest frame's body holds nothing with a height: its content measured with the body's floor let go. */
+  const heightless = (body: HTMLElement): boolean => {
+    const { blockSize, minBlockSize } = body.style;
+    body.style.blockSize = "";
+    body.style.minBlockSize = "0px";
+    const height = body.offsetHeight;
+    body.style.blockSize = blockSize;
+    body.style.minBlockSize = minBlockSize;
+    return height === 0;
+  };
+  /** Story `rest`'s frames as tall as their screen when its rest frame, drawn in `body`, has a width and no height of its own; whether they now are. */
+  function fillsScreen(
+    section: Section,
+    rest: Frame,
+    body: HTMLElement
+  ): boolean {
+    const key = fillKey(section.file, rest.story.name);
+    if (
+      screenFilled.has(key) ||
+      widthOf(rest.story, rest.column.width) === null ||
+      !heightless(body)
+    ) {
+      return false;
+    }
+    screenFilled.add(key);
+    for (const frame of section.frames.values()) {
+      if (frame.story.name === rest.story.name) {
+        sizeBody(frame.body, widthOf(frame.story, frame.column.width), true);
+      }
+    }
+    return true;
   }
 
   /**
@@ -1861,7 +1926,12 @@ export function boot(options: BootOptions): void {
   /** The frame's body set for its column: its scheme, width and forced state. */
   function dress(frame: Frame): void {
     const { story } = frame;
-    dressBody(frame.body, frame.column, story);
+    dressBody(
+      frame.body,
+      frame.column,
+      story,
+      screenFilled.has(fillKey(frame.section.file, story.name))
+    );
     frame.el.toggleAttribute("data-cawco-selected", chosen === story.name);
     frame.el.toggleAttribute(
       "data-cawco-edited",
@@ -1870,7 +1940,12 @@ export function boot(options: BootOptions): void {
   }
 
   /** A body dressed as a frame of `column` is: its scheme, width, forced state and the dials' variables. */
-  function dressBody(body: HTMLElement, column: Column, story: Story): void {
+  function dressBody(
+    body: HTMLElement,
+    column: Column,
+    story: Story,
+    fills: boolean
+  ): void {
     const scheme = schemeOf(column);
     const ground = groundOf();
     body.style.colorScheme = scheme;
@@ -1878,7 +1953,7 @@ export function boot(options: BootOptions): void {
     body.classList.toggle("dark", scheme === "dark");
     body.style.backgroundColor = ground.background;
     body.style.color = ground.color;
-    sizeBody(body, widthOf(story, column.width));
+    sizeBody(body, widthOf(story, column.width), fills);
     for (const states of Object.values(FORCED)) {
       for (const state of states) {
         body.classList.remove(allClass(state));
@@ -2035,7 +2110,12 @@ export function boot(options: BootOptions): void {
       .map((rest) => {
         const body = document.createElement("div");
         body.className = `cawco-frame-body ${HELD}`;
-        dressBody(body, rest.column, rest.story);
+        dressBody(
+          body,
+          rest.column,
+          rest.story,
+          screenFilled.has(fillKey(section.file, rest.story.name))
+        );
         rig.append(body);
         const mounted = mountInto(
           body,
@@ -2054,6 +2134,7 @@ export function boot(options: BootOptions): void {
       rewriteAll();
       for (const rest of rests) {
         const body = stand.find((one) => one.rest === rest)?.body ?? rest.body;
+        fillsScreen(section, rest, body);
         const reached = reachedIn(body);
         const before = section.interactions.get(rest.story.name)?.join() ?? "";
         if (before !== reached.join()) {
@@ -2134,6 +2215,10 @@ export function boot(options: BootOptions): void {
   /** A section's stories mounted from its module: rest first, then the columns its CSS reaches. */
   function showSection(section: Section): void {
     const mod = section.mod as SectionModule;
+    // Its stories measured afresh as they mount (`fillsScreen`): an edit may have given one a height of its own.
+    for (const story of mod.SHEET.stories) {
+      screenFilled.delete(fillKey(section.file, story.name));
+    }
     section.loaded = true;
     section.failure = null;
     const had = new Set(section.frames.values());
@@ -2473,7 +2558,11 @@ export function boot(options: BootOptions): void {
       const body = document.createElement("div");
       // Held from its first frame: nothing in the rig runs while it waits to be read.
       body.className = `cawco-frame-body ${HELD}`;
-      sizeBody(body, widthOf(story, "own"));
+      sizeBody(
+        body,
+        widthOf(story, "own"),
+        screenFilled.has(fillKey(section.file, story.name))
+      );
       rig.append(body);
       const mounted = mountInto(
         body,
@@ -2714,7 +2803,11 @@ export function boot(options: BootOptions): void {
       const body = document.createElement("div");
       body.className = "cawco-frame-body";
       const story = storiesOf(section).find((one) => one.name === to);
-      sizeBody(body, story ? widthOf(story, "own") : null);
+      sizeBody(
+        body,
+        story ? widthOf(story, "own") : null,
+        screenFilled.has(fillKey(section.file, to))
+      );
       rig.append(body);
       try {
         sweepOn(section, "move", to);
