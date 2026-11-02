@@ -26,6 +26,7 @@ import {
 import { z } from "zod";
 import { firstPaintChunks } from "./first-paint-chunks.ts";
 import { groupsAsCombinators } from "./group-selectors.ts";
+import { precompressAll } from "./precompress-adapter.ts";
 import { publicOrigin } from "./public-origin.js";
 import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
 
@@ -509,7 +510,7 @@ export default defineConfig(({ command }) => {
       sveltekit({
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },
-        adapter: adapter({ out: BUILD_OUT }),
+        adapter: precompressAll(adapter({ out: BUILD_OUT })),
         experimental: { remoteFunctions: true },
         version: { name: BUILD_VERSION },
         // The dashboard's one CSRF rule is its own gate (hooks.server.ts,

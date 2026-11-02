@@ -364,8 +364,9 @@ function serveApp(req, res) {
   ) {
     return;
   }
-  // sirv has no type for Caw's .riv files and would send an empty
-  // Content-Type; it keeps one already set on the response.
+  // adapter-node's type table has none for Caw's .riv files (`".riv":""`
+  // in build/adapter-node.js), so it sends no Content-Type; it keeps one
+  // already set on the response.
   if (pathname.endsWith(".riv")) {
     res.setHeader("Content-Type", "application/octet-stream");
   }
