@@ -150,7 +150,7 @@ export const artifactListWords = (list: ArtifactList): string => {
         `${count(list.total, "artifact")}, newest first; every artifact tool takes the name:`,
         list.artifacts.map((status) => statusLine(status, now)),
         list.next_cursor &&
-          `…and older ones: cursor ${list.next_cursor} lists the next page.`
+          `More past this page. Next page: cursor ${list.next_cursor}.`
       );
 };
 

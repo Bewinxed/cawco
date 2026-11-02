@@ -7,5 +7,5 @@
 export const devServerWords = {
   /** A request that needs the hub, on a vite server named none. */
   devHubUnset:
-    "This request needs a hub, and this vite server has none: CAWCO_DEV_HUB_URL is unset, so start the server with it set (CAWCO_DEV_HUB_URL=http://localhost:4456 bun run dev); CAWCO_HUB_URL, the live hub in a session's shell, is never read.",
+    "This request needs a hub, and this vite server was started without one. Start it with CAWCO_DEV_HUB_URL set (CAWCO_DEV_HUB_URL=http://localhost:4456 bun run dev); CAWCO_HUB_URL is not read.",
 };
