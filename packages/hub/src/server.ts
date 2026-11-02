@@ -12571,14 +12571,13 @@ export const createServer = (
   };
 
   /**
-   * Artifact `id` went: its own origin ({@link embedKey}) ends with it, its
-   * listener stopped and its port free again, and its machine's listener
-   * stopped too. The one end of an artifact's origin: the session that
-   * opened it, or held it, ending leaves it standing.
+   * What artifact origin `key` shows is let go: its target forgotten, a
+   * start still in flight voided, and its machine's listener stopped. A
+   * request after it makes the target again from its artifact's row as it
+   * is now (`target` in {@link artifactListener}), if one stands.
    */
-  const endArtifactOrigin = (id: string): void => {
-    const key = embedKey(id);
-    previewListeners.release(key);
+  const dropEmbedTarget = (key: string): void => {
+    nextPreviewGeneration(key);
     const target = embedTargets.get(key);
     embedTargets.delete(key);
     if (target && !("page" in target.source)) {
@@ -12591,6 +12590,40 @@ export const createServer = (
         ),
         "embedded preview stop"
       );
+    }
+  };
+
+  /**
+   * Artifact `id` went (db `onArtifactsGone`: every way an artifact row
+   * goes): its own origin ({@link embedKey}) ends with it, its listener
+   * stopped and its port free again, and its machine's listener stopped
+   * too. The one end of an artifact's origin: the session that opened it,
+   * or held it, ending leaves it standing.
+   */
+  const endArtifactOrigin = (id: string): void => {
+    const key = embedKey(id);
+    previewListeners.release(key);
+    dropEmbedTarget(key);
+  };
+
+  /**
+   * Artifact `id`'s held next version `held` opens in its place (artifacts
+   * service `promote`): the version's origin, where its preview-address and
+   * every browser handed it stand, answers for the artifact from now on, on
+   * the same port, and the artifact's own origin before it lets its port go
+   * (preview.ts `move`); a session's pass into the version's origin moves
+   * with it. What both showed is let go, so the next request serves the
+   * artifact as it now is. A version no origin was opened for leaves the
+   * artifact's origin where it was. Then the version's row goes, and with
+   * it whatever of its origin is left ({@link endArtifactOrigin}).
+   */
+  const moveArtifactOrigin = (held: string, id: string): void => {
+    const from = embedKey(held);
+    const to = embedKey(id);
+    dropEmbedTarget(from);
+    dropEmbedTarget(to);
+    if (previewListeners.move(from, to)) {
+      db.previewPasses.moveScope(from, to);
     }
   };
 
@@ -14592,10 +14625,10 @@ export const createServer = (
         publishPreview(instanceId, "open", now);
       }
     },
-    // A preview gone holds the workspace it showed no longer, and its own
-    // origin ends with it.
+    // A preview gone holds the workspace it showed no longer (its own
+    // origin ends with its row: db `onArtifactsGone`).
+    versionOpened: (held, id) => moveArtifactOrigin(held, id),
     removed: (row) => {
-      endArtifactOrigin(row.id);
       if (row.kind === "preview" && row.machineId) {
         workItems.settleShown(row.machineId);
       }
@@ -15541,6 +15574,12 @@ export const createServer = (
     db.previewPasses,
     tailnetHttps
   );
+  // Every way an artifact row goes ends its own origin.
+  db.onArtifactsGone((ids) => {
+    for (const id of ids) {
+      endArtifactOrigin(id);
+    }
+  });
 
   /**
    * A register squares the machine's preview listeners with this hub's

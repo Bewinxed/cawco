@@ -128,7 +128,13 @@ import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
-import { type ArtifactsDb, artifactsDb, projectPage } from "./artifacts";
+import {
+  type ArtifactsDb,
+  artifactsDb,
+  type Deleter,
+  dropArtifactRows,
+  projectPage,
+} from "./artifacts";
 import { type AsksDb, asksDb } from "./asks";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
@@ -1419,6 +1425,13 @@ export interface DbShape {
     reason: ProjectOfferRow["reason"];
     line: string;
   }) => boolean;
+  /**
+   * `listener` hears the ids of the artifacts that went, a next version
+   * held for one included, once the write that deleted them is done: the
+   * service's discard, a session's delete, a project's delete or fold
+   * (`dropArtifacts`, the one way an artifact row goes).
+   */
+  readonly onArtifactsGone: (listener: (ids: string[]) => void) => void;
   /**
    * `listener` hears the hashes of the credentials the hub revokes, once
    * the write that revoked them is done and they no longer resolve: a
@@ -3510,6 +3523,62 @@ const make = async (path: string): Promise<DbShape> => {
       : undefined;
   };
 
+  /** Who hears of the artifacts that went ({@link DbShape.onArtifactsGone}). */
+  const goneListeners = new Set<(ids: string[]) => void>();
+  /** Artifacts a write deleted, not yet told. */
+  let goneNoted: Set<string> | undefined;
+
+  /**
+   * The artifacts noted gone, told once the write is done (a microtask:
+   * every transaction here runs synchronously, so none is open then), and
+   * only those no row answers to: a write rolled back deleted nothing.
+   */
+  const tellGone = (): void => {
+    const noted = [...(goneNoted ?? [])];
+    goneNoted = undefined;
+    const kept = new Set<string>();
+    for (let at = 0; at < noted.length; at += 500) {
+      for (const row of db
+        .select({ id: artifacts.id })
+        .from(artifacts)
+        .where(inArray(artifacts.id, noted.slice(at, at + 500)))
+        .all()) {
+        kept.add(row.id);
+      }
+    }
+    const ids = noted.filter((id) => !kept.has(id));
+    if (ids.length === 0) {
+      return;
+    }
+    for (const listener of goneListeners) {
+      try {
+        listener(ids);
+      } catch (error) {
+        console.error("[artifacts] telling a delete failed", error);
+      }
+    }
+  };
+
+  /**
+   * Every artifact `where` names deleted, its held next versions with it
+   * (artifacts.ts {@link dropArtifactRows}), and noted for
+   * {@link DbShape.onArtifactsGone}: the one way an artifact row goes, a
+   * session's, a project's or the service's discard.
+   */
+  const dropArtifacts = (tx: Deleter, where: SQL | undefined): void => {
+    const ids = dropArtifactRows(tx, where);
+    if (ids.length === 0) {
+      return;
+    }
+    if (!goneNoted) {
+      goneNoted = new Set();
+      queueMicrotask(tellGone);
+    }
+    for (const id of ids) {
+      goneNoted.add(id);
+    }
+  };
+
   /** Who hears of the credentials the hub revokes ({@link DbShape.onCredentialsRevoked}). */
   const revokedListeners = new Set<(hashes: string[]) => void>();
   /** Hashes a write revoked, not yet told. */
@@ -3645,9 +3714,10 @@ const make = async (path: string): Promise<DbShape> => {
     // Their artifacts go with them, but a project's page: its life is its
     // source's in the project's folder, so it stays with no session (the
     // key's set null), its picks and places kept.
-    tx.delete(artifacts)
-      .where(and(inArray(artifacts.instanceId, list), not(projectPage)))
-      .run();
+    dropArtifacts(
+      tx,
+      and(inArray(artifacts.instanceId, list), not(projectPage))
+    );
     tx.delete(instances).where(inArray(instances.id, list)).run();
   };
 
@@ -5063,6 +5133,9 @@ const make = async (path: string): Promise<DbShape> => {
     revokedAmong,
     onCredentialsRevoked: (listener) => {
       revokedListeners.add(listener);
+    },
+    onArtifactsGone: (listener) => {
+      goneListeners.add(listener);
     },
     getMcpServer: (name) => {
       const row = db
@@ -8649,9 +8722,7 @@ const make = async (path: string): Promise<DbShape> => {
           }
         }
         // Its pages go with it: their sources were its folder's.
-        tx.delete(artifacts)
-          .where(and(projectPage, eq(artifacts.projectId, id)))
-          .run();
+        dropArtifacts(tx, and(projectPage, eq(artifacts.projectId, id)));
         tx.delete(projects).where(eq(projects.id, id)).run();
       });
     },
@@ -8761,15 +8832,14 @@ const make = async (path: string): Promise<DbShape> => {
           .select({ name: artifacts.name })
           .from(artifacts)
           .where(and(projectPage, eq(artifacts.projectId, keepId)));
-        tx.delete(artifacts)
-          .where(
-            and(
-              projectPage,
-              eq(artifacts.projectId, dupId),
-              inArray(artifacts.name, keptNames)
-            )
+        dropArtifacts(
+          tx,
+          and(
+            projectPage,
+            eq(artifacts.projectId, dupId),
+            inArray(artifacts.name, keptNames)
           )
-          .run();
+        );
         // Its routines with their routes and polls, the events it took in,
         // its actions, relays and moves, Caw's turns and calls, its
         // artifacts and notices: the kept project's from now on, where the
@@ -9729,7 +9799,7 @@ const make = async (path: string): Promise<DbShape> => {
     trackers: trackersDb(db),
     taskLinks: taskLinksOf,
     hubAuth: hubAuthDb(db),
-    artifacts: artifactsDb(db),
+    artifacts: artifactsDb(db, dropArtifacts),
     find: findDb(db),
     findSettings: {
       hideSecrets: () =>

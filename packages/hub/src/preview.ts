@@ -53,6 +53,10 @@ import {
 } from "@cawco/core/preview-reach";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
+import {
+  type PortHolders,
+  previewPortWords,
+} from "@cawco/core/words/preview-ports";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { serveCanvas } from "./artifacts/canvas";
 import {
@@ -388,6 +392,17 @@ type ListenerSocket = PreviewSocket | ArtifactSocket;
 interface Listener {
   port: number;
   stop: () => Promise<void>;
+}
+
+/**
+ * A machine artifact's listener ({@link createPreviewListeners}' `embeds`):
+ * the origins that may frame it, and the key it answers as, which a held
+ * next version's opening moves to its artifact's.
+ */
+interface Embed {
+  ancestors: Set<string>;
+  listener: Listener;
+  route: { key: string };
 }
 
 const isArtifact = (
@@ -1484,12 +1499,11 @@ export function createPreviewListeners(
    * Each machine artifact's listener on the port it keeps (made again as a
    * frame next names it, after a mode change or a restart too), by its key,
    * with every origin a page that shows it was served on: exactly those may
-   * frame it. It lasts as long as its artifact, whoever opened it.
+   * frame it. It lasts as long as its artifact, whoever opened it, and an
+   * artifact's held next version's passes to the artifact as it opens
+   * (`move`).
    */
-  const embeds = new Map<
-    string,
-    { ancestors: Set<string>; listener: Listener }
-  >();
+  const embeds = new Map<string, Embed>();
   /** Host mode's one listener. */
   let byHost: Listener | undefined;
 
@@ -1592,37 +1606,38 @@ export function createPreviewListeners(
   };
 
   /**
-   * Every origin that doesn't hold its port ({@link holds}) lets it go: its
-   * listener stops, its stored port is dropped, and what shows it is told
-   * again without that address. A sleeping session's preview, or an ended
-   * one's page opened again, is served on a port no origin in use needs,
-   * and gives it up here once one does. How many went.
+   * One port taken back for origin `asking`, the range being full: from
+   * one origin that doesn't hold it ({@link holds}), one with no listener
+   * standing first (a claim kept across a restart or an idle spell), its
+   * listener stopped, its stored port dropped, and what shows it told again
+   * without that address. Every other origin keeps its port, and so its
+   * address. The key that let its port go; undefined when every origin
+   * holds its own.
    */
-  const letUnusedGo = (): number => {
-    const unused = [
-      ...new Set([
-        ...db.ports().map((row) => row.key),
-        ...sessions.keys(),
-        ...embeds.keys(),
-      ]),
-    ].filter((key) => !holds(key));
-    for (const key of unused) {
-      release(key);
+  const reclaimOne = (asking: string): string | undefined => {
+    const idle = db
+      .ports()
+      .map((row) => row.key)
+      .filter((one) => one !== asking && !holds(one));
+    const taken =
+      idle.find((one) => !(sessions.has(one) || embeds.has(one))) ?? idle[0];
+    if (taken === undefined) {
+      return;
     }
-    if (unused.length > 0) {
-      deps.letGo(unused);
-    }
-    return unused.length;
+    release(taken);
+    deps.letGo([taken]);
+    return taken;
   };
 
   /**
    * The one way a session gets its port, at the hub's start and on demand:
    * the port it keeps while that is still a preview port and `opens`; else
    * the lowest of the range that is not the fleet's own, not another
-   * origin's, and opens; else, once every origin that doesn't hold its
-   * port let it go ({@link letUnusedGo}), the lowest that opens then. A move is saved, so a collision
-   * heals itself, and said in one line. Its listener opens on it (`bind`),
-   * and host mode's `{port}` names it too.
+   * origin's, and opens; else, the range being full, the lowest that opens
+   * once an origin that doesn't hold its port let it go, one at a time
+   * ({@link reclaimOne}). A move is saved, so a collision heals itself, and
+   * said in one line. Its listener opens on it (`bind`), and host mode's
+   * `{port}` names it too.
    */
   const portFor = (
     instanceId: string,
@@ -1642,11 +1657,10 @@ export function createPreviewListeners(
       }
       why = refused ?? "another process holds it";
     }
-    const port =
-      firstOpen(new Set(held.map((row) => row.port)), opens) ??
-      (letUnusedGo() > 0
-        ? firstOpen(new Set(db.ports().map((row) => row.port)), opens)
-        : undefined);
+    let port = firstOpen(new Set(held.map((row) => row.port)), opens);
+    while (port === undefined && reclaimOne(instanceId) !== undefined) {
+      port = firstOpen(new Set(db.ports().map((row) => row.port)), opens);
+    }
     if (port === undefined) {
       throw everyPortTaken();
     }
@@ -1680,53 +1694,40 @@ export function createPreviewListeners(
   };
 
   /**
-   * Every port of the range is held, each by a live origin or another
-   * program: said with how many each holds, and what frees one.
+   * Every port of the range is held, each by an origin in use or another
+   * program: said with how many each holds, and what frees one
+   * (core words/preview-ports.ts).
    */
-  const everyPortTaken = (): PreviewRefusal => {
-    const { sessions: bySessions, projects, others } = portHolders();
-    const held = [
-      bySessions
-        ? `${bySessions} by sessions that run or are open on a screen`
-        : "",
-      projects ? `${projects} by projects' pages` : "",
-      others ? `${others} by other programs on the hub's machine` : "",
-    ].filter(Boolean);
-    const free = [
-      bySessions ? "end a session that has a preview or a canvas" : "",
-      others ? "stop one of those programs" : "",
-      projects ? "delete a project you no longer need" : "",
-    ].filter(Boolean);
-    const action = new Intl.ListFormat("en", { type: "disjunction" }).format(
-      free
-    );
-    return new PreviewRefusal(
+  const everyPortTaken = (): PreviewRefusal =>
+    new PreviewRefusal(
       503,
-      `Every preview port (${PREVIEW_PORTS_TEXT}) is taken: ${new Intl.ListFormat("en").format(held)}. ${action.charAt(0).toUpperCase()}${action.slice(1)}, then show this one again.`
+      previewPortWords.everyPortTaken(PREVIEW_PORTS_TEXT, portHolders())
     );
-  };
 
-  /** How many ports of the range, the barred left out, sessions in use, projects and other programs hold. */
-  const portHolders = (): {
-    others: number;
-    projects: number;
-    sessions: number;
-  } => {
+  /**
+   * What holds each port of the range, the barred left out: an artifact's
+   * preview whose workspace is still active (`workspaceHolds`), a project's
+   * pages, a session (or an artifact it holds or shows) that runs or is open
+   * on a screen, else another program on the hub's machine.
+   */
+  const portHolders = (): PortHolders => {
     const keys = new Map(db.ports().map((row) => [row.port, row.key]));
-    const count = { others: 0, projects: 0, sessions: 0 };
+    const count = { others: 0, previews: 0, projects: 0, sessions: 0 };
     for (
       let port = PREVIEW_PORTS.first;
       port <= PREVIEW_PORTS.last;
       port += 1
     ) {
-      const key = keys.get(port);
-      const holder = key === undefined ? undefined : holderOf(key);
       if (barred(port)) {
         continue;
       }
-      if (holder === undefined) {
+      const key = keys.get(port);
+      const artifactId = key === undefined ? null : artifactOfOrigin(key);
+      if (key === undefined) {
         count.others += 1;
-      } else if (projectOfOrigin(holder) === null) {
+      } else if (artifactId !== null && deps.workspaceHolds(artifactId)) {
+        count.previews += 1;
+      } else if (projectOfOrigin(key) === null) {
         count.sessions += 1;
       } else {
         count.projects += 1;
@@ -1833,17 +1834,17 @@ export function createPreviewListeners(
    * artifact lasts ({@link holds}): the port it keeps while that still opens,
    * else the lowest of the range no other origin holds, kept from then on.
    */
-  const openEmbed = (
-    key: string
-  ): { ancestors: Set<string>; listener: Listener } => {
+  const openEmbed = (key: string): Embed => {
     portFor(key, (port) => {
       if (!unheld(port)) {
         return false;
       }
       try {
+        const route = { key };
         embeds.set(key, {
           ancestors: new Set<string>(),
-          listener: listen(port, () => key, portLock),
+          listener: listen(port, () => route.key, portLock),
+          route,
         });
         return true;
       } catch (thrown) {
@@ -1890,16 +1891,16 @@ export function createPreviewListeners(
   };
 
   /**
-   * Each kept port is checked once ({@link holds}): one no origin holds
-   * now lets it go; each session or project that holds one and has no
-   * listener yet gets one on it (`bind`), a machine artifact's too
-   * ({@link openEmbed}), so the address it was handed under answers again;
-   * a decision page that frames it names its own origin as it loads.
+   * Each kept port is checked once ({@link holds}): each session, project
+   * or machine artifact that holds one and has no listener yet gets one on
+   * it (`bind`, {@link openEmbed}), so the address it was handed under
+   * answers again; a decision page that frames it names its own origin as
+   * it loads. One that doesn't hold it keeps the claim, unbound, until it
+   * is asked for again or the range fills ({@link reclaimOne}).
    */
   const bindKept = (): void => {
-    letUnusedGo();
     for (const { key } of db.ports()) {
-      if (sessions.has(key) || embeds.has(key)) {
+      if (sessions.has(key) || embeds.has(key) || !holds(key)) {
         continue;
       }
       try {
@@ -2038,6 +2039,39 @@ export function createPreviewListeners(
 
     /** The origin's owner ended (a session, a project, an artifact): its listener stops and its port is free again. */
     release,
+
+    /**
+     * Origin `from` (an artifact's held next version's) answers as origin
+     * `to` (the artifact's) from now on, on `from`'s port, so its address
+     * stays: `to`'s own listener stops and its port is free again, the
+     * frames that showed it told again (`letGo`). Its listener, its
+     * framers and its stored port move; a session's pass into `from` is
+     * moved by the caller. False, and nothing moved, when `from` keeps no
+     * port.
+     */
+    move(from: string, to: string): boolean {
+      if (!db.movePort(from, to)) {
+        return false;
+      }
+      const moved = embeds.get(from);
+      const was = embeds.get(to);
+      if (was) {
+        detach(was.listener.stop(), "preview listener stop");
+      }
+      embeds.delete(from);
+      embeds.delete(to);
+      viewers.delete(from);
+      viewers.delete(to);
+      if (moved) {
+        moved.route.key = to;
+        for (const framer of was?.ancestors ?? []) {
+          moved.ancestors.add(framer);
+        }
+        embeds.set(to, moved);
+      }
+      deps.letGo([to]);
+      return true;
+    },
 
     /** Whether the hub reaches a preview origin's ping itself now ({@link reachOrigin}). */
     reach: reachOrigin,

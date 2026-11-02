@@ -12,6 +12,7 @@ import {
   isNotNull,
   isNull,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -200,7 +201,7 @@ export interface ArtifactsDb {
     projectId: string,
     name: string
   ) => ArtifactRow | undefined;
-  /** Removes an artifact and its log. */
+  /** Removes an artifact and its log, a next version held for it too ({@link dropArtifacts}). */
   readonly remove: (id: string) => void;
   /** Keeps `artifactId` as what session `instanceId`'s panel shows, in place of any other. */
   readonly show: (instanceId: string, artifactId: string) => void;
@@ -220,7 +221,42 @@ export interface ArtifactsDb {
   readonly updates: (id: string) => Uint8Array[];
 }
 
-export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
+/** What deletes rows: the database, or a transaction of it. */
+export type Deleter = Pick<BunSQLiteDatabase, "delete" | "select">;
+
+/**
+ * Every artifact `where` names deleted, and each next version held for one
+ * (`heldFor`, which its foreign key cascades): their ids, every one, read
+ * before the delete, since a cascade returns nothing. The one way an
+ * artifact's row goes; db index.ts wraps it (`dropArtifacts`) to tell
+ * `onArtifactsGone` of the ids once the write is done.
+ */
+export const dropArtifactRows = (
+  tx: Deleter,
+  where: SQL | undefined
+): string[] => {
+  // No condition names no row: never every artifact.
+  if (!where) {
+    return [];
+  }
+  const named = tx.select({ id: artifacts.id }).from(artifacts).where(where);
+  const ids = tx
+    .select({ id: artifacts.id })
+    .from(artifacts)
+    .where(or(where, inArray(artifacts.heldFor, named)))
+    .all()
+    .map((row) => row.id);
+  if (ids.length > 0) {
+    tx.delete(artifacts).where(where).run();
+  }
+  return ids;
+};
+
+export const artifactsDb = (
+  db: BunSQLiteDatabase,
+  /** {@link dropArtifactRows}, its ids told once the write is done (db index.ts `dropArtifacts`). */
+  drop: (tx: Deleter, where: SQL | undefined) => void
+): ArtifactsDb => ({
   componentsOn: (machineId) =>
     db
       .select()
@@ -423,7 +459,7 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .all()
       .map(artifactOf),
   remove: (id) => {
-    db.delete(artifacts).where(eq(artifacts.id, id)).run();
+    drop(db, eq(artifacts.id, id));
   },
   show: (instanceId, artifactId) => {
     db.insert(shownPreviews)

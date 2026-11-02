@@ -1,4 +1,4 @@
-import { and, eq, gt, lte } from "drizzle-orm";
+import { and, eq, gt, isNotNull, lte } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { ownerDevices, previewPasses } from "./schema";
 
@@ -12,6 +12,8 @@ export type PreviewPassRow = typeof previewPasses.$inferSelect;
 export interface PreviewPassesDb {
   /** The live pass whose token hashes to `tokenHash`; undefined once it lapsed, was revoked, or never was. */
   readonly live: (tokenHash: string, now: Date) => PreviewPassRow | undefined;
+  /** Every session pass whose scope names origin `from` names origin `to` in its place: `from`'s port is `to`'s now (previews.ts `movePort`). */
+  readonly moveScope: (from: string, to: string) => void;
   /**
    * A pass given at an entry, `replacing` (the token hash the browser
    * presented, if any) gone in the same write, and every lapsed pass with
@@ -83,6 +85,26 @@ export const previewPassesDb = (db: BunSQLiteDatabase): PreviewPassesDb => ({
       .where(revoked(by))
       .returning({ id: previewPasses.id })
       .all().length,
+  moveScope: (from, to) => {
+    db.transaction((tx) => {
+      for (const row of tx
+        .select({ id: previewPasses.id, scope: previewPasses.scope })
+        .from(previewPasses)
+        .where(isNotNull(previewPasses.scope))
+        .all()) {
+        if (row.scope?.includes(from)) {
+          tx.update(previewPasses)
+            .set({
+              scope: [
+                ...new Set(row.scope.map((key) => (key === from ? to : key))),
+              ],
+            })
+            .where(eq(previewPasses.id, row.id))
+            .run();
+        }
+      }
+    });
+  },
   touch: (id, at) => {
     db.update(previewPasses)
       .set({ lastSeenAt: at })

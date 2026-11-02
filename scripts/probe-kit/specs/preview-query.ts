@@ -366,6 +366,7 @@ const run = async (kit: Kit) => {
         ok: true,
         upstream: { address: "127.0.0.1", port: agentPort, token: TOKEN },
       }),
+    target: (key: string) => previewTargets.get(key),
     unreachable: () => undefined,
     ownerOf: () => undefined,
     kindOf: () => undefined,
@@ -417,6 +418,7 @@ const run = async (kit: Kit) => {
       }
       return gone.length;
     },
+    moveScope: () => undefined,
     touch: () => undefined,
   };
   // No tailnet here: no TLS twins, no tailnet origin.

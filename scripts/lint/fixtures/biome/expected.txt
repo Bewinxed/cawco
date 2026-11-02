@@ -34,3 +34,4 @@ no-raw-motion/apps/dashboard/src/planted.css:5:24 no-raw-motion
 no-raw-motion/apps/dashboard/src/planted.css:6:31 no-raw-motion
 no-raw-motion/packages/hub/skills/decision-page/kit/page.css:3:25 no-raw-motion
 no-raw-motion/packages/hub/skills/decision-page/kit/page.css:3:30 no-raw-motion
+artifact-rows-drop/packages/hub/src/db/planted.ts:7:1 artifact-rows-drop

@@ -307,6 +307,7 @@ async function hubListener(
   const deps = {
     reach: () => Promise.resolve({ ok: true as const, upstream }),
     stageAnswered: () => undefined,
+    target: (key: string) => previewTargets.get(key),
     unreachable: () => undefined,
     servedOn: () => false,
     kindOf: () => "component" as const,

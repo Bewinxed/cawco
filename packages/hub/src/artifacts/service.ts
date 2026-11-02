@@ -1746,7 +1746,8 @@ export interface ArtifactServiceDeps {
   relist: (instanceId: string) => void;
   /**
    * An artifact was taken out: a preview it was no longer holds the
-   * workspace it showed (work-items.ts `settleShown`).
+   * workspace it showed (work-items.ts `settleShown`). Its own origin ends
+   * with its row (db `onArtifactsGone`), not here.
    */
   removed?: (row: ArtifactRow) => void;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
@@ -1851,6 +1852,13 @@ export interface ArtifactServiceDeps {
    * the ask did, one sentence.
    */
   verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
+  /**
+   * Artifact `id`'s held next version `held` opens in its place
+   * ({@link promote}), before its row goes: the version's preview origin,
+   * and so its address, is the artifact's from now on (server.ts
+   * `moveArtifactOrigin`).
+   */
+  versionOpened: (held: string, id: string) => void;
   /** The session's current step waits on the artifact; the step that does, or null (plans.ts `waitOn`). */
   waitOn: (instanceId: string, artifactId: string) => string | null;
   /** The session's plan's page waits and steps: what a wait on its artifacts stands on (plans.ts `waits`). */
@@ -3026,6 +3034,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       revision: next.revision,
       updatedAt: new Date(),
     }) as ArtifactRow;
+    // Its origin, where its address was handed out, is the artifact's now.
+    deps.versionOpened(next.id, row.id);
     discard(next);
     versionMoved(promoted);
     // A server the next version moved off is let go once nothing shows it.

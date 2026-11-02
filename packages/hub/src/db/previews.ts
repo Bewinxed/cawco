@@ -49,6 +49,13 @@ export interface PreviewsDb {
    * kept, when it is not.
    */
   readonly keepPort: (key: string, port: number) => boolean;
+  /**
+   * Origin `from`'s port is origin `to`'s now, whatever `to` kept before
+   * let go: an artifact's held next version opened in its place (server.ts
+   * `moveArtifactOrigin`). False, and nothing moved, when `from` keeps no
+   * port or `to`'s owner is not a row.
+   */
+  readonly movePort: (from: string, to: string) => boolean;
   /** Whether origin `key`'s owner (the session, the project or the artifact) is a row of the hub's now. */
   readonly ownerHeld: (key: string) => boolean;
   /** Every origin's port, by its key. */
@@ -141,6 +148,19 @@ export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({
       }
       tx.insert(previewPorts)
         .values({ port, ...ownerOf(key) })
+        .run();
+      return true;
+    }),
+  movePort: (from, to) =>
+    db.transaction((tx) => {
+      const kept = tx.select().from(previewPorts).where(owned(from)).get();
+      if (!(kept && ownerHeld(tx, to))) {
+        return false;
+      }
+      tx.delete(previewPorts).where(owned(to)).run();
+      tx.delete(previewPorts).where(owned(from)).run();
+      tx.insert(previewPorts)
+        .values({ port: kept.port, ...ownerOf(to) })
         .run();
       return true;
     }),
