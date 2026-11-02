@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   artifacts,
@@ -54,8 +54,16 @@ export interface PreviewsDb {
   readonly ownerHeld: (key: string) => boolean;
   /** Every origin's port, by its key. */
   readonly ports: () => { key: string; port: number }[];
+  /**
+   * Every origin's port, by its key, the one used least recently first
+   * (`used_at`, one never used before any): the order a full range takes
+   * a port back in (preview.ts `reclaimOne`).
+   */
+  readonly portsByUse: () => { key: string; port: number }[];
   readonly setSettings: (settings: StoredPreviewSettings) => void;
   readonly settings: () => StoredPreviewSettings;
+  /** Origin `key` was used at `at` (preview.ts `used`, at most once a minute). */
+  readonly used: (key: string, at: Date) => void;
 }
 
 const ID = "preview";
@@ -116,23 +124,32 @@ const ownerOf = (key: string) => {
   return origin ? { origin } : { instanceId: key };
 };
 
+/** A port row as the listeners read it: its origin's key and its port. */
+const keyed = (
+  row: typeof previewPorts.$inferSelect
+): { key: string; port: number } => {
+  if (row.projectId) {
+    return { key: projectOrigin(row.projectId), port: row.port };
+  }
+  return {
+    key: row.origin ? artifactOrigin(row.origin) : (row.instanceId as string),
+    port: row.port,
+  };
+};
+
 export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({
-  ports: () =>
+  ports: () => db.select().from(previewPorts).all().map(keyed),
+  // SQLite sorts a null first in ascending order: one never used goes first.
+  portsByUse: () =>
     db
       .select()
       .from(previewPorts)
+      .orderBy(asc(previewPorts.usedAt), asc(previewPorts.port))
       .all()
-      .map((row) => {
-        if (row.projectId) {
-          return { key: projectOrigin(row.projectId), port: row.port };
-        }
-        return {
-          key: row.origin
-            ? artifactOrigin(row.origin)
-            : (row.instanceId as string),
-          port: row.port,
-        };
-      }),
+      .map(keyed),
+  used: (key, at) => {
+    db.update(previewPorts).set({ usedAt: at }).where(owned(key)).run();
+  },
   ownerHeld: (key) => ownerHeld(db, key),
   keepPort: (key, port) =>
     db.transaction((tx) => {

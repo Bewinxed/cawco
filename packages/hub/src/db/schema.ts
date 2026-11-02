@@ -4317,6 +4317,13 @@ export const previewPorts = sqliteTable(
      * down is dropped at its next start (preview.ts `bindKept`).
      */
     origin: text("origin").unique(),
+    /**
+     * When the origin was last used (a request, a socket opened or closed),
+     * written at most once a minute (preview.ts `used`): under a full range
+     * the port of the one used least recently that nothing uses now goes
+     * first (`reclaimOne`), across the hub's restarts. Null until first used.
+     */
+    usedAt: timestamp("used_at"),
   },
   () => [
     // Its columns by bare name, as every check's (migrations-check.ts

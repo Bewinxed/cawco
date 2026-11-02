@@ -935,6 +935,8 @@ const run = async (kit: Kit) => {
       ports: () => [],
       keepPort: () => true,
       dropPort: () => undefined,
+      portsByUse: () => [],
+      used: () => undefined,
       setSettings: () => undefined,
     } satisfies Parameters<typeof createPreviewListeners>[2],
     // No request here carries a pass, so the lock reads none: each answer is

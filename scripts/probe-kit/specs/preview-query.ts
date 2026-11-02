@@ -388,6 +388,8 @@ const run = async (kit: Kit) => {
     dropPort: (key: string) => {
       kept.delete(key);
     },
+    portsByUse: () => [...kept].map(([key, port]) => ({ key, port })),
+    used: () => undefined,
     setSettings: () => undefined,
   } as unknown as Db;
   // The passes the hub keeps, as its db does (db/preview-passes.ts), by token hash.

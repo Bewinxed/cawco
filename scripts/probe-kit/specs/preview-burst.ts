@@ -333,6 +333,8 @@ async function hubListener(
       return true;
     },
     dropPort: (key: string) => ports.delete(key),
+    portsByUse: () => [...ports].map(([key, held]) => ({ key, port: held })),
+    used: () => undefined,
   } as unknown as Listeners[2];
   const tailnet = {
     beside: () => ({ close: () => undefined }),

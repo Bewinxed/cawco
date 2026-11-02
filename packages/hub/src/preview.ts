@@ -53,6 +53,7 @@ import {
 } from "@cawco/core/preview-reach";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
+import { MINUTE_MS } from "@cawco/core/time";
 import {
   type PortHolders,
   previewPortWords,
@@ -605,6 +606,9 @@ const TRAILING_STOP = /\.$/u;
 
 /** How long the machine's listener has to answer the ping's relay. Our call: under the pane's own 10 s for the whole probe. */
 const PING_RELAY_MS = 5000;
+
+/** How often an origin's use is written to its port row at most (`used`): the reclaim's order needs no finer grain. Our call. */
+const USE_WRITE_MS = MINUTE_MS;
 
 /** A thrown fetch's short name for the pane: its code (`ECONNRESET`), else its kind. */
 const codeOf = (error: unknown): string => {
@@ -1257,17 +1261,28 @@ export function createPreviewListeners(
    */
   const viewers = new Map<string, number>();
   /**
-   * When each origin was last used, by its key: its last request or socket
-   * opened or closed, in this hub process. Under a full range the one used
-   * least recently gives its port up first ({@link reclaimOne}); one not
-   * used since the hub started counts as the oldest.
+   * When this hub process last wrote each origin's use, by its key: a write
+   * throttle alone. The use itself is its port row's (`used_at`), which
+   * orders a full range's reclaim ({@link reclaimOne}) across restarts.
    */
-  const lastUse = new Map<string, number>();
+  const usedWritten = new Map<string, number>();
+  /**
+   * Origin `key` was used (a request, a socket opened or closed): its port
+   * row's `used_at` written, at most once a minute ({@link USE_WRITE_MS}).
+   */
+  const used = (key: string): void => {
+    const now = Date.now();
+    if (now - (usedWritten.get(key) ?? 0) < USE_WRITE_MS) {
+      return;
+    }
+    usedWritten.set(key, now);
+    db.used(key, new Date(now));
+  };
   const viewed = (socket: ServerWebSocket<ListenerSocket>, by: 1 | -1) => {
     const { data } = socket;
     const key = "artifactId" in data ? data.at : data.instanceId;
     if (key) {
-      lastUse.set(key, Date.now());
+      used(key);
       const now = (viewers.get(key) ?? 0) + by;
       if (now > 0) {
         viewers.set(key, now);
@@ -1323,7 +1338,7 @@ export function createPreviewListeners(
     ): Promise<Response | undefined> => {
       const instanceId = route(request);
       if (instanceId) {
-        lastUse.set(instanceId, Date.now());
+        used(instanceId);
       }
       const stopped = atTheLock(request, lock, instanceId);
       if (stopped) {
@@ -1622,7 +1637,8 @@ export function createPreviewListeners(
 
   /**
    * One port taken back for origin `asking`, the range being full: from
-   * the origin least recently used ({@link lastUse}) of those no screen has
+   * the origin least recently used (`used_at`, db previews.ts
+   * `portsByUse`) of those no screen has
    * open and no running session keeps ({@link inUse}), previews of active
    * workspaces among them; one whose owner went first. Its listener stops,
    * its stored port is dropped, and what shows it is told again without that
@@ -1633,16 +1649,10 @@ export function createPreviewListeners(
    */
   const reclaimOne = (asking: string): string | undefined => {
     const idle = db
-      .ports()
+      .portsByUse()
       .map((row) => row.key)
       .filter((one) => one !== asking && !inUse(one));
-    const used = (key: string): number =>
-      db.ownerHeld(key) ? (lastUse.get(key) ?? 0) : -1;
-    const taken = idle.reduce<string | undefined>(
-      (least, one) =>
-        least === undefined || used(one) < used(least) ? one : least,
-      undefined
-    );
+    const taken = idle.find((one) => !db.ownerHeld(one)) ?? idle[0];
     if (taken === undefined) {
       return;
     }
@@ -1759,7 +1769,7 @@ export function createPreviewListeners(
     sessions.delete(key);
     embeds.delete(key);
     viewers.delete(key);
-    lastUse.delete(key);
+    usedWritten.delete(key);
     db.dropPort(key);
   };
 
