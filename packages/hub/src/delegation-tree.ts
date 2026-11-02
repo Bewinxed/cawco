@@ -6,12 +6,19 @@
  * sees every attempt in its project beside its own delegates, as co-parent
  * (§5.3 conversation authority).
  */
-import type { InstanceRow, WorkItemState } from "@cawco/core";
+import type { InstanceRow, TranscriptPage, WorkItemState } from "@cawco/core";
 import { HOUR_MS } from "@cawco/core/time";
 import type { DbShape, WorkItemRow } from "./db";
+import { byHandle } from "./handles";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
-import { type HeldWork, isHubParent, type QueuedDelegate } from "./work-items";
+import { type Step, stepsEnough, stepsOf } from "./transcript-steps";
+import {
+  type HeldWork,
+  isHubParent,
+  type QueuedDelegate,
+  type Unlanded,
+} from "./work-items";
 
 /** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
 type DelegateListInclude = "live" | "all";
@@ -20,13 +27,24 @@ type DelegateListInclude = "live" | "all";
  * One `delegate_list` read. With `since` or `before`, only what that window
  * holds: delegates whose lifetime touches it (started before `before`, and
  * ended after `since` or still live), workspaces held inside it, and queued
- * delegates queued before its end.
+ * delegates queued before its end. With `target`, that one delegate of the
+ * caller's tree in full ({@link DelegatePeek}): its steps' `page`, of
+ * {@link STEPS_PAGE}, when `steps` is `all`; its last {@link STEPS_RECENT}
+ * when `recent`.
  */
 export interface DelegateListQuery {
   before?: Date;
   include: DelegateListInclude;
   since?: Date;
+  target?: { asked: string; page: number; steps: "recent" | "all" };
 }
+
+/** How many of its newest steps a concise look at one delegate names. */
+const STEPS_RECENT = 8;
+/** How many steps one page of a detailed look holds. */
+const STEPS_PAGE = 50;
+/** The fewest transcript pages read back for a look; past it the steps say they were cut. */
+export const PAGES_READ_MOST = 40;
 
 /** How long an ended item stays in a `live` read. */
 const ENDED_LIVE_MS = HOUR_MS;
@@ -70,6 +88,49 @@ export interface DelegateNode {
   workspaceId: string;
 }
 
+/** Its context window now, as its harness last reported the request it sent. */
+export type PeekContext =
+  | {
+      /** Tokens its last request sent. */
+      tokens: number;
+      /** Its model's window; null when the fleet does not know it, with why. */
+      window: number | null;
+      windowWhy?: string;
+    }
+  /** Its harness reported no figure yet. */
+  | { tokens: null };
+
+/** What its workspace holds so far, or why it could not be read. */
+export type PeekMade =
+  | (Omit<Unlanded, "live" | "workspaceId"> & {
+      /** The artifacts it handed its parent (`to: "parent"`), by name. */
+      handed: { id: string; name: string }[];
+    })
+  | { handed: { id: string; name: string }[]; unread: string };
+
+/** `delegate_list` with a `target`: one delegate in full. */
+export interface DelegatePeek {
+  /** A turn is in flight, as its transcript's tail says. */
+  busy: boolean;
+  context: PeekContext;
+  /** The same node the list shows, its children aside. */
+  delegate: DelegateNode;
+  /** Its latest assistant text, whole; the presenter cuts it. */
+  lastWords?: { at?: string; text: string };
+  made: PeekMade;
+  steps:
+    | {
+        /** This page's steps, newest first. */
+        list: Step[];
+        /** Steps older than this page exist: the next page holds them. */
+        more: boolean;
+        page: number;
+        /** The read stopped at {@link PAGES_READ_MOST} pages: older steps went unread. */
+        cut: boolean;
+      }
+    | { unread: string };
+}
+
 /** What one `delegate_list` read answers. */
 export interface DelegateList {
   delegates: DelegateNode[];
@@ -85,8 +146,15 @@ export interface DelegationTreeDeps {
     lastActivityAt: Date;
     cacheWarm: boolean;
   };
+  /**
+   * The session's context as its harness last reported it (the row's
+   * `contextTokens`), against its model's window (server.ts
+   * `contextWindowOf`).
+   */
+  context: (row: KeepAliveRow) => Promise<PeekContext>;
   db: Pick<
     DbShape,
+    | "artifacts"
     | "getInstancesByIds"
     | "project"
     | "projectAttempts"
@@ -101,6 +169,16 @@ export interface DelegationTreeDeps {
   machineName: (machineId: string) => string;
   /** A paused machine's pause in words (machine-pause.ts); undefined when it is not paused. */
   machinePaused: (machineId: string) => string | undefined;
+  /**
+   * The session's transcript pages, newest first, read back from its newest
+   * until `enough` holds, the conversation's start, or `most` pages
+   * (server.ts `pagesUntil`); or why it could not be read.
+   */
+  pages: (
+    instanceId: string,
+    enough: (pages: readonly TranscriptPage[]) => boolean,
+    most: number
+  ) => Promise<{ pages: TranscriptPage[] } | { fault: string }>;
   /** The session's plan progress, when it has steps (plans.ts). */
   plan: (
     instanceId: string
@@ -111,6 +189,8 @@ export interface DelegationTreeDeps {
   stalled: (
     instanceId: string
   ) => { stale?: true; words: string; until?: number } | undefined;
+  /** What session's workspace holds on no remote (work-items `unlanded`); throws the machine's words. */
+  unlanded: (instanceId: string) => Promise<Unlanded | undefined>;
 }
 
 const firstLine = (text: string | null): string | undefined =>
@@ -336,10 +416,10 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
    * still stands while a child it keeps hangs under it, and its workspaces
    * still count toward `held`: held work is owed whatever the include.
    */
-  const read = async (
+  const list = async (
     caller: InstanceRow,
     query: DelegateListQuery,
-    now = Date.now()
+    now: number
   ): Promise<DelegateList> => {
     const seen = new Set<string>([caller.id]);
     const workspaces = new Set<string>();
@@ -410,5 +490,134 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     };
   };
 
+  /**
+   * Every session under `caller`, one entry each: the work items the list
+   * walks (and, for a project's conversation, its project's attempts), level
+   * by level, each session once.
+   */
+  const descendants = (caller: InstanceRow): Session[] => {
+    const seen = new Set<string>([caller.id]);
+    const items: WorkItemRow[] = [];
+    const project = ledProject(caller);
+    let level = [
+      ...db.workItemsOfParents([caller.id]),
+      ...(project ? db.projectAttempts(project) : []),
+    ];
+    while (level.length > 0) {
+      const fresh = level.filter((item) => !seen.has(item.instanceId));
+      items.push(...fresh);
+      const ids = [...new Set(fresh.map((item) => item.instanceId))];
+      for (const id of ids) {
+        seen.add(id);
+      }
+      level = ids.length > 0 ? db.workItemsOfParents(ids) : [];
+    }
+    return sessionsOf(items);
+  };
+
+  /** The artifacts `instanceId` made that stand in its parent's panel: handed up with `to: "parent"`. */
+  const handedUp = (item: WorkItemRow): { id: string; name: string }[] =>
+    db.artifacts
+      .ofInstance(item.parentInstanceId)
+      .filter((artifact) => artifact.madeBy === item.instanceId)
+      .map((artifact) => ({ id: artifact.id, name: artifact.name }));
+
+  /** What the session's workspace holds so far, or the machine's words on why it could not be read. */
+  const madeOf = async (item: WorkItemRow): Promise<PeekMade> => {
+    const handed = handedUp(item);
+    try {
+      const read = await deps.unlanded(item.instanceId);
+      if (!read) {
+        return { handed, unread: "it has no workspace of its own" };
+      }
+      const { live: _live, workspaceId: _workspace, ...made } = read;
+      return { ...made, handed };
+    } catch (error) {
+      return {
+        handed,
+        unread: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+
+  /** Its steps for the query's page, read back from its transcript as far as the page needs. */
+  const stepsFor = async (
+    instanceId: string,
+    target: NonNullable<DelegateListQuery["target"]>
+  ): Promise<{
+    busy: boolean;
+    lastWords?: DelegatePeek["lastWords"];
+    steps: DelegatePeek["steps"];
+  }> => {
+    const [from, size] =
+      target.steps === "all"
+        ? [(target.page - 1) * STEPS_PAGE, STEPS_PAGE]
+        : [0, STEPS_RECENT];
+    const read = await deps.pages(
+      instanceId,
+      stepsEnough(from + size),
+      PAGES_READ_MOST
+    );
+    if ("fault" in read) {
+      return { busy: false, steps: { unread: read.fault } };
+    }
+    const said = stepsOf(read.pages);
+    const reached = said.steps.length > from + size;
+    return {
+      busy: said.busy,
+      ...(said.lastWords ? { lastWords: said.lastWords } : {}),
+      steps: {
+        list: said.steps.slice(from, from + size),
+        more: reached || !said.whole,
+        cut: !(said.whole || reached),
+        page: target.page,
+      },
+    };
+  };
+
+  /** `delegate_list` with a `target`: the one delegate of `caller`'s tree it names, in full. */
+  const peek = async (
+    caller: InstanceRow,
+    target: NonNullable<DelegateListQuery["target"]>
+  ): Promise<DelegatePeek> => {
+    const sessions = descendants(caller);
+    const rows = new Map(
+      db
+        .getInstancesByIds(sessions.map((one) => one.item.instanceId))
+        .map((each) => [each.id, each])
+    );
+    const session = byHandle(
+      target.asked,
+      sessions,
+      {
+        id: (one) => one.item.instanceId,
+        names: (one) => {
+          const row = rows.get(one.item.instanceId);
+          const label = row ? sessionLabel(row) : undefined;
+          return [one.item.title, label?.name, label?.tag, row?.cwd];
+        },
+        said: (one) => `${handleOf(one.item.instanceId)} “${one.item.title}”`,
+      },
+      "delegate of yours"
+    );
+    const row = rows.get(session.item.instanceId);
+    const [delegate, context, made, steps] = await Promise.all([
+      nodeOf(session, row, []),
+      row ? deps.context(row) : Promise.resolve({ tokens: null }),
+      madeOf(session.item),
+      stepsFor(session.item.instanceId, target),
+    ]);
+    return { delegate, context, made, ...steps };
+  };
+
+  const read = (
+    caller: InstanceRow,
+    query: DelegateListQuery,
+    now = Date.now()
+  ): Promise<DelegateList | DelegatePeek> =>
+    query.target ? peek(caller, query.target) : list(caller, query, now);
+
   return { read };
 };
+
+const handleOf = (id: string): string => id.slice(0, 8);

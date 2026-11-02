@@ -404,9 +404,22 @@ export interface HeldWork extends WorkspaceHolding {
 export interface Unlanded {
   ahead: number;
   changed: number;
+  /**
+   * Read only while something holds the workspace up (its boundary runs):
+   * the subjects of its newest commits on no remote, at most
+   * {@link SUBJECTS_READ}, newest first, and the files of its
+   * `$TMPDIR/outputs/` by their path under it. Absent for one closed and
+   * held, whose clone is read only by its machine's host.
+   */
+  clone?: { outputs: string[]; subjects: string[] };
+  /** Its uncommitted changed files alone, stashes apart. */
+  dirty: number;
   live: boolean;
   workspaceId: string;
 }
+
+/** How many of a workspace's commit subjects {@link Unlanded} reads. */
+const SUBJECTS_READ = 5;
 
 /**
  * A workspace closed on its machine: its row, archived, and the carry its
@@ -1745,6 +1758,9 @@ interface ScratchOutput {
   path: string;
   size: number;
 }
+
+/** The line between the parts of one read of a workspace ({@link unlandedOf}). */
+const READ_PART = "--cawco-part--";
 
 /** {@link SCRATCH_OUTPUTS_LIST}'s answer, read. */
 const scratchOutputsOf = (stdout: string): ScratchOutput[] =>
@@ -4720,7 +4736,7 @@ export const createWorkItems = ({
       }
       if (isHeld(workspace)) {
         const { dirty, stashes, ahead } = workspace.holding;
-        return { workspaceId: id, changed: dirty + stashes, ahead };
+        return { workspaceId: id, changed: dirty + stashes, dirty, ahead };
       }
       // A folder's unlanded work is its change set (agent layer.ts).
       if (workspace.kind === "folder") {
@@ -4729,25 +4745,28 @@ export const createWorkItems = ({
           CONTROL_WORKSPACE_CHANGES,
           [refOf(workspace)]
         )) as WorkspaceChanges;
-        return { workspaceId: id, changed: changes.changed.length, ahead: 0 };
+        const changed = changes.changed.length;
+        return { workspaceId: id, changed, dirty: changed, ahead: 0 };
       }
       const skip = handedOver(workspace).map(
         (path) => ` ${quote(`:(exclude,literal)${path}`)}`
       );
       const lines = (name: string): string =>
         `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
+      // The counts on the first three lines; then, each after a line of its
+      // own, the newest commit subjects on no remote and the outputs folder.
       const read = await command(
         workspace.machineId,
         workspace.path,
-        `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
+        `${SAFE_GIT_SHELL}a=$( ${ownCommitsShell(workspace.base || undefined, landedFrom(id))} ) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")} && echo ${READ_PART} && git log -${SUBJECTS_READ} --format=%s HEAD --not --remotes=origin && echo ${READ_PART} && { ${SCRATCH_OUTPUTS_LIST}; }`,
         GIT_TIMEOUT_MS,
         refOf(workspace),
         { noWait: true }
       );
-      const [ahead, dirty, stashes] = read.stdout
-        .trim()
-        .split(SPACES)
-        .map(Number);
+      const [counts = "", subjects = "", outputs = ""] = read.stdout.split(
+        `${READ_PART}\n`
+      );
+      const [ahead, dirty, stashes] = counts.trim().split(SPACES).map(Number);
       if (
         read.exitCode !== 0 ||
         [ahead, dirty, stashes].some((count) => !Number.isInteger(count))
@@ -4759,7 +4778,12 @@ export const createWorkItems = ({
       return {
         workspaceId: id,
         changed: (dirty as number) + (stashes as number),
+        dirty: dirty as number,
         ahead: ahead as number,
+        clone: {
+          subjects: subjects.split("\n").filter(Boolean),
+          outputs: scratchOutputsOf(outputs).map((one) => one.path),
+        },
       };
     });
 

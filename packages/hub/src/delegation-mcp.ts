@@ -44,7 +44,11 @@ import {
   type Listable,
   loadsUpfront,
 } from "./delegation-tools";
-import type { DelegateList, DelegateListQuery } from "./delegation-tree";
+import type {
+  DelegateList,
+  DelegateListQuery,
+  DelegatePeek,
+} from "./delegation-tree";
 import type { FleetWatch } from "./fleet-watch";
 import { type createHubTools, DESIGN_VERDICT, HUB_TOOLS } from "./hub-tools";
 import { INGRESS_TOOLS, type Ingress } from "./ingress";
@@ -303,7 +307,7 @@ export function createDelegationMcp(options: {
   delegationTree?: (
     actor: InstanceRow,
     query: DelegateListQuery
-  ) => Promise<DelegateList>;
+  ) => Promise<DelegateList | DelegatePeek>;
   /**
    * The project tools (views, the project's folder), for a session in a
    * project (caw.ts). `toolUseId` is the call's own: a delegate type

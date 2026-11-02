@@ -54,9 +54,14 @@ import type { Tasks } from "./tasks";
  * 2026-10-31: admin_subagents_read and admin_subagents_write, so a fleet
  * subagent is changed with the owner's approval like every other kind of
  * fleet configuration (worker 29,065 measured).
+ * 2026-11-02: delegate_list takes a `target` (and its steps' `page`): one
+ * delegate in full, its steps, context, made so far and last words, in
+ * place of reading its transcript by hand; 143 tokens (worker 29,221
+ * measured, from 29,078). Only a session that may start delegates lists it,
+ * so the delegate's role is unchanged.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 29_100,
+  worker: 29_250,
   delegate: 10_600,
   overseer: 770,
   "web-facing": 3400,

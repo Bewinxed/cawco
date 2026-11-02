@@ -26107,6 +26107,31 @@ export const createServer = (
     machineName,
     machinePaused: (machineId) => machinePause.words(machineId),
     stalled: (instanceId) => stallOf(instanceId),
+    unlanded: (instanceId) => workItems.unlanded(instanceId),
+    pages: async (instanceId, enough, most) => {
+      const read = await pagesUntil(instanceId, enough, most);
+      if ("gone" in read) {
+        return { fault: `its transcript no longer holds block ${read.gone}` };
+      }
+      return "fault" in read ? { fault: read.message } : read;
+    },
+    context: async (row) => {
+      if (row.contextTokens === null) {
+        return { tokens: null };
+      }
+      const window = await contextWindowOf(
+        row.machineId,
+        row.harness as HarnessKind,
+        row.model ?? undefined
+      ).then(
+        (found) => ({ window: found ?? null }),
+        (error: unknown) => ({
+          window: null,
+          windowWhy: error instanceof Error ? error.message : String(error),
+        })
+      );
+      return { tokens: row.contextTokens, ...window };
+    },
     activity: (row) => {
       const state = followupState(row);
       return {
@@ -26558,7 +26583,18 @@ export const createServer = (
    * or what stopped the walk: the pages are the in-memory builder's
    * (transcripts.ts), so the whole walk reads no disk twice.
    */
-  const everyPage = async (instanceId: string) => {
+  const everyPage = (instanceId: string) =>
+    pagesUntil(instanceId, () => false, Number.POSITIVE_INFINITY);
+  /**
+   * A session's transcript pages, newest first, read back from its newest
+   * until `enough` holds of what is read, the conversation's start, or
+   * `most` pages; or what stopped the walk.
+   */
+  async function pagesUntil(
+    instanceId: string,
+    enough: (pages: readonly TranscriptPage[]) => boolean,
+    most: number
+  ) {
     const id = db.instanceIdOf(instanceId);
     const pages: TranscriptPage[] = [];
     let before: string | undefined;
@@ -26568,12 +26604,12 @@ export const createServer = (
         return page;
       }
       pages.push(page);
-      if (page.cursor === null) {
+      if (page.cursor === null || pages.length >= most || enough(pages)) {
         return { pages };
       }
       before = page.cursor;
     }
-  };
+  }
   // What a session hands another by name, as files (handed-inputs.ts).
   const handedInputs = createHandedInputs({
     artifacts,

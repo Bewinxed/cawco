@@ -608,8 +608,24 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate_list",
-      "Your delegates, newest first, theirs nested: each one's state, cache warmth and report; then those queued for owned files and the workspaces held with unlanded work. Use it when you need where one stands; reports and refusals reach you by themselves.",
+      "Your delegates, newest first, theirs nested: each one's state, cache warmth and report; then those queued for owned files and the workspaces held with unlanded work. Use it when you need where one stands; reports and refusals reach you by themselves. With target, that one delegate in full: its step now, its last steps, its context against its model's window, what it has made so far and its last words; use it while one works and you need its progress or context before its report.",
       {
+        target: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe(
+            "A delegate's handle, directory or id, as handoff takes it."
+          ),
+        page: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe(
+            "With target and detailed: which 50 steps, newest first (default 1)."
+          ),
         include: z
           .enum(["live", "all"])
           .optional()
@@ -621,10 +637,19 @@ export function handoffTools(deps: HandoffDeps) {
         ),
         before: isoTime().describe("ISO time: only items started before it."),
       },
-      ({ include, since, before }) => {
+      ({ include, since, before, target, page }, format) => {
         const windowed = since !== undefined || before !== undefined;
         return actions.delegateList({
           include: include ?? (windowed ? "all" : "live"),
+          ...(target === undefined
+            ? {}
+            : {
+                target: {
+                  asked: target,
+                  page: page ?? 1,
+                  steps: format === "detailed" ? "all" : "recent",
+                },
+              }),
           ...(since === undefined ? {} : { since: new Date(since) }),
           ...(before === undefined ? {} : { before: new Date(before) }),
         });

@@ -5,15 +5,23 @@
  * transcript's delegate card is keyed by (core transcript-rules.ts).
  */
 import {
+  artifactLink,
   type DelegateType,
   delegateTypesWords as delegateTypesUiWords,
   type GeneratedImage,
+  delegatePeekWords as peek,
   planLink,
   sessionLink,
   startsAny,
 } from "@cawco/core";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
-import type { DelegateList, DelegateNode } from "../delegation-tree";
+import {
+  type DelegateList,
+  type DelegateNode,
+  type DelegatePeek,
+  PAGES_READ_MOST,
+} from "../delegation-tree";
+import type { Step } from "../transcript-steps";
 import {
   excludedNamed,
   type HeldWork,
@@ -109,11 +117,121 @@ const heldLine = (work: HeldWork, now: number): string => {
   return `- workspace ${handle(work.workspaceId)} on ${work.machine} · held ${ago(work.heldAt, now)} · ${work.holds} · ${work.size}${excluded ? ` · kept out of git: ${excluded}` : ""}`;
 };
 
-/** `delegate_list`: the tree newest first, then the queued and the held. */
+/** How much of a delegate's last words a look at it quotes. */
+const LAST_WORDS_MAX = 400;
+
+/** One step as a line: the tool in words, its target, and how it ended. */
+const stepLine = (step: Step, now: number): string => {
+  const ended = {
+    error: ` · ${peek.failed}`,
+    pending: ` · ${peek.running}`,
+    success: "",
+  }[step.status];
+  return `- ${step.tool}${step.target ? ` ${quote(step.target, 140)}` : ""}${ended}${step.at ? ` · ${ago(step.at, now)}` : ""}`;
+};
+
+/** What it does now: the call open and for how long, thinking between calls, or idle since its last activity. */
+const nowLine = (look: DelegatePeek, now: number): string => {
+  const node = look.delegate;
+  if (node.endedAt) {
+    return peek.nowEnded;
+  }
+  if (!look.busy) {
+    return peek.nowIdle(lasted(now - Date.parse(node.lastActivityAt)));
+  }
+  const [newest] = "list" in look.steps ? look.steps.list : [];
+  if (newest?.status === "pending") {
+    const line = `${newest.tool}${newest.target ? ` ${quote(newest.target, 140)}` : ""}`;
+    return peek.nowStep(
+      line,
+      newest.at
+        ? lasted(now - Date.parse(newest.at))
+        : "a time its harness did not keep"
+    );
+  }
+  return peek.nowThinking(newest?.at ? ago(newest.at, now) : "not yet taken");
+};
+
+const NUMBER = new Intl.NumberFormat("en-US");
+
+/** Its context against its model's window; its cache's warmth is on its first line. */
+const contextLine = (look: DelegatePeek): string => {
+  const { context } = look;
+  if (context.tokens === null) {
+    return peek.contextNone;
+  }
+  let share = "";
+  if (context.window) {
+    share = peek.contextShare(
+      Math.round((context.tokens / context.window) * 100),
+      NUMBER.format(context.window)
+    );
+  } else if (context.windowWhy) {
+    share = peek.contextWindowUnknown(context.windowWhy);
+  }
+  return peek.context(NUMBER.format(context.tokens), share);
+};
+
+/** What its workspace holds so far, and what it handed up. */
+const madeLines = (look: DelegatePeek): string[] => {
+  const { made } = look;
+  const handed = peek.handed(
+    made.handed.map((one) => artifactLink(one.id, one.name))
+  );
+  if ("unread" in made) {
+    return [peek.madeHeading, peek.madeUnread(made.unread), handed];
+  }
+  return [
+    peek.madeHeading,
+    peek.commits(made.ahead, made.clone?.subjects ?? []),
+    peek.uncommitted(made.dirty),
+    made.clone ? peek.outputs(made.clone.outputs) : peek.outputsUnread,
+    handed,
+  ];
+};
+
+/** `delegate_list` with a `target`: one delegate, who, now, its last steps, context, made so far, last words. */
+const peekWords = (look: DelegatePeek): string => {
+  const now = Date.now();
+  const node = look.delegate;
+  const { steps } = look;
+  let stepLines: (string | false)[];
+  if ("unread" in steps) {
+    stepLines = [peek.stepsUnread(steps.unread)];
+  } else if (steps.list.length === 0) {
+    stepLines = [peek.stepsNone];
+  } else {
+    stepLines = [
+      peek.stepsHeading(steps.list.length),
+      ...steps.list.map((step) => stepLine(step, now)),
+      steps.cut && peek.stepsCut(PAGES_READ_MOST),
+      steps.more && peek.stepsMore,
+    ];
+  }
+  return lines(
+    nodeLines(node, 0, now)[0],
+    nowLine(look, now),
+    stepLines.filter((line): line is string => !!line),
+    contextLine(look),
+    madeLines(look),
+    look.lastWords
+      ? peek.lastWords(
+          look.lastWords.at ? ago(look.lastWords.at, now) : "undated",
+          quote(look.lastWords.text, LAST_WORDS_MAX)
+        )
+      : peek.lastWordsNone
+  );
+};
+
+/** `delegate_list`: the tree newest first, then the queued and the held; with a `target`, that one delegate in full. */
 export const delegateListWords = (
-  tree: DelegateList,
+  answer: DelegateList | DelegatePeek,
   asked: { include?: "live" | "all"; since?: string; before?: string }
 ): string => {
+  if ("delegate" in answer) {
+    return peekWords(answer);
+  }
+  const tree = answer;
   const now = Date.now();
   const roots = newestFirst(tree.delegates);
   const shown = roots.slice(0, LISTED);
