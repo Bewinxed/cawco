@@ -9,6 +9,7 @@
    * the steps stay at its foot.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import type { Review } from "./model";
   import StateItem from "./StateItem.svelte";
@@ -46,8 +47,15 @@
        steps at its foot come and go with the kept state's path (Stepper
        draws none for a path of one), and a scrollbar that came with them
        took its width from the rows, which wrapped anew. -->
+  <!-- Hover and the kept row are the list's, as the app's own lists draw
+       them (the sidebar, the Comments rail): one hover ghost, and the
+       selection pill under the kept row, gliding to the next one kept. -->
   <div
     class="-mx-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto px-space-1 scrollbar-gutter-stable"
+    {@attach highlight({
+      rows: '[data-slot="state-item"]',
+      selected: "[data-kept]",
+    })}
   >
     {#each review.machines as one (one.name)}
       <section

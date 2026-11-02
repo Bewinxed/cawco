@@ -584,6 +584,7 @@
 @custom-variant slot-stack (&[data-slot="stack"]);
 @custom-variant slot-stage (&[data-slot="stage"]);
 @custom-variant slot-starters (&[data-slot="starters"]);
+@custom-variant slot-state-item (&[data-slot="state-item"]);
 @custom-variant slot-step-command (&[data-slot="step-command"]);
 @custom-variant slot-step-number (&[data-slot="step-number"]);
 @custom-variant slot-strategy-picker-card (&[data-slot="strategy-picker-card"]);
