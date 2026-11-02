@@ -4,8 +4,9 @@
    * sized from the cards as placed (layout.ts). Three surfaces apart, so
    * each reads against the one under it: the canvas on the deep recess, the
    * group on the recess with the control edge, the cards on the raised
-   * surface. Its name in its head, in the label role and the row's ink,
-   * where no card or move stands.
+   * surface. Its name in its head, in the states list's section-head face
+   * (section-header `sectionHeadVariants`: the label role, muted ink), where
+   * no card or move stands.
    */
   import type { NodeProps } from "@xyflow/svelte";
 
@@ -18,7 +19,7 @@
   class="size-full rounded-lg border border-border-control bg-surface-recess"
 >
   <h3
-    class="m-0 truncate px-space-3 pt-space-2 type-label text-ink-row"
+    class="m-0 truncate px-space-3 pt-space-2 type-label text-ink-muted"
     title={name}
   >
     {name}
