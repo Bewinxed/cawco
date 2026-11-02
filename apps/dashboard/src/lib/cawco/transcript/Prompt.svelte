@@ -21,7 +21,7 @@
    * its body and its foot come up out of a slight blur one after the other
    * as the shape grows (`shown`), and sink back as it folds.
    */
-  import { tick, untrack } from "svelte";
+  import { tick } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -163,15 +163,15 @@
    */
   // Open from the start when the session gave no reason: then the command is
   // all there is to read. The card is keyed by its ask, so this is per ask.
-  let commandOpen = $state(
-    untrack(
-      () =>
-        !(
-          typeof request.input.description === "string" &&
-          request.input.description.trim()
-        )
+  const reasonless = $derived(
+    !(
+      typeof request.input.description === "string" &&
+      request.input.description.trim()
     )
   );
+  // It follows the ask while mounted; the reader's toggle holds until the
+  // ask's own reason comes or goes (a boolean that stays put keeps it).
+  let commandOpen = $derived(reasonless);
   let commandLine = $state<HTMLElement | null>(null);
   let commandClipped = $state(false);
   const command = $derived(presentation.command ?? null);
