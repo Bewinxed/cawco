@@ -30,20 +30,24 @@
    * no press. The drawing starts at its room's leading edge, so putting
    * the room beside it away never moves it.
    *
-   * It mounts the component again only when the kept state changes, since
-   * a component reads its props as it opens (RoutineForm's draft); a move
-   * plays on that live instance through `update`, which changes its props
-   * in place, so its own motion runs (component-canvas moves.md), and its
-   * clips' elements stay the ones on screen for as long as the state is
-   * kept. While comparing, the state it is compared with is drawn hidden
-   * under it at the same width, and the two are read for what came in,
-   * what changed and what went on the way to the kept state (diff.ts).
+   * The component on it is one live instance for as long as he stays
+   * with it: it mounts once (again only for another component, or Try
+   * again after a fault), and a component under the canvas follows its
+   * props while mounted. `reach` is the one way the instance moves: a
+   * press sets the pressed state's args on it in place, or, when the
+   * states file plays a move into that state from the state on stage,
+   * runs that `play` on it; either way its own motion runs
+   * (component-canvas moves.md) and is read as clips. While comparing,
+   * the state it is compared with is drawn hidden under it at the same
+   * width, mounted afresh from its story as written and never moved, and
+   * the two are read for what came in, what changed and what went on the
+   * way to the kept state (diff.ts).
    */
   import { readWithin } from "@cawco/core/bounded";
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { queriesIn, userEventIn } from "@cawco/core/stage-play";
   import { graphWords as words } from "@cawco/core/words/graph";
-  import { tick, untrack } from "svelte";
+  import { type Component as SvelteComponent, tick, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { dur, motionOk, numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -125,10 +129,11 @@
   let scroller = $state<HTMLElement>();
   let hidden = $state<HTMLElement>();
 
-  /** The props the live instance has: reassigned per state, changed in place by a move's `update`. */
-  let live = $state<Record<string, unknown>>(
-    untrack(() => ({ ...shown.args }))
-  );
+  /** The component mounted live: taken as it mounts, so another component's props never reach it. */
+  let Live = $state<SvelteComponent<Record<string, unknown>> | null>(null);
+  /** The props the live instance has: replaced by each press, changed in place by a play's `update`. */
+  let live = $state<Record<string, unknown>>({});
+  /** Counts the mounts: the first, another component's, and Try again's. */
   let mount = $state(0);
   let fault = $state<{ message: string; stack: string } | null>(null);
   let details = $state(false);
@@ -139,17 +144,6 @@
    * emptied as it remounted took the scroll back to its top).
    */
   let lastTall = $state(0);
-
-  $effect(() => {
-    // Each state mounts afresh: a component reads its props as it opens.
-    const next = shown.args;
-    untrack(() => {
-      live = { ...next };
-      fault = null;
-      mounted = false;
-      mount += 1;
-    });
-  });
 
   /** The wait grace (DESIGN.md, The Real Wait Rule): no skeleton before it has lasted. */
   let waited = $state(false);
@@ -239,7 +233,11 @@
     let quiet = performance.now();
     while (performance.now() < end) {
       await settle();
-      if ([...seen.keys()].some((one) => one.playState === "running")) {
+      if (
+        [...seen.keys()].some(
+          (one) => one.playState === "running" && !endless(one)
+        )
+      ) {
         quiet = performance.now();
       } else if (performance.now() - quiet > QUIET_MS) {
         return;
@@ -316,28 +314,71 @@
     }
   }
 
-  /**
-   * Plays a move on the stage: the from state mounted, then the to state's
-   * `play` run on that live instance. Answers every animation the engine
-   * ran, as clips, from the move's start; throws what the play threw. With
-   * `still` (reduced motion) each animation is read, then landed at once,
-   * so nothing travels.
-   */
-  export async function playMove(
-    fromArgs: Record<string, unknown>,
-    play: (context: PlayContext) => Promise<void> | void,
-    still = false
-  ): Promise<Clip[]> {
-    live = { ...fromArgs };
+  /** The component mounted afresh with `args`; its drawing comes to rest (`restOf`). */
+  async function open(args: Record<string, unknown>): Promise<void> {
+    Live = review.component;
+    live = { ...args };
+    fault = null;
     mounted = false;
     mount += 1;
+    await tick();
+    await resting?.done;
+  }
+
+  /** The last `reach` asked for: one still waiting its turn is passed over. */
+  let asked = 0;
+  /** The reach under way: each waits for the one before it, so no two act on the instance at once. */
+  let reaching: Promise<unknown> = Promise.resolve();
+
+  /**
+   * The one way the live instance moves. A press sets the pressed state's
+   * `args` on it, replacing its props whole (a key the state lacks falls
+   * to the component's default); with `play` (the states file plays the
+   * move into that state from the state on stage) that play runs on it
+   * instead. The first press, or one on another component, mounts it with
+   * `args` instead, at rest. Answers every animation the engine ran, as
+   * clips, from the press; null when a later press took its turn; throws
+   * what the play threw. With `still` (reduced motion) each animation is
+   * read, then landed at once, so nothing travels.
+   */
+  export function reach(
+    args: Record<string, unknown>,
+    play: ((context: PlayContext) => Promise<void> | void) | null = null,
+    still = false
+  ): Promise<Clip[] | null> {
+    asked += 1;
+    const mine = asked;
+    const turn = reaching.then(async () => {
+      if (mine !== asked) {
+        return null;
+      }
+      if (Live !== review.component) {
+        await open(args);
+        return [];
+      }
+      return await act(
+        play ??
+          (async () => {
+            live = { ...args };
+            await tick();
+          }),
+        still
+      );
+    });
+    reaching = turn.catch(() => undefined);
+    return turn;
+  }
+
+  /** `run` done on the live instance, every animation it starts read as a clip. */
+  async function act(
+    run: (context: PlayContext) => Promise<void> | void,
+    still: boolean
+  ): Promise<Clip[]> {
     await tick();
     const holder = frame;
     if (!holder) {
       return [];
     }
-    // The from state at rest, its own arrivals landed, before the move.
-    await resting?.done;
     const had = document.activeElement;
     // Where he left the stage's scroll: a play's press focuses a control,
     // which scrolls it into view; the scroll is put back once it has run.
@@ -366,18 +407,24 @@
       }
     };
     let watching = true;
-    const watch = () => {
-      if (!watching) {
-        return;
-      }
+    const scan = () => {
       for (const animation of holder.getAnimations({ subtree: true })) {
         if (!seen.has(animation)) {
           seen.set(animation, performance.now() - t0);
           take(animation);
         }
       }
-      requestAnimationFrame(watch);
     };
+    const watch = () => {
+      if (watching) {
+        scan();
+        requestAnimationFrame(watch);
+      }
+    };
+    // What already runs is the state's own, not this press's.
+    for (const animation of holder.getAnimations({ subtree: true })) {
+      seen.set(animation, -1);
+    }
     requestAnimationFrame(watch);
     const update = async (next: Record<string, unknown>) => {
       Object.assign(live, next);
@@ -385,21 +432,26 @@
     };
     try {
       await readWithin(PLAY_MS, async () => {
-        await play({
+        await run({
           args: live,
           update,
           canvas: queriesIn(holder),
           userEvent: userEventIn(holder),
         });
       });
+      // The press's own frame: what it set has started its animations.
+      await settle();
+      scan();
       await quietOf(seen);
     } finally {
       watching = false;
-      mounted = true;
       giveBack(holder, had);
       if (scroller && left) {
         scroller.scrollTo({ ...left, behavior: "instant" });
       }
+    }
+    if (holder.isConnected) {
+      measureFit(holder);
     }
     // Each thing named as it stands once the move has ended: what he sees.
     return clips.map((clip) =>
@@ -685,7 +737,9 @@
                 };
               }}
             >
-              <Component {...live} />
+              {#if Live}
+                <Live {...live} />
+              {/if}
               {#snippet failed()}
                 <span></span>
               {/snippet}
@@ -763,8 +817,7 @@
         <div class="flex gap-space-2">
           <Button
             onclick={() => {
-              fault = null;
-              mount += 1;
+              open({ ...live });
             }}
             size="sm"
             variant="outline">{words.tryAgain}</Button
