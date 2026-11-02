@@ -134,7 +134,7 @@
    * A sheet whose root is `modal={false}` is not modal to a screen reader
    * either: its content says `aria-modal="false"`, held there through every
    * redraw. vaul-svelte (1.0.0-next.7) does not forward `modal` to bits-ui's
-   * Dialog.Root, and bits-ui (2.19.5) writes `aria-modal="true"` on every
+   * Dialog.Root, and bits-ui (2.20.3) writes `aria-modal="true"` on every
    * dialog's content: the gap React vaul closed in emilkowalski/vaul#580,
    * unreleased per #647. Delete this once vaul-svelte forwards `modal`.
    */
