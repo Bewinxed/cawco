@@ -42,7 +42,7 @@ The artifact panel's head, modes, Comments rail, pins, threads, delivery and To 
 Token dials; sashes; the component canvas's map mode; comparing two components' moves; the page's own "Clip kinds" switch; the agent's report format.
 
 ## His answers (spec.md, His answers)
-A full move editor, presets first, advanced for any length, curve and spring; a tap keeps, and that is the look; the move plays once on arrival then rests at its start; one component in front, the others behind a switch; Compare is a switch that stays on; the journey opens at the asked state; records as they stood when the agent opened the surface, with that time named. Later, on the preview: the stage changes only on a press; resting never previews.
+A full move editor, presets first, advanced for any length, curve and spring; a tap keeps, and that is the look; the move plays once on arrival then rests at its start; one component in front, the others behind a switch; Compare is a switch that stays on; the journey opens at the asked state; records as they stood when the agent opened the surface, with that time named. Later, on the preview: the stage changes only on a press; resting never previews. On design-graph-arrangement: on a desk the states and the move stand in a room beside the stage, the one arrangement.
 
 ## Open with him
 Whether group heads become column heads (a deviation from DESIGN.md); whether a width pick replays the move.
