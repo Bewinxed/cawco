@@ -202,14 +202,16 @@
         </div>
 
         {#each clips as clip, row (clip.id)}
-          <!-- The row is the clip, one comment target named as a person
-                 says it ("Form failure unfolds, 260 ms"). -->
-          <fieldset
+          <!-- The row is the clip, one comment target named by its first
+               words, as a person says it ("Form failure unfolds, 260 ms").
+               A box, never a fieldset: a fieldset is its own formatting
+               context, so its `subgrid` fell back to columns of its own and
+               its bar left the ruler's scale. -->
+          <div
             data-slot="clip"
-            class="col-span-5 col-start-1 row-start-(--row) m-0 grid min-w-0 grid-cols-subgrid items-center border-0 p-0"
+            class="col-span-5 col-start-1 row-start-(--row) grid min-w-0 grid-cols-subgrid items-center"
             style:--row={row + 2}
           >
-            <legend class="sr-only">{nameOf(clip)}</legend>
             <div class="col-span-2 flex min-w-0 items-start gap-space-1">
               <div class="flex min-w-0 flex-1 flex-col">
                 <span class="type-label text-ink-row wrap-anywhere num"
@@ -235,7 +237,7 @@
                 {scale}
               />
             </div>
-          </fieldset>
+          </div>
         {/each}
 
         <!-- The playhead's line, down the bars' column alone. -->
