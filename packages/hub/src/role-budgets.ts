@@ -324,6 +324,7 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
         facts: () => {
           throw new Error("measuring");
         },
+        heal: () => Promise.resolve({ kind: "unanswered" }),
         park: () => undefined,
         servers: () => [],
         settle: () => undefined,

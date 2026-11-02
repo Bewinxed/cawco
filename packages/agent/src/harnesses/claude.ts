@@ -3485,7 +3485,8 @@ class ClaudeSession implements HarnessSession {
       return await this.#takeFleetSettings();
     }
     if (method === CONTROL_MCP_FLEET_HEAL) {
-      const healing = this.#fleetMcp.then(() => this.#healFleetMcp());
+      const named = args[0] as string[] | undefined;
+      const healing = this.#fleetMcp.then(() => this.#healFleetMcp(named));
       this.#fleetMcp = healing.catch(() => undefined);
       return await healing;
     }
@@ -3763,26 +3764,40 @@ class ClaudeSession implements HarnessSession {
    * of the tools the proxy lists, or not at all, taken again as a sign-in
    * takes it ({@link #takeFleetMcp}). Asked by the machine at the session's
    * attach and after each fleet sync, so a session left without a server's
-   * tools heals with no new sign-in. A server the person turned off here, or
-   * one still connecting, is left as it is; so is one whose proxy list could
-   * not be read, or lists nothing.
+   * tools heals with no new sign-in; and by the hub for a connect ask on a
+   * server signed in already, with `names`, each answered as the session
+   * holds it afterwards. A server the person turned off here, or one still
+   * connecting, is left as it is; so is one whose proxy list could not be
+   * read, or lists nothing.
    */
-  async #healFleetMcp(): Promise<{ healed: FleetMcpTaken[] }> {
-    if (this.#fence) {
-      return { healed: [] };
-    }
-    const configured = await this.#configuredMcp();
-    const proxied = Object.keys(configured).filter((name) =>
-      this.#proxied(configured, name)
-    );
-    if (proxied.length === 0) {
-      return { healed: [] };
-    }
+  async #healFleetMcp(names?: readonly string[]): Promise<FleetMcpTakeAnswer> {
+    const asked = (name: string) => !names || names.includes(name);
     const held = new Map(
       (await this.#handle.mcpServerStatus()).map((server) => [
         server.name,
         server,
       ])
+    );
+    /** A named server left as it is, as the session holds it: ToolSearch waits on one still connecting. */
+    const asIs = (name: string): FleetMcpTaken => {
+      const has = held.get(name);
+      return {
+        name,
+        kind: "signed-in",
+        status: this.#fence ? "fenced" : (has?.status ?? "gone"),
+        holds:
+          !this.#fence &&
+          (has?.status === "connected" || has?.status === "pending"),
+        ...(has?.tools ? { tools: has.tools.length } : {}),
+        ...(has?.error ? { error: has.error } : {}),
+      };
+    };
+    if (this.#fence) {
+      return { servers: (names ?? []).map(asIs) };
+    }
+    const configured = await this.#configuredMcp();
+    const proxied = Object.keys(configured).filter(
+      (name) => asked(name) && this.#proxied(configured, name)
     );
     const broken: { name: string; was: string }[] = [];
     for (const name of proxied) {
@@ -3805,21 +3820,30 @@ class ClaudeSession implements HarnessSession {
           : "not held",
       });
     }
-    if (broken.length === 0) {
-      return { healed: [] };
+    const { servers } =
+      broken.length === 0
+        ? { servers: [] }
+        : await this.#takeFleetMcp(
+            broken.map(({ name }) => ({ name, kind: "signed-in" }))
+          );
+    if (broken.length > 0) {
+      console.info(
+        `[claude] ${this.instanceId}: healed fleet MCP ${broken
+          .map(({ name, was }) => {
+            const now = servers.find((server) => server.name === name);
+            return `${name} was ${was}, now ${now?.status ?? "unknown"}${now?.tools === undefined ? "" : ` (${now.tools} tools)`}${now?.error ? ` — ${now.error}` : ""}`;
+          })
+          .join("; ")}`
+      );
     }
-    const { servers } = await this.#takeFleetMcp(
-      broken.map(({ name }) => ({ name, kind: "signed-in" }))
-    );
-    console.info(
-      `[claude] ${this.instanceId}: healed fleet MCP ${broken
-        .map(({ name, was }) => {
-          const now = servers.find((server) => server.name === name);
-          return `${name} was ${was}, now ${now?.status ?? "unknown"}${now?.tools === undefined ? "" : ` (${now.tools} tools)`}${now?.error ? ` — ${now.error}` : ""}`;
-        })
-        .join("; ")}`
-    );
-    return { healed: servers };
+    return {
+      servers: names
+        ? names.map(
+            (name) =>
+              servers.find((server) => server.name === name) ?? asIs(name)
+          )
+        : servers,
+    };
   }
 
   async #withdraw(uuid: string): Promise<"withdrawn" | "started"> {

@@ -16,9 +16,13 @@
  * harness redialled the server), with as whom and with what access when
  * the server's tools are in its tool list, and with its harness's words
  * when they are not. Not now answers it as declined. A server the hub is
- * signed in to already is answered at once. A session has one connect ask open at a
- * time; one whose session ends before it is answered is withdrawn, and the
- * call refused. A waiting call ends with the hub that held it.
+ * signed in to already raises no card: the session is asked whether it
+ * holds the server's tools, taking it again where it holds it broken
+ * ({@link ConnectAsksDeps.heal}), and its answer is read the same way. So
+ * "connected" is said only of a server the session holds. A session has
+ * one connect ask open at a time; one whose session ends before it is
+ * answered is refused with it ({@link ConnectAsks.ended}). A waiting call
+ * ends with the hub that held it.
  *
  * A session whose denied tools cover every tool of the server (its
  * delegate type's, or the fleet baseline's) is refused at once, before any
@@ -74,6 +78,12 @@ export interface ConnectAsksDeps {
   readonly denials: (actor: InstanceRow) => SessionDenials;
   /** What an ask for the server says (fleet-mcp.ts `askFacts`); throws the sentence the agent reads. */
   readonly facts: (server: string) => AskFacts;
+  /**
+   * Asks `actor`'s session whether it holds `server`'s tools, taking the
+   * server again where it holds it broken (core `CONTROL_MCP_FLEET_HEAL`,
+   * named): its harness's answer, or none in time. Never rejects.
+   */
+  readonly heal: (actor: InstanceRow, server: string) => Promise<FleetMcpTook>;
   /** Parks the ask for the person: the pending ledger, every screen, push. */
   readonly park: (envelope: Envelope) => void;
   /** The fleet's MCP servers that sign in with OAuth and reach `actor`'s sessions, by name. */
@@ -170,6 +180,15 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
   /** Calls waiting on the person, by the ask's request id. */
   const waiting = new Map<string, Waiter>();
 
+  /** `requestId`'s call, if it still waits, answered from its session's take ({@link answerFromTake}). */
+  const answerOne = (requestId: string, took: FleetMcpTook): void => {
+    const waiter = waiting.get(requestId);
+    if (waiter) {
+      waiting.delete(requestId);
+      answerFromTake(waiter, took, deps.facts);
+    }
+  };
+
   const asks = {
     /** Parks `actor`'s connect ask and waits for the person's answer. */
     async ask(
@@ -179,17 +198,27 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
     ): Promise<ConnectAnswer> {
       const server = serverNamed(input.server, deps.servers(actor));
       refuseDenied(server, deps.denials(actor));
-      const facts = deps.facts(server);
-      if (facts.signedIn) {
-        return {
-          outcome: "connected",
-          server,
-          as: facts.as,
-          access: facts.held,
-        };
-      }
       refuseSecondAsk(waiting, actor.id, "connect");
+      const facts = deps.facts(server);
       const requestId = crypto.randomUUID();
+      const answered = new Promise<ConnectAnswer>((resolve, reject) => {
+        waiting.set(requestId, {
+          instanceId: actor.id,
+          resolve,
+          reject,
+          server,
+          signedIn: facts.signedIn,
+        });
+      });
+      if (facts.signedIn) {
+        // Signed in already: no card, and the session's own reading of the
+        // server answers, as a sign-in's take does ({@link taking}).
+        console.log(
+          `[connect] ${actor.id} asks for ${server}, signed in already: its session says whether it holds it (${requestId})`
+        );
+        answerOne(requestId, await deps.heal(actor, server));
+        return await answered;
+      }
       const ask: ConnectAskFrame = {
         access: accessOf(
           facts.offers,
@@ -201,15 +230,6 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
         server,
         url: facts.url,
       };
-      const answered = new Promise<ConnectAnswer>((resolve, reject) => {
-        waiting.set(requestId, {
-          instanceId: actor.id,
-          resolve,
-          reject,
-          server,
-          signedIn: false,
-        });
-      });
       deps.park(
         parkedToolAsk(
           actor,
@@ -296,27 +316,31 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
         return;
       }
       return (took) => {
-        for (const [requestId, waiter] of mine) {
-          if (waiting.get(requestId) === waiter) {
-            waiting.delete(requestId);
-            answerFromTake(waiter, took, deps.facts);
-          }
+        for (const [requestId] of mine) {
+          answerOne(requestId, took);
         }
       };
     },
 
-    /** An ask left the ledger unanswered (its session ended): the call is refused. */
-    withdrawn(requestId: string): void {
-      const waiter = waiting.get(requestId);
-      if (!waiter) {
-        return;
+    /**
+     * `instanceId`'s session ended (hub server.ts `forgetPending`): each of
+     * its calls still waiting is refused, its card with it, so none
+     * outlives its session.
+     */
+    ended(instanceId: string): void {
+      for (const [requestId, waiter] of waiting) {
+        if (waiter.instanceId !== instanceId) {
+          continue;
+        }
+        waiting.delete(requestId);
+        waiter.reject(
+          new Error(
+            waiter.signedIn
+              ? askWords.connectTakeUnanswered(waiter.server)
+              : `The connect ask was withdrawn before the person answered it; ${waiter.server} was not connected.`
+          )
+        );
       }
-      waiting.delete(requestId);
-      waiter.reject(
-        new Error(
-          `The connect ask was withdrawn before the person answered it; ${waiter.server} was not connected.`
-        )
-      );
     },
 
     /** `connect_ask`, bound to the calling session (none for a listing). */

@@ -1941,11 +1941,14 @@ export interface FleetMcpTakeAnswer {
   servers: FleetMcpTaken[];
 }
 /**
- * The machine's own ask of one live session, at its attach and after each
- * fleet sync: every fleet server the hub proxies that the session holds
- * failed, or connected with fewer tools than the proxy lists (none), or not
- * at all, is taken again as a sign-in would take it. Answers `{ healed }`,
- * what each server it took again reads afterwards.
+ * Every fleet server the hub proxies that the session holds failed, or
+ * connected with fewer tools than the proxy lists (none), or not at all, is
+ * taken again as a sign-in would take it (arg: the server names to read, or
+ * none for every one). Asked by the machine of a live Claude Code session at
+ * its attach and after each fleet sync, unnamed; and by the hub of any
+ * session, named, for a connect ask on a server it is signed in to already
+ * (hub connect-asks.ts). Answers {@link FleetMcpTakeAnswer}: each named
+ * server as the session holds it afterwards, or, unnamed, each it took again.
  */
 export const CONTROL_MCP_FLEET_HEAL = "fleetMcpHeal";
 /**
@@ -1997,8 +2000,8 @@ export interface WorkInFlight {
  * each after whatever is already on its way to the session, but nothing waits
  * for it — `reloadSkills` re-reads every skill (0.7 s measured), and a send
  * behind it sat in the daemon, never reaching the harness, for as long as
- * that took. A fleet MCP change connects servers, which takes as long as
- * their servers take to answer.
+ * that took. A fleet MCP change or heal connects servers, which takes as
+ * long as their servers take to answer.
  */
 export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
   CONTROL_CONTEXT_USAGE,
@@ -2008,6 +2011,7 @@ export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
   CONTROL_RELOAD_SKILLS,
   CONTROL_MCP_STATUS,
   CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
 ]);
 
 /** Machine-scoped session-catalog controls, answered by whichever harness owns the id. */

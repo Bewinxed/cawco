@@ -1047,7 +1047,7 @@ public enum Words {
 
         /// A connect ask whose sign-in landed, answered from the asking session's own take of it (hub connect-asks.ts): its tools did not reach the session, in its harness's words, or its machine did not say in time.
         public static func connectNotTaken(server: String, said: String) -> String {
-            "Signed in to \(server), but its tools did not reach this session: \(said). A new session gets them."
+            "Signed in to \(server), but its tools did not reach this session: \(said). The sign-in is kept: a new session gets them."
         }
 
         public static func connectTakeUnanswered(server: String) -> String {

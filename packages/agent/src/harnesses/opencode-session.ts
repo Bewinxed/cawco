@@ -50,6 +50,7 @@ import {
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
   CONTROL_MCP_RECONNECT,
   CONTROL_MCP_STATUS,
   CONTROL_MCP_TOGGLE,
@@ -3284,33 +3285,72 @@ export class OpencodeSession implements HarnessSession {
         // (opencode.ts `#startFailed`). What each reads at this session's
         // directory is the answer: OpenCode lists a connected server's
         // tools at the session's next step.
-        const changes = args[0] as FleetMcpChange[];
-        const listed = await this.#client.mcp.list(at(this.#directory));
-        const taken: FleetMcpTakeAnswer = {
-          servers: changes.map(({ name, kind }) => {
-            const status = listed.data.find(
-              (server) => server.name === name
-            )?.status;
-            return {
-              name,
-              kind,
-              status: status?.status ?? "gone",
-              holds: status?.status === "connected",
-              ...(status && "error" in status ? { error: status.error } : {}),
-            };
-          }),
-        };
+        const taken = await this.#fleetMcpHeld(args[0] as FleetMcpChange[]);
         console.info(
           `[opencode] ${this.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
         );
         return taken;
       }
+      case CONTROL_MCP_FLEET_HEAL:
+        return await this.#healFleetMcp(
+          (args[0] as string[] | undefined) ?? []
+        );
       default:
         // An unsupported control verb is a silent no-op, never a user-facing
         // failure: the hub may send a verb this harness has none for.
         console.warn(`[opencode] no control verb ${method} — ignored`);
         return;
     }
+  }
+
+  /** Each changed server as OpenCode holds it at this session's directory: it lists a connected server's tools at the session's next step. */
+  async #fleetMcpHeld(
+    changes: readonly FleetMcpChange[]
+  ): Promise<FleetMcpTakeAnswer> {
+    const listed = await this.#client.mcp.list(at(this.#directory));
+    return {
+      servers: changes.map(({ name, kind }) => {
+        const status = listed.data.find(
+          (server) => server.name === name
+        )?.status;
+        return {
+          name,
+          kind,
+          status: status?.status ?? "gone",
+          holds: status?.status === "connected",
+          ...(status && "error" in status ? { error: status.error } : {}),
+        };
+      }),
+    };
+  }
+
+  /**
+   * The hub's ask of named fleet servers (core `CONTROL_MCP_FLEET_HEAL`):
+   * one OpenCode holds failed at this session's directory is started again
+   * there, as `CONTROL_MCP_RECONNECT` starts it, and each is answered as
+   * OpenCode holds it afterwards.
+   */
+  async #healFleetMcp(names: readonly string[]): Promise<FleetMcpTakeAnswer> {
+    const asked = names.map((name) => ({ name, kind: "signed-in" as const }));
+    const before = await this.#fleetMcpHeld(asked);
+    for (const { name, status } of before.servers) {
+      if (status === "failed") {
+        await this.#client.mcp
+          .connect({ server: name, ...at(this.#directory) })
+          .catch((error: unknown) =>
+            console.warn(
+              `[opencode] ${this.instanceId}: fleet MCP ${name} did not start again: ${error instanceof Error ? error.message : String(error)}`
+            )
+          );
+      }
+    }
+    const after = before.servers.some(({ status }) => status === "failed")
+      ? await this.#fleetMcpHeld(asked)
+      : before;
+    console.info(
+      `[opencode] ${this.instanceId}: fleet MCP read ${after.servers.map(({ name, status }) => `${name}: ${status}`).join("; ")}`
+    );
+    return after;
   }
 
   /**

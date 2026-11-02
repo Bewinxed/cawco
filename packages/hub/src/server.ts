@@ -205,6 +205,7 @@ import {
   CONTROL_LEND_ACCOUNT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
   CONTROL_MODEL_CATALOG,
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_HOME_LOGIN,
@@ -635,7 +636,7 @@ import {
   PREVIEW_PORTS,
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
-import { createConnectAsks } from "./connect-asks";
+import { createConnectAsks, type FleetMcpTook } from "./connect-asks";
 import { connectionRoutes, createConnections } from "./connections";
 import {
   asksOpening,
@@ -1144,6 +1145,16 @@ const ABANDON_MS = 5000;
  * Past it, a connect ask waiting on the take says its machine did not say.
  */
 const FLEET_MCP_TAKE_MS = 150_000;
+
+/** A session's answer to a fleet MCP take or heal, as connect asks read it: its servers, or none. */
+const tookOf = (answer: Bounded<ControlResult>): FleetMcpTook => {
+  const servers =
+    answer.kind === "answered" && answer.value.ok
+      ? (answer.value.result as Partial<FleetMcpTakeAnswer> | undefined)
+          ?.servers
+      : undefined;
+  return servers ? { kind: "taken", servers } : { kind: "unanswered" };
+};
 
 /**
  * Who asks `GET /api/find`, as the hub's log names a slow machine's search
@@ -3800,6 +3811,16 @@ export const createServer = (
       };
     },
     facts: (server) => fleetMcp.askFacts(server),
+    // Its session's own reading of the server, taken again if broken.
+    heal: (actor, server) =>
+      callAgent(
+        actor.machineId,
+        CONTROL_MCP_FLEET_HEAL,
+        [[server]],
+        FLEET_MCP_TAKE_MS,
+        undefined,
+        actor.id
+      ).then(tookOf, (): FleetMcpTook => ({ kind: "unanswered" })),
     // A project's own server reaches that project's sessions alone.
     servers: (actor) =>
       db
@@ -3893,7 +3914,6 @@ export const createServer = (
     // An ask that left unanswered (its session ended) never runs.
     if (outcome === "cancelled") {
       browserAsks.withdrawn(parked.requestId);
-      connectAsks.withdrawn(parked.requestId);
     }
     registry.broadcast({
       verb: "frames",
@@ -5581,6 +5601,8 @@ export const createServer = (
             )
         );
       }
+      // Its connect asks' calls end with it, signed in or not.
+      connectAsks.ended(instanceId);
       pending.forget(instanceId);
     }
     // Nor is it doing anything any more: a pulse outliving its process is the
@@ -21115,14 +21137,7 @@ export const createServer = (
           FLEET_MCP_TAKE_MS,
           undefined,
           row.id
-        ).then((answer) => {
-          const servers =
-            answer.kind === "answered" && answer.value.ok
-              ? (answer.value.result as Partial<FleetMcpTakeAnswer> | undefined)
-                  ?.servers
-              : undefined;
-          took?.(servers ? { kind: "taken", servers } : { kind: "unanswered" });
-        }),
+        ).then((answer) => took?.(tookOf(answer))),
         `fleet MCP take in ${row.id}`
       );
     }

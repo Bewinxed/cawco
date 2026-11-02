@@ -100,7 +100,7 @@ export const askWords = {
    * session, in its harness's words, or its machine did not say in time.
    */
   connectNotTaken: (server: string, said: string) =>
-    `Signed in to ${server}, but its tools did not reach this session: ${said}. A new session gets them.`,
+    `Signed in to ${server}, but its tools did not reach this session: ${said}. The sign-in is kept: a new session gets them.`,
   connectTakeUnanswered: (server: string) =>
     `Signed in to ${server}, but this session's machine did not say whether its tools arrived. Search for them before calling one.`,
   /** The record's tail, the server's name, opens the MCP page. */

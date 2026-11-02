@@ -15,6 +15,7 @@ import {
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
   CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_COMMANDS,
@@ -473,6 +474,38 @@ class FleetMcp {
       }
     }
     return done;
+  }
+
+  /**
+   * Each of `names` as the session holds it, one it does not hold taken as a
+   * sign-in takes it ({@link take}): pi's registrations are all it shows of
+   * a server, and its `tool_search` and codemode wait on one connecting.
+   */
+  async heal(
+    names: readonly string[],
+    door: BrowserDoor | undefined
+  ): Promise<FleetMcpTakeAnswer> {
+    const missing = names.filter((name) => !this.#held.has(name));
+    const taken =
+      missing.length === 0
+        ? []
+        : (
+            await this.take(
+              missing.map((name) => ({ name, kind: "signed-in" })),
+              door
+            )
+          ).servers;
+    return {
+      servers: names.map(
+        (name) =>
+          taken.find((server) => server.name === name) ?? {
+            name,
+            kind: "signed-in",
+            status: "kept",
+            holds: true,
+          }
+      ),
+    };
   }
 
   /** A fleet change taken in place: the set read again and applied ({@link #apply}). */
@@ -1286,6 +1319,20 @@ class PiSession implements HarnessSession {
                 holds: false,
               })),
             };
+      }
+      // Named by the hub for a connect ask; the agent sends the door (pi-sessiond.ts).
+      case CONTROL_MCP_FLEET_HEAL: {
+        const names = (args[0] as string[] | undefined) ?? [];
+        return this.#fleetMcp
+          ? await this.#fleetMcp.heal(names, args[1] as BrowserDoor | undefined)
+          : ({
+              servers: names.map((name) => ({
+                name,
+                kind: "signed-in",
+                status: "not taken: the session is fenced",
+                holds: false,
+              })),
+            } satisfies FleetMcpTakeAnswer);
       }
       case CONTROL_INTERRUPT:
         await this.interrupt();

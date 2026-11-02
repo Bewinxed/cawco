@@ -13,6 +13,7 @@ import {
   CAWCO_ENV,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
   GATEWAY_RELAUNCH,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -510,8 +511,11 @@ class PiRemoteSession implements HarnessSession {
       : undefined;
   }
   control(method: string, args: unknown[]): Promise<unknown> {
-    return method === CONTROL_MCP_FLEET_CHANGED
-      ? this.#takeFleetMcp(args[0] as FleetMcpChange[])
+    if (method === CONTROL_MCP_FLEET_CHANGED) {
+      return this.#takeFleetMcp(args[0] as FleetMcpChange[]);
+    }
+    return method === CONTROL_MCP_FLEET_HEAL
+      ? this.#healFleetMcp((args[0] as string[] | undefined) ?? [])
       : this.request({ type: "control", method, args });
   }
   /**
@@ -531,6 +535,19 @@ class PiRemoteSession implements HarnessSession {
       `[pi] ${this.#ctx.instanceId}: fleet MCP ${taken.servers.map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
     );
     return taken;
+  }
+  /** The hub's ask of named fleet servers (pi-runtime.ts `FleetMcp.heal`), with the door, said as a take is. */
+  async #healFleetMcp(names: string[]): Promise<unknown> {
+    const door = await piBrowserDoor(this.#ctx);
+    const healed = (await this.request({
+      type: "control",
+      method: CONTROL_MCP_FLEET_HEAL,
+      args: [names, door],
+    })) as FleetMcpTakeAnswer;
+    console.info(
+      `[pi] ${this.#ctx.instanceId}: fleet MCP read ${healed.servers.map(({ name, status }) => `${name}: ${status}`).join("; ")}`
+    );
+    return healed;
   }
   async interrupt(): Promise<void> {
     await this.control(CONTROL_INTERRUPT, []);
