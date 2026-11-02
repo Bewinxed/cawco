@@ -58,8 +58,6 @@ function heightOf(
 
 /** The gap between two cards of a machine, and between two machines' boxes. */
 const GAP = 25;
-/** The line above a card that says how a person gets to it ("Try again"): the meta role's line and its gap. */
-const ARRIVES = 22;
 const BETWEEN = 32;
 
 /**
@@ -75,9 +73,7 @@ export function layoutOf(
   marked: (state: string) => boolean,
   /** Each card's height as drawn, once it has been: the estimate stands in until then. */
   measured: Record<string, number>,
-  wrap: number | null,
-  /** Whether a card has a line above it saying how a person gets to it. */
-  arrives: (state: string) => boolean
+  wrap: number | null
 ): Layout {
   const width = numberOf("--c-graph-node-w") || 208;
   const states: Record<string, Placed> = {};
@@ -94,7 +90,6 @@ export function layoutOf(
     }
     let at = y + MACHINE_HEAD + PAD;
     for (const id of machine.path) {
-      at += arrives(id) ? ARRIVES : 0;
       const h = heightOf(review, id, marked(id), measured);
       states[id] = { x: x + PAD, y: at, w: width, h };
       at += h + GAP;

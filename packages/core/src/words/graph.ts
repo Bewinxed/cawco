@@ -36,8 +36,6 @@ export const graphWords = {
   nothingReaches: "Nothing reaches it",
   /** A state that is not the end of its path, with no move out of it. */
   nothingLeaves: "Nothing leaves it",
-  /** What a person does to get to a state, over its card in the whole set: "Try again", "Custom or Fix the schedule". */
-  arrivesBy: (acts: string[]) => acts.join(" or "),
   /** A state's variants, the row's name for a screen reader. */
   variants: (state: string) => `${state}'s variants`,
   /** The variant that is the state itself. */

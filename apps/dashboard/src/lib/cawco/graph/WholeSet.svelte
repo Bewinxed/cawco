@@ -7,12 +7,9 @@
    * scrolls, by wheel or drag, inside its bounds; it opens on the kept
    * state's machine, from its top-left corner, so nothing is cut on open.
    * A move the states file plays is a solid edge; one the agent only named
-   * (the canvas spec's `edges`) is dashed. What a person does to get to a
-   * state ("Try again") stands on a line of its own above its card, never
-   * on an edge, where it would cross a card or another's words.
+   * (the canvas spec's `edges`) is dashed, with its label.
    */
   import "#lib/vendor-css/xyflow.css";
-  import { graphWords as words } from "@cawco/core/words/graph";
   import {
     type Edge,
     MarkerType,
@@ -62,21 +59,13 @@
   let room = $state({ w: 0, h: 0 });
   /** Each card's height as Svelte Flow measured it: the layout is drawn again from them. */
   let measured = $state<Record<string, number>>({});
-  /** What a person does to get to `id`, from the moves into it that say so. */
-  const arrivesOf = (id: string): string | null => {
-    const acts = review.moves
-      .filter((move) => move.to === id && move.label)
-      .map((move) => move.label as string);
-    return acts.length > 0 ? words.arrivesBy(acts) : null;
-  };
   /** Down a tall room the columns wrap at its width; across a strip they run on and it scrolls sideways. */
   const layout = $derived(
     layoutOf(
       review,
       marked,
       measured,
-      direction === "down" ? Math.max(0, room.w - 2 * AIR) : null,
-      (id) => Boolean(arrivesOf(id))
+      direction === "down" ? Math.max(0, room.w - 2 * AIR) : null
     )
   );
 
@@ -110,7 +99,6 @@
           kept: id === kept,
           keptVariant: id === kept ? keptVariant : null,
           compared: id === compared,
-          arrives: arrivesOf(id),
           onpreview: (variant: string | null) => onpreview(id, variant),
           onpress: (variant: string) => onpress(id, variant),
         },
@@ -128,10 +116,12 @@
       source: move.from,
       target: move.to,
       type: "smoothstep",
+      label: move.label ?? undefined,
       // Under the cards: a move never stands over a state's name.
       zIndex: 0,
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
       style: `stroke: var(--border-contrast); stroke-width: var(--c-graph-edge);${move.played ? "" : " stroke-dasharray: 4 4;"}`,
+      labelStyle: "font: var(--type-meta); color: var(--ink-muted);",
       selectable: false,
       focusable: false,
     }))
