@@ -7,6 +7,16 @@
  * here or nowhere.
  */
 export const sidebarWords = {
+  /** A session renamed, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
+  notRenamedThen: "so it was not renamed.",
+  /** A scratch session kept, refused by the hub: what came of it (`hubRefusal`). */
+  notKeptThen: "so it was not kept.",
+  /** A session removed, refused by the hub: what came of it (`hubRefusal`). */
+  sessionNotRemovedThen: "so the session was not removed. Try again.",
+  /** A workspace's held files unread, the hub refusing: what came of it (`hubRefusal`). */
+  heldUnreadThen: "so what the workspace holds is unread.",
+  /** A workspace archived, refused by the hub: what came of it (`hubRefusal`). */
+  notArchivedThen: "so the workspace was not archived. Try again.",
   /** The projects list is empty and no machine runs CawCo yet. */
   noProjectsNoMachines:
     "No projects yet — start one with New project. Once CawCo runs on a machine, its checkouts group here too.",

@@ -11,6 +11,8 @@
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const updatesWords = {
+  /** The update policy reset, refused by the hub: what came of it (`hubRefusal`). */
+  policyNotResetThen: "so the update policy was not reset. Try again.",
   /** The notice's title while a build waits. */
   ready: (version: string) => `CawCo ${version} is ready`,
   /** The update toast's title: the dashboard serves a newer build than the open page (dashboard update-toast.svelte.ts). */

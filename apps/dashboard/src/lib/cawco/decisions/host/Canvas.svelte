@@ -16,6 +16,7 @@
 -->
 <script lang="ts">
   import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
+  import { decisionsWords } from "@cawco/core/words/decisions";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { hubRefusal } from "../../hub-read.js";
@@ -44,7 +45,7 @@
         method: "POST",
       });
       if (!response.ok) {
-        said = (await hubRefusal(response, "so the canvas didn't open."))
+        said = (await hubRefusal(response, decisionsWords.canvasNotOpenedThen))
           .message;
       }
     } catch {

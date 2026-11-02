@@ -27,6 +27,8 @@
     // never one (DESIGN.md, Motion grammar); the markup and script half is
     // Golar's (scripts/lint/design/raw-motion.mjs).
     "./scripts/lint/no-raw-motion.grit",
+    // A refused hub request's reason is a words entry (packages/core/src/words/**).
+    "./scripts/lint/hub-refusal-words.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

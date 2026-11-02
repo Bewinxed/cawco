@@ -37,6 +37,8 @@ const BY_KIND: Readonly<Record<string, string>> = {
 const ROUTINE = "routine:";
 
 export const noticeWords = {
+  /** The record of notices seen reset, refused by the hub: what came of it (`hubRefusal`). */
+  recordNotResetThen: "so the notices record was not reset. Try again.",
   /** A notice whose kind has no line here. */
   fallback: "Note from CawCo",
   /** A routine's run, woken by its schedule or event. */

@@ -124,7 +124,7 @@
         response.ok
           ? madeWords.notShown(name)
           : failureWords(
-              await hubRefusal(response, `so ${name} could not be shown.`)
+              await hubRefusal(response, madeWords.notShownThen(name))
             ),
       (error: unknown) => failureWords(error)
     );

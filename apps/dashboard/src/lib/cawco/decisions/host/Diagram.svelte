@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import { CANVAS_DIAGRAMS } from "@cawco/core/decisions";
+  import { decisionsWords } from "@cawco/core/words/decisions";
   import { Button } from "#lib/components/ui/button/index.js";
   import { hubRefusal } from "../../hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
@@ -105,7 +106,7 @@
         body: JSON.stringify({ mermaid: text, from: statementId ?? null }),
       });
       if (!response.ok) {
-        said = (await hubRefusal(response, "so the canvas didn't open."))
+        said = (await hubRefusal(response, decisionsWords.canvasNotOpenedThen))
           .message;
       }
     } catch {

@@ -13,6 +13,7 @@
    * hub's words; only the hub reads the folder.
    */
   import { deliverableKind } from "@cawco/core/deliverables";
+  import { filesWords } from "@cawco/core/words/files";
   import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
@@ -62,7 +63,7 @@
     )
       .then(async (response) => {
         if (!response.ok) {
-          throw await hubRefusal(response, `so ${at} could not be read.`);
+          throw await hubRefusal(response, filesWords.notReadThen(at));
         }
         return ((await response.json()) as { content: string }).content;
       })

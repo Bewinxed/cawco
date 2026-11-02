@@ -9,6 +9,8 @@
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const madeWords = {
+  /** An output the hub refused to serve: what came of it, said after the hub's sentence (`hubRefusal`). */
+  notShownThen: (name: string) => `so ${name} could not be shown.`,
   /** The strip's tab, while a task has made something. */
   tab: "Made",
   /** A file output's row: Open shows the file itself. */

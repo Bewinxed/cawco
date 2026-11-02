@@ -27,6 +27,7 @@ import {
   watchSilence,
 } from "@cawco/core/doc-link";
 import type { StageState, StageUnreached } from "@cawco/core/stage";
+import { commentWords } from "@cawco/core/words/comments";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
@@ -193,12 +194,7 @@ export const sendArtifact = (
   artifactId: string,
   control: "needs-you" | "panel-head" | "panel-more"
 ): Promise<void> =>
-  postSend(
-    instanceId,
-    artifactId,
-    { control },
-    "so nothing was sent. Send again."
-  );
+  postSend(instanceId, artifactId, { control }, commentWords.notSentThen);
 
 /** A comment's Try again, after a delivery no one took: it goes to the session now. */
 export const retryComment = (
@@ -206,12 +202,7 @@ export const retryComment = (
   artifactId: string,
   pin: string
 ): Promise<void> =>
-  postSend(
-    instanceId,
-    artifactId,
-    { pins: [pin] },
-    "so the comment didn't go. Try again."
-  );
+  postSend(instanceId, artifactId, { pins: [pin] }, commentWords.notGoneThen);
 
 /** A comment's Ask again: an update changed what it stands on with no answer, so it goes to the session again, whole. */
 export const askAgain = (

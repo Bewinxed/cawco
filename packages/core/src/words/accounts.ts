@@ -29,6 +29,8 @@ export interface SwatchWords {
 }
 
 export const accountsWords = {
+  /** A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
+  notMovedThen: "so the session stayed on its account.",
   // ── The list (accounts/+page.svelte, AccountListRow) ──────────────────
   add: "Add account",
   addFirst: "Add your first account",

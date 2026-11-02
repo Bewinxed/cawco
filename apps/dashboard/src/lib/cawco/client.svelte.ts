@@ -149,6 +149,11 @@ import { announcingParts, clientLine } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { askWords } from "@cawco/core/words/asks";
 import { catalogWords } from "@cawco/core/words/catalog";
+import { machineWords } from "@cawco/core/words/machine";
+import { offerWords } from "@cawco/core/words/offers";
+import { projectWords } from "@cawco/core/words/project";
+import { sidebarWords } from "@cawco/core/words/sidebar";
+import { workWords } from "@cawco/core/words/work";
 import { flushSync, untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import {
@@ -2440,7 +2445,7 @@ export function dismissWorkItem(
   id: string,
   why: { reason: string } | { replacedBy: string }
 ): Promise<void> {
-  return workItemAct(id, "dismiss", why, "so the delegate was not dismissed");
+  return workItemAct(id, "dismiss", why, workWords.notDismissedThen);
 }
 
 /**
@@ -2448,7 +2453,7 @@ export function dismissWorkItem(
  * reopens the same item there; answered once the session has read it.
  */
 export function retryWorkItem(id: string): Promise<void> {
-  return workItemAct(id, "retry", undefined, "so the delegate was not retried");
+  return workItemAct(id, "retry", undefined, workWords.notRetriedThen);
 }
 
 async function workItemAct(
@@ -2471,7 +2476,7 @@ async function workItemAct(
     }
   );
   if (!response.ok) {
-    throw await hubRefusal(response, `${outcome}.`);
+    throw await hubRefusal(response, outcome);
   }
   keepWorkItem((await response.json()) as WorkItemSummary, mark);
 }
@@ -6369,7 +6374,7 @@ export async function moveInstanceAccount(
     }
   );
   if (!response.ok) {
-    throw await hubRefusal(response, "so the session stayed on its account.");
+    throw await hubRefusal(response, accountsWords.notMovedThen);
   }
 }
 
@@ -6388,7 +6393,7 @@ export async function renameInstance(
     body: JSON.stringify({ title }),
   });
   if (!response.ok) {
-    throw await hubRefusal(response, "so it was not renamed.");
+    throw await hubRefusal(response, sidebarWords.notRenamedThen);
   }
 }
 
@@ -6416,7 +6421,7 @@ export async function editProject(
     body: JSON.stringify(change),
   });
   if (!response.ok) {
-    throw await hubRefusal(response, "so it was not changed.");
+    throw await hubRefusal(response, projectWords.notChangedThen);
   }
   const row = (await response.json()) as ProjectRow;
   keepProject(row, asked);
@@ -6451,7 +6456,7 @@ export async function addProjectPlace(
     }
   );
   if (!response.ok) {
-    throw await hubRefusal(response, "so it was not added.");
+    throw await hubRefusal(response, projectWords.placeNotAddedThen);
   }
   const row = (await response.json()) as ProjectRow;
   keepProject(row, asked);
@@ -6472,7 +6477,7 @@ export async function removeProjectPlace(
     { method: "DELETE" }
   );
   if (!response.ok) {
-    throw await hubRefusal(response, "so it was not removed.");
+    throw await hubRefusal(response, projectWords.placeNotRemovedThen);
   }
   await readProjects();
 }
@@ -6491,7 +6496,7 @@ export async function keepSession(instanceId: string): Promise<Bounded<void>> {
     body: JSON.stringify({ kind: "mainline" }),
   });
   if (!response.ok) {
-    throw await hubRefusal(response, "so it was not kept.");
+    throw await hubRefusal(response, sidebarWords.notKeptThen);
   }
 
   target.scratch = false;
@@ -6616,7 +6621,7 @@ export async function createProject(project: {
     body: JSON.stringify({ ...project, caw: true }),
   });
   if (!response.ok) {
-    throw await hubRefusal(response, "so the project was not made. Try again.");
+    throw await hubRefusal(response, projectWords.notMadeThen);
   }
   const created = (await response.json()) as ProjectRow & {
     place: ProjectPlace;
@@ -6642,10 +6647,7 @@ export async function projectAtFolder(project: {
     body: JSON.stringify(project),
   });
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so the project was not saved. Try again."
-    );
+    throw await hubRefusal(response, projectWords.notSavedThen);
   }
   const created = (await response.json()) as ProjectRow & {
     place: ProjectPlace;
@@ -6799,7 +6801,7 @@ export async function answerProjectOffer(
     { method: "POST" }
   );
   if (!response.ok) {
-    throw await hubRefusal(response, "so nothing changed. Try again.");
+    throw await hubRefusal(response, offerWords.nothingChangedThen);
   }
   const offerGone = () => {
     if (!heardSince(`project_offer:${instanceId}`, mark)) {
@@ -6970,10 +6972,7 @@ export const setProjectBudget = (
 export async function deleteProject(id: string): Promise<void> {
   const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so the project was not forgotten. Try again."
-    );
+    throw await hubRefusal(response, projectWords.notForgottenThen);
   }
 }
 
@@ -7061,10 +7060,7 @@ export interface RunningSession {
 export async function projectRunning(id: string): Promise<RunningSession[]> {
   const response = await fetch(`/api/projects/${id}/running`);
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so its sessions were not listed. Try again."
-    );
+    throw await hubRefusal(response, projectWords.sessionsNotListedThen);
   }
   return ((await response.json()) as { sessions: RunningSession[] }).sessions;
 }
@@ -7114,10 +7110,7 @@ export async function stopProjectSessions(
     body: JSON.stringify({ instanceIds }),
   });
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so its sessions were not stopped. Try again."
-    );
+    throw await hubRefusal(response, projectWords.sessionsNotStoppedThen);
   }
 }
 
@@ -7131,10 +7124,7 @@ export async function removeMachine(machineId: string): Promise<void> {
     method: "DELETE",
   });
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so the machine was not removed. Try again."
-    );
+    throw await hubRefusal(response, machineWords.notRemovedThen);
   }
   await refresh();
 }
@@ -7158,10 +7148,7 @@ export async function pauseMachine(
     }
   );
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so the machine's pause did not change. Try again."
-    );
+    throw await hubRefusal(response, machineWords.pauseNotChangedThen);
   }
   await refresh();
 }
@@ -7212,7 +7199,7 @@ export async function workspaceHeld(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/held`
   );
   if (!response.ok) {
-    throw await hubRefusal(response, "so what the workspace holds is unread.");
+    throw await hubRefusal(response, sidebarWords.heldUnreadThen);
   }
   return (await response.json()) as WorkspaceHeld;
 }
@@ -7239,10 +7226,7 @@ export async function archiveWorkspace(
     }
   );
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so the workspace was not archived. Try again."
-    );
+    throw await hubRefusal(response, sidebarWords.notArchivedThen);
   }
   await refresh();
 }
@@ -7253,10 +7237,7 @@ export async function removeSession(instanceId: string): Promise<void> {
     { method: "DELETE" }
   );
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so the session was not removed. Try again."
-    );
+    throw await hubRefusal(response, sidebarWords.sessionNotRemovedThen);
   }
   await refresh();
 }

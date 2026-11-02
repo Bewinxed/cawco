@@ -5,6 +5,22 @@
  * (scripts/probe-words-check.ts refuses a copy).
  */
 export const projectWords = {
+  /** A project's details changed, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
+  notChangedThen: "so it was not changed.",
+  /** A place added to a project, refused by the hub (`hubRefusal`). */
+  placeNotAddedThen: "so it was not added.",
+  /** A place removed from a project, refused by the hub (`hubRefusal`). */
+  placeNotRemovedThen: "so it was not removed.",
+  /** A new project, refused by the hub (`hubRefusal`). */
+  notMadeThen: "so the project was not made. Try again.",
+  /** A project saved, refused by the hub (`hubRefusal`). */
+  notSavedThen: "so the project was not saved. Try again.",
+  /** A project forgotten, refused by the hub (`hubRefusal`). */
+  notForgottenThen: "so the project was not forgotten. Try again.",
+  /** A project's running sessions listed, refused by the hub (`hubRefusal`). */
+  sessionsNotListedThen: "so its sessions were not listed. Try again.",
+  /** A project's running sessions stopped, refused by the hub (`hubRefusal`). */
+  sessionsNotStoppedThen: "so its sessions were not stopped. Try again.",
   /** The name a project made from New project's words holds until Caw names it (hub caw.ts `project_name`). */
   placeholderName: "New project",
   /** The head's New session from the project's checkout. */

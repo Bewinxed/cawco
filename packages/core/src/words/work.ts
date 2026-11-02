@@ -4,6 +4,10 @@
  * refuses a copy).
  */
 export const workWords = {
+  /** A delegate dismissed, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
+  notDismissedThen: "so the delegate was not dismissed.",
+  /** A delegate retried, refused by the hub: what came of it (`hubRefusal`). */
+  notRetriedThen: "so the delegate was not retried.",
   /** A work item whose commits the hub pushed to `base`. */
   landedOn: (base: string) => `Landed on ${base}`,
   /**

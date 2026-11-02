@@ -9,6 +9,8 @@
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const offerWords = {
+  /** An offer answered, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
+  nothingChangedThen: "so nothing changed. Try again.",
   // ── "Make this a project" (transcript/ProjectOffer.svelte) ──
   offerLabel: "Make this session a project",
   joinedLabel: "Joined a project",

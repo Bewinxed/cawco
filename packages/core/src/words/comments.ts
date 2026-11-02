@@ -14,6 +14,10 @@ const FINAL_STOP = /\.$/u;
 const NOT_SENT = "Not sent:";
 
 export const commentWords = {
+  /** A comment sent, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
+  notSentThen: "so nothing was sent. Send again.",
+  /** A comment's Try again, refused by the hub (`hubRefusal`). */
+  notGoneThen: "so the comment didn't go. Try again.",
   // The composer at the element.
   composeHint: { full: "What should change?", short: "What should change?" },
   comment: "Comment",

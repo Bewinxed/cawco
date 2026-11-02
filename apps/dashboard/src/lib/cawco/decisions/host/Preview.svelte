@@ -199,8 +199,9 @@
         method: "POST",
       });
       if (!response.ok) {
-        refusal = (await hubRefusal(response, "so the preview didn't open."))
-          .message;
+        refusal = (
+          await hubRefusal(response, decisionsWords.previewNotOpenedThen)
+        ).message;
       }
     } catch {
       refusal = "The preview didn't open: the hub didn't answer.";

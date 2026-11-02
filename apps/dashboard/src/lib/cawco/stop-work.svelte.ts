@@ -27,6 +27,7 @@ import type {
   ProjectConversationView,
 } from "@cawco/core/project-conversation";
 import { cawOffWords } from "@cawco/core/words/caw-off";
+import { projectWords } from "@cawco/core/words/project";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
@@ -888,10 +889,7 @@ class StopWork {
 async function runningSessions(job: StopJob): Promise<RunningSession[]> {
   const response = await fetch(`/api/projects/${job.projectId}/running`);
   if (!response.ok) {
-    throw await hubRefusal(
-      response,
-      "so its sessions were not listed. Try again."
-    );
+    throw await hubRefusal(response, projectWords.sessionsNotListedThen);
   }
   return ((await response.json()) as { sessions: RunningSession[] }).sessions;
 }
@@ -910,10 +908,7 @@ async function stillRunning(
       return "gone";
     }
     if (!response.ok) {
-      throw await hubRefusal(
-        response,
-        "so what still runs could not be read. Reopen it to try again."
-      );
+      throw await hubRefusal(response, cawOffWords.stillRunningUnreadThen);
     }
     return ((await response.json()) as { sessions: RunningSession[] }).sessions;
   } catch (error) {

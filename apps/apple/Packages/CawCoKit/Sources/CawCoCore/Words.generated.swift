@@ -137,6 +137,9 @@ public enum Words {
 
     public enum Accounts {
         // packages/core/src/words/accounts.ts `accountsWords`
+        /// A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
+        public static let notMovedThen = "so the session stayed on its account."
+
         public static let add = "Add account"
 
         public static let addFirst = "Add your first account"
@@ -1062,6 +1065,12 @@ public enum Words {
 
     public enum Machine {
         // packages/core/src/words/machine.ts `machineWords`
+        /// A machine removed, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
+        public static let notRemovedThen = "so the machine was not removed. Try again."
+
+        /// A machine's pause changed, refused by the hub (`hubRefusal`).
+        public static let pauseNotChangedThen = "so the machine's pause did not change. Try again."
+
         /// The menu's way to a Mac's login keychain, for an agent outside the desktop session.
         public static let unlockKeychain = "Unlock keychain…"
 
@@ -1086,6 +1095,21 @@ public enum Words {
 
     public enum Sidebar {
         // packages/core/src/words/sidebar.ts `sidebarWords`
+        /// A session renamed, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
+        public static let notRenamedThen = "so it was not renamed."
+
+        /// A scratch session kept, refused by the hub: what came of it (`hubRefusal`).
+        public static let notKeptThen = "so it was not kept."
+
+        /// A session removed, refused by the hub: what came of it (`hubRefusal`).
+        public static let sessionNotRemovedThen = "so the session was not removed. Try again."
+
+        /// A workspace's held files unread, the hub refusing: what came of it (`hubRefusal`).
+        public static let heldUnreadThen = "so what the workspace holds is unread."
+
+        /// A workspace archived, refused by the hub: what came of it (`hubRefusal`).
+        public static let notArchivedThen = "so the workspace was not archived. Try again."
+
         /// The projects list is empty and no machine runs CawCo yet.
         public static let noProjectsNoMachines = "No projects yet — start one with New project. Once CawCo runs on a machine, its checkouts group here too."
 
@@ -1266,6 +1290,9 @@ public enum Words {
 
     public enum Offers {
         // packages/core/src/words/offers.ts `offerWords`
+        /// An offer answered, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
+        public static let nothingChangedThen = "so nothing changed. Try again."
+
         public static let offerLabel = "Make this session a project"
 
         public static let joinedLabel = "Joined a project"
@@ -1754,6 +1781,9 @@ public enum Words {
 
     public enum Updates {
         // packages/core/src/words/updates.ts `updatesWords`
+        /// The update policy reset, refused by the hub: what came of it (`hubRefusal`).
+        public static let policyNotResetThen = "so the update policy was not reset. Try again."
+
         /// The notice's title while a build waits.
         public static func ready(version: String) -> String {
             "CawCo \(version) is ready"
@@ -1830,6 +1860,12 @@ public enum Words {
 
     public enum Decisions {
         // packages/core/src/words/decisions.ts `decisionsWords`
+        /// A card's canvas or diagram, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
+        public static let canvasNotOpenedThen = "so the canvas didn't open."
+
+        /// A card's preview, refused by the hub (`hubRefusal`).
+        public static let previewNotOpenedThen = "so the preview didn't open."
+
         /// The tab's name in the project's strip, and ‹ back to its list.
         public static let tab = "Decisions"
 
@@ -2639,6 +2675,11 @@ public enum Words {
 
     public enum Made {
         // packages/core/src/words/made.ts `madeWords`
+        /// An output the hub refused to serve: what came of it, said after the hub's sentence (`hubRefusal`).
+        public static func notShownThen(name: String) -> String {
+            "so \(name) could not be shown."
+        }
+
         /// The strip's tab, while a task has made something.
         public static let tab = "Made"
 

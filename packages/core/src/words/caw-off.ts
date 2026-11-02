@@ -5,6 +5,9 @@
  * rows say nothing of their own: the empty box says they keep running.
  */
 export const cawOffWords = {
+  /** What still runs, unread after a reload, the hub refusing: what came of it (`hubRefusal`). */
+  stillRunningUnreadThen:
+    "so what still runs could not be read. Reopen it to try again.",
   /** The section's title while it asks. */
   ask: (project: string) => `Turn Caw off for ${project || "this project"}?`,
   /** Its title once he is off. */

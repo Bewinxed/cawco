@@ -160,10 +160,7 @@ class Updates {
       method: "POST",
     });
     if (!response.ok) {
-      throw await hubRefusal(
-        response,
-        "so the update policy was not reset. Try again."
-      );
+      throw await hubRefusal(response, updatesWords.policyNotResetThen);
     }
     this.policy = (await response.json()) as BinaryUpdatePolicy;
     this.damaged = false;
