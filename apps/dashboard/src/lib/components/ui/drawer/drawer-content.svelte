@@ -92,6 +92,7 @@
     ownHead = false,
     actions,
     restoreScrollDelay = 0,
+    grabber,
     children,
     ...restProps
   }: WithoutChildrenOrChild<DrawerPrimitive.ContentProps> &
@@ -127,6 +128,13 @@
       hosted?: boolean;
       /** As its root's `modal`: false, the page under it stays live, to a screen reader too. */
       modal?: boolean;
+      /**
+       * The grabber is a control: a press steps the sheet to its next stop
+       * (Apple HIG, Sheets: a tap on the grabber cycles its detents), its
+       * area 44px to a finger. Without it the grabber is drawn only, and a
+       * drag still moves the sheet.
+       */
+      grabber?: { label: string; onpress: () => void };
       children?: Snippet;
     } = $props();
 
@@ -242,7 +250,19 @@
 </DrawerPortal>
 
 {#snippet body()}
-  {#if !hosted}
+  {#if !hosted && grabber}
+    <!-- The grabber's own box is the press: its pill drawn inside it, the
+         area round it the touch rule's. -->
+    <button
+      type="button"
+      aria-label={grabber.label}
+      data-slot="drawer-grabber"
+      class="touch-hit mx-auto mt-space-2 mb-space-1 hidden h-space-5 w-c-grabber-w shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
+      onclick={grabber.onpress}
+    >
+      <span aria-hidden="true" class={cn(grabberVariants(), "my-0")}></span>
+    </button>
+  {:else if !hosted}
     <div
       data-slot="drawer-grabber"
       class={cn(
