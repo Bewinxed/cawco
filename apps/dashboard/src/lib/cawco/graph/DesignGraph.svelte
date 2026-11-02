@@ -69,11 +69,14 @@
     IconClose,
     IconCompare,
     IconLayers,
+    IconListRows,
     IconMaximize,
     IconMonitor,
     IconMoon,
     IconPhone,
+    IconPlay,
     IconSidebar,
+    IconStructure,
     IconSun,
     IconTablet,
   } from "#lib/icons.js";
@@ -698,19 +701,17 @@
     value={face}
   >
     <TabsList aria-label={words.faces}>
-      <TabItem label={words.statesFace} value="states" />
-      <TabItem label={words.wholeSet} value="whole" />
-      <TabItem label={words.moveFace} value="move" />
+      <!-- Each face its Solar duotone glyph before its name, at the
+           tabs' own icon size and ink (fluid-tabs TabItem `icon`). -->
+      <TabItem icon={IconListRows} label={words.statesFace} value="states" />
+      <TabItem icon={IconStructure} label={words.wholeSet} value="whole" />
+      <TabItem icon={IconPlay} label={words.moveFace} value="move" />
     </TabsList>
   </Tabs>
 {/snippet}
 
 {#snippet stepper()}
-  <Stepper
-    {at}
-    onstep={(next) => keep(next, null)}
-    {path}
-  />
+  <Stepper {at} onstep={(next) => keep(next, null)} {path} />
 {/snippet}
 
 {#snippet widthItem(
