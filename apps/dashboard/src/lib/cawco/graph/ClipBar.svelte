@@ -1,50 +1,53 @@
 <script lang="ts">
   /**
-   * A clip's bar on the move's scale, and its timing's handles (bits-ui's
-   * Slider, two thumbs): the start handle is when it begins (its delay,
-   * never before the moment the move set it off), the end handle when it
-   * ends (its length). A drag draws the bar where it is held; letting go
-   * tunes the clip, which plays on the stage at once (DesignGraph
-   * `retime`). The arrow keys move a handle by 10 ms.
+   * A row's bar on the move's one scale (MoveFace: the ruler, every bar and
+   * the playhead share it), and its timing's handles (bits-ui's Slider, two
+   * thumbs): the start handle is when the thing begins to move (never
+   * before the moment the move set it off), the end handle when it comes to
+   * rest. Its stretches of motion are drawn on the bar; a thing that moves
+   * twice shows both. A drag draws the bar where it is held; letting go
+   * moves and stretches the row's clips together (motion `retime`), and the
+   * move plays on the stage at once. The arrow keys move a handle by 10 ms.
+   *
+   * Under a finger each handle's 44px area stops at the midpoint between
+   * the two (DESIGN.md, The 44 Touch Rule: `--hit-gap-x`), so a finger on
+   * the start never takes the end.
    */
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
-  import type { Clip, Tuning } from "./motion";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import type { Track } from "./motion";
 
   let {
-    clip,
+    track,
     name,
     scale,
-    ontune,
+    onretime,
   }: {
-    clip: Clip;
-    /** The clip as a person says it, for each handle's name. */
+    track: Track;
+    /** The row as a person says it, for each handle's name. */
     name: string;
     /** The scale's end, ms: the ruler's. */
     scale: number;
-    ontune: (tuning: Tuning) => void;
+    /** The row's new stretch, ms into the move. */
+    onretime: (from: number, to: number) => void;
   } = $props();
 
   const STEP = 10;
   const onStep = (ms: number) => Math.round(ms / STEP) * STEP;
   /** The earliest step it may begin on: never before the moment the move set it off. */
-  const floor = $derived(Math.ceil(clip.start / STEP) * STEP);
+  const floor = $derived(
+    Math.ceil(Math.min(...track.clips.map((clip) => clip.start)) / STEP) * STEP
+  );
   /**
-   * The handles at rest, on the slider's steps. bits-ui's Slider snaps a
-   * value off its steps and hands the snap to `onValueChange` (its root's
-   * `watch`); a clip begins at whatever millisecond the engine started it,
-   * so its handles, given as they were, came back snapped, were held, were
-   * put back off the steps by `within`, and snapped again, an effect loop
-   * (`effect_update_depth_exceeded`). Every value it is given is a step.
+   * The handles at rest, on the slider's steps: bits-ui's Slider snaps a
+   * value off its steps and hands the snap back to `onValueChange`, which
+   * held off-step values looped on (`effect_update_depth_exceeded`).
    */
   const rest = $derived.by(() => {
-    const from = Math.max(floor, onStep(clip.start + clip.delay));
-    return [
-      from,
-      Math.max(from + STEP, onStep(clip.start + clip.delay + clip.duration)),
-    ];
+    const from = Math.max(floor, onStep(track.begins));
+    return [from, Math.max(from + STEP, onStep(track.ends))];
   });
-  /** The handles while a drag holds them. */
   let held = $state<number[] | null>(null);
   const value = $derived(held ?? rest);
   /** On the steps, from its floor; never shorter than one step. */
@@ -52,6 +55,15 @@
     const begins = Math.max(floor, Math.min(from, scale - STEP));
     return [begins, Math.max(begins + STEP, Math.min(to, scale))];
   };
+  const pct = (t: number) => `${(t / scale) * 100}%`;
+
+  /** The bar's width, px: how far apart the two handles stand on screen. */
+  let wide = $state(0);
+  /** The handle's drawn width, px (`w-space-1`). */
+  const HANDLE = 4;
+  const apart = $derived(
+    Math.max(0, (((value[1] ?? 0) - (value[0] ?? 0)) / scale) * wide - HANDLE)
+  );
 </script>
 
 <Slider.Root
@@ -65,12 +77,7 @@
     const [from = floor, to = floor] = within(next);
     held = null;
     if (from !== rest[0] || to !== rest[1]) {
-      ontune({
-        delay: from - clip.start,
-        duration: to - from,
-        easing: clip.easing,
-        spring: null,
-      });
+      onretime(from, to);
     }
   }}
   step={STEP}
@@ -81,14 +88,29 @@
   {#snippet children({ thumbItems })}
     <span
       class="relative h-space-2 w-full grow overflow-clip rounded-pill bg-surface-fill"
+      {@attach frameSize((node: HTMLElement) => {
+        wide = node.clientWidth;
+      })}
     >
-      <Slider.Range class="absolute h-full rounded-pill bg-ink-muted" />
+      {#if held || track.spans.length === 1}
+        <Slider.Range class="absolute h-full rounded-pill bg-ink-muted" />
+      {:else}
+        <!-- Its stretches of motion, each where it runs. -->
+        {#each track.spans as span, at (at)}
+          <span
+            class="absolute inset-y-0 start-(--from) w-(--wide) rounded-pill bg-ink-muted"
+            style:--from={pct(span.from)}
+            style:--wide={pct(span.to - span.from)}
+          ></span>
+        {/each}
+      {/if}
     </span>
     {#each thumbItems as { index } (index)}
       <Slider.Thumb
         aria-label={index === 0 ? words.clipStarts(name) : words.clipEnds(name)}
         aria-valuetext={words.ms(value[index] ?? 0)}
         class="pointer-hit touch-hit block h-space-4 w-space-1 cursor-ew-resize rounded-pill bg-ink-strong transition-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 can-hover:hover:scale-y-125"
+        style="--hit-gap-x: {apart}px"
         {index}
       />
     {/each}
