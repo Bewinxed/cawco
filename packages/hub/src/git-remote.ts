@@ -56,9 +56,9 @@ const ACTION_EXPIRES_S = 3600;
 /** The tail of a CGI's stderr kept for the log. */
 const STDERR_KEPT = 4000;
 
-/** The bare main repository of `projectId` under `root`. */
-export const bareRepoPath = (root: string, projectId: string): string =>
-  join(root, `${projectId}.git`);
+/** The bare repository of `key` under `root`. */
+export const bareRepoPath = (root: string, key: HubRepoKey): string =>
+  join(root, hubRepoSegment(key));
 
 /** A large file's place in the store. */
 const lfsObjectPath = (lfsRoot: string, oid: string): string =>
@@ -239,7 +239,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
     if (!deps.projectExists(key.projectId)) {
       return undefined;
     }
-    const path = join(deps.root, hubRepoSegment(key));
+    const path = bareRepoPath(deps.root, key);
     const made = making.get(path);
     if (made !== undefined) {
       return made;

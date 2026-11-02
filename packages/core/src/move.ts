@@ -15,6 +15,7 @@
  */
 
 import type { EffortLevel, HarnessKind, PermissionMode } from "./harness";
+import type { HubRepoKey } from "./hub-repo";
 
 /** Every {@link MoveStep}, in the order a job does them. */
 export const MOVE_JOB_STEPS = [
@@ -298,11 +299,21 @@ export interface MoveInspection {
   path: string;
   /** HEAD is on a remote-tracking branch of `origin` (its commits are on the remote). */
   pushed: boolean;
+  /**
+   * The root commit HEAD reaches by first parents: which repository the
+   * folder is, the same in every clone of it on any machine (hub-repo.ts).
+   * Null when not a repository or unborn.
+   */
+  root: string | null;
   /** Files with uncommitted changes, tracked and untracked, not ignored. */
   uncommitted: number;
 }
 
-/** Where a move reaches the hub's git: the project, so the machine builds the URL from its own hub address. */
+/**
+ * The project a snapshot goes to the hub for: the source's machine picks
+ * which of its repositories (agent move.ts `snapshotRepo`) and builds the
+ * URL from its own hub address.
+ */
 export interface MoveHubRemote {
   projectId: string;
 }
@@ -348,6 +359,13 @@ export interface MoveSnapshotResult {
   commit: string;
   files: number;
   /**
+   * The hub repository holding `commit`, which the target clones or fetches
+   * it from: where the snapshot went, or with no snapshot, the source's
+   * `origin` when that is the hub's. Absent: `commit` is only on the
+   * source's outside remote.
+   */
+  hub?: HubRepoKey;
+  /**
    * An outside remote's project: the large files the snapshot adds, uploaded
    * to the hub's LFS store; the target fetches these from the hub and the
    * rest from the project's own remote. Absent for the hub's own projects.
@@ -365,7 +383,6 @@ export interface MoveCloneRequest extends MoveRemoteAuth {
   cloneUrl?: string;
   /** The destination as the person reads it (`~/cockpit`), for a refusal. */
   display: string;
-  hub: MoveHubRemote;
   jobId: string;
   /** Install Git LFS's filters in the clone (large files follow). */
   lfs: boolean;
@@ -379,7 +396,6 @@ export interface MoveCloneRequest extends MoveRemoteAuth {
 export interface MoveLfsRequest extends MoveRemoteAuth {
   /** The hub is the LFS server (no outside remote). */
   fromHub: boolean;
-  hub: MoveHubRemote;
   jobId: string;
   /** This machine's name in the fleet, for a refusal. */
   machine: string;

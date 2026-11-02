@@ -26506,7 +26506,7 @@ export const createServer = (
     dispatch: dispatcher,
     edit: (projectId, change) => projectEdits.edit(projectId, change),
     publish: createRepoPublish({
-      bare: (projectId) => bareRepoPath(GIT_ROOT, projectId),
+      bare: (key) => bareRepoPath(GIT_ROOT, key),
       call: callMachine,
       connections,
       places: placeRepos,

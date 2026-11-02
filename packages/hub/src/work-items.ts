@@ -7992,7 +7992,6 @@ export const createWorkItems = ({
       queue: landings,
       skip: item.outputs ?? [],
       stopped: landingStopped(item),
-      ...(item.projectId ? { repo: item.projectId } : {}),
     });
     const after = await headOf(workspace, item);
     if (before && after && before !== after) {
@@ -8155,7 +8154,6 @@ export const createWorkItems = ({
       queue: landings,
       skip: item.outputs ?? [],
       stopped: landingStopped(item),
-      ...(item.projectId ? { repo: item.projectId } : {}),
     });
     if (pushed.kind === "stopped") {
       return stoppedLanding(item);

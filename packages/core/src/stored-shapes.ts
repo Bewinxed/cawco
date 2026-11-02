@@ -146,6 +146,7 @@ import type {
   HookMcpToolHandler as HookMcpToolHandlerType,
   HookPromptHandler as HookPromptHandlerType,
 } from "./hooks";
+import type { HubRepoKey as HubRepoKeyType } from "./hub-repo";
 import type { CheckoutMove as CheckoutMoveType } from "./injected";
 import type {
   InstallCheck as InstallCheckType,
@@ -2066,6 +2067,11 @@ export const MoveLfsResultShape = z.object({
   files: z.number(),
 });
 
+const HubRepoKeyShape = z.object({
+  projectId: z.string(),
+  root: z.string().optional(),
+});
+
 const MoveLfsObjectShape = z.object({
   oid: z.string(),
   path: z.string(),
@@ -2077,6 +2083,7 @@ export const MoveSnapshotResultShape = z.object({
   branch: z.string(),
   commit: z.string(),
   files: z.number(),
+  hub: HubRepoKeyShape.optional(),
   hubLfs: z.array(MoveLfsObjectShape).optional(),
   sourceBranch: z.string().nullable(),
 });
@@ -2426,6 +2433,7 @@ prove<
     Same<z.output<typeof MoveStageShape>, MoveStageType>,
     Same<z.output<typeof MoveJobShape>, MoveJobType>,
     Same<z.output<typeof MoveLfsResultShape>, MoveLfsResultType>,
+    Same<z.output<typeof HubRepoKeyShape>, HubRepoKeyType>,
     Same<z.output<typeof MoveLfsObjectShape>, MoveLfsObjectType>,
     Same<z.output<typeof MoveSnapshotResultShape>, MoveSnapshotResultType>,
     Same<z.output<typeof MachinePathShape>, MachinePathType>,

@@ -151,15 +151,11 @@ export interface LandingDeps<F> {
    * command due there would have waited for.
    */
   onStepOut?: (words: string) => void;
-  /** Serialises landings that share a key. */
-  queue: LandingQueue;
   /**
-   * The name every machine's clone of the repository shares (the item's
-   * project), keying the queue: clones can spell their remote differently (a
-   * renamed GitHub repository answers to its old name too), and their
-   * landings on one branch must still take turns. Unset, the remote's URL.
+   * Serialises landings that share a key: the repository's root commit and
+   * the branch ({@link ready}).
    */
-  repo?: string;
+  queue: LandingQueue;
   /**
    * Runs a shell command in the workspace's checkout; `noWait`, in the turn,
    * throws {@link WouldWait} rather than wait for its machine's pause or a
@@ -560,7 +556,7 @@ async function landOn<F>(
   if (start.kind !== "ready") {
     return start;
   }
-  const key = `${deps.repo ?? start.remote}#${base}`;
+  const key = `${start.repo}#${base}`;
   /** Push checks refused only because origin's branch moved past the rebase. */
   let moved = 0;
   for (;;) {
@@ -899,12 +895,21 @@ export type BranchOutcome =
   | Stopped
   | Refusal;
 
-/** The workspace's HEAD and its remote, as both landings start: only commits go anywhere. */
+/**
+ * The workspace's HEAD and which repository it is, as both landings start:
+ * only commits go anywhere. The repository is its root commit, the one HEAD
+ * reaches by first parents (core hub-repo.ts): every clone of it on any
+ * machine has that one, whatever its remote is called there (a renamed
+ * GitHub repository answers to its old name too; the hub answers at more than
+ * one address), and two unrelated repositories never share one, so landings
+ * in one repository take turns on a branch while those in two repositories
+ * of one project run side by side.
+ */
 async function ready(
   run: LandingDeps<unknown>["run"],
   skip: string[] | undefined
 ): Promise<
-  | { kind: "ready"; remote: string }
+  | { kind: "ready"; repo: string }
   | Extract<BranchOutcome, { kind: "dirty" | "no-remote" | "refused" }>
 > {
   const status = await run(statusCommand(skip), LOCAL_MS);
@@ -918,7 +923,14 @@ async function ready(
   if (remote.exitCode !== 0 || !remote.stdout.trim()) {
     return { kind: "no-remote" };
   }
-  return { kind: "ready", remote: remote.stdout.trim() };
+  const root = await run(
+    "git rev-list --max-parents=0 --first-parent HEAD",
+    LOCAL_MS
+  );
+  if (root.exitCode !== 0 || !root.stdout.trim()) {
+    return refusal("read", root);
+  }
+  return { kind: "ready", repo: root.stdout.trim() };
 }
 
 /**
@@ -937,7 +949,7 @@ export function pushBranch(
   branch: string,
   deps: Pick<
     LandingDeps<unknown>,
-    "logsUrl" | "queue" | "repo" | "run" | "skip" | "stopped" | "turn"
+    "logsUrl" | "queue" | "run" | "skip" | "stopped" | "turn"
   > & { last: string | undefined }
 ): Promise<BranchOutcome> {
   return untilStopped(pushOwnBranch(base, branch, deps));
@@ -953,53 +965,50 @@ async function pushOwnBranch(
   if (start.kind !== "ready") {
     return start;
   }
-  return await deps.queue(
-    `${deps.repo ?? start.remote}#${branch}`,
-    async () => {
-      if (deps.stopped?.()) {
-        return { kind: "stopped" };
-      }
-      const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
-      if (fetched.exitCode !== 0) {
-        return refusal("fetch", fetched);
-      }
-      const ahead = await run(
-        `git rev-list --count ${quote(`origin/${base}`)}..HEAD`,
-        LOCAL_MS
-      );
-      if (ahead.exitCode !== 0) {
-        return refusal("read", ahead);
-      }
-      if (Number(ahead.stdout.trim()) === 0) {
-        return { kind: "nothing" };
-      }
-      const stamped = await landedRebase(
-        run,
-        `origin/${base}`,
-        deps.logsUrl,
-        true,
-        false
-      );
-      if (stamped.kind === "conflict") {
-        return {
-          kind: "refused",
-          step: "rebase",
-          detail: `the rebase that stamps its commits where they stand conflicted on ${stamped.files}`,
-        };
-      }
-      if (stamped.kind !== "rebased") {
-        return stamped;
-      }
-      const sha = stamped.head;
-      if (deps.stopped?.()) {
-        return { kind: "stopped" };
-      }
-      const refused = await leasedPush(run, branch, sha, deps.last);
-      return refused && !(await holds(run, `refs/heads/${branch}`, sha, false))
-        ? refused
-        : { kind: "pushed", sha };
+  return await deps.queue(`${start.repo}#${branch}`, async () => {
+    if (deps.stopped?.()) {
+      return { kind: "stopped" };
     }
-  );
+    const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
+    if (fetched.exitCode !== 0) {
+      return refusal("fetch", fetched);
+    }
+    const ahead = await run(
+      `git rev-list --count ${quote(`origin/${base}`)}..HEAD`,
+      LOCAL_MS
+    );
+    if (ahead.exitCode !== 0) {
+      return refusal("read", ahead);
+    }
+    if (Number(ahead.stdout.trim()) === 0) {
+      return { kind: "nothing" };
+    }
+    const stamped = await landedRebase(
+      run,
+      `origin/${base}`,
+      deps.logsUrl,
+      true,
+      false
+    );
+    if (stamped.kind === "conflict") {
+      return {
+        kind: "refused",
+        step: "rebase",
+        detail: `the rebase that stamps its commits where they stand conflicted on ${stamped.files}`,
+      };
+    }
+    if (stamped.kind !== "rebased") {
+      return stamped;
+    }
+    const sha = stamped.head;
+    if (deps.stopped?.()) {
+      return { kind: "stopped" };
+    }
+    const refused = await leasedPush(run, branch, sha, deps.last);
+    return refused && !(await holds(run, `refs/heads/${branch}`, sha, false))
+      ? refused
+      : { kind: "pushed", sha };
+  });
 }
 
 /** Whitespace between `git ls-remote`'s sha and its ref. */

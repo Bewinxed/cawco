@@ -3,16 +3,18 @@
  * pushed to the hub's own remote of the project with this machine's
  * credential, for the hub to publish to GitHub with a token only it holds
  * (hub project-settings.ts `create_repo`). A place with no origin gets the
- * hub's remote as its origin, as a workspace's cut gives it; one whose
+ * hub's remote of it as its origin, as a workspace's cut gives it
+ * (workspace.ts `hubRepoOf`), and the push names that repository; one whose
  * origin is anywhere else is refused, so nothing goes where the person did
  * not point it. A dry run reads the branch, the commit and its tree's files
  * and bytes, and pushes nothing.
  */
 import { type PlacePush, WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
+import { hubRepoOfUrl } from "@cawco/core/hub-repo";
 import { useHubCredentialHelper } from "./git-credential";
 import { hubGitEnv, hubRepo, isHubRemote } from "./move";
 import { publishCheck } from "./place-repo";
-import { gitUntil } from "./workspace";
+import { gitUntil, hubRepoOf } from "./workspace";
 
 const LINE = /\r?\n/u;
 /** `git ls-tree -r -l` line: mode, type, object, size, then a tab and the path. */
@@ -85,14 +87,23 @@ export const placePush = async (
   if (dryRun === true) {
     return { ...read, pushed: false };
   }
+  const hub = origin
+    ? hubRepoOfUrl(origin)
+    : await hubRepoOf(root, projectId, deadline);
+  if (!hub) {
+    throw new Error(
+      `${root}'s origin ${origin} names none of the hub's repositories, so CawCo does not publish it.`
+    );
+  }
+  const remote = origin || hubRepo(hub);
   if (!origin) {
-    await git(root, "remote", "add", "origin", hubRepo(projectId));
+    await git(root, "remote", "add", "origin", remote);
     console.info(
-      `[place-push] ${root} had no origin: the hub's remote of project ${projectId} is its origin now`
+      `[place-push] ${root} had no origin: ${remote}, the hub's remote of it in project ${projectId}, is its origin now`
     );
   }
   useHubCredentialHelper(root);
-  await gitUntil(deadline, hubGitEnv(origin || hubRepo(projectId)))(
+  await gitUntil(deadline, hubGitEnv(remote))(
     root,
     "push",
     "--quiet",
@@ -100,7 +111,7 @@ export const placePush = async (
     `HEAD:refs/heads/${branch}`
   );
   console.info(
-    `[place-push] ${root}: ${branch} at ${commit.slice(0, 9)} pushed to the hub's remote of ${projectId}`
+    `[place-push] ${root}: ${branch} at ${commit.slice(0, 9)} pushed to ${remote}`
   );
-  return { ...read, pushed: true };
+  return { ...read, pushed: true, hub };
 };

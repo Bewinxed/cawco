@@ -12,10 +12,11 @@
  *   refuses a place whose commits hold what the rules or the credential
  *   scan would have kept out. The card says them all.
  * - **Publish**, on Approve: the place pushes its branch to the hub's own
- *   remote of the project with its machine's credential; the hub creates
+ *   remote of its repository with its machine's credential (agent
+ *   place-push.ts names which); the hub creates
  *   the repository through the connection with Octokit
  *   (`repos.createForAuthenticatedUser`, private as asked) and pushes that
- *   branch from its bare repository with the token in
+ *   branch from that repository's bare one with the token in
  *   an `http.extraHeader` given through git's environment, never argv; the
  *   project is then linked to it, as `link_repo` links one.
  */
@@ -25,6 +26,7 @@ import {
   type ProjectSettingChange,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import type { HubRepoKey } from "@cawco/core/hub-repo";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { unhandled } from "@cawco/core/unhandled";
 import { startedPath } from "@cawco/core/workspace-needs";
@@ -42,8 +44,8 @@ const PUSH_MS = 10 * 60_000;
 type CreateRepo = Extract<ProjectSettingChange, { kind: "create_repo" }>;
 
 export interface RepoPublishDeps {
-  /** The hub's bare repository of a project (git-remote.ts `bareRepoPath`). */
-  readonly bare: (projectId: string) => string;
+  /** The hub's bare repository of one of a project's repositories (git-remote.ts `bareRepoPath`). */
+  readonly bare: (key: HubRepoKey) => string;
   /** A machine-scoped daemon function, answered or thrown in the machine's words. */
   readonly call: (
     machineId: string,
@@ -157,7 +159,7 @@ export const createRepoPublish = ({
 
   /** The hub's push from its bare repository to GitHub, the token in git's environment. */
   const pushFromHub = async (
-    projectId: string,
+    key: HubRepoKey,
     branch: string,
     url: string,
     token: string
@@ -168,7 +170,7 @@ export const createRepoPublish = ({
         [
           "git",
           "-C",
-          bare(projectId),
+          bare(key),
           "push",
           "--quiet",
           url,
@@ -225,6 +227,11 @@ export const createRepoPublish = ({
       project.id,
       false,
     ])) as PlacePush;
+    const hub =
+      pushed.hub ??
+      refuse(
+        `${place.path} answered its push without naming the hub repository it went to.`
+      );
     const octokit = connections.githubClient(change.connection);
     const asked = await readWithin(API_MS, async (signal) => {
       try {
@@ -265,7 +272,7 @@ export const createRepoPublish = ({
     // The token the connection's Octokit signs in with (@octokit/auth-token:
     // `auth()` answers `{ token }`).
     const { token } = (await octokit.auth()) as { token: string };
-    await pushFromHub(project.id, pushed.branch, made.clone_url, token);
+    await pushFromHub(hub, pushed.branch, made.clone_url, token);
     console.log(
       `[repo-publish] ${project.name}: ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.full_name}`
     );

@@ -41,8 +41,13 @@ import {
   type MoveRemoteAuth,
   type MoveSnapshotRequest,
   type MoveSnapshotResult,
+  WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core";
-import { hubRepoSegment } from "@cawco/core/hub-repo";
+import {
+  type HubRepoKey,
+  hubRepoOfUrl,
+  hubRepoSegment,
+} from "@cawco/core/hub-repo";
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
 import { remoteWithoutCredential } from "@cawco/core/remote-credential";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
@@ -56,6 +61,7 @@ import {
   useHubCredentialHelper,
 } from "./git-credential";
 import { notAProject, placeSettled, placeTurn } from "./place-repo";
+import { hubRepoOf } from "./workspace";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
 
@@ -89,9 +95,9 @@ const hubOrigin = (): string => {
   return url.origin;
 };
 
-/** The project's main repository on the hub, or with `root` the one of its repositories that root commit keys (core hub-repo.ts). */
-export const hubRepo = (projectId: string, root?: string): string =>
-  `${hubOrigin()}/git/${hubRepoSegment(root ? { projectId, root } : { projectId })}`;
+/** One of a project's repositories on the hub (core hub-repo.ts), at the address this machine reaches it by. */
+export const hubRepo = (key: HubRepoKey): string =>
+  `${hubOrigin()}/git/${hubRepoSegment(key)}`;
 
 /**
  * Whether `url` names one of the hub's repositories, under any address the
@@ -203,12 +209,12 @@ export const LFS_FILTERS: [string, string][] = [
   ["filter.lfs.required", "true"],
 ];
 
-/** git's environment for a command that reaches the hub's repository of `projectId`. */
+/** git's environment for a command that reaches the hub's repository `key`. */
 const hubEnv = (
-  projectId: string,
+  key: HubRepoKey,
   extra: [string, string][] = []
 ): Record<string, string> => ({
-  ...hubGitEnv(hubRepo(projectId), extra),
+  ...hubGitEnv(hubRepo(key), extra),
   GIT_OPTIONAL_LOCKS: "0",
 });
 
@@ -943,6 +949,7 @@ export const moveInspect = async (path: string): Promise<MoveInspection> => {
     empty: info?.isDirectory() ? (await readdir(path)).length === 0 : false,
     isGit: false,
     head: null,
+    root: null,
     branch: null,
     origin: null,
     originCredential: false,
@@ -963,10 +970,11 @@ export const moveInspect = async (path: string): Promise<MoveInspection> => {
   if (!(await exists(join(path, ".git")))) {
     return inspectPlain(path, base);
   }
-  const [head, branch, remote] = await Promise.all([
+  const [head, branch, remote, root] = await Promise.all([
     maybe(path, ["rev-parse", "-q", "--verify", "HEAD^{commit}"]),
     maybe(path, ["symbolic-ref", "-q", "--short", "HEAD"]),
     maybe(path, ["remote", "get-url", "origin"]),
+    maybe(path, ["rev-list", "--max-parents=0", "--first-parent", "HEAD"]),
   ]);
   // A credential in the URL stays here ({@link moveRemoteCredential}).
   const bare = remote ? remoteWithoutCredential(remote) : undefined;
@@ -1022,6 +1030,7 @@ export const moveInspect = async (path: string): Promise<MoveInspection> => {
     ...base,
     isGit: true,
     head,
+    root: root || null,
     branch,
     origin,
     originCredential: bare?.basic !== undefined,
@@ -1253,6 +1262,34 @@ const outsideNewLfs = async (
     .map(([oid, { size, path: file }]) => ({ oid, size, path: file }));
 };
 
+/**
+ * The hub repository a snapshot of the folder at `path` goes to: the one its
+ * `origin` names when that is the hub's, else the one the folder is in
+ * project `projectId` (workspace.ts {@link hubRepoOf}), so an unrelated
+ * repository's snapshot never lands among the main one's branches.
+ */
+const snapshotRepo = async (
+  path: string,
+  projectId: string
+): Promise<HubRepoKey> => {
+  const origin = await maybe(path, ["remote", "get-url", "origin"]);
+  const named = origin ? hubRepoOfUrl(origin) : undefined;
+  return (
+    named ??
+    (await hubRepoOf(path, projectId, Date.now() + WORKSPACE_GIT_TIMEOUT_MS))
+  );
+};
+
+/** The hub repository a move's commit is on; a move from an outside remote with no snapshot has none. */
+const hubOf = (snapshot: MoveSnapshotResult): HubRepoKey => {
+  if (!snapshot.hub) {
+    throw new StepFailed(
+      "Nothing of this move is on the hub: its commit is on the folder's own remote."
+    );
+  }
+  return snapshot.hub;
+};
+
 export const moveSnapshot = (
   request: MoveSnapshotRequest
 ): Promise<MoveSnapshotResult> =>
@@ -1272,8 +1309,9 @@ export const moveSnapshot = (
           `${basename(path)} has no commits and no files to move.`
         );
       }
-      const remote = hubRepo(request.hub.projectId);
-      const auth = hubEnv(request.hub.projectId, LFS_FILTERS);
+      const hub = await snapshotRepo(path, request.hub.projectId);
+      const remote = hubRepo(hub);
+      const auth = hubEnv(hub, LFS_FILTERS);
       const hubLfs =
         request.remote === "outside"
           ? await outsideNewLfs(path, commit)
@@ -1318,6 +1356,7 @@ export const moveSnapshot = (
         branch,
         commit,
         files,
+        hub,
         sourceBranch,
         ...(hubLfs ? { hubLfs } : {}),
       };
@@ -1417,7 +1456,7 @@ const checkOut = async (
   request: MoveCloneRequest,
   fromHub: boolean
 ): Promise<void> => {
-  const { snapshot, hub } = request;
+  const { snapshot } = request;
   if (!fromHub && snapshot.branch) {
     // The snapshot is on the hub, not on the outside remote.
     await must(
@@ -1427,11 +1466,11 @@ const checkOut = async (
         "fetch",
         "-q",
         "--no-tags",
-        hubRepo(hub.projectId),
+        hubRepo(hubOf(snapshot)),
         `+refs/heads/${snapshot.branch}:refs/cawco/move`,
       ],
       "The snapshot could not be fetched from the hub",
-      { ...hubEnv(hub.projectId), GIT_LFS_SKIP_SMUDGE: "1" }
+      { ...hubEnv(hubOf(snapshot)), GIT_LFS_SKIP_SMUDGE: "1" }
     );
   }
   const quiet = { ...plainEnv(), GIT_LFS_SKIP_SMUDGE: "1" };
@@ -1517,14 +1556,14 @@ const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
           "clone",
           "--progress",
           "--no-checkout",
-          request.cloneUrl ?? hubRepo(request.hub.projectId),
+          request.cloneUrl ?? hubRepo(hubOf(snapshot)),
           scratch,
         ],
         {
           cwd: dirname(path),
           env: {
             ...(request.cloneUrl === undefined
-              ? hubEnv(request.hub.projectId)
+              ? hubEnv(hubOf(snapshot))
               : outsideEnv(request.cloneUrl, request.remoteBasic)),
             GIT_LFS_SKIP_SMUDGE: "1",
           },
@@ -1660,7 +1699,7 @@ const largestInFlight = (
 const fromHubLfs = async (
   run: Run,
   cwd: string,
-  projectId: string,
+  hub: HubRepoKey,
   object: MoveLfsObject,
   progressFile: string
 ): Promise<void> => {
@@ -1669,7 +1708,7 @@ const fromHubLfs = async (
     discardStdout: true,
     input: `version https://git-lfs.github.com/spec/v1\noid sha256:${object.oid}\nsize ${object.size}\n`,
     env: {
-      ...hubEnv(projectId),
+      ...hubEnv(hub),
       GIT_LFS_PROGRESS: progressFile,
     },
   });
@@ -1700,7 +1739,7 @@ const pullEnv = async (
   request: MoveLfsRequest
 ): Promise<Record<string, string>> => {
   if (request.fromHub) {
-    return hubEnv(request.hub.projectId);
+    return hubEnv(hubOf(request.snapshot));
   }
   const origin = await must(
     undefined,
@@ -1757,13 +1796,7 @@ const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
         { ...plainEnv(), GIT_LFS_SKIP_SMUDGE: "1" }
       );
       for (const object of snapshot.hubLfs ?? []) {
-        await fromHubLfs(
-          run,
-          path,
-          request.hub.projectId,
-          object,
-          progressFile
-        );
+        await fromHubLfs(run, path, hubOf(snapshot), object, progressFile);
       }
       const pulled = await exec(run, ["git", "lfs", "pull"], {
         cwd: path,

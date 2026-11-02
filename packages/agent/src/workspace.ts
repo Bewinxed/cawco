@@ -52,6 +52,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
+import type { HubRepoKey } from "@cawco/core/hub-repo";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import { PACKAGE_TREES } from "@cawco/core/package-trees";
@@ -175,14 +176,15 @@ type Git = (root: string, ...args: string[]) => Promise<string>;
  * git on this host as `safe-git.ts` says, its stdout trimmed, within the
  * create's one `deadline`; `env` in place of the host's (the hub's
  * credential, env-only); in a workspace's copy as `access` reaches it
- * ({@link accessOf}) when given. git's stderr, credential taken out, is the
- * error.
+ * ({@link accessOf}) when given; `input` its stdin. git's stderr,
+ * credential taken out, is the error.
  */
 export const gitUntil =
   (
     deadline: number,
     env: Record<string, string> = hostEnvironment(),
-    access?: CopyAccess
+    access?: CopyAccess,
+    input?: string
   ): Git =>
   async (root, ...args) => {
     const late = `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`;
@@ -197,6 +199,7 @@ export const gitUntil =
       const { code, signalCode, stdout, stderr } = await runCaptured(run.argv, {
         cwd: run.cwd,
         env: { ...env, ...SAFE_GIT_ENV },
+        ...(input === undefined ? {} : { input }),
         signal,
         killSignal: "SIGKILL",
       });
@@ -422,23 +425,40 @@ const holdingSource = async <T>(
 };
 
 /**
- * The hub remote origin-less source repository `repoRoot` of project
- * `projectId` takes (core hub-repo.ts): the project's main repository when
- * that has no default branch yet (this one becomes it), when `repoRoot`
- * holds the commit at its HEAD (a checkout of it), or when `repoRoot` has no
- * commit to key by; otherwise one of its own, keyed by its root commit, so
- * an unrelated repository never cuts from or lands on the main one's
- * branches. Two such repositories cut at once into a project whose main
- * repository has no branch yet can both take it: the second's push of its
- * branch is then refused.
+ * The ref of a project's main hub repository naming the repository that took
+ * it before it had a branch: a blob holding that one's root commit. Pushed
+ * create-only, so of two repositories that ask at once, git's receive-pack
+ * gives it to one ({@link hubRepoOf}).
  */
-const hubRemoteOf = async (
+const MAIN_CLAIM = "refs/cawco/main-root";
+
+/** `git ls-remote`'s lines as each ref's object. */
+const remoteRefs = (listed: string): Map<string, string> =>
+  new Map(
+    listed
+      .split("\n")
+      .map((line) => line.split("\t"))
+      .filter((pair): pair is [string, string] => pair.length === 2)
+      .map(([oid, ref]) => [ref, oid])
+  );
+
+/**
+ * Which of project `projectId`'s hub repositories (core hub-repo.ts) the
+ * source repository `repoRoot`, which has no hub remote yet, is: the main
+ * one when `repoRoot` has no commit to key by, when it holds the commit at
+ * the main one's HEAD (a checkout of it), or when the main one has no
+ * default branch yet and `repoRoot` is the repository that claimed it
+ * ({@link MAIN_CLAIM}, by its root commit: the first to ask); otherwise one
+ * of its own, keyed by its root commit, so an unrelated repository never
+ * cuts from, lands on, or moves through the main one's branches.
+ */
+export const hubRepoOf = async (
   repoRoot: string,
   projectId: string,
   deadline: number
-): Promise<string> => {
+): Promise<HubRepoKey> => {
   const plain = gitUntil(deadline);
-  const main = hubRepo(projectId);
+  const main: HubRepoKey = { projectId };
   const root = await plain(
     repoRoot,
     "rev-list",
@@ -449,33 +469,63 @@ const hubRemoteOf = async (
   if (!root) {
     return main;
   }
-  const [head = ""] = (
-    await gitUntil(deadline, hubGitEnv(main))(
-      repoRoot,
-      "ls-remote",
-      main,
-      "HEAD"
-    )
-  ).split("\t");
-  if (!head) {
-    return main;
-  }
-  const holds = await plain(
-    repoRoot,
-    "cat-file",
-    "-e",
-    `${head}^{commit}`
-  ).then(
-    () => true,
-    () => false
+  const own: HubRepoKey = { projectId, root };
+  const url = hubRepo(main);
+  const hubGit = gitUntil(deadline, hubGitEnv(url));
+  const listed = remoteRefs(
+    await hubGit(repoRoot, "ls-remote", url, "HEAD", MAIN_CLAIM)
   );
-  return holds ? main : hubRepo(projectId, root);
+  const head = listed.get("HEAD");
+  if (head) {
+    const holds = await plain(
+      repoRoot,
+      "cat-file",
+      "-e",
+      `${head}^{commit}`
+    ).then(
+      () => true,
+      () => false
+    );
+    return holds ? main : own;
+  }
+  const mine = await gitUntil(
+    deadline,
+    hostEnvironment(),
+    undefined,
+    `${root}\n`
+  )(repoRoot, "hash-object", "-w", "--stdin");
+  let claimed = listed.get(MAIN_CLAIM);
+  if (!claimed) {
+    // `--no-verify`: the repository's own pre-push hooks are for its own pushes.
+    const refused = await hubGit(
+      repoRoot,
+      "push",
+      "--quiet",
+      "--no-verify",
+      `--force-with-lease=${MAIN_CLAIM}:`,
+      url,
+      `${mine}:${MAIN_CLAIM}`
+    ).then(
+      () => undefined,
+      (error: Error) => error
+    );
+    claimed = remoteRefs(
+      await hubGit(repoRoot, "ls-remote", url, MAIN_CLAIM)
+    ).get(MAIN_CLAIM);
+    if (!claimed) {
+      throw (
+        refused ??
+        new Error(`The hub's ${url} holds no ${MAIN_CLAIM} after its push.`)
+      );
+    }
+  }
+  return claimed === mine ? main : own;
 };
 
 /**
  * Readies source repository `repoRoot` for a workspace cut from it, inside
  * {@link inSource}: its `origin` (the hub's remote of it in `projectId` when
- * it has none, {@link hubRemoteOf}), the hub's credential helper in its config when that is the hub and
+ * it has none, {@link hubRepoOf}), the hub's credential helper in its config when that is the hub and
  * `source` (another workspace's clone, whose config is that workspace's) is
  * none, and the branch the workspace starts from ({@link hubBase}). `hub` is
  * that origin's URL when it is the hub's, which every git that reaches it
@@ -501,7 +551,7 @@ const readySource = (
           `${repoRoot} has no origin remote and belongs to no project, so it has no hub remote to cut a workspace from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
         );
       }
-      origin = await hubRemoteOf(repoRoot, projectId, deadline);
+      origin = hubRepo(await hubRepoOf(repoRoot, projectId, deadline));
       await plain(repoRoot, "remote", "add", "origin", origin);
       console.info(
         `[workspace] ${repoRoot} had no origin: ${origin}, the hub's remote of it in project ${projectId}, is its origin now`

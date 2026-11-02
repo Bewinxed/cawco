@@ -23,6 +23,7 @@
 import { CLAUDE_PROVIDER } from "./accounts";
 import { ASK_ORIGIN } from "./asks";
 import { everyOf } from "./every-of";
+import type { HubRepoKey } from "./hub-repo";
 import { HOUR_MS } from "./time";
 import { harnessWords } from "./words/harness";
 
@@ -2338,6 +2339,8 @@ export interface PlacePush {
   bytes: number;
   commit: string;
   files: number;
+  /** The hub repository it went to (hub-repo.ts); absent on a dry run, which pushes nothing. */
+  hub?: HubRepoKey;
   /** What stays out: every uncommitted path in the place the first commit's rules keep out, with why. */
   leftOut: PlaceLeftOut[];
   pushed: boolean;

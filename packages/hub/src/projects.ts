@@ -6,6 +6,7 @@
  */
 
 import type { CommandResult } from "@cawco/core";
+import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import { withoutRemoteCredential } from "@cawco/core/remote-credential";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -16,7 +17,7 @@ import { quote } from "./landing";
  * every machine, whatever address it reaches the hub by. `root` names one of
  * the project's other repositories (core hub-repo.ts); absent, its main one.
  */
-export const hubRemoteIdentity = (projectId: string, root?: string): string =>
+export const hubRemoteIdentity = ({ projectId, root }: HubRepoKey): string =>
   `cawco/${projectId.toLowerCase()}${root ? `/${root}` : ""}`;
 
 /** A scheme URL: `https://`, `ssh://`, `git://`, `file://`. */
@@ -26,9 +27,6 @@ const SCP = /^(?:[^@/]+@)?([^:/]+):(.+)$/u;
 const EDGE_SLASHES = /^\/+|\/+$/gu;
 const DOT_GIT = /\.git$/iu;
 const TRAILING_SLASHES = /\/+$/u;
-/** The hub's own git remote of a project's repository (core hub-repo.ts): `/git/<project uuid>[.<root commit>].git`. */
-const HUB_REMOTE_PATH =
-  /^\/git\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\.([0-9a-f]{40}|[0-9a-f]{64}))?(?:\.git)?\/?$/iu;
 
 /**
  * A remote URL as `host/owner/repo`: the host lowercased, credentials, port
@@ -53,9 +51,9 @@ export const normaliseRemote = (url: string): string | null => {
     } catch {
       return null;
     }
-    const hub = HUB_REMOTE_PATH.exec(path);
+    const hub = hubRepoOfUrl(raw);
     if (hub) {
-      return hubRemoteIdentity(hub[1] as string, hub[2]?.toLowerCase());
+      return hubRemoteIdentity(hub);
     }
   } else {
     const scp = SCP.exec(raw);

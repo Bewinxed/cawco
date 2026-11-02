@@ -53,6 +53,7 @@ import {
   type SpawnPayload,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
   type MachinePath,
   MachinePathRefused,
@@ -551,11 +552,11 @@ export const createMoves = (deps: MovesDeps) => {
       INSPECT_TIMEOUT_MS
     ) as Promise<MoveInspection>;
 
-  /** Whether the hub's repository of the project already holds `commit` on a branch. */
-  const onHub = async (projectId: string, commit: string): Promise<boolean> => {
+  /** Whether the hub's repository `key` already holds `commit` on a branch. */
+  const onHub = async (key: HubRepoKey, commit: string): Promise<boolean> => {
     const listed = await runGit([
       "-C",
-      bareRepoPath(deps.gitRoot, projectId),
+      bareRepoPath(deps.gitRoot, key),
       "branch",
       "--contains",
       commit,
@@ -564,20 +565,15 @@ export const createMoves = (deps: MovesDeps) => {
     return Boolean(listed);
   };
 
-  /** Whether `inspection`'s folder is a checkout of `project`. */
-  const checkoutOfProject = (
-    project: ProjectRow,
-    inspection: MoveInspection
-  ): boolean => {
-    if (!(inspection.isGit && inspection.origin)) {
-      return false;
-    }
-    const remote = normaliseRemote(inspection.origin);
-    return (
-      remote !== null &&
-      (remote === project.remote || remote === hubRemoteIdentity(project.id))
-    );
-  };
+  /**
+   * Whether the folders `source` and `target` are one repository: the same
+   * root commit, which every clone of it has on any machine and two
+   * unrelated repositories never share (core hub-repo.ts).
+   */
+  const sameRepository = (
+    source: MoveInspection,
+    target: MoveInspection
+  ): boolean => source.root !== null && source.root === target.root;
 
   interface Plan {
     estimate: MoveEstimate;
@@ -624,8 +620,8 @@ export const createMoves = (deps: MovesDeps) => {
 
   /**
    * What the two folders say about a move: the source gone, the destination
-   * already the project (no move needed) or another folder, or a decline
-   * the project remembers.
+   * already a clone of the source's repository (no move needed) or another
+   * folder, or a decline the project remembers.
    */
   const foldersSay = (
     project: ProjectRow,
@@ -641,7 +637,7 @@ export const createMoves = (deps: MovesDeps) => {
       };
     }
     if (there.exists && !there.empty) {
-      return checkoutOfProject(project, there)
+      return sameRepository(source.inspection, there)
         ? { needed: false, bytes: 0, lfsBytes: 0 }
         : {
             refused: `${shown(there.path, there.home)} on ${deps.machineName(target.machineId)} is already a different folder. Pick another path.`,
@@ -799,9 +795,13 @@ export const createMoves = (deps: MovesDeps) => {
     return { project, estimate: estimated, source, target };
   };
 
-  /** Where the clone comes from: the source's outside remote, or the hub. */
+  /**
+   * Where the clone comes from: the hub when the source's `origin` is one of
+   * its repositories ({@link hubRepoOfUrl}) or it has none, else the
+   * source's outside remote.
+   */
   const fromOf = (source: MoveInspection): MoveJob["from"] => {
-    if (!source.origin) {
+    if (!source.origin || hubRepoOfUrl(source.origin)) {
       return { kind: "hub" };
     }
     const remote = normaliseRemote(source.origin) ?? source.origin;
@@ -815,11 +815,14 @@ export const createMoves = (deps: MovesDeps) => {
   ): Promise<MoveStep[]> => {
     const { inspection: s } = planned.source;
     const { needsApproval } = planned.estimate;
-    // The target can check out the source's HEAD only where the clone gets it.
+    // The target can check out the source's HEAD only where the clone gets
+    // it. A source with no origin has no hub repository until its snapshot
+    // picks one (agent move.ts `snapshotRepo`).
+    const hub = s.origin ? hubRepoOfUrl(s.origin) : undefined;
     const onCloneSource =
       s.head !== null &&
       (from.kind === "hub"
-        ? await onHub(planned.project.id, s.head)
+        ? hub !== undefined && (await onHub(hub, s.head))
         : s.pushed);
     const snapshot = needsApproval || s.uncommitted > 0 || !onCloneSource;
     return [
@@ -860,9 +863,10 @@ export const createMoves = (deps: MovesDeps) => {
     source: string
   ): string[] => {
     const gitInit = !s.isGit;
-    const origin = s.origin
-      ? (normaliseRemote(s.origin) ?? "its remote")
-      : "hub";
+    const origin =
+      s.origin && !hubRepoOfUrl(s.origin)
+        ? (normaliseRemote(s.origin) ?? "its remote")
+        : "hub";
     const firstCommit = [
       "git add -A",
       'git commit -m "The folder as it was when CawCo first moved it"',
@@ -937,6 +941,22 @@ export const createMoves = (deps: MovesDeps) => {
     };
   };
 
+  /**
+   * The snapshot a move with no snapshot step clones: the source's HEAD
+   * `head`, on the hub repository its `origin` names when that is the hub's.
+   */
+  const unsnapped = (s: MoveInspection, head: string): MoveSnapshotResult => {
+    const hub = s.origin ? hubRepoOfUrl(s.origin) : undefined;
+    return {
+      base: head,
+      commit: head,
+      branch: "",
+      files: 0,
+      sourceBranch: s.branch,
+      ...(hub ? { hub } : {}),
+    };
+  };
+
   /** A new job's record; `approved` when the person said "Move it" in New session. */
   const stateFor = (
     planned: Placed,
@@ -964,8 +984,10 @@ export const createMoves = (deps: MovesDeps) => {
       steps,
       bytes: s.bytes,
       from,
-      ...(s.origin ? { cloneUrl: s.origin } : {}),
-      ...(s.origin && s.originCredential ? { cloneCredential: true } : {}),
+      ...(from.kind === "outside" && s.origin ? { cloneUrl: s.origin } : {}),
+      ...(from.kind === "outside" && s.originCredential
+        ? { cloneCredential: true }
+        : {}),
       ignoredSecrets: s.ignoredSecrets,
       ignores: s.ignores,
       ...(s.lfs.files > 0 ? { lfs: s.lfs } : {}),
@@ -978,15 +1000,7 @@ export const createMoves = (deps: MovesDeps) => {
       // Nothing to snapshot: the target checks out the source's HEAD.
       ...(steps.includes("snapshot") || !s.head
         ? {}
-        : {
-            snapshot: {
-              base: s.head,
-              commit: s.head,
-              branch: "",
-              files: 0,
-              sourceBranch: s.branch,
-            },
-          }),
+        : { snapshot: unsnapped(s, s.head) }),
       targetInstanceId: crypto.randomUUID(),
       promptUuid: crypto.randomUUID(),
     };
@@ -1042,7 +1056,7 @@ export const createMoves = (deps: MovesDeps) => {
     // A project with no outside remote has the hub as its remote.
     const identity = source.inspection.origin
       ? normaliseRemote(source.inspection.origin)
-      : hubRemoteIdentity(project.id);
+      : hubRemoteIdentity({ projectId: project.id });
     if (identity && !project.remote) {
       db.setProjectRemote(project.id, identity);
     }
@@ -1127,7 +1141,6 @@ export const createMoves = (deps: MovesDeps) => {
               path: state.targetPath,
               display: shown(state.targetPath, state.targetHome),
               machine: target,
-              hub,
               ...(state.cloneUrl ? { cloneUrl: state.cloneUrl } : {}),
               ...(await remoteAuthFor(row, stage)),
               lfs: state.steps.includes("lfs"),
@@ -1150,7 +1163,6 @@ export const createMoves = (deps: MovesDeps) => {
               jobId: row.id,
               path: state.targetPath,
               machine: target,
-              hub,
               fromHub: state.from.kind === "hub",
               ...(await remoteAuthFor(row, stage)),
               snapshot: state.snapshot,
