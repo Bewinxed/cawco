@@ -191,9 +191,6 @@
       {#if adHoc > 0}
         <p class="m-0 type-meta text-status-attn-ink">{words.adHoc(adHoc)}</p>
       {/if}
-      {#if still}
-        <p class="m-0 type-meta text-ink-muted">{words.playStill}</p>
-      {/if}
 
       <!-- The timeline: one grid, every cell its own child placed on its
            row, so every lane cell is one column of one width; each lane

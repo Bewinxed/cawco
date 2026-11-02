@@ -1357,7 +1357,7 @@ public enum Words {
         /// A canvas's view menu, its motion choice and its check against the design system.
         public static let canvasView = "Canvas view"
 
-        public static let reducedMotion = "Reduced motion"
+        public static let reducedMotion = "Reduce motion"
 
         public static let verifyDesign = "Verify against the design system"
 
