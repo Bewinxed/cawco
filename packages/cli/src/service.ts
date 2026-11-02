@@ -27,7 +27,7 @@ import {
 } from "@cawco/core/launchd";
 import { hubDbPath } from "@cawco/core/paths";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
-import { hostEnvironment } from "@cawco/core/session-env";
+import { AGENT_FETCH_CAP, hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -1107,6 +1107,9 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       command: layout.agent.command,
       environment: {
         [CAWCO_ENV.sessiondEndpoint]: sessiondSocket(),
+        // Bun reads it as the process starts: the session streams the agent
+        // relays never hold back its own reads of the hub (AGENT_FETCH_CAP).
+        [AGENT_FETCH_CAP.name]: AGENT_FETCH_CAP.value,
         ...(readEnv(CAWCO_ENV.hubUrl)
           ? { [CAWCO_ENV.hubUrl]: readEnv(CAWCO_ENV.hubUrl) as string }
           : {}),
