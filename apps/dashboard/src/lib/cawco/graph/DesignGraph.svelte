@@ -1006,24 +1006,26 @@
           >
             <div class="flex min-w-0 items-center gap-space-2">
               {@render faces()}
-              <!-- The drawer's one Close, the ghost the kit's sheet heads draw. -->
-              <Drawer.Close>
-                {#snippet child({ props })}
-                  <Button
-                    {...mergeProps(props, {
-                      onclick: () => {
-                        lit = null;
-                      },
-                    })}
-                    aria-label={words.closeRoom}
-                    icon={IconClose}
-                    press="pressable"
-                    size="icon-sm"
-                    title={words.closeRoom}
-                    variant="ghost"
-                  />
-                {/snippet}
-              </Drawer.Close>
+              <!-- The drawer's one Close, the ghost the kit's sheet heads
+                   draw. It puts the room away itself: vaul's Close asks
+                   the dialog to close, and a root that is not
+                   `dismissible` refuses every such ask
+                   (use-drawer-root.svelte.js `onDialogOpenChange`: "if
+                   (!opts.dismissible.current && !o) return;"); the drawer
+                   is not dismissible so that a drag past its head stop
+                   never closes it. -->
+              <Button
+                aria-label={words.closeRoom}
+                icon={IconClose}
+                onclick={() => {
+                  roomOpen = false;
+                  lit = null;
+                }}
+                press="pressable"
+                size="icon-sm"
+                title={words.closeRoom}
+                variant="ghost"
+              />
             </div>
             {#if face === "move"}
               {@render moveFace()}
