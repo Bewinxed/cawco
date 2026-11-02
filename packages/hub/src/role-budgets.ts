@@ -59,9 +59,14 @@ import type { Tasks } from "./tasks";
  * place of reading its transcript by hand; 143 tokens (worker 29,221
  * measured, from 29,078). Only a session that may start delegates lists it,
  * so the delegate's role is unchanged.
+ * 2026-11-02: a project's setup and a view's ask carry the person's words
+ * alone; their procedures moved to the project-setup and project-view skills
+ * and their facts to tools: project_setup answers data, project_name names a
+ * project made from New project's words, view_guide answers how a view is
+ * written (worker 29,365 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 29_250,
+  worker: 29_400,
   delegate: 10_600,
   overseer: 770,
   "web-facing": 3400,
@@ -178,10 +183,10 @@ export const listRoleTools = (): RoleTools[] => {
         db: {} as never,
         proposeType: () => Promise.reject(new Error("measuring")),
         end: () => undefined,
-        fleetChoicesSet: () => false,
-        relayOffer: () => null,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),
+        machines: { name: (machineId) => machineId, online: () => [] },
+        rename: () => Promise.reject(new Error("measuring")),
         noted: () => undefined,
         online: () => false,
         projectsChanged: () => undefined,

@@ -49,6 +49,8 @@ export const BUNDLED_SKILLS = [
   "project-fleet-watch",
   "project-connection",
   "project-decision",
+  "project-setup",
+  "project-view",
 ] as const;
 
 /**

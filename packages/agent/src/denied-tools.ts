@@ -7,7 +7,9 @@
  *
  * Every session is denied its harness's own to-do list and plan mode
  * besides (core `OWN_LIST_DENIED`): a session's plan is CawCo's list, always;
- * and its own question tool (core `QUESTION_TOOL_DENIED`), at spawn alone.
+ * its own subagents (core `SUBAGENTS_DENIED`): work goes to CawCo's
+ * delegates, always; and its own question tool (core
+ * `QUESTION_TOOL_DENIED`), at spawn alone.
  * Those names are never stored in the baseline; they are added here.
  *
  * A machine that has not heard the list, or cannot read the sidecar, spawns
@@ -22,9 +24,9 @@
  *
  * Two consumers read the resolved denials:
  *  1. The spawn paths (`claude.ts`, `opencode.ts`, `pi.ts`), through
- *     {@link sessionFleetDenials}: the baseline, plus the own-list set.
+ *     {@link sessionFleetDenials}: the baseline, plus the own-list set and the subagents.
  *  2. `convergeDeniedTools`, which writes the machine's share (the baseline,
- *     plus the own-list set) into
+ *     plus the own-list set and the subagents) into
  *     `~/.claude/settings.json` so the user's own `claude` sees the same
  *     denials — at daemon start, and again on every fleet sync.
  *
@@ -36,6 +38,7 @@ import {
   OWN_LIST_DENIED,
   opencodeToolsFor,
   QUESTION_TOOL_DENIED,
+  SUBAGENTS_DENIED,
 } from "@cawco/core";
 import { userLayerPath } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -219,9 +222,9 @@ const resolvedFleetDenials = async (): Promise<FleetDenials> => {
   }
 };
 
-/** What the machine's own `claude` is denied: the baseline, and the own-list set. */
+/** What the machine's own `claude` is denied: the baseline, the own-list set and the subagents. */
 const machineDenyList = ({ deniedTools }: FleetDenials): string[] => [
-  ...new Set([...deniedTools, ...OWN_LIST_DENIED]),
+  ...new Set([...deniedTools, ...OWN_LIST_DENIED, ...SUBAGENTS_DENIED]),
 ];
 
 /**

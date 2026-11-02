@@ -1767,6 +1767,7 @@ const NeutralUserMessageShape = z.object({
   origin: NeutralOriginShape.optional(),
   parent_tool_use_id: z.string().nullable().optional(),
   raw: z.unknown().optional(),
+  reminder: z.string().optional(),
   replaces: z.string().optional(),
   session_id: z.string().optional(),
   shouldQuery: z.boolean().optional(),

@@ -1549,7 +1549,7 @@
    * board". The `sentAt` it opened with is not a send.
    */
   /**
-   * Send: the hub's send, which applies a setup page's fleet choices and
+   * Send: the hub's send, which applies a setup page's name, shape and
    * place first and tells the session of the page's picks. A refusal is
    * said in the band over the page, and the picks stay unsent.
    */

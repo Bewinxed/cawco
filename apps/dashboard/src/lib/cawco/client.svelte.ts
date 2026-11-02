@@ -6598,13 +6598,14 @@ export async function machineFs<T>(
 
 /**
  * New project (`POST /api/projects`), made with Caw: its one place is its
- * folder on the hub until setup picks its checkout. `template` is written as
- * its stages.md; `prompt` starts its conversation (as the message
+ * folder on the hub until setup picks its checkout. `template` is the card
+ * tapped, kept as tapped and written by nothing until the setup page is
+ * sent; it carries no name (it holds the placeholder until Caw names it).
+ * `prompt` starts its conversation, its first message (as the send
  * `promptId`), which sets it up: `conversation` is that session. The hub's
  * refusal is its own words.
  */
 export async function createProject(project: {
-  name: string;
   template?: string;
   prompt: string;
   promptId: string;

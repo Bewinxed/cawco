@@ -16,18 +16,20 @@
  *   fleet's), else the one you last chose for its harness on that machine.
  *   A start that fails says why on the project's head until one goes.
  * - **Events are sends**: each event is one send to the conversation's
- *   session through the one send path ({@link Caw.tell}), opening with its
- *   context line ({@link eventContext}: the project and folder, the trigger,
- *   the skill for its kind). A report reaches it as any delegate's reaches
- *   its parent. Nothing is noted anywhere else: the person reads the
- *   conversation.
+ *   session through the one send path ({@link Caw.tell}), with its context
+ *   line ({@link eventContext}: the project and folder, the trigger, the
+ *   skill for its kind). What the person typed is the whole of their
+ *   message: their words' context rides in the send's reminder after them,
+ *   and their acts are CawCo's notices ({@link ProjectEvent}). A report
+ *   reaches it as any delegate's reaches its parent. Nothing is noted
+ *   anywhere else: the person reads the conversation.
  * - **Notes**: what the hub says to the person about the project (a
  *   repository made, an offer to answer, a routine made) is a line in the
  *   conversation's transcript, waking nobody ({@link Caw.notice}).
  * - **Views**: a session drafts a view with `view_draft` (views.ts), an
  *   OpenUI Lang program written to the prompt generated from CawCo's library
- *   (openui.ts `VIEW_PROMPT`, which your ask for a view carries); you keep or
- *   discard it. Asked for from a page's end, the draft stands on that page as
+ *   (openui.ts `VIEW_PROMPT`, which `view_guide` answers; the project-view
+ *   skill says how); you keep or discard it. Asked for from a page's end, the draft stands on that page as
  *   a proposed block (blocks.ts).
  * - Each project shows its conversation's spend: what every session of
  *   origin `project` has cost, from the usage buckets budgets already read.
@@ -35,6 +37,8 @@
 
 import { createHash } from "node:crypto";
 import {
+  ACT_ORIGIN,
+  type ARTIFACT_ORIGIN,
   BLOCK_PAGE_TITLES,
   BLOCK_PAGES,
   type BlockPage,
@@ -51,22 +55,23 @@ import {
   type InstanceRow,
   type NeutralOrigin,
   type OfferedMode,
+  type PLAN_ORIGIN,
   type ProjectConversationView,
   type ProjectNote,
   type ProjectSpend,
-  type ProjectView,
   projectLink,
   type RelayProvider,
   type SendPayload,
   type SpawnPayload,
-  STAGES_TEMPLATES,
-  type StagesTemplate,
   taskLink,
   VIEW_TOOLS,
   viewTitle,
   type WorkspaceRef,
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
+import { unhandled } from "@cawco/core/unhandled";
+import { noticeWords } from "@cawco/core/words/notices";
+import { projectWords } from "@cawco/core/words/project";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
@@ -76,7 +81,7 @@ import type { DbShape } from "./db";
 import type { Origin } from "./db/schema";
 import { boardTitle } from "./labels";
 import { sentence, tool } from "./mcp-tool";
-import { personsTier, ROUTINE_ORIGIN } from "./memory";
+import { AGENTS_FILE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import {
   folderReadWords,
@@ -85,6 +90,7 @@ import {
   viewQueryWords,
 } from "./presenters/project";
 import type { Caps } from "./project-caps";
+import { typeFileProblem } from "./project-delegate-types";
 import {
   FOLDER_CONTENT_LIMIT,
   FOLDER_ENCODINGS,
@@ -97,13 +103,14 @@ import {
 } from "./project-folder";
 import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
 import {
-  type RelayOffer,
+  SETUP_CARDS,
   SETUP_PARTS,
-  type SetupAsk,
+  type SetupFacts,
   type SetupPart,
-  setupEvent,
+  setupFactsWords,
+  shippedTemplates,
 } from "./setup";
-import { readStages, templateText } from "./stages";
+import { readStages } from "./stages";
 import { MODE, stagesFileOf, type TaskEvent, type TaskView } from "./tasks";
 import type { Views } from "./views";
 
@@ -235,35 +242,98 @@ export const EVENT_SKILLS = {
   "fleet-watch": "project-fleet-watch",
   connection: "project-connection",
   decision: "project-decision",
+  "project-setup": "project-setup",
+  "view-request": "project-view",
 } as const;
 
 /** What kind of event a send to the project's conversation is ({@link EVENT_SKILLS}). */
 export type EventKind = keyof typeof EVENT_SKILLS;
 
-/**
- * One event the project's conversation hears, as one send to its session
- * ({@link Caw.tell}): who it is from (`you`, the person's words from another
- * place, which reach it on or off; `event`, anything else, only while the
- * switch is on), its kind, what triggered it in words with its link, and its
- * own words. A routine's run and an event route name themselves, for the
- * turn the run is and the mode a start takes ({@link modeFor}).
- */
-export interface ProjectEvent {
-  by: Origin;
-  /** What rode with the person's words (pictures, files). */
+/** What every event says of itself: its kind, and what triggered it in words with its link. */
+interface EventBase {
+  /** What rode with it (pictures, files). */
   carried?: Carried;
   kind: EventKind;
-  /** The event route that delivered it, when one did. */
-  route?: string;
-  /** The routine whose run it is. */
-  routine?: string;
-  text: string;
   /** What triggered it, a phrase with its link: "the routine [Nightly](…), its 09:00 run". */
   trigger: string;
 }
 
 /**
- * The two lines every event's send opens with: where the conversation runs
+ * The person's words from another place (their phone, a page's ask): the
+ * message is `words` and nothing else, drawn as theirs. Its context
+ * ({@link eventContext}) and `note`, CawCo's word on what the agent needs
+ * beside them, ride in the send's reminder after the words (core
+ * `NeutralUserMessage.reminder`). It reaches the conversation on or off.
+ */
+export interface YourWords extends EventBase {
+  by: "you";
+  /** CawCo's word to the agent beside the words: facts, never a procedure (that is the kind's skill). */
+  note?: string;
+  words: string;
+}
+
+/**
+ * One of the person's acts that carries none of their words (a project made
+ * from an offer set up, marks on an artifact whose session ended, a plan's
+ * change, a decision page's Make tasks), told in CawCo's words on the
+ * `system` origin `origin` names, which wakes as their words do (core
+ * `byPerson`): drawn as CawCo's notice, its line `origin.line` or its kind's.
+ * Its context rides in the send's reminder, so a notice the transcript reads
+ * by its opening tag (an artifact's) still opens the message. It reaches
+ * the conversation on or off.
+ */
+export interface YourAct extends EventBase {
+  by: "act";
+  origin: { line?: string; name: PersonsActOrigin };
+  text: string;
+}
+
+/** The `system` origins of the person's acts (core `byPerson`). */
+export type PersonsActOrigin =
+  typeof ACT_ORIGIN | typeof ARTIFACT_ORIGIN | typeof PLAN_ORIGIN;
+
+/**
+ * Anything else the conversation hears (a routine's run, an inbound event,
+ * a task moving, a report), CawCo's word opening with its context, only
+ * while the switch is on. A routine's run and an event route name
+ * themselves, for the turn the run is and the mode a start takes
+ * ({@link modeFor}).
+ */
+export interface HubEvent extends EventBase {
+  by: "event";
+  /** The event route that delivered it, when one did. */
+  route?: string;
+  /** The routine whose run it is. */
+  routine?: string;
+  text: string;
+}
+
+/**
+ * One event the project's conversation hears, as one send to its session
+ * ({@link Caw.tell}). Who wrote it and how it routes are apart: the
+ * person's words ({@link YourWords}) and acts ({@link YourAct}) reach it on
+ * or off and wake it stopped; an event ({@link HubEvent}) only while the
+ * switch is on. Only {@link YourWords} is drawn as the person's.
+ */
+export type ProjectEvent = YourWords | YourAct | HubEvent;
+
+/**
+ * The person's words or act sent straight to one session (not through its
+ * project's conversation): their words, the whole of the message, with
+ * CawCo's `note` to the agent beside them in its reminder; or their act,
+ * CawCo's notice of it on the `act` origin (core `ACT_ORIGIN`) with the
+ * `line` the person reads of it.
+ */
+export type PersonsSend =
+  | { by: "you"; note?: string; words: string }
+  | { by: "act"; line: string; text: string };
+
+/** How an event routes: the person's (on or off, waking it stopped) or the hub's (only while on). */
+const routeOf = (event: Pick<ProjectEvent, "by">): Origin =>
+  event.by === "event" ? "event" : "you";
+
+/**
+ * The two lines every event's send carries: where the conversation runs
  * (its project and folder), what triggered it, and the skill for its kind.
  */
 export const eventContext = (
@@ -276,6 +346,57 @@ export const eventContext = (
 
 /** What a send carries besides its words: pictures (base64) and attachments. */
 export type Carried = Pick<SendPayload, "attachments" | "images">;
+
+/**
+ * One send as it goes to the conversation's session: its content (the
+ * person's words alone, or CawCo's text), the origin it is drawn by, the
+ * reminder that rides after it, a routine's run, and what it carries.
+ */
+interface Said {
+  carried?: Carried;
+  content: string;
+  origin: NeutralOrigin;
+  reminder?: string;
+}
+
+/** `event` as it is said to a session in `folder` of `project` ({@link Said}). */
+const saidOf = (
+  project: { id: string; name: string },
+  folder: string,
+  event: ProjectEvent
+): Said => {
+  const context = eventContext(project, folder, event.kind, event.trigger);
+  const carried = event.carried ? { carried: event.carried } : {};
+  switch (event.by) {
+    case "you":
+      return {
+        ...carried,
+        content: event.words,
+        origin: { kind: "human" },
+        reminder: event.note ? `${context}\n\n${event.note}` : context,
+      };
+    case "act":
+      return {
+        ...carried,
+        content: event.text,
+        origin: { kind: "system", ...event.origin },
+        reminder: context,
+      };
+    case "event":
+      return {
+        ...carried,
+        content: `${context}\n\n${event.text}`,
+        origin: {
+          kind: "system",
+          name: event.routine
+            ? `${ROUTINE_ORIGIN}${event.routine}`
+            : PROJECT_ORIGIN,
+        },
+      };
+    default:
+      return unhandled("project event", event);
+  }
+};
 
 const STAGES_FILE = "stages.md";
 /** A project's delegate types: a write there is a proposal the person approves (memory.ts `proposeType`). */
@@ -301,6 +422,36 @@ const stagesRead = (body: string | Uint8Array): void => {
   if (!reading.ok) {
     throw new Error(`stages.md was not written: ${reading.problems.join(" ")}`);
   }
+};
+
+/**
+ * Why `rel` is not a session's to write with `folder_write` (memory.ts
+ * `personsTier`), or nothing; AGENTS.md is its writer's while the setup page
+ * it wrote from is `approved` by the person's Send.
+ */
+const notWriters = (rel: string, approved: boolean): string | undefined =>
+  approved && rel === AGENTS_FILE ? undefined : personsTier(rel);
+
+/**
+ * A `delegates/` write's text, refused when it is bytes; with the setup
+ * page's Send as its approval (`approved`), refused too when it makes no
+ * whole type, as an approved proposal is (memory.ts `proposeType`).
+ */
+const typeText = (
+  rel: string,
+  body: string | Uint8Array,
+  approved: boolean
+): string => {
+  if (typeof body !== "string") {
+    throw new Error(
+      `${rel} was not ${approved ? "written" : "proposed"}: a delegate type is text, not bytes.`
+    );
+  }
+  const problem = approved ? typeFileProblem(rel, body) : undefined;
+  if (problem) {
+    throw new Error(`${rel} was not written: ${problem}`);
+  }
+  return body;
 };
 
 /** The system origin's name of a send to the project's conversation for an event (core `NeutralOrigin`). */
@@ -354,8 +505,6 @@ export interface CawDeps {
   >;
   /** Ends a session (the conversation, when its harness or model moves). */
   readonly end: (instanceId: string) => void;
-  /** Whether the fleet's delegates choice was ever set (setup asks for it until it is). */
-  readonly fleetChoicesSet: () => boolean;
   /** The project's folder changed under its tasks (stages.md, a task file). */
   readonly folderChanged: (projectId: string) => void;
   /**
@@ -367,6 +516,11 @@ export interface CawDeps {
   readonly leadHome: (
     projectId: string
   ) => Promise<{ machineId: string; cwd: string } | undefined>;
+  /** The machines online now, and the name CawCo shows a machine by. */
+  readonly machines: {
+    name: (machineId: string) => string;
+    online: () => string[];
+  };
   /** A project note placed in a conversation's transcript as it is written (server.ts `noteProject`). */
   readonly noted: (
     instanceId: string,
@@ -387,8 +541,12 @@ export interface CawDeps {
     content: string,
     toolUseId: string | undefined
   ) => Promise<{ id: string; path: string; waiting: string }>;
-  /** Setup's stream relay card, while it is to be asked (with the domain the person last reached CawCo through); null once the fleet has a relay or a journey, or the card was answered and not asked `again`. */
-  readonly relayOffer: (again: boolean) => RelayOffer | null;
+  /**
+   * Renames the project as the dashboard's rename does (project-edit.ts),
+   * every client reading it again; answers the name as kept, a refusal
+   * thrown in its sentence.
+   */
+  readonly rename: (projectId: string, name: string) => Promise<string>;
   /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
   readonly send: (envelope: Envelope<SendPayload>) => boolean;
   /**
@@ -434,14 +592,14 @@ export const createCaw = ({
   conversationStarted,
   db,
   end,
-  fleetChoicesSet,
   folderChanged,
   leadHome,
+  machines,
   noted,
   online,
   projectsChanged,
   proposeType,
-  relayOffer,
+  rename,
   send,
   spawn,
   stops,
@@ -536,7 +694,7 @@ export const createCaw = ({
    */
   const modeFor = (
     project: ReturnType<typeof projectOf>,
-    event: Pick<ProjectEvent, "route" | "routine"> | undefined
+    event: Pick<HubEvent, "route" | "routine"> | undefined
   ): OfferedMode | undefined =>
     (event?.route ? db.ingress.route(event.route)?.mode : undefined) ??
     (event?.routine ? db.routines.get(event.routine)?.mode : undefined) ??
@@ -545,55 +703,44 @@ export const createCaw = ({
     undefined;
 
   /**
-   * One message to the conversation's session. One that carries your words
-   * is yours (`human`), as a session's composer sends it: it wakes the
-   * session stopped, and at its account's limit it is moved or continued as
-   * any person's turn is. Any other is CawCo's word (`system`, named
+   * One message to the conversation's session ({@link Said}). One that
+   * carries your words is yours (`human`), as a session's composer sends
+   * it: it wakes the session stopped, and at its account's limit it is moved
+   * or continued as any person's turn is; so does your act on its `system`
+   * origin (core `byPerson`). Any other is CawCo's word (`system`, named
    * `project`): a routine's says so in its origin (`routine:<id>`), the turn
    * it starts that run's (memory.ts). Answers the send's uuid when the hub
    * took it.
    */
-  const message = (
-    target: InstanceRow,
-    content: string,
-    by: Origin,
-    routine?: string,
-    carried?: Carried
-  ): string | undefined => {
+  const message = (target: InstanceRow, said: Said): string | undefined => {
     const uuid = crypto.randomUUID();
-    const origin: NeutralOrigin =
-      by === "you"
-        ? { kind: "human" }
-        : {
-            kind: "system",
-            name: routine ? `${ROUTINE_ORIGIN}${routine}` : PROJECT_ORIGIN,
-          };
     const taken = send({
       verb: "send",
       machineId: target.machineId,
       instanceId: target.id,
       payload: {
-        ...carried,
+        ...said.carried,
         instanceId: target.id,
         message: {
           type: "user",
           uuid,
-          message: { role: "user", content },
+          message: { role: "user", content: said.content },
           parent_tool_use_id: null,
-          origin,
+          origin: said.origin,
+          ...(said.reminder ? { reminder: said.reminder } : {}),
         },
       },
     });
     return taken ? uuid : undefined;
   };
 
-  /** What starts the conversation: its first words, once its row is there, and how. */
+  /** What starts the conversation: how it routes, its first send once its row is there, and how. */
   interface Start {
     by: Origin;
-    carried?: Carried;
-    first: (session: InstanceRow) => string;
+    first: (session: InstanceRow) => Said;
     mode?: OfferedMode;
-    routine?: string;
+    /** Skills in its context before its first send (the spawn's `skills`). */
+    skills?: readonly string[];
   }
 
   /**
@@ -616,6 +763,7 @@ export const createCaw = ({
         harness: project.cawHarness,
         ...(project.cawModel ? { model: project.cawModel } : {}),
         ...(start.mode ? { permissionMode: start.mode } : {}),
+        ...(start.skills?.length ? { skills: [...start.skills] } : {}),
         projectId: project.id,
         title: "Caw",
         requestId: crypto.randomUUID(),
@@ -633,13 +781,7 @@ export const createCaw = ({
         `The project's conversation ${instanceId} has no row on this hub.`
       );
     }
-    const sent = message(
-      conversation,
-      start.first(conversation),
-      start.by,
-      start.routine,
-      start.carried
-    );
+    const sent = message(conversation, start.first(conversation));
     console.log(
       `[caw] ${project.name}: started its conversation on ${project.cawHarness} (${instanceId})`
     );
@@ -704,7 +846,8 @@ export const createCaw = ({
     project: ReturnType<typeof projectOf>,
     event: ProjectEvent
   ): Extract<Told, { woke: false }> | undefined => {
-    if (event.by === "event" && !project.eventsOn) {
+    const route = routeOf(event);
+    if (route === "event" && !project.eventsOn) {
       return { woke: false, why: CAW_OFF };
     }
     const capped = caps.quiets(project.id);
@@ -714,39 +857,38 @@ export const createCaw = ({
     return {
       woke: false,
       why: capped,
-      ...(event.by === "you" ? { thrown: new CawRefusal(409, capped) } : {}),
+      ...(route === "you" ? { thrown: new CawRefusal(409, capped) } : {}),
     };
   };
 
   /**
    * One event, one send to the project's conversation (§5.3): an attempt's
    * judgement, a task moving, a routine's run, an inbound event, the
-   * person's words from another place. It opens with its context
-   * ({@link eventContext}) and carries the event's own words after it,
-   * starting the conversation when it has none (in {@link modeFor}'s mode).
-   * The person's words reach it on or off; an event, only while the switch
-   * is on. Past the project's spend cap nothing goes. There is no timer
-   * behind it.
+   * person's words or acts from another place, each said as
+   * {@link saidOf} says it, starting the conversation when it has none (in
+   * {@link modeFor}'s mode, with `skills` in its context first). The
+   * person's words and acts reach it on or off; an event, only while the
+   * switch is on. Past the project's spend cap nothing goes. There is no
+   * timer behind it.
    */
   const tell = async (
     projectId: string,
-    event: ProjectEvent
+    event: ProjectEvent,
+    skills?: readonly string[]
   ): Promise<Told> => {
     const project = projectOf(projectId);
     const refused = heldBack(project, event);
     if (refused) {
       return refused;
     }
-    const words = (session: InstanceRow) =>
-      `${eventContext(project, session.cwd, event.kind, event.trigger)}\n\n${event.text}`;
-    const mode = modeFor(project, event);
+    const said = (session: InstanceRow) => saidOf(project, session.cwd, event);
+    const mode = modeFor(project, event.by === "event" ? event : undefined);
     let conversation: Awaited<ReturnType<typeof conversationFor>>;
     try {
       conversation = await conversationFor(projectId, {
-        by: event.by,
-        first: words,
-        ...(event.carried ? { carried: event.carried } : {}),
-        ...(event.routine ? { routine: event.routine } : {}),
+        by: routeOf(event),
+        first: said,
+        ...(skills ? { skills } : {}),
         ...(mode ? { mode } : {}),
       });
     } catch (error) {
@@ -757,13 +899,7 @@ export const createCaw = ({
     }
     const sent = conversation.started
       ? conversation.sent
-      : message(
-          conversation.row,
-          words(conversation.row),
-          event.by,
-          event.routine,
-          event.carried
-        );
+      : message(conversation.row, said(conversation.row));
     return sent
       ? { woke: true, instanceId: conversation.row.id, send: sent }
       : { woke: false, why: "Its session didn't take the message." };
@@ -788,15 +924,15 @@ export const createCaw = ({
   };
 
   /**
-   * {@link tell} for your own words from a page (a view's ask, a project's
-   * setup, a decided page): what refused them is thrown, as the page's
-   * answer; answers the conversation's session.
+   * {@link tell} for the person's words or acts from a page (a view's ask, a
+   * decided page): what refused them is thrown, as the page's answer;
+   * answers the conversation's session and the send.
    */
   const tellYours = async (
     projectId: string,
-    event: Omit<ProjectEvent, "by">
+    event: YourWords | YourAct
   ): Promise<{ instanceId: string; send: string }> => {
-    const told = await tell(projectId, { ...event, by: "you" });
+    const told = await tell(projectId, event);
     if (told.woke) {
       return { instanceId: told.instanceId, send: told.send };
     }
@@ -940,17 +1076,11 @@ export const createCaw = ({
     };
   };
 
-  /** What a session reads when you ask for a view: your words, where you asked from, then how a view is written. */
-  const viewRequest = (body: string, place: ViewPlace | null) => {
-    const draft = place
-      ? `They asked from the ${BLOCK_PAGE_TITLES[place.page]} page: draft it with view_draft({ name, source, page: "${place.page}"${place.position === null ? "" : `, position: ${place.position}`} }), and it stands there as a block they keep or remove.`
-      : "Draft it with view_draft({ name, source }).";
-    return `${body}\n\n${draft}\n\n# How a view is written\n\n${VIEW_PROMPT}`;
-  };
-
-  /** What a session reads when you ask to change a kept view: your words, its program, then how a view is written. */
-  const viewChange = (kept: ProjectView, body: string) =>
-    `${body}\n\nIts program now:\n\n${kept.source}\n\nDraft the change with view_draft({ name: "${kept.name}", source }): they keep it where the view stands, or discard it.\n\n# How a view is written\n\n${VIEW_PROMPT}`;
+  /** Where a view was asked for, as the facts beside the person's words (the project-view skill says what to do with them). */
+  const viewPlaceNote = (place: ViewPlace | null): string =>
+    place
+      ? `They asked from the ${BLOCK_PAGE_TITLES[place.page]} page: page "${place.page}"${place.position === null ? "" : `, position ${place.position}`}.`
+      : "They asked from the views strip: no page.";
 
   /**
    * Caw's draft written (`view_draft`), as view_draft answers it. For a
@@ -1021,57 +1151,49 @@ export const createCaw = ({
     body.trim() || refuse(400, "A message needs words.");
 
   /**
-   * Setup's steps for `project` as the fleet stands now ({@link setupEvent}),
-   * the one source of both its paths: the send a new project's conversation
-   * opens with ({@link Caw.setup}) and `project_setup`, the person's ask in
-   * any conversation. The fleet's choices and the relay card are asked
-   * while unanswered, and again when the person asked to change them
-   * (`change`); the place card
-   * while the project has no checkout, or when they asked to move it.
+   * The facts a setup page is built from, for `project_setup` (setup.ts
+   * {@link SetupFacts}): the project's name and the template tapped, every
+   * shipped template, its stages.md and tasks by stage, its places and the
+   * machines online, and the page's card ids with what Send applies.
    */
-  const setupText = (
-    project: ReturnType<typeof projectOf>,
-    from: SetupAsk["from"],
-    template: StagesTemplate | null,
-    {
-      change = [],
-      opened,
-      stages,
-    }: {
-      change?: readonly SetupPart[];
-      opened?: string;
-      stages?: string;
-    } = {}
-  ): string =>
-    setupEvent({
-      askFleet: !fleetChoicesSet() || change.includes("fleet"),
-      from,
-      ...(opened === undefined ? {} : { opened }),
-      placed:
-        !change.includes("place") &&
-        project.places.some((place) => place.kind === "checkout"),
-      relay: relayOffer(change.includes("relay")),
-      projectName: project.name,
-      ...(stages === undefined ? {} : { stages }),
-      template,
-    });
+  const setupFacts = async (
+    projectId: string,
+    change: readonly SetupPart[]
+  ): Promise<SetupFacts> => {
+    const project = projectOf(projectId);
+    const stages = await folderCall(() => stagesFileOf(projectId));
+    const tasks: Record<string, string[]> = {};
+    for (const indexed of db.taskIndex(projectId)) {
+      tasks[indexed.stage] = [
+        ...(tasks[indexed.stage] ?? []),
+        `${indexed.id} “${indexed.title}”`,
+      ];
+    }
+    return {
+      name: project.name,
+      named: project.name !== projectWords.placeholderName,
+      tapped: project.tapped ?? null,
+      change,
+      templates: shippedTemplates(),
+      stages: stages ?? null,
+      tasks,
+      places: project.places.map((place) =>
+        place.kind === "hub"
+          ? "its folder on the hub"
+          : `${machines.name(place.machineId)} — ${place.path}${place.isPrimary ? " (primary)" : ""}`
+      ),
+      machines: machines.online(),
+      cards: SETUP_CARDS,
+    };
+  };
 
   /**
-   * The template the project's stages.md is, word for word; null when it is
-   * its own. With no stages.md, the code template when the project was made
-   * from it (the hub reads it with no file), else null.
+   * The setup pages sent and not yet written up, by project: from the
+   * person's Send of the setup page until its conversation's next turn ends,
+   * Caw's own `folder_write` of AGENTS.md and of a delegate type commits it,
+   * the Send being the person's approval of both (no proposal follows it).
    */
-  const templateOf = async (
-    projectId: string
-  ): Promise<StagesTemplate | null> => {
-    const content = await stagesFileOf(projectId);
-    if (content === undefined) {
-      return db.project(projectId)?.template === "code" ? "code" : null;
-    }
-    return (
-      STAGES_TEMPLATES.find((name) => templateText(name) === content) ?? null
-    );
-  };
+  const setupsSent = new Map<string, string>();
 
   const api = {
     /**
@@ -1089,7 +1211,12 @@ export const createCaw = ({
         await conversationFor(projectId, {
           by,
           first: (session) =>
-            `${eventContext(project, session.cwd, "delegate-report", `${by === "you" ? "the person" : "the hub"} started an attempt at one of its tasks`)}\n\nIts report comes to you when it ends.`,
+            saidOf(project, session.cwd, {
+              by: "event",
+              kind: "delegate-report",
+              trigger: `${by === "you" ? "the person" : "the hub"} started an attempt at one of its tasks`,
+              text: "Its report comes to you when it ends.",
+            }),
           ...(mode ? { mode } : {}),
         })
       )?.row;
@@ -1097,6 +1224,14 @@ export const createCaw = ({
     tell,
     tellQuietly,
     tellYours,
+    /**
+     * The person sent project `projectId`'s setup page made by `instanceId`:
+     * until that session's turn ends, its `folder_write` of AGENTS.md and
+     * of a delegate type commits, their Send being the approval.
+     */
+    setupSent(projectId: string, instanceId: string): void {
+      setupsSent.set(projectId, instanceId);
+    },
     /** The mode the hub starts a project's conversation in where the project names none (`supervisor_config.caw_mode`). */
     fleetMode: (): OfferedMode | null => db.cawMode(),
     /** Sets {@link fleetMode}; answers it as stored. */
@@ -1238,9 +1373,10 @@ export const createCaw = ({
     },
 
     /**
-     * "Ask Caw for a view": your words to the project's conversation, with
-     * where you asked from (a page's end: its draft stands on that page as a
-     * proposed block; the strip: a draft tab) and how a view is written.
+     * "Ask Caw for a view": your words to the project's conversation, the
+     * whole of the message, with where you asked from beside them (a page's
+     * end: its draft stands on that page as a proposed block; the strip: a
+     * draft tab), and the project-view skill for how a view is written.
      * Answers the conversation's session.
      */
     async requestView(
@@ -1248,40 +1384,46 @@ export const createCaw = ({
       raw: string,
       place: ViewPlace | null = null
     ): Promise<{ instanceId: string }> {
-      const body = bodyOf(raw);
       const told = await tellYours(projectId, {
-        kind: "person-request",
+        by: "you",
+        kind: "view-request",
         trigger: "the person asked for a view of the project",
-        text: viewRequest(body, place),
+        words: bodyOf(raw),
+        note: viewPlaceNote(place),
       });
       return { instanceId: told.instanceId };
     },
 
     /**
-     * "Ask Caw to change it", on a kept view: your words and the view's
-     * program to the project's conversation. Answers its session.
+     * "Ask Caw to change it", on a kept view: your words to the project's
+     * conversation, the whole of the message, naming the view beside them.
+     * Answers its session.
      */
     async askAboutView(
       projectId: string,
       name: string,
       raw: string
     ): Promise<{ instanceId: string }> {
-      const body = bodyOf(raw);
+      const words = bodyOf(raw);
       const kept = await views.view(projectId, name).catch(refusedBy);
       const told = await tellYours(projectId, {
-        kind: "person-request",
-        trigger: `the person asked to change the view “${viewTitle(kept.name)}” (views/${kept.name}.oui)`,
-        text: viewChange(kept, body),
+        by: "you",
+        kind: "view-request",
+        trigger: `the person asked to change the view “${viewTitle(kept.name)}”`,
+        words,
+        note: `The view is kept: name "${kept.name}", its program views/${kept.name}.oui.`,
       });
       return { instanceId: told.instanceId };
     },
 
     /**
-     * A project made with Caw (New project, an accepted offer): its setup
-     * steps to its conversation, with your prompt, or the note of the offer
-     * it was made from (kept as the project's first note). Answers the
-     * conversation's session; a conversation that cannot start says why on
-     * the project's head, and the project stands either way.
+     * A project made with Caw (New project, an accepted offer): its
+     * conversation starts with the project-setup skill in its context. Made
+     * from your words, its first message is your words alone; made from a
+     * session's offer, it opens on CawCo's notice of your act (kept as the
+     * project's first note too). Answers the conversation's session; a
+     * conversation that cannot start says why on the project's head, and the
+     * project stands either way.
      */
     async setup(
       projectId: string,
@@ -1289,7 +1431,6 @@ export const createCaw = ({
         /** The note a project without a prompt opens with (an offer's). */
         note?: ProjectNote;
         prompt?: string;
-        template: StagesTemplate | null;
       }
     ): Promise<string | undefined> {
       const project = projectOf(projectId);
@@ -1303,14 +1444,24 @@ export const createCaw = ({
           }
         );
       }
-      const told = await tell(projectId, {
-        by: "you",
-        kind: "person-request",
-        trigger: `the person made the project and asked to set it up${prompt ? "" : " (from a session's offer)"}`,
-        text: setupText(project, prompt ? "prompt" : "offer", ask.template, {
-          ...(prompt ? { opened: prompt } : {}),
-        }),
-      });
+      const told = await tell(
+        projectId,
+        prompt
+          ? {
+              by: "you",
+              kind: "project-setup",
+              trigger: "the person made the project with these words",
+              words: prompt,
+            }
+          : {
+              by: "act",
+              kind: "project-setup",
+              trigger: "the person made the project from a session's offer",
+              origin: { name: ACT_ORIGIN, line: noticeWords.setupFromOffer },
+              text: `The person made the project “${project.name}” from a session's offer. Set it up with them.`,
+            },
+        [EVENT_SKILLS["project-setup"]]
+      );
       if (!told.woke) {
         console.warn(
           `[caw] ${project.name}: its setup did not reach its conversation: ${told.why}`
@@ -1382,6 +1533,12 @@ export const createCaw = ({
       }
       turnEnded(instanceId);
       const current = row(instanceId);
+      if (
+        current?.projectId &&
+        setupsSent.get(current.projectId) === instanceId
+      ) {
+        setupsSent.delete(current.projectId);
+      }
       if (current && isProjectConversation(current, db.project)) {
         answered(current.projectId ?? "");
       }
@@ -1447,7 +1604,7 @@ export const createCaw = ({
         ),
         tool(
           "folder_write",
-          "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval.",
+          "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval unless their setup page's Send gave it.",
           {
             path: z.string().min(1),
             content: z.string().max(FOLDER_CONTENT_LIMIT),
@@ -1456,7 +1613,10 @@ export const createCaw = ({
           async ({ path, content, encoding }) => {
             const projectId = ours();
             const rel = await folderCall(() => folderPath(path));
-            const theirs = personsTier(rel);
+            // The setup page sent is the person's approval of AGENTS.md and
+            // the delegate types its writer writes from it.
+            const approved = setupsSent.get(projectId) === me().id;
+            const theirs = notWriters(rel, approved);
             if (theirs) {
               throw new Error(`${rel} was not written: ${theirs}`);
             }
@@ -1464,12 +1624,10 @@ export const createCaw = ({
               folderContent(content, encoding)
             );
             if (rel.startsWith(DELEGATES_DIR)) {
-              if (typeof body !== "string") {
-                throw new Error(
-                  `${rel} was not proposed: a delegate type is text, not bytes.`
-                );
+              const type = typeText(rel, body, approved);
+              if (!approved) {
+                return await proposeType(me(), rel, type, toolUseId);
               }
-              return await proposeType(me(), rel, body, toolUseId);
             }
             if (rel === STAGES_FILE) {
               stagesRead(body);
@@ -1525,22 +1683,37 @@ export const createCaw = ({
         ),
         tool(
           "project_setup",
-          "Setup's steps, to follow whenever the person asks you to set the project up: the first time, again, or one part.",
+          "Facts for the project's setup page (project-setup skill).",
           {
             change: z
               .array(z.enum(SETUP_PARTS))
               .optional()
-              .describe("Answered parts to ask again."),
+              .describe("Parts to ask again."),
           },
-          async ({ change }) => {
+          async ({ change }) => await setupFacts(ours(), change ?? []),
+          setupFactsWords
+        ),
+        tool(
+          "project_name",
+          "Name your project while it has its placeholder name.",
+          { name: z.string().min(1).max(200) },
+          async ({ name }) => {
             const projectId = ours();
-            const stages = await folderCall(() => stagesFileOf(projectId));
-            const template = await folderCall(() => templateOf(projectId));
-            return setupText(projectOf(projectId), "ask", template, {
-              ...(change ? { change } : {}),
-              ...(stages === undefined ? {} : { stages }),
-            });
+            const now = projectOf(projectId).name;
+            if (now !== projectWords.placeholderName) {
+              throw new Error(
+                `The project is named “${now}” already; the person renames it from its details or the setup page's name field.`
+              );
+            }
+            return { name: await rename(projectId, name) };
           },
+          (named: { name: string }) => `Named the project “${named.name}”.`
+        ),
+        tool(
+          "view_guide",
+          "How a view's program is written.",
+          {},
+          async () => VIEW_PROMPT,
           sentence
         ),
       ];

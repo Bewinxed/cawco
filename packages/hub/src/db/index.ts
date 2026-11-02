@@ -799,8 +799,8 @@ export interface DbShape {
     remote: string | null;
     /** Made with Caw: its Caw starts on. */
     caw?: boolean;
-    /** The stage template it is made from. */
-    template?: StagesTemplate | null;
+    /** The template tapped on New project, kept as tapped until its setup page is sent. */
+    tapped?: StagesTemplate | null;
   }) => ProjectRow;
   /** Files a work item as the hub accepted it. */
   /** Files a work item as the hub accepted it, the globs it owns with it in one transaction. */
@@ -1010,7 +1010,6 @@ export interface DbShape {
   readonly getRule: (id: string) => Rule | undefined;
   readonly getSupervisorConfig: () => {
     deniedTools: string[];
-    choicesSetAt: Date | null;
     updatedAt: Date;
   };
   /** A parent's items in one group that no combined report has carried yet, oldest first. */
@@ -1833,19 +1832,6 @@ export interface DbShape {
     error?: string;
     files?: SkillFile[];
   }) => FleetSkillMeta;
-  /**
-   * Updates the fleet's choices row (single-row table) and, with `denied`,
-   * changes its tool denials in the same transaction: `remove`, then `add`,
-   * every other name where it was.
-   */
-  readonly putSupervisorConfig: (config: {
-    denied?: {
-      add: readonly string[];
-      remove: readonly string[];
-    };
-    /** When the fleet's choices were set through `PUT /api/fleet/choices`. */
-    choicesSetAt?: Date | null;
-  }) => void;
   /** Files or refreshes rows of a project's task index, each by its file's path, its lists with it. */
   readonly putTaskIndex: (rows: TaskIndexRow[]) => void;
   readonly putToolListing: (listing: string, toolsHash: string) => void;
@@ -8470,7 +8456,7 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .run();
     },
-    createProject: ({ id, name, checkout, remote, caw = false, template }) =>
+    createProject: ({ id, name, checkout, remote, caw = false, tapped }) =>
       db.transaction((tx) => {
         tx.insert(projects)
           .values({
@@ -8478,7 +8464,7 @@ const make = async (path: string): Promise<DbShape> => {
             name,
             remote,
             eventsOn: caw,
-            template: template ?? null,
+            tapped: tapped ?? null,
           })
           .run();
         tx.insert(projectPlaces)
@@ -9967,37 +9953,8 @@ const make = async (path: string): Promise<DbShape> => {
       const row = supervisorChoices();
       return {
         deniedTools: deniedToolNames(),
-        choicesSetAt: row.choicesSetAt,
         updatedAt: row.updatedAt,
       };
-    },
-    putSupervisorConfig: ({ denied, ...config }) => {
-      supervisorChoices();
-      db.transaction((tx) => {
-        tx.update(supervisorConfig)
-          .set({
-            ...(config.choicesSetAt === undefined
-              ? {}
-              : { choicesSetAt: config.choicesSetAt }),
-            updatedAt: new Date(),
-          })
-          .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-          .run();
-        if (!denied) {
-          return;
-        }
-        if (denied.remove.length > 0) {
-          tx.delete(fleetDeniedTools)
-            .where(inArray(fleetDeniedTools.tool, [...denied.remove]))
-            .run();
-        }
-        if (denied.add.length > 0) {
-          tx.insert(fleetDeniedTools)
-            .values(denied.add.map((tool) => ({ tool })))
-            .onConflictDoNothing()
-            .run();
-        }
-      });
     },
     fleetWatchOn: () =>
       db

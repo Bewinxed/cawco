@@ -7,13 +7,14 @@
    *
    * One live Caw at a time: the first fit sends the 80px Caw away and he
    * peeks over the card; a different fit moves the peek to it; no fit sends
-   * the peek away and the 80px Caw comes back. A tap on a card picks it
-   * whatever fits; until one is tapped the fitting card is the pick.
+   * the peek away and the 80px Caw comes back. The fit is a hint and never a
+   * pick: only a tap picks a card, typing and chips leave the tap where it
+   * is, and a tap on the picked card clears it.
    *
    * The send makes the project with Caw (its folder on the hub its place until
-   * setup picks the checkout), with the picked template's stages, and lands
-   * on the project's page with his panel open on the conversation setting
-   * it up, the words its first message.
+   * setup picks the checkout), carrying the tapped template or none and no
+   * name (Caw names it), and lands on the project's page with his panel open
+   * on the conversation setting it up, the words its first message.
    */
   import { tick } from "svelte";
   import { barGlass } from "#lib/cawco/bar-glass.svelte.js";
@@ -29,7 +30,6 @@
   import { openOnArrival } from "#lib/cawco/project/caw-lead.svelte.js";
   import {
     fitOf,
-    nameFrom,
     STARTERS,
     TEMPLATE_CARDS,
     type TemplateCard,
@@ -56,24 +56,18 @@
   const words = $derived(draft.text);
   let fit = $state<TemplateName | null>(null);
   /**
-   * The card the person tapped: it is the pick until the prompt fits
-   * another card. Untapped, the fitting card is the pick, so the frame
-   * stands on the fit or the tap and nowhere else.
+   * The card the person tapped, the one pick: the frame stands on it and
+   * nowhere else, whatever the words fit.
    */
   let tapped = $state<TemplateName | null>(null);
-  const selected = $derived(tapped ?? fit);
-  /** A card picked on the cards: the tap. */
+  /** A card picked on the cards, or the picked one tapped again (null). */
   function tap(next: TemplateName | null) {
     tapped = next;
   }
 
-  /** The prompt's fit, now: a new fit releases the tap and the frame follows it. */
+  /** The prompt's fit, now: where Caw peeks, never the pick. */
   function refit(text: string) {
-    const next = fitOf(text);
-    if (next !== null && next !== fit) {
-      tapped = null;
-    }
-    fit = next;
+    fit = fitOf(text);
   }
 
   // The fit runs once typing has rested.
@@ -104,8 +98,6 @@
   function starter(text: string) {
     draft.text = text;
     draft.focusWanted = true;
-    // A chip is a new prompt, never a pick: the frame goes to its fit.
-    tapped = null;
     // A press runs the fit at once: there is no typing to wait for.
     refit(text);
   }
@@ -141,10 +133,9 @@
     let created: Awaited<ReturnType<typeof createProject>>;
     try {
       created = await createProject({
-        name: nameFrom(text) || text.trim().slice(0, 60),
         prompt: text,
         promptId: unsent.id,
-        ...(selected ? { template: selected } : {}),
+        ...(tapped ? { template: tapped } : {}),
       });
       unsent = null;
     } catch (error) {
@@ -258,7 +249,7 @@
       peekPresent={!leaving}
       peekShare={made ? `caw:${made}` : undefined}
       peekSize={CAW_SIZE}
-      bind:selected={() => selected, tap}
+      bind:selected={() => tapped, tap}
     />
   </div>
 </main>

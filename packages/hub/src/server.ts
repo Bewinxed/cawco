@@ -122,6 +122,7 @@ import {
   ACCOUNT_READ,
   ACCOUNT_RULES,
   ACCOUNT_SETUP_STEPS,
+  ACT_ORIGIN,
   type Account,
   type AccountBorrowFrame,
   type AccountCatalogFault,
@@ -348,6 +349,7 @@ import {
   permissionModeNamed,
   pictureName,
   placeAtLink,
+  presenceLine,
   previewEnterUrl,
   previewRoute,
   providerChoices,
@@ -406,7 +408,7 @@ import {
   type WorkInFlight,
   waitArtifact,
   withMovedLine,
-  withPresenceLine,
+  withReminder,
   workWords,
 } from "@cawco/core";
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
@@ -509,6 +511,7 @@ import { turnCutWords } from "@cawco/core/words/cuts";
 import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
+import { projectWords } from "@cawco/core/words/project";
 import { type RelaunchFor, relaunchWords } from "@cawco/core/words/relaunch";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { turnWords } from "@cawco/core/words/turns";
@@ -599,6 +602,7 @@ import {
   eventContext,
   fencedSpawn,
   isProjectConversation,
+  type PersonsSend,
   PROJECT_ORIGIN,
   stagePlaceRef,
 } from "./caw";
@@ -713,11 +717,7 @@ import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_QUERY } from "./find";
 import { forScreens } from "./find-secrets";
 import { createFindTool } from "./find-tool";
-import {
-  type FleetChoicesStore,
-  fleetChoicesRoutes,
-  setFleetChoices,
-} from "./fleet-choices";
+import { fleetChoicesRoutes } from "./fleet-choices";
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
@@ -5985,7 +5985,10 @@ export const createServer = (
       return `${item.title} is ${item.state}, not failed.`;
     }
     const [row] = db.getInstancesByIds([item.instanceId]);
-    const refused = inputRefusal(item.instanceId, { kind: "human" });
+    const refused = inputRefusal(item.instanceId, {
+      kind: "system",
+      name: ACT_ORIGIN,
+    });
     if (!row || refused) {
       return refused?.reason ?? "This session is gone.";
     }
@@ -6000,18 +6003,16 @@ export const createServer = (
       instanceId: row.id,
       payload: {
         instanceId: row.id,
-        message: {
-          type: "user",
-          uuid,
-          message: {
-            role: "user",
-            content: error
+        message: personsMessage(
+          {
+            by: "act",
+            line: noticeWords.retried,
+            text: error
               ? `Your work failed: ${error}\nTry it again.`
               : "Your work failed. Try it again.",
           },
-          parent_tool_use_id: null,
-          origin: { kind: "human" },
-        },
+          uuid
+        ),
       },
     });
     const owed = sent?.state === "pending" && sent.owed !== null;
@@ -9459,46 +9460,85 @@ export const createServer = (
   };
 
   /**
-   * The send as its machine is handed it: a copy with the person's presence
-   * after its text ({@link personSaid}, core `withPresenceLine`), read fresh
-   * at every hand, a hand again included, on every harness alike. The
-   * record keeps the send as it was accepted: the person's bubble is their
-   * words alone. A keep-alive ping goes as it is, and so does every send to
-   * a session that does not talk with the person (roles.ts
-   * `talksWithPerson`): a work item asks its parent, never the person.
+   * The person's words or act as the message a session is sent (caw.ts
+   * {@link PersonsSend}): their words alone on their own origin, CawCo's
+   * note beside them in the send's reminder; or CawCo's notice of their act
+   * on the act origin, with its line.
+   */
+  const personsMessage = (said: PersonsSend, uuid: string): SentMessage => ({
+    type: "user",
+    uuid,
+    parent_tool_use_id: null,
+    ...(said.by === "you"
+      ? {
+          message: { role: "user", content: said.words },
+          origin: { kind: "human" },
+          ...(said.note ? { reminder: said.note } : {}),
+        }
+      : {
+          message: { role: "user", content: said.text },
+          origin: { kind: "system", name: ACT_ORIGIN, line: said.line },
+        }),
+  });
+
+  /** A send's content with `lines` in one reminder block after its last text (core `withReminder`). */
+  const remindedContent = (
+    content: SentMessage["message"]["content"],
+    lines: readonly string[]
+  ): SentMessage["message"]["content"] => {
+    if (typeof content === "string") {
+      return withReminder(content, lines);
+    }
+    const at = content.findLastIndex((part) => part.type === "text");
+    const last = content[at];
+    return last?.type === "text"
+      ? content.with(at, { ...last, text: withReminder(last.text, lines) })
+      : [...content, { type: "text", text: withReminder("", lines) }];
+  };
+
+  /**
+   * The send as its machine is handed it: a copy with CawCo's word to the
+   * agent after its text, in one `<system-reminder>` block (core
+   * `withReminder`), read fresh at every hand, a hand again included, on
+   * every harness alike: the send's own reminder (core
+   * `NeutralUserMessage.reminder`: where it came from, which skill applies),
+   * then the person's presence ({@link personSaid}). The record keeps the
+   * send as it was accepted: the person's bubble is their words alone. A
+   * keep-alive ping goes as it is; a send to a session that does not talk
+   * with the person (roles.ts `talksWithPerson`: a work item asks its
+   * parent, never the person) carries no presence.
    */
   const presenced = (
     envelope: Envelope<SendPayload>
   ): Envelope<SendPayload> => {
     const { instanceId, message } = envelope.payload;
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (isKeepAlive(message) || (row && !talksWithPerson(row))) {
+    if (isKeepAlive(message)) {
       return envelope;
     }
-    const said = personSaid(instanceId, message.origin.kind === "human");
-    const { content } = message.message;
-    let next: typeof content;
-    if (typeof content === "string") {
-      next = withPresenceLine(content, said);
-    } else {
-      const at = content.findLastIndex((part) => part.type === "text");
-      const last = content[at];
-      next =
-        last?.type === "text"
-          ? content.with(at, {
-              ...last,
-              text: withPresenceLine(last.text, said),
-            })
-          : [...content, { type: "text", text: withPresenceLine("", said) }];
+    const [row] = db.getInstancesByIds([instanceId]);
+    const said =
+      row && !talksWithPerson(row)
+        ? undefined
+        : personSaid(instanceId, message.origin.kind === "human");
+    const { reminder, ...sent } = message;
+    const lines = [
+      ...(reminder ? [reminder] : []),
+      ...(said ? [presenceLine(said)] : []),
+    ];
+    if (lines.length === 0) {
+      return envelope;
     }
-    console.log(
-      `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.kind === "on" && said.recap ? `, back after away since ${said.recap.since}, with the plan's notes under "Since ${said.recap.section}"` : ""}`
-    );
+    const next = remindedContent(sent.message.content, lines);
+    if (said) {
+      console.log(
+        `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.kind === "on" && said.recap ? `, back after away since ${said.recap.since}, with the plan's notes under "Since ${said.recap.section}"` : ""}`
+      );
+    }
     return {
       ...envelope,
       payload: {
         ...envelope.payload,
-        message: { ...message, message: { ...message.message, content: next } },
+        message: { ...sent, message: { ...sent.message, content: next } },
       },
     };
   };
@@ -13325,25 +13365,13 @@ export const createServer = (
   };
 
   /**
-   * Why a place was not added: the route's status and its sentence, which a
-   * setup page's send answers as it answers any refusal of its own.
+   * Why a place was not added, or a name not taken: the route's status and
+   * its sentence, which a setup page's send answers as it answers any
+   * refusal of its own.
    */
   class PlaceRefusal extends ArtifactRefusal {
     declare readonly status: 400 | 404;
   }
-
-  /** The fleet's onboarding choices as their rows keep them (fleet-choices.ts). */
-  const fleetChoices: FleetChoicesStore = {
-    read: () => {
-      const config = db.getSupervisorConfig();
-      return {
-        deniedTools: config.deniedTools,
-        choicesSetAt: config.choicesSetAt,
-      };
-    },
-    write: (choices) => db.putSupervisorConfig(choices),
-    synced: () => fleetChanged(),
-  };
 
   /**
    * The fleet's stream relay (stream-relay.ts): coturn on a machine with a
@@ -13451,19 +13479,11 @@ export const createServer = (
     ports: PREVIEW_PORTS,
     domain: previewListeners.domain(),
   });
-  /**
-   * The domain a page last reached CawCo through (every dashboard reads the
-   * journey as it loads): the setup card recommends Set up with it.
-   */
-  let lastRelayDomain: string | null = null;
   /** Who asks of the relay's journey: the paired device (a browser's own key on a trusted hub), where from, and through what domain. */
   const relayAsker = (request: Request, socket: string | null) => {
     const caller = hubAuth.callerOf(request, socket);
     const agent = request.headers.get("user-agent");
     const domain = domainOf(request.headers, hubOwnNames());
-    if (domain) {
-      lastRelayDomain = domain;
-    }
     return {
       device:
         caller.kind === "owner" && caller.device
@@ -13832,8 +13852,9 @@ export const createServer = (
   ): Promise<MarksOutcome> => {
     const woke = await their
       .tell(projectId, {
-        by: "you",
+        by: "act",
         kind: "person-request",
+        origin: { name: ARTIFACT_ORIGIN },
         trigger: `the person marked an artifact ${sessionName(instance)} made, and that session takes no input now (${why.replace(CLOSING_STOP, "")})`,
         text: `${text}\n\nThese come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
         ...(images.length > 0 || attachments.length > 0
@@ -14475,33 +14496,29 @@ export const createServer = (
       if (artifact.kind === "page" && artifact.projectId) {
         await decisions.decide(artifact.projectId, artifact.name, artifact.id);
       }
-      return applySetupPicks(artifact, instance.projectId, state, {
-        fleet: (choices) => setFleetChoices(fleetChoices, choices),
-        // Set up opens the relay's journey, and its row stands in Needs you;
-        // Later only answers the card.
-        relay: (pick) =>
-          relayJourney
-            .act(
-              { act: pick },
-              {
-                device: { id: "setup", name: "the setup page" },
-                address: null,
-                // The send carries no page's headers: the domain a page last
-                // reached CawCo through stands for it, for the name's
-                // suggestion.
-                domain: lastRelayDomain,
-              }
-            )
-            .catch((error: unknown) =>
-              console.warn(
-                `[relay-journey] the setup page's ${pick} was not taken: ${error instanceof Error ? error.message : String(error)}`
-              )
-            ),
+      // A project's setup page: its name, shape and place applied before
+      // its writer hears the picks, and the Send its approval of the
+      // AGENTS.md and delegate types it writes from them (caw.ts `setupSent`).
+      const setup = await applySetupPicks(artifact, instance.projectId, state, {
+        // Its name field's refusal is the send's to answer, as a place's is.
+        name: async (projectId, name) => {
+          await projectEdits.edit(projectId, { name }).catch((error) => {
+            throw error instanceof ProjectEditRefusal
+              ? new PlaceRefusal(error.status, error.message)
+              : error;
+          });
+        },
+        shape: async (projectId, template) => {
+          await tasks.applyTemplate(projectId, template, YOU_ACTOR);
+        },
         // A refusal is an ArtifactRefusal too: the send answers it.
         place: async (projectId, place) => {
           await addProjectPlace(projectId, place.machineId, place.path);
         },
       });
+      if (setup && instance.projectId) {
+        lead?.setupSent(instance.projectId, instance.id);
+      }
     },
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
     listing: (instance) => browsers.listed(instance),
@@ -24205,10 +24222,12 @@ export const createServer = (
    * project, not a second one. Else a new project, its places its folder on
    * the hub and the checkout it was made from, its primary. With no checkout
    * (New project: its place is picked once it is set up) its one place is
-   * its folder on the hub. A new project's `template` is written as its
-   * stages.md; given `setup` (your prompt), its conversation starts with it
-   * and sets it up, on or off (caw.ts `setup`). The dashboard's "New
-   * project" and "Create project" and an accepted project offer all come here.
+   * its folder on the hub. Nothing is written into a new project here: the
+   * template tapped on New project is kept as `tapped`, and its setup page's
+   * Send applies the shape picked (setup.ts `applySetupPicks`). Given `setup`
+   * (your prompt), its conversation starts with it and sets it up, on or off
+   * (caw.ts `setup`). The dashboard's "New project" and an accepted project
+   * offer come here.
    */
   /** A paused machine's folder is read nothing: the person is told now, not kept waiting for the pause's end. */
   const folderReadable = (machineId: string | undefined): void => {
@@ -24221,6 +24240,18 @@ export const createServer = (
     }
   };
 
+  /**
+   * The name `POST /api/projects` makes a project under: the one asked, else
+   * for New project's words the placeholder Caw names it from (caw.ts
+   * `project_name`); none when neither was sent.
+   */
+  const askedProjectName = (body: {
+    name?: string;
+    prompt?: string;
+  }): string | undefined =>
+    body.name ??
+    (body.prompt?.trim() ? projectWords.placeholderName : undefined);
+
   interface ProjectAsk {
     /** Made with Caw: a new project's Caw starts on. */
     caw?: boolean;
@@ -24232,7 +24263,8 @@ export const createServer = (
       prompt?: string;
       promptId?: string;
     };
-    template?: StagesTemplate;
+    /** The template tapped on New project, kept as tapped until the setup page is sent. */
+    tapped?: StagesTemplate;
   }
   interface ProjectMade {
     /** The project's conversation setting it up, when it started. */
@@ -24310,7 +24342,7 @@ export const createServer = (
       ...(checkout ? { checkout } : {}),
       remote,
       caw: asked.caw ?? false,
-      template: asked.template ?? null,
+      tapped: asked.tapped ?? null,
     });
     projectsChanged();
     projectStarters.touched(created.id, "project created");
@@ -24325,27 +24357,17 @@ export const createServer = (
   };
 
   /**
-   * A new project's template applied as any template is (tasks.ts
-   * `applyTemplate`: its stages.md and the delegate types they run), and its
-   * conversation set to set it up when it is made with Caw: its session.
+   * A new project's conversation set to set it up when it is made with
+   * your prompt: its session. Your prompt sets the project up whether its
+   * Caw is on or off.
    */
-  const startProject = async (
+  const startProject = (
     created: ProjectRow,
     asked: ProjectAsk
-  ): Promise<string | undefined> => {
-    if (asked.template) {
-      await tasks.applyTemplate(created.id, asked.template, YOU_ACTOR);
-      // Its template's starter skills reach the checkout it was made from.
-      fleetChanged();
-    }
-    // Your prompt sets the project up whether its Caw is on or off.
-    return asked.setup
-      ? caw.setup(created.id, {
-          ...asked.setup,
-          template: asked.template ?? null,
-        })
-      : undefined;
-  };
+  ): Promise<string | undefined> =>
+    asked.setup
+      ? caw.setup(created.id, asked.setup)
+      : Promise.resolve(undefined);
 
   /**
    * A project as the API answers it: its places, and its primary checkout's
@@ -25147,13 +25169,13 @@ export const createServer = (
       tasks.touched(projectId);
       decisionsChanged(projectId);
     },
-    fleetChoicesSet: () => db.getSupervisorConfig().choicesSetAt !== null,
-    relayOffer: (again) =>
-      db.streamRelay.read() ||
-      db.streamRelay.journey() ||
-      (db.streamRelay.askedAt() !== null && !again)
-        ? null
-        : { domain: lastRelayDomain },
+    machines: {
+      name: machineName,
+      online: () => onlineMachines().map(machineName),
+    },
+    // Caw's project_name: the rename the project head's details tray makes.
+    rename: async (projectId, name) =>
+      (await projectEdits.edit(projectId, { name })).name,
     projectsChanged,
     // A project note, a line in its conversation's transcript as it lands.
     noted: (instanceId, note) => noteProject(instanceId, note),
@@ -25473,30 +25495,39 @@ export const createServer = (
     },
     tasks: async (projectId) =>
       decidedTasks((await tasks.list(projectId)).tasks),
-    tell: (instance, text, uuid) => {
+    // The person's note, their words alone with the page beside them for
+    // the agent; or their act, CawCo's notice of it.
+    tell: (instance, said, uuid) => {
       deliverSend({
         verb: "send",
         machineId: instance.machineId,
         instanceId: instance.id,
         payload: {
           instanceId: instance.id,
-          message: {
-            type: "user",
-            uuid,
-            message: { role: "user", content: text },
-            parent_tool_use_id: null,
-            origin: { kind: "human" },
-          },
+          message: personsMessage(said, uuid),
         },
       });
     },
-    // The person's words to the project's conversation (caw.ts `tellYours`).
-    tellConversation: (projectId, text) =>
-      caw.tellYours(projectId, {
-        kind: "person-request",
-        trigger: "the person sent a decision page",
-        text,
-      }),
+    // The person's words or act to the project's conversation (caw.ts `tellYours`).
+    tellConversation: (projectId, said) =>
+      caw.tellYours(
+        projectId,
+        said.by === "you"
+          ? {
+              by: "you",
+              kind: "person-request",
+              trigger: "the person wrote on a decision page",
+              words: said.words,
+              note: said.note,
+            }
+          : {
+              by: "act",
+              kind: "person-request",
+              trigger: "the person sent a decision page",
+              origin: { name: ACT_ORIGIN, line: said.line },
+              text: said.text,
+            }
+      ),
     // The send's own record: unread while pending, then the turn that read
     // it until that session's next turn end (the send may have gone on to
     // a continuation: its record names where).
@@ -25540,7 +25571,7 @@ export const createServer = (
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     createProject: createOrJoinProject,
-    setup: (projectId, note) => caw.setup(projectId, { note, template: null }),
+    setup: (projectId, note) => caw.setup(projectId, { note }),
     moved: (machineIds) => {
       for (const machineId of machineIds) {
         publishInstances(machineId);
@@ -25756,8 +25787,9 @@ export const createServer = (
     tell: tellPlan,
     wakeCaw: async (projectId, text) => {
       const woke = await caw.tell(projectId, {
-        by: "you",
+        by: "act",
         kind: "person-request",
+        origin: { name: PLAN_ORIGIN },
         trigger: "the person changed the project's plan",
         text,
       });
@@ -25773,8 +25805,8 @@ export const createServer = (
     projectIds: () => db.listProjects().map((project) => project.id),
   });
   tasks.listen(waits.taskChanged);
-  /** Your words about a task to a session, as the composer sends them. */
-  const sendYours = (row: InstanceRow, text: string): void => {
+  /** Your words or act about a task to a session ({@link personsMessage}). */
+  const sendYours = (row: InstanceRow, said: PersonsSend): void => {
     try {
       deliverSend({
         verb: "send",
@@ -25782,13 +25814,7 @@ export const createServer = (
         instanceId: row.id,
         payload: {
           instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content: text },
-            parent_tool_use_id: null,
-            origin: { kind: "human" },
-          },
+          message: personsMessage(said, crypto.randomUUID()),
         },
       });
     } catch (error) {
@@ -29687,7 +29713,7 @@ export const createServer = (
         projectDelegateTypesRoutes(projectTypes, (id) =>
           db.listProjects().some((project) => project.id === id)
         ),
-        fleetChoicesRoutes(fleetChoices),
+        fleetChoicesRoutes(() => db.getSupervisorConfig().deniedTools),
         browserRoutes(browsers),
         browserStreamRoutes(browserStream),
         relayJourneyRoutes(relayJourney, relayAsker, (request, server) =>
@@ -33253,14 +33279,16 @@ export const createServer = (
       // already has joins it as a checkout place (`placeAdded`), and the
       // answer is that project, not a second one. `place` is the folder asked
       // about. With no folder (New project: its checkout is picked once it is
-      // set up) its one place is its folder on the hub. `template` writes its
-      // stages.md; made with Caw, its conversation starts with `prompt` and
-      // the setup steps (`conversation`, its session).
+      // set up) its one place is its folder on the hub. `template` is the one
+      // tapped, kept as tapped and written by nothing until the setup page is
+      // sent; made with Caw, its conversation starts with `prompt`, the
+      // person's words alone (`conversation`, its session). A project made
+      // from a prompt with no `name` takes the placeholder Caw names it from.
       .post(
         "/api/projects",
         {
           body: t.Object({
-            name: t.String({ minLength: 1, maxLength: 200 }),
+            name: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
             machineId: t.Optional(t.String({ minLength: 1 })),
             cwd: t.Optional(t.String({ minLength: 1 })),
             // Made with Caw: its Caw starts on. A folder that joins a project
@@ -33280,15 +33308,19 @@ export const createServer = (
               "A checkout is a machine and a folder: send both machineId and cwd, or neither."
             );
           }
+          const name = askedProjectName(body);
+          if (!name) {
+            return status(400, "A project needs a name.");
+          }
           // A folder that is no absolute path on its machine is refused in
           // the hub's words (db `placePathOn`).
           const made = await createOrJoinProject({
-            name: body.name,
+            name,
             ...(body.machineId && body.cwd
               ? { checkout: { machineId: body.machineId, cwd: body.cwd } }
               : {}),
             ...(body.caw === undefined ? {} : { caw: body.caw }),
-            ...(body.template ? { template: body.template } : {}),
+            ...(body.template ? { tapped: body.template } : {}),
             ...(body.prompt?.trim()
               ? {
                   setup: {

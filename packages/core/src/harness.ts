@@ -378,10 +378,21 @@ export const CAWCO_NOTICE = "cawco_notice";
 export const PLAN_ORIGIN = "plan";
 
 /**
+ * The `system` origin name of the hub's word on one of the person's acts
+ * that carries none of their words and has no origin of its own: a project
+ * made from a session's offer set up, a decision page's "I'm done picking",
+ * its Make tasks. The hub writes what the act was in CawCo's words, and the
+ * notice's `line` where it is made. It is the person's act, so it reaches its
+ * session as their own words do ({@link byPerson}).
+ */
+export const ACT_ORIGIN = "act";
+
+/**
  * Whether a send is the person's own act: their words, their picks or
  * comments on one of the session's artifacts ({@link ARTIFACT_ORIGIN}),
- * their answer to its ask ({@link ASK_ORIGIN}), or their changes to a plan
- * ({@link PLAN_ORIGIN}).
+ * their answer to its ask ({@link ASK_ORIGIN}), their changes to a plan
+ * ({@link PLAN_ORIGIN}), or another act told in CawCo's words
+ * ({@link ACT_ORIGIN}).
  * Any of them may wake a stopped session and reopen finished work.
  */
 export const byPerson = (origin: NeutralOrigin): boolean =>
@@ -389,7 +400,8 @@ export const byPerson = (origin: NeutralOrigin): boolean =>
   (origin.kind === "system" &&
     (origin.name === ARTIFACT_ORIGIN ||
       origin.name === ASK_ORIGIN ||
-      origin.name === PLAN_ORIGIN));
+      origin.name === PLAN_ORIGIN ||
+      origin.name === ACT_ORIGIN));
 
 /**
  * The hub's line in a session's transcript where it started again fresh
@@ -1041,6 +1053,14 @@ export interface NeutralUserMessage {
   origin?: NeutralOrigin;
   parent_tool_use_id?: string | null;
   raw?: unknown;
+  /**
+   * CawCo's word to the agent about this send (where it came from, which
+   * skill applies), kept apart from `message` so the sender's words are the
+   * whole of the message: the hub folds it into a `<system-reminder>` block
+   * after them each time it hands the send to its machine (hub server.ts
+   * `presenced`), and no row, record or Find draws it.
+   */
+  reminder?: string;
   /**
    * A retry: the uuid of the failed send this one is sent in place of. The
    * hub marks that record `replaced` ({@link SendRecord.replacedBy}).

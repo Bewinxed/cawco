@@ -1,133 +1,59 @@
 /**
- * The fleet's onboarding choices (Projects spec §5.2, §5.6):
+ * The fleet's tool policy and its one onboarding offer (Projects spec §2,
+ * §5.2):
  *
- * - **delegates**: use CawCo's delegates instead of each harness's own
- *   subagents — kept on the denied-tools baseline
- *   (`fleet_denied_tools`): Claude Code's `Task`/`Agent`,
- *   OpenCode's `subagent`. pi has none, so the choice does not change it.
- *
- * A session's plan is no choice: it is CawCo's list on every harness, and
- * each harness's own list and plan mode are denied to every session (core
- * `OWN_LIST_DENIED`), never stored in the baseline.
- *
- * - **relay**: the fleet's stream relay (stream-relay.ts), offered once on a
- *   new project's setup page as the card `fleet-relay` while the fleet has
- *   none, no journey, and nobody has answered it
- *   (`supervisor_config.relay_asked_at`): Set up the stream relay, which
- *   opens its guided journey (relay-journey.ts) in Needs you, or Later.
- *   Settings › Browsers is where it is finished.
+ * - **CawCo's tools over the harness's own**, a standing rule with no
+ *   setting: every session is denied its harness's own subagents (core
+ *   `SUBAGENTS_DENIED`: Claude Code's `Task`/`Agent`, OpenCode's `subagent`;
+ *   pi has none), so work goes to CawCo's delegates; and its own list and
+ *   plan mode (core `OWN_LIST_DENIED`), so a session's plan is CawCo's list.
+ *   Both are added on every machine (agent denied-tools.ts), never stored in
+ *   the baseline and never asked about.
+ * - **The baseline** (`fleet_denied_tools`): any other denial the fleet
+ *   keeps, which every machine hears through fleet sync.
+ * - **relay**: the fleet's stream relay (stream-relay.ts) card and its pick,
+ *   for the first-run row that offers it once a machine is online. Settings ›
+ *   Browsers is where it is finished.
  *
  * Names are Claude Code's, the list every daemon already writes into
  * `~/.claude/settings.json` (Claude Code refuses a rule whose tool name is
  * lowercase); the OpenCode adapter reads each name as its OpenCode tool
- * (`opencodeToolsFor`). The answer spells out what each harness is denied
- * for each choice.
+ * (`opencodeToolsFor`).
  */
 import type { ChoiceEntry } from "@cawco/core";
 import { NATIVE_TOOLS } from "@cawco/core";
 import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 
 /** What `GET /api/fleet/choices` answers. */
 export interface FleetChoices {
-  /** Use delegates instead of each harness's subagents. */
-  delegates: boolean;
-  /** The baseline as stored, the delegates choice and every other denial in it. */
-  deniedTools: string[];
-  /** When someone last set the choices here (ms epoch); null while nobody has, so a new project's setup asks. */
-  setAt: number | null;
   /**
-   * Always true: every session keeps CawCo's list. Still sent, with
-   * `tools.todos` (what every session is denied for it), because the apps on
-   * TestFlight 20261015 through 20261018 decode both as required (hub
-   * openapi.ts's wire check); they go in the change that expires those
-   * builds.
+   * Always true: every session uses CawCo's delegates over its harness's
+   * subagents, the fleet's policy. Still sent, with `setAt` and
+   * `tools.delegates`, because the apps on TestFlight 20261015 through
+   * 20261018 decode them as required (hub openapi.ts's wire check); they go
+   * in the change that expires those builds.
    */
+  delegates: true;
+  /** The baseline as stored: denials beyond the fixed policy. */
+  deniedTools: string[];
+  /** Always null: nothing about the fleet's tools is set. Kept as `delegates` is. */
+  setAt: null;
+  /** Always true: every session keeps CawCo's list. Kept as `delegates` is. */
   todos: true;
-  /** What each denies, per harness. */
+  /** What each fixed denial denies, per harness. */
   tools: Record<"delegates" | "todos", Record<string, readonly string[]>>;
 }
 
-/** What the fleet's choices are stored as. */
-interface StoredChoices {
-  /** When a PUT last set them; null while nobody has. */
-  choicesSetAt: Date | null;
-  /** The baseline. */
-  deniedTools: string[];
-}
-
-/**
- * A change to the baseline (`fleet_denied_tools`): the names removed and
- * added; every other name stays where it was.
- */
-interface DeniedToolsChange {
-  add: readonly string[];
-  remove: readonly string[];
-}
-
-/** "Delegates" turned on or off: Claude Code's subagent tools added, or every harness's removed. */
-const delegatesChange = (on: boolean): DeniedToolsChange => {
-  const names = NATIVE_TOOLS.subagents;
-  return on
-    ? { add: names.claude, remove: [] }
-    : { add: [], remove: [...names.claude, ...names.opencode] };
-};
-
-const readChoices = ({
-  deniedTools,
-  choicesSetAt,
-}: StoredChoices): FleetChoices => ({
-  delegates: NATIVE_TOOLS.subagents.claude.every((name) =>
-    deniedTools.includes(name)
-  ),
-  todos: true,
-  setAt: choicesSetAt?.getTime() ?? null,
-  deniedTools,
-  tools: { delegates: NATIVE_TOOLS.subagents, todos: NATIVE_TOOLS.todos },
-});
-
-/** Where the fleet's choices are kept, and how every machine hears them. */
-export interface FleetChoicesStore {
-  read: () => StoredChoices;
-  synced: () => void;
-  /** Stores the baseline's change and when it was set, in one transaction. */
-  write: (choices: { denied: DeniedToolsChange; choicesSetAt: Date }) => void;
-}
-
-/**
- * Sets the choices named, stores them and sends every machine them
- * (`synced`), so the next session on each starts under them and each
- * machine's own harness config follows at once: the PUT, and a new
- * project's setup page when the person sends it (setup.ts).
- */
-export const setFleetChoices = (
-  store: FleetChoicesStore,
-  choices: { delegates?: boolean }
-): FleetChoices => {
-  if (choices.delegates === undefined) {
-    return readChoices(store.read());
-  }
-  store.write({
-    denied: delegatesChange(choices.delegates),
-    choicesSetAt: new Date(),
-  });
-  store.synced();
-  return readChoices(store.read());
-};
-
-/** `GET /api/fleet/choices` and `PUT /api/fleet/choices`; a PUT names the choices it changes. */
-export const fleetChoicesRoutes = (store: FleetChoicesStore) =>
-  new Elysia()
-    .get("/api/fleet/choices", () => readChoices(store.read()))
-    .put(
-      "/api/fleet/choices",
-      {
-        body: t.Object({
-          delegates: t.Optional(t.Boolean()),
-        }),
-      },
-      ({ body }) => setFleetChoices(store, body)
-    );
+/** `GET /api/fleet/choices`: the policy as it stands, `deniedTools` the stored baseline. */
+export const fleetChoicesRoutes = (deniedTools: () => string[]) =>
+  new Elysia().get("/api/fleet/choices", (): FleetChoices => ({
+    delegates: true,
+    deniedTools: deniedTools(),
+    setAt: null,
+    todos: true,
+    tools: { delegates: NATIVE_TOOLS.subagents, todos: NATIVE_TOOLS.todos },
+  }));
 
 /** The relay card's id and its two options. */
 const RELAY_CARD = {
@@ -137,10 +63,13 @@ const RELAY_CARD = {
 } as const;
 
 /**
- * The `fleet-relay` card, for Caw's setup page (setup.ts): the step's lead
- * (core `STREAM_RELAY_WORDS`), and two options, Set up the stream relay and
- * Later; Set up recommended when the person reached CawCo through a domain,
- * which carries pages and not streams.
+ * The `fleet-relay` card, for the first-run row's relay step: the step's
+ * lead (core `STREAM_RELAY_WORDS`), and two options, Set up the stream relay
+ * and Later; Set up recommended when the person reached CawCo through a
+ * domain, which carries pages and not streams.
+ *
+ * @public Kept for the first-run row's relay step, the build after the one
+ * that took the card off the setup page.
  */
 export const relayCard = (domain: string | null): string => {
   const words = STREAM_RELAY_WORDS;
@@ -148,7 +77,11 @@ export const relayCard = (domain: string | null): string => {
   return `- \`${RELAY_CARD.id}\`: "${words.title}" — ${lead} Options \`${RELAY_CARD.setUp}\` labelled "${words.setUp}"${domain ? " (recommended)" : ""} and \`${RELAY_CARD.later}\` labelled "${words.later}". Say on the card that Set up opens a short guided set-up in Needs you, each step ticking by itself, and that Settings › Browsers is where it is finished and seen. It is the fleet's, asked once: say so on the card.`;
 };
 
-/** What the person picked on the relay card: Set up, Later, or nothing. */
+/**
+ * What the person picked on the relay card: Set up, Later, or nothing.
+ *
+ * @public Kept for the first-run row's relay step, as {@link relayCard} is.
+ */
 export const relayPickOf = (
   state: Record<string, ChoiceEntry>
 ): "set-up" | "later" | undefined => {

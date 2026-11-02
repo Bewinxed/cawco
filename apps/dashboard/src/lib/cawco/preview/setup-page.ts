@@ -1,6 +1,6 @@
 /**
  * A new project's setup page (the page artifact `setup` its Caw makes, the
- * hub's setup.ts). The hub applies its fleet choices and place on every
+ * hub's setup.ts). The hub applies its name, shape and place on every
  * send; the pane only tells it apart, to put the phone's sheet away once it
  * is sent.
  */

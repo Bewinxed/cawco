@@ -1,6 +1,7 @@
 /**
- * New project (design §5): the templates its cards offer, which one fits
- * what the person typed, and the name the project takes from it.
+ * New project (design §5): the templates its cards offer, and which one fits
+ * what the person typed: a hint where Caw peeks, never the pick (only a tap
+ * picks a card). The project takes no name from the words: Caw names it.
  */
 
 import type { StagesTemplate } from "@cawco/core/views";
@@ -105,25 +106,4 @@ export function fitOf(words: string): TemplateName | null {
     return null;
   }
   return RULES.find(([rule]) => rule.test(text))?.[1] ?? null;
-}
-
-const TRAILING = /[/\s]+$/u;
-const GIT_SUFFIX = /\.git$/u;
-const LAST_SEGMENT = /([^/\s]+)\/?$/u;
-const WORD = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
-
-/**
- * The name a project takes from the words that start it: a URL's or path's
- * last segment (`github.com/you/site` → `site`, `site.git` → `site`), else
- * its first three words.
- */
-export function nameFrom(words: string): string {
-  const located = URL_OR_PATH.exec(words)?.[0]?.trim();
-  if (located) {
-    const segment = LAST_SEGMENT.exec(located.replace(TRAILING, ""))?.[1];
-    if (segment) {
-      return segment.replace(GIT_SUFFIX, "");
-    }
-  }
-  return (words.match(WORD) ?? []).slice(0, 3).join(" ");
 }

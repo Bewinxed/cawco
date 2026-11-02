@@ -16,7 +16,9 @@
    *
    * The page decides when the peek is there (one live Caw at a time: the
    * page's 80px Caw goes before he peeks); once there, he moves to whichever
-   * card fits now. A tap picks a card whatever fits.
+   * card fits now. The fit is a hint: `selected` is the tapped card alone,
+   * and a tap on it again clears it (a radio group never unchecks, so that
+   * tap is taken before the group's own).
    */
   import { RadioGroup } from "bits-ui";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
@@ -45,6 +47,7 @@
     action,
   }: {
     cards: readonly TemplateCard[];
+    /** The tapped card, or null. */
     selected: TemplateName | null;
     /** The card the prompt fits, or null. */
     fit: TemplateName | null;
@@ -133,6 +136,18 @@
         }
       : undefined;
   });
+  /**
+   * A tap on the picked card clears the pick. Run before the group's own
+   * handler, which the prevented event skips (bits-ui composes the item's
+   * handlers in order, stopping at a prevented one).
+   */
+  function clearIfPicked(event: Event, template: TemplateName) {
+    if (selected === template) {
+      event.preventDefault();
+      selected = null;
+    }
+  }
+
   /** The peek's first place is taken without travel; after that he moves. */
   let placed = $state(false);
   $effect(() => {
@@ -171,6 +186,12 @@
           data-slot="icon-card"
           class={iconCardVariants()}
           data-template={card.template}
+          onclick={(event) => clearIfPicked(event, card.template)}
+          onkeydown={(event) => {
+            if (event.key === " ") {
+              clearIfPicked(event, card.template);
+            }
+          }}
           value={card.template}
         >
           <CardFace

@@ -193,10 +193,10 @@ export const delegateTypeProblem = (
 
 /**
  * Each harness's own tools for the two things CawCo keeps itself (Projects
- * spec §5.2, §5.6): native subagents (the fleet's "delegates instead of
- * subagents" choice) and the native to-do list with its plan mode, which
- * every session is denied: a session's plan is CawCo's list (`todo_write`'s
- * session scope, core plan.ts), always.
+ * spec §2, §5.2): native subagents, which every session is denied (work
+ * goes to CawCo's delegates), and the native to-do list with its plan mode,
+ * which every session is denied: a session's plan is CawCo's list
+ * (`todo_write`'s session scope, core plan.ts), always.
  *
  * - Claude Code: its list, `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`
  *   and `TodoWrite` (each in agent SDK 0.3.302's `BUILTIN_TOOL_NAMES`), and
@@ -239,6 +239,16 @@ export const NATIVE_TOOLS = {
  * machine's own `claude` settings, so no stored list carries the names.
  */
 export const OWN_LIST_DENIED: readonly string[] = NATIVE_TOOLS.todos.claude;
+
+/**
+ * The harness's own subagents, in Claude Code's names (the OpenCode adapter
+ * reads them as `subagent`; pi has none): denied to every session and the
+ * machine's own `claude` as {@link OWN_LIST_DENIED} is, a fixed line of the
+ * fleet's policy, never stored or asked about. Work a session hands off goes
+ * to CawCo's delegates.
+ */
+export const SUBAGENTS_DENIED: readonly string[] =
+  NATIVE_TOOLS.subagents.claude;
 
 /**
  * The harness's own question tool, in Claude Code's name (the OpenCode

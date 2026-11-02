@@ -538,7 +538,18 @@ export const presenceLine = (said: PresenceSaid): string => {
  * marker's tag still opens the message.
  */
 export const withPresenceLine = (text: string, said: PresenceSaid): string =>
-  `${text}${text ? "\n\n" : ""}<system-reminder>\n${presenceLine(said)}\n</system-reminder>`;
+  withReminder(text, [presenceLine(said)]);
+
+/**
+ * `text` with CawCo's `lines` to the agent after it, in one
+ * `<system-reminder>` block, each a paragraph: the session reads them, and a
+ * transcript's text and Find leave them out (jsonl-parser text.ts drops
+ * every such block). `text` alone when there are none.
+ */
+export const withReminder = (text: string, lines: readonly string[]): string =>
+  lines.length === 0
+    ? text
+    : `${text}${text ? "\n\n" : ""}<system-reminder>\n${lines.join("\n\n")}\n</system-reminder>`;
 
 /**
  * A hand-off read back into who sent it and what it says. `from` names the

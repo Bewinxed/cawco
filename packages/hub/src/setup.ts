@@ -1,72 +1,172 @@
 /**
- * A new project's setup (Projects spec §5.6, §5.8): what Caw is woken with
- * when New project (or an accepted project offer) makes a project with Caw.
- * He shows the person one decision page, `decisions/setup/`, and on their
- * picks writes the project's files; the hub applies the fleet's choices and
- * adds the place they picked when they send ({@link applySetupPicks}).
+ * A project's setup (Projects spec §5.6, §5.8): the facts Caw sets a project
+ * up from, and what the hub applies when the person sends the setup page.
+ * How he does it is the bundled skill `project-setup`
+ * (packages/hub/skills/project-setup/), which the first conversation of a
+ * project made with Caw starts with in its context (caw.ts `setup`); these
+ * are the facts `project_setup` answers ({@link SetupFacts}) and the page's
+ * card ids ({@link SETUP_CARDS}).
  *
- * The page's cards, by their ids:
- * - `fleet-delegates`: the fleet's delegates choice, asked once, while
- *   nobody has set it (`supervisor_config.choices_set_at`).
- * - `fleet-relay`: the fleet's stream relay (fleet-choices.ts `relayCard`),
- *   Set up or Later, offered once, while the fleet has none and nobody has
- *   answered it.
- * - `stages`: the template's stages, names editable (`cawco.set`).
- * - `delegates`: delegate types the template suggests beyond the ones its
- *   stages run (already written with it), several picks; none, no card.
- * - `place`: the machine and folder its work happens in (`cawco.pickPlace`,
- *   stored as `{ machineId, label, path }`).
+ * Nothing is written into a new project before its setup page is sent: the
+ * template tapped on New project is kept as what was tapped
+ * (`projects.tapped`), and the shape picked on the page is applied on Send
+ * ({@link applySetupPicks}), with the name and the place. Caw writes the
+ * rest (stages.md, delegates/, AGENTS.md) after it.
  */
 
-import type { ChoiceEntry, StagesTemplate } from "@cawco/core";
-import { relayCard, relayPickOf } from "./fleet-choices";
-import { templateText } from "./stages";
+import {
+  type ChoiceEntry,
+  STAGES_TEMPLATES,
+  type StagesTemplate,
+} from "@cawco/core";
+import { templateStages } from "./stages";
 import { templateTypes } from "./template-types";
-
-/**
- * The delegate types a template's work suggests beyond the ones it supplies
- * (its stages run them, or its skills file tasks with them): those are
- * written with the template (template-types.ts), never picked.
- */
-const TEMPLATE_DELEGATES: Record<StagesTemplate, readonly string[]> = {
-  code: ["implementer", "reviewer"],
-  launch: [],
-  seo: [],
-  brand: [],
-  design: [],
-  social: [],
-  outreach: ["outreach"],
-};
 
 /** The decision page's name, and its folder in the project's. */
 const SETUP_PAGE = "setup";
 
+/** The `shape` card's option for a project that fits no template: Caw drafts its stages from what the person wrote. */
+const OWN_SHAPE = "own";
+
+/**
+ * The setup page's cards by id, and what the hub does with each when the
+ * person sends the page; a card the hub applies nothing of is Caw's to write
+ * after Send.
+ */
+export const SETUP_CARDS = [
+  {
+    id: "name",
+    send: 'Renames the project to the text stored with cawco.set("name", text).',
+  },
+  {
+    id: "aim",
+    send: "Nothing: you write AGENTS.md from it.",
+  },
+  {
+    id: "shape",
+    send: `Applies the picked option: a shipped template's name writes its stages.md, its delegate types and its starter skills; "${OWN_SHAPE}" writes nothing.`,
+  },
+  {
+    id: "stages",
+    send: 'Nothing: you write stages.md from the list stored with cawco.set("stages", [{ name, kind }, …]).',
+  },
+  {
+    id: "delegates",
+    send: "Nothing: you write delegates/<type>.md for each type kept.",
+  },
+  {
+    id: "place",
+    send: "Adds the machine and folder picked with cawco.pickPlace() as the project's checkout.",
+  },
+  {
+    id: "routines",
+    send: "Nothing: you make each routine kept.",
+  },
+  {
+    id: "what-moves",
+    send: "Nothing: you move each task to the stage picked for it.",
+  },
+] as const;
+
+/**
+ * The answered parts of a setup the person can ask Caw to put to them again
+ * (`project_setup`'s `change`): its place, its shape, its name, its stages.
+ */
+export const SETUP_PARTS = ["place", "shape", "name", "stages"] as const;
+export type SetupPart = (typeof SETUP_PARTS)[number];
+
+/** A shipped template as `project_setup` lists it: its stages in a line and the delegate types they run. */
+export interface ShippedTemplate {
+  name: StagesTemplate;
+  /** Each stage, `name (kind)`, with what it runs or waits for. */
+  stages: string;
+  types: readonly string[];
+}
+
+/** What `project_setup` answers: the facts a setup page is built from. */
+export interface SetupFacts {
+  cards: typeof SETUP_CARDS;
+  /** Parts the person asked to be put to them again. */
+  change: readonly SetupPart[];
+  /** The machines online now, by the name CawCo shows each by. */
+  machines: readonly string[];
+  name: string;
+  /** Whether the name is still the placeholder (`project_name` sets it then). */
+  named: boolean;
+  /** Its places: its folder on the hub, its checkouts. */
+  places: readonly string[];
+  /** Its stages.md as it stands; null while it has none. */
+  stages: string | null;
+  /** The template tapped on New project; null when none was. */
+  tapped: StagesTemplate | null;
+  /** Its tasks, by the stage each stands in. */
+  tasks: Readonly<Record<string, readonly string[]>>;
+  templates: readonly ShippedTemplate[];
+}
+
+/** A stage of a template in words: its name, its kind, and its hooks. */
+const stageLine = (template: StagesTemplate): string =>
+  templateStages(template)
+    .stages.map((stage) => {
+      const hooks = [
+        ...(stage.hooks.runs ? [`runs ${stage.hooks.runs}`] : []),
+        ...(stage.hooks.until ? [`until ${stage.hooks.until}`] : []),
+        ...(stage.hooks.after ? [`after ${stage.hooks.after}`] : []),
+      ];
+      return `${stage.name} (${[stage.kind, ...hooks].join(", ")})`;
+    })
+    .join(", ");
+
+/** Every shipped template, read from the hub's own tables. */
+export const shippedTemplates = (): ShippedTemplate[] =>
+  STAGES_TEMPLATES.map((name) => ({
+    name,
+    stages: stageLine(name),
+    types: templateTypes(name),
+  }));
+
+/** `project_setup`'s answer in lines: facts, each under its label. */
+export const setupFactsWords = (facts: SetupFacts): string =>
+  [
+    `Project: “${facts.name}”${facts.named ? "" : " (the placeholder: name it with project_name)"}.`,
+    `Tapped on New project: ${facts.tapped ?? "none"}.`,
+    ...(facts.change.length > 0
+      ? [`Asked again: ${facts.change.join(", ")}.`]
+      : []),
+    "Shipped templates:",
+    ...facts.templates.map(
+      (template) =>
+        `- ${template.name}: ${template.stages}. Types: ${template.types.join(", ") || "none"}.`
+    ),
+    facts.stages === null
+      ? "stages.md: none yet."
+      : `stages.md:\n\`\`\`\n${facts.stages.trimEnd()}\n\`\`\``,
+    Object.keys(facts.tasks).length === 0
+      ? "Tasks: none."
+      : [
+          "Tasks by stage:",
+          ...Object.entries(facts.tasks).map(
+            ([stage, ids]) => `- ${stage}: ${ids.join(", ")}`
+          ),
+        ].join("\n"),
+    `Places: ${facts.places.join("; ") || "none"}.`,
+    `Machines online: ${facts.machines.join(", ") || "none"}.`,
+    `The page is decisions/${SETUP_PAGE}/, artifact name "${SETUP_PAGE}". Card ids, and what Send applies:`,
+    ...facts.cards.map((card) => `- ${card.id}: ${card.send}`),
+  ].join("\n");
+
 /** What a sent setup page changes beyond the project's files, which Caw writes. */
 export interface SetupApply {
-  /** Sets the fleet's choices named (fleet-choices.ts `setFleetChoices`). */
-  fleet: (choices: { delegates?: boolean }) => void;
+  /** Renames the project (project-edit.ts, the dashboard's rename); a refusal throws. */
+  name: (projectId: string, name: string) => Promise<void>;
   /** Adds the place picked as the project's checkout; a refusal throws. */
   place: (
     projectId: string,
     place: { machineId: string; path: string }
   ) => Promise<void>;
-  /**
-   * The relay card's answer: Set up opens the relay's journey (its row
-   * stands in Needs you), Later answers the card. Never refuses the page.
-   */
-  relay: (pick: "set-up" | "later") => void;
+  /** Applies a shipped template: its files, its starter skills, the project's template (tasks.ts `applyTemplate`). */
+  shape: (projectId: string, template: StagesTemplate) => Promise<void>;
 }
-
-const onOff = (
-  state: Record<string, ChoiceEntry>,
-  id: string
-): boolean | undefined => {
-  const [option] = state[id]?.options ?? [];
-  if (option === "on") {
-    return true;
-  }
-  return option === "off" ? false : undefined;
-};
 
 const placeOf = (
   state: Record<string, ChoiceEntry>
@@ -81,136 +181,47 @@ const placeOf = (
     : undefined;
 };
 
+const nameOf = (state: Record<string, ChoiceEntry>): string | undefined => {
+  const entry: ChoiceEntry | undefined = state.name;
+  const value: unknown = entry?.value;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+};
+
+const shapeOf = (
+  state: Record<string, ChoiceEntry>
+): StagesTemplate | undefined => {
+  const entry: ChoiceEntry | undefined = state.shape;
+  const [option] = entry?.options ?? [];
+  return STAGES_TEMPLATES.find((name) => name === option);
+};
+
 /**
  * When the person sends a project's setup page, by any path (the page's own
- * `cawco.send`, the panel's Send): the fleet's choices (`fleet-delegates`,
- * `on` or `off`) and the place picked (`place`, from
- * `cawco.pickPlace`, added as the project's checkout) are applied before
- * Caw hears the picks, so he writes only the project's files. Any other
- * artifact is left alone.
+ * `cawco.send`, the panel's Send): the name in its `name` field, the shipped
+ * template picked on `shape` and the place picked on `place` are applied
+ * before Caw hears the picks, so he writes only the project's files. Any
+ * other artifact is left alone. Answers whether it was the setup page.
  */
 export const applySetupPicks = async (
   artifact: { kind: string; name: string },
   projectId: string | null | undefined,
   state: Record<string, ChoiceEntry>,
   apply: SetupApply
-): Promise<void> => {
+): Promise<boolean> => {
   if (!projectId || artifact.kind !== "page" || artifact.name !== SETUP_PAGE) {
-    return;
+    return false;
   }
-  const delegates = onOff(state, "fleet-delegates");
-  if (delegates !== undefined) {
-    apply.fleet({ delegates });
+  const name = nameOf(state);
+  if (name) {
+    await apply.name(projectId, name);
   }
-  const relay = relayPickOf(state);
-  if (relay) {
-    apply.relay(relay);
+  const shape = shapeOf(state);
+  if (shape) {
+    await apply.shape(projectId, shape);
   }
   const place = placeOf(state);
   if (place) {
     await apply.place(projectId, place);
   }
-};
-
-/** The relay card as it is offered: the domain the person last reached CawCo through, which makes Set up the recommended option. */
-export interface RelayOffer {
-  domain: string | null;
-}
-
-/**
- * The answered parts of a setup the person can ask to change when they ask
- * Caw to set the project up again (caw.ts `project_setup`): each is asked
- * again though it was answered. `fleet` is the delegates choice.
- */
-export const SETUP_PARTS = ["fleet", "relay", "place"] as const;
-export type SetupPart = (typeof SETUP_PARTS)[number];
-
-export interface SetupAsk {
-  /** Whether the fleet's delegates choice was never set, so the page asks for it. */
-  askFleet: boolean;
-  /**
-   * Why it is set up: New project's prompt, a session's offer, or the
-   * person's ask in any session of the project (`project_setup`).
-   */
-  from: "prompt" | "offer" | "ask";
-  /**
-   * The person's words the project was made with (`prompt`); none when it
-   * was made from a session's offer (`offer`), or on the person's ask
-   * (`ask`), answered inside the turn that read their words.
-   */
-  opened?: string;
-  /** It has its checkout already (made from a folder): no card asks for its place. */
-  placed: boolean;
-  projectName: string;
-  /** The relay card, while it is to be asked; null when it is not. */
-  relay: RelayOffer | null;
-  /**
-   * The project's stages.md as it stands, set up again on the person's ask:
-   * the stages card starts from it rather than from a template.
-   */
-  stages?: string;
-  /** The template it was made from; the code template stands in when none. */
-  template: StagesTemplate | null;
-}
-
-/** The opening paragraph: why Caw is setting the project up, and from what. */
-const openingOf = (ask: SetupAsk): string => {
-  if (ask.from === "ask") {
-    return `Setup: the person asked you to set the project “${ask.projectName}” up. ${ask.stages ? "Its stages.md as it stands is below." : "It has no stages.md yet."} Set the project up with them.`;
-  }
-  return `Setup: the person just made the project “${ask.projectName}”${
-    ask.from === "prompt" ? ", with these words" : " from a session's offer"
-  }${ask.opened ? `:\n\n${ask.opened}\n\n` : ". "}${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`;
-};
-
-const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — sessions hand work to CawCo's delegates rather than their harness's own subagents. Options \`on\` labelled "Use delegates" (recommended) and \`off\` labelled "Keep subagents". It is the fleet's, asked once: say so on the card.`;
-
-/**
- * What Caw reads to set a project up: woken with it when a project is made
- * for him, or answered it by `project_setup` when the person asks.
- */
-export const setupEvent = (ask: SetupAsk): string => {
-  const template = ask.template ?? "code";
-  const stagesFrom = ask.stages
-    ? "from its stages.md below"
-    : `from the ${template} template below`;
-  const stagesText = ask.stages
-    ? `Its stages.md:\n\n\`\`\`\n${ask.stages.trimEnd()}\n\`\`\``
-    : `The ${template} template's stages.md:\n\n\`\`\`\n${templateText(template)}\`\`\``;
-  const types = TEMPLATE_DELEGATES[template];
-  const own = templateTypes(template).map((type) => `\`${type}\``);
-  const picked =
-    types.length > 0
-      ? " Write delegates/<type>.md for each type they picked (front matter: harness, model, effort, role, lands; the body is the type's brief, from their words; each goes to them as a proposal and is committed once they approve it)."
-      : "";
-  const kept =
-    own.length > 0
-      ? ` The template's own types (${own.join(", ")}) are in delegates/ already, written as the project was made: its stages and skills run them by those names, so keep the names, and rewrite a type's brief (the body under its front matter) with folder_write only where their words change the work; the rewrite goes to them as a proposal too.`
-      : "";
-  return [
-    openingOf(ask),
-    `1. Load the decision-page skill and build one decision page named "${SETUP_PAGE}" as HTML, the skill's form for picks that are not options: the stage names the person edits and the place they pick with \`cawco.pickPlace\`. The page lives in the project's folder on the hub, which your own edit tools do not write: write decisions/${SETUP_PAGE}/page.html there with folder_write (start from the skill's kit/page.html; read it with your Read tool), then call artifact_create({ kind: "page", name: "${SETUP_PAGE}", does: "pick", ask: "Pick how this project is set up" }). Its cards, with exactly these ids:`,
-    [
-      ...(ask.askFleet ? [fleetCards] : []),
-      ...(ask.relay ? [relayCard(ask.relay.domain)] : []),
-      `- \`stages\`: the project's stages, ${stagesFrom}, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them; show each kind in words: to do, active, waiting, you, done, dropped).`,
-      ...(types.length > 0
-        ? [
-            `- \`delegates\`: the delegate types to set up, several picks (\`data-cawco-multiple\`), each option a type with one line on the work it takes: ${types.map((type) => `\`${type}\``).join(", ")}${types.length > 1 ? ", all recommended" : ", recommended"}; add one only when their words call for it.`,
-          ]
-        : []),
-      ...(ask.placed
-        ? []
-        : [
-            `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\` as \`{ machineId, label, path }\`, \`label\` being the name CawCo shows the machine by. Once picked, the card reads "<label> — <path>", from \`cawco.on("picks", …)\` (\`picks.place.value\`).`,
-          ]),
-      ask.placed
-        ? "It was made from a folder, which is its place already: no card asks where its work happens. No routines, webhook relays or other cards."
-        : "No routines, webhook relays or other cards.",
-      'Write the page in CawCo\'s voice: sentence case, no "I", options named for what they do (never Yes or No), no folder paths inside sentences.',
-    ].join("\n"),
-    stagesText,
-    `2. End your turn. When the person sends their picks you hear that the page has new responses; artifact_read() has them in full. CawCo has then already applied the fleet's choices and added the place they picked; do not write those. Write, with folder_write: stages.md (${ask.stages ? "its block" : "the template's block"} with the stage names they kept; it must read cleanly, or folder_write refuses it with the reason).${picked}${kept} AGENTS.md is the person's, so propose it with memory_propose({ path: "AGENTS.md", content, why, ask: true }): what the project is and how its work is done, from their words, in CawCo's voice, no folder or file paths inside its sentences. They approve it from Needs you.`,
-    "3. Answer in one or two sentences: what you set up, naming no paths, and that AGENTS.md waits for their approval. The person opens the board from the project's page.",
-  ].join("\n\n");
+  return true;
 };

@@ -5,6 +5,8 @@
  * (scripts/probe-words-check.ts refuses a copy).
  */
 export const projectWords = {
+  /** The name a project made from New project's words holds until Caw names it (hub caw.ts `project_name`). */
+  placeholderName: "New project",
   /** The head's New session from the project's checkout. */
   spinOff: "Spin off",
   /** The head's Ask Caw: his panel on a new conversation. */

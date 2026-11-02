@@ -508,6 +508,12 @@ export const projects = sqliteTable("projects", {
    */
   template: text("template").$type<StagesTemplate>(),
   /**
+   * The template the person tapped on New project, kept as what was tapped
+   * until its setup page is sent (setup.ts): `project_setup` answers it, and
+   * nothing of it is written before Send. Null: none was tapped.
+   */
+  tapped: text("tapped").$type<StagesTemplate>(),
+  /**
    * Review before done: only you move a task into a done stage, and an
    * attempt that lands sends its task to review (stages.ts `ruledStages`).
    * Off: the project's conversation and sessions close tasks as the project's stages allow.
@@ -3032,12 +3038,6 @@ export const fleetSkillHistory = sqliteTable("fleet_skill_history", {
 export const supervisorConfig = sqliteTable("supervisor_config", {
   /** Always `'supervisor'`: the hub has one, and a table with a key says so cheaply. */
   id: text("id").primaryKey(),
-  /**
-   * When the fleet's delegates choice was last set through
-   * `PUT /api/fleet/choices`; null while nobody has set it, which is when a
-   * new project's setup page asks for it.
-   */
-  choicesSetAt: timestamp("choices_set_at"),
   /**
    * When the fleet's stream relay was last offered on a new project's setup
    * page and answered (a machine picked, or Later); null while never, so the

@@ -17,6 +17,7 @@ import type { AskOutcome } from "../asks";
 
 /** Each notice kind's line, by its `system` origin's name, for one made with no line of its own. */
 const BY_KIND: Readonly<Record<string, string>> = {
+  act: "Told what you did",
   ask: "Told your answer on its ask",
   browser: "Told about the browser",
   caw: "Woke Caw",
@@ -44,6 +45,16 @@ export const noticeWords = {
   running: "· still running",
   /** And once it has ended. */
   ended: "· ended",
+  /** A project made from a session's offer, told to its conversation to be set up (hub caw.ts `setup`). */
+  setupFromOffer: "Asked Caw to set up the project you made",
+  /** A decision page's "I'm done picking", told to the session that holds it (hub decisions.ts). */
+  donePicking: (title: string) => `Told you're done picking on “${title}”`,
+  /** A decided page's Make tasks, asked of the session that holds it. */
+  makeTasks: (title: string) => `Asked to make tasks from “${title}”`,
+  /** The person's approval of a task, told to the session that filed it (hub task-approval.ts). */
+  approved: (title: string) => `Told you approved “${title}”`,
+  /** The person's Retry on failed work, from the tray (hub server.ts `retryFromTray`). */
+  retried: "Asked to try its work again",
   /** What the agent was sent, as the row opens to it. */
   sent: "Sent to the agent",
   /** A run of notices with no turn between them: the newest one's line, and how many more the row holds. */

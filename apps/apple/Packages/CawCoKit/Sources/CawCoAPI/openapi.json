@@ -950,46 +950,6 @@
             }
           }
         }
-      },
-      "put": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "delegates": {
-                    "type": "boolean"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "operationId": "putApiFleetChoices",
-        "responses": {
-          "200": {
-            "description": "putApiFleetChoices 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FleetChoices"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "putApiFleetChoices 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/browsers": {
@@ -26196,10 +26156,7 @@
                     "maxLength": 200,
                     "type": "string"
                   }
-                },
-                "required": [
-                  "name"
-                ]
+                }
               }
             }
           }
@@ -31740,6 +31697,9 @@
                 "string"
               ]
             },
+            "tapped": {
+              "$ref": "#/components/schemas/StagesTemplate"
+            },
             "template": {
               "$ref": "#/components/schemas/StagesTemplate"
             },
@@ -31964,6 +31924,9 @@
               "string"
             ]
           },
+          "tapped": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
@@ -32174,6 +32137,9 @@
               "null",
               "string"
             ]
+          },
+          "tapped": {
+            "$ref": "#/components/schemas/StagesTemplate"
           },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
@@ -32406,6 +32372,9 @@
               "string"
             ]
           },
+          "tapped": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
           },
@@ -32588,6 +32557,9 @@
               "null",
               "string"
             ]
+          },
+          "tapped": {
+            "$ref": "#/components/schemas/StagesTemplate"
           },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate"
@@ -35564,25 +35536,25 @@
         "type": "object",
         "properties": {
           "delegates": {
-            "description": "Use delegates instead of each harness's subagents.",
-            "type": "boolean"
+            "description": "Always true: every session uses CawCo's delegates over its harness's\nsubagents, the fleet's policy. Still sent, with `setAt` and\n`tools.delegates`, because the apps on TestFlight 20261015 through\n20261018 decode them as required (hub openapi.ts's wire check); they go\nin the change that expires those builds.",
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           },
           "deniedTools": {
-            "description": "The baseline as stored, the delegates choice and every other denial in it.",
+            "description": "The baseline as stored: denials beyond the fixed policy.",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "setAt": {
-            "description": "When someone last set the choices here (ms epoch); null while nobody has, so a new project's setup asks.",
-            "type": [
-              "null",
-              "number"
-            ]
+            "description": "Always null: nothing about the fleet's tools is set. Kept as `delegates` is.",
+            "type": "null"
           },
           "todos": {
-            "description": "Always true: every session keeps CawCo's list. Still sent, with\n`tools.todos` (what every session is denied for it), because the apps on\nTestFlight 20261015 through 20261018 decode both as required (hub\nopenapi.ts's wire check); they go in the change that expires those\nbuilds.",
+            "description": "Always true: every session keeps CawCo's list. Kept as `delegates` is.",
             "type": "boolean",
             "enum": [
               true
@@ -35602,7 +35574,7 @@
               "delegates",
               "todos"
             ],
-            "description": "What each denies, per harness."
+            "description": "What each fixed denial denies, per harness."
           }
         },
         "required": [
@@ -56569,6 +56541,10 @@
             ]
           },
           "raw": {},
+          "reminder": {
+            "description": "CawCo's word to the agent about this send (where it came from, which\nskill applies), kept apart from `message` so the sender's words are the\nwhole of the message: the hub folds it into a `<system-reminder>` block\nafter them each time it hands the send to its machine (hub server.ts\n`presenced`), and no row, record or Find draws it.",
+            "type": "string"
+          },
           "replaces": {
             "description": "A retry: the uuid of the failed send this one is sent in place of. The\nhub marks that record `replaced` ({@link SendRecord.replacedBy}).",
             "type": "string"

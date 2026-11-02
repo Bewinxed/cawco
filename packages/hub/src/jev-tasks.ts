@@ -28,7 +28,7 @@
 import { taskLink } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
-import type { Caw } from "./caw";
+import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
 import { type JevAccess, jevAccess } from "./jev";
@@ -90,8 +90,8 @@ export interface JevTasksDeps {
    * nothing (work-items `refusal`: an archived workspace, a newer item there).
    */
   readonly refused: (row: SessionRow) => string | undefined;
-  /** Your words to a session, as the composer sends them. */
-  readonly sendYours: (row: SessionRow, text: string) => void;
+  /** Your words to a session, theirs alone with CawCo's note beside them (server.ts `sendYours`). */
+  readonly sendYours: (row: SessionRow, said: PersonsSend) => void;
   readonly tasks: Tasks;
   /** A session's prompt cache is warm now (the cold check's test), and it is not in a turn. */
   readonly warmth: (row: SessionRow) => { idle: boolean; warm: boolean };
@@ -454,9 +454,14 @@ export const createJevTasks = ({
     }
     const [row] = db.getInstancesByIds([newest.instanceId]);
     const yours = `A comment on ${id}, your task:\n\n${text}`;
+    const comment: PersonsSend = {
+      by: "you",
+      words: text,
+      note: `It is a comment on ${id}, your task.`,
+    };
     if (isLive(newest.state)) {
       if (row) {
-        sendYours(row, yours);
+        sendYours(row, comment);
       }
       return;
     }
@@ -469,7 +474,7 @@ export const createJevTasks = ({
       return;
     }
     if (placed?.to === "attach") {
-      sendYours(placed.row, yours);
+      sendYours(placed.row, comment);
       return;
     }
     if (placed?.to === "continue") {
@@ -582,7 +587,7 @@ export const createJevTasks = ({
       by: "you",
       kind: "person-request",
       trigger: `the person wrote from their phone${task ? `, about ${taskLink(projectId, task.id, task.title)}` : ""}`,
-      text: sentence,
+      words: sentence,
     });
     if (!woke.woke && woke.thrown !== undefined) {
       throw woke.thrown;

@@ -27,7 +27,8 @@
  */
 import { type InstanceRow, taskLink } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
-import type { Caw } from "./caw";
+import { noticeWords } from "@cawco/core/words/notices";
+import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { TaskEvent, Tasks } from "./tasks";
 
@@ -36,8 +37,8 @@ export interface TaskApprovalDeps {
   readonly db: Pick<DbShape, "getInstancesByIds" | "project">;
   /** Why a session takes none of your words now (server.ts `inputRefusal`), or nothing. */
   readonly refused: (row: InstanceRow) => string | undefined;
-  /** Your words to a session, as the composer sends them. */
-  readonly sendYours: (row: InstanceRow, text: string) => void;
+  /** Your act to a session, CawCo's notice of it (server.ts `sendYours`). */
+  readonly sendYours: (row: InstanceRow, said: PersonsSend) => void;
   readonly tasks: Pick<Tasks, "get">;
 }
 
@@ -78,7 +79,11 @@ export const createTaskApproval = ({
     const [row] = by.id ? db.getInstancesByIds([by.id]) : [];
     const silent = row ? refused(row) : "gone";
     if (row && !silent) {
-      sendYours(row, approvalText(approval, task.title, "the task you filed"));
+      sendYours(row, {
+        by: "act",
+        line: noticeWords.approved(task.title),
+        text: approvalText(approval, task.title, "the task you filed"),
+      });
       console.log(
         `[tasks] ${id} in ${projectId}: approved; its filer ${row.id} hears it`
       );

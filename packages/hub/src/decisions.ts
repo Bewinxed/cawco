@@ -69,7 +69,9 @@ import {
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
 import { pageHash } from "@cawco/core/preview-proxy";
+import { noticeWords } from "@cawco/core/words/notices";
 import { Elysia, status, t } from "elysia";
+import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
@@ -387,12 +389,12 @@ export interface DecisionsDeps {
   stampSent: (artifactId: string) => void;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
   tasks: (projectId: string) => Promise<DecidedTask[]>;
-  /** The person's own words to a session, through the one send path, as the send `uuid`. */
-  tell: (instance: InstanceRow, text: string, uuid: string) => void;
-  /** The person's words to the project's conversation (caw.ts `tellYours`): its session, and the send's uuid. */
+  /** The person's words or act to a session ({@link PersonsSend}), through the one send path, as the send `uuid`. */
+  tell: (instance: InstanceRow, said: PersonsSend, uuid: string) => void;
+  /** The person's words or act to the project's conversation (caw.ts `tellYours`): its session, and the send's uuid. */
   tellConversation: (
     projectId: string,
-    text: string
+    said: PersonsSend
   ) => Promise<{ instanceId: string; send: string }>;
 }
 
@@ -810,7 +812,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
 
   /** What tells Caw a page is his now: where it is and how to read it. */
   const handedToCaw = (read: DecisionPageRead): string =>
-    `${read.writer ? `Its session “${read.writer.title}” has ended, so this page is yours` : "No session holds this page now, so it is yours"}: read my picks and notes with artifact_read({ id: "${read.artifactId}" }).`;
+    `${read.writer ? `Its session “${read.writer.title}” has ended, so this page is yours` : "No session holds this page now, so it is yours"}: read the person's picks and notes with artifact_read({ id: "${read.artifactId}" }).`;
 
   /** Record writes, one at a time across the hub: each reads the record the last one left. */
   let writing: Promise<unknown> = Promise.resolve();
@@ -936,7 +938,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     projectId: string,
     record: StoredRecord,
     to: ReturnType<typeof heardBy>,
-    ask: string
+    ask: PersonsSend
   ): Promise<{ error: unknown; why: string } | null> => {
     try {
       if ("instance" in to) {
@@ -1096,10 +1098,14 @@ export const createDecisions = (deps: DecisionsDeps) => {
       }
       const words = text?.trim() || undefined;
       const to = heardBy(read);
-      const noted = `On the decision page “${read.title}” (decisions/${name}/) I wrote: ${words}`;
+      const page = `They wrote it on the decision page “${read.title}” (decisions/${name}/).`;
       if ("instance" in to) {
         if (words) {
-          deps.tell(to.instance, noted, crypto.randomUUID());
+          deps.tell(
+            to.instance,
+            { by: "you", words, note: page },
+            crypto.randomUUID()
+          );
         } else {
           await deps.send(
             to.instance.id,
@@ -1113,12 +1119,15 @@ export const createDecisions = (deps: DecisionsDeps) => {
       if (!words) {
         await decide(projectId, name, read.artifactId);
       }
-      const said = words
-        ? noted
-        : `I'm done picking on the decision page “${read.title}” (decisions/${name}/).`;
       const { instanceId } = await deps.tellConversation(
         projectId,
-        `${said}\n\n${handedToCaw(read)}`
+        words
+          ? { by: "you", words, note: `${page} ${handedToCaw(read)}` }
+          : {
+              by: "act",
+              line: noticeWords.donePicking(read.title),
+              text: `The person is done picking on the decision page “${read.title}” (decisions/${name}/). ${handedToCaw(read)}`,
+            }
       );
       if (!words) {
         deps.stampSent(read.artifactId);
@@ -1156,11 +1165,15 @@ export const createDecisions = (deps: DecisionsDeps) => {
         );
       }
       const to = heardBy(read);
-      const ask = `Make tasks from my picks on the decision page “${read.title}” (decisions/${name}/): load the to-tasks skill and file them now; pressing Make tasks approves the breakdown. ${
-        "instance" in to
-          ? `artifact_read({ id: "${artifactId}" }) has my picks and notes by card id.`
-          : handedToCaw(read)
-      } The record is decisions/${name}/record.json (each card's id, question, what I chose and my note), and log.md beside it says it in words. File one or more tasks for each card I decided and none for a card left open, and give each the field ${DECIDED_FIELD}: "${name}#<card id>" (task_create's fields), so it links back to its card.`;
+      const ask: PersonsSend = {
+        by: "act",
+        line: noticeWords.makeTasks(read.title),
+        text: `The person pressed Make tasks on the decision page “${read.title}” (decisions/${name}/): load the to-tasks skill and file them now; their press approves the breakdown. ${
+          "instance" in to
+            ? `artifact_read({ id: "${artifactId}" }) has their picks and notes by card id.`
+            : handedToCaw(read)
+        } The record is decisions/${name}/record.json (each card's id, question, what they chose and their note), and log.md beside it says it in words. File one or more tasks for each card they decided and none for a card left open, and give each the field ${DECIDED_FIELD}: "${name}#<card id>" (task_create's fields), so it links back to its card.`,
+      };
       // Who it asks: a session by the send the record names, or Caw.
       const asked: Pick<StoredRecord, "askedOf" | "askedSend"> =
         "instance" in to
