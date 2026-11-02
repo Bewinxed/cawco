@@ -418,7 +418,6 @@ const run = async (kit: Kit) => {
       }
       return gone.length;
     },
-    moveScope: () => undefined,
     touch: () => undefined,
   };
   // No tailnet here: no TLS twins, no tailnet origin.

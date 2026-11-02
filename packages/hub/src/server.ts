@@ -668,11 +668,7 @@ import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { OwedMove } from "./db/owed-moves";
-import {
-  artifactOfOrigin,
-  projectOfOrigin,
-  projectOrigin,
-} from "./db/previews";
+import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type {
   ContinuationAsker,
   PriorConversation,
@@ -3200,7 +3196,8 @@ export const createServer = (
     // told on the session's stream and the board.
     followed: (instanceId) => {
       const target = previewTargets.get(instanceId);
-      if (target && !previewListeners.bound(frameKey(instanceId, target))) {
+      const key = target && frameKey(instanceId, target);
+      if (target && !(key && previewListeners.bound(key))) {
         publishPreview(instanceId, "open", target);
         publishInstances("");
       }
@@ -12475,10 +12472,20 @@ export const createServer = (
     );
   };
 
-  /** The key of the origin a frame of `target` in session `instanceId`'s panel loads ({@link frameOrigin}'s). */
-  const frameKey = (instanceId: string, target: Shown): string => {
+  /**
+   * The key of artifact `id`'s own preview origin: the one its row points
+   * at now (schema.ts `artifacts.origin`); undefined once the hub doesn't
+   * hold it.
+   */
+  const embedKeyOf = (id: string): string | undefined => {
+    const origin = db.artifacts.get(id)?.origin;
+    return origin === undefined ? undefined : embedKey(origin);
+  };
+
+  /** The key of the origin a frame of `target` in session `instanceId`'s panel loads ({@link frameOrigin}'s); undefined for an artifact the hub no longer holds. */
+  const frameKey = (instanceId: string, target: Shown): string | undefined => {
     if (!("page" in target.source)) {
-      return embedKey(target.artifact.id);
+      return embedKeyOf(target.artifact.id);
     }
     const project = pageProject(target.artifact.id);
     return project ? projectOrigin(project) : instanceId;
@@ -12494,6 +12501,9 @@ export const createServer = (
    */
   const toldAddress = (instanceId: string, target: Shown) => {
     const key = frameKey(instanceId, target);
+    if (key === undefined) {
+      return null;
+    }
     return previewListeners.holds(key)
       ? frameAddress(instanceId, target)
       : previewListeners.bound(key);
@@ -12594,37 +12604,18 @@ export const createServer = (
   };
 
   /**
-   * Artifact `id` went (db `onArtifactsGone`: every way an artifact row
-   * goes): its own origin ({@link embedKey}) ends with it, its listener
-   * stopped and its port free again, and its machine's listener stopped
-   * too. The one end of an artifact's origin: the session that opened it,
-   * or held it, ending leaves it standing.
+   * Artifact origin `origin` ended (schema.ts `artifacts.origin`): the row
+   * that pointed at it went (db `onArtifactsGone`: every way an artifact
+   * row goes, a held version's too, which after its opening points at the
+   * artifact's old origin, `handOrigin`). Its listener stops and its port
+   * is free again, and its machine's listener stops too. The one end of an
+   * artifact's origin: the session that opened it, or held it, ending
+   * leaves it standing.
    */
-  const endArtifactOrigin = (id: string): void => {
-    const key = embedKey(id);
+  const endArtifactOrigin = (origin: string): void => {
+    const key = embedKey(origin);
     previewListeners.release(key);
     dropEmbedTarget(key);
-  };
-
-  /**
-   * Artifact `id`'s held next version `held` opens in its place (artifacts
-   * service `promote`): the version's origin, where its preview-address and
-   * every browser handed it stand, answers for the artifact from now on, on
-   * the same port, and the artifact's own origin before it lets its port go
-   * (preview.ts `move`); a session's pass into the version's origin moves
-   * with it. What both showed is let go, so the next request serves the
-   * artifact as it now is. A version no origin was opened for leaves the
-   * artifact's origin where it was. Then the version's row goes, and with
-   * it whatever of its origin is left ({@link endArtifactOrigin}).
-   */
-  const moveArtifactOrigin = (held: string, id: string): void => {
-    const from = embedKey(held);
-    const to = embedKey(id);
-    dropEmbedTarget(from);
-    dropEmbedTarget(to);
-    if (previewListeners.move(from, to)) {
-      db.previewPasses.moveScope(from, to);
-    }
   };
 
   /** What starting a machine's listener for a preview answered: where it listens, or the hop that failed and why. */
@@ -14627,7 +14618,6 @@ export const createServer = (
     },
     // A preview gone holds the workspace it showed no longer (its own
     // origin ends with its row: db `onArtifactsGone`).
-    versionOpened: (held, id) => moveArtifactOrigin(held, id),
     removed: (row) => {
       if (row.kind === "preview" && row.machineId) {
         workItems.settleShown(row.machineId);
@@ -15057,28 +15047,40 @@ export const createServer = (
 
   /**
    * A machine-served artifact's target under its own key ({@link
-   * embedKey}), `source` on `machineId`: kept as it is while its source and
-   * machine stand, else made anew. Its key: the artifact's own origin, which
-   * its panel, its own tab and every decision card load.
+   * embedKeyOf}: the origin its row points at), `source` on `machineId`:
+   * kept as it is while its source and machine stand, else made anew; the
+   * artifact it names is the one pointing at it now (a held version's
+   * origin is its artifact's once it opens, its listener kept). Its key: the
+   * artifact's own origin, which its panel, its own tab and every decision
+   * card load. Refused for an artifact the hub no longer holds.
    */
   const keepEmbedTarget = (
     artifact: PreviewTarget["artifact"],
     source: PreviewSource,
     machineId: string
   ): string => {
-    const key = embedKey(artifact.id);
+    const key = embedKeyOf(artifact.id);
+    if (key === undefined) {
+      throw new PreviewRefusal(
+        409,
+        `${artifact.name} is gone, so no origin serves it.`
+      );
+    }
     const now = embedTargets.get(key);
+    const named = { id: artifact.id, kind: artifact.kind, name: artifact.name };
     if (
       !now ||
       previewSourceKey(now.source) !== previewSourceKey(source) ||
       now.machineId !== machineId
     ) {
       embedTargets.set(key, {
-        artifact: { id: artifact.id, kind: artifact.kind, name: artifact.name },
+        artifact: named,
         machineId,
         source,
         revision: crypto.randomUUID(),
       });
+    } else if (now.artifact.id !== artifact.id) {
+      embedTargets.set(key, { ...now, artifact: named });
     }
     return key;
   };
@@ -15148,11 +15150,13 @@ export const createServer = (
     const { key, address, path } = browsedOrigin(row);
     const embeds = Object.entries(
       artifacts.programServed(row.id)?.media ?? {}
-    ).flatMap(([, held]) =>
-      held?.kind === "preview" || held?.kind === "component"
-        ? [embedKey(held.id)]
-        : []
-    );
+    ).flatMap(([, held]) => {
+      const own =
+        held?.kind === "preview" || held?.kind === "component"
+          ? embedKeyOf(held.id)
+          : undefined;
+      return own === undefined ? [] : [own];
+    });
     return {
       address,
       path,
@@ -15350,7 +15354,7 @@ export const createServer = (
     servedOn: (artifactId, key) => {
       // A machine's preview's own origin serves its doc's socket and
       // actions, which the page's overlay joins there.
-      if (originKeyOf(artifactId) === key || embedKey(artifactId) === key) {
+      if (originKeyOf(artifactId) === key || embedKeyOf(artifactId) === key) {
         return true;
       }
       // Another session's artifact its delegation tree's session shows in
@@ -15411,7 +15415,8 @@ export const createServer = (
       const gone = new Set(keys);
       queueMicrotask(() => {
         for (const [instanceId, target] of previewTargets) {
-          if (gone.has(frameKey(instanceId, target))) {
+          const key = frameKey(instanceId, target);
+          if (key !== undefined && gone.has(key)) {
             publishPreview(instanceId, "open", target);
           }
         }
@@ -15420,29 +15425,22 @@ export const createServer = (
     },
     reach: reachPreview,
     stageAnswered: (artifactId) => artifacts.stageAnswered(artifactId),
+    artifactAt: (key) => {
+      const origin = originOfKey(key);
+      return origin === null ? undefined : db.artifacts.byOrigin(origin)?.id;
+    },
     target: (key) => {
-      const artifactId = artifactOfOrigin(key);
-      if (artifactId === null) {
+      const origin = originOfKey(key);
+      if (origin === null) {
         return previewTargets.get(key);
       }
       const row = embedTargets.has(key)
         ? undefined
-        : db.artifacts.get(artifactId);
+        : db.artifacts.byOrigin(origin);
       if (row?.machineId && !("page" in row.source)) {
         keepEmbedTarget(shownArtifact(row), row.source, row.machineId);
       }
       return embedTargets.get(key);
-    },
-    workspaceHolds: (artifactId) => {
-      const source = db.artifacts.get(artifactId)?.source;
-      const workspace =
-        source && "port" in source ? source.workspace : undefined;
-      return (
-        workspace !== undefined &&
-        db
-          .workspacesNamed(workspace)
-          .some((row) => row.id === workspace && row.state !== "archived")
-      );
     },
     unreachable: previewUnreachable,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
@@ -15575,9 +15573,9 @@ export const createServer = (
     tailnetHttps
   );
   // Every way an artifact row goes ends its own origin.
-  db.onArtifactsGone((ids) => {
-    for (const id of ids) {
-      endArtifactOrigin(id);
+  db.onArtifactsGone((gone) => {
+    for (const { origin } of gone) {
+      endArtifactOrigin(origin);
     }
   });
 

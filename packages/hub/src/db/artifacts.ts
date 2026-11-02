@@ -117,11 +117,11 @@ interface ArtifactChange {
 
 /**
  * What may change on an artifact after it is made: never its id, project,
- * kind or birth. Its session changes only for a project's page another
+ * kind, birth or origin (its origin only through {@link ArtifactsDb.handOrigin}). Its session changes only for a project's page another
  * session of the project makes again ({@link ArtifactsDb.projectPage}).
  */
 type ArtifactPatch = Partial<
-  Omit<ArtifactRow, "id" | "projectId" | "kind" | "createdAt">
+  Omit<ArtifactRow, "id" | "projectId" | "kind" | "createdAt" | "origin">
 >;
 
 /** The rows artifacts/ keeps: the list, and each document's update log. */
@@ -154,6 +154,8 @@ export interface ArtifactsDb {
     name: string,
     composer?: boolean
   ) => ArtifactRow | undefined;
+  /** The artifact whose row points at preview origin `origin` (schema.ts `artifacts.origin`). */
+  readonly byOrigin: (origin: string) => ArtifactRow | undefined;
   /** An artifact's keys' last changes: those after seq `after`, by `by`, when named. */
   readonly changes: (
     id: string,
@@ -163,11 +165,24 @@ export interface ArtifactsDb {
   readonly compact: (id: string, snapshot: Uint8Array) => void;
   /** The component canvases made on machine `machineId`, held next versions too: each one's stage runs there. */
   readonly componentsOn: (machineId: string) => ArtifactRow[];
-  /** A new row; `composer` only on the person's own composer canvas (schema.ts `artifacts.composer`). */
+  /**
+   * A new row, its preview origin minted with it (schema.ts
+   * `artifacts.origin`), whatever `row` was copied from; `composer` only on
+   * the person's own composer canvas (schema.ts `artifacts.composer`).
+   */
   readonly create: (
-    row: Omit<ArtifactRow, "composer"> & { composer?: boolean }
+    row: Omit<ArtifactRow, "composer" | "origin"> & { composer?: boolean }
   ) => ArtifactRow;
   readonly get: (id: string) => ArtifactRow | undefined;
+  /**
+   * Artifact `id` takes the preview origin of `held`, its next version,
+   * as its parent opens it (artifacts service.ts `promote`), and `held`
+   * takes the artifact's: the version's origin, where its address was
+   * handed out, answers for the artifact from now on, and the artifact's
+   * own ends with the version's row, which goes next (db index.ts
+   * `onArtifactsGone`). Both repointed in one write, nothing renamed.
+   */
+  readonly handOrigin: (held: string, id: string) => void;
   /** The next version held for artifact `id` (`heldFor`), if one waits. */
   readonly heldOf: (id: string) => ArtifactRow | undefined;
   /** Every artifact a next version is held for, in one read. */
@@ -221,35 +236,41 @@ export interface ArtifactsDb {
   readonly updates: (id: string) => Uint8Array[];
 }
 
+/** An artifact row that went, and the preview origin it pointed at (schema.ts `artifacts.origin`). */
+export interface GoneArtifact {
+  id: string;
+  origin: string;
+}
+
 /** What deletes rows: the database, or a transaction of it. */
 export type Deleter = Pick<BunSQLiteDatabase, "delete" | "select">;
 
 /**
  * Every artifact `where` names deleted, and each next version held for one
- * (`heldFor`, which its foreign key cascades): their ids, every one, read
- * before the delete, since a cascade returns nothing. The one way an
- * artifact's row goes; db index.ts wraps it (`dropArtifacts`) to tell
- * `onArtifactsGone` of the ids once the write is done.
+ * (`heldFor`, which its foreign key cascades): their ids and preview
+ * origins, every one, read before the delete, since a cascade returns
+ * nothing. The one way an artifact's row goes; db index.ts wraps it
+ * (`dropArtifacts`) to tell `onArtifactsGone` of them once the write is
+ * done.
  */
 export const dropArtifactRows = (
   tx: Deleter,
   where: SQL | undefined
-): string[] => {
+): GoneArtifact[] => {
   // No condition names no row: never every artifact.
   if (!where) {
     return [];
   }
   const named = tx.select({ id: artifacts.id }).from(artifacts).where(where);
-  const ids = tx
-    .select({ id: artifacts.id })
+  const gone = tx
+    .select({ id: artifacts.id, origin: artifacts.origin })
     .from(artifacts)
     .where(or(where, inArray(artifacts.heldFor, named)))
-    .all()
-    .map((row) => row.id);
-  if (ids.length > 0) {
+    .all();
+  if (gone.length > 0) {
     tx.delete(artifacts).where(where).run();
   }
-  return ids;
+  return gone;
 };
 
 export const artifactsDb = (
@@ -341,13 +362,56 @@ export const artifactsDb = (
     artifactOf(
       db
         .insert(artifacts)
-        .values({ ...row, ...sourceColumnsOf(source) })
+        .values({
+          ...row,
+          ...sourceColumnsOf(source),
+          // Minted here, never copied: a held version's row is made from its
+          // artifact's whole, and its origin is its own.
+          origin: crypto.randomUUID(),
+        })
         .returning()
         .get()
     ),
   get: (id) => {
     const row = db.select().from(artifacts).where(eq(artifacts.id, id)).get();
     return row && artifactOf(row);
+  },
+  byOrigin: (origin) => {
+    const row = db
+      .select()
+      .from(artifacts)
+      .where(eq(artifacts.origin, origin))
+      .get();
+    return row && artifactOf(row);
+  },
+  handOrigin: (held, id) => {
+    db.transaction((tx) => {
+      const of = (one: string) =>
+        tx
+          .select({ origin: artifacts.origin })
+          .from(artifacts)
+          .where(eq(artifacts.id, one))
+          .get()?.origin;
+      const theirs = of(held);
+      const ours = of(id);
+      if (theirs === undefined || ours === undefined) {
+        return;
+      }
+      // Each origin is one row's (`artifacts_origin`): the version's stands
+      // apart for the one statement between.
+      tx.update(artifacts)
+        .set({ origin: crypto.randomUUID() })
+        .where(eq(artifacts.id, held))
+        .run();
+      tx.update(artifacts)
+        .set({ origin: theirs })
+        .where(eq(artifacts.id, id))
+        .run();
+      tx.update(artifacts)
+        .set({ origin: ours })
+        .where(eq(artifacts.id, held))
+        .run();
+    });
   },
   heldOf: (id) => {
     const row = db

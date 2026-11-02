@@ -28,15 +28,16 @@ const ARTIFACT_ORIGIN = "embed-";
 
 /**
  * A machine artifact's own preview origin as preview.ts keys it (a dev
- * server's or a folder's preview, a sheet): the one its panel, its own tab
- * and every decision card load, and the key its machine's listener is kept
- * under.
+ * server's or a folder's preview, a sheet), by the origin its row points at
+ * (schema.ts `artifacts.origin`): the one its panel, its own tab and every
+ * decision card load, and the key its machine's listener, its port, its
+ * host-mode label and its passes are kept under.
  */
-export const artifactOrigin = (artifactId: string): string =>
-  `${ARTIFACT_ORIGIN}${artifactId}`;
+export const artifactOrigin = (origin: string): string =>
+  `${ARTIFACT_ORIGIN}${origin}`;
 
-/** The artifact a preview origin's key names; null for a session's or a project's. */
-export const artifactOfOrigin = (key: string): string | null =>
+/** The artifact origin (`artifacts.origin`) a preview origin's key names; null for a session's or a project's. */
+export const originOfKey = (key: string): string | null =>
   key.startsWith(ARTIFACT_ORIGIN) ? key.slice(ARTIFACT_ORIGIN.length) : null;
 
 /** The rows preview.ts keeps: each origin's port, and the fleet's mode. */
@@ -49,13 +50,6 @@ export interface PreviewsDb {
    * kept, when it is not.
    */
   readonly keepPort: (key: string, port: number) => boolean;
-  /**
-   * Origin `from`'s port is origin `to`'s now, whatever `to` kept before
-   * let go: an artifact's held next version opened in its place (server.ts
-   * `moveArtifactOrigin`). False, and nothing moved, when `from` keeps no
-   * port or `to`'s owner is not a row.
-   */
-  readonly movePort: (from: string, to: string) => boolean;
   /** Whether origin `key`'s owner (the session, the project or the artifact) is a row of the hub's now. */
   readonly ownerHeld: (key: string) => boolean;
   /** Every origin's port, by its key. */
@@ -72,9 +66,9 @@ const owned = (key: string) => {
   if (projectId) {
     return eq(previewPorts.projectId, projectId);
   }
-  const artifactId = artifactOfOrigin(key);
-  return artifactId
-    ? eq(previewPorts.artifactId, artifactId)
+  const origin = originOfKey(key);
+  return origin
+    ? eq(previewPorts.origin, origin)
     : eq(previewPorts.instanceId, key);
 };
 
@@ -93,13 +87,13 @@ const ownerHeld = (
         .get() !== undefined
     );
   }
-  const artifactId = artifactOfOrigin(key);
-  if (artifactId) {
+  const origin = originOfKey(key);
+  if (origin) {
     return (
       db
         .select({ id: artifacts.id })
         .from(artifacts)
-        .where(eq(artifacts.id, artifactId))
+        .where(eq(artifacts.origin, origin))
         .get() !== undefined
     );
   }
@@ -118,8 +112,8 @@ const ownerOf = (key: string) => {
   if (projectId) {
     return { projectId };
   }
-  const artifactId = artifactOfOrigin(key);
-  return artifactId ? { artifactId } : { instanceId: key };
+  const origin = originOfKey(key);
+  return origin ? { origin } : { instanceId: key };
 };
 
 export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({
@@ -133,8 +127,8 @@ export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({
           return { key: projectOrigin(row.projectId), port: row.port };
         }
         return {
-          key: row.artifactId
-            ? artifactOrigin(row.artifactId)
+          key: row.origin
+            ? artifactOrigin(row.origin)
             : (row.instanceId as string),
           port: row.port,
         };
@@ -148,19 +142,6 @@ export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({
       }
       tx.insert(previewPorts)
         .values({ port, ...ownerOf(key) })
-        .run();
-      return true;
-    }),
-  movePort: (from, to) =>
-    db.transaction((tx) => {
-      const kept = tx.select().from(previewPorts).where(owned(from)).get();
-      if (!(kept && ownerHeld(tx, to))) {
-        return false;
-      }
-      tx.delete(previewPorts).where(owned(to)).run();
-      tx.delete(previewPorts).where(owned(from)).run();
-      tx.insert(previewPorts)
-        .values({ port: kept.port, ...ownerOf(to) })
         .run();
       return true;
     }),

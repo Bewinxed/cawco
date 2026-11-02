@@ -133,6 +133,7 @@ import {
   artifactsDb,
   type Deleter,
   dropArtifactRows,
+  type GoneArtifact,
   projectPage,
 } from "./artifacts";
 import { type AsksDb, asksDb } from "./asks";
@@ -1426,12 +1427,13 @@ export interface DbShape {
     line: string;
   }) => boolean;
   /**
-   * `listener` hears the ids of the artifacts that went, a next version
-   * held for one included, once the write that deleted them is done: the
-   * service's discard, a session's delete, a project's delete or fold
-   * (`dropArtifacts`, the one way an artifact row goes).
+   * `listener` hears the artifacts that went, each with the preview origin
+   * its row pointed at, a next version held for one included, once the
+   * write that deleted them is done: the service's discard, a session's
+   * delete, a project's delete or fold (`dropArtifacts`, the one way an
+   * artifact row goes).
    */
-  readonly onArtifactsGone: (listener: (ids: string[]) => void) => void;
+  readonly onArtifactsGone: (listener: (gone: GoneArtifact[]) => void) => void;
   /**
    * `listener` hears the hashes of the credentials the hub revokes, once
    * the write that revoked them is done and they no longer resolve: a
@@ -3524,9 +3526,9 @@ const make = async (path: string): Promise<DbShape> => {
   };
 
   /** Who hears of the artifacts that went ({@link DbShape.onArtifactsGone}). */
-  const goneListeners = new Set<(ids: string[]) => void>();
-  /** Artifacts a write deleted, not yet told. */
-  let goneNoted: Set<string> | undefined;
+  const goneListeners = new Set<(gone: GoneArtifact[]) => void>();
+  /** Artifacts a write deleted, not yet told: each one's preview origin by its id. */
+  let goneNoted: Map<string, string> | undefined;
 
   /**
    * The artifacts noted gone, told once the write is done (a microtask:
@@ -3534,25 +3536,33 @@ const make = async (path: string): Promise<DbShape> => {
    * only those no row answers to: a write rolled back deleted nothing.
    */
   const tellGone = (): void => {
-    const noted = [...(goneNoted ?? [])];
+    const noted = [...(goneNoted ?? [])].map(([id, origin]) => ({
+      id,
+      origin,
+    }));
     goneNoted = undefined;
     const kept = new Set<string>();
     for (let at = 0; at < noted.length; at += 500) {
       for (const row of db
         .select({ id: artifacts.id })
         .from(artifacts)
-        .where(inArray(artifacts.id, noted.slice(at, at + 500)))
+        .where(
+          inArray(
+            artifacts.id,
+            noted.slice(at, at + 500).map((one) => one.id)
+          )
+        )
         .all()) {
         kept.add(row.id);
       }
     }
-    const ids = noted.filter((id) => !kept.has(id));
-    if (ids.length === 0) {
+    const gone = noted.filter((one) => !kept.has(one.id));
+    if (gone.length === 0) {
       return;
     }
     for (const listener of goneListeners) {
       try {
-        listener(ids);
+        listener(gone);
       } catch (error) {
         console.error("[artifacts] telling a delete failed", error);
       }
@@ -3566,16 +3576,16 @@ const make = async (path: string): Promise<DbShape> => {
    * session's, a project's or the service's discard.
    */
   const dropArtifacts = (tx: Deleter, where: SQL | undefined): void => {
-    const ids = dropArtifactRows(tx, where);
-    if (ids.length === 0) {
+    const gone = dropArtifactRows(tx, where);
+    if (gone.length === 0) {
       return;
     }
     if (!goneNoted) {
-      goneNoted = new Set();
+      goneNoted = new Map();
       queueMicrotask(tellGone);
     }
-    for (const id of ids) {
-      goneNoted.add(id);
+    for (const { id, origin } of gone) {
+      goneNoted.set(id, origin);
     }
   };
 

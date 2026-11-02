@@ -934,7 +934,6 @@ const run = async (kit: Kit) => {
       ownerHeld: () => true,
       ports: () => [],
       keepPort: () => true,
-      movePort: () => false,
       dropPort: () => undefined,
       setSettings: () => undefined,
     } satisfies Parameters<typeof createPreviewListeners>[2],

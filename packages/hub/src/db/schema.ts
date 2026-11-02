@@ -4155,6 +4155,16 @@ export const artifacts = sqliteTable(
       onDelete: "cascade",
     }),
     /**
+     * The preview origin this row's own frames load (hub preview.ts
+     * `embedKey`): an id of its own, minted once when the row is made
+     * (db/artifacts.ts `create`), never renamed. A held next version has
+     * its own; opening it hands its origin to the artifact, and the
+     * artifact's own goes with the version's row (`handOrigin`). Its port,
+     * its host-mode label, its passes and its machine's listener are all
+     * keyed by it.
+     */
+    origin: text("origin").notNull(),
+    /**
      * The session's project when it made it; a page there is also written
      * to `decisions/<name>/`, and is the project's (served on its origin).
      * A project's delete takes its pages first (db/index.ts
@@ -4238,6 +4248,7 @@ export const artifacts = sqliteTable(
         sql`${table.heldFor} is null and ${table.projectId} is not null and ${table.kind} = 'page'`
       ),
     uniqueIndex("artifacts_held_for").on(table.heldFor),
+    uniqueIndex("artifacts_origin").on(table.origin),
   ]
 );
 
@@ -4298,16 +4309,21 @@ export const previewPorts = sqliteTable(
     projectId: text("project_id")
       .unique()
       .references(() => projects.id, { onDelete: "cascade" }),
-    artifactId: text("artifact_id")
-      .unique()
-      .references(() => artifacts.id, { onDelete: "cascade" }),
+    /**
+     * An artifact's origin (`artifacts.origin`), which no foreign key
+     * holds: a held version's opening repoints it from one row to another.
+     * It goes as the origin ends (hub server.ts `endArtifactOrigin`, on
+     * every artifact delete), and one whose artifact went while the hub was
+     * down is dropped at its next start (preview.ts `bindKept`).
+     */
+    origin: text("origin").unique(),
   },
   () => [
     // Its columns by bare name, as every check's (migrations-check.ts
     // `qualifiedChecks`).
     check(
       "preview_ports_one_owner",
-      sql`(${sql.identifier("instance_id")} is not null) + (${sql.identifier("project_id")} is not null) + (${sql.identifier("artifact_id")} is not null) = 1`
+      sql`(${sql.identifier("instance_id")} is not null) + (${sql.identifier("project_id")} is not null) + (${sql.identifier("origin")} is not null) = 1`
     ),
   ]
 );
