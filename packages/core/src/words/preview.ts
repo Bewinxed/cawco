@@ -46,7 +46,7 @@ export const previewWords = {
   startFromSession: "Start it again from its session, then try again.",
   /** A canvas's view menu, its motion choice and its check against the design system. */
   canvasView: "Canvas view",
-  reducedMotion: "Reduced motion",
+  reducedMotion: "Reduce motion",
   verifyDesign: "Verify against the design system",
   /**
    * The page's content process ended a second time for the same page (the

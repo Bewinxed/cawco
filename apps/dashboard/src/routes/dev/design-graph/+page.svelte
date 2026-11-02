@@ -5,16 +5,13 @@
   /**
    * The design graph, mounted once with its real records: the routine form
    * and Who decides' roster from their own states files, as an agent opens
-   * them with the ask "Judge the Create routine form at Save failed". The
-   * records are the set as it stood when the page opened (`?at=` names
-   * another moment). `?link=lost` draws the hub's link down; `?face=whole` and `?face=move`
-   * open the room on the whole set or the move, as an ask may name them.
+   * them with the ask "Judge the Create routine form at Save failed".
+   * `?link=lost` draws the hub's link down; `?face=whole` and `?face=move`
+   * open the room on the map or the animation, as an ask may name them.
    */
   import { page } from "$app/state";
 
   const said = page.url.searchParams;
-  const at = said.get("at");
-  const recordsAt = at ? new Date(at) : new Date();
 </script>
 
 <svelte:head><title>Design graph</title></svelte:head>
@@ -30,7 +27,6 @@
         ) ?? "states",
     }}
     inputs={[routineForm, roster]}
-    {recordsAt}
     stale={said.get("link") === "lost"}
   />
 </div>
