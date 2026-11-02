@@ -10,7 +10,7 @@
    * them with the ask "Judge the Create routine form at Save failed". The
    * records are the set as it stood when the page opened (`?at=` names
    * another moment). `?arrange=` sets where the states stand on a desk
-   * (beside, below, stage); `?link=lost` draws the hub's link down; `?face=whole` and `?face=move`
+   * (beside, below, stage); `?link=lost` draws the hub's link down; `?seeing=whole` and `?face=move`
    * open the room on the whole set or the move, as an ask may name them.
    */
   import { page } from "$app/state";
@@ -31,10 +31,8 @@
     ask={{
       component: "Routine form",
       state: "FailedSave",
-      face:
-        (["states", "whole", "move"] as const).find(
-          (one) => one === said.get("face")
-        ) ?? "states",
+      seeing: said.get("seeing") === "whole" ? "whole" : "journey",
+      face: said.get("face") === "move" ? "move" : "states",
     }}
     inputs={[routineForm, roster]}
     {recordsAt}

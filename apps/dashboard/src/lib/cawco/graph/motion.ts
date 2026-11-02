@@ -180,8 +180,7 @@ export function clipOf(animation: Animation, start: number, at: number): Clip {
     duration,
     easing,
     framed,
-    // A curve drawn into its frames has no name of its own: its row says its length alone.
-    curve: framed ? "" : curveWords(easing),
+    curve: framed ? words.keyframedCurve : curveWords(easing),
     token,
     adHoc: token === null || curveToken === null,
     was: null,

@@ -1,111 +1,201 @@
 <script lang="ts">
   /**
-   * One state in the states list (spec, The states), the app's list row
-   * (DESIGN.md, The Row Dress Rule): its name in label, its own note under
-   * it in meta, two lines at most, the whole note in its tooltip. One
-   * press keeps it, so the stage shows it; while comparing, a press
-   * compares the kept state with it instead. Resting the pointer on it
-   * lights the row and nothing else.
+   * One state of the component in front (spec, The states): its name, its
+   * one-line note, its marks (a failure, and a hole in its machine: nothing
+   * reaches it, nothing leaves it), each a glyph and words in the status
+   * ink, and its variants as named choices. One press: resting a fine
+   * pointer on it previews it on the stage, pressing keeps it (a tap keeps
+   * it too); while comparing, a press compares it with the kept one. The
+   * kept state wears the selection wash, the compared one the changed
+   * ring's edge.
    *
-   * The state on the stage wears the selection wash with every word in
-   * `selected-ink` (the Comments rail's open row), and only it shows its
-   * record sets, as the kit's toggle group under its name: the state as
-   * written is the one with none picked. The state it is compared with
-   * wears the change ring's edge, the stage's mark for what differs.
-   *
-   * A pin on it is named by its name ("Failed save"), its note its
-   * description.
+   * A pin on it is named by its title ("Failed save"), the note and marks
+   * its description; a variant's chip by its state and its own name
+   * ("Failed save: As written"). A row in the journey and the room's list;
+   * a card in the whole set (`form="node"`), `c-graph-node-w` wide.
    */
   import { graphWords as words } from "@cawco/core/words/graph";
-  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
-  import type { GraphState } from "./model";
+  import { IconError, IconWarningTriangle } from "#lib/icons.js";
+  import type { GraphState, Holes } from "./model";
 
   let {
     state,
+    holes,
+    form = "row",
     kept = false,
     keptVariant = null,
-    against = false,
+    compared = false,
+    onpreview,
     onpress,
   }: {
     state: GraphState;
-    /** It is the state on the stage. */
+    holes: Holes;
+    form?: "row" | "node";
+    /** It is the kept state. */
     kept?: boolean;
-    /** The record set the stage shows, when it is this state's. */
+    /** The kept variant's id, when the kept state is this one. */
     keptVariant?: string | null;
-    /** It is the state the kept one is compared with. */
-    against?: boolean;
-    /** It, or one of its record sets (null: as written), was pressed. */
-    onpress: (variant: string | null) => void;
+    /** It is the state compared with the kept one. */
+    compared?: boolean;
+    /** A fine pointer rests on it (or its variant), or left it (null). */
+    onpreview: (variant: string | null) => void;
+    /** It (or its variant) was pressed. */
+    onpress: (variant: string) => void;
   } = $props();
 
+  const fine =
+    typeof window !== "undefined" &&
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const first = $derived(state.variants[0]?.id ?? state.id);
+  const others = $derived(state.variants.slice(1));
   const uid = $props.id();
   const noteId = `${uid}-note`;
+  const marksId = `${uid}-marks`;
+  const marked = $derived(state.failure || !holes.reaches || !holes.leaves);
+  /** The note and the marks: the title's description, never its name. */
+  const described = $derived(
+    [state.note ? noteId : null, marked ? marksId : null]
+      .filter(Boolean)
+      .join(" ")
+  );
 </script>
 
 <div
   data-slot="state-item"
+  data-form={form}
   data-kept={kept ? "" : undefined}
-  data-against={against ? "" : undefined}
+  data-compared={compared ? "" : undefined}
   class={[
-    "relative flex min-w-0 flex-col rounded-sm",
+    "group/state relative flex min-w-0 flex-col rounded-md",
+    form === "node"
+      ? "w-c-graph-node-w border border-border-control bg-surface-raised shadow-tile"
+      : "w-full",
     kept && "bg-selected-bg",
-    against &&
+    compared &&
       "outline-solid outline-(length:--c-change-ring-width) outline-c-change-ring",
   ]}
 >
-  <!-- The row's press: the name's button reaches over the whole row (its
-       ::before), so a press anywhere on it is the button's and a pin on it
-       is named by the name alone. -->
+  <!-- Its head: one press, the title its name and the note and marks its
+       description. The title's button reaches over the whole head (its
+       ::before), so a press anywhere on it is the button's, and a pin on it
+       is named by the title alone. -->
   <div
     class={[
-      "relative flex min-h-c-touch-floor min-w-0 flex-col justify-center gap-space-row rounded-sm px-space-3 py-space-2 transition-control",
+      "group/head relative flex min-h-c-touch-floor min-w-0 flex-col items-start gap-space-1 rounded-md px-space-3 py-space-2 transition-control",
+      // The kept state already shows on the stage: resting on it changes nothing.
       !kept && "can-hover:has-[button:hover]:bg-surface-hover",
     ]}
   >
     <button
       type="button"
       aria-current={kept ? "true" : undefined}
-      aria-describedby={state.note ? noteId : undefined}
-      title={state.note ?? undefined}
+      aria-describedby={described || undefined}
       class={[
-        "min-w-0 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 before:rounded-sm focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
+        "min-w-0 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 before:rounded-md focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
         kept ? "text-selected-ink" : "text-ink-row",
       ]}
-      onclick={() => onpress(null)}
+      onpointerenter={() => {
+        if (fine) {
+          onpreview(first);
+        }
+      }}
+      onpointerleave={() => {
+        if (fine) {
+          onpreview(null);
+        }
+      }}
+      onclick={() => onpress(first)}
     >
-      {state.name}{#if against}<span class="sr-only"
-          >, {words.comparedWith(state.name)}</span
-        >{/if}
+      {state.name}
     </button>
     {#if state.note}
       <span
         id={noteId}
         class={[
-          "line-clamp-2 min-w-0 type-meta text-pretty wrap-anywhere",
+          "type-meta line-clamp-2 min-w-0 text-pretty",
           kept ? "text-selected-ink" : "text-ink-muted",
         ]}>{state.note}</span
       >
     {/if}
+    {#if marked}
+      <span id={marksId} class="flex flex-wrap gap-x-space-3 gap-y-space-1">
+        {#if state.failure}
+          <span
+            class="mark-line inline-flex items-center gap-space-1 type-meta text-status-fail-ink"
+          >
+            <IconError
+              aria-hidden="true"
+              class="size-icon-sm flex-none text-status-fail-glyph"
+              data-box
+            />
+            <span>{words.failure}</span>
+          </span>
+        {/if}
+        {#if !holes.reaches}
+          <span
+            class="mark-line inline-flex items-center gap-space-1 type-meta text-status-attn-ink"
+          >
+            <IconWarningTriangle
+              aria-hidden="true"
+              class="size-icon-sm flex-none text-status-attn-glyph"
+              data-box
+            />
+            <span>{words.nothingReaches}</span>
+          </span>
+        {/if}
+        {#if !holes.leaves}
+          <span
+            class="mark-line inline-flex items-center gap-space-1 type-meta text-status-attn-ink"
+          >
+            <IconWarningTriangle
+              aria-hidden="true"
+              class="size-icon-sm flex-none text-status-attn-glyph"
+              data-box
+            />
+            <span>{words.nothingLeaves}</span>
+          </span>
+        {/if}
+      </span>
+    {/if}
   </div>
 
-  {#if kept && state.variants.length > 0}
-    <!-- Its record sets, on the stage's state alone: none picked is the state as written. -->
-    <div class="min-w-0 overflow-x-auto px-space-3 pb-space-2">
-      <ToggleGroup.Root
-        aria-label={words.variants(state.name)}
-        onValueChange={(next: string) => onpress(next || null)}
-        type="single"
-        value={keptVariant ?? ""}
-      >
-        {#each state.variants as variant (variant.id)}
-          <ToggleGroup.Item value={variant.id}>
-            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              ><span class="sr-only">{words.variantOf(state.name)}</span
-              >{variant.name}</span
-            >
-          </ToggleGroup.Item>
-        {/each}
-      </ToggleGroup.Root>
-    </div>
+  {#if others.length > 0}
+    <!-- Its variants, each a named choice a remark can stand on. -->
+    <fieldset
+      class="m-0 flex min-w-0 flex-wrap gap-space-1 border-0 px-space-3 pt-0 pb-space-2"
+    >
+      <legend class="sr-only">{words.variants(state.name)}</legend>
+      {#each state.variants as variant (variant.id)}
+        {@const chosen = kept && (keptVariant ?? first) === variant.id}
+        <button
+          type="button"
+          data-slot="variant"
+          aria-pressed={chosen}
+          class={[
+            "pointer-hit touch-hit h-c-btn-h-sm min-w-0 rounded-sm px-space-2 type-label transition-control",
+            chosen
+              ? "bg-surface-raised text-selected-ink shadow-xs"
+              : "text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong",
+          ]}
+          onpointerenter={() => {
+            if (fine) {
+              onpreview(variant.id);
+            }
+          }}
+          onpointerleave={() => {
+            if (fine) {
+              onpreview(null);
+            }
+          }}
+          onclick={() => onpress(variant.id)}
+        >
+          <!-- Its name carries its state's, so one variant's pin on two states reads apart. -->
+          <span class="block truncate"
+            ><span class="sr-only">{words.variantOf(state.name)}</span
+            >{variant.name}</span
+          >
+        </button>
+      {/each}
+    </fieldset>
   {/if}
 </div>

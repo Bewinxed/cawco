@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  /** What the stage draws: the kept state, at a width or as one of its variants, of the component in front. */
+  /** What the stage draws: one state, or one of its variants, of the component in front. */
   export interface Shown {
     args: Record<string, unknown>;
     line: number | null;
@@ -11,6 +11,9 @@
     variant: string | null;
     width: number | null;
   }
+
+  /** What the shown state is to the person: the kept one, one previewed, or one compared with the kept one. */
+  export type ShownRole = "kept" | "previewing" | "compared";
 </script>
 
 <script lang="ts">
@@ -20,31 +23,27 @@
    * he picks, always at 1:1: at its own width up to its room's (a form
    * asked at 1440 lays itself out at the room's width, as a window that
    * wide would), and at a width he picks wider than the room, scrolling
-   * sideways, never scaled, so no type renders under its size. It shows
-   * the kept state, the one its head names, and nothing else: it changes
-   * only when he keeps another. The component stands on the page's own
-   * surface with the page's gutter round it (`--space-6`), as the product
-   * shows it, never flush with the stage's edge. Nothing of the surface's
-   * own stands over it: the comparison's rings stand outside each
+   * sideways, never scaled, so no type renders under its size. Its head
+   * names the state it shows and whether that is the kept one, one
+   * previewed, or one compared with the kept one. Nothing of the
+   * surface's own stands over it: the comparison's rings stand outside each
    * element's box in a layer of the stage's own, under the pins, taking
    * no press. The drawing starts at its room's leading edge, so putting
    * the room beside it away never moves it.
    *
-   * It mounts the component again only when the kept state changes, since
-   * a component reads its props as it opens (RoutineForm's draft); a move
-   * plays on that live instance through `update`, which changes its props
-   * in place, so its own motion runs (component-canvas moves.md), and its
-   * clips' elements stay the ones on screen for as long as the state is
-   * kept. While comparing, the state it is compared with is drawn hidden
-   * under it at the same width, and the two are read for what came in,
-   * what changed and what went on the way to the kept state (diff.ts).
+   * It mounts the component again for each state, since a component reads
+   * its props as it opens (RoutineForm's draft); a move plays on the live
+   * instance through `update`, which changes its props in place, so its own
+   * motion runs (component-canvas moves.md). While comparing, the kept
+   * state is drawn hidden under it at the same width, and the two are read
+   * for what came in, what changed and what went (diff.ts).
    */
   import { readWithin } from "@cawco/core/bounded";
   import { queriesIn, userEventIn } from "@cawco/core/stage-play";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { tick, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { dur, numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconError } from "#lib/icons.js";
@@ -55,27 +54,29 @@
   let {
     review,
     shown,
-    against = null,
+    kept = null,
+    role,
     width,
     scheme,
     stale = false,
+    against = null,
   }: {
     review: Review;
-    /** The kept state, as it is drawn. */
     shown: Shown;
-    /** The state it is compared with, while comparing. */
-    against?: Shown | null;
+    /** The kept state's args while another is compared with it; null when not comparing. */
+    kept?: Record<string, unknown> | null;
+    role: ShownRole;
     /** The width he picked; the state's own when null. */
     width: number | null;
     scheme: "light" | "dark";
     /** The hub's link is down: this is the last drawing. */
     stale?: boolean;
+    /** The kept state's name while comparing. */
+    against?: string | null;
   } = $props();
 
   /** A width no state names: the desk form (core stage.ts `FORMS.desk`). */
   const DESK = 1280;
-  /** The page's gutter round the component, each side. */
-  const GUTTER = "--space-6";
   let room = $state(0);
   /** The width it is laid out at: his pick, else its own up to its room's. */
   const drawnWidth = $derived(
@@ -129,8 +130,8 @@
   // The differences, once both drawings have laid out, and again as either lays itself out anew (a read-back the hub answered).
   let found = $state<Difference[]>([]);
   let laidOut = $state(0);
-  /** The compared drawing's height: the frame stands at least that tall, so a ring where something went stands whole inside it. */
-  let againstTall = $state(0);
+  /** The kept drawing's height while comparing: the frame stands at least that tall, so a ring where something went stands whole inside it. */
+  let keptTall = $state(0);
   const relaid = frameSize(() => {
     laidOut += 1;
   });
@@ -140,7 +141,7 @@
     if (laidOut < 0) {
       return;
     }
-    if (!(against && k && f && mounted && mount > 0 && drawnWidth > 0)) {
+    if (!(kept && k && f && mounted && mount > 0 && drawnWidth > 0)) {
       found = [];
       return;
     }
@@ -304,6 +305,16 @@
 
   const lines = $derived(found.slice(0, LINES_SHOWN));
   const Component = $derived(review.component);
+  const ROLE_WORDS: Record<ShownRole, string> = {
+    kept: words.kept,
+    previewing: words.previewing,
+    compared: words.compare,
+  };
+  const roleWord = $derived(
+    role === "compared" && against
+      ? words.comparedWith(against)
+      : ROLE_WORDS[role]
+  );
   const ringOut = "(var(--c-change-ring-offset) + var(--c-change-ring-width))";
 </script>
 
@@ -312,8 +323,8 @@
   aria-label={shown.name}
   class="flex min-h-0 min-w-0 flex-1 flex-col"
 >
-  <!-- Its head: the state's name in the title role, its record set, and
-       while comparing the state it is compared with. -->
+  <!-- Its head: the state's name in the title role, what it is to him,
+       and the width it is drawn at. -->
   <header
     data-slot="stage-head"
     class="flex min-h-c-btn-h min-w-0 flex-wrap items-baseline gap-x-space-3 gap-y-space-1 px-space-1 pb-space-3"
@@ -321,18 +332,20 @@
     <h2 class="m-0 min-w-0 type-title text-ink-strong">
       <span class="block truncate">{shown.name}</span>
     </h2>
+    <span
+      data-slot="stage-role"
+      data-role={role}
+      class={[
+        "type-label",
+        role === "kept" ? "text-selected-ink" : "text-ink-muted",
+      ]}>{roleWord}</span
+    >
     {#if shown.variant}
-      <span class="min-w-0 truncate type-label text-ink-muted"
-        >{shown.variant}</span
-      >
+      <span class="type-label text-ink-muted">· {shown.variant}</span>
     {/if}
-    {#if against}
-      <span
-        data-slot="stage-against"
-        class="min-w-0 truncate type-label text-ink-muted"
-        >{words.comparedWith(against.name)}</span
-      >
-    {/if}
+    <span class="ms-auto type-meta text-ink-muted num">
+      {words.widthPx(drawnWidth)}
+    </span>
   </header>
 
   {#if stale}
@@ -345,7 +358,7 @@
     </p>
   {/if}
 
-  {#if against && lines.length > 0}
+  {#if kept && lines.length > 0}
     <!-- What differs, in words: one line per difference, its mark the ring's
          own (solid for came in or changed, dashed for went). -->
     <ul
@@ -374,62 +387,52 @@
         </li>
       {/if}
     </ul>
-  {:else if against && mounted}
-    <p class="m-0 mb-space-3 type-label text-ink-muted">
-      {words.sameAs(against.name)}
-    </p>
+  {:else if kept && mounted}
+    <p class="m-0 mb-space-3 type-label text-ink-muted">{words.sameAsKept}</p>
   {/if}
 
-  <!-- The field: the stage's room, which scrolls when the page is taller
-       or wider. The page's gutter holds the room a change ring takes
-       outside an element's box (5px, under --space-6), so a ring on an
-       element at the drawing's edge stands whole. -->
+  <!-- The field: the stage's room, which scrolls when the drawing is taller.
+       Its pad is the room a change ring takes outside an element's box
+       (--c-change-ring-offset and -width, 5px, under --space-2), so a ring
+       on an element at the drawing's edge stands whole. -->
   <div
     data-slot="stage-scroll"
-    class="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain rounded-lg border border-border-hairline bg-surface-recess-deep"
+    class="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain rounded-lg border border-border-hairline bg-surface-recess-deep p-space-2"
     {@attach frameSize((node: HTMLElement) => {
       const style = getComputedStyle(node);
       room =
         node.clientWidth -
         Number.parseFloat(style.paddingInlineStart) -
-        Number.parseFloat(style.paddingInlineEnd) -
-        2 * numberOf(GUTTER);
+        Number.parseFloat(style.paddingInlineEnd);
     })}
   >
-    <!-- The page the component stands on: the product's surface and its
-         gutter round the drawing, in the scheme he picked. -->
-    <div
-      data-slot="stage-page"
-      data-scheme={scheme}
-      class={[
-        "w-max bg-surface-page p-space-6 text-ink-strong",
-        scheme === "dark" ? "scheme-dark" : "scheme-light",
-        stale && "opacity-(--account-stale-opacity)",
-      ]}
-    >
+    <div class="relative w-(--frame-w)" style:--frame-w="{drawnWidth}px">
       <div
         data-slot="stage-frame"
-        style:--frame-w="{drawnWidth}px"
-        style:--against-h="{against ? againstTall : 0}px"
-        class="relative min-h-(--against-h) w-(--frame-w)"
+        data-scheme={scheme}
+        style:--kept-h="{kept ? keptTall : 0}px"
+        class={[
+          "relative min-h-(--kept-h) w-(--frame-w) bg-surface-page text-ink-strong",
+          scheme === "dark" ? "scheme-dark" : "scheme-light",
+          stale && "opacity-(--account-stale-opacity)",
+        ]}
       >
-        {#if against}
-          <!-- The state it is compared with, drawn hidden under the kept one
-               at the same width, read for what differs and never seen or
-               pressed. -->
+        {#if kept}
+          <!-- The kept state, drawn hidden under the compared one at the same
+               width, read for what differs and never seen or pressed. -->
           <div
             bind:this={hidden}
             {@attach relaid}
             {@attach frameSize((node: HTMLElement) => {
-              againstTall = node.offsetHeight;
+              keptTall = node.offsetHeight;
             })}
             aria-hidden="true"
             inert
             class="pointer-events-none invisible absolute inset-x-0 top-0"
           >
-            {#key against}
+            {#key kept}
               <svelte:boundary>
-                <Component {...against.args} />
+                <Component {...kept} />
               </svelte:boundary>
             {/key}
           </div>
@@ -460,7 +463,7 @@
             </svelte:boundary>
           {/key}
         </div>
-        {#if against}
+        {#if kept}
           <!-- The rings: outside each element's box on its own shape, in
                the stage's own layer, taking no press. -->
           <div aria-hidden="true" class="pointer-events-none absolute inset-0">
@@ -503,6 +506,9 @@
         </p>
         <p class="m-0 max-w-c-measure type-body text-ink-row wrap-anywhere">
           {fault.message}
+        </p>
+        <p class="m-0 max-w-c-measure type-body text-ink-muted">
+          {words.mountFailedNext}
         </p>
         <div class="flex gap-space-2">
           <Button

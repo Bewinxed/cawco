@@ -17,17 +17,17 @@ export default {
   component: DesignGraphFrame,
   args: {
     arrangement: "beside",
-    ask: { component: "Routine form", state: "FailedSave" },
+    ask: { component: "Routine form", state: "FailedSave", seeing: "journey" },
   },
 };
 
 /** Opened by the agent's ask: the routine form at Save failed, its move playing once, the journey beside it. */
 export const Opened = { parameters: { viewport: 1440 } };
 
-/** The whole set: every state of the form's four machines and where each one's moves go. */
+/** The whole set: every state of the form's four machines and the moves between them. */
 export const WholeSet = {
   args: {
-    ask: { component: "Routine form", state: "FailedSave", face: "whole" },
+    ask: { component: "Routine form", state: "FailedSave", seeing: "whole" },
   },
   parameters: { viewport: 1440 },
 };

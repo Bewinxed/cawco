@@ -76,13 +76,12 @@ export function nameOf(el: Element): string {
       ? (el.labels?.[0]?.textContent?.trim() ?? el.placeholder)
       : null);
   if (label) {
-    const said = quoted(label.replace(SPACES, " ").trim());
-    return kind ? `${kind} ${said}` : said;
+    return `${kind ?? words.element} ${quoted(label.replace(SPACES, " ").trim())}`;
   }
   // The words it says (a pending label waiting, hidden from a reader, says nothing), else every word it holds.
   const text = saidOf(el) || wordsOf(el);
   if (text) {
-    return kind ? `${kind} ${quoted(text)}` : quoted(text);
+    return `${kind ?? words.element} ${quoted(text)}`;
   }
   const holder = el.parentElement?.closest("[data-slot]");
   return holder ? nameOf(holder) : (kind ?? words.element);

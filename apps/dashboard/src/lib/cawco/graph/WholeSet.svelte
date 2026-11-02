@@ -1,141 +1,217 @@
 <script lang="ts">
   /**
    * The whole set (spec, The whole set): every state of every machine and
-   * every move out of it, drawn whole on a page that scrolls, for judging
-   * whether the set is complete. Each machine is a section of the app's
-   * list (`sectionHeadVariants`), each state one card (the room's raised
-   * surface on its recess, its edge `border-control`), and under its name
-   * where its moves go, each said as the person causes it ("Try again →
-   * Saving"), moves into other machines too. An error state, and a state
-   * no move reaches or none leaves, is marked by a glyph after its name;
-   * its words are the glyph's tooltip and the card's description, never a
-   * line on the page. One press keeps a state, or, while comparing,
-   * compares with it.
+   * every move between them in one look, on Svelte Flow at 1:1 (no zoom,
+   * no zoom figure: no type renders under 12px), each machine a box with
+   * its name in its head. Where the drawing is larger than its room it
+   * scrolls, by wheel or drag, inside its bounds; it opens on the kept
+   * state's machine, from its top-left corner, so nothing is cut on open.
+   * A move the states file plays is a solid edge; one the agent only named
+   * (the canvas spec's `edges`) is dashed. What a person does to get to a
+   * state ("Try again") stands on a line of its own above its card, never
+   * on an edge, where it would cross a card or another's words.
    */
+  import "#lib/vendor-css/xyflow.css";
   import { graphWords as words } from "@cawco/core/words/graph";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import { IconError, IconWarningTriangle } from "#lib/icons.js";
+  import {
+    type Edge,
+    MarkerType,
+    type Node,
+    SvelteFlow,
+    type Viewport,
+  } from "@xyflow/svelte";
+  import { untrack } from "svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { theme } from "#lib/theme.svelte.js";
+  import { layoutOf } from "./layout";
+  import MachineNode from "./MachineNode.svelte";
   import { holesOf, type Review } from "./model";
+  import StateNode from "./StateNode.svelte";
 
   let {
     review,
     kept,
-    against,
+    keptVariant,
+    compared,
+    direction,
+    focus,
+    onpreview,
     onpress,
   }: {
     review: Review;
     kept: string;
-    against: string | null;
-    onpress: (state: string, variant: string | null) => void;
+    keptVariant: string | null;
+    compared: string | null;
+    direction: "down" | "across";
+    /** The machine to bring into view: the region names' one navigation. */
+    focus: string;
+    onpreview: (state: string, variant: string | null) => void;
+    onpress: (state: string, variant: string) => void;
   } = $props();
 
-  const outOf = (id: string) => review.moves.filter((one) => one.from === id);
-  const many = $derived(review.machines.length > 1);
-  const uid = $props.id();
+  const nodeTypes = { state: StateNode, machine: MachineNode };
+  /** The air round the drawing, so no card stands on the room's edge. */
+  const AIR = 18;
+
+  const marked = (id: string) => {
+    const holes = holesOf(review, id);
+    return (
+      Boolean(review.states[id]?.failure) || !holes.reaches || !holes.leaves
+    );
+  };
+  let room = $state({ w: 0, h: 0 });
+  /** Each card's height as Svelte Flow measured it: the layout is drawn again from them. */
+  let measured = $state<Record<string, number>>({});
+  /** What a person does to get to `id`, from the moves into it that say so. */
+  const arrivesOf = (id: string): string | null => {
+    const acts = review.moves
+      .filter((move) => move.to === id && move.label)
+      .map((move) => move.label as string);
+    return acts.length > 0 ? words.arrivesBy(acts) : null;
+  };
+  /** Down a tall room the columns wrap at its width; across a strip they run on and it scrolls sideways. */
+  const layout = $derived(
+    layoutOf(
+      review,
+      marked,
+      measured,
+      direction === "down" ? Math.max(0, room.w - 2 * AIR) : null,
+      (id) => Boolean(arrivesOf(id))
+    )
+  );
+
+  const nodesNow = $derived<Node[]>([
+    ...review.machines.map((machine) => {
+      const box = layout.machines[machine.name] ?? { x: 0, y: 0, w: 0, h: 0 };
+      return {
+        id: `m:${machine.name}`,
+        type: "machine",
+        position: { x: box.x, y: box.y },
+        width: box.w,
+        height: box.h,
+        data: { name: machine.name },
+        selectable: false,
+        draggable: false,
+        focusable: false,
+        // Over the moves, so none crosses a machine's name; its body lets them through.
+        zIndex: 1,
+      } satisfies Node;
+    }),
+    ...review.order.map((id) => {
+      const box = layout.states[id] ?? { x: 0, y: 0, w: 0, h: 0 };
+      const state = review.states[id];
+      return {
+        id,
+        type: "state",
+        position: { x: box.x, y: box.y },
+        data: {
+          state,
+          holes: holesOf(review, id),
+          kept: id === kept,
+          keptVariant: id === kept ? keptVariant : null,
+          compared: id === compared,
+          arrives: arrivesOf(id),
+          onpreview: (variant: string | null) => onpreview(id, variant),
+          onpress: (variant: string) => onpress(id, variant),
+        },
+        selectable: false,
+        draggable: false,
+        focusable: false,
+        zIndex: 2,
+      } satisfies Node;
+    }),
+  ]);
+
+  const edgesNow = $derived<Edge[]>(
+    review.moves.map((move) => ({
+      id: `${move.from}→${move.to}`,
+      source: move.from,
+      target: move.to,
+      type: "smoothstep",
+      // Under the cards: a move never stands over a state's name.
+      zIndex: 0,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+      style: `stroke: var(--border-contrast); stroke-width: var(--c-graph-edge);${move.played ? "" : " stroke-dasharray: 4 4;"}`,
+      selectable: false,
+      focusable: false,
+    }))
+  );
+
+  // Svelte Flow keeps what it measures on the nodes it holds: it holds its own copies.
+  let nodes = $state.raw<Node[]>([]);
+  let edges = $state.raw<Edge[]>([]);
+  $effect(() => {
+    nodes = nodesNow;
+  });
+  $effect(() => {
+    // Once every card is drawn, the layout takes their heights.
+    const heights: Record<string, number> = {};
+    for (const node of nodes) {
+      if (node.type === "state" && node.measured?.height) {
+        heights[node.id] = Math.round(node.measured.height);
+      }
+    }
+    const known = untrack(() => measured);
+    if (
+      Object.keys(heights).length === review.order.length &&
+      Object.entries(heights).some(([id, h]) => known[id] !== h)
+    ) {
+      measured = heights;
+    }
+  });
+  $effect(() => {
+    edges = edgesNow;
+  });
+
+  const at = (machine: string): Viewport => {
+    const box = layout.machines[machine] ?? { x: 0, y: 0 };
+    return { x: AIR - box.x, y: AIR - box.y, zoom: 1 };
+  };
+  let viewport = $state<Viewport>(
+    untrack(() => at(review.states[kept]?.machine ?? ""))
+  );
+  $effect(() => {
+    const machine = focus;
+    untrack(() => {
+      viewport = at(machine);
+    });
+  });
+  const extent = $derived<[[number, number], [number, number]]>([
+    [-AIR, -AIR],
+    [
+      Math.max(layout.bounds.w + AIR, room.w - AIR),
+      Math.max(layout.bounds.h + AIR, room.h - AIR),
+    ],
+  ]);
 </script>
 
 <div
   data-slot="whole-set"
-  class="-mx-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto px-space-1"
+  class="relative size-full min-h-0 min-w-0"
+  {@attach frameSize((node: HTMLElement) => {
+    room = { w: node.clientWidth, h: node.clientHeight };
+  })}
 >
-  {#each review.machines as one (one.name)}
-    <section
-      aria-label={one.name}
-      class="flex min-w-0 flex-col pb-space-4 last:pb-space-1"
-    >
-      {#if many}
-        <h3 class={sectionHeadVariants({ class: "m-0 mb-space-2" })}>
-          <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-            >{one.name}</span
-          >
-        </h3>
-      {/if}
-      <ol class="m-0 flex min-w-0 list-none flex-col gap-space-2 p-0">
-        {#each one.path as id (id)}
-          {@const state = review.states[id]}
-          {@const holes = holesOf(review, id)}
-          {@const moves = outOf(id)}
-          {@const marks = [
-            state?.failure ? words.errorState : null,
-            holes.reaches ? null : words.nothingReaches,
-            holes.leaves ? null : words.nothingLeaves,
-          ].filter((mark) => mark !== null)}
-          {#if state}
-            <li
-              data-slot="whole-state"
-              class={[
-                "relative flex min-w-0 flex-col gap-space-row rounded-md border px-space-3 py-space-2 transition-control",
-                id === kept
-                  ? "border-transparent bg-selected-bg"
-                  : "border-border-control bg-surface-raised can-hover:has-[button:hover]:bg-surface-hover",
-                id === against &&
-                  "outline-solid outline-(length:--c-change-ring-width) outline-c-change-ring",
-              ]}
-            >
-              <div class="mark-line flex min-w-0 items-center gap-space-2">
-                <button
-                  type="button"
-                  aria-current={id === kept ? "true" : undefined}
-                  aria-describedby={marks.length > 0
-                    ? `${uid}-${id}-marks`
-                    : undefined}
-                  class={[
-                    "min-w-0 flex-1 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 before:rounded-md focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
-                    id === kept ? "text-selected-ink" : "text-ink-row",
-                  ]}
-                  onclick={() => onpress(id, null)}
-                >
-                  {state.name}
-                </button>
-                {#if marks.length > 0}
-                  <span
-                    id={`${uid}-${id}-marks`}
-                    class="relative flex flex-none items-center gap-space-1"
-                    data-box
-                    title={marks.join(". ")}
-                  >
-                    <span class="sr-only">{marks.join(". ")}</span>
-                    {#if state.failure}
-                      <IconError
-                        aria-hidden="true"
-                        class="size-icon-sm text-status-fail-glyph"
-                        data-box
-                      />
-                    {/if}
-                    {#if !(holes.reaches && holes.leaves)}
-                      <IconWarningTriangle
-                        aria-hidden="true"
-                        class="size-icon-sm text-status-attn-glyph"
-                        data-box
-                      />
-                    {/if}
-                  </span>
-                {/if}
-              </div>
-              {#if moves.length > 0}
-                <ul
-                  aria-label={words.movesOut(state.name)}
-                  class="m-0 flex min-w-0 list-none flex-col p-0"
-                >
-                  {#each moves as move (move.to)}
-                    <li
-                      class={[
-                        "min-w-0 type-meta wrap-anywhere",
-                        id === kept ? "text-selected-ink" : "text-ink-muted",
-                      ]}
-                    >
-                      {words.moveTo(
-                        move.label,
-                        review.states[move.to]?.name ?? move.to
-                      )}
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-            </li>
-          {/if}
-        {/each}
-      </ol>
-    </section>
-  {/each}
+  <SvelteFlow
+    colorMode={theme.current}
+    deleteKey={null}
+    elementsSelectable={false}
+    maxZoom={1}
+    minZoom={1}
+    {nodeTypes}
+    nodesConnectable={false}
+    nodesDraggable={false}
+    nodesFocusable={false}
+    panOnDrag
+    panOnScroll
+    preventScrolling
+    proOptions={{ hideAttribution: true }}
+    translateExtent={extent}
+    bind:edges
+    bind:nodes
+    bind:viewport
+    zoomOnDoubleClick={false}
+    zoomOnPinch={false}
+    zoomOnScroll={false}
+  />
 </div>
