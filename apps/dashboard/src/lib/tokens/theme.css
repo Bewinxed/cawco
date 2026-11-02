@@ -311,6 +311,7 @@
   --spacing-c-map-node-w: var(--c-map-node-w);
   --spacing-c-graph-room-w: var(--c-graph-room-w);
   --spacing-c-graph-node-w: var(--c-graph-node-w);
+  --spacing-c-graph-label: var(--c-graph-label);
   --spacing-c-graph-drawer-head: var(--c-graph-drawer-head);
   --spacing-c-graph-stage-min: var(--c-graph-stage-min);
   --spacing-c-pin-list-min: var(--c-pin-list-min);
