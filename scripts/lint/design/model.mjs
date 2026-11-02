@@ -97,6 +97,8 @@ const SCOPES = new Set([
 ]);
 
 /** The names a binding pattern declares. */
+export const patternNamesOf = (pattern) => patternNames(pattern);
+
 function patternNames(pattern, out = []) {
   if (!pattern) {
     return out;
@@ -322,6 +324,9 @@ export function modelOf(fileName) {
   models.set(fileName, model);
   return model;
 }
+
+/** Every node under `node`, with its parent and the key it stands under. */
+export const walkNodes = (node, visit) => walk(node, visit);
 
 /** Every node of the file, with its parent. */
 export function eachNode(model, visit) {
