@@ -9,10 +9,10 @@
    * kept state wears the selection wash, the compared one the changed
    * ring's edge.
    *
-   * A pin on it is named by its title ("Failed save"), the note and marks
-   * its description; a variant's chip by its state and its own name
-   * ("Failed save: As written"). A row in the journey and the room's list;
-   * a card in the whole set (`form="node"`), `c-graph-node-w` wide.
+   * Its words are its name for a pin: the panel's Comment mode names a
+   * remark on it by them ("State item · Failed save The hub didn't
+   * answer…"). A row in the journey and the room's list; a card in the
+   * whole set (`form="node"`), `c-graph-node-w` wide.
    */
   import { graphWords as words } from "@cawco/core/words/graph";
   import { IconError, IconWarningTriangle } from "#lib/icons.js";
@@ -48,16 +48,6 @@
     window.matchMedia("(hover: hover) and (pointer: fine)").matches;
   const first = $derived(state.variants[0]?.id ?? state.id);
   const others = $derived(state.variants.slice(1));
-  const uid = $props.id();
-  const noteId = `${uid}-note`;
-  const marksId = `${uid}-marks`;
-  const marked = $derived(state.failure || !holes.reaches || !holes.leaves);
-  /** The note and the marks: the title's description, never its name. */
-  const described = $derived(
-    [state.note ? noteId : null, marked ? marksId : null]
-      .filter(Boolean)
-      .join(" ")
-  );
 </script>
 
 <div
@@ -75,50 +65,42 @@
       "outline-solid outline-(length:--c-change-ring-width) outline-c-change-ring",
   ]}
 >
-  <!-- Its head: one press, the title its name and the note and marks its
-       description. The title's button reaches over the whole head (its
-       ::before), so a press anywhere on it is the button's, and a pin on it
-       is named by the title alone. -->
-  <div
+  <button
+    type="button"
+    aria-current={kept ? "true" : undefined}
     class={[
-      "group/head relative flex min-h-c-touch-floor min-w-0 flex-col items-start gap-space-1 rounded-md px-space-3 py-space-2 transition-control",
+      "touch-hit flex min-w-0 flex-col items-start gap-space-1 rounded-md px-space-3 py-space-2 text-start transition-control",
       // The kept state already shows on the stage: resting on it changes nothing.
-      !kept && "can-hover:has-[button:hover]:bg-surface-hover",
+      !kept && "can-hover:hover:bg-surface-hover",
     ]}
+    onpointerenter={() => {
+      if (fine) {
+        onpreview(first);
+      }
+    }}
+    onpointerleave={() => {
+      if (fine) {
+        onpreview(null);
+      }
+    }}
+    onclick={() => onpress(first)}
   >
-    <button
-      type="button"
-      aria-current={kept ? "true" : undefined}
-      aria-describedby={described || undefined}
+    <span
       class={[
-        "min-w-0 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 before:rounded-md focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
+        "type-label min-w-0 wrap-anywhere",
         kept ? "text-selected-ink" : "text-ink-row",
-      ]}
-      onpointerenter={() => {
-        if (fine) {
-          onpreview(first);
-        }
-      }}
-      onpointerleave={() => {
-        if (fine) {
-          onpreview(null);
-        }
-      }}
-      onclick={() => onpress(first)}
+      ]}>{state.name}</span
     >
-      {state.name}
-    </button>
     {#if state.note}
       <span
-        id={noteId}
         class={[
           "type-meta line-clamp-2 min-w-0 text-pretty",
           kept ? "text-selected-ink" : "text-ink-muted",
         ]}>{state.note}</span
       >
     {/if}
-    {#if marked}
-      <span id={marksId} class="flex flex-wrap gap-x-space-3 gap-y-space-1">
+    {#if state.failure || !holes.reaches || !holes.leaves}
+      <span class="flex flex-wrap gap-x-space-3 gap-y-space-1">
         {#if state.failure}
           <span
             class="mark-line inline-flex items-center gap-space-1 type-meta text-status-fail-ink"
@@ -157,7 +139,7 @@
         {/if}
       </span>
     {/if}
-  </div>
+  </button>
 
   {#if others.length > 0}
     <!-- Its variants, each a named choice a remark can stand on. -->
@@ -189,11 +171,7 @@
           }}
           onclick={() => onpress(variant.id)}
         >
-          <!-- Its name carries its state's, so one variant's pin on two states reads apart. -->
-          <span class="block truncate"
-            ><span class="sr-only">{words.variantOf(state.name)}</span
-            >{variant.name}</span
-          >
+          <span class="block truncate">{variant.name}</span>
         </button>
       {/each}
     </fieldset>

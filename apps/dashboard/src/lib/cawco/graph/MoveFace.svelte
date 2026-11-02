@@ -61,6 +61,7 @@
   );
   const facts = (clip: Clip) =>
     [
+      words.ms(clip.duration),
       clip.token?.replace("--dur-", ""),
       clip.curve,
       clip.delay > 0 ? `${words.delay} ${words.ms(clip.delay)}` : null,
@@ -168,64 +169,47 @@
         </div>
       </div>
 
-      <div class="relative flex min-h-0 flex-col">
-        <ol
-          class="m-0 flex min-h-0 list-none flex-col gap-space-2 overflow-y-auto p-0"
-        >
-          {#each clips as clip (clip.id)}
-            <li class="min-w-0">
-              <!-- The row is the clip, one comment target named by its
-                   legend as a person says it ("Form failure unfolds, 260
-                   ms"); its facts, its editor and its bar are what it
-                   holds. -->
-              <fieldset
-                data-slot="clip"
-                class="m-0 flex min-w-0 flex-col gap-space-1 border-0 p-0"
-              >
-                <legend class="p-0 type-label text-ink-row wrap-anywhere">
-                  <span class="num"
-                    >{words.clipName(
-                      clip.element,
-                      clip.how,
-                      clip.duration
-                    )}</span
-                  >
-                </legend>
-                <div class="flex min-w-0 items-start gap-space-2">
-                  <p
-                    class="m-0 min-w-0 flex-1 type-meta text-ink-muted num wrap-anywhere"
-                  >
-                    {facts(clip)}{#if clip.was}<span class="text-selected-ink">
-                        · {wasWords(clip)}</span
-                      >{/if}
-                  </p>
-                  <ClipEditor
-                    {clip}
-                    onreset={() => onreset(clip.id)}
-                    ontune={(tuning) => ontune(clip.id, tuning)}
-                  />
-                </div>
-                <div
-                  class="relative h-space-2 rounded-pill bg-surface-fill"
-                  aria-hidden="true"
+      <ol
+        class="relative m-0 flex min-h-0 list-none flex-col gap-space-2 overflow-y-auto p-0"
+      >
+        {#each clips as clip (clip.id)}
+          <li data-slot="clip" class="flex min-w-0 flex-col gap-space-1">
+            <div class="flex min-w-0 items-start gap-space-2">
+              <p class="m-0 flex min-w-0 flex-1 flex-col">
+                <span class="type-label text-ink-row wrap-anywhere"
+                  >{clip.element} {clip.how}</span
                 >
-                  <span
-                    class="absolute inset-y-0 start-(--at) w-(--long) rounded-pill bg-ink-muted"
-                    style:--at={pct(clip.start + clip.delay)}
-                    style:--long={pct(clip.duration)}
-                  ></span>
-                </div>
-              </fieldset>
-            </li>
-          {/each}
-        </ol>
+                <span class="type-meta text-ink-muted num wrap-anywhere"
+                  >{facts(clip)}{#if clip.was}<span class="text-selected-ink">
+                      · {wasWords(clip)}</span
+                    >{/if}</span
+                >
+              </p>
+              <ClipEditor
+                {clip}
+                onreset={() => onreset(clip.id)}
+                ontune={(tuning) => ontune(clip.id, tuning)}
+              />
+            </div>
+            <div
+              class="relative h-space-2 rounded-pill bg-surface-fill"
+              aria-hidden="true"
+            >
+              <span
+                class="absolute inset-y-0 start-(--at) w-(--long) rounded-pill bg-ink-muted"
+                style:--at={pct(clip.start + clip.delay)}
+                style:--long={pct(clip.duration)}
+              ></span>
+            </div>
+          </li>
+        {/each}
         <!-- The playhead across every bar. -->
         <span
           aria-hidden="true"
           class="pointer-events-none absolute inset-y-0 start-(--at) w-px bg-ink-strong"
           style:--at={pct(playhead)}
         ></span>
-      </div>
+      </ol>
     {/if}
   {/if}
 </div>

@@ -40,8 +40,6 @@ export const graphWords = {
   arrivesBy: (acts: string[]) => acts.join(" or "),
   /** A state's variants, the row's name for a screen reader. */
   variants: (state: string) => `${state}'s variants`,
-  /** A variant chip's state, said before its own name to a reader and a pin ("Failed save: As written"). */
-  variantOf: (state: string) => `${state}: `,
   /** The variant that is the state itself. */
   asWritten: "As written",
   /** A states file with one state and no machine, said once. */
@@ -129,9 +127,6 @@ export const graphWords = {
   /** A clip's element when nothing names it. */
   element: "Element",
 
-  /** A clip's row, named as a person says it: "Form failure unfolds, 260 ms". */
-  clipName: (element: string, how: string, ms: number) =>
-    `${element} ${how}, ${ms} ms`,
   /** The clip editor. */
   edit: (clip: string) => `Change ${clip}`,
   length: "Length",
