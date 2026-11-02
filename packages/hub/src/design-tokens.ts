@@ -338,44 +338,6 @@ function variantBlock(
   ];
 }
 
-/**
- * The dark context's tokens that are not colours (colours carry both
- * schemes in `light-dark()`): their dark values under its `selector`, and
- * their light ones again under its `lightSelector`, so a part of the page
- * drawn in the other scheme takes its own.
- */
-function schemeBlocks(
-  dark: TokenContext,
-  tokens: ViewToken[],
-  names: Set<string>
-): string[] {
-  const others = tokens.filter(
-    (t) => !isColour(t) && t.variants[dark.name] !== undefined
-  );
-  const { selector, lightSelector } = dark.condition as {
-    lightSelector?: string;
-    selector?: string;
-  };
-  if (others.length > 0 && !selector) {
-    throw new Error(
-      `${others.map((t) => t.path).join(", ")} change in ${dark.name} and are not colours: give the context a "selector" to set them under`
-    );
-  }
-  const blocks = variantBlock(others, names, dark.name, [`  ${selector} {`]);
-  if (lightSelector && others.length > 0) {
-    blocks.push(
-      "",
-      `  ${lightSelector} {`,
-      ...others.map(
-        (token) =>
-          `    --${token.name}: ${cssValue(token.css, names, token.name)};`
-      ),
-      "  }"
-    );
-  }
-  return blocks;
-}
-
 /** The stylesheet a token view makes. */
 function tokensCss(view: TokenView, options: TokensCssOptions): string {
   const tokens = view.tokens.filter((token) =>
@@ -408,7 +370,19 @@ function tokensCss(view: TokenView, options: TokensCssOptions): string {
     );
   }
   root.push("  }");
-  const blocks = dark ? schemeBlocks(dark, tokens, names) : [];
+  const blocks: string[] = [];
+  if (dark) {
+    const others = tokens.filter(
+      (t) => !isColour(t) && t.variants[dark.name] !== undefined
+    );
+    const { selector } = dark.condition as { selector?: string };
+    if (others.length > 0 && !selector) {
+      throw new Error(
+        `${others.map((t) => t.path).join(", ")} change in ${dark.name} and are not colours: give the context a "selector" to set them under`
+      );
+    }
+    blocks.push(...variantBlock(others, names, dark.name, [`  ${selector} {`]));
+  }
   for (const context of view.contexts) {
     if ("media" in context.condition) {
       blocks.push(

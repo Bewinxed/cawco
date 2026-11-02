@@ -1766,19 +1766,11 @@
       var(--ease-drawer);
   }
 
-  :root.dark,
-  [data-scheme="dark"] {
+  :root.dark {
     --tab-rim-mix-chosen: 0.78;
     --tab-rim-mix-idle: 0.54;
     --breath-floor: 0.58;
     --account-week-mix: 0.63;
-  }
-
-  [data-scheme="light"] {
-    --tab-rim-mix-chosen: 0.97;
-    --tab-rim-mix-idle: 0.86;
-    --breath-floor: 0.8;
-    --account-week-mix: 0.32;
   }
 
   @media (pointer: coarse) {

@@ -166,11 +166,9 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
   }
 }
 
-/* The theme class is the one switch (lib/theme.svelte.ts); a part of the
-   page drawn in the other scheme says so with \`data-scheme\` (the design
-   graph's stage), and what stands in it takes that scheme's look. */
-@custom-variant dark (&:where(.dark, .dark *, [data-scheme="dark"], [data-scheme="dark"] *):not(:where([data-scheme="light"], [data-scheme="light"] *)));
-@custom-variant light (&:where(:root:not(.dark), :root:not(.dark) *, [data-scheme="light"], [data-scheme="light"] *):not(:where([data-scheme="dark"], [data-scheme="dark"] *)));
+/* The theme class is the one switch (lib/theme.svelte.ts). */
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(:root:not(.dark), :root:not(.dark) *));
 
 /* A control under a held press. \`:active\`, and \`[data-pressed]\` from the
    kit menu Trigger (dropdown-menu-trigger.svelte): its menu opens on the

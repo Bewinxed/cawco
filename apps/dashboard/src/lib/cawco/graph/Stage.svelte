@@ -400,10 +400,9 @@
     <div class="relative w-(--frame-w)" style:--frame-w="{drawnWidth}px">
       <div
         data-slot="stage-frame"
-        data-scheme={scheme}
         class={[
           "relative w-(--frame-w) bg-surface-page text-ink-strong",
-          scheme === "dark" ? "scheme-dark" : "scheme-light",
+          scheme === "dark" ? "dark scheme-dark" : "scheme-light",
           stale && "opacity-(--account-stale-opacity)",
         ]}
       >

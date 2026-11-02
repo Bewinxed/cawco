@@ -15,11 +15,8 @@
  *
  * What CawCo's stylesheet writes for a context is the modifier's
  * `$extensions["dev.cawco"].contexts[<name>]`: `{ "scheme": "dark",
- * "selector": ":root.dark", "lightSelector": "[data-scheme=\"light\"]" }`
- * (colours as `light-dark()`, any other token under the selector, and its
- * light value again under `lightSelector`, so a part of the page drawn in
- * the other scheme than the page's, as the design graph's stage is, takes
- * its own) or `{ "media": "(pointer: coarse)" }`. Every set comes
+ * "selector": ":root.dark" }` (colours as `light-dark()`, any other token
+ * under the selector) or `{ "media": "(pointer: coarse)" }`. Every set comes
  * before the modifiers in `resolutionOrder` (the spec calls sets after
  * modifiers "likely a smell").
  *
@@ -42,8 +39,7 @@ const ORDER_REF = /^#\/(sets|modifiers)\/(.+)$/u;
 
 /** Where a context's tokens go in the stylesheet. */
 type ContextCondition =
-  | { scheme: "dark"; selector?: string; lightSelector?: string }
-  | { media: string };
+  { scheme: "dark"; selector?: string } | { media: string };
 
 export interface TokenContext {
   condition: ContextCondition;

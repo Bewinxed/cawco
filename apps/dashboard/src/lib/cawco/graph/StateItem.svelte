@@ -69,9 +69,8 @@
     type="button"
     aria-current={kept ? "true" : undefined}
     class={[
-      "touch-hit flex min-w-0 flex-col items-start gap-space-1 rounded-md px-space-3 py-space-2 text-start transition-control",
-      // The kept state already shows on the stage: resting on it changes nothing.
-      !kept && "can-hover:hover:bg-surface-hover",
+      "touch-hit flex min-w-0 flex-col items-start gap-space-1 rounded-md px-space-3 py-space-2 text-start transition-control can-hover:hover:bg-surface-hover",
+      kept && "can-hover:hover:bg-selected-bg",
     ]}
     onpointerenter={() => {
       if (fine) {
