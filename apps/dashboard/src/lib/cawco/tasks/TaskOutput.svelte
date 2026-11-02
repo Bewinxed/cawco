@@ -1,7 +1,9 @@
 <script lang="ts">
   /**
-   * One of a task's outputs, as its attempt handed it in (the hub serves it
-   * from where it copied it, `outputUrl`), drawn as what it is (@cawco/core
+   * A file a delegate handed in, read from `src`: a task's output as its
+   * attempt handed it in (`outputUrl`, ViewMade) or any file of the
+   * project's folder as its bytes (`folderRawHref`: a report's video or
+   * audio, the file card's picture). Drawn as what it is (@cawco/core
    * deliverables):
    * - a post (`*.post.json`): the post card (PostCard);
    * - markdown: the file drawn as a turn's words are (MessageBody);
@@ -11,7 +13,9 @@
    *   output's own route, in a tab of its own).
    * Its file row heads it, so every output is one press from the task. A
    * file the hub does not hold yet says so in the hub's words.
-   * `compact` draws it small, for the project's Made list.
+   * `compact` draws it small, for the project's Made list. `bare` leaves the
+   * file row out where the surface already heads it with the path (the file
+   * card, FolderFile); a plain file keeps its row, Open being all it has.
    */
   import {
     deliverableKind,
@@ -26,29 +30,32 @@
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { outputUrl, readOutputText } from "../project-tasks";
+  import { readOutputText } from "../project-tasks";
   import PostCard from "./PostCard.svelte";
 
   let {
     projectId,
-    taskId,
     path,
+    src,
     version = 0,
     compact = false,
+    bare = false,
   }: {
     projectId: string;
-    /** The task that names it in its `outputs`. */
-    taskId: string;
+    /** Its path, as the task's `outputs` or the folder names it. */
     path: string;
+    /** Where the hub serves its bytes: `outputUrl` or `folderRawHref`. */
+    src: string;
     /** Changes when the task was written again: the file is read again. */
     version?: number;
     compact?: boolean;
+    /** No file row: the surface it sits in is headed with its path already. */
+    bare?: boolean;
   } = $props();
 
   const kind = $derived(deliverableKind(path));
   /** Read as text here: a post and markdown. */
   const read = $derived(kind === "post" || kind === "markdown");
-  const raw = $derived(outputUrl(projectId, taskId, path));
   const name = $derived(path.split("/").at(-1) ?? path);
   let content = $state<string | null>(null);
   let problem = $state<string | null>(null);
@@ -75,7 +82,7 @@
     track(version);
     let gone = false;
     problem = null;
-    readOutputText(projectId, taskId, path)
+    readOutputText(src)
       .then((text) => {
         if (!gone) {
           content = text;
@@ -107,7 +114,7 @@
           element: image,
           height: image.naturalHeight,
           path,
-          src: raw,
+          src,
           width: image.naturalWidth,
         },
       ],
@@ -120,30 +127,32 @@
   data-kind={kind}
   data-compact={compact || undefined}
 >
-  <figcaption
-    data-slot="row"
-    data-with-body={kind !== "file" || undefined}
-    class="flex items-center gap-space-2 min-h-c-btn-h-sm ps-space-3 pe-space-1 text-ink-muted data-with-body:border-b data-with-body:border-b-border-well mark-line"
-  >
-    <IconDocument class="flex-none size-icon-md" />
-    <bdi
-      data-slot="path"
-      class="flex-auto min-w-0 overflow-clip type-meta text-ellipsis whitespace-nowrap"
-      title={path}>{compact ? name : path}</bdi
+  {#if !bare || kind === "file"}
+    <figcaption
+      data-slot="row"
+      data-with-body={kind !== "file" || undefined}
+      class="flex items-center gap-space-2 min-h-c-btn-h-sm ps-space-3 pe-space-1 text-ink-muted data-with-body:border-b data-with-body:border-b-border-well mark-line"
     >
-    {#if kind === "file"}
-      <a
-        class="inline-flex flex-none items-center gap-space-1 h-c-btn-h-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
-        data-box
-        href={raw}
-        rel="noopener"
-        target="_blank"
+      <IconDocument class="flex-none size-icon-md" />
+      <bdi
+        data-slot="path"
+        class="flex-auto min-w-0 overflow-clip type-meta text-ellipsis whitespace-nowrap"
+        title={path}>{compact ? name : path}</bdi
       >
-        <span>{madeWords.open}</span>
-        <IconArrowUpRight data-task-output-glyph class="size-icon-sm" />
-      </a>
-    {/if}
-  </figcaption>
+      {#if kind === "file"}
+        <a
+          class="inline-flex flex-none items-center gap-space-1 h-c-btn-h-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
+          data-box
+          href={src}
+          rel="noopener"
+          target="_blank"
+        >
+          <span>{madeWords.open}</span>
+          <IconArrowUpRight data-task-output-glyph class="size-icon-sm" />
+        </a>
+      {/if}
+    </figcaption>
+  {/if}
   {#if kind !== "file"}
     <!-- mark-line: the body stacks the output itself; no mark sits beside words in it -->
     <div
@@ -190,7 +199,7 @@
           <img
             alt={name}
             class="block max-w-full max-h-c-task-output-image-h group-data-compact:max-h-c-task-output-compact-h rounded-sm"
-            src={raw}
+            {src}
             bind:this={image}
           />
         </button>
@@ -201,12 +210,12 @@
           class="block w-full max-h-c-task-output-video-h rounded-sm bg-surface-recess"
           controls
           preload="metadata"
-          src={raw}
+          {src}
           in:reveal
         ></video>
       {:else if kind === "audio"}
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
-        <audio class="w-full" controls preload="metadata" src={raw} in:reveal
+        <audio class="w-full" controls preload="metadata" {src} in:reveal
         ></audio>
       {/if}
     </div>

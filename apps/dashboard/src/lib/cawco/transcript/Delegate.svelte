@@ -29,7 +29,6 @@
   import { tickingClock } from "../motion/clock.svelte.js";
   import { dur, easeOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
-  import FolderFiles from "../project/FolderFiles.svelte";
   import {
     sessionAnswer,
     sessionPlace,
@@ -50,6 +49,7 @@
     headline,
     matchesSession,
   } from "./present";
+  import ReportOutputs from "./ReportOutputs.svelte";
   import { trayCard } from "./tray.svelte";
 
   let { message }: { message: Message } = $props();
@@ -593,10 +593,11 @@
     {/if}
 
     <!-- Closed, a report's outputs stand under its headline: each file its
-         finish copied into the project's folder, opening where it is. -->
+         finish copied into the project's folder, drawn as what it is
+         (ReportOutputs). -->
     {#if report && report.outputs.length > 0 && projectId && !open}
-      <div class="rail-hang">
-        <FolderFiles files={report.outputs} {projectId} />
+      <div class="rail-hang max-w-c-measure">
+        <ReportOutputs files={report.outputs} {projectId} />
       </div>
     {/if}
 

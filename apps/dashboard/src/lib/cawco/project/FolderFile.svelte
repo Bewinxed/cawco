@@ -1,14 +1,18 @@
 <script lang="ts">
   /**
    * A file of the project's folder on the hub, at its address on the
-   * project page (`?file=<path>`, folderFileHref), as it reads there:
-   * markdown drawn, anything else as text. A Caw reply's chips, Configure's
-   * project delegate types and a task's attached files link to it. It opens
+   * project page (`?file=<path>`, folderFileHref), drawn as what it is
+   * (@cawco/core deliverables): a picture as itself, opening in the
+   * lightbox, video and audio in the platform's player (TaskOutput, from
+   * the folder's bytes, folderRawHref); markdown drawn, anything else as
+   * text. A Caw reply's chips, a report's file chips, Configure's project
+   * delegate types and a task's attached files link to it. It opens
    * in the page (The Open Page Rule): the card beside the view on a desk
    * (SideSurface, in the page's Split), its own page with Back under 900px.
    * A path the hub refuses (not in the folder, outside it) says so in the
    * hub's words; only the hub reads the folder.
    */
+  import { deliverableKind } from "@cawco/core/deliverables";
   import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
@@ -16,7 +20,9 @@
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronLeft } from "#lib/icons.js";
+  import { folderRawHref } from "../project-tasks";
   import SideSurface from "../side/SideSurface.svelte";
+  import TaskOutput from "../tasks/TaskOutput.svelte";
 
   let {
     projectId,
@@ -35,6 +41,11 @@
     backLabel?: string;
   } = $props();
 
+  const kind = $derived(deliverableKind(path));
+  /** A picture, a video or a sound: drawn from its bytes, never read as text. */
+  const media = $derived(
+    kind === "image" || kind === "video" || kind === "audio"
+  );
   let content = $state<string | null>(null);
   let problem = $state<string | null>(null);
 
@@ -43,6 +54,9 @@
     const at = path;
     content = null;
     problem = null;
+    if (media) {
+      return;
+    }
     fetch(
       `/api/projects/${encodeURIComponent(pid)}/folder/file?${new URLSearchParams({ path: at })}`
     )
@@ -74,7 +88,14 @@
     class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5 in-data-file-page:border-t in-data-file-page:border-t-border-hairline"
     data-folder-file={path}
   >
-    {#if problem}
+    {#if media}
+      <TaskOutput
+        bare
+        {path}
+        {projectId}
+        src={folderRawHref(projectId, path)}
+      />
+    {:else if problem}
       <!-- Plain, not alarmed (DESIGN.md, Voice: no alarm inflation): the path
            asked for is not there to show, and the hub says why. -->
       <Alert data-folder-file-refused>

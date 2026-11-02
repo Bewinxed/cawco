@@ -9,7 +9,7 @@
    */
   import { madeWords } from "@cawco/core/words/made";
   import { IconNeedsYou } from "#lib/icons.js";
-  import { stageLabel, type TaskSummary } from "../project-tasks";
+  import { outputUrl, stageLabel, type TaskSummary } from "../project-tasks";
   import TaskOutput from "../tasks/TaskOutput.svelte";
 
   let {
@@ -91,7 +91,7 @@
             compact
             {path}
             {projectId}
-            taskId={task.id}
+            src={outputUrl(projectId, task.id, path)}
             version={task.updatedAt}
           />
         {/each}

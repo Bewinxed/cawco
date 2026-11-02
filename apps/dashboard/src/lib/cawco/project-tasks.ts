@@ -598,13 +598,13 @@ export const outputUrl = (
 ): string =>
   `${one(projectId, taskId)}/outputs/file?name=${encodeURIComponent(name)}`;
 
-/** An output's words, whole, as the hub served it; throws the hub's sentence when it refuses. */
-export async function readOutputText(
-  projectId: string,
-  taskId: string,
-  name: string
-): Promise<string> {
-  const response = await fetch(outputUrl(projectId, taskId, name));
+/**
+ * An output's words, whole, as the hub served them from `src` (a task's
+ * `outputUrl` or the folder's `folderRawHref`); throws the hub's sentence
+ * when it refuses.
+ */
+export async function readOutputText(src: string): Promise<string> {
+  const response = await fetch(src);
   if (unreachedAnswer(response)) {
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
