@@ -17,7 +17,8 @@
    * `form="group"` is the same capsule as a head's trailing group (The
    * Title Bars Follow Liquid Glass Rule: "Each group is one capsule of the
    * panel's glass … the top bar's trailing group its recipe"): the capsule
-   * and its items at every width, with no Caw tab and no join.
+   * and its items at every width, with no Caw tab; a card it hangs joins it
+   * as the bar's do, in the desk's form.
    *
    * While a card hangs from it (Caw's panel, the machines, Jump, Files:
    * HangCard `glass`) the glass is one shape with the card (DESIGN.md, Caw's
@@ -70,23 +71,27 @@
   style:--tools-round="calc(var(--c-bar-caw-glass-phone) / 2)"
   style:--tools-neck={"calc(var(--c-tab-row-h) - var(--c-bar-caw-glass-phone))"}
 >
-  {#if form === "bar"}
-    <!-- The join: a layer one flare wider than the glass on its leading side
-         and 1px under its foot, into the card's top edge. The layer is the
-         edge's ink in the outline (`--join-edge`), its `::before` the surface
-         1px inside it (`clip-join`), so the edge runs up the flare, both
-         flanks and over the top. Its top corners are the pill's end (`--r`). -->
-    <span
-      data-slot="join"
-      aria-hidden="true"
-      class="absolute inset-bs-0 -inset-be-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--join-round)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join @max-desk/shell:-inset-be-(--caw-neck) @max-desk/shell:[--r:var(--tools-round)] @max-desk/shell:clip-path-(--join-edge-phone) @max-desk/shell:before:clip-join-phone"
-      style:--f="var(--flare)"
-      style:--h="calc(100% - 1px)"
-      style:--join-round="calc(var(--c-btn-h) / 2)"
-      style:--join-edge={"shape(from 0 var(--h), arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw, line to var(--f) var(--r), arc to calc(var(--f) + var(--r)) 0 of var(--r) cw, line to calc(100% - var(--r)) 0, arc to 100% var(--r) of var(--r) cw, line to 100% 100%, line to 0 100%, close)"}
-      style:--join-edge-phone={"shape(from 0 var(--h), arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw, line to var(--f) var(--r), arc to calc(var(--f) + var(--r)) 0 of var(--r) cw, line to 100% 0, line to 100% 100%, line to 0 100%, close)"}
-    ></span>
-  {/if}
+  <!-- The join: a layer one flare wider than the glass on its leading side
+       and 1px under its foot, into the card's top edge. The layer is the
+       edge's ink in the outline (`--join-edge`), its `::before` the surface
+       1px inside it (`clip-join`), so the edge runs up the flare, both
+       flanks and over the top. Its top corners are the pill's end (`--r`).
+       A head's group draws it too, for the card it hangs (a design graph's
+       view); only the bar's takes the phone's tab form. -->
+  <span
+    data-slot="join"
+    aria-hidden="true"
+    class={[
+      "absolute inset-bs-0 -inset-be-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--join-round)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
+      form === "bar" &&
+        "@max-desk/shell:-inset-be-(--caw-neck) @max-desk/shell:[--r:var(--tools-round)] @max-desk/shell:clip-path-(--join-edge-phone) @max-desk/shell:before:clip-join-phone",
+    ]}
+    style:--f="var(--flare)"
+    style:--h="calc(100% - 1px)"
+    style:--join-round="calc(var(--c-btn-h) / 2)"
+    style:--join-edge={"shape(from 0 var(--h), arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw, line to var(--f) var(--r), arc to calc(var(--f) + var(--r)) 0 of var(--r) cw, line to calc(100% - var(--r)) 0, arc to 100% var(--r) of var(--r) cw, line to 100% 100%, line to 0 100%, close)"}
+    style:--join-edge-phone={"shape(from 0 var(--h), arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw, line to var(--f) var(--r), arc to calc(var(--f) + var(--r)) 0 of var(--r) cw, line to 100% 0, line to 100% 100%, line to 0 100%, close)"}
+  ></span>
   {@render children?.()}
   {@render head?.()}
 </div>
