@@ -7,33 +7,34 @@
 export const graphWords = {
   /** The room's three faces, its switch's segments, and the switch's name for a screen reader. */
   statesFace: "States",
-  wholeSet: "Whole set",
-  moveFace: "Move",
-  faces: "What the panel shows",
-  /** Where the journey stands on the component's path: "8 of 11, Failed save". */
-  position: (at: number, of: number, name: string) => `${at} of ${of}, ${name}`,
+  wholeSet: "Map",
+  moveFace: "Animation",
+  faces: "Panel view",
+  /** The panel's own name, whichever face it shows: the room's aside and the phone drawer's title. */
+  room: "States, map and animation",
+  /** Where the journey stands on the component's path: "8 of 11". */
+  position: (at: number, of: number) => `${at} of ${of}`,
   previous: "Previous state",
   next: "Next state",
   /** The room's one close, its own; and the bar's symbol that brings it back while it is put away. */
-  closeRoom: "Close",
-  openRoom: "Show states",
+  closeRoom: "Close panel",
+  openRoom: "Open panel",
   /** The phone drawer's grabber: a press steps it to its next stop. */
-  nextStop: "Resize the panel",
+  nextStop: "Resize panel",
   /** The kept row's mark: the state the stage shows. */
-  onStage: "On stage",
+  onStage: "Showing",
   /** The component in front, when the ask names several: the switch's name. */
   components: "Component",
   /** A state the states file tags as a failure: its glyph's name and tooltip in the whole set. */
   errorState: "Error state",
   /** A state that is not its machine's start, with no move into it: its glyph's tooltip. */
-  nothingReaches: "No move leads here",
+  nothingReaches: "Unreachable: no arrow leads to this state",
   /** A state that is not the end of its path, with no move out of it: its glyph's tooltip. */
-  nothingLeaves: "No move leads on from here",
+  nothingLeaves: "Dead end: no arrow leads out of this state",
   /** What a person does to reach a state, on its card in the whole set ("Try again"). */
   arrivesBy: (acts: string[]) => acts.join(" or "),
   /** The whole set's canvas, its name for a screen reader. */
-  wholeMap: (component: string) =>
-    `Every state of ${component}, and the moves between them`,
+  wholeMap: (component: string) => `Map of ${component}'s states`,
   /** A state's variants, the toggle group's name for a screen reader. */
   variants: (state: string) => `Variants of ${state}`,
   /** A variant's state, said before its own name to a reader and a pin ("Failed save: Longest names"). */
@@ -42,42 +43,42 @@ export const graphWords = {
   oneState: "This component has one state.",
 
   /** Compare: a switch that stays on until he turns it off. */
-  compare: "Compare",
+  compare: "Compare with previous state",
   comparedWith: (state: string) => `Compared with ${state}`,
   /** One line per difference. */
-  cameIn: (element: string) => `${element} came in`,
-  went: (element: string) => `${element} went`,
+  cameIn: (element: string) => `${element} added`,
+  went: (element: string) => `${element} removed`,
   changed: (element: string, before: string, after: string) =>
     `${element}: ${before} → ${after}`,
   changedPlain: (element: string) => `${element} changed`,
-  sameAs: (state: string) => `Nothing differs from ${state}.`,
+  sameAs: (state: string) => `No difference from ${state}.`,
+  /** The list of differences at the stage's head, its name for a screen reader. */
+  differences: "Differences",
 
   /** The move into the kept state. */
   move: (from: string, to: string) => `${from} → ${to}`,
-  noMove: (state: string) => `No move plays into ${state}.`,
+  noMove: (state: string) => `${state} has no animation.`,
   play: "Play",
   pause: "Pause",
   playQuarter: "Play at quarter speed",
   /** The playhead's time over the move's length, tabular figures. */
   playhead: (at: number, of: number) => `${at} / ${of} ms`,
-  scrub: "Playhead",
+  scrub: "Time",
   /** A clip's two handles on its bar. */
-  clipStarts: (clip: string) => `${clip}: starts`,
-  clipEnds: (clip: string) => `${clip}: ends`,
-  /** Reduced motion: Play draws the end state with a fade. */
-  playStill: "Reduce motion is on: Play fades the end state in.",
+  clipStarts: (clip: string) => `Start of ${clip}`,
+  clipEnds: (clip: string) => `End of ${clip}`,
   /** Clips outside DESIGN.md's tokens, flagged once at the move's head. */
   adHoc: (n: number) =>
     n === 1
-      ? "1 clip is outside the tokens"
-      : `${n} clips are outside the tokens`,
+      ? "1 timing is not from the design system"
+      : `${n} timings are not from the design system`,
   /** While the move is read off the stage. */
-  reading: "Reading the move…",
+  reading: "Reading the animation…",
   /** The move played but the engine saw nothing animate. */
   nothingAnimated: (from: string, to: string) =>
-    `Nothing on the stage moved from ${from} to ${to}.`,
+    `Nothing animates from ${from} to ${to}.`,
   /** The move's play threw. */
-  moveFailed: (why: string) => `The move didn't play: ${why}`,
+  moveFailed: (why: string) => `The animation didn't play: ${why}`,
 
   /** How a clip moves its element, by the property it animates; any other property is named as it is. */
   how: {
@@ -109,7 +110,7 @@ export const graphWords = {
     linear: "Linear",
   } as Record<string, string>,
   /** A curve no token names. */
-  ownCurve: "Its own curve",
+  ownCurve: "Custom curve",
   /** A clip's element when nothing names it. */
   element: "Element",
 
@@ -120,7 +121,7 @@ export const graphWords = {
     `${element} ${how}, ${from}–${to} ms`,
   /** The clip editor. */
   edit: (clip: string) => `Change ${clip}`,
-  length: "Length",
+  length: "Duration",
   /** Lengths offered first, in plain words with their figure beside each. */
   lengths: [
     { name: "Quick", ms: 150 },
@@ -139,14 +140,11 @@ export const graphWords = {
     spring: "Spring",
   } as Record<string, string>,
   /** A curve no shape is near: its four numbers stand under Advanced. */
-  ownShape: "Its own",
+  ownShape: "Custom curve: none of these shapes matches it",
   /** How strongly the chosen shape bends. */
   intensity: "Intensity",
-  /** A spring's length: how long it takes to come to rest. */
-  settles: (ms: number) => `Comes to rest in ${ms} ms`,
   /** The house's own token, when the clip's timing is one: CawCo's words, said inside the editor only. */
-  tokenLine: (token: string) => `CawCo token: ${token}`,
-  spring: "Spring",
+  tokenLine: (token: string) => `From the design system: ${token}`,
   advanced: "Advanced",
   custom: "Curve numbers",
   bounce: "Bounce",
@@ -159,37 +157,37 @@ export const graphWords = {
   /** The ruler's unit, beside the playhead's figure. */
   msUnit: "ms",
   /** A tuned clip says so on its row, before and after. */
-  tuned: (before: string, after: string) => `Tuned: ${before} → ${after}`,
+  tuned: (before: string, after: string) => `Changed: ${before} → ${after}`,
   /** Where a tuning goes, said once in the editor. */
-  tunedGoes: "The agent reads every change back.",
+  tunedGoes: "Changes here go to the agent.",
 
   /** A list state's record sets, each a variant. */
   recordsOne: "One record",
-  recordsMany: (n: number) => `Many, ${n}`,
+  recordsMany: (n: number) => `${n} records`,
   recordsLongest: "Longest names",
-  recordsAsOf: (time: string) => `Records as they stood at ${time}`,
 
   /** The stage's view. */
-  stageView: "View",
+  stageView: "View options",
   width: "Width",
-  ownWidth: (px: number) => `Its own width, ${px}`,
+  ownWidth: (px: number) => `Component's own width, ${px}`,
   /** A listed width that is also the component's own. */
-  ownListed: (device: string, px: number) => `${device}, ${px}, its own width`,
+  ownListed: (device: string, px: number) =>
+    `${device}, ${px}, the component's own width`,
   phone: "Phone",
   tablet: "Tablet",
-  desk: "Desk",
+  desk: "Desktop",
   widthOf: (device: string, px: number) => `${device}, ${px}`,
-  scheme: "Scheme",
+  scheme: "Appearance",
   light: "Light",
   dark: "Dark",
   reduceMotion: "Reduce motion",
-  mounting: (name: string) => `Mounting ${name}…`,
+  mounting: (name: string) => `Loading ${name}…`,
   /** The component failed to mount: what happened, why, what to do, what next. */
   mountFailed: (name: string, state: string) =>
-    `${name} didn't mount at ${state}, so the stage has nothing to draw.`,
+    `${name} didn't load at ${state}.`,
   showDetails: "Show details",
   hideDetails: "Hide details",
   tryAgain: "Try again",
   /** The hub's link down: the stage keeps its last drawing. */
-  stale: "Not live: the hub's link is down. This is the last drawing.",
+  stale: "Not live: the hub can't be reached. This is the last view it sent.",
 } as const;
