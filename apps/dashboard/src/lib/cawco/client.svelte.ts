@@ -139,7 +139,6 @@ import type {
   TranscriptTail,
 } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
-import type { UpstreamPosts, WriteMethod } from "@cawco/core/upstream-guard";
 import type {
   ClaudeLimits,
   OpenCodeGoLimits,
@@ -323,11 +322,6 @@ export interface ProjectRow {
   remote: string | null;
   /** Review before done: only you move a task to done, and landed work waits in review. */
   review: boolean;
-  /**
-   * Whether its agents may post to other people's repositories (hub
-   * upstream.ts); null: the fleet's answer ({@link cawco.fleetUpstream}).
-   */
-  upstreamPosts: UpstreamPosts | null;
 }
 
 /**
@@ -1185,13 +1179,6 @@ const state = $state({
    * invariant.ts), whole on each `laws.broken` frame; none until one breaks.
    */
   lawsBroken: [] as LawBroken[],
-  /**
-   * The fleet's upstream answer (`GET /api/fleet/choices` `upstream`):
-   * whether agents may post to other people's repositories; null while
-   * nobody has answered, which is when Needs you asks it; undefined until
-   * read.
-   */
-  fleetUpstream: undefined as UpstreamPosts | null | undefined,
   /**
    * Every machine's browsers as the hub lists them: the `browser_list`
    * frame the socket opens with, then each one on a change; undefined until
@@ -2723,7 +2710,7 @@ async function readAccounts(): Promise<void> {
  */
 async function accountsWrite<T>(
   url: string,
-  method: WriteMethod,
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
   body?: unknown
 ): Promise<T> {
   const response = await fetch(url, {
@@ -3004,8 +2991,6 @@ async function refresh(): Promise<boolean> {
   readWaitingActions();
   // Fleet watch's notices to you: frames keep them from here.
   readWatchNotices();
-  // The fleet's upstream answer: Needs you asks it while nobody has.
-  readFleetUpstream();
   // The person's presence: the rail's dot, and Needs you's row for this browser.
   readPerson().catch(() => undefined);
   // HTTPS on the tailnet name: Needs you shows its step while one stands.
@@ -3500,13 +3485,6 @@ function handleFrame(frame: FramePayload): void {
   // Something that needs the person, shown on the desk tab they use.
   if (frame.kind === "desk_alert") {
     showDeskAlert(frame, instanceIndex);
-    return;
-  }
-
-  // The fleet's upstream answer, given anywhere: Needs you stops asking.
-  if (frame.kind === "fleet.upstream") {
-    heardFrame("fleet.upstream");
-    state.fleetUpstream = frame.upstream;
     return;
   }
 
@@ -6416,7 +6394,7 @@ export async function renameInstance(
 
 /**
  * The person's own edit of a project: its name, its Review before done,
- * where its work lands, or its upstream choice, null for the fleet's
+ * where its work lands, or where its large files live
  * (`PATCH /api/projects/:id`). The answer lands in the
  * projects at once; the hub's `projects.changed` brings it to every other
  * dashboard and the app. Throws the refusal, in the hub's words.
@@ -6429,7 +6407,6 @@ export async function editProject(
     lfs?: { connection: string; url: string } | null;
     name?: string;
     review?: boolean;
-    upstreamPosts?: UpstreamPosts | null;
   }
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
@@ -6754,34 +6731,6 @@ export async function reportRelayProof(
 /** A 60 s credential for this screen's proof of the relay. */
 export function relayTry(): Promise<RelayTry> {
   return askHub<RelayTry>("/api/stream-relay/try");
-}
-
-/** The fleet's upstream answer, as the hub holds it now. */
-async function readFleetUpstream(): Promise<void> {
-  const mark = readLeaves();
-  const read = await load<{ upstream: UpstreamPosts | null }>(
-    "/api/fleet/choices"
-  );
-  if (read && !heardSince("fleet.upstream", mark)) {
-    state.fleetUpstream = read.upstream;
-  }
-}
-
-/**
- * Answers the fleet's upstream choice (`PUT /api/fleet/choices`): whether
- * agents may post to other people's repositories wherever a project sets
- * nothing. Every machine's workspaces judge by it from their next beat.
- * Throws the refusal, in the hub's words.
- */
-export async function answerFleetUpstream(posts: UpstreamPosts): Promise<void> {
-  const mark = readLeaves();
-  const answered = await askHub<{ upstream: UpstreamPosts | null }>(
-    "/api/fleet/choices",
-    json("PUT", { upstream: posts })
-  );
-  if (!heardSince("fleet.upstream", mark)) {
-    state.fleetUpstream = answered.upstream;
-  }
 }
 
 /** Fleet watch's needs-you notices, as the hub holds them now. */
@@ -9375,10 +9324,6 @@ export const cawco = {
   /** Every system law the hub caught broken since it started. */
   get lawsBroken(): LawBroken[] {
     return state.lawsBroken;
-  },
-  /** The fleet's upstream answer; null while nobody has given it, undefined until read. */
-  get fleetUpstream(): UpstreamPosts | null | undefined {
-    return state.fleetUpstream;
   },
   /** Every machine's browsers as the hub last told them; undefined until its first frame. */
   get browsers(): ListedBrowser[] | undefined {

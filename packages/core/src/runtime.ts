@@ -28,11 +28,15 @@ export const runtimeCommit =
  * that called them. Epoch 5: a fleet delta carries the machine's
  * `generation`, which the hub keeps and resends unchanged, and the agent
  * answers with its `observedGeneration`, kept on disk with what it holds
- * (core fleet.ts `FLEET_DELTA`); an epoch-4 agent knows only a rev. A hub sends a launch only to an agent whose range
- * holds its own, and a joined machine installs only a build whose range
- * overlaps its hub's.
+ * (core fleet.ts `FLEET_DELTA`); an epoch-4 agent knows only a rev. Epoch
+ * 6: the hub hands no machine a rule on which repositories a session may
+ * write to, and holds no post for the person (`/api/upstream/asks` is gone);
+ * an epoch-5 agent's doors go on by the last rule it wrote and raise held
+ * posts there. A hub sends a launch only to an agent whose range holds its
+ * own, and a joined machine installs only a build whose range overlaps its
+ * hub's.
  */
-export const protocolRange = { min: 5, max: 5 } as const;
+export const protocolRange = { min: 6, max: 6 } as const;
 export const runtimeDataDir = () =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),

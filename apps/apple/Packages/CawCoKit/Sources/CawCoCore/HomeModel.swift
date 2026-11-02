@@ -217,9 +217,6 @@ public final class HomeModel {
         public enum Kind {
             case ask(ParkedAsk)
             case watch(Components.Schemas.FleetWatchNotice)
-            /// An onboarding choice nobody answered: the fleet's upstream
-            /// choice, its three answers on the row (NeedsCard.svelte `choice`).
-            case choice
             /// HTTPS on the tailnet name: the step that stands, its one
             /// button on the row; `done` a moment after it is taken
             /// (NeedsCard.svelte `tailnet`).
@@ -246,7 +243,7 @@ public final class HomeModel {
             switch kind {
             case let .ask(ask): ask.instanceId
             case let .watch(notice): notice.instanceId
-            case .choice, .tailnet: nil
+            case .tailnet: nil
             }
         }
     }
@@ -267,19 +264,16 @@ public final class HomeModel {
             // waiting: its asks stay, marked stale, so Needs you is never a
             // false negative (PRODUCT.md).
             let ended = row.map { !($0.isLive || $0.isStale) } ?? false
-            // A post to another person's repository held for you outlives its
-            // session (hub upstream-asks.ts): the hub makes it once you approve.
-            for ask in asks where ask.routedTo != "parent" && (!ended || ask.toolName == Self.upstreamPostTool) {
+            for ask in asks where ask.routedTo != "parent" && !ended {
                 // An ask no session row stands behind (a memory proposal) is
                 // on the machine its envelope named, titled by who asked
                 // (home-state.svelte.ts).
                 let machineId = row?.machineId ?? ask.machineId
-                // A held post is titled by itself (home-state.svelte.ts).
                 var item = NeedsItem(
                     id: "\(ask.instanceId):\(ask.requestId)",
                     kind: .ask(ask),
                     machineId: machineId,
-                    title: ask.presentation.post?.title ?? row.map { fleet.title($0) } ?? Self.asker(ask) ?? fleet.machineName(machineId),
+                    title: row.map { fleet.title($0) } ?? Self.asker(ask) ?? fleet.machineName(machineId),
                     place: Naming.unbroken(fleet.placeOf(machineId, row?.cwd)),
                     raisedAt: ask.raisedAt
                 )
@@ -302,17 +296,6 @@ public final class HomeModel {
             item.cwd = row?.cwd ?? ""
             items.append(item)
         }
-        // Asked until it is answered; unread, it waits for the read (home-state.svelte.ts `unanswered`).
-        if fleet.upstream == .unanswered {
-            items.append(NeedsItem(
-                id: "choice:upstream",
-                kind: .choice,
-                machineId: "",
-                title: Words.Upstream.title,
-                place: "Onboarding",
-                raisedAt: nil
-            ))
-        }
         // HTTPS on the tailnet name: its step while one stands, its tick a
         // moment after (home-state.svelte.ts `secured`).
         if let tailnet = fleet.tailnetHttps,
@@ -328,9 +311,6 @@ public final class HomeModel {
         }
         return items.sorted { ($0.raisedAt ?? .infinity, $0.id) < ($1.raisedAt ?? .infinity, $1.id) }
     }
-
-    /// The tool a post held for the person is parked under (core upstream-post.ts `UPSTREAM_POST_TOOL`).
-    static let upstreamPostTool = "mcp__cawco__upstream_post"
 
     /// Every session mid-turn, ordered by when it joined Working, newest first.
     public var working: [BoardRow] {

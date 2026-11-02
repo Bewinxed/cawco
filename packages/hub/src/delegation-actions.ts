@@ -41,9 +41,9 @@ import {
   workWords,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { ForgeWrite } from "@cawco/core/forge-post";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { unhandled } from "@cawco/core/unhandled";
-import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { Started } from "./call-cuts";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type {
@@ -911,8 +911,8 @@ export interface HandoffActions {
   readonly finishItem: (request: WorkItemSubmission) => Promise<string>;
   /**
    * One write on a repository's forge, made on this session's machine with
-   * its own sign-in there, under the project's choice on other people's
-   * repositories (forge-posts.ts). Answers what came of it, in words.
+   * its own sign-in there (forge-posts.ts). Answers what came of it, in
+   * words.
    */
   readonly forgePost: (ask: {
     repo?: string;

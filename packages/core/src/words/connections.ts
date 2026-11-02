@@ -179,10 +179,9 @@ export interface ConnectionWay {
  *   and takes "A fine-grained personal access token with the MCP tool
  *   resource and the Execute permission"; legacy personal access tokens "cannot
  *   have the `mcp` scope, so the GitLab MCP server rejects them"
- *   (docs.gitlab.com/user/model_context_protocol/mcp_server). A session's
- *   write through it to another person's project is judged by the hub
- *   (connection-writes.ts). Pushes, issues and merge requests through
- *   `forge_post` sign in with the machine's glab instead.
+ *   (docs.gitlab.com/user/model_context_protocol/mcp_server). Pushes,
+ *   issues and merge requests through `forge_post` sign in with the
+ *   machine's glab instead.
  */
 export interface ConnectionService {
   label: string;

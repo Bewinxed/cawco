@@ -128,6 +128,11 @@ import {
   AGENT_RESTARTING,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
+import {
+  CONTROL_FORGE_POST,
+  type ForgeVerdict,
+  type ForgeWrite,
+} from "@cawco/core/forge-post";
 import { type HeldInput, handedInputs } from "@cawco/core/handed-input";
 import {
   isMachinePath,
@@ -140,11 +145,6 @@ import type { StageCloneFrame } from "@cawco/core/stage";
 import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import {
-  CONTROL_FORGE_POST,
-  type ForgeVerdict,
-  type ForgeWrite,
-} from "@cawco/core/upstream-post";
 import {
   excludedPaths,
   IGNORED_STATUS,
@@ -1446,8 +1446,8 @@ const messageOf = (
 
 /**
  * Who may give finished work another turn: the reader (dashboard or app,
- * their words, their Send on its artifact, or their answer to its held
- * upstream post: core `byPerson`), the
+ * their words, their Send on its artifact, or their answer to its ask: core
+ * `byPerson`), the
  * session that delegated it, or its project's conversation (a co-parent of every
  * item of its project).
  */
@@ -8191,8 +8191,8 @@ export const createWorkItems = ({
    * Opens the pull or merge request for an item's pushed branch, or finds
    * the open one: the workspace's machine makes it through the forge adapter
    * of its origin's host with its own sign-in there (agent forges/,
-   * `CONTROL_FORGE_POST`, the project's own repository, so no rule holds
-   * it). A forge that turns it down refuses the landing in its words.
+   * `CONTROL_FORGE_POST`). A forge that turns it down refuses the landing in
+   * its words.
    */
   const pullRequestFor = async (
     workspace: WorkspaceRow,
@@ -8222,7 +8222,6 @@ export const createWorkItems = ({
     let verdict: ForgeVerdict;
     try {
       verdict = (await call(workspace.machineId, CONTROL_FORGE_POST, [
-        null,
         { repo: origin, write },
       ])) as ForgeVerdict;
     } catch (error) {
@@ -8232,15 +8231,7 @@ export const createWorkItems = ({
       };
     }
     const made =
-      verdict.kind === "made"
-        ? verdict.made
-        : {
-            ok: false,
-            said:
-              verdict.kind === "refused"
-                ? verdict.why
-                : "it was held, which a project's own repository never is",
-          };
+      verdict.kind === "made" ? verdict.made : { ok: false, said: verdict.why };
     if (!(made.ok && made.url)) {
       return {
         kind: "refused",

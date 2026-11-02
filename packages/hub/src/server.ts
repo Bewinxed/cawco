@@ -395,7 +395,6 @@ import {
   toolSpec,
   transcriptUserText,
   UPDATE_CAWCO,
-  UPSTREAM_ORIGIN,
   undeliveredNotice,
   unparked,
   unshownAskMessage,
@@ -449,6 +448,11 @@ import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
 import {
+  CONTROL_FORGE_POST,
+  type ForgeVerdict,
+  readForgeAsk,
+} from "@cawco/core/forge-post";
+import {
   type HandoverCommand,
   type HandoverEvent,
   step as handoverStep,
@@ -498,15 +502,6 @@ import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
 import type { RelayFrame } from "@cawco/core/stream-relay";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
-import { decideWrite, type UpstreamRules } from "@cawco/core/upstream-guard";
-import {
-  CONTROL_FORGE_POST,
-  CONTROL_UPSTREAM_POST,
-  type ForgeVerdict,
-  isUpstreamPost,
-  type PostMade,
-  readForgeAsk,
-} from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { containerWords } from "@cawco/core/words/containers";
@@ -621,7 +616,6 @@ import {
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
 import { createConnectAsks } from "./connect-asks";
-import { connectionWrite } from "./connection-writes";
 import { connectionRoutes, createConnections } from "./connections";
 import {
   asksOpening,
@@ -723,7 +717,6 @@ import {
   type FleetChoicesStore,
   fleetChoicesRoutes,
   setFleetChoices,
-  UPSTREAM_POSTS_SCHEMA,
 } from "./fleet-choices";
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
@@ -983,8 +976,6 @@ import {
 import { createTreeStops } from "./tree-stops";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
-import { upstreamRuleOf, upstreamRules } from "./upstream";
-import { createUpstreamAsks, heldPostOf } from "./upstream-asks";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
@@ -1489,8 +1480,8 @@ const READ_TIMEOUT_MS = 10_000;
  * (dashboard config.ts `INSTALL_TIMEOUT_MS`), so the two never disagree.
  */
 const TOOL_INSTALL_MS = 300_000;
-/** How long an approved post may take its machine (agent upstream-posts.ts makes it within five minutes). */
-const UPSTREAM_POST_MS = 6 * 60_000;
+/** How long a forge post may take its machine (agent forges/forge.ts gives each forge call a minute). */
+const FORGE_POST_MS = 6 * 60_000;
 
 /** Statuses whose session's parked asks survive a hub start: a process may hold them, or a move's approval waits on its `moving` row. */
 const PARKS_ASKS: ReadonlySet<InstanceStatus> = new Set([
@@ -1888,7 +1879,6 @@ const registerAck = (
   instances: string[],
   machineCredential: string,
   sessionLimits: SessionLimits,
-  upstream: UpstreamRules,
   hostsHub: boolean,
   revokedCredentials: string[],
   gitOrigins: string[],
@@ -1905,7 +1895,6 @@ const registerAck = (
     hubEpoch: HUB_EPOCH,
     machineCredential,
     sessionLimits,
-    upstream,
     // What the agent serves on its own computer's loopback (agent
     // hub-loopback.ts), and whether that computer is this hub's: then nothing.
     dashboardPorts: { hub: DASHBOARD_PORT, local: LOCAL_DASHBOARD_PORT },
@@ -3803,93 +3792,17 @@ export const createServer = (
       pending.resolve(requestId);
     },
   });
-  /**
-   * The session a workspace's held post is its ask: the session of the
-   * workspace's newest work item. On `machineId` alone when a machine raised
-   * it.
-   */
-  const upstreamAsker = (
-    workspaceId: string,
-    machineId: string | undefined
-  ): InstanceRow | undefined => {
-    const workspace = db
-      .workspacesNamed(workspaceId)
-      .find((one) => one.id === workspaceId);
-    if (!workspace || (machineId && workspace.machineId !== machineId)) {
-      return;
-    }
-    for (const item of db.workItemsIn(workspaceId)) {
-      const [row] = db.getInstancesByIds([item.instanceId]);
-      if (row) {
-        return row;
-      }
-    }
-  };
-  // Posts to other people's repositories held for the person under "Ask me
-  // first" (upstream-asks.ts): kept across a restart, and past the session's
-  // process, since the hub makes each one itself once approved.
-  const upstreamAsks = createUpstreamAsks({
-    park: (envelope) => parkForPerson(envelope, true),
-    parked: (requestId) => pending.get(requestId),
-    pending: () => pending.list(),
-    settle: (requestId) => {
-      pending.resolve(requestId);
-    },
-    make: async (machineId, workspaceId, post) => {
-      const made = await callAgent(
-        machineId,
-        CONTROL_UPSTREAM_POST,
-        [workspaceId, post],
-        UPSTREAM_POST_MS
-      );
-      if (made.kind === "unanswered") {
-        return {
-          ok: false,
-          said:
-            made.reason === "dead"
-              ? `${machineName(machineId)} is not connected, so nothing was posted.`
-              : `${machineName(machineId)} did not say how the post went in time; it may or may not be there.`,
-        };
-      }
-      return made.value.ok
-        ? (made.value.result as PostMade)
-        : {
-            ok: false,
-            said: made.value.error ?? "The machine refused the post.",
-          };
-    },
-    callConnection: async (post, requestId) => {
-      const called = await connections.callOnce(
-        post.connection,
-        post.tool,
-        { ...post.args },
-        { "dev.cawco/idempotency-key": requestId, "idempotency-key": requestId }
-      );
-      if (called.kind !== "answered") {
-        return { ok: false, said: called.error };
-      }
-      const said = (called.result.content ?? [])
-        .map((part) => (part.type === "text" ? part.text : ""))
-        .join("\n")
-        .trim();
-      return { ok: called.result.isError !== true, said };
-    },
-    tell: (instanceId, text) =>
-      tellSession(instanceId, text, { name: UPSTREAM_ORIGIN }),
-  });
-  // A session's forge_post (forge-posts.ts): decided and made on its
-  // machine with the machine's own sign-in, or held as the person's ask.
+  // A session's forge_post (forge-posts.ts): made on its machine with the
+  // machine's own sign-in.
   const forgePosts = createForgePosts({
-    ask: (actor, held, account) => upstreamAsks.ask(actor, held, account),
     remoteOf: (projectId) =>
       (projectId ? db.project(projectId)?.remote : undefined) ?? undefined,
-    ruleOf: (projectId) => upstreamRuleOf(db, projectId),
-    call: async (machineId, rule, ask) => {
+    call: async (machineId, ask) => {
       const answer = await callAgent(
         machineId,
         CONTROL_FORGE_POST,
-        [rule, ask],
-        UPSTREAM_POST_MS
+        [ask],
+        FORGE_POST_MS
       );
       if (answer.kind === "unanswered") {
         return {
@@ -3987,8 +3900,6 @@ export const createServer = (
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
     // A move's approval is kept on its `moving` row, which no process holds;
     // the move settles one no job waits on (moves.ts `resume`).
-    // A post held for the person stays whatever its session is doing
-    // (upstream-asks.ts): the hub makes it.
     if (!(outlivesSession(parked) || (row && PARKS_ASKS.has(row.status)))) {
       droppedAtStart.push(parked);
     }
@@ -4629,8 +4540,8 @@ export const createServer = (
    * Whether a send from `origin` may start a turn in `row` when its process
    * is gone ({@link wakesForSend}). A stopped or stopping session, ended by
    * its person, its parent or the hub, is woken only by a person (their
-   * words, their Send on one of its artifacts, or their answer to its held
-   * upstream post: core `byPerson`) or by its
+   * words, their Send on one of its artifacts, or their answer to its ask:
+   * core `byPerson`) or by its
    * own parent:
    * a delegate's report, another session's hand-off and every hub notice
    * wait for one of them. A sleeping or failed one is woken by another
@@ -13428,18 +13339,7 @@ export const createServer = (
       return {
         deniedTools: config.deniedTools,
         choicesSetAt: config.choicesSetAt,
-        upstreamPosts: db.upstreamPosts(),
       };
-    },
-    // Every dashboard hears the answer at once (`fleet.upstream`); every
-    // machine with its next beat (upstream.ts).
-    setUpstream: (posts) => {
-      db.setUpstreamPosts(posts);
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "fleet.upstream", upstream: posts },
-      });
     },
     write: (choices) => db.putSupervisorConfig(choices),
     synced: () => fleetChanged(),
@@ -22333,11 +22233,8 @@ export const createServer = (
         return;
       }
       // A hub-raised ask is settled here, never delivered to a machine: a
-      // held post, a move.
-      if (
-        upstreamAsks.answer(requestId, result) ||
-        moves.answer(requestId, result)
-      ) {
+      // move.
+      if (moves.answer(requestId, result)) {
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
         }
@@ -25257,7 +25154,6 @@ export const createServer = (
       (db.streamRelay.askedAt() !== null && !again)
         ? null
         : { domain: lastRelayDomain },
-    upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
     // A project note, a line in its conversation's transcript as it lands.
     noted: (instanceId, note) => noteProject(instanceId, note),
@@ -26380,45 +26276,6 @@ export const createServer = (
             };
       },
     },
-    // A forge connection's write tool (connection-writes.ts) to another
-    // person's repository: decided as every write is (core decideWrite),
-    // refused under off, held for the person under ask.
-    upstream: (actor, connection, tool, args) => {
-      const rule = upstreamRuleOf(db, actor.projectId);
-      const write = connectionWrite(connection, tool, args, rule.remotes);
-      if (!write) {
-        return;
-      }
-      const decision = decideWrite(rule, write);
-      switch (decision.kind) {
-        case "go":
-          return;
-        case "refuse":
-          return {
-            isError: true,
-            content: [{ type: "text", text: decision.why }],
-          };
-        case "hold": {
-          const text = upstreamAsks.ask(
-            actor,
-            {
-              post: {
-                via: "mcp",
-                connection: connection.name,
-                tool: tool.name,
-                args,
-              },
-              repo: decision.repo,
-              what: write.what,
-            },
-            `${connection.account || connection.name} (connection ${connection.name})`
-          );
-          return { content: [{ type: "text", text }] };
-        }
-        default:
-          throw unreachable(decision);
-      }
-    },
   });
   // Tracker sync (tracker.ts): a project's tasks one record with their
   // GitHub or Linear issues, through each service's own SDK.
@@ -27031,12 +26888,6 @@ export const createServer = (
             owned.asked.kind === "approve"
               ? "That ask is a change waiting on the person; only they answer it."
               : "That ask isn't this delegate's."
-          );
-        }
-        if (heldPostOf(pending.get(answer.requestId))) {
-          throw new WorkItemRefusal(
-            403,
-            "That ask is a post to another person's repository waiting on the person (Ask me first); only they answer it."
           );
         }
         // Its refusal says which delegate the target named: an ask that is
@@ -30098,57 +29949,6 @@ export const createServer = (
             body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineCalled(machineId, db.listAgents())} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
           });
           return { ok: true };
-        }
-      )
-      // A post to another person's repository a workspace held under "Ask me
-      // first" (agent github-door.ts, hub-git.ts), raised by its machine as
-      // the person's ask (upstream-asks.ts); answers what the session reads.
-      .post(
-        "/api/upstream/asks",
-        {
-          ...hidden,
-          body: t.Object({
-            workspaceId: t.String({ minLength: 1 }),
-            post: t.Any(),
-            repo: t.String({ minLength: 1 }),
-            account: t.String(),
-            what: t.String(),
-          }),
-        },
-        ({ body, request, server, status }) => {
-          const caller = hubAuth.callerOf(request, addressOf(server, request));
-          const { post, repo, what, workspaceId } = body;
-          if (!isUpstreamPost(post) || post.via === "mcp") {
-            return status(
-              400,
-              `cawco: \`${what}\` did not run: its post is not one a workspace holds.`
-            );
-          }
-          const actor = upstreamAsker(
-            workspaceId,
-            caller.kind === "machine" ? caller.machineId : undefined
-          );
-          if (!actor) {
-            return status(
-              404,
-              `cawco: \`${what}\` did not run: the hub holds no session of this workspace, so the owner could not be asked. Nothing was posted.`
-            );
-          }
-          const decision = decideWrite(upstreamRuleOf(db, actor.projectId), {
-            what,
-            repo,
-          });
-          if (decision.kind !== "hold") {
-            return status(
-              409,
-              `cawco: \`${what}\` did not run: this project's choice changed since the call (${decision.kind === "refuse" ? "agents are kept off other repositories" : "it may post there now"}). Run it again to go by the choice as it is now.`
-            );
-          }
-          return upstreamAsks.ask(
-            actor,
-            { post, repo, what, workspaceId, machineId: actor.machineId },
-            body.account
-          );
         }
       )
       .post(
@@ -33548,8 +33348,7 @@ export const createServer = (
         }
       )
       // The person's own edit of a project: its name, whether it reviews
-      // before done, where its work lands and its upstream choice
-      // (project-edit.ts). Every dashboard and the app hear
+      // before done and where its work lands (project-edit.ts). Every dashboard and the app hear
       // it at once (`projects.changed`; a review change, `tasks.changed` too).
       .patch(
         "/api/projects/:id",
@@ -33558,10 +33357,6 @@ export const createServer = (
             name: t.Optional(t.String({ maxLength: 2000 })),
             review: t.Optional(t.Boolean()),
             lands: t.Optional(LANDS),
-            // Null: the fleet's answer (upstream.ts).
-            upstreamPosts: t.Optional(
-              t.Union([UPSTREAM_POSTS_SCHEMA, t.Null()])
-            ),
             // Where its large files live; null: each origin's own LFS.
             lfs: t.Optional(
               t.Union([
@@ -35457,7 +35252,6 @@ export const createServer = (
                   // the one its last connection held stops working.
                   machineCredentials.mint(message.machineId),
                   db.sessionLimits(),
-                  upstreamRules(db),
                   // Its machine id is this hub's own: the same computer.
                   await isHubMachine(message.machineId),
                   // Which of the credentials its redaction store holds the
@@ -35817,8 +35611,6 @@ export const createServer = (
                   // Each keeps its boundary up there, whatever else holds it.
                   liveWorkspaces: db.liveWorkspacesOn(message.machineId),
                   sessionLimits: db.sessionLimits(),
-                  // Each workspace's shims judge by the choice as it stands.
-                  upstream: upstreamRules(db),
                   // Its loopback carries over https while this hub serves it.
                   ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),
                   // Its desktop is read only once the person said yes to it.

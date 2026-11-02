@@ -13,9 +13,9 @@ import {
   spawningToolAllowed,
   startsAny,
 } from "@cawco/core";
+import type { ForgeWrite } from "@cawco/core/forge-post";
 import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
 import type { DesignMap } from "@cawco/core/stage";
-import type { ForgeWrite } from "@cawco/core/upstream-post";
 import { z } from "zod";
 import type {
   ArtifactRead,

@@ -14,34 +14,6 @@ public typealias ApprovedAction = Components.Schemas.ApprovedActionView
 
 extension Components.Schemas.InstanceRow: TreeRow, ListedRow {}
 
-/// The upstream choice's answer as this device holds it (core
-/// upstream-guard.ts `UpstreamPosts`, client.svelte.ts `fleetUpstream`).
-public enum UpstreamAnswer: Equatable, Sendable {
-    /// Not read from the hub yet.
-    case unread
-    /// Nobody has answered: Needs you asks it.
-    case unanswered
-    case answered(Components.Schemas.FleetChoicesUpstream)
-
-    init(_ read: Components.Schemas.FleetChoicesUpstream?) {
-        self = read.map { .answered($0) } ?? .unanswered
-    }
-}
-
-public extension Components.Schemas.FleetChoicesUpstream {
-    /// The three answers in the order every surface lists them (`UPSTREAM_POSTS`).
-    static let listed: [Self] = [.off, .ask, .on]
-
-    /// An answer's words (`upstreamPostsWords`); one this app does not know reads as allowed.
-    var words: String {
-        switch self {
-        case .off: Words.Upstream.keepOff
-        case .ask: Words.Upstream.ask
-        default: Words.Upstream.allow
-        }
-    }
-}
-
 /// What one load of a machine's stored sessions left out: a sentence per
 /// harness that didn't answer in time or whose listing threw, none when it
 /// left nothing out. `load` tells each load from the last, so a screen says
@@ -287,11 +259,6 @@ public final class FleetStore {
     /// invariant.ts), whole on each `laws.broken` frame; none until one
     /// breaks (client.svelte.ts `lawsBroken`).
     public internal(set) var lawsBroken: [Components.Schemas.LawBroken] = []
-    /// The fleet's upstream answer (`GET /api/fleet/choices` `upstream`,
-    /// client.svelte.ts `fleetUpstream`): whether agents may post to other
-    /// people's repositories. Read on connect, then on each `fleet.upstream`
-    /// frame; Needs you asks it while nobody has answered.
-    public internal(set) var upstream: UpstreamAnswer = .unread
     /// HTTPS on the hub machine's tailnet name (`GET /api/tailnet-https`,
     /// client.svelte.ts `tailnetHttps`): read on connect, then on each
     /// `tailnet.https` frame; Needs you shows its step while one stands.

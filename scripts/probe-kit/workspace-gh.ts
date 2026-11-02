@@ -1,8 +1,7 @@
 /**
- * The git-door spec's leg (s): a workspace whose project lets agents post
- * upstream holds no forge token, and its `gh` posts through the
- * workspace's GitHub door (agent github-door.ts), decided there by the
- * project's rule as every door decides (core `decideWrite`).
+ * The git-door spec's leg (s): a workspace holds no forge token, and its
+ * `gh` posts through the workspace's GitHub door (agent github-door.ts),
+ * which signs in on the host.
  *
  * It runs the workspace's real executor and runner on the host
  * (workspace-executor.ts): every command goes in through the executor, its
@@ -12,32 +11,25 @@
  * reached by the door's own requests to api.github.com, which this process
  * hands it.
  *
- * (s) Under "Let agents post upstream":
- *     - with no token in the caller's environment, and with the caller's
+ * (s) - with no token in the caller's environment, and with the caller's
  *       `GH_TOKEN`, a command's environment carries no forge's token
  *       variable, and its gh's config is the door's;
  *     - no file in the workspace's dirs (its state dir, the part a command
  *       reads, its scratch dir, its clone) holds the host's gh token;
  *     - the real gh's `api repos/someone/else/issues` inside is made by the
  *       door: the stand-in takes the issue once, signed with the host's token.
- *     Under "Ask me first", the same post is held by the door: the hub is
- *     asked once, for github.com/someone/else, and GitHub takes nothing.
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { UpstreamPosts } from "../../packages/core/src/upstream-guard";
 import { githubStub } from "./forge-stubs";
 import type { Kit } from "./kit";
 import { standExecutor } from "./workspace-executor";
 
 /** What the git-door spec hands the leg. */
 export interface WorkspaceGhAt {
-  /** What the stand-in hub was asked, in order. */
-  readonly asks: readonly { post?: { via?: string }; repo?: string }[];
   readonly clone: string;
   readonly id: string;
   readonly root: string;
-  readonly writeRule: (posts: UpstreamPosts) => Promise<void>;
 }
 
 const HOST_TOKEN = "probe-host-gh-token";
@@ -129,13 +121,12 @@ export const workspaceGhLeg = async (
     `gh api repos/someone/else/issues -f title='${title}' -f body='from the probe' 2>&1; echo "GHEXIT=$?"`;
 
   try {
-    await at.writeRule("on");
     const bare = await run(SHOW_ENV);
     const withCaller = await run(SHOW_ENV, { GH_TOKEN: CALLER_TOKEN });
     const door = (said: string) =>
       said.includes("GHCONFIG=") && said.includes("http_unix_socket");
     kit.check(
-      "(s) under Let agents post upstream, a command's environment carries no forge token, the caller's GH_TOKEN included, and its gh's config is the door's",
+      "(s) a command's environment carries no forge token, the caller's GH_TOKEN included, and its gh's config is the door's",
       !(
         FORGE_VARS.test(bare) ||
         FORGE_VARS.test(withCaller) ||
@@ -165,25 +156,11 @@ export const workspaceGhLeg = async (
       (each) => each.repo === "someone/else" && each.title === "Probe made"
     );
     kit.check(
-      "(s) under Let agents post upstream, gh's issue on someone/else is made by the door: the stand-in takes it once, signed with the host's token",
+      "(s) gh's issue on someone/else is made by the door: the stand-in takes it once, signed with the host's token",
       made.includes("GHEXIT=0") &&
         issues.length === 1 &&
         issues[0]?.token === HOST_TOKEN,
       `gh said: ${made.trim()} | writes ${JSON.stringify(stub.writes)} | unknown ${JSON.stringify(stub.unknown)}`
-    );
-
-    await at.writeRule("ask");
-    const asked = at.asks.length;
-    const held = await run(POST("Probe held"));
-    const ask = at.asks[asked];
-    kit.check(
-      "(s) under Ask me first, the same post is held by the door: one ask for github.com/someone/else, and GitHub takes nothing",
-      at.asks.length === asked + 1 &&
-        ask?.repo === "github.com/someone/else" &&
-        ask.post?.via === "http" &&
-        held.includes("PROBE-HUB-HELD") &&
-        !stub.writes.some((each) => each.title === "Probe held"),
-      `gh said: ${held.trim()} | asks ${JSON.stringify(at.asks.slice(asked))}`
     );
   } finally {
     globalThis.fetch = realFetch;

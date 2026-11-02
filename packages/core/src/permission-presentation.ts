@@ -24,7 +24,6 @@ import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 import { DAY_MS } from "./time";
-import { UPSTREAM_POST_TOOL } from "./upstream-post";
 import {
   projectSettingsWords,
   type SettingsBudget,
@@ -65,12 +64,6 @@ export interface PermissionPresentation {
   detail?: string;
   /** The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out. */
   fields: PermissionField[];
-  /**
-   * A post to another person's repository held for the person: Needs you
-   * names it by its own title (a comment's, its body's first line) over
-   * where it goes (`owner/repo#12`). Absent for any other ask.
-   */
-  post?: HeldPostNaming;
   /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
   project?: string;
   /**
@@ -79,14 +72,6 @@ export interface PermissionPresentation {
    * two commits are on origin/main"), its command under it in `command`.
    */
   summary: string;
-}
-
-/** A held post as Needs you names it: what it is, and where it goes. */
-export interface HeldPostNaming {
-  /** `owner/repo`, the host too off GitHub, with `#n` for the issue or pull request it is on. */
-  target: string;
-  /** The post's own title; a comment's first line. */
-  title: string;
 }
 
 /** Who asks and where, as an ask's head names them: "Caw · cockpit". */
@@ -1257,50 +1242,6 @@ function designProposal(input: Record<string, unknown>): Presented {
   };
 }
 
-const VOWEL_FIRST = /^[aeiou]/iu;
-
-/** "an issue", "a comment": a kind with its article. */
-const withArticle = (kind: string): string =>
-  `${VOWEL_FIRST.test(kind) ? "an" : "a"} ${kind}`;
-
-/**
- * A post to another person's repository held for the person (core
- * upstream-post.ts `UpstreamAskInput`): where it lands and what it is as the
- * summary, the account it posts as and its host under it, its title and
- * body as fields,
- * and the post itself, whole, as the command CawCo makes once approved.
- */
-function upstreamPost(input: Record<string, unknown>): Presented {
-  const kind = text(input.kind) ?? "post";
-  const repo = text(input.repo) ?? "another repository";
-  const account = text(input.account);
-  const title = typeof input.title === "string" ? input.title : undefined;
-  const body = typeof input.body === "string" ? input.body : undefined;
-  const command = text(input.command);
-  const host = text(input.repo)?.split("/")[0];
-  const where = host === "github.com" ? "GitHub" : host;
-  const summary = `Post ${withArticle(kind)} on ${repo}`;
-  const named =
-    title?.trim() ||
-    body
-      ?.split("\n")
-      .map((line) => line.trim())
-      .find(Boolean);
-  return {
-    summary,
-    post: { title: named ?? summary, target: text(input.target) ?? repo },
-    ...(account
-      ? { detail: where ? `As ${account} on ${where}` : `As ${account}` }
-      : {}),
-    changes: [],
-    ...(command ? { command } : {}),
-    fields: [
-      ...(title === undefined ? [] : [{ key: "title", value: title }]),
-      ...(body === undefined ? [] : [{ key: "body", value: body }]),
-    ],
-  };
-}
-
 /** The tool name a project's Caw changes his own project's settings by (hub project-settings.ts). */
 export const PROJECT_SETTINGS_TOOL = "mcp__cawco__project_settings";
 
@@ -1666,9 +1607,6 @@ export function presentPermission(
   }
   if (toolName === PROJECT_SETTINGS_TOOL) {
     return { ...who, ...projectSettings(input) };
-  }
-  if (toolName === UPSTREAM_POST_TOOL) {
-    return { ...who, ...upstreamPost(input) };
   }
   // A browser ask reads as its reason, the page's origin under it.
   if (toolName === BROWSER_ASK_TOOL) {

@@ -11,11 +11,6 @@
 
 <script lang="ts">
   import { machineLabel } from "@cawco/core/machine-names";
-  import {
-    UPSTREAM_WORDS,
-    type UpstreamPosts,
-    upstreamPostsWords,
-  } from "@cawco/core/upstream-guard";
   /**
    * The project's head: one row at every width, nothing wraps (DESIGN.md,
    * The Title Bars Follow Liquid Glass Rule: "One bar, one row"), as tall as
@@ -37,8 +32,7 @@
    * composer: work in a project starts by telling Caw, PRD §5.6), Spin off,
    * and More holding Pick stages (while the code stages stand in), Project
    * details…, Caw's settings (CawPanel, off More: a popover on a desk, the
-   * bottom sheet on touch), Spend, Other people's repositories (the upstream
-   * choice: the fleet's answer until the project picks its own) and Forget
+   * bottom sheet on touch), Spend and Forget
    * (and, under 640px, Spin off, New task, Filter tasks… and Ask Caw for a
    * view), each with its glyph. Nothing in the head is on the coral: no view
    * of a project is for asking Caw (One prominent action, trailing). One tray
@@ -60,19 +54,14 @@
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
-  import { cawco, editProject } from "#lib/cawco/client.svelte.js";
+  import { editProject } from "#lib/cawco/client.svelte.js";
   import ForgetProjectTray from "#lib/cawco/ForgetProjectTray.svelte";
   import { forgetHost, forgetProject } from "#lib/cawco/forget.svelte.js";
-  import {
-    failureClause,
-    failureWords as message,
-  } from "#lib/cawco/hub-read.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
-  import UpstreamMenu from "#lib/cawco/project/UpstreamMenu.svelte";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
@@ -261,28 +250,6 @@
     } catch (error) {
       renaming = null;
       renameFault = message(error);
-    }
-  }
-
-  /**
-   * What the hub refused of the upstream choice, said under the head where
-   * the More that asked stands, with Try again; never a toast (DESIGN.md, The
-   * Work Outlives Its Surface Rule).
-   */
-  const upstreamKey = $derived(`upstream:${project.id}`);
-  const upstreamFault = $derived(refusals.get(upstreamKey));
-
-  /** The project's own upstream answer, or null for the fleet's (UpstreamMenu). */
-  async function setUpstream(posts: UpstreamPosts | null): Promise<void> {
-    refusals.delete(upstreamKey);
-    try {
-      await editProject(project.id, { upstreamPosts: posts });
-    } catch (error) {
-      const asked = posts ? upstreamPostsWords(posts) : UPSTREAM_WORDS.inherit;
-      refusals.set(upstreamKey, {
-        reason: `${UPSTREAM_WORDS.title} was not set to “${asked}”: ${failureClause(error)}. It stays as it was.`,
-        asked: posts,
-      });
     }
   }
 
@@ -571,13 +538,6 @@
             <IconUsage />
             <span>Spend</span>
           </DropdownMenu.Item>
-          <!-- The upstream choice: the fleet's answer until the project picks
-                 its own; every workspace of it judges by it from its next beat. -->
-          <UpstreamMenu
-            fleet={cawco.fleetUpstream}
-            onchange={setUpstream}
-            posts={project.upstreamPosts}
-          />
           <!-- The one destructive row, as every menu draws one: the house's
                  destructive item, set apart at the end. -->
           <DropdownMenu.Separator />
@@ -595,18 +555,12 @@
   </div>
 </header>
 <!-- What the hub refused, under the head as a line of its own, in its
-     words: a rename, and the upstream choice its More asked. -->
+     words: a rename. -->
 <div
   data-slot="head-faults"
   class="ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
 >
   <RowFault again={commitName} reason={renameFault} />
-  <RowFault
-    again={() =>
-      setUpstream((upstreamFault?.asked as UpstreamPosts | null) ?? null)}
-    data-upstream-refusal
-    reason={upstreamFault?.reason}
-  />
 </div>
 <!-- Caw's settings, off More: the project's own, beside its other settings. -->
 {#if touch.current}

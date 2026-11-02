@@ -30,10 +30,6 @@
    * service's words), and one whose call may or may not have happened says
    * so; Remove puts either away once you have read it.
    *
-   * An onboarding choice nobody answered (the fleet's upstream choice) is
-   * the same row with its risk as its line and its two options as the
-   * peers; it opens nothing, and leaves once the hub has the answer.
-   *
    * The stream relay's journey is the journey's own card (RelayJourney,
    * `row`), drawn whole in the row's place.
    *
@@ -69,12 +65,6 @@
     TailnetHttps,
     TailnetHttpsTodo,
   } from "@cawco/core/tailnet-https";
-  import {
-    UPSTREAM_POSTS,
-    UPSTREAM_WORDS,
-    type UpstreamPosts,
-    upstreamPostsWords,
-  } from "@cawco/core/upstream-guard";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { askWords } from "@cawco/core/words/asks";
   import { configurePage } from "@cawco/core/words/configure";
@@ -113,7 +103,6 @@
     IconNeedsYou,
     IconSend,
     IconServer,
-    IconShield,
     IconSuccess,
     IconTailnetHttps,
     IconTick,
@@ -123,7 +112,6 @@
   import { isTyping } from "#lib/utils/typing.js";
   import CopyBox from "../CopyBox.svelte";
   import {
-    answerFleetUpstream,
     answerFor,
     cawco,
     decideAction,
@@ -178,7 +166,6 @@
 
   const href = $derived.by(() => {
     if (
-      item.kind === "choice" ||
       item.kind === "tailnet" ||
       item.kind === "desk" ||
       item.kind === "relay" ||
@@ -205,8 +192,6 @@
           : item.ask;
       case "watch":
         return item.notice.title;
-      case "choice":
-        return UPSTREAM_WORDS.risk;
       case "tailnet":
         return item.done
           ? tailnetWords.done(item.tailnet.dashboard ?? "")
@@ -249,18 +234,10 @@
     return capLine(item.cap);
   });
 
-  /**
-   * What Deny and Approve answer, as their names say it: a held post by its
-   * title and where it goes, any other ask by what it asks and whose it is.
-   */
-  const answered = $derived.by(() => {
-    if (item.kind !== "ask") {
-      return "";
-    }
-    return item.request.presentation.post
-      ? `${item.title} to ${item.ask}`
-      : `${item.ask} on ${item.title}`;
-  });
+  /** What Deny and Approve answer, as their names say it: what it asks and whose it is. */
+  const answered = $derived(
+    item.kind === "ask" ? `${item.ask} on ${item.title}` : ""
+  );
 
   /** An action's call, laid out: when, through what, the tool, and its arguments as JSON. */
   const call = $derived.by(() => {
@@ -340,8 +317,6 @@
     switch (item.kind) {
       case "watch":
         return `Fleet watch · ${item.place}`;
-      case "choice":
-        return "Onboarding · each project can change it";
       case "tailnet":
         return tailnetWords.meta(item.tailnet.host);
       case "desk":
@@ -548,24 +523,6 @@
     });
   }
 
-  /** The upstream choice's answer on its way, by the option pressed; the hub's refusal in its words. */
-  let choosing = $state<UpstreamPosts | null>(null);
-  let choiceRefusal = $state<string | null>(null);
-  async function choose(posts: UpstreamPosts): Promise<void> {
-    if (item.kind !== "choice" || stale || choosing !== null) {
-      return;
-    }
-    choosing = posts;
-    choiceRefusal = null;
-    try {
-      await answerFleetUpstream(posts);
-    } catch (error) {
-      choiceRefusal = failureWords(error);
-    } finally {
-      choosing = null;
-    }
-  }
-
   /**
    * One step on the path to HTTPS, laid out: what to do, where or why, and
    * its control, a page to open or its command to copy.
@@ -736,8 +693,7 @@
        its reason: its place and the peers move down one row. -->
   {@const lined = Boolean(
     item.kind === "ask" &&
-    ((item.request.presentation.command && !item.request.presentation.post) ||
-      item.request.browserAsk)
+    (item.request.presentation.command || item.request.browserAsk)
   )}
   <!-- lead, end and below are this card's; the row's box, cover, title, wait and want are NeedsRow's. -->
   <NeedsRow
@@ -761,8 +717,6 @@
           place={item.cwd || item.machineId}
           status="attn"
         />
-      {:else if item.kind === "choice"}
-        <IconShield aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "desk"}
         {#if item.done}
           <IconSuccess
@@ -878,12 +832,11 @@
       {/if}
     {/snippet}
     {#snippet below()}
-      {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
+      {#if item.kind === "ask" && item.request.presentation.command}
         <!-- What runs, under why: its first line, so Approve here is made on
-           the command as much as on the card. A held post's target line
-           already says where it goes. A shell ask's command: one line under
-           its reason, in the transcript's command rule, cut with an
-           ellipsis. -->
+           the command as much as on the card. A shell ask's command: one
+           line under its reason, in the transcript's command rule, cut with
+           an ellipsis. -->
         <code
           data-slot="needs-command"
           class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta text-ellipsis whitespace-pre text-ink-muted"
@@ -920,16 +873,7 @@
           {#if item.project}
             {@render projectMark(item.project)}
           {/if}
-          <!-- A held post names the session that asked; its title is the row's. -->
-          {#if item.request.presentation.post && item.request.presentation.asker}
-            <span
-              data-slot="asker"
-              class="min-w-0 flex-initial overflow-clip text-ellipsis"
-              >{item.request.presentation.asker}</span
-            >
-          {:else}
-            <span class="flex-none">{askKind(item)}</span>
-          {/if}
+          <span class="flex-none">{askKind(item)}</span>
           {@render onMachine(item.machine, item.stale)}
         </span>
       {:else if item.kind === "artifact"}
@@ -1223,37 +1167,6 @@
             size="sm"
             variant="secondary"
           />
-        </div>
-      {:else if item.kind === "choice"}
-        <!-- Its three options as the peers: same size, type and fill (The Peer
-           Rule); keeping agents off comes first, as the recommended one, then
-           asking first, then letting them post. Its options are its words,
-           longer than Deny and Approve, too long to stand side by side in the
-           panel: they stack, each the text column's width, so the three stay
-           peers in size. -->
-        <div
-          data-slot="peers"
-          class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-col items-stretch justify-end gap-space-2 coarse:gap-space-4"
-        >
-          {#if choiceRefusal}
-            <ErrorText
-              message={choiceRefusal}
-              title="The hub refused that answer"
-            />
-          {/if}
-          {#each UPSTREAM_POSTS as answer (answer)}
-            <Button
-              edge="none"
-              disabled={stale || (choosing !== null && choosing !== answer)}
-              failed={answer === "off" && choiceRefusal !== null}
-              label={upstreamPostsWords(answer)}
-              onclick={() => choose(answer)}
-              pending={choosing === answer}
-              pendingLabel="Saving…"
-              size="sm"
-              variant="secondary"
-            />
-          {/each}
         </div>
       {:else if item.kind === "desk" && !item.done}
         <!-- Skip and Allow as peers (The Peer Rule): Skip puts the row away in

@@ -180,7 +180,6 @@ export const listRoleTools = (): RoleTools[] => {
         end: () => undefined,
         fleetChoicesSet: () => false,
         relayOffer: () => null,
-        upstreamAnswered: () => false,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),
         noted: () => undefined,

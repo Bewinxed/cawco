@@ -127,8 +127,6 @@ const RULES: readonly [string, RegExp, Access][] = [
   // A machine's own row and busy count; the fleet's list stays the person's.
   ["GET", /^\/api\/agents\/[^/]+$/u, "machine"],
   ["GET", /^\/api\/agents\/[^/]+\/busy$/u, "machine"],
-  // A workspace's post held for the person (upstream-asks.ts), raised by its machine.
-  ["POST", /^\/api\/upstream\/asks$/u, "machine"],
   // Where a project's large files live, and a .lfsconfig its git-lfs refused (agent host-lfs.ts).
   ["GET", /^\/api\/lfs\/projects\/[^/]+$/u, "machine"],
   ["POST", /^\/api\/lfs\/projects\/[^/]+\/refused$/u, "machine"],

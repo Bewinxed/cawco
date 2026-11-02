@@ -93,7 +93,6 @@ import { writeStateFileSync } from "@cawco/core/state-file";
 import { nameStoredRowsFrom } from "@cawco/core/stored-json";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
-import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import {
   and,
   asc,
@@ -258,7 +257,6 @@ import {
   supervisorConfig,
   taskCommentIds,
   tools,
-  upstreamSettings,
   usageBuckets,
   usageLimits,
   workItemGlobs,
@@ -2177,14 +2175,11 @@ export interface DbShape {
       >
     >
   ) => void;
-  /** The project's name, its Review before done and its upstream choice, as project-edit.ts checked them. */
+  /** The project's name, its Review before done and its large files, as project-edit.ts checked them. */
   readonly setProjectDetails: (
     id: string,
     change: Partial<
-      Pick<
-        ProjectRow,
-        "lfsConnection" | "lfsUrl" | "name" | "review" | "upstreamPosts"
-      >
+      Pick<ProjectRow, "lfsConnection" | "lfsUrl" | "name" | "review">
     >
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
@@ -2262,7 +2257,6 @@ export interface DbShape {
   readonly settlePlanChanges: (instanceId: string) => void;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
-  readonly setUpstreamPosts: (posts: UpstreamPosts) => void;
   /** Where the fleet's skill `name` comes from; undefined for none. */
   readonly skillSource: (name: string) => string | undefined;
   /** Names of fleet skills installed at or after `since`. */
@@ -2540,8 +2534,6 @@ export interface DbShape {
      */
     online?: boolean;
   }) => void;
-  /** The fleet's upstream answer (schema `upstreamSettings`): null while nobody has answered. */
-  readonly upstreamPosts: () => UpstreamPosts | null;
   /**
    * One harness's recorded cost since each boundary and in all, in one SQL
    * pass. A bucket counts toward a boundary when it starts at or after it;
@@ -2942,8 +2934,6 @@ const SUPERVISOR_CONFIG_ID = "supervisor";
 const OPENROUTER_CONNECTION_ID = "openrouter";
 const JEV_SETTINGS_ID = "jev";
 const FLEET_WATCH_ID = "fleet-watch";
-/** The one {@link upstreamSettings} row's key. */
-const UPSTREAM_ID = "upstream";
 /** The one {@link presenceSettings} row's key, and the one {@link findSettings} row's. */
 const PRESENCE_ID = "person";
 
@@ -10015,22 +10005,6 @@ const make = async (path: string): Promise<DbShape> => {
         .from(fleetWatchSettings)
         .where(eq(fleetWatchSettings.id, FLEET_WATCH_ID))
         .get()?.on ?? true,
-    upstreamPosts: () =>
-      db
-        .select({ posts: upstreamSettings.posts })
-        .from(upstreamSettings)
-        .where(eq(upstreamSettings.id, UPSTREAM_ID))
-        .get()?.posts ?? null,
-    setUpstreamPosts: (posts) => {
-      const answeredAt = new Date();
-      db.insert(upstreamSettings)
-        .values({ id: UPSTREAM_ID, posts, answeredAt })
-        .onConflictDoUpdate({
-          target: upstreamSettings.id,
-          set: { posts, answeredAt },
-        })
-        .run();
-    },
     setFleetWatchOn: (on) => {
       db.insert(fleetWatchSettings)
         .values({ id: FLEET_WATCH_ID, on })

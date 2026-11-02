@@ -107,7 +107,6 @@ import {
 import type { StreamRelayState } from "@cawco/core/stream-relay";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { HOUR_MS } from "@cawco/core/time";
-import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
 import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { sql } from "drizzle-orm";
 import {
@@ -514,13 +513,6 @@ export const projects = sqliteTable("projects", {
    * Off: the project's conversation and sessions close tasks as the project's stages allow.
    */
   review: integer("review", { mode: "boolean" }).notNull().default(false),
-  /**
-   * Whether its sessions may post to repositories that are not its own
-   * (core upstream-guard.ts `UpstreamPosts`): `off` keeps them off, `ask`
-   * holds each post for the person, `on` lets them. Null: the fleet's
-   * answer ({@link upstreamSettings}).
-   */
-  upstreamPosts: text("upstream_posts", { enum: UPSTREAM_POSTS }),
   /**
    * Where its large files live (its Large files setting): an LFS endpoint
    * every git-lfs run on a machine for it is held to (agent host-lfs.ts),
@@ -3221,21 +3213,6 @@ export const fleetWatchSettings = sqliteTable("fleet_watch_settings", {
   /** Always `'fleet-watch'`. */
   id: text("id").primaryKey(),
   on: integer("on", { mode: "boolean" }).notNull().default(true),
-});
-
-/**
- * The fleet's upstream choice (core upstream-guard.ts), asked once in
- * onboarding — one row, keyed `'upstream'`, following the
- * {@link spendSettings} precedent: whether sessions may post to repositories
- * that are not their project's, where the project sets nothing: `off`, `ask`
- * or `on`. No row, or a null `posts`, is never answered: sessions may, and
- * the dashboard asks.
- */
-export const upstreamSettings = sqliteTable("upstream_settings", {
-  /** Always `'upstream'`. */
-  id: text("id").primaryKey(),
-  posts: text("posts", { enum: UPSTREAM_POSTS }),
-  answeredAt: timestamp("answered_at"),
 });
 
 /**

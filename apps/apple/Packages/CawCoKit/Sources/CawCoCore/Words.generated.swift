@@ -1103,23 +1103,6 @@ public enum Words {
         public static let lastActivity = "Last activity"
     }
 
-    public enum Upstream {
-        // packages/core/src/upstream-guard.ts `UPSTREAM_WORDS`
-        public static let title = "Other people's repositories"
-
-        public static let risk = "Agents can open issues and pull requests on other people's repositories under your git account."
-
-        public static let keepOff = "Keep agents off other repositories"
-
-        /// Each post waits in Needs you for the person's Approve (owner: "why is there no option for them to ask me first").
-        public static let ask = "Ask me first"
-
-        public static let allow = "Let agents post upstream"
-
-        /// A project's settings: the fleet's answer stands until the project picks its own.
-        public static let inherit = "Same as the fleet"
-    }
-
     public enum Tailnet {
         // packages/core/src/words/tailnet.ts `tailnetWords`
         public static let title = "HTTPS on your tailnet"

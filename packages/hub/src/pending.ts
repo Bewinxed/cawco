@@ -23,8 +23,8 @@ import { parkedToolAsk } from "./parked-ask";
  */
 export interface PendingShape {
   /**
-   * A relaunch or a death answers every question its process had open; a
-   * held post stays ({@link outlivesSession}).
+   * A relaunch or a death answers every question its process had open; an
+   * ask the hub owns stays ({@link outlivesSession}).
    */
   readonly forget: (instanceId: string) => void;
   /** The parked ask itself, for whoever answers it away from a dashboard. */
@@ -135,15 +135,11 @@ export const askEnvelope = (
 
 /**
  * Whether an ask stays when its session's process ends: one the hub owns
- * ({@link askEnvelope}), or a post held for the person (upstream-asks.ts),
- * which the hub makes itself. No process waits on either; an owned ask goes
- * only when its session ends for good (asks.ts `withdrawEnded`).
+ * ({@link askEnvelope}). No process waits on it; it goes only when its
+ * session ends for good (asks.ts `withdrawEnded`).
  */
-export const outlivesSession = (envelope: Envelope): boolean => {
-  const payload = envelope.payload as
-    { askId?: unknown; upstreamPost?: unknown } | undefined;
-  return payload?.upstreamPost !== undefined || payload?.askId !== undefined;
-};
+export const outlivesSession = (envelope: Envelope): boolean =>
+  (envelope.payload as { askId?: unknown } | undefined)?.askId !== undefined;
 
 const isPermissionAsk = (envelope: Envelope): boolean =>
   (envelope.payload as { kind?: unknown } | undefined)?.kind ===

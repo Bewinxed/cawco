@@ -61,10 +61,11 @@ import type { TailnetServing } from "./tailnet-https";
  *    "Changes saved to", "Fix tray handed you") in place of `artifactSaid`,
  *    one per notice kind (core `ARTIFACT_NOTICES`). A page built for 10 would
  *    draw every notice as "Responses on", so it reloads first.
- * 12: the upstream choice has three answers, `off`, `ask` and `on`, where it
- *    had a boolean: `GET`/`PUT /api/fleet/choices` `upstream`, a project's
- *    `upstreamPosts`, the `fleet.upstream` frame. A page built for 11 sends
- *    a boolean the hub refuses, so it reloads first.
+ * 12: the choice on writes to other people's repositories has three
+ *    answers, `off`, `ask` and `on`, where it had a boolean, in the fleet's
+ *    choices, a project's own answer and the frame that carried the fleet's
+ *    (all gone since 44). A page built for 11 sends a boolean the hub
+ *    refuses, so it reloads first.
  * 13: an archived workspace's row (`POST /api/workspaces/:id/archive`) says
  *    `head`, the commit its clone's HEAD was on when it retired and the
  *    branch of `origin` that held it, where it is cut again, in place of
@@ -215,12 +216,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    `mayStart` (`["any"]` every type), where a `canDelegate` yes or no
  *    stood. A page built for 42 reads a `canDelegate` the hub no longer
  *    sends, so it reloads first.
+ * 44: no choice holds a session's writes to any repository: `GET`/`PUT
+ *    /api/fleet/choices` carries no `upstream`, a project carries no answer
+ *    of its own, and the `fleet.upstream` frame is gone. A page built for 43
+ *    sends a choice the hub refuses, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 43;
+export const WIRE_PROTOCOL = 44;
 
 /**
  * What a session's stream carries: the changes each frame made to its
@@ -550,12 +555,6 @@ export interface RegisterAckPayload {
    * wiped or restored from an older copy has never heard of real accounts).
    */
   unknownAccounts?: string[];
-  /**
-   * The upstream guard's rules (upstream-guard.ts `UpstreamRules`), so a
-   * workspace's first command after the machine connects is judged by the
-   * choice as it stands. Every heartbeat's ack carries them again.
-   */
-  upstream?: import("./upstream-guard").UpstreamRules;
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>

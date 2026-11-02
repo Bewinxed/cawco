@@ -33,7 +33,7 @@ const PORT = /:\d+$/u;
 /**
  * Whether a CLI's login for `configured` (`gitea.local:3000`) is the one for
  * `asked`: the same host and port, or, asked by a project's remote, which
- * names no port (core normaliseRemote), the same hostname.
+ * names no port (hub projects.ts `normaliseRemote`), the same hostname.
  */
 export const sameHost = (configured: string, asked: string): boolean => {
   const login = configured.trim().toLowerCase();

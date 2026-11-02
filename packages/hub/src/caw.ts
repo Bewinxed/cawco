@@ -420,8 +420,6 @@ export interface CawDeps {
    * was, when the session itself is over.
    */
   readonly turnEnded: (instanceId: string, why?: string, gone?: string) => void;
-  /** Whether the fleet's upstream choice was ever answered (setup asks it until it is). */
-  readonly upstreamAnswered: () => boolean;
   /**
    * Writes drafted views, answers the view tools, and reads a kept view to
    * change (views.ts).
@@ -449,7 +447,6 @@ export const createCaw = ({
   stops,
   task,
   turnEnded,
-  upstreamAnswered,
   views,
 }: CawDeps) => {
   /** Conversations being started now, by project: one start per project at a time. */
@@ -1027,9 +1024,9 @@ export const createCaw = ({
    * Setup's steps for `project` as the fleet stands now ({@link setupEvent}),
    * the one source of both its paths: the send a new project's conversation
    * opens with ({@link Caw.setup}) and `project_setup`, the person's ask in
-   * any conversation. The fleet's choices,
-   * its upstream answer and the relay card are asked while unanswered, and
-   * again when the person asked to change them (`change`); the place card
+   * any conversation. The fleet's choices and the relay card are asked
+   * while unanswered, and again when the person asked to change them
+   * (`change`); the place card
    * while the project has no checkout, or when they asked to move it.
    */
   const setupText = (
@@ -1048,7 +1045,6 @@ export const createCaw = ({
   ): string =>
     setupEvent({
       askFleet: !fleetChoicesSet() || change.includes("fleet"),
-      askUpstream: !upstreamAnswered() || change.includes("upstream"),
       from,
       ...(opened === undefined ? {} : { opened }),
       placed:

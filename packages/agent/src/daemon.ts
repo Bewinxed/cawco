@@ -108,6 +108,7 @@ import {
 } from "@cawco/core/browser";
 import { timerMs } from "@cawco/core/clock";
 import { detach } from "@cawco/core/detach";
+import { CONTROL_FORGE_POST, readForgeAsk } from "@cawco/core/forge-post";
 import {
   CUSTODY_BOUND_MS,
   type HandoverCommand,
@@ -158,13 +159,6 @@ import {
   type RelayStartArgs,
 } from "@cawco/core/stream-relay";
 import { unhandled } from "@cawco/core/unhandled";
-import { readUpstreamRule } from "@cawco/core/upstream-guard";
-import {
-  CONTROL_FORGE_POST,
-  CONTROL_UPSTREAM_POST,
-  isUpstreamPost,
-  readForgeAsk,
-} from "@cawco/core/upstream-post";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { hostJavaHome, workspaceNeeds } from "@cawco/core/workspace-needs";
@@ -194,7 +188,6 @@ import {
   liveWorkItems,
   rearmHooks,
   settleGonePlaces,
-  takeUpstreamRules,
   watchQuietBoundaries,
 } from "./boundary";
 import {
@@ -336,7 +329,6 @@ import {
 import { setStageCloneSink } from "./stage-clone";
 import type { RenderAsk } from "./stage-render";
 import { onToolsMoved, probeTools } from "./tools";
-import { makeUpstreamPost } from "./upstream-posts";
 import { UsageScans } from "./usage/scans";
 import {
   archiveWorkspace,
@@ -353,17 +345,6 @@ import {
   worktreeFolders,
 } from "./workspace";
 import { cloneHolding, workspaceRefs } from "./workspace-records";
-
-/** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
-const takeUpstream = (
-  rules: import("@cawco/core/upstream-guard").UpstreamRules | undefined
-): void => {
-  takeUpstreamRules(rules).catch((error: unknown) => {
-    console.warn(
-      `[workspace] the hub's upstream rules could not be written: ${error instanceof Error ? error.message : String(error)}`
-    );
-  });
-};
 
 /** How often the machine's interfaces are compared, for a network change (our call: a minute's stale address is a minute's wrong relay candidate). */
 const NETWORK_CHECK_MS = 30_000;
@@ -2882,7 +2863,6 @@ const attach = (
         takeSessionLimits(
           (envelope.payload as RegisterAckPayload).sessionLimits
         );
-        takeUpstream((envelope.payload as RegisterAckPayload).upstream);
         // localhost on this computer is the hub this connection reached.
         carryHub(
           url,
@@ -3059,7 +3039,6 @@ const attach = (
         // agent; it never throws.
         clearUnmarkedHusks(ack?.liveWorkspaces);
         takeSessionLimits(ack?.sessionLimits);
-        takeUpstream(ack?.upstream);
         followHub(ack?.tailnetHttps);
         reportActivity(ack?.reportActivity === true);
         supervisor.acknowledged(ack);
@@ -3627,19 +3606,6 @@ const startDaemon = (rediscover = false) =>
       }
       return supervisor.endFinishedWork(id, instanceIds);
     });
-    // A post made once with this machine's own sign-in (upstream-posts.ts):
-    // one the person approved, or a landing's pull or merge request.
-    supervisor.registerDaemonFunction(CONTROL_UPSTREAM_POST, (id, post) => {
-      if (!(
-        isUpstreamPost(post) &&
-        (typeof id === "string" || (id === null && post.via === "forge"))
-      )) {
-        return Promise.reject(
-          new Error("upstreamPost takes a workspace id and a post")
-        );
-      }
-      return makeUpstreamPost(id, post);
-    });
     // The hub's gh connections (hub connections.ts): the accounts this
     // machine's gh is signed in to, and one account's token, read each time.
     supervisor.registerDaemonFunction(CONTROL_GH_ACCOUNTS, () => ghAccounts());
@@ -3648,16 +3614,14 @@ const startDaemon = (rediscover = false) =>
         ? ghAccountToken(host, login)
         : Promise.reject(new Error("ghToken takes a host and a login"))
     );
-    // A session's forge write under its project's rule (forges/forge.ts):
-    // made, held for the person, or refused here.
-    supervisor.registerDaemonFunction(CONTROL_FORGE_POST, (rule, ask) => {
+    // A session's forge write, or a landing's pull or merge request
+    // (forges/forge.ts): made here with this machine's own sign-in.
+    supervisor.registerDaemonFunction(CONTROL_FORGE_POST, (ask) => {
       const read = readForgeAsk(ask);
-      if (!read || (rule !== null && !readUpstreamRule(rule))) {
-        return Promise.reject(
-          new Error("forgePost takes the project's rule and a forge write")
-        );
+      if (!read) {
+        return Promise.reject(new Error("forgePost takes a forge write"));
       }
-      return forgePost(readUpstreamRule(rule), read);
+      return forgePost(read);
     });
     // A project's browser (browser/browsers.ts): started or woken on its
     // machine's host, stopped, removed; the whole list told on each change.

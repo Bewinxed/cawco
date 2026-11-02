@@ -56,7 +56,7 @@ const WITHIN = 1.5;
 
 /** Five canvases of the dashboard, a story each, as a page shows them. */
 const CANVASES = [
-  ["needs", "src/lib/cawco/home/NeedsCard.stories.ts", "Issue"],
+  ["needs", "src/lib/cawco/home/NeedsCard.stories.ts", "Budget"],
   ["routine", "src/lib/cawco/routines/RoutineForm.stories.ts", "Filled"],
   ["suggest", "src/lib/cawco/suggestions/Suggestions.stories.ts", "List"],
   ["sheet", "src/lib/cawco/preview/SheetInspector.stories.ts", "Desk"],

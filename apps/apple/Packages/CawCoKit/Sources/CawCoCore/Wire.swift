@@ -258,8 +258,6 @@ enum Frame {
     case actions([Components.Schemas.ApprovedActionView])
     /// Every system law the hub caught broken since it started, whole, on each break (core invariant.ts).
     case lawsBroken([Components.Schemas.LawBroken])
-    /// The fleet's upstream answer was given or changed, anywhere: Needs you stops asking.
-    case fleetUpstream(Components.Schemas.FleetChoicesUpstream)
     /// A skill, plugin or marketplace the hub fetched has landed (or failed): the fleet's setup is read again.
     case fleetFetched(Components.Schemas.FleetFetchFrame)
     /// HTTPS on the hub machine's tailnet name changed state: Needs you's step moves on, or ticks.
@@ -317,8 +315,6 @@ enum Frame {
             self = .actions(frame.actions)
         case .laws_broken(let frame):
             self = .lawsBroken(frame.broken)
-        case .fleet_upstream(let frame):
-            self = .fleetUpstream(frame.upstream)
         case .fleet_fetch(let frame):
             self = .fleetFetched(frame)
         case .tailnet_https(let frame):

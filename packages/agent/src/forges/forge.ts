@@ -4,32 +4,25 @@
  * sign-in where that forge's CLI keeps it and makes an issue, a pull or merge
  * request, or a comment through the forge's own library or MCP server
  * (github.ts on Octokit, gitlab.ts on @gitbeaker/rest, gitea.ts on the
- * official gitea-mcp). No adapter decides whether a write may go: that is
- * core's `decideWrite`, here as at every door.
+ * official gitea-mcp).
  *
- * - {@link forgePost}: an agent's write (the hub's `forge_post`, sent here as
- *   `CONTROL_FORGE_POST` with the project's rule): the repository's forge and
- *   sign-in found by its host, then made now, held for the person (the hub
- *   raises the ask the answer names), or refused in the guard's words.
- * - {@link makeForgePost}: a write made once with no decision, an approved
- *   held one or a landing's pull request (`CONTROL_UPSTREAM_POST`).
+ * {@link forgePost}: an agent's write (the hub's `forge_post`, sent here as
+ * `CONTROL_FORGE_POST`), or a landing's pull request: the repository's forge
+ * and sign-in found by its host, then made once with that sign-in.
  *
  * The credential is read on the host, used here, and never sent anywhere but
  * its forge.
  */
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { unhandled } from "@cawco/core/unhandled";
-import { decideWrite, type UpstreamRule } from "@cawco/core/upstream-guard";
 import {
   changeRequestWords,
   FORGE_NAMES,
   type Forge,
   type ForgeAsk,
-  type ForgePost,
   type ForgeVerdict,
   type ForgeWrite,
-  type PostMade,
-} from "@cawco/core/upstream-post";
+} from "@cawco/core/forge-post";
+import { unhandled } from "@cawco/core/unhandled";
 import { giteaForge } from "./gitea";
 import { githubForge } from "./github";
 import { gitlabForge } from "./gitlab";
@@ -99,7 +92,6 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//iu;
 const SCP_LIKE = /^(?:[^@/\s]+@)?([^/:\s]+):(.+)$/u;
 const EDGE_SLASHES = /^\/+|\/+$/gu;
 const DOT_GIT = /\.git$/iu;
-const PORT = /:\d+$/u;
 
 /**
  * Where a repository is, from its git URL or `host/path`: its host with its
@@ -107,7 +99,7 @@ const PORT = /:\d+$/u;
  * (`gitea.local:3000`), and its path, `.git` and edge slashes off. Undefined
  * for what names no host and path.
  */
-export const forgeLocation = (
+const forgeLocation = (
   raw: string
 ): { host: string; path: string } | undefined => {
   const text = raw.trim();
@@ -150,7 +142,7 @@ const CLI_OF: Record<Forge, string> = {
  * repository is on is not CawCo's to guess, and the session is asked for
  * the repository's URL, its port and all, which names one login.
  */
-export const forgeOn = async (
+const forgeOn = async (
   host: string
 ): Promise<{ adapter: ForgeAdapter; signIn: ForgeSignIn } | string> => {
   const found = await Promise.all(
@@ -222,20 +214,6 @@ const write = (client: ForgeClient, one: ForgeWrite): Promise<ForgeMade> => {
   }
 };
 
-/** What a write is, in the words a session and the card read. */
-const whatOf = (forge: Forge, one: ForgeWrite, repo: string): string => {
-  switch (one.op) {
-    case "issue":
-      return `open an issue on ${repo}`;
-    case "pull_request":
-      return `open a ${changeRequestWords(forge)} on ${repo}`;
-    case "comment":
-      return `comment on ${one.on === "issue" ? "issue" : changeRequestWords(forge)} ${one.number} of ${repo}`;
-    default:
-      unhandled("forge write", one);
-  }
-};
-
 /** What a made write says. */
 const madeWords = (forge: Forge, one: ForgeWrite, made: ForgeMade): string => {
   const name = FORGE_NAMES[forge];
@@ -250,40 +228,11 @@ const madeWords = (forge: Forge, one: ForgeWrite, made: ForgeMade): string => {
     : `${name} took the comment: ${made.url}`;
 };
 
-/** Makes `post` once, with the host's sign-in on its forge: no decision, the write is approved or the project's own. */
-export const makeForgePost = async (post: ForgePost): Promise<PostMade> => {
-  const { host, path } = hostAndPath(post.repo);
-  const adapter = FORGE_ADAPTERS.find((each) => each.forge === post.forge);
-  const signIn = adapter ? await adapter.signIn(host) : undefined;
-  if (!(adapter && typeof signIn === "object")) {
-    return {
-      ok: false,
-      said: `CawCo did not post: ${typeof signIn === "string" ? signIn : `this machine has no ${FORGE_NAMES[post.forge]} sign-in on ${host}`}.`,
-    };
-  }
-  const made = await within(`${FORGE_NAMES[post.forge]} on ${host}`, () =>
-    write(adapter.client(signIn, path), post.write)
-  );
-  return made.ok
-    ? {
-        ok: true,
-        said: madeWords(post.forge, post.write, made.value),
-        url: made.value.url,
-        ...(made.value.existing ? { existing: true } : {}),
-      }
-    : { ok: false, said: made.said };
-};
-
 /**
- * An agent's write under the project's `rule`: the repository's forge and
- * the host's sign-in there found by its host, then decided (core
- * `decideWrite`) and made now, held with the account it would post as, or
- * refused.
+ * An agent's write: the repository's forge and the host's sign-in there
+ * found by its host, then made once with that sign-in.
  */
-export const forgePost = async (
-  rule: UpstreamRule | undefined,
-  ask: ForgeAsk
-): Promise<ForgeVerdict> => {
+export const forgePost = async (ask: ForgeAsk): Promise<ForgeVerdict> => {
   const at = forgeLocation(ask.repo);
   if (!at) {
     return {
@@ -295,38 +244,20 @@ export const forgePost = async (
   if (typeof found === "string") {
     return { kind: "refused", why: `cawco: nothing was posted: ${found}` };
   }
-  const { forge } = found.adapter;
-  // The rule names repositories without a port, as every remote's identity
-  // is (core normaliseRemote); the post names the host its sign-in is for,
-  // port and all, so it is made where it was decided.
-  const repo = `${at.host.replace(PORT, "")}/${at.path}`;
-  const what = whatOf(forge, ask.write, repo);
-  const post: ForgePost = {
-    via: "forge",
-    forge,
-    repo: `${found.signIn.host}/${at.path}`,
-    write: ask.write,
+  const { adapter, signIn } = found;
+  const { forge } = adapter;
+  const made = await within(`${FORGE_NAMES[forge]} on ${signIn.host}`, () =>
+    write(adapter.client(signIn, at.path), ask.write)
+  );
+  return {
+    kind: "made",
+    made: made.ok
+      ? {
+          ok: true,
+          said: madeWords(forge, ask.write, made.value),
+          url: made.value.url,
+          ...(made.value.existing ? { existing: true } : {}),
+        }
+      : { ok: false, said: made.said },
   };
-  const decision = decideWrite(rule, { what, repo });
-  switch (decision.kind) {
-    case "go":
-      return { kind: "made", made: await makeForgePost(post) };
-    case "refuse":
-      return { kind: "refused", why: decision.why };
-    case "hold": {
-      const login = await within("reading the account", () =>
-        found.adapter.client(found.signIn, at.path).account()
-      );
-      return {
-        kind: "held",
-        post,
-        what,
-        account: login.ok
-          ? `@${login.value}`
-          : `this machine's ${FORGE_NAMES[forge]} sign-in`,
-      };
-    }
-    default:
-      unhandled("decision", decision);
-  }
 };

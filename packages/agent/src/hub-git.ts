@@ -32,15 +32,11 @@
  * ({@link gitDoorEnv}), and the door, which speaks git's helper protocol
  * itself for such a remote, runs the host's own git against it with the
  * host's own credential ({@link hostGitEnv}). Every push across the
- * network comes here too ({@link guardedPushParameters}), whatever the
- * project's upstream rule (core upstream-guard.ts): one to the project's own
- * repository goes on; one to anyone else's goes on where agents may post,
- * is refused in the guard's words under "Keep agents off", or under "Ask me
- * first" held for the person and sent nowhere ({@link holdPush}). The door
- * serves the workspace's own clone alone, by the repository its helper
- * names, and takes no other URL. A workspace's gh reaches GitHub's API
- * through its GitHub door (github-door.ts) the same way: on the host,
- * judged there.
+ * network comes here too ({@link doorPushParameters}), on any host, and
+ * goes on with the host's own credential. The door serves the workspace's
+ * own clone alone, by the repository its helper names. A workspace's gh
+ * reaches GitHub's API through its GitHub door (github-door.ts) the same
+ * way: on the host, signed in there.
  *
  * A checkout outside any workspace whose `origin` is the hub (one a project
  * got the hub as its remote in, or one a move made) pulls and pushes from a
@@ -70,15 +66,8 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
-import {
-  askRefusal,
-  decideWrite,
-  normaliseRemote,
-} from "@cawco/core/upstream-guard";
-import type { GitPost, PushedRef } from "@cawco/core/upstream-post";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { hubOrigins } from "./git-credential";
-import { upstreamRule } from "./github-door";
 import { hostGh } from "./host-gh";
 import {
   declaredLfs,
@@ -109,7 +98,6 @@ import {
 } from "./move";
 import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
-import { raiseUpstreamAsk } from "./upstream-posts";
 import { cloneHolding } from "./workspace-records";
 
 /** A workspace's git door. */
@@ -317,7 +305,7 @@ const lfsConfigFor = (url: string): [string, string][] => {
  * runs no pre-push hook, so a push would otherwise land pointers whose
  * objects stay behind. Answers why the files did not go, or nothing.
  */
-export const pushLfs = async (
+const pushLfs = async (
   ref: WorkspaceRef,
   sources: string[],
   env: Record<string, string>,
@@ -367,7 +355,7 @@ const HOST_RUN_SILENCE_MS = 120_000;
 const HOST_RUN_ERR_KEPT = 64_000;
 
 /** A host run's whole stdout, the tail of its stderr, and its exit (128 when it was stopped or never ran). */
-export interface HostRun {
+interface HostRun {
   readonly code: number;
   readonly err: string;
   readonly out: string;
@@ -382,10 +370,9 @@ export interface HostRun {
  * process group of its own. When it says nothing for
  * {@link HOST_RUN_SILENCE_MS}, the whole group is stopped (a credential
  * helper it waits on included, and with it any lock that helper holds), and
- * its last words say how long it was silent. The door's own runs, and a held push made
- * on approval (upstream-posts.ts `makeHeldPush`).
+ * its last words say how long it was silent. The door's own runs.
  */
-export const runOnHost = (
+const runOnHost = (
   ref: WorkspaceRef,
   args: readonly string[],
   env: Record<string, string>
@@ -579,8 +566,8 @@ const protocolFeed = (
   const endBatch = async (): Promise<void> => {
     const lines = batch;
     batch = [];
-    // A dry run (a landing's push check, hub landing.ts) sends no large file
-    // and lands nothing to hold for the person: the helper answers it alone.
+    // A dry run (a landing's push check, hub landing.ts) sends no large
+    // file: the helper answers it alone.
     if (dryRun) {
       write(`${lines.join("\n")}\n\n`);
       return;
@@ -628,60 +615,6 @@ const protocolFeed = (
   };
 };
 
-/**
- * A push batch to another person's repository under `ask`, held for the
- * person: each ref's source resolved here to the commit it is at, so the
- * push made once they approve sends exactly these commits, and raised as
- * their ask. Answers what git shows beside each ref; nothing was pushed.
- * A dry run (`dryRun`) reads the refs the same way and asks nobody: it
- * answers that the push would wait for the person.
- */
-const holdPush = async (
-  ref: WorkspaceRef,
-  url: string,
-  repo: string,
-  lines: readonly string[],
-  dryRun: boolean
-): Promise<string> => {
-  const what = `git push ${url}`;
-  const refs: PushedRef[] = [];
-  for (const line of lines) {
-    const { src, dst } = refspecOf(line);
-    if (!src) {
-      return oneLine(
-        askRefusal(
-          what,
-          `deleting ${dst} is not a post the owner can approve here`
-        )
-      );
-    }
-    const run = inCopySync(
-      ref.id,
-      ref.path,
-      safeGitArgv(["rev-parse", "--verify", "--quiet", `${src}^{commit}`])
-    );
-    const read = Bun.spawnSync(run.argv, {
-      cwd: run.cwd,
-      env: {
-        ...process.env,
-        ...SAFE_GIT_ENV,
-        GIT_DIR: join(ref.path, ".git"),
-      },
-    });
-    const sha = read.stdout.toString().trim();
-    if (read.exitCode !== 0 || !sha) {
-      return oneLine(askRefusal(what, `${src} is no commit of this clone`));
-    }
-    refs.push({ sha, dst, force: FORCED.test(line.slice("push ".length)) });
-  }
-  if (dryRun) {
-    return `cawco: \`${what}\` to ${repo} would wait in the owner's Needs you (their choice: Ask me first). This was a dry run: nothing was asked and nothing was posted.`;
-  }
-  const post: GitPost = { via: "git", url, refs };
-  const raised = await raiseUpstreamAsk(ref.id, post, repo, what);
-  return oneLine(raised.text);
-};
-
 /** A C-quoted option value as git wrote it (`"…"`, quote.c `quote_c_style`), plain; a bare one as it is. */
 const unquoted = (value: string): string => {
   if (!value.startsWith('"')) {
@@ -715,7 +648,7 @@ const SSH_SCHEMES: ReadonlySet<string> = new Set([
  * local path or `file://` holds no credential: git inside the boundary
  * reaches it under the boundary's own file rules, never through the door.
  */
-export const isNetworkRemote = (url: string): boolean => {
+const isNetworkRemote = (url: string): boolean => {
   if (!SCHEME_URL.test(url)) {
     return SCP_LIKE.test(url);
   }
@@ -735,15 +668,13 @@ export const isNetworkRemote = (url: string): boolean => {
  * workspace's git door (`pushInsteadOf`, git-config(1): "Any URL that starts
  * with this value will not be pushed to; instead, it will be rewritten"):
  * `https://`, `http://`, the ssh schemes, and the scp-like form under
- * `git@`, the login every forge's ssh URL carries. The door judges each by
- * the rule ({@link doorTarget}): the project's own repository goes on;
- * another's is refused in the guard's words, or held for the person under
- * `ask` ({@link holdPush}), and under `on` pushed with the host's own
- * credential. Fetches still go straight out. A push to an
+ * `git@`, the login every forge's ssh URL carries. The door pushes each with
+ * the host's own credential ({@link doorTarget}). Fetches still go straight
+ * out. A push to an
  * scp-like URL under any other login reaches git's ssh, which inside the
  * boundary is {@link SSH_REFUSAL}.
  */
-export const guardedPushParameters = (): string =>
+export const doorPushParameters = (): string =>
   [
     ...[
       "https://",
@@ -794,7 +725,7 @@ export const quietGitParameters = (): string =>
  * (config/url_config.go `Get`). A hub origin's git is held to its own LFS
  * ({@link hubGitEnv}). The rename drops the read-only bind the workspace's
  * sandbox holds on that file, so the sandbox is stopped with everything in
- * it (boundary-host.ts `guard`): on 2026-10-17 a landing's push to a guarded
+ * it (boundary-host.ts `guard`): on 2026-10-17 a landing's push to a
  * GitHub origin set this off (a 401 on `locks/verify`, then
  * `lfs.<url>.access` written), and cut off every command the workspace was
  * running.
@@ -814,7 +745,7 @@ const DOOR_LFS: [string, string][] = [["lfs.locksverify", "false"]];
  * it into the clone's config). Both keys are scoped to github.com's URL, so
  * no other host's credential changes.
  */
-export const hostGitEnv = async (): Promise<Record<string, string>> => {
+const hostGitEnv = async (): Promise<Record<string, string>> => {
   const gh = await hostGh();
   const key = "credential.https://github.com.helper";
   return withGitConfig(
@@ -868,33 +799,18 @@ export const hostOriginGitEnv = async (
 };
 
 /**
- * What a push through the door to a remote outside the hub does: goes on
- * (`go`), is held for the person (`hold`, {@link holdPush}), or is refused in
- * the guard's words (`refuse`).
- */
-type PushRule =
-  | { kind: "go" }
-  | { kind: "hold"; repo: string }
-  | { kind: "refuse"; why: string };
-
-/**
  * What a door connection for `url` reaches:
  * - `hub`: the clone's own origin on the hub, through git's http helper with
  *   this machine's hub credential and the hub's LFS;
  * - `host`: a remote outside the hub, on any host and over any transport
  *   that crosses the network ({@link isNetworkRemote}), reached by the
  *   host's own git with the host's own credential. Its refs and objects are
- *   read; a push goes by the project's upstream rule (core
- *   upstream-guard.ts): to the clone's own origin or the project's own
- *   repository by another URL it goes on; to anyone else's it goes on where
- *   sessions may post, is held for the person under `ask`, and is refused
- *   under `off`. Each push that goes carries its large files to the
- *   repository it reaches (`origin`: whether that is the clone's own
- *   origin, whose LFS the clone names, or another, by its URL alone).
+ *   read, and a push goes on, carrying its large files to the repository it
+ *   reaches (`origin`: whether that is the clone's own origin, whose LFS the
+ *   clone names, or another, by its URL alone).
  * Thrown for anything else: the door signs nothing else in.
  */
-type DoorTarget =
-  { kind: "hub" } | { kind: "host"; origin: boolean; push: PushRule };
+type DoorTarget = { kind: "hub" } | { kind: "host"; origin: boolean };
 
 const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
   const origin = originOf(ref.id, ref.path);
@@ -903,7 +819,7 @@ const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
       return { kind: "hub" };
     }
     if (isNetworkRemote(origin)) {
-      return { kind: "host", origin: true, push: { kind: "go" } };
+      return { kind: "host", origin: true };
     }
   }
   if (!isNetworkRemote(url) || isHubRemote(url)) {
@@ -911,30 +827,17 @@ const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
       `cawco: git did not reach ${url} through the workspace's git door: it takes this clone's own origin, and pushes across the network, alone`
     );
   }
-  const repo = normaliseRemote(url);
-  const decision = decideWrite(upstreamRule(ref.id), {
-    what: `git push ${url}`,
-    ...(repo ? { repo } : {}),
-  });
-  return {
-    kind: "host",
-    origin: false,
-    push:
-      decision.kind === "refuse"
-        ? { kind: "refuse", why: oneLine(decision.why) }
-        : decision,
-  };
+  return { kind: "host", origin: false };
 };
 
 /**
  * What the door answers git's commands with when it speaks git's remote
  * helper protocol itself (gitremote-helpers(7)), for a remote outside the
- * hub or a held push: the remote's refs for `list`, the objects of the
+ * hub: the remote's refs for `list`, the objects of the
  * named refs for a `fetch` batch, and a line per ref for a `push` batch
  * (`ok <dst>`, or `error <dst> <why>`). A push batch under `dryRun` (git's
- * `option dry-run true`) is judged as the real one is and answered the same
- * way, and changes nothing: no large file sent, no ref written, nothing
- * held for the person. `leases` are the batch's `option cas` values, each
+ * `option dry-run true`) is answered by the remote's own `--dry-run` and
+ * changes nothing: no large file sent, no ref written. `leases` are the batch's `option cas` values, each
  * the push's `--force-with-lease=<ref>:<sha>`.
  */
 interface HelperBackend {
@@ -973,8 +876,8 @@ const PORCELAIN_REF = /^([ +\-*=!])\t[^\t]*:([^\t]+)\t(.*)$/u;
  * own credential ({@link hostGitEnv}), whatever its host and transport: its
  * refs by `git ls-remote`, a fetch by `git fetch` of the refs git named into
  * the clone's own objects (git writes the refs itself once the batch is
- * answered), and a push by its {@link PushRule}: held, refused, or made by
- * `git push --porcelain` of the batch's refspecs, read per ref. A push that
+ * answered), and a push by `git push --porcelain` of the batch's refspecs,
+ * read per ref. A push that
  * goes sends its large files first ({@link pushLfs}): to the clone's own
  * origin's LFS when `origin`, else to the LFS of the repository at `url`.
  */
@@ -982,15 +885,9 @@ const hostBackend = (
   ref: WorkspaceRef,
   url: string,
   env: Record<string, string>,
-  origin: boolean,
-  rule: PushRule
+  origin: boolean
 ): HelperBackend => ({
   list: async (forPush) => {
-    // A push that does not go on needs nothing of the remote: it is held or
-    // refused whatever the remote holds, and reaches no network for it.
-    if (forPush && rule.kind !== "go") {
-      return [];
-    }
     const listed = await runOnHost(
       ref,
       ["ls-remote", ...(forPush ? [] : ["--symref"]), url],
@@ -1033,13 +930,6 @@ const hostBackend = (
     }
   },
   push: async (lines, dryRun, leases) => {
-    if (rule.kind === "hold") {
-      const said = await holdPush(ref, url, rule.repo, lines, dryRun);
-      return lines.map((line) => `error ${refspecOf(line).dst} ${said}`);
-    }
-    if (rule.kind === "refuse") {
-      return lines.map((line) => `error ${refspecOf(line).dst} ${rule.why}`);
-    }
     const specs = lines.map((line) => line.slice("push ".length));
     // A dry run sends no large file: the remote's own `--dry-run` answers it.
     const refused = dryRun
@@ -1383,7 +1273,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
           socket,
           channel,
           rest,
-          hostBackend(ref, url, env, target.origin, target.push),
+          hostBackend(ref, url, env, target.origin),
           fail,
           async () => {
             if (!target.origin) {
@@ -1515,7 +1405,7 @@ const doors = new Map<string, Server>();
  */
 const SSH_REFUSAL = `#!${systemProgram("sh")}
 # CawCo: git's ssh inside a workspace's boundary, which holds no ssh key.
-echo "cawco: git over ssh did not run here: a workspace holds no ssh key and reaches no key agent. This clone's own origin goes through CawCo's git door, which signs in with this machine's own credential; another repository is reached only as the project's choice on other people's repositories allows (under Ask me first, a push to its https://, ssh:// or git@host: URL waits for the owner)." >&2
+echo "cawco: git over ssh did not run here: a workspace holds no ssh key and reaches no key agent. This clone's own origin goes through CawCo's git door, which signs in with this machine's own credential; a push to another repository goes through the door too by its https://, ssh:// or git@host: URL." >&2
 exit 128
 `;
 

@@ -241,10 +241,8 @@ async function furnish(fleet: KitFleet, data: Data): Promise<void> {
 }
 
 /**
- * Boots a fleet as a person's: sessiond, the hub, the signed-in account, the
- * agent, and onboarding's one choice answered as a person answers it once
- * (`PUT /api/fleet/choices`, agents kept off other people's repositories),
- * so what needs them is only what the journey raises.
+ * Boots a fleet as a person's: sessiond, the hub, the signed-in account and
+ * the agent, so what needs them is only what the journey raises.
  */
 async function bootFleet(fleet: KitFleet, hubMachine?: string): Promise<void> {
   fleet.launch("sessiond");
@@ -254,16 +252,6 @@ async function bootFleet(fleet: KitFleet, hubMachine?: string): Promise<void> {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const chose = await fetch(`${fleet.base}/api/fleet/choices`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ upstream: "off" }),
-  });
-  if (!chose.ok) {
-    throw new Error(
-      `the fleet's upstream choice was refused: ${chose.status} ${await chose.text()}`
-    );
-  }
 }
 
 /** The hub launched, under `hubMachine` when given, and answering. */

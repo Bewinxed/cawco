@@ -525,12 +525,6 @@ export interface HeartbeatAckPayload {
    * agent's loopback carries to the hub by it (agent hub-loopback.ts).
    */
   tailnetHttps?: import("./tailnet-https").TailnetServing;
-  /**
-   * The upstream guard's rules as the hub holds them now (upstream-guard.ts
-   * `UpstreamRules`), on every beat: each workspace's shims judge the next
-   * call by them (agent boundary.ts `takeUpstreamRules`).
-   */
-  upstream?: import("./upstream-guard").UpstreamRules;
 }
 
 /**
@@ -1413,7 +1407,6 @@ export type FramePayload =
   | import("./frames").ProjectsChangedFrame
   /** Hub-originated: the hub restarts for an update now, and is back within a deadline. */
   | import("./frames").HubRestartFrame
-  | import("./frames").FleetUpstreamFrame
   | import("./frames").TailnetHttpsFrame
   | import("./frames").FleetFetchFrame
   | import("./frames").ProjectCapFrame

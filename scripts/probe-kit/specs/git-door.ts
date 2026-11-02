@@ -2,18 +2,16 @@
  * A workspace's git door (agent hub-git.ts) for a remote that is not the
  * hub, on a host that is not GitHub: the door speaks git's remote helper
  * protocol itself and runs the host's own git with the host's own
- * credential, by the project's upstream rule. Run against the real door
- * and real git, with no boundary: git here runs with exactly the helper,
- * door socket, ssh and config a workspace's commands get (`gitDoorEnv`,
- * and `guardedPushParameters` and `quietGitParameters` as a guarded
- * workspace's executor adds them),
+ * credential. Run against the real door and real git, with no boundary: git
+ * here runs with exactly the helper, door socket, ssh and config a
+ * workspace's commands get (`gitDoorEnv`, and `doorPushParameters` and
+ * `quietGitParameters` as a workspace's executor adds them),
  * against bare repositories git's own http-backend serves on the loopback
  * (`serveGitHttp`): the clone's origin, `probe/origin.git`, and another
  * person's, `someone/else.git`.
  *
  *   bun scripts/probe-kit/run.ts git-door
  *
- * Under "Keep agents off other repositories" (the rule names the origin):
  * (a) `git fetch origin` reads the origin through the door;
  * (b) a commit pushed to `origin` lands there, once;
  * (k) a fetch with an annotated tag to follow works with the options git
@@ -34,44 +32,27 @@
  *     their commit and the hub's last, and their commit stays; (w) git's
  *     lease reaches the door: a stale one git refuses itself, and a held
  *     one is sent as `option cas`, answered ok, and lands;
- * (c) a push to someone/else.git is refused in the guard's words, and that
- *     repository takes no push; (p) its dry run is refused the same way;
  * (d) a push from another repository whose origin is the same URL is
  *     refused: the door serves the workspace's clone alone, and the origin
  *     takes no push;
  * (e) a push over ssh under a login the rewrite does not cover: git's ssh
- *     says the workspace holds no key.
- * Under "Ask me first", with a stand-in hub taking the ask:
- * (f) the push to someone/else.git is held: the hub is asked once, for
- *     that repository and that commit, as this machine's git sign-in; git
- *     reads the hub's answer; the repository takes no push; (q) its dry run
- *     says it would wait for the owner, and asks nobody;
- * (g) a push over ssh in git's scp-like form under `git@` is held the same
- *     way, for that host's repository, and reaches no network.
- * With "Let agents post upstream" in the rule:
- * (h) the same push to someone/else.git goes, with the host's credential,
- *     and lands there.
+ *     says the workspace holds no key;
+ * (h) a push to someone/else.git goes, with the host's credential, and
+ *     lands there.
  * Large files, with the host holding a credential for the loopback host (a
  * git credential store under its HOME) and the clone committing a
  * `.lfsconfig` that names a trap endpoint:
- * (r) under "Let agents post upstream", a dry run of a commit carrying an
- *     LFS file is ok and sends nothing: no object, no ref, no push;
- * (i) under "Let agents post upstream", a commit carrying an LFS file pushed
- *     to someone/else.git lands with its object in that repository's own LFS
- *     (`someone/else.git/info/lfs`), sent with the host's credential; the
- *     trap the `.lfsconfig` names is never called;
- * (j) under "Ask me first", such a push is held with nothing sent; made on
- *     approval (`makeHeldPush`), its object reaches someone/else.git's
- *     LFS with the host's credential before the commit lands, and the trap
- *     is still never called.
+ * (r) a dry run of a commit carrying an LFS file is ok and sends nothing: no
+ *     object, no ref, no push;
+ * (i) a commit carrying an LFS file pushed to someone/else.git lands with
+ *     its object in that repository's own LFS (`someone/else.git/info/lfs`),
+ *     sent with the host's credential; the trap the `.lfsconfig` names is
+ *     never called.
  * Every push through the door ends:
  * (y) when the host's credential helper never answers (as macOS's
  *     osxkeychain waits on a keychain prompt nobody is there for), the
  *     door stops the git-lfs it runs, helper and all, after 120 s of
  *     silence, and the push is refused in words that say so;
- * (y2) an approved held push (`makeHeldPush`) whose helper never answers
- *     ends the same way: its git push's whole process group is stopped
- *     after 120 s of silence, and no credential helper is left;
  * (z) when the door says `ok` and then nothing (a stuck agent), the helper
  *     ends git's push itself after 60 s, in words that say so.
  * A command's git, through the workspace's real executor and runner, on
@@ -80,14 +61,12 @@
  *     3 s later none runs from the clone.
  * The workspace's gh (workspace-gh.ts, through the workspace's real
  * executor and runner, on the host):
- * (s) under "Let agents post upstream" no forge token is in a command's
- *     environment, the caller's GH_TOKEN included, nor in any file of the
- *     workspace's, and gh's post is made by the GitHub door with the host's
- *     token; under "Ask me first" the door holds it for the person.
+ * (s) no forge token is in a command's environment, the caller's GH_TOKEN
+ *     included, nor in any file of the workspace's, and gh's post is made by
+ *     the GitHub door with the host's token.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { UpstreamPosts } from "../../../packages/core/src/upstream-guard";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { serveGitHttp } from "../git-http";
 import type { Spec } from "../kit";
@@ -96,8 +75,6 @@ import { workspaceGitQuietLeg } from "../workspace-git-quiet";
 
 const ORIGIN = "probe/origin.git";
 const ELSE = "someone/else.git";
-/** A repository that takes only signed-in pushes, as a forge's public one does. */
-const PRIVATE = "someone/private.git";
 const IDENTITY = ["-c", "user.name=Probe", "-c", "user.email=probe@probe.test"];
 /** git-lfs's filters, given per command so the clone's own config stays as a clone's is. */
 const LFS_FILTERS = [
@@ -132,45 +109,19 @@ const spec: Spec = {
     // scratch's own, before the agent's modules read either.
     process.env.HOME = join(scratch, "h");
     process.env.XDG_RUNTIME_DIR = join(scratch, "r");
-    // A stand-in hub: it takes a held post's ask and answers what the
-    // session reads (hub upstream-asks.ts), recording each.
-    const asks: {
-      account?: string;
-      post?: { refs?: { sha?: string }[]; url?: string; via?: string };
-      repo?: string;
-    }[] = [];
-    const hub = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      async fetch(request) {
-        if (new URL(request.url).pathname !== "/api/upstream/asks") {
-          return new Response("not here\n", { status: 404 });
-        }
-        asks.push((await request.json()) as (typeof asks)[number]);
-        return new Response(
-          "PROBE-HUB-HELD: it waits in the owner's Needs you"
-        );
-      },
-    });
-    process.env.CAWCO_HUB_URL = `http://127.0.0.1:${hub.port}`;
     await mkdir(process.env.XDG_RUNTIME_DIR, { recursive: true, mode: 0o700 });
     const {
       closeGitDoor,
       gitDoorEnv,
       gitHelperDirOf,
-      guardedPushParameters,
+      doorPushParameters,
       openGitDoor,
       quietGitParameters,
     } = await import("../../../packages/agent/src/hub-git");
-    const { workspaceUpstreamRuleFile } =
-      await import("../../../packages/core/src/paths");
-    const { normaliseRemote } =
-      await import("../../../packages/core/src/upstream-guard");
 
     const http = serveGitHttp(join(scratch, "srv"), HOST_LOGIN);
     const originUrl = await http.bare(ORIGIN);
     const elseUrl = await http.bare(ELSE);
-    const privateUrl = await http.bare(PRIVATE, true);
     // The origin holds one commit, as a project's remote would.
     const seed = join(scratch, "seed");
     await Bun.$`git init -q -b main ${seed} && git -C ${seed} ${IDENTITY} commit -q --allow-empty -m seed && git -C ${seed} push -q ${originUrl} main`.quiet();
@@ -179,32 +130,22 @@ const spec: Spec = {
 
     const id = `gd${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const ref = { id, path: clone };
-    const writeRule = async (posts: UpstreamPosts) => {
-      await mkdir(join(workspaceUpstreamRuleFile(id), ".."), {
-        recursive: true,
-      });
-      await writeFile(
-        workspaceUpstreamRuleFile(id),
-        JSON.stringify({ posts, remotes: [normaliseRemote(originUrl)] })
-      );
-    };
-    await writeRule("off");
     await openGitDoor(ref);
     const door = gitDoorEnv(id, clone);
-    /** A guarded workspace's command environment: the door's helper first on PATH, its config words, its ssh. */
+    /** A workspace's command environment: the door's helper first on PATH, its config words, its ssh. */
     const doorEnv = (extra: Record<string, string> = {}) => ({
       ...process.env,
       ...door,
       PATH: `${gitHelperDirOf(id)}:${process.env.PATH}`,
       GIT_CONFIG_PARAMETERS: [
         door.CAWCO_GIT_PARAMETERS,
-        guardedPushParameters(),
+        doorPushParameters(),
         quietGitParameters(),
       ].join(" "),
       GIT_TERMINAL_PROMPT: "0",
       ...extra,
     });
-    /** git as a guarded workspace's command runs it. */
+    /** git as a workspace's command runs it. */
     const inside = (
       cwd: string,
       args: string[],
@@ -478,38 +419,6 @@ const spec: Spec = {
       await originLegs();
       await branchLegs();
 
-      // (c)
-      const pushedElse = await inside(clone, [
-        "push",
-        elseUrl,
-        "HEAD:refs/heads/door-else",
-      ]);
-      check(
-        "(c) under keep off, a push to someone/else.git is refused in the guard's words, and it takes no push",
-        pushedElse.exitCode !== 0 &&
-          said(pushedElse).includes(
-            `cawco: \`git push ${elseUrl}\` did not run: it writes to 127.0.0.1/someone/else`
-          ) &&
-          http.pushes(ELSE) === 0 &&
-          (await tip(ELSE, "door-else")) === "",
-        `exit ${pushedElse.exitCode}; pushes ${http.pushes(ELSE)}; ${said(pushedElse)}`
-      );
-      const dryElse = await inside(clone, [
-        "push",
-        "--dry-run",
-        elseUrl,
-        "HEAD:refs/heads/door-else",
-      ]);
-      check(
-        "(p) under keep off, a dry run of that push is refused in the same words",
-        dryElse.exitCode !== 0 &&
-          said(dryElse).includes(
-            `cawco: \`git push ${elseUrl}\` did not run: it writes to 127.0.0.1/someone/else`
-          ) &&
-          http.pushes(ELSE) === 0,
-        `exit ${dryElse.exitCode}; ${said(dryElse)}`
-      );
-
       // (d)
       const stranger = join(scratch, "stranger");
       await Bun.$`git init -q -b main ${stranger} && git -C ${stranger} ${IDENTITY} commit -q --allow-empty -m stranger && git -C ${stranger} remote add origin ${originUrl}`.quiet();
@@ -541,69 +450,14 @@ const spec: Spec = {
         `exit ${overSsh.exitCode}; ${said(overSsh)}`
       );
 
-      // (f)
-      await writeRule("ask");
-      const held = await inside(clone, [
-        "push",
-        elseUrl,
-        "HEAD:refs/heads/door-held",
-      ]);
-      const [ask] = asks;
-      check(
-        "(f) under Ask me first, the push to someone/else.git is held: one ask for that repository and commit, as this machine's git sign-in; git reads the hub's answer; nothing lands",
-        held.exitCode !== 0 &&
-          said(held).includes("PROBE-HUB-HELD") &&
-          asks.length === 1 &&
-          ask?.repo === "127.0.0.1/someone/else" &&
-          ask.account === "this machine's git sign-in" &&
-          ask.post?.via === "git" &&
-          ask.post.url === elseUrl &&
-          ask.post.refs?.[0]?.sha === head &&
-          http.pushes(ELSE) === 0 &&
-          (await tip(ELSE, "door-held")) === "",
-        `exit ${held.exitCode}; asks ${JSON.stringify(asks)}; pushes ${http.pushes(ELSE)}; ${said(held)}`
-      );
-      const dryHeld = await inside(clone, [
-        "push",
-        "--dry-run",
-        elseUrl,
-        "HEAD:refs/heads/door-held-dry",
-      ]);
-      check(
-        "(q) under Ask me first, a dry run of that push says it would wait for the owner, and asks nobody",
-        dryHeld.exitCode !== 0 &&
-          said(dryHeld).includes("would wait in the owner's Needs you") &&
-          asks.length === 1 &&
-          http.pushes(ELSE) === 0 &&
-          (await tip(ELSE, "door-held-dry")) === "",
-        `exit ${dryHeld.exitCode}; asks ${asks.length}; ${said(dryHeld)}`
-      );
-
-      // (g)
-      const heldSsh = await inside(clone, [
-        "push",
-        "git@other.probe.test:someone/else.git",
-        "HEAD:refs/heads/door-held-ssh",
-      ]);
-      check(
-        "(g) a push over ssh to git@other.probe.test is held the same way, for that host's repository",
-        heldSsh.exitCode !== 0 &&
-          said(heldSsh).includes("PROBE-HUB-HELD") &&
-          asks.length === 2 &&
-          asks[1]?.repo === "other.probe.test/someone/else" &&
-          asks[1]?.post?.url === "git@other.probe.test:someone/else.git",
-        `exit ${heldSsh.exitCode}; asks ${JSON.stringify(asks.slice(1))}; ${said(heldSsh)}`
-      );
-
       // (h)
-      await writeRule("on");
       const pushedOn = await inside(clone, [
         "push",
         elseUrl,
         "HEAD:refs/heads/door-on",
       ]);
       check(
-        "(h) where agents may post, the same push to someone/else.git goes with the host's credential and lands",
+        "(h) a push to someone/else.git goes with the host's credential and lands",
         pushedOn.exitCode === 0 &&
           (await tip(ELSE, "door-on")) === head &&
           http.pushes(ELSE) === 1,
@@ -663,7 +517,7 @@ const spec: Spec = {
         "HEAD:refs/heads/door-lfs",
       ]);
       check(
-        "(r) under Let agents post upstream, a dry run of a commit carrying an LFS file is ok and sends nothing: no object, no ref, no push",
+        "(r) a dry run of a commit carrying an LFS file is ok and sends nothing: no object, no ref, no push",
         dryLfs.exitCode === 0 &&
           said(dryLfs).includes("HEAD -> door-lfs") &&
           http.lfs(ELSE_LFS).length === 0 &&
@@ -681,7 +535,7 @@ const spec: Spec = {
       ]);
       const elseObjects = http.lfs(ELSE_LFS);
       check(
-        "(i) under Let agents post upstream, a commit's LFS object goes to someone/else.git's own LFS with the host's credential; the clone's .lfsconfig trap is never called",
+        "(i) a commit's LFS object goes to someone/else.git's own LFS with the host's credential; the clone's .lfsconfig trap is never called",
         onLfs.pointer.startsWith(
           "version https://git-lfs.github.com/spec/v1"
         ) &&
@@ -695,46 +549,8 @@ const spec: Spec = {
         `exit ${pushedLfs.exitCode}; else LFS ${JSON.stringify(elseObjects)}; trap calls ${http.lfsCalls("trap")}; origin LFS ${JSON.stringify(http.lfs(ORIGIN_LFS))}; ${said(pushedLfs)}`
       );
 
-      // (j)
-      await writeRule("ask");
-      const askLfs = await lfsCommit("held.bin");
-      const asksBefore = asks.length;
-      const heldLfs = await inside(clone, [
-        "push",
-        elseUrl,
-        "HEAD:refs/heads/door-lfs-held",
-      ]);
-      const heldAsk = asks[asksBefore];
-      const sentWhileHeld = http.lfs(ELSE_LFS).length;
-      // Approved: made as the agent makes it, from the workspace's clone
-      // (upstream-posts.ts `makeUpstreamPost`, once it has found the clone).
-      const { makeHeldPush } =
-        await import("../../../packages/agent/src/upstream-posts");
-      const { isUpstreamPost } =
-        await import("../../../packages/core/src/upstream-post");
-      const heldPost: unknown = heldAsk?.post;
-      const made =
-        isUpstreamPost(heldPost) && heldPost.via === "git"
-          ? await makeHeldPush(ref, heldPost)
-          : { ok: false, said: "no git push was held" };
-      const afterApproval = http.lfs(ELSE_LFS);
-      check(
-        "(j) under Ask me first, an LFS push is held with nothing sent; made on approval, its object reaches someone/else.git's LFS with the host's credential and the commit lands; the trap is never called",
-        heldLfs.exitCode !== 0 &&
-          heldAsk?.post?.refs?.[0]?.sha === askLfs.sha &&
-          sentWhileHeld === elseObjects.length &&
-          made.ok &&
-          (await tip(ELSE, "door-lfs-held")) === askLfs.sha &&
-          afterApproval.some(
-            (one) => one.oid === askLfs.oid && one.user === HOST_LOGIN.user
-          ) &&
-          http.lfsCalls("trap") === 0,
-        `held exit ${heldLfs.exitCode}; sent while held ${sentWhileHeld - elseObjects.length}; made ${JSON.stringify(made)}; else LFS ${JSON.stringify(afterApproval)}; trap calls ${http.lfsCalls("trap")}`
-      );
-
       // (y): the host's credential helper waits forever, as osxkeychain does
       // on a keychain prompt nobody answers.
-      await writeRule("on");
       const marker = `probe-silent-helper-${crypto.randomUUID().slice(0, 8)}`;
       const silentHelper = join(scratch, "silent-helper");
       await writeFile(
@@ -769,44 +585,7 @@ const spec: Spec = {
           helperLeft === "",
         `exit ${stalled.exitCode} after ${stallTook} s; helper left ${helperLeft || "none"}; ${said(stalled)}`
       );
-
-      // (y2): an approved held push whose helper never answers. A commit of
-      // its own with no large file, so git-lfs has nothing to send, to a
-      // repository that reads from anyone and takes only signed-in pushes:
-      // git's push itself waits on the helper.
-      const heldStallLeg = async (): Promise<void> => {
-        const emptyTree = (
-          await Bun.$`git -C ${clone} mktree < ${new Response("")}`.text()
-        ).trim();
-        const lone = (
-          await Bun.$`git -C ${clone} ${IDENTITY} commit-tree ${emptyTree} -m held-stall`.text()
-        ).trim();
-        const privatePushes = http.pushes(PRIVATE);
-        const heldStart = Date.now();
-        const heldStall = await makeHeldPush(ref, {
-          via: "git",
-          url: privateUrl,
-          refs: [
-            { sha: lone, dst: "refs/heads/door-held-stall", force: false },
-          ],
-        });
-        const heldTook = Math.round((Date.now() - heldStart) / 1000);
-        await writeFile(gitconfig, storeConfig);
-        const heldHelperLeft = (
-          await Bun.$`pgrep -f ${marker}`.quiet().nothrow().text()
-        ).trim();
-        check(
-          "(y2) an approved held push whose credential helper never answers ends within the silence limit, its whole process group stopped: refused in words that say so, nothing lands, and no credential helper is left",
-          !heldStall.ok &&
-            heldStall.said.includes("git push said nothing for 120 s") &&
-            heldTook < 180 &&
-            http.pushes(PRIVATE) === privatePushes &&
-            (await tip(PRIVATE, "door-held-stall")) === "" &&
-            heldHelperLeft === "",
-          `after ${heldTook} s; helper left ${heldHelperLeft || "none"}; made ${JSON.stringify(heldStall)}`
-        );
-      };
-      await heldStallLeg();
+      await writeFile(gitconfig, storeConfig);
 
       // (z): a door that says ok and then nothing, as a stuck agent would.
       const mutePath = join(scratch, "mute.sock");
@@ -840,17 +619,10 @@ const spec: Spec = {
       await workspaceGitQuietLeg(kit, { clone, id, root: scratch });
 
       // (s)
-      await workspaceGhLeg(kit, {
-        asks,
-        clone,
-        id,
-        root: scratch,
-        writeRule,
-      });
+      await workspaceGhLeg(kit, { clone, id, root: scratch });
     } finally {
       await closeGitDoor(id);
       http.stop();
-      hub.stop(true);
     }
   },
 };

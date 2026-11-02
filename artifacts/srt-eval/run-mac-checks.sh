@@ -16,12 +16,11 @@
 # apps/apple CawCo`). Each of those, git push and Playwright is a
 # working row: a failure fails the run, as an OPEN escape row does.
 # It starts its own sessiond on a scratch socket, creates one workspace through
-# the product code (rig-workspace.ts, which first hands the agent the upstream
-# rule this fleet's hub sends: unguarded, SOURCE_REPO's remotes its own) and
-# keeps that rig up for the whole run, serving the workspace's doors as the
-# agent does (git.sock, github.sock, tools.sock). It runs everything through
-# the workspace's executor, then stops the rig by its pid, archives the
-# workspace and stops its sessiond.
+# the product code (rig-workspace.ts) and keeps that rig up for the whole
+# run, serving the workspace's doors as the agent does (git.sock,
+# github.sock, tools.sock). It runs everything through the workspace's
+# executor, then stops the rig by its pid, archives the workspace and stops
+# its sessiond.
 set -u
 source_repo=$1 other_env=$2 swift_package=${3:-} xcode_dir=${4:-} xcode_scheme=${5:-}
 here=$(cd "$(dirname "$0")" && pwd)
@@ -107,7 +106,6 @@ doors_served() {
     connect "$door_dir/$door.sock" && works "connect the $door door ($1)" PASS || works "connect the $door door ($1)" "FAIL (not served; the rig is $rig_state, the socket $(test -S "$door_dir/$door.sock" && echo is there || echo is gone))"
   done
 }
-echo "its upstream rule: $(cat "$state/ro/upstream.json")"
 step "the workspace's doors, served by the rig"
 doors_served "at the start"
 # The workspace's scratch dir, as its commands see it: their TMPDIR.

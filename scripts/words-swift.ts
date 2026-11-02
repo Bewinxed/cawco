@@ -92,11 +92,6 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/sidebar.ts", export: "sidebarWords", as: "" }],
   },
   {
-    // The upstream choice: its card in Needs you and a project's ⋯ menu.
-    swift: "Upstream",
-    members: [{ file: "upstream-guard.ts", export: "UPSTREAM_WORDS", as: "" }],
-  },
-  {
     // HTTPS on the tailnet: its onboarding row in Needs you.
     swift: "Tailnet",
     members: [{ file: "words/tailnet.ts", export: "tailnetWords", as: "" }],

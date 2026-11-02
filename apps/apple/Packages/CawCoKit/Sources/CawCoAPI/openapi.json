@@ -961,14 +961,6 @@
                 "properties": {
                   "delegates": {
                     "type": "boolean"
-                  },
-                  "upstream": {
-                    "type": "string",
-                    "enum": [
-                      "off",
-                      "ask",
-                      "on"
-                    ]
                   }
                 }
               }
@@ -26399,17 +26391,6 @@
                       "none"
                     ]
                   },
-                  "upstreamPosts": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "enum": [
-                      "off",
-                      "ask",
-                      "on"
-                    ]
-                  },
                   "lfs": {
                     "type": [
                       "object",
@@ -31764,9 +31745,6 @@
             },
             "tracker": {
               "$ref": "#/components/schemas/Tracker"
-            },
-            "upstreamPosts": {
-              "$ref": "#/components/schemas/FleetChoicesUpstream"
             }
           },
           "required": [
@@ -31991,9 +31969,6 @@
           },
           "tracker": {
             "$ref": "#/components/schemas/Tracker"
-          },
-          "upstreamPosts": {
-            "$ref": "#/components/schemas/FleetChoicesUpstream"
           }
         },
         "required": [
@@ -32205,9 +32180,6 @@
           },
           "tracker": {
             "$ref": "#/components/schemas/Tracker"
-          },
-          "upstreamPosts": {
-            "$ref": "#/components/schemas/FleetChoicesUpstream"
           }
         },
         "required": [
@@ -32439,9 +32411,6 @@
           },
           "tracker": {
             "$ref": "#/components/schemas/Tracker"
-          },
-          "upstreamPosts": {
-            "$ref": "#/components/schemas/FleetChoicesUpstream"
           }
         },
         "required": [
@@ -32625,9 +32594,6 @@
           },
           "tracker": {
             "$ref": "#/components/schemas/Tracker"
-          },
-          "upstreamPosts": {
-            "$ref": "#/components/schemas/FleetChoicesUpstream"
           }
         },
         "required": [
@@ -34147,9 +34113,6 @@
             "$ref": "#/components/schemas/HubRestartFrame"
           },
           {
-            "$ref": "#/components/schemas/FleetUpstreamFrame"
-          },
-          {
             "$ref": "#/components/schemas/TailnetHttpsFrame"
           },
           {
@@ -34243,7 +34206,6 @@
             "starters.changed": "#/components/schemas/StartersChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "hub.restart": "#/components/schemas/HubRestartFrame",
-            "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
             "tailnet.https": "#/components/schemas/TailnetHttpsFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
@@ -35641,10 +35603,6 @@
               "todos"
             ],
             "description": "What each denies, per harness."
-          },
-          "upstream": {
-            "$ref": "#/components/schemas/FleetChoicesUpstream",
-            "description": "Sessions may post to other people's repositories; null while nobody has answered."
           }
         },
         "required": [
@@ -59734,10 +59692,6 @@
               "$ref": "#/components/schemas/PermissionField"
             }
           },
-          "post": {
-            "$ref": "#/components/schemas/HeldPostNaming",
-            "description": "A post to another person's repository held for the person: Needs you\nnames it by its own title (a comment's, its body's first line) over\nwhere it goes (`owner/repo#12`). Absent for any other ask."
-          },
           "project": {
             "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
             "type": "string"
@@ -59801,24 +59755,6 @@
         "required": [
           "key",
           "value"
-        ]
-      },
-      "HeldPostNaming": {
-        "description": "A held post as Needs you names it: what it is, and where it goes.",
-        "type": "object",
-        "properties": {
-          "target": {
-            "description": "`owner/repo`, the host too off GitHub, with `#n` for the issue or pull request it is on.",
-            "type": "string"
-          },
-          "title": {
-            "description": "The post's own title; a comment's first line.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "target",
-          "title"
         ]
       },
       "PermissionUpdate": {
@@ -60672,26 +60608,6 @@
         },
         "required": [
           "kind"
-        ]
-      },
-      "FleetUpstreamFrame": {
-        "description": "Hub-originated: the fleet's upstream answer (hub fleet-choices.ts\n`upstream`) was given or changed, from onboarding's Needs you row, a\nsetup page or the API: every dashboard takes it at once, so Needs you\nstops asking and each project's \"Same as the fleet\" names it.",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "fleet.upstream"
-            ]
-          },
-          "upstream": {
-            "$ref": "#/components/schemas/FleetChoicesUpstream",
-            "description": "Whether agents may post to other people's repositories: off, ask the person first, or on."
-          }
-        },
-        "required": [
-          "kind",
-          "upstream"
         ]
       },
       "TailnetHttpsFrame": {
@@ -61736,14 +61652,6 @@
           "delegate",
           "session",
           "spin-off"
-        ]
-      },
-      "FleetChoicesUpstream": {
-        "type": "string",
-        "enum": [
-          "ask",
-          "off",
-          "on"
         ]
       },
       "FleetDecidesCaw": {

@@ -81,7 +81,6 @@ typeOverrides:
     FindConversationRole: OpenEnums.FindConversationRole
     FindField: OpenEnums.FindField
     FindLiveState: OpenEnums.FindLiveState
-    FleetChoicesUpstream: OpenEnums.FleetChoicesUpstream
     FleetConvergeState: OpenEnums.FleetConvergeState
     FleetDecidesCaw: OpenEnums.FleetDecidesCaw
     FleetFaultCause: OpenEnums.FleetFaultCause

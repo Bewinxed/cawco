@@ -40,9 +40,8 @@
  * its clone's origin, on any host and over any transport, through the git
  * door (hub-git.ts), which signs in on the host with the host's own. Its
  * `gh` reaches GitHub's API through the workspace's GitHub door
- * (github-door.ts), which judges each write by the project's upstream rule
- * and signs in on the host to what goes, whatever the rule: no forge's token
- * ever enters a workspace ({@link commandEnv}). The hub lands a workspace's
+ * (github-door.ts), which signs in on the host: no forge's token ever
+ * enters a workspace ({@link commandEnv}). The hub lands a workspace's
  * commits through the same door: its `git push` is a command the workspace's
  * agent runs through this executor (`runHubCommand`). `cawco tools` reaches the hub's tools through the
  * workspace's tool door (`tool-door.ts`).
@@ -152,7 +151,6 @@ import {
   workspaceStateDir,
   workspacesDir,
   workspaceTmpDir,
-  workspaceUpstreamRuleFile,
   workspaceXdgDirs,
   workspaceXdgEnv,
 } from "@cawco/core/paths";
@@ -184,7 +182,6 @@ import {
 } from "@cawco/core/state-file";
 import { PolicySchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
-import type { UpstreamRule, UpstreamRules } from "@cawco/core/upstream-guard";
 import type { Policy } from "@cawco/core/workspace-judge";
 import {
   systemProgram,
@@ -217,10 +214,10 @@ import { syncedHeld } from "./fleet-converged";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import {
   closeGitDoor,
+  doorPushParameters,
   gitDoorEnv,
   gitDoorOf,
   gitHelperDirOf,
-  guardedPushParameters,
   openGitDoor,
   quietGitParameters,
 } from "./hub-git";
@@ -1679,73 +1676,15 @@ ${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port
   ]);
 };
 
-/** The workspace's upstream rule (`UpstreamRule`), written only here ({@link workspaceUpstreamRuleFile}). */
-const upstreamRuleOf = workspaceUpstreamRuleFile;
-
-/** The rules the hub last handed this machine (register and heartbeat acks); none until it has. */
-let upstreamRules: UpstreamRules | undefined;
-
-/** Workspace `id`'s rule under `rules`: its project's, or the fleet's for a workspace in none. */
-const ruleFor = async (
-  id: string,
-  rules: UpstreamRules
-): Promise<UpstreamRule> => {
-  const project = await readRecord(workspaceProjectFile(id), z.string()).catch(
-    () => undefined
-  );
-  return (project !== undefined && rules.projects[project]) || rules.fleet;
-};
-
-/** Writes workspace `id`'s upstream rule under the rules held, when it changed; nothing while none is held. */
-const writeUpstreamRule = async (id: string): Promise<void> => {
-  const rules = upstreamRules;
-  if (!rules) {
-    return;
-  }
-  const text = `${JSON.stringify(await ruleFor(id, rules))}\n`;
-  const file = upstreamRuleOf(id);
-  if ((await readFile(file, "utf8").catch(() => "")) === text) {
-    return;
-  }
-  await writeWhole(file, text, 0o644);
-};
-
-/**
- * Takes the upstream rules the hub hands this machine with each register
- * and heartbeat ack, and writes each workspace's here (one with a `ro` dir:
- * one whose boundary was armed), so its shims judge the next call by the
- * choice as it stands: a change reaches a running session within a beat.
- */
-export const takeUpstreamRules = async (
-  rules: UpstreamRules | undefined
-): Promise<void> => {
-  if (!rules) {
-    return;
-  }
-  upstreamRules = rules;
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
-  await Promise.all(
-    ids
-      .filter((id) => existsSync(roOf(id)))
-      .map((id) =>
-        writeUpstreamRule(id).catch((error: unknown) => {
-          console.warn(
-            `[workspace] ${id}: its upstream rule could not be written: ${error instanceof Error ? error.message : String(error)}`
-          );
-        })
-      )
-  );
-};
-
 /**
  * The gh config dir every workspace's commands run with (`GH_CONFIG_DIR`,
  * {@link commandEnv}), read-only inside: `http_unix_socket`
  * names the workspace's GitHub door, so gh sends every request there in the
  * clear (go-gh pkg/api/client_options.go `resolveOptions`: "if
  * opts.UnixDomainSocket == \"\" … cfg.Get([]string{\"http_unix_socket\"})"),
- * and its login is a placeholder the door replaces with the host's token for
- * what it lets through. `version: "1"` is the config gh would migrate to,
- * so it writes nothing here.
+ * and its login is a placeholder the door replaces with the host's token.
+ * `version: "1"` is the config gh would migrate to, so it writes nothing
+ * here.
  */
 const guardedGhConfigOf = (id: string): string => join(roOf(id), "gh-guarded");
 
@@ -1816,13 +1755,15 @@ const armHookNow = async (
     await writeShims(id, runtime);
   }
   await writeGuardedGhConfig(id);
-  await writeUpstreamRule(id);
   await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id), 0o644);
   await writeGitShim(id, held.path);
   await writeChromiumShim(id);
   // The copy of gh's token an earlier build's executor kept beside the
   // workspace: nothing reads it now, and a token is kept nowhere it is not used.
   await rm(join(stateDir(id), "gh-token"), { force: true });
+  // The repository rule an earlier build wrote for the workspace's doors:
+  // nothing reads it now.
+  await rm(join(roOf(id), "upstream.json"), { force: true });
   // Its host's pid as the keeper listed it at its start, and matched to
   // the keeper's list again before any boundary on record is armed.
   await writeWhole(
@@ -7151,15 +7092,13 @@ const ready = (
  * `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a script tells that it runs
  * inside one; never a key agent's socket ({@link AGENT_SOCKET_ENV}).
  *
- * And never a forge's token, its caller's included ({@link FORGE_TOKEN_ENV}),
- * whatever the project's upstream rule: no forge CLI by its path, nor curl,
- * nor any HTTP client has one to post with, on any host. gh runs with the
- * door's config dir ({@link guardedGhConfigOf}): its requests go through the
- * workspace's GitHub door, which decides each write by the rule as every door
- * does (core `decideWrite`) and signs in on the host to what goes
- * (github-door.ts). Every push across the network goes through the git door
- * (hub-git.ts `guardedPushParameters`), which decides it the same way and
- * pushes what goes with the host's own credential.
+ * And never a forge's token, its caller's included ({@link FORGE_TOKEN_ENV}):
+ * no forge CLI by its path, nor curl, nor any HTTP client has one to post
+ * with, on any host. gh runs with the door's config dir
+ * ({@link guardedGhConfigOf}): its requests go through the workspace's GitHub
+ * door, which signs in on the host (github-door.ts). Every push across the
+ * network goes through the git door (hub-git.ts `doorPushParameters`), which
+ * pushes it with the host's own credential.
  */
 const commandEnv = (id: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
@@ -7198,7 +7137,7 @@ const doorEnv = (id: string, clone: string): Record<string, string> => {
     ...door,
     CAWCO_GIT_PARAMETERS: [
       door.CAWCO_GIT_PARAMETERS,
-      guardedPushParameters(),
+      doorPushParameters(),
       quietGitParameters(),
     ]
       .filter(Boolean)

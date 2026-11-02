@@ -1,9 +1,8 @@
 /**
  * The host's `gh`, and any program the host runs with its own sign-ins, as
  * CawCo runs them outside every workspace's boundary: the GitHub door signs
- * a workspace's gh requests with gh's token (github-door.ts), an approved
- * held request is made with it (upstream-posts.ts), and the forge adapters
- * sign in with it, or start gitea-mcp (forges/). No workspace is ever handed
+ * a workspace's gh requests with gh's token (github-door.ts), and the forge
+ * adapters sign in with it, or start gitea-mcp (forges/). No workspace is ever handed
  * a token; the hub is, for a `gh` connection made from this machine's gh
  * (core `CONTROL_GH_TOKEN`), and seals it as it seals every connection's.
  */

@@ -963,14 +963,6 @@ export const workspaceSpillDir = (id: string, instanceId: string): string =>
  * on the hub's machine (`workspacePolicy`). In the state dir, which nothing
  * inside the boundary writes.
  */
-/**
- * Workspace `id`'s upstream rule (upstream-guard.ts `UpstreamRule`), in the
- * part of its state dir a command reads: its shims judge by it inside the
- * boundary, and its executor and git door outside it.
- */
-export const workspaceUpstreamRuleFile = (id: string): string =>
-  join(workspaceReadOnlyDir(id), "upstream.json");
-
 export const workspaceProjectFile = (id: string): string =>
   join(workspaceStateDir(id), "project.json");
 

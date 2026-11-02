@@ -33,7 +33,6 @@ import { questionsOf } from "@cawco/core/question";
 import type { RelayJourneyView } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
-import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
 import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { presenceWords } from "@cawco/core/words/presence";
@@ -84,7 +83,6 @@ import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
 import { rooted, standsAlone, tree } from "../tree";
-import { askNaming } from "./ask-naming";
 import { choices } from "./choices.svelte";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
@@ -358,7 +356,7 @@ export function span(ms: number): string {
 /* ── Shapes ────────────────────────────────────────────────────────── */
 
 export interface AskItem {
-  /** What it asks, in plain words; a held post, where it goes (`owner/repo#12`). */
+  /** What it asks, in plain words. */
   ask: string;
   /** Where the session runs: its mark's hue, the seed every list uses. */
   cwd: string;
@@ -431,20 +429,6 @@ interface WatchItem {
   notice: FleetWatchNotice;
   place: string;
   raisedAt: number;
-  title: string;
-}
-
-/**
- * An onboarding choice nobody has answered yet, asked once as the dashboard
- * loads: today the fleet's upstream choice (hub fleet-choices.ts), whether
- * agents may post to other people's repositories. Its two options answer it
- * on the row, and it leaves once the hub has the answer.
- */
-interface ChoiceItem {
-  key: string;
-  kind: "choice";
-  place: string;
-  raisedAt: undefined;
   title: string;
 }
 
@@ -654,7 +638,6 @@ export type NeedsItem =
   | CapItem
   | ActionItem
   | WatchItem
-  | ChoiceItem
   | TailnetItem
   | DeskItem
   | RelayItem
@@ -1303,13 +1286,11 @@ class Home {
     const asks: NeedsItem[] = cawco.blocked.map((item) => {
       const row = cawco.instanceIndex.byId.get(item.instanceId);
       const questions = questionsOf(item.request.toolName, item.request.input);
-      // A held post is named by itself; an ask no session row stands behind
-      // (a memory proposal) is titled by who asked, as the hub named them.
-      const { title, ask } = askNaming(item.request.presentation, () =>
-        row
-          ? instanceTitle(row)
-          : item.request.presentation.asker || item.hostname
-      );
+      // An ask no session row stands behind (a memory proposal) is titled
+      // by who asked, as the hub named them.
+      const title = row
+        ? instanceTitle(row)
+        : item.request.presentation.asker || item.hostname;
       return {
         kind: "ask",
         key: `${item.instanceId}:${item.request.requestId}`,
@@ -1329,7 +1310,7 @@ class Home {
               ?.os ?? "",
         },
         isQuestion: Boolean(questions),
-        ask,
+        ask: item.request.presentation.summary,
         raisedAt: item.request.raisedAt,
         request: item.request,
         stale: item.stale,
@@ -1389,19 +1370,6 @@ class Home {
         raisedAt: notice.at,
       };
     });
-    // Asked until it is answered; unread (undefined), it waits for the read.
-    const unanswered: NeedsItem[] =
-      cawco.fleetUpstream === null
-        ? [
-            {
-              kind: "choice",
-              key: "choice:upstream",
-              title: UPSTREAM_WORDS.title,
-              place: "Onboarding",
-              raisedAt: undefined,
-            },
-          ]
-        : [];
     // HTTPS on the tailnet name: its step while one stands, its tick a moment after.
     const tailnet = cawco.tailnetHttps;
     const secured: NeedsItem[] =
@@ -1590,7 +1558,6 @@ class Home {
       ...caps,
       ...actions,
       ...watched,
-      ...unanswered,
       ...secured,
       ...desk,
       ...relaying,

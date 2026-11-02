@@ -943,19 +943,6 @@ export interface ProjectsChangedFrame {
 }
 
 /**
- * Hub-originated: the fleet's upstream answer (hub fleet-choices.ts
- * `upstream`) was given or changed, from onboarding's Needs you row, a
- * setup page or the API: every dashboard takes it at once, so Needs you
- * stops asking and each project's "Same as the fleet" names it.
- */
-export interface FleetUpstreamFrame {
-  instanceId?: undefined;
-  kind: "fleet.upstream";
-  /** Whether agents may post to other people's repositories: off, ask the person first, or on. */
-  upstream: import("./upstream-guard").UpstreamPosts;
-}
-
-/**
  * Hub-originated: HTTPS on the hub machine's tailnet name changed state (hub
  * tailnet-https.ts): a step came to need the person, they took it, or the
  * name began or stopped answering. Every dashboard takes it at once, so its

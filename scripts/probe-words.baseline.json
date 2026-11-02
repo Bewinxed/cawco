@@ -77,9 +77,7 @@
   "scripts/probe-kit/specs/git-door.ts": {
     "cawco: git over ssh did not run here": 1,
     "it serves this workspace's clone": 1,
-    "this machine's git sign-in": 1,
-    "version https://git-lfs.github.com/spec/v1": 1,
-    "would wait in the owner's Needs you": 1
+    "version https://git-lfs.github.com/spec/v1": 1
   },
   "scripts/probe-kit/specs/handed-inputs.ts": {
     "a workspace's boundary reaches public hosts only": 1
@@ -204,14 +202,6 @@
   "scripts/probe-kit/specs/unchosen-defaults.ts": {
     "A permission mode must be chosen": 1,
     "couldn't read its models": 1
-  },
-  "scripts/probe-kit/specs/upstream-guard.ts": {
-    "git push": 1,
-    "on GitHub": 1,
-    "Onboarding · each project can change it": 1,
-    "The owner approved": 1,
-    "The owner denied": 1,
-    "this machine's git sign-in": 1
   },
   "scripts/probe-kit/specs/web/hub-states.ts": {
     "Searching the hub…": 1,

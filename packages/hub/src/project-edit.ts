@@ -1,25 +1,21 @@
 /**
- * A project's name, its Review before done, where its work lands and its
- * upstream choice (upstream.ts), changed by the person (`PATCH
- * /api/projects/:id`, the project head's details tray) or, but for the
- * upstream choice, by its Caw (`project_settings` `rename`, `set_review`,
- * `set_lands`): one check and one write for all four. Where work lands is
- * a dispatch setting, written by the dispatcher's own `configure`
- * (`lands`), so the dispatcher looks at the project again as it changes.
- * The upstream choice is the person's alone: it is what keeps sessions, Caw
- * among them, off other people's repositories. So is where its large files
- * live (`lfs`): an LFS endpoint bound to a fleet connection, which every
- * git-lfs run on a machine for the project is held to with that
- * connection's key (agent host-lfs.ts). The change reaches every
- * dashboard and the app at once: `projects.changed` makes each read the
- * projects again, and a review change is a change to the stages the hub
+ * A project's name, its Review before done and where its work lands, changed
+ * by the person (`PATCH /api/projects/:id`, the project head's details tray)
+ * or by its Caw (`project_settings` `rename`, `set_review`, `set_lands`):
+ * one check and one write for all three. Where work lands is a dispatch
+ * setting, written by the dispatcher's own `configure` (`lands`), so the
+ * dispatcher looks at the project again as it changes. Where its large
+ * files live (`lfs`) is the person's alone: an LFS endpoint bound to a
+ * fleet connection, which every git-lfs run on a machine for the project is
+ * held to with that connection's key (agent host-lfs.ts). The change reaches
+ * every dashboard and the app at once: `projects.changed` makes each read
+ * the projects again, and a review change is a change to the stages the hub
  * applies, so the project's boards read its tasks and stages again too.
  *
  * Names are not unique: a project is known by its id, and the hub makes two
  * projects of one name as readily (`POST /api/projects`).
  */
 import { LANDS_MODES, type LandsMode } from "@cawco/core";
-import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import type { DbShape, ProjectRow } from "./db";
 
 /** As long as a name `POST /api/projects` takes. */
@@ -38,8 +34,6 @@ export interface ProjectEdit {
   lfs?: { connection: string; url: string } | null;
   name?: string;
   review?: boolean;
-  /** Whether its sessions may post to other repositories (off, ask first, on); null: the fleet's answer. */
-  upstreamPosts?: UpstreamPosts | null;
 }
 
 /** A change the hub refuses, in a sentence the person reads under the field. */
@@ -157,12 +151,6 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   if (asked.review !== undefined && asked.review !== project.review) {
     change.review = asked.review;
   }
-  if (
-    asked.upstreamPosts !== undefined &&
-    asked.upstreamPosts !== project.upstreamPosts
-  ) {
-    change.upstreamPosts = asked.upstreamPosts;
-  }
   if (asked.lands !== undefined) {
     if (!LANDS_MODES.includes(asked.lands)) {
       throw new ProjectEditRefusal(
@@ -186,8 +174,7 @@ export const createProjectEdits = ({
 }: ProjectEditsDeps) => ({
   /**
    * Checks and applies a change to a project's name, Review before done,
-   * landing and upstream choice; answers the project as it
-   * is now. Nothing asked is refused.
+   * landing and large files; answers the project as it is now. Nothing asked is refused.
    */
   async edit(projectId: string, asked: ProjectEdit): Promise<ProjectRow> {
     const project = db.project(projectId);
@@ -201,12 +188,11 @@ export const createProjectEdits = ({
       asked.name === undefined &&
       asked.review === undefined &&
       asked.lands === undefined &&
-      asked.upstreamPosts === undefined &&
       asked.lfs === undefined
     ) {
       throw new ProjectEditRefusal(
         400,
-        "Name what changes: the project's name, whether it reviews before done, where its work lands, whether its agents may post to other repositories, or where its large files live."
+        "Name what changes: the project's name, whether it reviews before done, where its work lands, or where its large files live."
       );
     }
     const { lands: landsTo, lfs: _lfs, ...asks } = changeOf(project, asked);

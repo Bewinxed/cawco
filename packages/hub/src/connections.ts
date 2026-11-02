@@ -332,18 +332,6 @@ export interface ConnectionsDeps {
   readonly trash: (name: string) => number | undefined;
   /** The connections the delegate type a session runs as lists. */
   readonly typeConnections: (row: InstanceRow) => readonly string[];
-  /**
-   * The upstream guard on a session's call (server.ts, upstream-asks.ts): a
-   * forge connection's write tool to another person's repository is refused
-   * (off) or held for the person (ask), and this answers the session instead
-   * of the call; undefined when the call goes ahead.
-   */
-  readonly upstream: (
-    actor: InstanceRow,
-    connection: Pick<ConnectionRow, "account" | "name" | "service" | "url">,
-    tool: Tool,
-    args: Record<string, unknown>
-  ) => CallToolResult | undefined;
 }
 
 const problem = (message: string): never => {
@@ -1687,10 +1675,6 @@ export const createConnections = (deps: ConnectionsDeps) => {
       problem(
         `${name} isn't available here: this session reads the outside world, so it gets only a connection's read-only tools.`
       );
-    }
-    const guarded = deps.upstream(actor, row(parsed.connection), tool, args);
-    if (guarded) {
-      return guarded;
     }
     console.info(
       `[connections] ${actor.id} calls ${parsed.connection}/${tool.name}`

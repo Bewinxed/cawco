@@ -32,13 +32,13 @@ import {
 import type { MachinePath } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
-import { normaliseRemote } from "@cawco/core/upstream-guard";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import type { DbShape, ProjectOfferRow, ProjectRow } from "./db";
 import { leafOf, sessionLabel } from "./labels";
 import { tool } from "./mcp-tool";
 import { FolderRefusal, refused } from "./project-folder";
+import { normaliseRemote } from "./projects";
 import type { TaskActor, Tasks } from "./tasks";
 
 /** Open plan items at a turn's end that make a plan worth a project. */

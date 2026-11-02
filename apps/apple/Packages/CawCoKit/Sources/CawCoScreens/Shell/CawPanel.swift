@@ -28,8 +28,6 @@ final class CawPanel: GlassContent {
     /// A row chosen: the panel has begun to close.
     var onChoose: (HomeModel.NeedsItem) -> Void = { _ in }
     var onAnswer: (HomeModel.NeedsItem, ParkedAsk, NeedsYouStore.Answer) -> Void = { _, _, _ in }
-    /// The fleet's upstream choice answered on its row; throws the hub's refusal.
-    var onUpstream: (Components.Schemas.FleetChoicesUpstream) async throws -> Void = { _ in }
     var onDismiss: (Notice) -> Void = { _ in }
     /// One entry of a group acknowledged alone, by its notice ids.
     var onAcknowledge: ([String]) -> Void = { _ in }
@@ -156,7 +154,6 @@ final class CawPanel: GlassContent {
                     onChoose(item)
                 }
                 row.onAnswer = { [weak self] ask, answer in self?.onAnswer(item, ask, answer) }
-                row.onUpstream = { [weak self] answer in try await self?.onUpstream(answer) }
                 list.addArrangedSubview(row)
             }
         }
@@ -366,7 +363,6 @@ private final class NoticeRule: UIView {
 private final class NeedRow: UIControl {
     var onChoose: () -> Void = {}
     var onAnswer: (ParkedAsk, NeedsYouStore.Answer) -> Void = { _, _ in }
-    var onUpstream: (Components.Schemas.FleetChoicesUpstream) async throws -> Void = { _ in }
 
     init(_ item: HomeModel.NeedsItem, now: Double, sent: Ledger.Command?, live: Bool) {
         super.init(frame: .zero)
@@ -396,16 +392,9 @@ private final class NeedRow: UIControl {
         let inFlight = sent.map { $0.stage != .failed } ?? false
         switch item.kind {
         case let .ask(parked):
-            // A held post (NeedsCard.svelte): its title is the row's, where
-            // it goes its one line, and the session that asked ends the place
-            // line, so a long name gives way before the machine's.
-            let post = parked.presentation.post
-            ask.text = post?.target ?? parked.summary
-            if post != nil, let asker = HomeModel.asker(parked) {
-                place.text = "\(place.text ?? item.place) · \(asker)"
-            }
+            ask.text = parked.summary
             // What runs, under why: Approve here is made on the command too.
-            if post == nil, !parked.isQuestion, let line = parked.commandLine {
+            if !parked.isQuestion, let line = parked.commandLine {
                 column.addArrangedSubview(PromptCardView.commandLine(line))
             }
             let actions = UIStackView()
@@ -420,8 +409,8 @@ private final class NeedRow: UIControl {
                 let approve = KitButton.make("Approve", glyph: .tick, variant: .done, height: .sm) { [weak self] in
                     self?.onAnswer(parked, .allow)
                 }
-                // A held post by its title and where it goes (NeedsCard.svelte `answered`).
-                let answered = post.map { "\(item.title) to \($0.target)" } ?? "\(parked.summary) on \(item.title)"
+                // What it asks and whose it is (NeedsCard.svelte `answered`).
+                let answered = "\(parked.summary) on \(item.title)"
                 deny.accessibilityLabel = "Deny \(answered)"
                 approve.accessibilityLabel = "Approve \(answered)"
                 deny.accessibilityIdentifier = "caw-need-deny"
@@ -443,32 +432,6 @@ private final class NeedRow: UIControl {
             // `meta`): the row itself opens the session; nothing is answered here.
             ask.text = notice.title
             place.text = "Fleet watch · \(item.place)"
-        case .choice:
-            // The fleet's upstream choice (NeedsCard.svelte `choice`): its
-            // risk read whole, and its three answers stacked as peers, each
-            // the column's width, keeping agents off first.
-            waited.isHidden = true
-            place.text = "\(item.place) · each project can change it"
-            ask.text = Words.Upstream.risk
-            ask.numberOfLines = 0
-            let refusal = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
-            refusal.isHidden = true
-            let peers = UIStackView()
-            peers.axis = .vertical
-            peers.alignment = .fill
-            peers.spacing = Space.space2
-            for answer in Components.Schemas.FleetChoicesUpstream.listed {
-                let button = KitButton.make(answer.words, variant: .secondary, height: .sm) { [weak self] in
-                    self?.answerUpstream(answer, refusal: refusal)
-                }
-                button.isEnabled = !stale
-                button.accessibilityIdentifier = "caw-need-upstream-\(answer.rawValue)"
-                upstreamButtons.append((answer, button))
-                peers.addArrangedSubview(button)
-            }
-            column.addArrangedSubview(peers)
-            column.addArrangedSubview(refusal)
-            column.setCustomSpacing(Space.space2, after: ask)
         case let .tailnet(tailnet, done):
             // HTTPS on the tailnet (NeedsCard.svelte `tailnet`): the step
             // that stands, read whole, and its one button; ticked, the https
@@ -505,8 +468,6 @@ private final class NeedRow: UIControl {
             let session = SessionMarkView()
             session.configure(id: item.instanceId ?? "", place: item.cwd.isEmpty ? item.machineId : item.cwd, status: .attn)
             mark = session
-        case .choice:
-            mark = GlyphView(.shield, size: Size.iconMd, tint: Palette.inkMuted)
         case let .tailnet(_, done):
             mark = done
                 ? GlyphView(.passed, size: Size.iconMd, tint: Palette.statusDoneInk)
@@ -582,38 +543,6 @@ private final class NeedRow: UIControl {
         case ._operator, .port: (Words.Tailnet.copyCommand, nil, tailnet.command)
         case .userspace: (Words.Tailnet.openDocs, URL(string: Words.Tailnet.userspacePage), nil)
         default: (Words.Tailnet.openDnsPage, URL(string: Words.Tailnet.dnsPage), nil)
-        }
-    }
-
-    /// The upstream choice's three answers, by the answer each gives.
-    private var upstreamButtons: [(answer: Components.Schemas.FleetChoicesUpstream, button: UIButton)] = []
-
-    /// One answer on its way (NeedsCard.svelte `choose`): it says Saving…,
-    /// the other two wait; the hub's refusal stands under them. Answered, the
-    /// row leaves with the fleet's answer.
-    private func answerUpstream(_ answer: Components.Schemas.FleetChoicesUpstream, refusal: UILabel) {
-        for (each, button) in upstreamButtons {
-            button.isEnabled = false
-            if each == answer {
-                KitButton.setTitle("Saving…", of: button, variant: .secondary, height: .sm)
-                button.configuration?.showsActivityIndicator = true
-            }
-        }
-        refusal.isHidden = true
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await onUpstream(answer)
-            } catch {
-                refusal.text = error.localizedDescription
-                refusal.isHidden = false
-                UIAccessibility.post(notification: .announcement, argument: error.localizedDescription)
-                for (each, button) in upstreamButtons {
-                    KitButton.setTitle(each.words, of: button, variant: .secondary, height: .sm)
-                    button.configuration?.showsActivityIndicator = false
-                    button.isEnabled = true
-                }
-            }
         }
     }
 
