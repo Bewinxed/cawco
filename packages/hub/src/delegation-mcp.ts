@@ -1148,7 +1148,7 @@ export function createDelegationMcp(options: {
    * What `bound` can be listed over its life (delegation-tools.ts
    * `Listable`): its role and leaf-ness are its start's, its project may
    * come later, so its listing in a project and out of one. Unbound
-   * (OpenCode's shared discovery), the superset, on no side.
+   * (OpenCode's shared discovery), the superset.
    */
   const listableOf = (bound: InstanceRow | undefined): Listable => {
     const namesOf = (row: InstanceRow | undefined) =>
@@ -1163,8 +1163,6 @@ export function createDelegationMcp(options: {
       const names = namesOf(undefined);
       return {
         names,
-        inProject: new Set(),
-        outsideProject: new Set(),
         upfront: upfrontOf(names),
       };
     }
@@ -1173,8 +1171,6 @@ export function createDelegationMcp(options: {
     const names = [...new Set([...inside, ...outside])];
     return {
       names,
-      inProject: new Set(inside.filter((name) => !outside.includes(name))),
-      outsideProject: new Set(outside.filter((name) => !inside.includes(name))),
       upfront: upfrontOf(names),
     };
   };

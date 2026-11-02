@@ -1228,14 +1228,10 @@ const CORE_TASK_TOOLS: ReadonlySet<string> = new Set([
 /**
  * What a session can be listed over its life: its role and whether it may
  * delegate are fixed at its start, its project is not (`project_from_session`
- * makes one). `names` is the union across both; `inProject` and
- * `outsideProject` the ones listed only in a project or only outside one;
- * the instructions read only `names` and `upfront`.
+ * makes one). `names` is the union across both.
  */
 export interface Listable {
-  inProject: ReadonlySet<string>;
   names: readonly string[];
-  outsideProject: ReadonlySet<string>;
   /** The names Claude loads upfront for this session ({@link loadsUpfront}). */
   upfront: ReadonlySet<string>;
 }
