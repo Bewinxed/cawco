@@ -825,9 +825,12 @@ export interface Browsed {
 /** How long a show waits for a view to say it has the artifact on screen. The spec's number. */
 export const SHOWN_WAIT_MS = 10_000;
 
-/** No view of the session said it showed the artifact in time. DESIGN.md's error formula. */
+/** No view follows the session, so none could show the artifact. DESIGN.md's error formula. */
 const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
+
+/** A view follows the session and none said it put the artifact on screen in time. */
+const NOT_PUT_ON_SCREEN = `A dashboard is showing this session, but none put the artifact on screen within ${SHOWN_WAIT_MS / 1000} s. It stays in the session's panel.`;
 
 /** Why a `to: "parent"` create opened nothing: the parent opens it. */
 const HELD = artifactToolWords.handedToParent;
@@ -1605,6 +1608,8 @@ export interface ArtifactServiceDeps {
     dir: string,
     path: string | undefined
   ) => Promise<FolderWeight>;
+  /** Whether a dashboard (or the app) follows the session's stream now: one shows it. */
+  followed: (instanceId: string) => boolean;
   /**
    * Tells `parent` once that its delegate `maker` handed it `artifact`, not
    * opened, or changed it while its panel shows it, the change held as
@@ -4099,8 +4104,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ack = shown.value;
         break;
       case "unanswered":
-        // Not known yet, not failed: it is in the panel and opens when a dashboard does.
-        return { opened: false, why: NO_VIEW, started: true };
+        // Not known yet, not failed: it is in the panel. Said as it stands:
+        // no view follows the session, or one does and drew nothing of it.
+        return {
+          opened: false,
+          why: deps.followed(panel ?? "") ? NOT_PUT_ON_SCREEN : NO_VIEW,
+          started: true,
+        };
       default:
         unhandled("read", shown);
     }

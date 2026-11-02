@@ -14641,6 +14641,7 @@ export const createServer = (
       }
     },
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
+    followed: (instanceId) => streams.followerCount(instanceId) > 0,
     listing: (instance) => browsers.listed(instance),
     // The same open, its list without what went: no pane reloads.
     relist: (instanceId) => {

@@ -137,6 +137,7 @@
   import { landKey } from "../motion/keyed.svelte";
   import { settleAway } from "../motion/rest.js";
   import { closeInto } from "../motion/share.svelte";
+  import { pageVisible } from "../page-visible.svelte";
   import { pressOutside } from "../press-outside";
   import { refusals } from "../refusals.svelte";
   import { watchInput } from "../reload.svelte";
@@ -516,7 +517,7 @@
   let seenBefore = true;
   $effect(() => {
     const failed = reached;
-    const seen = inView && onScreen;
+    const seen = pageVisible.current && onScreen;
     const back = seen && !seenBefore;
     seenBefore = seen;
     if (!(seen && failed && !failed.ok && failed.origin === paneOrigin)) {
@@ -740,7 +741,7 @@
   $effect(() => {
     const hop = down;
     const origin = paneOrigin;
-    const seen = inView && onScreen;
+    const seen = pageVisible.current && onScreen;
     track(downProbe);
     if (!(hop && hop !== "closed" && origin && seen)) {
       return;
@@ -867,16 +868,7 @@
       !connected &&
       !down
   );
-  let inView = $state(true);
   let saidFor: string | null = null;
-  $effect(() => {
-    const seen = () => {
-      inView = document.visibilityState === "visible";
-    };
-    seen();
-    document.addEventListener("visibilitychange", seen);
-    return () => document.removeEventListener("visibilitychange", seen);
-  });
   function loadedFrame(key: string) {
     loadedKey = key;
     silentKey = null;
@@ -891,7 +883,7 @@
   $effect(() => {
     const revision = preview?.state === "open" ? preview.revision : undefined;
     const id = artifact?.id;
-    if (!(revision && id && inView) || saidFor === revision) {
+    if (!(revision && id && pageVisible.current) || saidFor === revision) {
       return;
     }
     const current = loadedKey === frameKey;

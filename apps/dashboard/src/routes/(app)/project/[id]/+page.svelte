@@ -603,6 +603,38 @@
     remember();
   }
 
+  /**
+   * A page of this project Caw's conversation shows opens in Decisions
+   * (JOURNEY.md, Act on what waits: "a decision page opens in Decisions"),
+   * where its frame tells the hub it is on screen (PageFrame): his panel
+   * stands nothing beside his conversation (SessionPane `docked`), so the
+   * reveal a panel acts on (client `revealPreview`: a new open frame, or
+   * his artifact card pressed) is this page's. Only a reveal heard while
+   * the page stands: the panel's frame as the page arrives leaves the view
+   * the URL names.
+   */
+  let revealsSeen: { count: number | undefined; id: string } | null = null;
+  $effect(() => {
+    const id = lead.conversationId;
+    const count = id ? cawco.previewRequests[id] : undefined;
+    untrack(() => {
+      const seen = revealsSeen;
+      revealsSeen = id ? { id, count } : null;
+      if (!(id && seen?.id === id && count !== seen.count)) {
+        return;
+      }
+      const frame = cawco.previews[id];
+      if (
+        frame?.state === "open" &&
+        frame.project === projectId &&
+        frame.artifact.kind === "page"
+      ) {
+        decisionsGo({ page: frame.artifact.name, card: null });
+        choose("decisions");
+      }
+    });
+  });
+
   /** The time the rows' ages read, moved each minute while the tab shows. */
   let decisionsNow = $state(Date.now());
   $effect(() => {

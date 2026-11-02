@@ -10,12 +10,18 @@
    * It draws in the dashboard's theme and pads its foot for the docked
    * composer (`inset.bottom`). It loads once the browser entered its
    * previews (page-source.ts); turned away later, it enters once more and
-   * loads again (preview/pass.ts).
+   * loads again (preview/pass.ts). Loaded and in view, it tells the hub
+   * that each session's panel showing this page has it on screen, as the
+   * pane does (PreviewPane): the agent's artifact_create or artifact_show
+   * answers from it.
    */
   import { decisionsWords } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
+  import { artifactShown } from "#lib/cawco/artifact-api.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import { artifactReached } from "#lib/cawco/files/reached.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { pageVisible } from "#lib/cawco/page-visible.svelte.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
   import { track } from "#lib/cawco/track.js";
@@ -48,7 +54,8 @@
   let origin = $state<string | null>(null);
   let src = $state<string | null>(null);
   let problem = $state<string | null>(null);
-  let connected = false;
+  /** The page said it is ready (`cawco:ready`): its overlay joined it. */
+  let connected = $state(false);
   let turnedAway = 0;
   /**
    * When the frame last stood without the pass it may hold now
@@ -158,6 +165,34 @@
         post({ type: "cawco:place", inset: { bottom } });
       }
     });
+  });
+
+  /** The open frames already said on screen, by revision. */
+  const said = new Set<string>();
+  // Each session's panel showing this page, at its open frame's revision:
+  // the page is on screen here, which the waiting show answers.
+  $effect(() => {
+    if (!(connected && pageVisible.current)) {
+      return;
+    }
+    for (const [instanceId, panel] of Object.entries(cawco.previews)) {
+      if (
+        panel?.state !== "open" ||
+        panel.artifact.id !== artifactId ||
+        said.has(panel.revision)
+      ) {
+        continue;
+      }
+      const { revision } = panel;
+      said.add(revision);
+      artifactShown(instanceId, artifactId, { revision, ok: true }).then(
+        () => artifactReached(instanceId, artifactId),
+        () => {
+          // Unheard: the next change of state says it again.
+          said.delete(revision);
+        }
+      );
+    }
   });
 
   // Only its own frame, from its own origin, is heard.
