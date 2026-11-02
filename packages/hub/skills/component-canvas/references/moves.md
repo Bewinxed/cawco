@@ -3,7 +3,8 @@
 A **move** is how a component gets from one state to another, with its motion.
 
 - **Interaction moves** (rest to hover to pressed) are the CSS transitions the component already has. The delta of each forced state lists them (`animations`).
-- **Flow moves** are written in the states file, on the destination story:
+- **A press on a state** sets its args on the live instance; the motion the engine runs is that state's own arrival, read as the move's clips.
+- **Flow moves** are written in the states file, on the destination story, for a state whose arrival is an act worth watching (a press, a typed word), not for every state:
 
 ```ts
 /** The phone said yes: the code leaves and Caw reacts. */
