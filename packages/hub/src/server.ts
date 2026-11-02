@@ -541,6 +541,7 @@ import {
   machineAccount,
   noteProviderReading,
   noteRateLimit,
+  probeRetryDelay,
   reconcileAccounts,
   refreshCatalog,
   sessionLimitsReader,
@@ -4717,9 +4718,10 @@ export const createServer = (
   };
   /**
    * Why a `harness` session on `machineId` may not start on `model`: one the
-   * harness does not list there ({@link harnessModels}: Claude Code's account
-   * catalogs, OpenCode's and pi's machine reports), judged by core
-   * `modelListed`, so a model the harness never offers (a harness's name
+   * harness does not take there, judged by core `modelListed` against the
+   * rows it lists ({@link harnessModels}: Claude Code's account catalogs,
+   * OpenCode's and pi's machine reports) and Claude Code's aliases and full
+   * model names, so a model the harness never offers (a harness's name
    * asked as a model, Claude Code started on "pi" 2026-11-02; a model
    * OpenCode's catalog dropped, `opencode-go/deepseek-v4-flash` 2026-10-14)
    * is refused before its session is made rather than at its first turn. It
@@ -5292,7 +5294,7 @@ export const createServer = (
   /**
    * Each machine's last account report of each kind (its Claude dirs, its
    * provider stores), squared with the hub's accounts one at a time. A
-   * probe that failed is tried again, 30 s then doubling to 30 minutes,
+   * probe that failed is tried again on accounts.ts `probeRetryDelay`,
    * while the machine is connected; a new report starts over.
    *
    * A report the same as the last one taken on this connection says
@@ -5371,7 +5373,7 @@ export const createServer = (
           dispatcher.machineOnline(machineId);
         }
         if (failed && registry.agent(machineId)) {
-          const delay = Math.min(30 * 60_000, 30_000 * 2 ** sync.attempt);
+          const delay = probeRetryDelay(sync.attempt);
           sync.attempt += 1;
           sync.timer = lifetime.after(delay, () =>
             syncAccounts(machineId, harness)

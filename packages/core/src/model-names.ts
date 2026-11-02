@@ -23,6 +23,7 @@
  *   providers) are told apart by provider, else by id.
  */
 import type { HarnessKind, ModelInfo } from "./harness";
+import { unhandled } from "./unhandled";
 import { decidesWords } from "./words/decides";
 
 export interface NamedModel {
@@ -185,13 +186,47 @@ export const modelNameIn = (
 };
 
 /**
- * Whether a `harness` session may start on `id` by the rows its harness
- * lists: the harness's default; a row listed under it or one that runs it
- * ({@link modelNameIn}: Claude Code's aliases, the wire ids they run, the
- * `[1m]` variant of a listed model); and on pi a bare id unique among its
- * providers' rows, which pi's own resolver takes (agent pi-services.ts
- * `resolvePiModel`). OpenCode drops a bare id's model (agent opencode.ts
- * `splitModel`), so it is listed only with its provider.
+ * The model aliases Claude Code takes for its `model` setting, as its model
+ * configuration names them (https://code.claude.com/docs/en/model-config,
+ * "Model aliases": `default`, `best`, `fable`, `sonnet`, `opus`, `haiku`,
+ * `sonnet[1m]`, `opus[1m]`, `opusplan`; "the `fable` or `fable[1m]` alias").
+ * Its picker lists only some of them (`opusplan` and `best` never), so they
+ * are taken by name, not by its rows.
+ */
+const CLAUDE_ALIASES = new Set([
+  "default",
+  "best",
+  "fable",
+  "sonnet",
+  "opus",
+  "haiku",
+  "opusplan",
+  "fable[1m]",
+  "sonnet[1m]",
+  "opus[1m]",
+]);
+
+/**
+ * A full Anthropic API model name, which Claude Code's `model` setting takes
+ * beside its aliases ("Anthropic API: a full model name", model-config), in
+ * the shape Claude Code itself admits an `availableModels` id to its picker
+ * by (`/^claude-[a-z0-9-]+$/`, its 2.1.311 bundle), with the `[1m]` mark it
+ * takes on any of them. Whether the account may run one is not readable: the
+ * Agent SDK lists only the picker's rows (`supportedModels()`), and Claude
+ * Code reads `/v1/models` only from a gateway.
+ */
+const CLAUDE_MODEL_ID = /^claude-[a-z0-9-]+$/u;
+
+/**
+ * Whether a `harness` session may start on `id`, by what the harness takes:
+ * the harness's default; a row listed under it or one that runs it
+ * ({@link modelNameIn}: the wire ids Claude Code's rows run, the `[1m]`
+ * variant of a listed model); on Claude Code its aliases
+ * ({@link CLAUDE_ALIASES}) and any full model name ({@link CLAUDE_MODEL_ID});
+ * and on pi a bare id unique among its providers' rows, which pi's own
+ * resolver takes (agent pi-services.ts `resolvePiModel`). OpenCode drops a
+ * bare id's model (agent opencode.ts `splitModel`), so it is listed only
+ * with its provider.
  */
 export const modelListed = (
   harness: HarnessKind,
@@ -201,9 +236,20 @@ export const modelListed = (
   if (id === "default" || modelNameIn(rows, id) !== null) {
     return true;
   }
-  return (
-    harness === "pi" &&
-    providerOf(id) === undefined &&
-    rows.filter((row) => row.value.endsWith(`/${id}`)).length === 1
-  );
+  switch (harness) {
+    case "claude":
+      return (
+        CLAUDE_ALIASES.has(id) ||
+        CLAUDE_MODEL_ID.test(id.replace(LONG_CONTEXT, ""))
+      );
+    case "pi":
+      return (
+        providerOf(id) === undefined &&
+        rows.filter((row) => row.value.endsWith(`/${id}`)).length === 1
+      );
+    case "opencode":
+      return false;
+    default:
+      return unhandled("harness", harness);
+  }
 };

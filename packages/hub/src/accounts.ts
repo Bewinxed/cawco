@@ -20,7 +20,7 @@ import {
   sameIdentity,
   type UsageLimitsResponse,
 } from "@cawco/core";
-import { HOUR_MS } from "@cawco/core/time";
+import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
   type ObservedRateLimitInfo,
   observedReading,
@@ -157,6 +157,23 @@ type CatalogRead = "held" | "read" | "failed";
 /** The probe each account's catalog waits on now: one at a time per account. */
 const probing = new Map<string, Promise<CatalogRead>>();
 
+/**
+ * How long after its `attempt`th failure in a row (from 0) a probe of an
+ * account is tried again: 30 s, doubling to 30 minutes. The one schedule
+ * for a probe that failed, whoever asked for it: a machine's account sync
+ * (server.ts `syncAccounts`) and a session's stale catalog
+ * ({@link refreshCatalog}). What fails a probe (a locked login keychain, a
+ * machine that does not answer, Claude Code refusing initialize) is a state
+ * that outlasts the next session's start, and the catalog held serves the
+ * pickers meanwhile, so the wait grows to half an hour rather than meeting
+ * every start with another probe that fails.
+ */
+export const probeRetryDelay = (attempt: number): number =>
+  Math.min(30 * MINUTE_MS, (MINUTE_MS / 2) * 2 ** attempt);
+
+/** Each account whose last probe failed: how many failed in a row, and when one may be tried again. */
+const probeFailures = new Map<string, { attempt: number; until: number }>();
+
 /** Reads the account's models through a probe of its dir on `machineId`, kept only when the dir still answers as the account. */
 const probeCatalog = async (
   db: DbShape,
@@ -166,8 +183,14 @@ const probeCatalog = async (
 ): Promise<CatalogRead> => {
   const read = await probe(machineId, account.id);
   if (!read) {
+    const attempt = (probeFailures.get(account.id)?.attempt ?? -1) + 1;
+    probeFailures.set(account.id, {
+      attempt,
+      until: Date.now() + probeRetryDelay(attempt),
+    });
     return "failed";
   }
+  probeFailures.delete(account.id);
   const held = read.identity
     ? withOrgIdFrom(db, account, read.identity).identity
     : null;
@@ -182,9 +205,10 @@ const probeCatalog = async (
  * when the hub has none, or (`stale`) when it has one older than
  * {@link CATALOG_FRESH_MS}. A probe names no model, so its list is the
  * account's own; a session's initialize lists models around the session's
- * model (core `SessionAccountRead`) and is never kept as one. `held`: no
- * probe was needed; `failed`: the probe could not be read, which the caller
- * retries, and the catalog held stays.
+ * model (core `SessionAccountRead`) and is never kept as one. A stale one
+ * whose last probe failed is not probed again until {@link probeRetryDelay}
+ * has passed. `held`: no probe ran; `failed`: the probe could not be read,
+ * which the caller retries, and the catalog held stays.
  */
 export const refreshCatalog = (
   db: DbShape,
@@ -196,9 +220,12 @@ export const refreshCatalog = (
   const held = db.accounts
     .catalogs()
     .find((one) => one.accountId === account.id);
+  const now = Date.now();
   if (
     held &&
-    (when === "missing" || Date.now() - held.readAt < CATALOG_FRESH_MS)
+    (when === "missing" ||
+      now - held.readAt < CATALOG_FRESH_MS ||
+      now < (probeFailures.get(account.id)?.until ?? 0))
   ) {
     return Promise.resolve("held");
   }
