@@ -470,6 +470,7 @@ import {
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
+import { modelNameIn, namedModels } from "@cawco/core/model-names";
 import {
   DOWN_WORDS,
   type FolderWeight,
@@ -795,7 +796,6 @@ import {
   ROUTINE_ORIGIN,
 } from "./memory";
 import { documentFacts, sessionInstructions } from "./memory-scopes";
-import { namedModels } from "./model-names";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { uuidOf } from "./named-uuid";
 import { createNoticesSeen } from "./notices";
@@ -14420,7 +14420,7 @@ export const createServer = (
       };
     });
   };
-  /** A model's name as the hub names it in its harness's list on any machine (model-names.ts); its id when none lists it. */
+  /** A model's name as the hub names it in its harness's list on any machine (@cawco/core/model-names); its id when none lists or runs it. */
   const modelNamed = (named: string, model: string): string => {
     const harness = harnessNamed(named);
     const offered = harness
@@ -14429,9 +14429,7 @@ export const createServer = (
           new Set(db.listAgents().map((machine) => machine.machineId))
         )
       : [];
-    return (
-      namedModels(offered).find((one) => one.row.value === model)?.name ?? model
-    );
+    return modelNameIn(offered, model) ?? model;
   };
   // Who decides (settling.ts): each card sent to its member and said to its
   // writer: a run started under it the way dispatch starts an attempt, or a

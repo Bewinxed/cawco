@@ -19,6 +19,7 @@
     type HarnessKind,
     type PermissionMode,
   } from "@cawco/core/harness";
+  import { modelRun } from "@cawco/core/model-names";
   import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";
   import { isGitUrl, repoPath } from "@cawco/core/protocol";
   import { unhandled } from "@cawco/core/unhandled";
@@ -583,7 +584,7 @@
       lastSpawnAt: lastSpawnAt(harness),
       lastUsedAt: Object.fromEntries(
         offered.flatMap((row) => {
-          const id = row.resolvedModel ?? row.value;
+          const id = modelRun(row);
           const used = lastUsedAt(harness, id);
           return used ? [[id, used]] : [];
         })

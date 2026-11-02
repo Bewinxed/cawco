@@ -1,6 +1,6 @@
 /**
  * What `GET /api/decides` and `GET /api/delegate-types` answered on the hub
- * at 2026-10-31 18:00 (its models named as model-names.ts names them), for a member's settings: the harnesses on his online
+ * at 2026-10-31 18:00 (its models named as @cawco/core/model-names names them), for a member's settings: the harnesses on his online
  * machines with their models (OpenCode's and pi's lists cut to their first
  * dozen; the hub lists 118 and 46), the fleet's skills (12 of its 62), and
  * the Advisor's and Common practice's delegate types. Design reviewer is an
@@ -28,7 +28,7 @@ export const harnesses: FleetOffer["harnesses"] = [
         default: false,
       },
       { id: "sonnet", name: "Sonnet 5.5", default: false },
-      { id: "haiku", name: "Haiku", default: false },
+      { id: "haiku", name: "Sonnet 5", default: false },
       { id: "claude-fable-5-1", name: "Fable 5.1", default: false },
       { id: "claude-opus-4-8", name: "Opus 4.8", default: false },
     ],

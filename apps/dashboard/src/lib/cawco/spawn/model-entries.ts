@@ -1,4 +1,5 @@
 import type { EffortLevel, ModelInfo } from "@cawco/core/harness";
+import { modelNameIn, modelRun, providerOf } from "@cawco/core/model-names";
 import type { ModelUse } from "./modelUse.svelte";
 
 export interface ModelEntry {
@@ -17,54 +18,7 @@ export interface ModelEntry {
   released?: string;
 }
 
-const CLAUDE_PREFIX = /^claude-/u;
-const CONTEXT_SUFFIX = /\[1m\]$/iu;
-const VERSION = /^v?\d+(?:\.\d+)*$/u;
-const VERSION_PREFIX = /^v/u;
 const ID_SHAPE = /^[\w.\-/[\]:]+$/u;
-
-/** A model's display name as the picker lists it, e.g. "Opus 5.5 · 1M". */
-export function modelName(id: string, displayName?: string) {
-  const slash = id.lastIndexOf("/");
-  const provider = slash < 0 ? null : id.slice(0, slash);
-  const raw = id.slice(slash + 1);
-  const claude = raw.startsWith("claude-");
-  const tokens = raw
-    .replace(CLAUDE_PREFIX, "")
-    .replace(CONTEXT_SUFFIX, "")
-    .split("-");
-  const family = tokens.shift() ?? "";
-  const known =
-    claude ||
-    [
-      "opus",
-      "sonnet",
-      "haiku",
-      "deepseek",
-      "gpt",
-      "gemini",
-      "qwen",
-      "llama",
-      "mistral",
-      "grok",
-    ].includes(family);
-  if (!known) {
-    return { name: displayName || id, provider, mono: !displayName };
-  }
-  const title = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
-  const labels: Record<string, string> = { deepseek: "DeepSeek", gpt: "GPT" };
-  const label = labels[family] ?? title(family);
-  const version: string[] = [];
-  while (tokens.length && VERSION.test(tokens[0])) {
-    version.push(tokens.shift() as string);
-  }
-  const suffix = tokens.map(title).join(" ");
-  const number = version.join(".").replace(VERSION_PREFIX, "V");
-  return {
-    name: `${label}${number ? `${family === "gpt" ? "-" : " "}${number}` : ""}${suffix ? ` ${suffix}` : ""}${CONTEXT_SUFFIX.test(raw) ? " · 1M" : ""}`,
-    provider,
-  };
-}
 
 export function deriveModelEntries(
   rows: ModelInfo[],
@@ -72,21 +26,21 @@ export function deriveModelEntries(
 ): ModelEntry[] {
   const merged = new Map<string, ModelInfo[]>();
   for (const row of rows) {
-    const id = row.resolvedModel ?? row.value;
+    const id = modelRun(row);
     const group = merged.get(id) ?? [];
     group.push(row);
     merged.set(id, group);
   }
   return [...merged].map(([id, group]) => {
-    const named =
-      group.find((row) => row.value === id) ??
-      group.find((row) => row.value !== "default");
+    const name = modelNameIn(rows, id);
     const dates = group
       .flatMap((row) => (row.released ? [row.released] : []))
       .sort();
     return {
       id,
-      ...modelName(id, named?.displayName),
+      name: name ?? id,
+      provider: providerOf(id) ?? null,
+      mono: name === null,
       released: dates.at(-1),
       lastUsedAt: use.lastUsedAt[id],
       isDefault: group.some((row) => row.value === "default"),

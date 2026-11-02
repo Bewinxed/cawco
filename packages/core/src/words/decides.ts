@@ -307,8 +307,8 @@ export const decidesWords = {
   /** A harness on no online machine. */
   notOnMachine: "Not on any machine yet",
   /**
-   * The names the hub composes for a harness's models where the harness's
-   * own would repeat or fall short (packages/hub/src/model-names.ts).
+   * The names composed for a harness's models where the harness's own
+   * would repeat or fall short (packages/core/src/model-names.ts).
    */
   modelNames: {
     /** `model` with what tells it from a row of the same model, in its one trailing parenthetical: "Fable 5.1 (1M context, default)". */

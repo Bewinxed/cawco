@@ -1,5 +1,6 @@
 <script lang="ts">
   import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
+  import { modelRun } from "@cawco/core/model-names";
   /**
    * Model (§1.6, §2.9): harness tabs, one search/custom-id field, the model
    * list with the slide-swap on harness change. Codex is shown but disabled
@@ -223,10 +224,7 @@
   const use = $derived.by<ModelUse>(() => ({
     lastSpawnAt: lastSpawnAt(listHarness),
     lastUsedAt: Object.fromEntries(
-      [
-        ...catalog.map((row) => row.resolvedModel ?? row.value),
-        ...recent,
-      ].flatMap((id) => {
+      [...catalog.map(modelRun), ...recent].flatMap((id) => {
         const used = lastUsedAt(listHarness, id);
         return used ? [[id, used]] : [];
       })
@@ -260,7 +258,6 @@
     ) + (showCustomRow ? 1 : 0)
   );
   const hiOpacity = $derived(rows.some((row) => row.id === selectedId) ? 1 : 0);
-  const ctx = (entry: ModelEntry) => (entry.name.endsWith("· 1M") ? "1M" : "");
   const vendor = (id: string) => VENDOR[providerOf(id) ?? ""] ?? "";
   /** One maker for the whole list says nothing per row; mixed lists do. */
   const mixedMakers = $derived(
@@ -573,10 +570,4 @@
       >
     {/if}
   </span>
-  {#if ctx(entry)}
-    <span
-      class="font-(family-name:--font-mono) text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
-      >{ctx(entry)}</span
-    >
-  {/if}
 {/snippet}

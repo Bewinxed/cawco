@@ -1,5 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { namedModels } from "@cawco/core/model-names";
   /**
    * Which model answers — for a session that is running, and for one that is
    * still a form. Lists retain the harness that reported them; custom ids go
@@ -59,6 +60,7 @@
 
   const trimmed = $derived(typed.trim());
   const offered = $derived(models.forHarness(harness));
+  const named = $derived(namedModels(offered));
   const recent = $derived(models.recentFor(harness));
   /** A typed id nothing on the list already covers — the whole point of the field. */
   const custom = $derived(
@@ -210,17 +212,17 @@
               </span>
             </Command.Item>
           {/if}
-          {#each offered as row (row.value)}
+          {#each named as { row, name } (row.value)}
             <Command.Item
               data-checked={covers(row, value)}
-              keywords={[row.displayName]}
+              keywords={[name]}
               onSelect={() => selectModel(row.value)}
               title={row.value}
               value={row.value}
             >
               <ProviderLogo model={row.value} />
               <span class="flex flex-col" data-box>
-                <span>{row.displayName}</span>
+                <span>{name}</span>
                 <span class="text-meta text-ink-muted">{row.description}</span>
               </span>
             </Command.Item>

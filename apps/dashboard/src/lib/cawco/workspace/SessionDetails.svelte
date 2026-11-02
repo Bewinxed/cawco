@@ -44,7 +44,7 @@
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import { copyRefused, copyToClipboard } from "../copy";
   import HarnessLogo from "../HarnessLogo.svelte";
-  import { describingRow } from "../models.svelte";
+  import { describingRow, modelLabel } from "../models.svelte";
   import {
     CURVE,
     crossIn,
@@ -58,7 +58,6 @@
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
   import ModelSection from "../spawn/ModelSection.svelte";
-  import { modelName } from "../spawn/model-entries";
   import NsPopover from "../spawn/NsPopover.svelte";
   import ToolChips, {
     type EffortOff,
@@ -608,9 +607,7 @@
 {#snippet modelChip()}
   <ProviderLogo model={model ?? ""} size="control" />
   <span data-slot="chip-label"
-    >{model
-      ? modelName(model, modelInfo?.displayName).name
-      : "Model not reported"}</span
+    >{model ? modelLabel(model, harness) : "Model not reported"}</span
   >
 {/snippet}
 
@@ -803,7 +800,7 @@
              wrapping as a unit when the card runs out of row. The model chip
              gives up room first (its name ellipsized) before anything
              wraps. -->
-        <!-- The card's width holds the longest names whole ("Opus 5.5 · 1M",
+        <!-- The card's width holds the longest names whole ("Fable 5.1 (1M context)",
              "medium", "Accept edits") with the chips' insides drawn in a little;
              a phone's row is ~350px, so the three chips fit it whole, the
              model's name included, with the chips' sides and gaps drawn in. A

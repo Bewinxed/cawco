@@ -10,6 +10,7 @@
 import type { ModelInfo } from "@cawco/core/harness";
 import { isEffortLevel } from "@cawco/core/harness";
 import { machineLabel } from "@cawco/core/machine-names";
+import { LONG_CONTEXT, modelNameIn } from "@cawco/core/model-names";
 import { z } from "zod";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { cawco } from "./client.svelte";
@@ -229,9 +230,6 @@ export const covers = (row: ModelInfo, model: string): boolean =>
  */
 const NAMES_NO_MODEL = new Set(["default"]);
 
-/** The 1M-context variant's mark on a Claude model id: `claude-opus-5-5[1m]`. */
-const CONTEXT_SUFFIX = /\[1m\]$/iu;
-
 /**
  * The offered row for a model id — the one that carries its name, its provider
  * and the effort scale it can be run at. A row that names the model wins over
@@ -247,7 +245,7 @@ export const describingRow = (
   harness?: string
 ): ModelInfo | null => {
   const list = models.forHarness(harness);
-  for (const id of new Set([model, model.replace(CONTEXT_SUFFIX, "")])) {
+  for (const id of new Set([model, model.replace(LONG_CONTEXT, "")])) {
     const row =
       list.find(
         (item) => !NAMES_NO_MODEL.has(item.value) && covers(item, id)
@@ -259,12 +257,12 @@ export const describingRow = (
   return null;
 };
 
-/** What to call a model in a trigger: the offered name, or the id as typed. */
+/** What to call a model in a trigger: its name in the offered list (@cawco/core/model-names), or the id as typed. */
 export function modelLabel(model: string, harness?: string): string {
   if (!model) {
     return "Default";
   }
-  return describingRow(model, harness)?.displayName ?? model;
+  return modelNameIn(models.forHarness(harness), model) ?? model;
 }
 
 /**

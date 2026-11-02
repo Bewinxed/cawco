@@ -213,6 +213,7 @@
       "default": "./src/decisions-library.ts"
     },
     "./harness": "./src/harness.ts",
+    "./model-names": "./src/model-names.ts",
     "./fleet": "./src/fleet.ts",
     "./words/common": "./src/words/common.ts",
     "./question": "./src/question.ts",
