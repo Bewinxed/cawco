@@ -36,6 +36,11 @@ export const NO_REPLY_TOOL = "no_reply_needed";
  *   step that called a tool, `needsContinuation:BLe(u.values(),(ge)=>
  *   !ge.providerExecuted&&(ge.called||ge.settled))`, and no plugin hook
  *   (opencode.ai/v2/docs/build/plugins/server) ends the loop short of
- *   interrupting the session.
+ *   interrupting the session. The same at v2.2.5
+ *   (packages/core/src/session/runner/publish-llm-event.ts:
+ *   `needsContinuation: Iterable.some(tools.values(), (tool) =>
+ *   !tool.providerExecuted && (tool.called || tool.settled))`). So the
+ *   tool's words there ask for no text after the call (hub
+ *   delegation-tools.ts `NO_REPLY_WORDS`).
  */
 export const END_TURN_META = "claude/endTurn";

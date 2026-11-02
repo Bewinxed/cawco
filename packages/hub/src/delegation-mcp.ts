@@ -413,6 +413,7 @@ export function createDelegationMcp(options: {
             formerIds: options.formerIds,
             fleet: options.fleet,
             cwd: "",
+            harness: harnessOf(undefined),
             emit: () => {
               throw new Error("Discovery cannot execute tools");
             },
@@ -450,13 +451,20 @@ export function createDelegationMcp(options: {
     actor?.workItemId ? options.workItemLands?.(actor.workItemId) : undefined;
 
   /**
+   * The harness a listing is for: its session's. A connection with no
+   * session is OpenCode's shared discovery ({@link requestBinding}).
+   */
+  const harnessOf = (actor: InstanceRow | undefined): HarnessKind =>
+    actor?.harness ?? "opencode";
+
+  /**
    * The tools a session is listed: its role's and its scope's (roles.ts),
    * narrowed by its own context (a leaf gets no spawning tools, only a work
    * item `finish_item`, only a session in a project the project's tools,
    * only one that may be made a project `project_from_session`, only a
-   * design check's verifier `design_verdict`). Without a session —
-   * OpenCode's shared discovery — every role's, the superset; the call
-   * enforces.
+   * design check's verifier `design_verdict`), in its harness's words
+   * ({@link harnessOf}). Without a session — OpenCode's shared discovery —
+   * every role's, the superset; the call enforces.
    */
   const toolsFor = (actor: InstanceRow | undefined) => {
     const all = [
@@ -466,6 +474,7 @@ export function createDelegationMcp(options: {
         formerIds: options.formerIds,
         fleet: options.fleet,
         cwd: "",
+        harness: harnessOf(actor),
         mayStart: actor?.mayStart ?? undefined,
         hasParent: !actor || !!actor.parentInstanceId,
         lands: landsOf(actor),
@@ -760,12 +769,11 @@ export function createDelegationMcp(options: {
     if (name === "list_delegate_types") {
       // Anyone may read it; a caller the bridge can name reads its project's
       // catalog, where the project's own types shadow the fleet's.
-      let projectId: string | undefined;
+      let caller: InstanceRow | undefined;
       try {
-        projectId =
-          actorOf(binding, args, authorization).projectId ?? undefined;
+        caller = actorOf(binding, args, authorization);
       } catch {
-        projectId = undefined;
+        caller = undefined;
       }
       const entry = tools({
         instanceId: "",
@@ -773,7 +781,8 @@ export function createDelegationMcp(options: {
         formerIds: options.formerIds,
         fleet: options.fleet,
         cwd: "",
-        projectId,
+        harness: harnessOf(caller),
+        projectId: caller?.projectId ?? undefined,
         deliver: () => {
           throw new Error("Reading the catalog sends nothing");
         },
@@ -1026,7 +1035,7 @@ export function createDelegationMcp(options: {
       authorization,
       callId,
       cwd: actor.cwd,
-      harness: actor.harness as HarnessKind,
+      harness: actor.harness,
       mayStart: actor.mayStart ?? undefined,
       hasParent: !!actor.parentInstanceId,
       lands: landsOf(actor),
@@ -1189,7 +1198,7 @@ export function createDelegationMcp(options: {
         formerIds: options.formerIds,
         fleet: options.fleet,
         cwd: bound?.cwd ?? "",
-        harness: bound?.harness as HarnessKind | undefined,
+        harness: harnessOf(bound),
         mayStart: bound?.mayStart ?? undefined,
         deliver: () => {
           throw new Error("Instructions send nothing");

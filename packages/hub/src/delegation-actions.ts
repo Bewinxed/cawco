@@ -740,7 +740,11 @@ export interface HandoffDeps {
    * `formerIds`). A target named by one reaches its session.
    */
   readonly formerIds: () => Record<string, string>;
-  readonly harness?: HarnessKind;
+  /**
+   * The harness the tools are listed for and called from: what a tool's
+   * words say can differ by it (delegation-tools.ts `NO_REPLY_WORDS`).
+   */
+  readonly harness: HarnessKind;
   /**
    * Whether this session has a parent (it was started by another session):
    * artifact_create then offers `to: "parent"`.

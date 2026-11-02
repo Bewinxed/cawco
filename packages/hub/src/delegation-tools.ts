@@ -1,6 +1,7 @@
 import {
   DECIDES_RULE,
   HARNESSES,
+  type HarnessKind,
   IMAGE_GENERATION_DESCRIPTION,
   IMAGE_QUALITIES,
   type Kind,
@@ -261,6 +262,31 @@ export type { HandoffDeps } from "./delegation-actions";
  * it exposes: `mcp__cawco__handoff`, `…__start_session`, `…__delegate`.
  */
 export const MCP_SERVER_NAME = "cawco";
+
+/**
+ * What {@link NO_REPLY_TOOL} says on each harness. Claude Code and pi end
+ * the turn at the call (core no-reply.ts `END_TURN_META`). OpenCode's loop
+ * takes one more step after any step that called a tool, and the turn is
+ * no news only when that step writes nothing (server.ts `endsOnNoReply`).
+ */
+const ENDS_AT_THE_CALL = {
+  description:
+    "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them. The turn ends at the call: you take no step after it. It changes nothing else.",
+  result: "This turn ended here with no reply.",
+};
+const NO_REPLY_WORDS: Record<
+  HarnessKind,
+  { readonly description: string; readonly result: string }
+> = {
+  claude: ENDS_AT_THE_CALL,
+  pi: ENDS_AT_THE_CALL,
+  opencode: {
+    description:
+      "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them, and write nothing after it: text after it reaches them as a reply. It changes nothing else.",
+    result:
+      "No reply this turn. End your step with no text: anything written now reaches the person as a reply.",
+  },
+};
 
 /** The tools themselves, separated from the server so they can be exercised directly. */
 export function handoffTools(deps: HandoffDeps) {
@@ -876,9 +902,9 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       NO_REPLY_TOOL,
-      "End this turn with no reply to the person: no push, and the turn is no news on any screen. Call it alone, as the turn's last call, when the turn has nothing for them. The turn ends at the call: you take no step after it. It changes nothing else.",
+      NO_REPLY_WORDS[deps.harness].description,
       {},
-      () => Promise.resolve("This turn ended here with no reply."),
+      () => Promise.resolve(NO_REPLY_WORDS[deps.harness].result),
       sentence,
       {
         endsTurn: true,
