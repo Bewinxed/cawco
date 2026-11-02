@@ -1747,6 +1747,10 @@ export const delegateEvents = sqliteTable(
       table.kind,
       table.resultId
     ),
+    // A parent's events: the paged read (newest first by id, which every
+    // index entry carries after its key, so no sort), a continuation moving
+    // pending asks, and a session's deletion.
+    index("delegate_events_parent").on(table.parentInstanceId),
   ]
 );
 
