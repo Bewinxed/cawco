@@ -17,8 +17,11 @@
     redo,
     canUndo,
     canRedo,
+    figure = true,
   }: {
     zoom: number;
+    /** The zoom's figure between the buttons; a canvas held at its readable size says none. */
+    figure?: boolean;
     /**
      * The pan / select switch, for a canvas that is edited; a canvas that
      * is only read pans on any drag and has none.
@@ -104,9 +107,9 @@
         <IconMinus class="size-icon-md" />
       </Button>
     {/snippet}
-  </Tip><span class="min-w-space-8 text-center type-meta num"
-    >{Math.round(zoom * 100)}%</span
-  ><Tip label="Zoom in">
+  </Tip>{#if figure}<span class="min-w-space-8 text-center type-meta num"
+      >{Math.round(zoom * 100)}%</span
+    >{/if}<Tip label="Zoom in">
     {#snippet children(tip)}
       <Button
         {...tip}
