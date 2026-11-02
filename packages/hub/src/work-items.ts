@@ -1153,6 +1153,12 @@ export interface WorkItemDeps {
    * its account's limit (hub at-limit.ts `stall`); undefined while it runs.
    */
   readonly stalled: (instanceId: string) => string | undefined;
+  /**
+   * Why `instanceId`'s start is held at the hub while its machine takes none
+   * ("Omars-MacBook-Pro is installing an update", server.ts `startHold`);
+   * undefined once it went. A held start goes by itself when the hold ends.
+   */
+  readonly startHeld: (instanceId: string) => string | undefined;
   /** A task's title as its project's index has it: a pull request's title. */
   readonly taskTitle?: (
     projectId: string,
@@ -2471,6 +2477,7 @@ export const createWorkItems = ({
   spawn,
   spawnedUnder,
   stageRuns,
+  startHeld,
   taskTitle,
   tellYou,
   todos,
@@ -6659,11 +6666,19 @@ export const createWorkItems = ({
       brief();
     }
 
+    // Its machine takes no start now: the caller is told it is held, and why.
+    const held = startHeld(instanceId);
     return {
       item,
       workspace,
       text:
-        `Started ${sessionLink(instanceId, request.title)}, ${label}: ` +
+        (held
+          ? workWords.heldStart(
+              sessionLink(instanceId, request.title),
+              label,
+              held
+            )
+          : `Started ${sessionLink(instanceId, request.title)}, ${label}: `) +
         (settings.forkOf
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, starting with every turn of yours so far, `
           : `a fresh ${harness} session, `) +

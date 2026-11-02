@@ -4205,6 +4205,19 @@ export const createServer = (
   };
   const holdingStarts = (machineId: string): boolean =>
     startHold(machineId) !== undefined;
+  /**
+   * Why `instanceId`'s start is kept on its row at the hub ({@link sendSpawn}),
+   * in {@link startHold}'s words; nothing once it went, or while it only
+   * waits its turn among the hub's own launches ({@link paceSpawn}). It goes
+   * by itself when the hold ends ({@link flushOwedStarts}).
+   */
+  const startHeldWords = (instanceId: string): string | undefined => {
+    if (!db.owesSpawn(instanceId)) {
+      return undefined;
+    }
+    const [row] = db.getInstancesByIds([instanceId]);
+    return row ? startHold(row.machineId)?.words : undefined;
+  };
 
   /**
    * Sends a start as it was asked (`envelope`), bound now ({@link bounded}:
@@ -24729,6 +24742,7 @@ export const createServer = (
     // nothing starts an item before the hub is up.
     resolveHanded: (caller, input) => handedInputs.resolve(caller, input),
     stageRuns: stageHold,
+    startHeld: startHeldWords,
     // The design check (design-verify.ts), made further down; nothing
     // finishes an item before the hub is up.
     designHold: (item, submission) => designVerify.hold(item, submission),
@@ -26295,6 +26309,7 @@ export const createServer = (
     machineName,
     machinePaused: (machineId) => machinePause.words(machineId),
     stalled: (instanceId) => stallOf(instanceId),
+    startHeld: startHeldWords,
     unlanded: (instanceId) => workItems.unlanded(instanceId),
     pages: async (instanceId, enough, most) => {
       const read = await pagesUntil(instanceId, enough, most);

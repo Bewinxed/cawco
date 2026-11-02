@@ -47,6 +47,17 @@ export const workWords = {
       ? "It is a leaf: it cannot delegate further."
       : `It is a leaf that may start only: ${allowed.join(", ")}.`;
   },
+  /**
+   * A delegate whose start the hub holds while its machine takes none (hub
+   * server.ts `startHold`): `why` is the hold's sentence, "Omars-MacBook-Pro
+   * is installing an update". The start goes by itself once the hold ends
+   * (`flushOwedStarts`). `heldStart` opens `delegate`'s answer in place of
+   * "Started …:"; `heldStartListed` is its fact on `delegate_list`'s line.
+   */
+  heldStart: (link: string, label: string, why: string) =>
+    `Held ${link}, ${label}: ${why}, so the hub holds its start and starts it once that is over. It is `,
+  heldStartListed: (why: string) =>
+    `start held: ${why}; it starts once that is over`,
   /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
   reportArrives:
     "Its report arrives once it calls finish_item and its work passes the hub's merge checks; the report quotes the commands it ran.",

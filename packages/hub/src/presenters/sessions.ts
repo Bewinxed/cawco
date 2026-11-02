@@ -13,6 +13,7 @@ import {
   planLink,
   sessionLink,
   startsAny,
+  workWords,
 } from "@cawco/core";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import {
@@ -88,6 +89,7 @@ const nodeLines = (
       : []),
     ...(node.queued > 0 ? [`${count(node.queued, "message")} unread`] : []),
     ...(node.paused ? [node.paused] : []),
+    ...(node.startHeld ? [workWords.heldStartListed(node.startHeld)] : []),
     ...(node.landingWait
       ? [`${node.landingWait.words} since ${ago(node.landingWait.since, now)}`]
       : []),

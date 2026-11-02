@@ -78,6 +78,8 @@ export interface DelegateNode {
   stalled?: { words: string; until?: string };
   /** When its session's first item started. */
   startedAt: string;
+  /** While its start is held at the hub: "Omars-MacBook-Pro is installing an update"; it starts once that is over. */
+  startHeld?: string;
   /**
    * `stalled` while {@link stalled} says so: never `running` at its limit;
    * `stale` once its hold is past the cutoff (at-limit.ts `goneStale`).
@@ -189,6 +191,8 @@ export interface DelegationTreeDeps {
   stalled: (
     instanceId: string
   ) => { stale?: true; words: string; until?: number } | undefined;
+  /** Why the session's start is held at the hub (server.ts `startHold`); undefined once it went. */
+  startHeld: (instanceId: string) => string | undefined;
   /** What session's workspace holds on no remote (work-items `unlanded`); throws the machine's words. */
   unlanded: (instanceId: string) => Promise<Unlanded | undefined>;
 }
@@ -330,6 +334,13 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     return paused ? { paused } : {};
   };
 
+  /** A starting item's start held at the hub, in words; nothing once it went. */
+  const startHeldOf = (item: WorkItemRow): Pick<DelegateNode, "startHeld"> => {
+    const startHeld =
+      item.state === "starting" ? deps.startHeld(item.instanceId) : undefined;
+    return startHeld ? { startHeld } : {};
+  };
+
   /**
    * A live item whose session its account's limit stopped: `stalled` its
    * state (`stale` past the cutoff), with the words; nothing when it runs or
@@ -402,6 +413,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       // Stopped at its limit is what it is, whatever wait it declared.
       ...stalledOf(item),
       ...pausedOf(item, row),
+      ...startHeldOf(item),
       ...(plan && plan.total > 0 ? { plan } : {}),
       ...(report ? { report } : {}),
       children,
