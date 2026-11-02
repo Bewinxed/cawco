@@ -287,8 +287,9 @@ export const RATE_LIMIT_READ = "rate_limit";
 /**
  * The `system` subtype an agent says, once per Claude session start, what the
  * session's Claude Code answered at initialize (`initializationResult()`):
- * who it is signed in as, its plan, and the models it offers. The hub keeps
- * it as the session's account's catalog and plan; it never reaches a screen.
+ * who it is signed in as and its plan (core `SessionAccountRead`). The hub keeps
+ * the plan as its account's, and reads the account's catalog afresh when it
+ * is stale (hub accounts.ts `refreshCatalog`); it never reaches a screen.
  */
 export const ACCOUNT_READ = "account";
 
@@ -1521,8 +1522,8 @@ export interface CompactionFailure {
  */
 export interface NeutralSystemMessage {
   // account ({@link ACCOUNT_READ}) — what the session's Claude Code said at
-  // initialize: who it is signed in as, its plan, and its models
-  account?: import("./accounts").AccountProbe;
+  // initialize: who it is signed in as, and its plan
+  account?: import("./accounts").SessionAccountRead;
   // session_dir ({@link SESSION_DIR_READ}) — the account whose dir the
   // session's data is in now; null for the machine's own
   account_id?: string | null;

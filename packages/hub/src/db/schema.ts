@@ -2460,8 +2460,8 @@ export const accountWindows = sqliteTable(
 );
 
 /**
- * Each account's model catalog, as its Claude Code answered at initialize (a
- * probe's, or any of its sessions'), and the effort each model ran at when a
+ * Each account's model catalog, as its Claude Code answered a probe's
+ * initialize (hub accounts.ts `refreshCatalog`), and the effort each model ran at when a
  * session asked for none. Kept so a picker has the account's models with
  * nothing running, across agent and hub restarts.
  */

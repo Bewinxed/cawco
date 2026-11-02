@@ -15,10 +15,12 @@ import {
   type ClaudeLimits,
   extraUsageOn,
   type ProviderAccountReading,
+  type SessionAccountRead,
   type SigninState,
   sameIdentity,
   type UsageLimitsResponse,
 } from "@cawco/core";
+import { HOUR_MS } from "@cawco/core/time";
 import {
   type ObservedRateLimitInfo,
   observedReading,
@@ -36,7 +38,26 @@ export type AccountProber = (
   account: string
 ) => Promise<AccountProbe | undefined>;
 
-/** Keeps what a probe or a session's initialize said about an account. */
+/** Keeps what a session's Claude Code said of its account as it started: its plan. */
+export const keepReading = (
+  db: DbShape,
+  accountId: string,
+  read: SessionAccountRead,
+  at = Date.now()
+): void => {
+  if (read.subscriptionType !== undefined) {
+    db.accounts.putReading(
+      accountId,
+      { subscription: read.subscriptionType },
+      at
+    );
+  }
+};
+
+/**
+ * Keeps what a probe read of an account: its models, as its catalog
+ * (replacing the one before, rows and all), and its plan.
+ */
 export const keepProbe = (
   db: DbShape,
   accountId: string,
@@ -46,13 +67,7 @@ export const keepProbe = (
   if (probe.models.length > 0) {
     db.accounts.putCatalog(accountId, probe.models, at);
   }
-  if (probe.subscriptionType !== undefined) {
-    db.accounts.putReading(
-      accountId,
-      { subscription: probe.subscriptionType },
-      at
-    );
-  }
+  keepReading(db, accountId, probe, at);
 };
 
 /**
@@ -129,22 +144,29 @@ export const accountOfIdentity = (
 };
 
 /**
- * The account's models, read through a probe of its dir on the machine when
- * the hub has none yet; kept only when the dir still answers as the account.
- * False when the probe could not be read, which the caller retries.
+ * How old an account's catalog may be before a session starting on it reads
+ * it again ({@link refreshCatalog}). Ours: a model Claude Code adds or drops
+ * reaches the pickers within the hour, at one probe an hour per account in
+ * use.
  */
-const catalogFor = async (
+const CATALOG_FRESH_MS = HOUR_MS;
+
+/** How a {@link refreshCatalog} went. */
+type CatalogRead = "held" | "read" | "failed";
+
+/** The probe each account's catalog waits on now: one at a time per account. */
+const probing = new Map<string, Promise<CatalogRead>>();
+
+/** Reads the account's models through a probe of its dir on `machineId`, kept only when the dir still answers as the account. */
+const probeCatalog = async (
   db: DbShape,
   machineId: string,
   account: Account,
   probe: AccountProber
-): Promise<boolean> => {
-  if (db.accounts.catalogs().some((one) => one.accountId === account.id)) {
-    return true;
-  }
+): Promise<CatalogRead> => {
   const read = await probe(machineId, account.id);
   if (!read) {
-    return false;
+    return "failed";
   }
   const held = read.identity
     ? withOrgIdFrom(db, account, read.identity).identity
@@ -152,7 +174,41 @@ const catalogFor = async (
   if (read.identity && held && sameIdentity(read.identity, held)) {
     keepProbe(db, account.id, read);
   }
-  return true;
+  return "read";
+};
+
+/**
+ * The account's catalog, read through a probe of its dir on `machineId`
+ * when the hub has none, or (`stale`) when it has one older than
+ * {@link CATALOG_FRESH_MS}. A probe names no model, so its list is the
+ * account's own; a session's initialize lists models around the session's
+ * model (core `SessionAccountRead`) and is never kept as one. `held`: no
+ * probe was needed; `failed`: the probe could not be read, which the caller
+ * retries, and the catalog held stays.
+ */
+export const refreshCatalog = (
+  db: DbShape,
+  machineId: string,
+  account: Account,
+  probe: AccountProber,
+  when: "missing" | "stale"
+): Promise<CatalogRead> => {
+  const held = db.accounts
+    .catalogs()
+    .find((one) => one.accountId === account.id);
+  if (
+    held &&
+    (when === "missing" || Date.now() - held.readAt < CATALOG_FRESH_MS)
+  ) {
+    return Promise.resolve("held");
+  }
+  const reading =
+    probing.get(account.id) ??
+    probeCatalog(db, machineId, account, probe).finally(() =>
+      probing.delete(account.id)
+    );
+  probing.set(account.id, reading);
+  return reading;
 };
 
 /**
@@ -297,8 +353,14 @@ export const reconcileAccounts = async (
         store.putSignin({ accountId: account.id, machineId, state }) || changed;
     }
     if (state === "signed-in" && scope === "claude") {
-      const read = await catalogFor(db, machineId, account, probe);
-      failed = failed || !read;
+      const read = await refreshCatalog(
+        db,
+        machineId,
+        account,
+        probe,
+        "missing"
+      );
+      failed = failed || read === "failed";
     }
   }
 

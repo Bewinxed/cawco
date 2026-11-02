@@ -473,7 +473,12 @@ import {
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
-import { modelNameIn, namedModels } from "@cawco/core/model-names";
+import {
+  modelListed,
+  modelNameIn,
+  namedModels,
+  providerOf,
+} from "@cawco/core/model-names";
 import {
   DOWN_WORDS,
   type FolderWeight,
@@ -532,10 +537,12 @@ import {
   claudeCredentialRefused,
   confirmReading,
   keepProbe,
+  keepReading,
   machineAccount,
   noteProviderReading,
   noteRateLimit,
   reconcileAccounts,
+  refreshCatalog,
   sessionLimitsReader,
   uncompared,
   usageLimits,
@@ -4709,47 +4716,72 @@ export const createServer = (
     }
   };
   /**
-   * Why `machineId`'s OpenCode would not run `model`, naming the models it
-   * offers from that provider (those sharing the asked id's first word
-   * first), by the machine's last report: the models its servers list from
-   * the catalog they run on, which drops a model the catalog deprecates
-   * (`opencode-go/deepseek-v4-flash`, 2026-10-14), so a delegate on one is
-   * refused here rather than failing at its first turn. Undefined when it
-   * offers it, for any other harness, for a model naming no provider, and
-   * when the machine has reported no OpenCode models to judge by.
+   * Why a `harness` session on `machineId` may not start on `model`: one the
+   * harness does not list there ({@link harnessModels}: Claude Code's account
+   * catalogs, OpenCode's and pi's machine reports), judged by core
+   * `modelListed`, so a model the harness never offers (a harness's name
+   * asked as a model, Claude Code started on "pi" 2026-11-02; a model
+   * OpenCode's catalog dropped, `opencode-go/deepseek-v4-flash` 2026-10-14)
+   * is refused before its session is made rather than at its first turn. It
+   * names the ids the harness lists, those from the asked id's provider and
+   * sharing its first word first. Undefined when it lists it, for no model
+   * named, and when the harness has listed no models there to judge by.
    */
-  const opencodeModelRefusal = (
+  const modelRefusal = (
     machineId: string,
-    harness: string,
+    harness: HarnessKind,
     model: string | undefined
   ): string | undefined => {
-    const slash = model?.indexOf("/") ?? -1;
-    if (harness !== "opencode" || !model || slash <= 0) {
+    if (!model) {
       return;
     }
-    const offered = (harnessReportOf(machineId, "opencode")?.models ?? [])
-      .map((one) => one.value)
-      .filter((value) => value !== "default");
-    if (offered.length === 0 || offered.includes(model)) {
+    const rows = harnessModels(harness, new Set([machineId]));
+    if (rows.length === 0 || modelListed(harness, rows, model)) {
       return;
     }
-    const provider = model.slice(0, slash);
-    const fromProvider = offered.filter((value) =>
-      value.startsWith(`${provider}/`)
-    );
-    if (fromProvider.length === 0) {
-      return `OpenCode on ${machineName(machineId)} offers no model from ${provider}, so it cannot run ${model}: it holds no sign-in or key for ${provider} there. Nothing was started.`;
-    }
-    const word = model.slice(slash + 1).split(MODEL_ID_WORD)[0] ?? "";
-    const near = (value: string) =>
-      value.slice(provider.length + 1).startsWith(word);
-    const listed = [
-      ...fromProvider.filter(near),
-      ...fromProvider.filter((value) => !near(value)),
+    const name = accountsWords.harnesses[harness];
+    const machine = machineName(machineId);
+    const offered = [
+      ...new Set(
+        rows.map((one) => one.value).filter((value) => value !== "default")
+      ),
     ];
+    const provider = providerOf(model);
+    if (
+      provider !== undefined &&
+      !offered.some((value) => providerOf(value) === provider)
+    ) {
+      return spawnWords.unlistedModel.noProvider(
+        name,
+        machine,
+        model,
+        provider
+      );
+    }
+    const bare = provider ? model.slice(provider.length + 1) : model;
+    const word = bare.split(MODEL_ID_WORD)[0] ?? "";
+    const rank = (value: string): number =>
+      (providerOf(value) === provider ? 0 : 2) +
+      ((providerOf(value) ? value.slice(value.indexOf("/") + 1) : value)
+        .toLowerCase()
+        .startsWith(word.toLowerCase())
+        ? 0
+        : 1);
+    const listed = offered
+      .map((value, order) => ({ value, order }))
+      .sort((a, b) => rank(a.value) - rank(b.value) || a.order - b.order)
+      .map((one) => one.value);
     const shown = listed.slice(0, MODELS_NAMED);
-    const more = listed.length - shown.length;
-    return `OpenCode on ${machineName(machineId)} does not offer ${model}: the catalog it runs on dropped it or never had it. From ${provider} it offers ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}. Nothing was started.`;
+    const refusal = spawnWords.unlistedModel.words(
+      name,
+      machine,
+      model,
+      shown,
+      listed.length - shown.length
+    );
+    return harnessNamed(model)
+      ? `${refusal} ${spawnWords.unlistedModel.harnessNamed(model)}`
+      : refusal;
   };
   /** A new pi session that names no model, so pi's pick in its directory is asked first. */
   const asksPiDefault = (payload: SpawnPayload): boolean =>
@@ -5223,7 +5255,7 @@ export const createServer = (
       "claude"
     );
     // Unanswered or refused, the account keeps what the hub last knew of it
-    // (accounts.ts `catalogFor` writes nothing and tries again).
+    // (accounts.ts `refreshCatalog` writes nothing and tries again).
     switch (answer.kind) {
       case "unanswered": {
         const fault = unansweredFault(machineId, answer);
@@ -7919,6 +7951,9 @@ export const createServer = (
    * with none named it is refused, as its modes are not known. Its directory
    * is settled here too, for the same every spawn: `cwd` as a path on the
    * machine (core `machinePath`), or the refusal saying why it is none.
+   * And its model, for every start that is not a resume: one its harness
+   * lists there, else refused ({@link modelRefusal}); a resume runs the
+   * model its conversation started on.
    */
   const settleMode = (
     machineId: string,
@@ -7928,6 +7963,12 @@ export const createServer = (
     | { payload: SettledSpawn; permissionMode: string | null }
     | { refusal: string; ask?: ModeAsk } => {
     const { harness } = payload;
+    const unlisted = peekResume(payload)
+      ? undefined
+      : modelRefusal(machineId, harness, payload.model);
+    if (unlisted) {
+      return { refusal: unlisted };
+    }
     let paths: Pick<SettledSpawn, "cwd" | "bootstrap" | "scratch">;
     try {
       paths = spawnPaths(machineId, payload);
@@ -24677,7 +24718,7 @@ export const createServer = (
     designHeld: (itemId) => designVerify.held(itemId),
     hubMachineId: () => ownMachineIdRead,
     lifetime,
-    modelRefusal: opencodeModelRefusal,
+    modelRefusal,
     online: (machineId) => Boolean(registry.agent(machineId)),
     // A routine run's turn makes the sessions it starts the run's (memory.ts).
     spawnedUnder: (instanceId, parentId) =>
@@ -36693,7 +36734,31 @@ export const createServer = (
                     }
                   }
                   if (read) {
-                    keepProbe(db, accountId, read);
+                    keepReading(db, accountId, read);
+                  }
+                  // A session starting on the account reads its catalog
+                  // again once it is stale, through a probe that names no
+                  // model: the session's own initialize lists models around
+                  // its own (a session started on "pi" listed a "pi" row).
+                  if (
+                    frame.message.subtype === ACCOUNT_READ &&
+                    account?.provider === CLAUDE_PROVIDER
+                  ) {
+                    const { machineId: probedOn } = message;
+                    detach(
+                      refreshCatalog(
+                        db,
+                        probedOn,
+                        account,
+                        probeAccount,
+                        "stale"
+                      ).then((went) => {
+                        if (went === "read") {
+                          publishUsage(probedOn);
+                        }
+                      }),
+                      "account catalog refresh"
+                    );
                   }
                   publishUsage(message.machineId);
                   break;

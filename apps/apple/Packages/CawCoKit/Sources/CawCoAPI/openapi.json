@@ -55435,7 +55435,7 @@
           },
           "probe": {
             "$ref": "#/components/schemas/AccountProbe",
-            "description": "What Claude Code's own initialize response says about a config dir: who it\nis signed in as (absent when nobody is), its plan, and the models it\noffers. Read by a probe (a session that never takes a turn) and by every\nsession as it starts."
+            "description": "What a probe (a session that never takes a turn and names no model) reads\nof a config dir at initialize: its {@link SessionAccountRead}, and the models\nthe account offers, which the hub keeps as its catalog."
           },
           "state": {
             "type": "string",
@@ -55467,18 +55467,18 @@
         ]
       },
       "AccountProbe": {
-        "description": "What Claude Code's own initialize response says about a config dir: who it\nis signed in as (absent when nobody is), its plan, and the models it\noffers. Read by a probe (a session that never takes a turn) and by every\nsession as it starts.",
+        "description": "What a probe (a session that never takes a turn and names no model) reads\nof a config dir at initialize: its {@link SessionAccountRead}, and the models\nthe account offers, which the hub keeps as its catalog.",
         "type": "object",
         "properties": {
-          "identity": {
-            "$ref": "#/components/schemas/AccountIdentity",
-            "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
-          },
           "models": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ModelInfo"
             }
+          },
+          "identity": {
+            "$ref": "#/components/schemas/AccountIdentity",
+            "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
           },
           "subscriptionType": {
             "type": "string"
@@ -57555,7 +57555,7 @@
         "type": "object",
         "properties": {
           "account": {
-            "$ref": "#/components/schemas/AccountProbe"
+            "$ref": "#/components/schemas/SessionAccountRead"
           },
           "account_id": {
             "type": [
@@ -58161,6 +58161,19 @@
           "subtype",
           "type"
         ]
+      },
+      "SessionAccountRead": {
+        "description": "What a session's Claude Code says of its account at initialize, as it\nstarts: who it is signed in as (absent when nobody is) and its plan. Not\nits models: Claude Code lists them relative to the session's own model (a\nmodel it does not know is added as a \"Custom model\" row, an explicit id\nreplaces the alias row that runs it), so they are no account's catalog.",
+        "type": "object",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/AccountIdentity",
+            "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
+          },
+          "subscriptionType": {
+            "type": "string"
+          }
+        }
       },
       "ObservedRateLimitInfo": {
         "description": "The `rate_limit_info` payload, structurally. Not imported from the agent\nSDK: `unifiedWindows` is marked `@internal` there, so it is stripped from\nthe published `.d.ts` even though the CLI emits it.",

@@ -17,6 +17,33 @@ export const spawnWords = {
   refused: "[hub] refused spawn",
   /** One refused start, in the refusal's own words. */
   refusedLine: (refusal: string) => `${spawnWords.refused}: ${refusal}`,
+  /**
+   * A start refused on a model its harness does not list (hub server.ts
+   * `modelRefusal`), to the agent or person who asked: the harness by name
+   * (`harness`, accountsWords.harnesses), the model ids it does list, and
+   * how many more.
+   */
+  unlistedModel: {
+    words: (
+      harness: string,
+      machine: string,
+      model: string,
+      listed: readonly string[],
+      more: number
+    ) =>
+      `${harness} on ${machine} does not list the model ${model}. It lists ${listed.join(", ")}${more > 0 ? `, and ${more} more` : ""}. Nothing was started.`,
+    /** A model from a provider the harness lists nothing from. */
+    noProvider: (
+      harness: string,
+      machine: string,
+      model: string,
+      provider: string
+    ) =>
+      `${harness} on ${machine} lists no model from ${provider}, so it cannot run ${model}: it holds no sign-in or key for ${provider} there. Nothing was started.`,
+    /** Added when the model asked for is a harness's name. */
+    harnessNamed: (model: string) =>
+      `${model} is a harness, not a model: delegate takes it as harness.`,
+  },
   /** Between a session and the account its launch places it on, in the line the hub logs of it. */
   launchesOn: "launches on",
   /** The hub's line as a launch places a Claude session that ran on no account (server.ts `placeForLaunch`). */

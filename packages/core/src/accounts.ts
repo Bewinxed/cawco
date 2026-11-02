@@ -468,15 +468,24 @@ export interface AccountReport {
 }
 
 /**
- * What Claude Code's own initialize response says about a config dir: who it
- * is signed in as (absent when nobody is), its plan, and the models it
- * offers. Read by a probe (a session that never takes a turn) and by every
- * session as it starts.
+ * What a session's Claude Code says of its account at initialize, as it
+ * starts: who it is signed in as (absent when nobody is) and its plan. Not
+ * its models: Claude Code lists them relative to the session's own model (a
+ * model it does not know is added as a "Custom model" row, an explicit id
+ * replaces the alias row that runs it), so they are no account's catalog.
  */
-export interface AccountProbe {
+export interface SessionAccountRead {
   identity?: AccountIdentity;
-  models: import("./harness").ModelInfo[];
   subscriptionType?: string;
+}
+
+/**
+ * What a probe (a session that never takes a turn and names no model) reads
+ * of a config dir at initialize: its {@link SessionAccountRead}, and the models
+ * the account offers, which the hub keeps as its catalog.
+ */
+export interface AccountProbe extends SessionAccountRead {
+  models: import("./harness").ModelInfo[];
 }
 
 /**

@@ -22,7 +22,7 @@
  * - Two rows still alike (OpenCode and pi list one model from several
  *   providers) are told apart by provider, else by id.
  */
-import type { ModelInfo } from "./harness";
+import type { HarnessKind, ModelInfo } from "./harness";
 import { decidesWords } from "./words/decides";
 
 export interface NamedModel {
@@ -182,4 +182,28 @@ export const modelNameIn = (
         qualifiers: LONG_CONTEXT.test(id) ? [words.longContext] : [],
       })
     : null;
+};
+
+/**
+ * Whether a `harness` session may start on `id` by the rows its harness
+ * lists: the harness's default; a row listed under it or one that runs it
+ * ({@link modelNameIn}: Claude Code's aliases, the wire ids they run, the
+ * `[1m]` variant of a listed model); and on pi a bare id unique among its
+ * providers' rows, which pi's own resolver takes (agent pi-services.ts
+ * `resolvePiModel`). OpenCode drops a bare id's model (agent opencode.ts
+ * `splitModel`), so it is listed only with its provider.
+ */
+export const modelListed = (
+  harness: HarnessKind,
+  rows: readonly ModelInfo[],
+  id: string
+): boolean => {
+  if (id === "default" || modelNameIn(rows, id) !== null) {
+    return true;
+  }
+  return (
+    harness === "pi" &&
+    providerOf(id) === undefined &&
+    rows.filter((row) => row.value.endsWith(`/${id}`)).length === 1
+  );
 };

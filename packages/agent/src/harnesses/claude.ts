@@ -53,7 +53,6 @@ import type {
   FleetMcpTakeAnswer,
   FleetMcpTaken,
   MachineHarnessReport,
-  ModelInfo,
   MoveEnded,
   NeutralMessage,
   NeutralSessionInfo,
@@ -2533,9 +2532,10 @@ class ClaudeSession implements HarnessSession {
 
   /**
    * Says what the session's Claude Code answered at initialize
-   * ({@link ACCOUNT_READ}): who its account is, its plan, and the models it
-   * offers. The hub keeps it as the account's catalog, so a picker has it
-   * with nothing running. Its version is kept ({@link #runs}).
+   * ({@link ACCOUNT_READ}): who its account is, and its plan. Not the
+   * models it lists: Claude Code lists them around this session's own model
+   * (core `SessionAccountRead`); the account's catalog is a probe's. Its version is
+   * kept ({@link #runs}).
    */
   async #readAccount(): Promise<void> {
     try {
@@ -2548,7 +2548,6 @@ class ClaudeSession implements HarnessSession {
         type: "system",
         subtype: ACCOUNT_READ,
         account: {
-          models: init.models as ModelInfo[],
           ...(identity ? { identity } : {}),
           ...(init.account.subscriptionType
             ? { subscriptionType: init.account.subscriptionType }
@@ -4418,8 +4417,8 @@ class ClaudeHarness implements Harness {
    * (its `--version`, read as the capabilities probe reads it: sessions run
    * this one, which updates itself), and every account dir's sign-in, which
    * is also the machine's word on Claude (signed in when any account is). No
-   * model catalog: that is each account's, which its sessions' initialize
-   * responses report and the hub keeps. A version below the floor is the
+   * model catalog: that is each account's, which a probe of its dir reads
+   * and the hub keeps (hub accounts.ts `refreshCatalog`). A version below the floor is the
    * machine's sentence on why no session starts ({@link versionRefusal}).
    * Read on every report and each minute's re-read, which is where a
    * `claude update` is seen ({@link claudeHostVersion}). With no Claude Code

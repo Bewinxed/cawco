@@ -1020,9 +1020,11 @@ export interface WorkItemDeps {
     row: InstanceRow
   ) => Omit<ItemBlock, "since"> | undefined;
   /**
-   * Why `machineId` would not run `model` on `harness`, in words naming the
-   * models it does offer from that provider; undefined when it offers it, or
-   * when the machine has reported no models to judge by.
+   * Why a `harness` session on `machineId` may not start on `model`: one
+   * the harness does not list there, in words naming those it does
+   * (server.ts `modelRefusal`, which every start's `settleMode` asks too);
+   * undefined when it lists it, or has listed none to judge by. Asked here
+   * so a delegate is refused before its workspace is cut.
    */
   readonly modelRefusal: (
     machineId: string,
