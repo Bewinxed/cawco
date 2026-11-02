@@ -167,19 +167,30 @@
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
   /**
+   * The divider's width (the kit handle's `w-px`): paneforge shares what is
+   * left of the group beside it between the panes, so every share is of
+   * that (as side/Split.svelte reads it).
+   */
+  const DIVIDER = 1;
+  /** The px the two least shares, each rounded up to a hundredth, may add between them on the widest surface: under one. */
+  const ROUNDING = 1;
+  /**
    * The room stands beside the stage only where the surface holds both
    * whole: the stage at its least (`c-graph-stage-min`), the room at its
-   * least (`c-graph-room-w`), the gap between them and the page's gutters.
-   * Under that (1064px today) the room is the drawer, as the stage's least
-   * width says it becomes ("under it the room becomes the drawer"); a
-   * narrower desk ran the room past the surface's edge.
+   * least (`c-graph-room-w`), the gap between them, the split's divider
+   * and the page's gutters. Under that (1066px today) the room is the
+   * drawer, as the stage's least width says it becomes ("under it the room
+   * becomes the drawer"); a narrower desk ran the room past the surface's
+   * edge.
    */
   const besideLine = $derived(
     numberOf("--c-graph-stage-min") +
       numberOf("--c-graph-room-w") +
       numberOf("--space-5") +
       numberOf("--space-7") +
-      numberOf("--space-6")
+      numberOf("--space-6") +
+      DIVIDER +
+      ROUNDING
   );
   const desk = $derived(surface === 0 || surface >= besideLine);
 
@@ -662,12 +673,21 @@
    * read as a share of the width it stands in now.
    */
   let splitWidth = $state(0);
+  /** What the panes share, px. */
+  const panesWidth = $derived(Math.max(0, splitWidth - DIVIDER));
   /** The room's width the person dragged the edge to, px; null until he has. */
   let roomDragged: number | null = null;
   const splitShare = (px: number) =>
-    splitWidth > 0 ? Math.min(100, (px / splitWidth) * 100) : 0;
-  const stageLeast = $derived(splitShare(numberOf("--c-graph-stage-min")));
-  const roomLeast = $derived(splitShare(numberOf("--c-graph-room-w")));
+    panesWidth > 0 ? Math.min(100, (px / panesWidth) * 100) : 0;
+  /** Shares in hundredths, rounded up: a least width read as a share never stands under itself once laid out. */
+  const leastShare = (px: number) => Math.ceil(splitShare(px) * 100) / 100;
+  /** Each pane's least: its surface's least width and the pane's own inset beside the edge (`pe-space-2`, `ms-space-3`). */
+  const stageLeast = $derived(
+    leastShare(numberOf("--c-graph-stage-min") + numberOf("--space-2"))
+  );
+  const roomLeast = $derived(
+    leastShare(numberOf("--c-graph-room-w") + numberOf("--space-3"))
+  );
   /**
    * The room's share: the width he dragged it to, else what the stage at
    * its component's widest leaves, each held between the least widths.
@@ -1087,8 +1107,8 @@
             minSize={roomLeast}
             order={2}
             onResize={(size) => {
-              if (splitWidth > 0) {
-                roomDragged = (size / 100) * splitWidth;
+              if (panesWidth > 0) {
+                roomDragged = (size / 100) * panesWidth;
               }
             }}
           >
