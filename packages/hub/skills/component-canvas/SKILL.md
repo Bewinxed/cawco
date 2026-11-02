@@ -10,7 +10,7 @@ The canvas is the project's real component, mounted live by the project's own to
 ## Steps
 
 1. **Read the map.** `design_map` with `dir` (or `query`) for the folder you build in; `component` for any part you might use. Done when you know which existing components this one is made of: you **mount** those; their markup stays theirs (`references/map.md`). On a clean-slate redesign the surface being replaced is out of the map: mount only the design system's primitives and write every part above them new.
-2. **Write the component** props in, events out: everything a state needs arrives as a prop, so every state can be forced from a story. A component that reads the live store cannot show its other states; give it a seam (its state as props) or a fixture beside it. Done when its build and type-check pass.
+2. **Write the component** props in, events out: everything a state needs arrives as a prop, so every state can be forced from a story. The component follows its props while mounted: a story's args are inputs the live instance takes at any time, never a record it copies into its own `$state` as it opens (the `house/follows-props` lint catches the copy). A component that reads the live store cannot show its other states; give it a seam (its state as props) or a fixture beside it. Done when its build and type-check pass.
 3. **Write the states file** beside it:
    - `export default { title: "Group/Name", component, args }` with what every story shares; `title` is the section's heading.
    - One export per state the code reaches, named as the product talks (`Waiting`, `Denied`), each with only the args it changes.
