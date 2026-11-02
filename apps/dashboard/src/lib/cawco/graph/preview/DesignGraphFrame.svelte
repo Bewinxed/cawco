@@ -15,15 +15,11 @@
   import { routineForm } from "../routine-form-review";
 
   let {
-    arrangement,
     ask,
     stale = false,
     withRoster = false,
     alone = null,
-  }: Pick<
-    ComponentProps<typeof DesignGraph>,
-    "arrangement" | "ask" | "stale"
-  > & {
+  }: Pick<ComponentProps<typeof DesignGraph>, "ask" | "stale"> & {
     /** Whether the ask names the roster beside the routine form. */
     withRoster?: boolean;
     /** The one component under review in place of the routine form. */
@@ -63,5 +59,5 @@
     tall = screenHeight(node.clientWidth);
   })}
 >
-  <DesignGraph {arrangement} {ask} {inputs} recordsAt={opened} {stale} />
+  <DesignGraph {ask} {inputs} recordsAt={opened} {stale} />
 </div>
