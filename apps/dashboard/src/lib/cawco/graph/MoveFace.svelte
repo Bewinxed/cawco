@@ -86,6 +86,14 @@
   const nameOf = (clip: Clip) =>
     words.clipName(clip.element, clip.how, clip.duration);
   const pct = (t: number) => `${(t / scale) * 100}%`;
+  /**
+   * The playhead as the ruler's handle holds it: on the handle's 1 ms
+   * steps. bits-ui's Slider snaps a value off its steps and hands the snap
+   * to `onValueChange` (its root's `watch`), so a playing playhead, a
+   * fraction of a millisecond off a step every frame, read as a scrub and
+   * stopped the move after one frame.
+   */
+  const handle = $derived(Math.round(Math.min(playhead, length)));
 </script>
 
 <div data-slot="move" class="flex min-h-0 min-w-0 flex-1 flex-col gap-space-3">
@@ -174,7 +182,7 @@
               step={1}
               thumbPositioning="exact"
               type="single"
-              value={Math.min(playhead, length)}
+              value={handle}
             >
               <span class="h-px w-full bg-border-control"></span>
               <Slider.Thumb
