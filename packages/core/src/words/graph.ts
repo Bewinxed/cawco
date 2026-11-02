@@ -25,10 +25,11 @@ export const graphWords = {
   nothingReaches: "No move leads here",
   /** A state that is not the end of its path, with no move out of it: its glyph's tooltip. */
   nothingLeaves: "No move leads on from here",
-  /** A state's moves out, in the whole set: the list's name for a screen reader, and each move as the person causes it. */
-  movesOut: (state: string) => `Moves from ${state}`,
-  moveTo: (act: string | null, to: string) =>
-    act ? `${act} → ${to}` : `→ ${to}`,
+  /** What a person does to reach a state, on its card in the whole set ("Try again"). */
+  arrivesBy: (acts: string[]) => acts.join(" or "),
+  /** The whole set's canvas, its name for a screen reader. */
+  wholeMap: (component: string) =>
+    `Every state of ${component}, and the moves between them`,
   /** A state's variants, the toggle group's name for a screen reader. */
   variants: (state: string) => `Variants of ${state}`,
   /** A variant's state, said before its own name to a reader and a pin ("Failed save: Longest names"). */
