@@ -28,7 +28,8 @@
    * nothing else changes the stage. Beside it one room, its one switch
    * (fluid-tabs) choosing its face: the states list with its steps, the
    * whole set, or the move into the kept state. Compare, a switch that
-   * stays on, compares the kept state with the one before it at once,
+   * stays on, compares the kept state with the one before it (model
+   * `previousOf`, the state the Move face plays from) at once,
    * and a press on another state compares with that one instead; the
    * stage keeps the kept state and rings what differs. The move into a
    * kept state plays once as it arrives, then its playhead rests at its
@@ -38,7 +39,8 @@
    * One bar of one row (DESIGN.md, The Title Bars Follow Liquid Glass
    * Rule): leading the component's name (its menu when there are several),
    * trailing one glass group of bare symbols (Compare, the stage's view,
-   * the room). The view is a card hung from the glass (HangCard, as the
+   * and Show states only while the room is put away: the room's one close
+   * is its own). The view is a card hung from the glass (HangCard, as the
    * app's own glass hangs its cards): the widths as device glyphs, the
    * scheme as sun and moon, Reduce motion as a switch. Under the desk line
    * (900px of its own width) the room is the kit's bottom drawer, its
