@@ -178,7 +178,7 @@
     {...restProps}
   >
     {#snippet child({ props, open })}
-      <!-- bits-ui (2.19.5) writes `aria-modal="true"` on every dialog's
+      <!-- bits-ui (2.20.3) writes `aria-modal="true"` on every dialog's
            content: one that holds nothing says false, to a screen reader too. -->
       <div
         {...props}
