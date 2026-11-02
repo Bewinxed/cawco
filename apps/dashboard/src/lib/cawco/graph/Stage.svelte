@@ -40,17 +40,19 @@
    * what changed and what went on the way to the kept state (diff.ts).
    */
   import { readWithin } from "@cawco/core/bounded";
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { queriesIn, userEventIn } from "@cawco/core/stage-play";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { tick, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { dur, numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, motionOk, numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconError } from "#lib/icons.js";
   import { type Difference, differences, LINES_SHOWN } from "./diff";
   import type { PlayContext, Review } from "./model";
   import { type Clip, clipOf } from "./motion";
+  import { nameOf } from "./names";
 
   let {
     review,
@@ -59,6 +61,8 @@
     width,
     scheme,
     stale = false,
+    lit = null,
+    fits = $bindable(false),
   }: {
     review: Review;
     /** The kept state, as it is drawn. */
@@ -70,6 +74,10 @@
     scheme: "light" | "dark";
     /** The hub's link is down: this is the last drawing. */
     stale?: boolean;
+    /** What a row rested on names: ringed on the stage, nothing else changed. */
+    lit?: Element | null;
+    /** The drawing stands narrower than its room: the stage is its own width, and its column takes no more. */
+    fits?: boolean;
   } = $props();
 
   /** A width no state names: the desk form (core stage.ts `FORMS.desk`). */
@@ -78,10 +86,43 @@
   const GUTTER = "--space-6";
   let room = $state(0);
   /** The width it is laid out at: his pick, else its own up to its room's. */
-  const drawnWidth = $derived(
+  const roomWidth = $derived(
     width ?? Math.min(shown.width ?? DESK, room > 0 ? room : DESK)
   );
+  /**
+   * The component's own width, where it stands narrower than the width it
+   * was laid out at (a form held to its measure in a desk's room): the
+   * stage takes that and no more, so no paper stands beside it as if it
+   * were the component's. Kept per component and width pick, and only ever
+   * widened, so a press on a state never narrows the stage and moves the
+   * room beside it.
+   */
+  let fitOf = $state<Record<string, number>>({});
+  const fitKey = $derived(`${review.name}@${width ?? "own"}`);
+  const fit = $derived(fitOf[fitKey] ?? null);
+  const drawnWidth = $derived(
+    fit === null ? roomWidth : Math.min(roomWidth, fit)
+  );
+  $effect(() => {
+    fits = fit !== null;
+  });
+  /** The drawing's own width read as it rests: its root's box, or what overflows it. */
+  const measureFit = (holder: HTMLElement) => {
+    const root = holder.firstElementChild as HTMLElement | null;
+    if (!root) {
+      return;
+    }
+    const own = Math.ceil(
+      Math.max(root.getBoundingClientRect().width, root.scrollWidth)
+    );
+    const known = fitOf[fitKey];
+    if (known === undefined ? own < drawnWidth - 1 : own > known) {
+      fitOf = { ...fitOf, [fitKey]: Math.min(roomWidth, own) };
+    }
+  };
   let frame = $state<HTMLElement>();
+  /** The stage's scroller. */
+  let scroller = $state<HTMLElement>();
   let hidden = $state<HTMLElement>();
 
   /** The props the live instance has: reassigned per state, changed in place by a move's `update`. */
@@ -92,6 +133,12 @@
   let fault = $state<{ message: string; stack: string } | null>(null);
   let details = $state(false);
   let mounted = $state(false);
+  /**
+   * The drawing's height as it last stood: held while the next drawing
+   * mounts, so the stage's scroll is kept across a press (a frame that
+   * emptied as it remounted took the scroll back to its top).
+   */
+  let lastTall = $state(0);
 
   $effect(() => {
     // Each state mounts afresh: a component reads its props as it opens.
@@ -134,6 +181,12 @@
     }
     const rest = restOf(holder);
     resting = rest;
+    rest.done.then(() => {
+      if (holder.isConnected && mounted) {
+        measureFit(holder);
+        lastTall = holder.offsetHeight;
+      }
+    });
     return () => rest.end();
   });
 
@@ -286,6 +339,11 @@
     // The from state at rest, its own arrivals landed, before the move.
     await resting?.done;
     const had = document.activeElement;
+    // Where he left the stage's scroll: a play's press focuses a control,
+    // which scrolls it into view; the scroll is put back once it has run.
+    const left = scroller
+      ? { top: scroller.scrollTop, left: scroller.scrollLeft }
+      : null;
     const t0 = performance.now();
     const seen = new Map<Animation, number>();
     /** Each clip as the engine had it when it was first seen: a transition's engine drops its effect once it ends. */
@@ -339,9 +397,77 @@
       watching = false;
       mounted = true;
       giveBack(holder, had);
+      if (scroller && left) {
+        scroller.scrollTo({ ...left, behavior: "instant" });
+      }
     }
-    return clips;
+    // Each thing named as it stands once the move has ended: what he sees.
+    return clips.map((clip) =>
+      clip.thing?.isConnected ? { ...clip, element: nameOf(clip.thing) } : clip
+    );
   }
+
+  /** Where `el` stands in the drawing, unscaled. */
+  const boxOf = (el: Element) => {
+    const a = el.getBoundingClientRect();
+    const b = (frame as HTMLElement).getBoundingClientRect();
+    return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height };
+  };
+  /** The region brought into view, with room for a ring round it (DESIGN.md, The One Ring Rule: a scroller brings a mark into view with room for its ring). */
+  let shownBox = $state<{ h: number; w: number; x: number; y: number } | null>(
+    null
+  );
+  let marker = $state<HTMLElement>();
+  /**
+   * Brings the region `els` stand in into view in the stage's scroller,
+   * room for a ring round it, never cut at its head: on open, the region
+   * the kept state changed. While comparing, the first difference's ring
+   * stands for it.
+   */
+  export async function reveal(els: readonly Element[]): Promise<void> {
+    const first = against ? found[0] : undefined;
+    if (first) {
+      await showBox(first.box);
+      return;
+    }
+    const drawn = els.filter((el) => el.isConnected && frame?.contains(el));
+    if (!frame || drawn.length === 0) {
+      return;
+    }
+    const boxes = drawn.map(boxOf);
+    const top = Math.min(...boxes.map((box) => box.y));
+    const left = Math.min(...boxes.map((box) => box.x));
+    await showBox({
+      x: left,
+      y: top,
+      w: Math.max(...boxes.map((box) => box.x + box.w)) - left,
+      h: Math.max(...boxes.map((box) => box.y + box.h)) - top,
+    });
+  }
+
+  /** A box of the drawing brought into view, room for its ring. */
+  async function showBox(box: {
+    h: number;
+    w: number;
+    x: number;
+    y: number;
+  }): Promise<void> {
+    shownBox = box;
+    await tick();
+    if (marker) {
+      bringIntoView(marker, {
+        behavior: motionOk.current ? "smooth" : "instant",
+      });
+    }
+  }
+
+  /** The ring on what a rested row names, read again as the drawing lays out anew. */
+  const litBox = $derived.by(() => {
+    if (laidOut < 0 || !(lit && frame && mounted && frame.contains(lit))) {
+      return null;
+    }
+    return boxOf(lit);
+  });
 
   /** Reduced motion's Play: the end state fades in where it stands (DESIGN.md, The Reduced Motion Rule). */
   export function fadeIn(): void {
@@ -352,6 +478,24 @@
   }
 
   const lines = $derived(found.slice(0, LINES_SHOWN));
+  /**
+   * Compare turned on, or turned to another state: once its differences
+   * are read, the first one's ring is brought into view, so the words at
+   * the head and the ring they name are on screen together.
+   */
+  let firstPending = false;
+  $effect(() => {
+    if (against?.story) {
+      firstPending = true;
+    }
+  });
+  $effect(() => {
+    const [first] = found;
+    if (first && firstPending) {
+      firstPending = false;
+      untrack(() => showBox(first.box));
+    }
+  });
   const Component = $derived(review.component);
   const ringOut = "(var(--c-change-ring-offset) + var(--c-change-ring-width))";
 </script>
@@ -359,7 +503,7 @@
 <section
   data-slot="stage"
   aria-label={shown.name}
-  class="flex min-h-0 min-w-0 flex-1 flex-col"
+  class="flex min-h-0 min-w-0 flex-initial flex-col"
 >
   <!-- Its head: the state's name in the title role, its record set, and
        while comparing the state it is compared with. -->
@@ -395,30 +539,35 @@
   {/if}
 
   {#if against && lines.length > 0}
-    <!-- What differs, in words: one line per difference, its mark the ring's
-         own (solid for came in or changed, dashed for went). -->
+    <!-- What differs, in words: one line per difference, its mark the
+         ring's own (solid for came in or changed, dashed for went), each a
+         link to its ring: a press brings that ring into view. -->
     <ul
       data-slot="differences"
       aria-label={words.compare}
-      class="m-0 mb-space-3 flex list-none flex-col gap-space-1 p-0"
+      class="m-0 mb-space-2 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0"
     >
       {#each lines as line, at (at)}
-        <li
-          class="mark-line flex min-w-0 items-center gap-space-2 type-label text-ink-row"
-        >
-          <span
-            aria-hidden="true"
-            data-box
-            class={[
-              "inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring",
-              line.kind === "went" && "border-dashed",
-            ]}
-          ></span>
-          <span class="min-w-0 wrap-anywhere">{line.line}</span>
+        <li class="min-w-0">
+          <button
+            type="button"
+            class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+            onclick={() => showBox(line.box)}
+          >
+            <span
+              aria-hidden="true"
+              data-box
+              class={[
+                "inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring",
+                line.kind === "went" && "border-dashed",
+              ]}
+            ></span>
+            <span class="min-w-0 wrap-anywhere">{line.line}</span>
+          </button>
         </li>
       {/each}
       {#if found.length > LINES_SHOWN}
-        <li class="type-meta text-ink-muted num">
+        <li class="flex items-center px-space-1 type-meta text-ink-muted num">
           +{found.length - LINES_SHOWN}
         </li>
       {/if}
@@ -439,8 +588,9 @@
        element's box (5px, under --space-6), so a ring on an element at the
        drawing's edge stands whole. -->
   <div
+    bind:this={scroller}
     data-slot="stage-scroll"
-    class="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain rounded-lg"
+    class="relative min-h-0 min-w-0 flex-initial overflow-auto overscroll-contain rounded-lg scrollbar-gutter-stable"
     {@attach frameSize((node: HTMLElement) => {
       const style = getComputedStyle(node);
       room =
@@ -456,7 +606,7 @@
       data-slot="stage-page"
       data-scheme={scheme}
       class={[
-        "min-h-full w-max min-w-full bg-surface-page p-space-6 text-ink-strong",
+        "w-max min-w-full bg-surface-page p-space-6 text-ink-strong",
         scheme === "dark" ? "scheme-dark" : "scheme-light",
         stale && "opacity-(--account-stale-opacity)",
       ]}
@@ -464,7 +614,10 @@
       <div
         data-slot="stage-frame"
         style:--frame-w="{drawnWidth}px"
-        style:--against-h="{against ? againstTall : 0}px"
+        style:--against-h="{Math.max(
+          against ? againstTall : 0,
+          mounted ? 0 : lastTall
+        )}px"
         class="relative min-h-(--against-h) w-(--frame-w)"
       >
         {#if against}
@@ -514,6 +667,30 @@
             </svelte:boundary>
           {/key}
         </div>
+        <!-- What a rested row names, ringed; and the region brought into
+             view, with room for its ring. Neither takes a press. -->
+        {#if litBox}
+          <span
+            aria-hidden="true"
+            data-slot="lit-ring"
+            class="pointer-events-none absolute start-(--ring-x) top-(--ring-y) h-(--ring-h) w-(--ring-w) rounded-sm border-(length:--c-change-ring-width) border-c-change-ring"
+            style:--ring-x="calc({litBox.x}px - {ringOut})"
+            style:--ring-y="calc({litBox.y}px - {ringOut})"
+            style:--ring-w="calc({litBox.w}px + 2 * {ringOut})"
+            style:--ring-h="calc({litBox.h}px + 2 * {ringOut})"
+          ></span>
+        {/if}
+        {#if shownBox}
+          <span
+            bind:this={marker}
+            aria-hidden="true"
+            class="pointer-events-none invisible absolute start-(--at-x) top-(--at-y) h-(--at-h) w-(--at-w) scroll-my-space-4"
+            style:--at-x="{shownBox.x}px"
+            style:--at-y="{shownBox.y}px"
+            style:--at-w="{shownBox.w}px"
+            style:--at-h="{shownBox.h}px"
+          ></span>
+        {/if}
         {#if against}
           <!-- The rings: outside each element's box on its own shape, in
                the stage's own layer, taking no press. -->
@@ -583,7 +760,10 @@
         {/if}
       </div>
     {:else if !mounted && waited}
-      <div class="absolute inset-0 p-space-6" aria-busy="true">
+      <div
+        class={["inset-0 p-space-6", lastTall > 0 ? "absolute" : "relative"]}
+        aria-busy="true"
+      >
         <span class="sr-only">{words.mounting(review.name)}</span>
         <Skeleton height="board" />
       </div>
