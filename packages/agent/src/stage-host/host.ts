@@ -3246,6 +3246,8 @@ function cawcoStage() {
           [...mod.importers].filter((one) => one.transformResult !== null)
         );
         for (const mod of failed) {
+          // Hard first: the HMR call moves only `lastHMRTimestamp`, and Vite's race guards in transformRequest.ts compare `lastInvalidationTimestamp`, so a transform in flight across it would store its result on a module still soft-invalidated (https://github.com/vitejs/vite/issues/23941). Drop this line once a Vite release ships https://github.com/vitejs/vite/pull/23950.
+          graph.invalidateModule(mod, new Set(), timestamp);
           graph.invalidateModule(mod, new Set(), timestamp, true);
         }
         return importers.length > 0 ? [...modules, ...importers] : undefined;
