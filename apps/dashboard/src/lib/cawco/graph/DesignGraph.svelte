@@ -171,8 +171,28 @@
   let reduce = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
-  /** The desk line, of the surface's own width (DESIGN.md breakpoints: 900px). */
-  const desk = $derived(surface === 0 || surface >= 900);
+  /** DESIGN.md's desk line (Breakpoints: 900px). */
+  const DESK_LINE = 900;
+  /**
+   * The room stands beside the stage only where the surface holds both
+   * whole: the stage at its least (`c-graph-stage-min`), the room at its
+   * least (`c-graph-room-w`), the gap between them and the page's gutters.
+   * Under that (1064px today) the room is the drawer, as the stage's least
+   * width says it becomes ("under it the room becomes the drawer"); a
+   * narrower desk ran the room past the surface's edge. Under the stage,
+   * the room needs no more than the desk line.
+   */
+  const besideLine = $derived(
+    numberOf("--c-graph-stage-min") +
+      numberOf("--c-graph-room-w") +
+      numberOf("--space-5") +
+      numberOf("--space-7") +
+      numberOf("--space-6")
+  );
+  const desk = $derived(
+    surface === 0 ||
+      surface >= (arrangement === "below" ? DESK_LINE : besideLine)
+  );
 
   /**
    * A state as the stage draws it: a record set's args when one is picked;
