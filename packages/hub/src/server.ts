@@ -795,6 +795,7 @@ import {
   ROUTINE_ORIGIN,
 } from "./memory";
 import { documentFacts, sessionInstructions } from "./memory-scopes";
+import { namedModels } from "./model-names";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { uuidOf } from "./named-uuid";
 import { createNoticesSeen } from "./notices";
@@ -14395,17 +14396,16 @@ export const createServer = (
           .filter((report) => report.harness === harness && report.installed)
           .map((report) => ({ machine, report }))
       );
-      const models = new Map<string, HarnessOffer["models"][number]>();
-      for (const model of harnessModels(
-        harness,
-        new Set(reports.map(({ machine }) => machine.machineId))
-      )) {
-        models.set(model.value, {
-          id: model.value,
-          name: model.displayName,
-          default: model.value === "default",
-        });
-      }
+      const models = namedModels(
+        harnessModels(
+          harness,
+          new Set(reports.map(({ machine }) => machine.machineId))
+        )
+      ).map(({ row, name }) => ({
+        id: row.value,
+        name,
+        default: row.value === "default",
+      }));
       return {
         id: harness,
         name: accountsWords.harnesses[harness],
@@ -14416,11 +14416,11 @@ export const createServer = (
             )
           ),
         ],
-        models: [...models.values()],
+        models,
       };
     });
   };
-  /** A model's name as its harness offers it on any machine; its id when none does. */
+  /** A model's name as the hub names it in its harness's list on any machine (model-names.ts); its id when none lists it. */
   const modelNamed = (named: string, model: string): string => {
     const harness = harnessNamed(named);
     const offered = harness
@@ -14429,7 +14429,9 @@ export const createServer = (
           new Set(db.listAgents().map((machine) => machine.machineId))
         )
       : [];
-    return offered.find((one) => one.value === model)?.displayName ?? model;
+    return (
+      namedModels(offered).find((one) => one.row.value === model)?.name ?? model
+    );
   };
   // Who decides (settling.ts): each card sent to its member and said to its
   // writer: a run started under it the way dispatch starts an attempt, or a

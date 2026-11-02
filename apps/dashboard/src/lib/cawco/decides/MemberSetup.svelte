@@ -387,21 +387,7 @@
         >
           {#each models as model (model.id)}
             <OptionGroupItem value={model.id}>
-              <span class="flex min-w-0 flex-col">
-                <span class="wrap-anywhere">
-                  {model.name}
-                  {#if model.default && !model.name.startsWith("Default")}
-                    <span class="text-ink-muted">
-                      · {decidesWords.defaultModel}</span
-                    >
-                  {/if}
-                </span>
-                {#if models.filter((one) => one.name === model.name).length > 1}
-                  <span class="type-meta font-mono text-ink-muted wrap-anywhere"
-                    >{model.id}</span
-                  >
-                {/if}
-              </span>
+              <span class="min-w-0 wrap-anywhere">{model.name}</span>
             </OptionGroupItem>
           {/each}
         </OptionGroup>

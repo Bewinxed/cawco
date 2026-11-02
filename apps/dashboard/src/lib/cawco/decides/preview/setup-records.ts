@@ -1,6 +1,6 @@
 /**
  * What `GET /api/decides` and `GET /api/delegate-types` answered on the hub
- * at 2026-10-31 18:00, for a member's settings: the harnesses on his online
+ * at 2026-10-31 18:00 (its models named as model-names.ts names them), for a member's settings: the harnesses on his online
  * machines with their models (OpenCode's and pi's lists cut to their first
  * dozen; the hub lists 118 and 46), the fleet's skills (12 of its 62), and
  * the Advisor's and Common practice's delegate types. Design reviewer is an
@@ -20,12 +20,16 @@ export const harnesses: FleetOffer["harnesses"] = [
       "uwucloud",
     ],
     models: [
-      { id: "default", name: "Default (recommended)", default: true },
-      { id: "opus", name: "Opus", default: false },
-      { id: "claude-fable-5-1[1m]", name: "Fable", default: false },
-      { id: "sonnet", name: "Sonnet", default: false },
+      { id: "default", name: "Opus 5.5 (default)", default: true },
+      { id: "opus", name: "Opus 5.5", default: false },
+      {
+        id: "claude-fable-5-1[1m]",
+        name: "Fable 5.1 (1M context)",
+        default: false,
+      },
+      { id: "sonnet", name: "Sonnet 5.5", default: false },
       { id: "haiku", name: "Haiku", default: false },
-      { id: "claude-fable-5-1", name: "Fable", default: false },
+      { id: "claude-fable-5-1", name: "Fable 5.1", default: false },
       { id: "claude-opus-4-8", name: "Opus 4.8", default: false },
     ],
   },
@@ -34,10 +38,14 @@ export const harnesses: FleetOffer["harnesses"] = [
     name: "OpenCode",
     machines: ["obelisk-of-light", "Omars-MacBook-Pro"],
     models: [
-      { id: "default", name: "Flint 40B Free", default: true },
+      { id: "default", name: "Flint 40B Free (default)", default: true },
       { id: "opencode/big-pickle", name: "Big Pickle", default: false },
       { id: "openai/gpt-6.1-sol", name: "GPT-6.1 Sol", default: false },
-      { id: "openai/gpt-6-luna", name: "GPT-6 Luna", default: false },
+      {
+        id: "openai/gpt-6-luna",
+        name: "GPT-6 Luna (via openai)",
+        default: false,
+      },
       { id: "openai/gpt-6-astra", name: "GPT-6 Astra", default: false },
       { id: "openai/gpt-5.5", name: "GPT-5.5", default: false },
       {
@@ -45,7 +53,11 @@ export const harnesses: FleetOffer["harnesses"] = [
         name: "Kimi K3.1 Pro",
         default: false,
       },
-      { id: "opencode-go/glm-5.3", name: "GLM-5.3", default: false },
+      {
+        id: "opencode-go/glm-5.3",
+        name: "GLM-5.3 (via opencode-go)",
+        default: false,
+      },
       { id: "opencode-go/qwen3.8-max", name: "Qwen3.8 Max", default: false },
       {
         id: "anthropic/claude-opus-5-5",
@@ -69,7 +81,7 @@ export const harnesses: FleetOffer["harnesses"] = [
     name: "pi",
     machines: ["obelisk-of-light", "Omars-MacBook-Pro"],
     models: [
-      { id: "default", name: "Claude Opus 5", default: true },
+      { id: "default", name: "Claude Opus 5 (default)", default: true },
       {
         id: "anthropic/claude-sonnet-5",
         name: "Claude Sonnet 5",
