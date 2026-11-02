@@ -47221,6 +47221,10 @@
             "description": "The build of the current session keeper, the one every new session starts on: the `keeper` link.",
             "type": "string"
           },
+          "unconfirmedVersion": {
+            "description": "The build whose trial no update helper could decide (cli binary-apply.ts\n`endUndecided`), with `phase` `failed`: it may be the build that runs, its\nhealth never confirmed, not rolled back, and not installed again by\nitself (`failedVersion` names it too). Stays until a newer build is\ntaken up.",
+            "type": "string"
+          },
           "updatedAt": {
             "description": "When anything in this state last changed. Not an identity for anything.",
             "type": "number"

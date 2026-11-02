@@ -1852,7 +1852,12 @@ public enum Words {
 
         /// An update's trial whose resumed deciders each failed: the trial is ended, the machine left on the build it runs.
         public static func trialUndecided(version: String, tries: Int, why: String) -> String {
-            "The trial of \(version) could not be decided after \(tries) tries: \(why). The machine stays on the build it runs."
+            "\(version)'s health could not be checked after \(tries) tries: \(why)."
+        }
+
+        /// A machine's row once such a trial ended (`unconfirmedVersion`), `version` the build that runs.
+        public static func runningUnconfirmed(version: String) -> String {
+            "\(version) is running, but its health was never confirmed. It is not rolled back, and not installed again by itself."
         }
 
         public static func hubDropped(hub: String, code: String, what: String) -> String {

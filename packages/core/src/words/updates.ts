@@ -54,7 +54,10 @@ export const updatesWords = {
     `${what} did not end within ${seconds} s, so it was stopped`,
   /** An update's trial whose resumed deciders each failed: the trial is ended, the machine left on the build it runs. */
   trialUndecided: (version: string, tries: number, why: string) =>
-    `The trial of ${version} could not be decided after ${tries} tries: ${why}. The machine stays on the build it runs.`,
+    `${version}'s health could not be checked after ${tries} tries: ${why}.`,
+  /** A machine's row once such a trial ended (`unconfirmedVersion`), `version` the build that runs. */
+  runningUnconfirmed: (version: string) =>
+    `${version} is running, but its health was never confirmed. It is not rolled back, and not installed again by itself.`,
   hubDropped: (hub: string, code: string, what: string) =>
     `the hub at ${hub} refused or dropped the connection (${code}) before it answered ${what}; nothing was done on it, and it is asked again on the next tick`,
 };

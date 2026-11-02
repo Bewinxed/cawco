@@ -249,7 +249,30 @@ const keptCell = (kept: readonly KeptProcess[]): Cell => ({
   text: `No session can start on this machine: the process that keeps its sessions running stopped answering. CawCo can't restart it while ${heldBy(kept)} ${kept.length === 1 ? "runs" : "run"} inside it. Handoff: end ${kept.length === 1 ? "that process" : "them"}. The restart follows, and sessions start again.`,
 });
 
-/** Rows 3 to 12 and 14: the cell by the update's phase. */
+/**
+ * Rows 4 and 15: a failed update. Row 15 is a trial no helper could decide
+ * (`unconfirmedVersion`) on the build that runs: it is running unconfirmed,
+ * neither rolled back nor tried again by itself, so it never reads as an
+ * install that failed and retries.
+ */
+const failedCell = (u: BinaryUpdateState, v: string, cur: string): Cell =>
+  u.unconfirmedVersion === u.installedVersion
+    ? {
+        ...EMPTY(15),
+        fail: true,
+        text: updatesWords.runningUnconfirmed(cur),
+        buttons: ["retry", "error"],
+      }
+    : {
+        ...EMPTY(4),
+        fail: true,
+        text: v
+          ? `${v} did not install. It retries by itself.`
+          : "The update did not install. It retries by itself.",
+        buttons: ["error"],
+      };
+
+/** Rows 3 to 12, 14 and 15: the cell by the update's phase. */
 function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
   const v = u.availableVersion ? displayVersion(u.availableVersion) : "";
   const cur = displayVersion(u.installedVersion);
@@ -262,14 +285,7 @@ function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
         buttons: ["retry", "error"],
       };
     case "failed":
-      return {
-        ...EMPTY(4),
-        fail: true,
-        text: v
-          ? `${v} did not install. It retries by itself.`
-          : "The update did not install. It retries by itself.",
-        buttons: ["error"],
-      };
+      return failedCell(u, v, cur);
     case "installing":
       return { ...EMPTY(5), icon: "spinner", text: words("Installing", v) };
     case "downloading":
@@ -369,7 +385,11 @@ export function attention(
   return machines.filter((machine) => {
     const { row } = cellFor(machine, policy);
     return (
-      row === 3 || row === 4 || row === 13 || (row === 11 && !policy.autoUpdate)
+      row === 3 ||
+      row === 4 ||
+      row === 13 ||
+      row === 15 ||
+      (row === 11 && !policy.autoUpdate)
     );
   }).length;
 }

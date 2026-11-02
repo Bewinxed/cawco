@@ -1402,6 +1402,7 @@ export class BinaryUpdater {
         error: undefined,
         heldChildren: undefined,
         waitingOn: undefined,
+        unconfirmedVersion: undefined,
       });
       // What it waits for reaches the machine's row now, not at the next
       // beat: a hub's trial is over in less than a beat's interval, and a
@@ -1427,6 +1428,8 @@ export class BinaryUpdater {
         hubWait: undefined,
         availableVersion: version,
         notes,
+        // A newer build taken up is the next update: an undecided trial's word ends.
+        unconfirmedVersion: undefined,
       });
     }
     if (!attempt || waiting) {
@@ -1503,7 +1506,16 @@ export class BinaryUpdater {
       "none",
       ...(waitsForChannel ? (["installed"] as const) : []),
     ];
-    if (this.#state.phase !== target && settles.includes(this.#state.phase)) {
+    // A trial no helper could decide stays said while its build runs: nothing
+    // newer is no news about it (`unconfirmedVersion`).
+    const unconfirmed =
+      this.#state.phase === "failed" &&
+      this.#state.unconfirmedVersion === runtimeVersion;
+    if (
+      !unconfirmed &&
+      this.#state.phase !== target &&
+      settles.includes(this.#state.phase)
+    ) {
       await this.#set({
         phase: target,
         availableVersion: undefined,

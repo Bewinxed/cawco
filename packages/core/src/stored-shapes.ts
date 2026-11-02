@@ -822,6 +822,7 @@ const BinaryUpdateStateShape = z.object({
   retiringKeepers: z.array(RetiringKeeperShape).optional(),
   sessiondKept: z.array(KeptProcessShape).optional(),
   sessiondVersion: z.string().optional(),
+  unconfirmedVersion: z.string().optional(),
   updatedAt: z.number(),
   waitingOn: z.array(RestartHoldShape).optional(),
   waitingSince: z.number().optional(),

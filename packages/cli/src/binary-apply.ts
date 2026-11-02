@@ -359,9 +359,10 @@ async function countFailedResume(why: string): Promise<void> {
 /**
  * A trial no helper could decide ends undecided: the state says failed with
  * the last resume's reason, the build is the failed one (as a rollback's is,
- * so auto-update does not take it again unasked), and the trial goes. The
- * machine stays on the build `current` names, and the agent goes on to what
- * its hub offers next.
+ * so auto-update does not take it again unasked) and the unconfirmed one
+ * (`unconfirmedVersion`: a machine's row says it runs unconfirmed, not that
+ * it did not install), and the trial goes. The machine stays on the build
+ * `current` names, and the agent goes on to what its hub offers next.
  */
 async function endUndecided(
   trial: TrialMarker,
@@ -371,6 +372,7 @@ async function endUndecided(
   await writeState({
     phase: "failed",
     failedVersion: trial.version,
+    unconfirmedVersion: trial.version,
     heldChildren: undefined,
     error: updatesWords.trialUndecided(trial.version, tries, why),
   });

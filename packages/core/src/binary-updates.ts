@@ -407,6 +407,14 @@ export interface BinaryUpdateState {
   sessiondKept?: KeptProcess[];
   /** The build of the current session keeper, the one every new session starts on: the `keeper` link. */
   sessiondVersion?: string;
+  /**
+   * The build whose trial no update helper could decide (cli binary-apply.ts
+   * `endUndecided`), with `phase` `failed`: it may be the build that runs, its
+   * health never confirmed, not rolled back, and not installed again by
+   * itself (`failedVersion` names it too). Stays until a newer build is
+   * taken up.
+   */
+  unconfirmedVersion?: string;
   /** When anything in this state last changed. Not an identity for anything. */
   updatedAt: number;
   /** What `ready` waits for: the work in flight a restart would cut now. */
