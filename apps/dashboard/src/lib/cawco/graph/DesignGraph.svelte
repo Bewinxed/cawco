@@ -508,7 +508,7 @@
   <div
     data-slot="design-graph"
     data-arrangement={arrangement}
-    class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
+    class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page"
     {@attach frameSize((node: HTMLElement) => {
       surface = node.clientWidth;
     })}
@@ -776,9 +776,7 @@
     {#if !desk}
       <!-- Under the desk line: the room is the kit's bottom drawer, its stops
          head (the faces and the steps), half and whole; the page above it
-         stays live. Drawn in place, the surface its containing block
-         (`contain: layout`), so it stands on the surface's foot wherever
-         the surface stands. -->
+         stays live. -->
       <Drawer.Root
         bind:activeSnapPoint={snap}
         bind:open={roomOpen}
@@ -791,7 +789,6 @@
           height="cap"
           modal={false}
           onOpenAutoFocus={(event: Event) => event.preventDefault()}
-          portalProps={{ disabled: true }}
           trapFocus={false}
           ownHead
           title={words.statesFace}
