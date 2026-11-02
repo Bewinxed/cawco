@@ -1297,10 +1297,12 @@ interface DelegateEventBase {
 
 /**
  * One line of what a delegate and its parent said to each other through the
- * hub — a `delegate_events` row (packages/hub `db/schema.ts`), read over
- * `GET /api/delegate-events` and pushed as a `delegate_event` frame. The hub is
- * the system of record: the transcript markers say the same things, but only
- * for a reader who was watching, and only as text to be parsed back.
+ * hub — a `delegate_events` row (packages/hub `db/schema.ts`), summed up per
+ * delegate over `POST /api/delegate-summaries` ({@link DelegateSummary}),
+ * paged over `GET /api/delegate-events` and pushed as a `delegate_event`
+ * frame. The hub is the system of record: the transcript markers say the
+ * same things, but only for a reader who was watching, and only as text to
+ * be parsed back.
  */
 export type DelegateEvent =
   | (DelegateEventBase & {
@@ -1335,6 +1337,36 @@ export type DelegateEventKind = DelegateEvent["kind"];
 
 /** What each kind carries: the ask's own input, the answer, the turn's report. */
 export type DelegateEventPayload = DelegateEvent["payload"];
+
+/**
+ * How many delegates one `POST /api/delegate-summaries` names at most: a
+ * screen of cards, never a sweep of everything a parent ever ran. A reader
+ * with more asks in batches of this size.
+ */
+export const DELEGATE_SUMMARIES_LIMIT = 64;
+
+/**
+ * What a delegate's card in its parent's transcript draws of its traffic
+ * with that parent, as `POST /api/delegate-summaries` answers it: the newest
+ * report whole, the asks still waiting whole, and how many of each there
+ * were. The rest of its events stay on the hub; the card draws none of them.
+ */
+export interface DelegateSummary {
+  /** How many asks it routed to the parent, answered or not. */
+  asks: number;
+  instanceId: string;
+  /** Its asks still waiting on an answer, oldest first. */
+  pending: Extract<DelegateEvent, { kind: "ask" }>[];
+  /** Its newest report, or null before its first. */
+  report: Extract<DelegateEvent, { kind: "report" }> | null;
+  /** How many turns it reported. */
+  reports: number;
+  /**
+   * The highest event id the summary counts. A pushed `delegate_event` at or
+   * below it is already in here; one above it came after.
+   */
+  through: number;
+}
 
 /**
  * A coarse, now-state the rail draws without frames: what a session is doing

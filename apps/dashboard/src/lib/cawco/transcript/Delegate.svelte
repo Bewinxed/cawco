@@ -9,8 +9,9 @@
    * `start_session` — folded onto the parent's spine the way a subagent branch
    * is, so the operator can follow a fan-out without leaving the orchestrator.
    * The delegate is a full instance with its own row and transcript; this card
-   * only composes what the store already holds: the hub's record of its asks
-   * and reports, the daemon's pulse, and, once opened, its live transcript.
+   * only composes what the store holds: the hub's record of its asks and
+   * reports (read as the card comes on screen), the daemon's pulse, and,
+   * once opened, its live transcript.
    */
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -18,6 +19,7 @@
   import { formatDuration } from "#lib/utils/time.js";
   import {
     cawco,
+    readDelegate,
     readTranscript,
     unwatchDelegate,
     watchDelegate,
@@ -34,11 +36,7 @@
     sessionPlace,
     sessionTitle,
   } from "../session-names.svelte";
-  import type {
-    DelegateAskEvent,
-    DelegateReportEvent,
-    Message,
-  } from "../types";
+  import type { Message } from "../types";
   import { disclosure } from "./disclosure.svelte";
   import InlineTranscript from "./InlineTranscript.svelte";
   import {
@@ -96,13 +94,13 @@
     elsewhere ? (sessionTitle(elsewhere) ?? hubAnswer?.parent?.title ?? "") : ""
   );
 
-  const events = $derived(id && !elsewhere ? cawco.delegateEventsOf(id) : []);
-  const askEvents = $derived(
-    events.filter((e): e is DelegateAskEvent => e.kind === "ask")
-  );
-  const reportEvents = $derived(
-    events.filter((e): e is DelegateReportEvent => e.kind === "report")
-  );
+  /** The card on screen is what reads its delegate's record off the hub. */
+  $effect(() => {
+    if (id && !elsewhere) {
+      readDelegate(message.instanceId, id);
+    }
+  });
+  const record = $derived(id && !elsewhere ? cawco.delegateOf(id) : null);
   const parent = $derived(cawco.session(message.instanceId));
 
   const toolInput = $derived.by((): Record<string, unknown> => {
@@ -158,14 +156,14 @@
       count: number;
       at: number | undefined;
     } | null => {
-      const last = reportEvents.at(-1);
-      if (last) {
+      const last = record?.report;
+      if (record && last) {
         return {
           body: last.payload.body,
           headline: last.payload.headline,
           outputs: last.payload.outputs ?? [],
           failed: last.payload.failed,
-          count: reportEvents.length,
+          count: record.reports,
           at: new Date(last.createdAt).getTime(),
         };
       }
@@ -194,9 +192,10 @@
   );
 
   /**
-   * Its permission asks routed to this parent, oldest first. The hub's rows
-   * carry the state; older asks are read back out of the parent transcript,
-   * answered where the parent's `answer_delegate` call names their requestId.
+   * Its permission asks routed to this parent, oldest first: the hub's record
+   * holds the ones still waiting. A delegate the hub kept no asks for has
+   * them read back out of the parent transcript, answered where the
+   * parent's `answer_delegate` call names their requestId.
    */
   const asks = $derived.by(
     (): Array<{
@@ -208,8 +207,8 @@
       if (!id || elsewhere) {
         return [];
       }
-      if (askEvents.length > 0) {
-        return askEvents.map((ask) => ({
+      if (record && record.asks > 0) {
+        return record.pending.map((ask) => ({
           key: String(ask.id),
           status: ask.status ?? "pending",
           short: askShortOf(ask.toolName, ask.payload.input ?? {}),

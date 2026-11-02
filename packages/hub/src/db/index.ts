@@ -7,6 +7,7 @@ import type {
   DelegateEvent,
   DelegateEventKind,
   DelegateEventPayload,
+  DelegateSummary,
   EffortLevel,
   Envelope,
   FleetAgent,
@@ -836,6 +837,24 @@ export interface DbShape {
   readonly decides: DecidesDb;
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
+  /**
+   * One page of delegate events, oldest first: the newest
+   * {@link DELEGATE_EVENTS_PAGE} below `before` (an event id; absent, the
+   * newest there are) of one delegate, or of every delegate of one parent.
+   */
+  readonly delegateEventsPage: (filter: {
+    parent?: string;
+    instance?: string;
+    before?: number;
+  }) => DelegateEvent[];
+  /**
+   * What each of these delegates' cards draws of its traffic with `parent`
+   * ({@link DelegateSummary}); a delegate with none is left out.
+   */
+  readonly delegateSummaries: (
+    parent: string,
+    delegates: string[]
+  ) => DelegateSummary[];
   /** The fleet's delegate types (delegate-types.ts), on this connection. */
   readonly delegateTypes: DelegateTypesShape;
   readonly deleteContinuation: (id: string) => void;
@@ -1129,11 +1148,6 @@ export interface DbShape {
   readonly listAgents: () => AgentRow[];
   /** Board rows never fetch/decode the per-session tooling document. */
   readonly listBoardInstances: () => BoardInstanceRow[];
-  /** Oldest first: what one delegate did, or what every delegate of one parent did. */
-  readonly listDelegateEvents: (filter: {
-    parent?: string;
-    instance?: string;
-  }) => DelegateEvent[];
   /** {@link listBoardInstances}, of these ids only. */
   readonly listedBoardInstancesByIds: (ids: string[]) => BoardInstanceRow[];
   /** How many listed sessions this one started. */
@@ -2573,6 +2587,12 @@ export interface DbShape {
 }
 
 export class Db extends Context.Service<Db, DbShape>()("Db") {}
+
+/** How many delegate events one page of `delegateEventsPage` holds at most. */
+const DELEGATE_EVENTS_PAGE = 200;
+
+type DelegateReportEvent = Extract<DelegateEvent, { kind: "report" }>;
+type DelegateAskEvent = Extract<DelegateEvent, { kind: "ask" }>;
 
 /**
  * A delegate_events row as everything reads it: its date as JSON writes one,
@@ -9660,19 +9680,86 @@ const make = async (path: string): Promise<DbShape> => {
     // By id after the timestamp: an ask and the answer it settles can land in
     // the same millisecond, and a reader who sees the answer first sees a
     // conversation that runs backwards.
-    listDelegateEvents: ({ parent, instance }) =>
+    delegateEventsPage: ({ parent, instance, before }) =>
       db
         .select()
         .from(delegateEvents)
         .where(
           and(
             parent ? eq(delegateEvents.parentInstanceId, parent) : undefined,
-            instance ? eq(delegateEvents.instanceId, instance) : undefined
+            instance ? eq(delegateEvents.instanceId, instance) : undefined,
+            before === undefined ? undefined : lt(delegateEvents.id, before)
           )
         )
-        .orderBy(delegateEvents.createdAt, delegateEvents.id)
+        .orderBy(desc(delegateEvents.id))
+        .limit(DELEGATE_EVENTS_PAGE)
         .all()
+        .reverse()
         .map(delegateEventOf),
+    // Counted in SQL, and only the rows a card draws read whole: the newest
+    // report and the asks still waiting. Every other payload (each earlier
+    // report's body, each settled ask's tool input) stays on disk.
+    delegateSummaries: (parent, delegates) => {
+      if (delegates.length === 0) {
+        return [];
+      }
+      const mine = and(
+        eq(delegateEvents.parentInstanceId, parent),
+        inArray(delegateEvents.instanceId, delegates)
+      );
+      const counts = db
+        .select({
+          instanceId: delegateEvents.instanceId,
+          through: sql<number>`max(${delegateEvents.id})`.mapWith(Number),
+          reports:
+            sql<number>`count(case when ${delegateEvents.kind} = 'report' then 1 end)`.mapWith(
+              Number
+            ),
+          asks: sql<number>`count(case when ${delegateEvents.kind} = 'ask' then 1 end)`.mapWith(
+            Number
+          ),
+          report: sql<
+            number | null
+          >`max(case when ${delegateEvents.kind} = 'report' then ${delegateEvents.id} end)`,
+        })
+        .from(delegateEvents)
+        .where(mine)
+        .groupBy(delegateEvents.instanceId)
+        .all();
+      const reportIds = counts.flatMap((row) =>
+        row.report === null ? [] : [Number(row.report)]
+      );
+      const whole = db
+        .select()
+        .from(delegateEvents)
+        .where(
+          or(
+            reportIds.length > 0
+              ? inArray(delegateEvents.id, reportIds)
+              : undefined,
+            and(
+              mine,
+              eq(delegateEvents.kind, "ask"),
+              eq(delegateEvents.status, "pending")
+            )
+          )
+        )
+        .orderBy(delegateEvents.id)
+        .all()
+        .map(delegateEventOf);
+      return counts.map(({ report, ...row }) => ({
+        ...row,
+        report:
+          whole.find(
+            (event): event is DelegateReportEvent =>
+              event.kind === "report" && event.id === Number(report)
+          ) ?? null,
+        pending: whole.filter(
+          (event): event is DelegateAskEvent =>
+            event.kind === "ask" && event.instanceId === row.instanceId
+        ),
+      }));
+    },
     putUsageBuckets: (machineId, buckets) => {
       if (buckets.length === 0) {
         return;

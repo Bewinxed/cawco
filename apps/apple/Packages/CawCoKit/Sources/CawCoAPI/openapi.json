@@ -22267,6 +22267,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
           }
         ],
         "operationId": "getApiDelegateEvents",
@@ -22293,6 +22309,62 @@
           },
           "422": {
             "description": "getApiDelegateEvents 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/delegate-summaries": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parent": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "instances": {
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "parent",
+                  "instances"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiDelegateSummaries",
+        "responses": {
+          "200": {
+            "description": "postApiDelegateSummaries 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiDelegateSummaries200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiDelegateSummaries 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30555,6 +30627,12 @@
         "type": "array",
         "items": {
           "$ref": "#/components/schemas/DelegateEvent"
+        }
+      },
+      "postApiDelegateSummaries200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/DelegateSummary"
         }
       },
       "getApiWorkItems200": {
@@ -52267,7 +52345,7 @@
         ]
       },
       "DelegateEvent": {
-        "description": "One line of what a delegate and its parent said to each other through the\nhub — a `delegate_events` row (packages/hub `db/schema.ts`), read over\n`GET /api/delegate-events` and pushed as a `delegate_event` frame. The hub is\nthe system of record: the transcript markers say the same things, but only\nfor a reader who was watching, and only as text to be parsed back.",
+        "description": "One line of what a delegate and its parent said to each other through the\nhub — a `delegate_events` row (packages/hub `db/schema.ts`), summed up per\ndelegate over `POST /api/delegate-summaries` ({@link DelegateSummary}),\npaged over `GET /api/delegate-events` and pushed as a `delegate_event`\nframe. The hub is the system of record: the transcript markers say the\nsame things, but only for a reader who was watching, and only as text to\nbe parsed back.",
         "anyOf": [
           {
             "allOf": [
@@ -52440,6 +52518,124 @@
           "parentInstanceId",
           "requestId",
           "toolName"
+        ]
+      },
+      "DelegateSummary": {
+        "description": "What a delegate's card in its parent's transcript draws of its traffic\nwith that parent, as `POST /api/delegate-summaries` answers it: the newest\nreport whole, the asks still waiting whole, and how many of each there\nwere. The rest of its events stay on the hub; the card draws none of them.",
+        "type": "object",
+        "properties": {
+          "asks": {
+            "description": "How many asks it routed to the parent, answered or not.",
+            "type": "number"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "pending": {
+            "description": "Its asks still waiting on an answer, oldest first.",
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/DelegateEventBase"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "ask"
+                      ]
+                    },
+                    "payload": {
+                      "description": "The tool input as the harness asked it — `{filepath, diff}`, `{questions}`, …",
+                      "type": "object",
+                      "properties": {
+                        "input": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "payload"
+                  ]
+                }
+              ]
+            }
+          },
+          "report": {
+            "description": "Its newest report, or null before its first.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DelegateEventBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "report"
+                    ]
+                  },
+                  "payload": {
+                    "type": "object",
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "failed": {
+                        "type": "boolean"
+                      },
+                      "headline": {
+                        "description": "The delegate's one-or-two-sentence outcome, when it finished with `finish_item`.",
+                        "type": "string"
+                      },
+                      "outputs": {
+                        "description": "The files its finish copied into its project's folder, as paths\nfrom the folder's root (`assets/tsk-12/plan.md`); absent when it\nhanded in none.",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "resultId": {
+                        "type": "string"
+                      },
+                      "completedAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "body",
+                      "failed"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "payload"
+                ]
+              }
+            ]
+          },
+          "reports": {
+            "description": "How many turns it reported.",
+            "type": "number"
+          },
+          "through": {
+            "description": "The highest event id the summary counts. A pushed `delegate_event` at or\nbelow it is already in here; one above it came after.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "asks",
+          "instanceId",
+          "pending",
+          "reports",
+          "through"
         ]
       },
       "WorkItemSummary": {

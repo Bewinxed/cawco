@@ -92,6 +92,7 @@ import type {
   ContinuationJob,
   ControlPayload,
   DelegateEvent,
+  DelegateSummary,
   Envelope,
   FramePayload,
   FsPayload,
@@ -104,6 +105,7 @@ import type {
   StopRequest,
   WorkItemSummary,
 } from "@cawco/core/protocol";
+import { DELEGATE_SUMMARIES_LIMIT } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
@@ -173,6 +175,7 @@ import { deletePreview } from "./artifact-api";
 import { Keyed, Pulse, type PulseReading, unlessSame } from "./board.svelte";
 import { currentClientId } from "./client-id";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
+import { type DelegateRecord, delegateRecord } from "./delegate-record";
 import { devDebug } from "./dev-debug";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
@@ -238,7 +241,7 @@ import {
 import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
 import { speakerName } from "./transcript/speaker";
-import type { DelegateAskEvent, Message } from "./types";
+import type { Message } from "./types";
 import { type MissedRead, TRY_AGAIN, unansweredWords } from "./unanswered";
 import { updates } from "./updates/updates.svelte";
 import { contextOf, workspace } from "./workspace/workspace.svelte";
@@ -1134,12 +1137,18 @@ const state = $state({
    */
   liveRead: false,
   /**
-   * The hub's record of every delegate's asks, answers and reports, keyed by
-   * the delegate they are about and oldest first. Kept apart from the session
-   * it belongs to because the reader of this traffic is the *parent* — a
+   * What the hub summed up of each delegate whose card came on screen, keyed
+   * by the delegate ({@link readDelegate}). Kept apart from the session it
+   * belongs to because the reader of this traffic is the *parent*: a
    * delegate card renders its child's exchange, not its own.
    */
-  delegateEvents: {} as Record<string, DelegateEvent[]>,
+  delegateRead: {} as Record<string, DelegateSummary>,
+  /**
+   * The delegate events pushed while this page stood, keyed by the delegate
+   * they are about, in id order; those a later read already counts are
+   * dropped as it lands.
+   */
+  delegateHeard: {} as Record<string, DelegateEvent[]>,
   /**
    * Every work item a parent's delegate tray has been told of, by item id:
    * read when the parent's view opens, then kept by `work_item` frames.
@@ -2348,7 +2357,6 @@ async function persistSettings(
 /** Opens a session's view state — the route's half of arriving at `/session/[id]`. */
 export function openSession(instanceId: string): void {
   hydrate(session(instanceId));
-  detach(loadDelegateEvents(instanceId), "loadDelegateEvents");
   detach(loadWorkItems(instanceId), "loadWorkItems");
   // Opening a view is the moment its frames become this browser's to render.
   // (The subscription effect in the route layout already names its tab; this makes
@@ -2356,43 +2364,108 @@ export function openSession(instanceId: string): void {
   syncSubscriptions();
 }
 
-/** Views whose delegates' traffic has been read back — it is read once per connection. */
-const delegatesRead = new Set<string>();
+/**
+ * The delegates whose summaries this connection read or is reading, by the
+ * parent whose transcript draws their cards: each is read once per
+ * connection, and pushes keep it after that.
+ */
+const delegatesRead = new Map<string, Set<string>>();
+/** The delegates asked for since the last batch left, by parent. */
+const delegatesAsked = new Map<string, Set<string>>();
+
+/**
+ * A delegate card came on screen: its summary is read with every other card
+ * that came on screen in the same task, a batch per parent of at most
+ * {@link DELEGATE_SUMMARIES_LIMIT}. The cold load reads what the screen
+ * draws, never every delegate the parent ever ran.
+ */
+export function readDelegate(parent: string, instanceId: string): void {
+  const read = delegatesRead.get(parent) ?? new Set<string>();
+  if (read.has(instanceId)) {
+    return;
+  }
+  delegatesRead.set(parent, read.add(instanceId));
+  const asked = delegatesAsked.get(parent) ?? new Set<string>();
+  if (delegatesAsked.size === 0) {
+    queueMicrotask(sendDelegateReads);
+  }
+  delegatesAsked.set(parent, asked.add(instanceId));
+}
 
 /**
  * A reconnect: the delegate events broadcast while the socket was away are
- * lost, so every parent read so far is read again. Folding a row it already
- * holds is a no-op (`foldDelegateEvent` skips a known id).
+ * lost, so every summary read so far is read again.
  */
-function rereadDelegateEvents(): void {
+function rereadDelegates(): void {
   const read = [...delegatesRead];
   delegatesRead.clear();
-  for (const instanceId of read) {
-    detach(loadDelegateEvents(instanceId), "loadDelegateEvents");
+  for (const [parent, delegates] of read) {
+    for (const instanceId of delegates) {
+      readDelegate(parent, instanceId);
+    }
+  }
+}
+
+function sendDelegateReads(): void {
+  const asked = [...delegatesAsked];
+  delegatesAsked.clear();
+  for (const [parent, delegates] of asked) {
+    const all = [...delegates];
+    for (let at = 0; at < all.length; at += DELEGATE_SUMMARIES_LIMIT) {
+      detach(
+        loadDelegates(parent, all.slice(at, at + DELEGATE_SUMMARIES_LIMIT)),
+        "loadDelegates"
+      );
+    }
   }
 }
 
 /**
- * What this session's delegates asked it, and what it answered, before the tab
- * opened. Broadcast as it happens *and* readable here, for the same reason the
- * hand-offs are: an exchange that settled an hour ago is still the record, and
- * a settled ask is never pushed again. A read that fails leaves the delegate
- * cards on the transcript markers, and the next open tries again.
+ * What these delegates asked their parent, what it answered and what they
+ * reported, before their cards came on screen (`POST /api/delegate-summaries`).
+ * Broadcast as it happens *and* readable here, for the same reason the
+ * hand-offs are: an exchange that settled an hour ago is still the record,
+ * and a settled ask is never pushed again. A read that fails leaves the
+ * cards on the transcript markers, and the next time they come on screen
+ * tries again.
  */
-async function loadDelegateEvents(instanceId: string): Promise<void> {
-  if (delegatesRead.has(instanceId)) {
+async function loadDelegates(
+  parent: string,
+  delegates: string[]
+): Promise<void> {
+  let summaries: DelegateSummary[];
+  try {
+    const response = await fetch("/api/delegate-summaries", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ parent, instances: delegates }),
+    });
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    summaries = (await response.json()) as DelegateSummary[];
+  } catch (error) {
+    console.error("[cawco] /api/delegate-summaries failed:", error);
+    const read = delegatesRead.get(parent);
+    for (const instanceId of delegates) {
+      read?.delete(instanceId);
+    }
     return;
   }
-  delegatesRead.add(instanceId);
-  const events = await load<DelegateEvent[]>(
-    `/api/delegate-events?parent=${instanceId}`
-  );
-  if (!events) {
-    delegatesRead.delete(instanceId);
-    return;
-  }
-  for (const event of events) {
-    recordDelegateEvent(event);
+  for (const summary of summaries) {
+    // A reconnect's read can land before the one it replaced: the newer stays.
+    if (
+      (state.delegateRead[summary.instanceId]?.through ?? 0) > summary.through
+    ) {
+      continue;
+    }
+    state.delegateRead[summary.instanceId] = summary;
+    const heard = state.delegateHeard[summary.instanceId];
+    if (heard) {
+      state.delegateHeard[summary.instanceId] = heard.filter(
+        (event) => event.id > summary.through
+      );
+    }
   }
 }
 
@@ -3166,14 +3239,20 @@ function delegateEventOf(frame: FramePayload): DelegateEvent | null {
 }
 
 /**
- * Files one of the hub's delegate events into a delegate's list, kept in row
- * order. An answer also settles the ask it belongs to: a settled ask is never
- * re-broadcast, so a reader watching the exchange live has only this to learn
- * the verdict from — the next fresh read carries it on the ask itself.
+ * Files one of the hub's pushed delegate events under the delegate it is
+ * about, in id order. The read and the pushes overlap by however long the
+ * read was out: a row already held, or one the delegate's read summary
+ * already counts, is dropped ({@link delegateRecord} folds the rest).
  */
-function foldDelegateEvent(list: DelegateEvent[], event: DelegateEvent): void {
-  // Both sources deliver the same rows — the read on arrival and the pushes
-  // that follow it overlap by however long the read was out.
+function hearDelegateEvent(event: DelegateEvent): void {
+  if (event.id <= (state.delegateRead[event.instanceId]?.through ?? 0)) {
+    return;
+  }
+  // Written, then read back: a `$state` write lands on the proxy and never on
+  // the literal, so filing into the literal would put the row where the UI
+  // cannot see it.
+  state.delegateHeard[event.instanceId] ??= [];
+  const list = state.delegateHeard[event.instanceId];
   if (list.some((row) => row.id === event.id)) {
     return;
   }
@@ -3183,24 +3262,6 @@ function foldDelegateEvent(list: DelegateEvent[], event: DelegateEvent): void {
   } else {
     list.splice(after, 0, event);
   }
-  if (event.kind !== "answer" || !event.requestId) {
-    return;
-  }
-  const asked = list.find(
-    (row) => row.kind === "ask" && row.requestId === event.requestId
-  );
-  if (asked) {
-    asked.status = event.payload.behavior === "deny" ? "denied" : "answered";
-  }
-}
-
-/** Files one event under the delegate it is about, pushed or freshly read. */
-function recordDelegateEvent(event: DelegateEvent): void {
-  // Written, then read back: a `$state` write lands on the proxy and never on
-  // the literal, so folding into the literal would file the row where the UI
-  // cannot see it.
-  state.delegateEvents[event.instanceId] ??= [];
-  foldDelegateEvent(state.delegateEvents[event.instanceId], event);
 }
 
 /**
@@ -3638,7 +3699,7 @@ function handleFrame(frame: FramePayload): void {
   // of this traffic is the parent's delegate card.
   const delegateEvent = delegateEventOf(frame);
   if (delegateEvent) {
-    recordDelegateEvent(delegateEvent);
+    hearDelegateEvent(delegateEvent);
     return;
   }
 
@@ -5480,7 +5541,7 @@ function hubReached(): void {
   rereadFollowed();
   if (connections > 1) {
     rereadTrays();
-    rereadDelegateEvents();
+    rereadDelegates();
   }
   resumePendingSends(streamState, streamHost);
   detach(checkServedBuild(), "checkServedBuild");
@@ -9244,12 +9305,16 @@ export const cawco = {
   session: (instanceId: string): SessionState | null =>
     state.sessions[instanceId] ?? null,
   /**
-   * The hub's record of one delegate's exchange with its parent, oldest first.
-   * Empty for a delegate whose traffic predates the table — its card falls back
-   * to reading the markers out of the parent's transcript.
+   * What one delegate's card draws of its exchange with its parent, once
+   * {@link readDelegate} asked for it. Empty for a delegate whose traffic
+   * predates the table: its card falls back to reading the markers out of
+   * the parent's transcript.
    */
-  delegateEventsOf: (instanceId: string): DelegateEvent[] =>
-    state.delegateEvents[instanceId] ?? [],
+  delegateOf: (instanceId: string): DelegateRecord =>
+    delegateRecord(
+      state.delegateRead[instanceId],
+      state.delegateHeard[instanceId] ?? []
+    ),
   /**
    * What a session's tray lists, oldest first: the work items it delegated
    * (and as its project's conversation the ones it co-parents), and the sessions it
@@ -9330,18 +9395,6 @@ export const cawco = {
   /** The relay went live and was proven from outside while this page stood: its row ticks. */
   get relayTicked(): boolean {
     return state.relayTicked;
-  },
-  /** The ask a permission requestId belongs to, whichever delegate raised it. */
-  delegateAskOf: (requestId: string): DelegateAskEvent | null => {
-    for (const events of Object.values(state.delegateEvents)) {
-      const found = events.find(
-        (event) => event.kind === "ask" && event.requestId === requestId
-      );
-      if (found?.kind === "ask") {
-        return found;
-      }
-    }
-    return null;
   },
   /**
    * What a session needs from you — `idle` for one nothing has been heard
