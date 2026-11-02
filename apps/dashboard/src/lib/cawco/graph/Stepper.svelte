@@ -1,7 +1,9 @@
 <script lang="ts">
   /**
-   * The journey's steps: Previous, where he stands in words ("3 of 5,
-   * Saving"), Next. Each step keeps that state, so the stage shows it.
+   * The journey's steps: Previous, where he stands in words ("8 of 11,
+   * Failed save"), Next, along the component's one path, the order the
+   * states list shows (model `pathOf`), so the steps count what the list
+   * holds. Each step keeps that state, so the stage shows it.
    */
   import { graphWords as words } from "@cawco/core/words/graph";
   import { IconChevronLeft, IconChevronRight } from "#lib/icons.js";
@@ -10,16 +12,14 @@
     path,
     at,
     name,
-    machine,
     onstep,
   }: {
-    /** The machine's path, its states in order. */
+    /** The component's path, its states in the list's order. */
     path: readonly string[];
-    /** Where the kept state stands on it; -1 when it stands on another machine's. */
+    /** Where the kept state stands on it. */
     at: number;
     /** The kept state's name. */
     name: string;
-    machine: string;
     onstep: (state: string) => void;
   } = $props();
 
@@ -53,7 +53,7 @@
       class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-center type-label text-ink-row num"
       aria-live="polite"
     >
-      {at >= 0 ? words.position(at + 1, path.length, name) : machine}
+      {words.position(at + 1, path.length, name)}
     </p>
     <button
       type="button"

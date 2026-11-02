@@ -44,7 +44,6 @@
    * (900px of its own width) the room is the kit's bottom drawer, its
    * stops head, half and whole, the stage whole above it at the head stop.
    */
-  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { mergeProps } from "bits-ui";
   import { onMount, tick, untrack } from "svelte";
@@ -55,6 +54,7 @@
     sheetSlide,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -62,6 +62,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
@@ -83,15 +84,15 @@
   } from "#lib/icons.js";
   import Journey from "./Journey.svelte";
   import MoveFace, { type MoveState } from "./MoveFace.svelte";
-  import { moveInto, type Review, type ReviewInput, reviewOf } from "./model";
   import {
-    type Clip,
-    lengthOf,
-    Replays,
-    type Tuning,
-    tune,
-    untune,
-  } from "./motion";
+    moveInto,
+    pathOf,
+    previousOf,
+    type Review,
+    type ReviewInput,
+    reviewOf,
+  } from "./model";
+  import { type Clip, lengthOf, Replays, untune } from "./motion";
   import Stage, { type Shown } from "./Stage.svelte";
   import Stepper from "./Stepper.svelte";
   import WholeSet from "./WholeSet.svelte";
@@ -199,17 +200,10 @@
       : null
   );
 
-  /** What Compare compares with first: the state before the kept one on its path, else the one after, else the file's next. */
-  const before = (on: Review, state: string): string | null => {
-    const path =
-      on.machines.find((one) => one.path.includes(state))?.path ?? [];
-    const at = path.indexOf(state);
-    const others = on.order.filter((id) => id !== state);
-    return path[at - 1] ?? path[at + 1] ?? others[0] ?? null;
-  };
+  /** Compare turned on compares with the state before the kept one (`previousOf`), the one the move plays from. It leaves the room as it stands: the states are what he compares against. */
   const setComparing = (on: boolean) => {
     comparing = on;
-    against = on ? before(review, kept.state) : null;
+    against = on ? previousOf(review, kept.state) : null;
   };
   /** A press on a state: while comparing, compare with it; else keep it (a record set too). */
   const press = (state: string, variant: string | null) => {
@@ -222,7 +216,7 @@
   const keep = (state: string, variant: string | null) => {
     keptOf = { ...keptOf, [review.name]: { state, variant } };
     if (comparing && against === state) {
-      against = before(review, state);
+      against = previousOf(review, state);
     }
   };
 
@@ -235,6 +229,14 @@
   let run = 0;
   let clock = 0;
   const replays = new Replays();
+
+  /** The components whose kept region has been brought into view, once, as each opened. */
+  const opened = new Set<string>();
+  /** What the move changed on the stage: each moving thing. */
+  const regionOf = (clips: readonly Clip[]): Element[] =>
+    clips.flatMap((clip) => (clip.thing ? [clip.thing] : []));
+  /** What a row rested on in the move names on the stage. */
+  let lit = $state<Element | null>(null);
 
   const stop = () => {
     playing = false;
@@ -254,6 +256,7 @@
     const from = into ? on.states[into.from] : null;
     if (!(into && to?.play && from && pick.variant === null)) {
       move = { kind: "none", state: to?.name ?? pick.state };
+      opened.add(on.name);
       return;
     }
     move = { kind: "reading", from: from.name, to: to.name };
@@ -264,12 +267,12 @@
         return;
       }
       move = { kind: "ready", from: from.name, to: to.name, clips };
-      // The region the move changed, in view: where its last clip lands, the state's own evidence.
-      const target = clips.at(-1)?.target;
-      if (target) {
-        bringIntoView(target, {
-          behavior: motionOk.current ? "smooth" : "instant",
-        });
+      // On open, once: the region the move changed brought into view with
+      // room for its ring, the state's own evidence. A press after that
+      // keeps the stage's scroll where he left it.
+      if (!opened.has(on.name)) {
+        opened.add(on.name);
+        await stage?.reveal(regionOf(clips));
       }
     } catch (error) {
       if (mine === run) {
@@ -328,13 +331,15 @@
     playhead = t;
     replays.seek(clipsNow(), t);
   };
-  const retime = (id: string, change: (clip: Clip) => Clip) => {
+  /** The clips he tuned put in the move, which plays again on the stage at once. */
+  const retime = (changed: readonly Clip[]) => {
     if (move.kind !== "ready") {
       return;
     }
+    const by = new Map(changed.map((clip) => [clip.id, clip]));
     move = {
       ...move,
-      clips: move.clips.map((clip) => (clip.id === id ? change(clip) : clip)),
+      clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
     };
     playhead = 0;
     play(1);
@@ -361,7 +366,13 @@
       const field = (event.target as HTMLElement | null)?.closest(
         "input, textarea, select, [contenteditable='true']"
       );
-      if (event.key === "Escape" && event.isTrusted && !field && roomOpen) {
+      if (
+        event.key === "Escape" &&
+        event.isTrusted &&
+        !event.defaultPrevented &&
+        !field &&
+        roomOpen
+      ) {
         roomOpen = false;
       }
     };
@@ -392,9 +403,8 @@
     review.states[kept.state]?.variants.some((one) => one.id.includes(":")) ??
       false
   );
-  const path = $derived(
-    review.machines.find((one) => one.path.includes(kept.state))?.path ?? []
-  );
+  /** The journey's one order: the component's path, as the list shows it. */
+  const path = $derived(pathOf(review));
   const at = $derived(path.indexOf(kept.state));
   const single = $derived(review.order.length === 1);
   /** The widths the stage is drawn at, each a device's glyph; its own first. */
@@ -472,6 +482,64 @@
       snap = head;
     }
   });
+  /** How much of the window the drawer stands over at a stop (a share as vaul takes it), px: the stage's scroller ends at its top. */
+  const coverOf = (share: number) =>
+    Math.max(0, (share - (1 - capShare)) * windowHeight);
+  const cover = $derived(
+    typeof snap === "number" ? coverOf(snap) : coverOf(head)
+  );
+  /** The grabber steps the drawer to its next stop, and from the last back to its head (HIG, Sheets: a tap on the grabber cycles its detents). */
+  const nextStop = () => {
+    const here = typeof snap === "number" ? SNAPS.indexOf(snap) : -1;
+    snap = SNAPS[(here + 1) % SNAPS.length] ?? head;
+  };
+  // At each stop the region he is judging stays in view above the drawer:
+  // the first difference while comparing, else what the move changed.
+  $effect(() => {
+    if (desk || snap === null) {
+      return;
+    }
+    const clips = clipsNow();
+    untrack(() => {
+      requestAnimationFrame(() => stage?.reveal(regionOf(clips)));
+    });
+  });
+
+  /** His own width, when it is one of the listed widths: that one stands for it, marked his own. */
+  const ownListed = $derived(WIDTHS.some((one) => one.value === ownWidth));
+  /** The view's width choice: his own width (null) is "own", or the listed width it equals. */
+  const widthValue = $derived.by(() => {
+    if (width !== null) {
+      return String(width);
+    }
+    return ownListed ? String(ownWidth) : "own";
+  });
+  const pickWidth = (next: string) => {
+    if (!next) {
+      return;
+    }
+    width = next === "own" || Number(next) === ownWidth ? null : Number(next);
+  };
+
+  /**
+   * Focus a menu or a card hands back, or takes as it opens, after a
+   * press shows no ring (DESIGN.md, The One Ring Rule: pointer focus on a
+   * control shows nothing): the focus moves as a script's, which would
+   * draw it, so a press's moves it with `focusVisible: false`.
+   */
+  const quietFocus = (event: Event, to: HTMLElement | null | undefined) => {
+    if (lastInput.current !== "pointer") {
+      return;
+    }
+    event.preventDefault();
+    to?.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
+  };
+  let menuTrigger = $state<HTMLElement | null>(null);
+  let viewTrigger = $state<HTMLElement | null>(null);
+  /** Whether the stage stands at its component's own width, narrower than its room. */
+  let stageFits = $state(false);
+  /** The room stands beside the stage on a desk. */
+  const beside = $derived(desk && roomOpen && arrangement !== "below");
 </script>
 
 {#snippet statesFace(stepperHere: boolean)}
@@ -501,12 +569,21 @@
 
 {#snippet moveFace()}
   <MoveFace
+    coarse={!desk}
     {move}
+    onlight={(thing) => {
+      lit = thing;
+    }}
     onpause={stop}
     onplay={play}
-    onreset={(id) => retime(id, untune)}
+    onreset={(ids) =>
+      retime(
+        clipsNow()
+          .filter((clip) => ids.includes(clip.id))
+          .map(untune)
+      )}
+    onretime={retime}
     onseek={scrub}
-    ontune={(id, tuning: Tuning) => retime(id, (clip) => tune(clip, tuning))}
     {playhead}
     {playing}
     {still}
@@ -518,6 +595,7 @@
     class="min-w-0 flex-1"
     onValueChange={(next) => {
       face = next === "whole" || next === "move" ? next : "states";
+      lit = null;
     }}
     size="compact"
     value={face}
@@ -533,11 +611,31 @@
 {#snippet stepper()}
   <Stepper
     {at}
-    machine={review.states[kept.state]?.machine ?? ""}
     name={review.states[kept.state]?.name ?? ""}
     onstep={(next) => keep(next, null)}
     {path}
   />
+{/snippet}
+
+{#snippet widthItem(
+  value: string,
+  name: string,
+  figure: number,
+  own: boolean,
+  Icon: typeof IconPhone
+)}
+  <ToggleGroup.Item aria-label={name} {value}>
+    <!-- mark-line: the device's glyph stands over its figure, not beside it -->
+    <span class="flex flex-col items-center gap-space-row" data-box>
+      <Icon aria-hidden="true" />
+      <span
+        class={[
+          "type-meta num",
+          own && "underline decoration-dotted underline-offset-2",
+        ]}>{figure}</span
+      >
+    </span>
+  </ToggleGroup.Item>
 {/snippet}
 
 <TooltipProvider>
@@ -561,6 +659,7 @@
               {#snippet child({ props })}
                 <button
                   {...props}
+                  bind:this={menuTrigger}
                   aria-label={words.components}
                   class="mark-line pointer-hit touch-hit inline-flex h-c-btn-h-sm min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
                   type="button"
@@ -577,7 +676,12 @@
                 </button>
               {/snippet}
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="start" width="regular">
+            <DropdownMenu.Content
+              align="start"
+              onCloseAutoFocus={(event: Event) =>
+                quietFocus(event, menuTrigger)}
+              width="regular"
+            >
               <DropdownMenu.RadioGroup
                 bind:value={
                   () => String(front),
@@ -585,6 +689,7 @@
                     front = Number(next);
                     against = null;
                     comparing = false;
+                    lit = null;
                   }
                 }
               >
@@ -614,6 +719,8 @@
           glass = node.querySelector<HTMLElement>('[data-slot="tools"]');
         }}
       >
+        <!-- Compare and the view; Show states only while the room is put
+             away. The room's one close is its own. -->
         <BarGlass form="group" joined={viewJoined}>
           {#if !single}
             <Tip label={words.compare}>
@@ -641,6 +748,7 @@
                     <button
                       data-bar-item
                       {...mergeProps(tip, props)}
+                      bind:this={viewTrigger}
                       aria-label={words.stageView}
                       class="select-none touch-hit press-tint"
                       type="button"
@@ -661,61 +769,47 @@
               customAnchor={glass}
               forceMount
               inert={!viewOpen}
+              onCloseAutoFocus={(event: Event) =>
+                quietFocus(event, viewTrigger)}
               onEscapeKeydown={personsOwn}
               onInteractOutside={personsOwn}
+              onOpenAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
               side="bottom"
               sideOffset={0}
             >
               <div class="flex min-w-0 flex-col gap-space-4 p-space-4">
                 <div class="flex min-w-0 flex-col gap-space-2">
                   <span class="type-label text-ink-muted">{words.width}</span>
+                  <!-- Each width once: his own is the listed width it
+                       equals, marked his own, and stands apart only when
+                       none is. The names are the items' own; no tooltip
+                       opens over the card. -->
                   <ToggleGroup.Root
                     aria-label={words.width}
-                    onValueChange={(next: string) => {
-                      if (next) {
-                        width = next === "own" ? null : Number(next);
-                      }
-                    }}
+                    onValueChange={pickWidth}
                     type="single"
-                    value={width === null ? "own" : String(width)}
+                    value={widthValue}
                   >
-                    <Tip label={words.ownWidth(ownWidth)}>
-                      {#snippet children(tip)}
-                        <ToggleGroup.Item
-                          {...tip}
-                          aria-label={words.ownWidth(ownWidth)}
-                          value="own"
-                        >
-                          <!-- mark-line: the device's glyph stands over its figure, not beside it -->
-                          <span
-                            class="flex flex-col items-center gap-space-row"
-                            data-box
-                          >
-                            <IconMaximize aria-hidden="true" />
-                            <span class="type-meta num">{ownWidth}</span>
-                          </span>
-                        </ToggleGroup.Item>
-                      {/snippet}
-                    </Tip>
+                    {#if !ownListed}
+                      {@render widthItem(
+                        "own",
+                        words.ownWidth(ownWidth),
+                        ownWidth,
+                        true,
+                        IconMaximize
+                      )}
+                    {/if}
                     {#each WIDTHS as one (one.value)}
-                      <Tip label={words.widthOf(one.name, one.value)}>
-                        {#snippet children(tip)}
-                          <ToggleGroup.Item
-                            {...tip}
-                            aria-label={words.widthOf(one.name, one.value)}
-                            value={String(one.value)}
-                          >
-                            <!-- mark-line: the device's glyph stands over its figure, not beside it -->
-                            <span
-                              class="flex flex-col items-center gap-space-row"
-                              data-box
-                            >
-                              <one.icon aria-hidden="true" />
-                              <span class="type-meta num">{one.value}</span>
-                            </span>
-                          </ToggleGroup.Item>
-                        {/snippet}
-                      </Tip>
+                      {@const own = one.value === ownWidth}
+                      {@render widthItem(
+                        String(one.value),
+                        own
+                          ? words.ownListed(one.name, one.value)
+                          : words.widthOf(one.name, one.value),
+                        one.value,
+                        own,
+                        one.icon
+                      )}
                     {/each}
                   </ToggleGroup.Root>
                 </div>
@@ -755,63 +849,69 @@
               </div>
             </HangCard>
           </Popover.Root>
-          <Tip label={roomOpen ? words.closeRoom : words.openRoom}>
-            {#snippet children(tip)}
-              <button
-                data-bar-item
-                {...mergeProps(tip, {
-                  onclick: () => {
-                    roomOpen = !roomOpen;
-                    if (roomOpen) {
+          {#if !roomOpen}
+            <Tip label={words.openRoom}>
+              {#snippet children(tip)}
+                <button
+                  data-bar-item
+                  {...mergeProps(tip, {
+                    onclick: () => {
+                      roomOpen = true;
                       snap = head;
-                    }
-                  },
-                })}
-                aria-label={roomOpen ? words.closeRoom : words.openRoom}
-                aria-pressed={roomOpen}
-                class="select-none touch-hit press-tint"
-                type="button"
-              >
-                <IconSidebar data-slot="bar-symbol" aria-hidden="true" />
-              </button>
-            {/snippet}
-          </Tip>
+                    },
+                  })}
+                  aria-label={words.openRoom}
+                  class="select-none touch-hit press-tint"
+                  type="button"
+                >
+                  <IconSidebar data-slot="bar-symbol" aria-hidden="true" />
+                </button>
+              {/snippet}
+            </Tip>
+          {/if}
         </BarGlass>
       </div>
     </header>
 
-    <!-- The page: the stage, and on a desk the room beside or under it. -->
+    <!-- The page: the stage, and on a desk the room beside or under it. On
+         a phone its foot stands at the drawer's top at each stop, so the
+         stage's scroller ends where the drawer begins. -->
     <div
       data-slot="graph-page"
       class={[
         "flex min-h-0 min-w-0 flex-1 gap-space-5 overflow-clip ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
         desk && arrangement === "below" ? "flex-col" : "flex-row",
-        !desk && roomOpen ? "pb-c-graph-drawer-head" : "pb-space-6",
+        !desk && roomOpen ? "pb-(--drawer-cover)" : "pb-space-6",
       ]}
       style:--stage-w="{width ?? stageWidth}px"
+      style:--drawer-cover="{cover + numberOf('--space-3')}px"
     >
       <div
         class={[
           "flex min-h-0 min-w-0 flex-col",
-          desk && roomOpen && arrangement !== "below"
-            ? "shrink grow-0 basis-(--stage-w) min-w-c-graph-stage-min"
-            : "flex-1",
+          stageFits && "flex-initial",
+          !stageFits && beside && "shrink grow-0 basis-(--stage-w)",
+          !(stageFits || beside) && "flex-1",
+          beside && "min-w-c-graph-stage-min",
         ]}
       >
-        {#if timeWords && hasRecords}
-          <p class="m-0 mb-space-2 type-meta text-ink-muted">
-            {words.recordsAsOf(timeWords)}
-          </p>
-        {/if}
         <Stage
           bind:this={stage}
+          bind:fits={stageFits}
           against={againstShown}
+          {lit}
           {review}
           {scheme}
           {shown}
           {stale}
           {width}
         />
+        {#if timeWords && hasRecords}
+          <!-- Under the stage, never over it: whose records these are. -->
+          <p class="m-0 mt-space-2 type-meta text-ink-muted">
+            {words.recordsAsOf(timeWords)}
+          </p>
+        {/if}
         {#if desk && arrangement === "stage" && !single}
           <!-- The steps on the stage's own foot. -->
           <div class="min-w-0 pt-space-3">{@render stepper()}</div>
@@ -819,11 +919,11 @@
       </div>
 
       {#if desk && roomOpen}
-        <!-- The room: one surface, two faces, closed by Close or Esc. -->
-        <!-- It comes in from its edge and goes back there, as the app's
+        <!-- The room: one surface, three faces, closed by its Close or Esc.
+             It comes in from its edge and goes back there, as the app's
              panels do (the sheet recipe's motion, `sheetSlide`: the
              inspector's): from the trailing edge beside the stage, from the
-             foot under it. -->
+             foot under it. It takes the room the stage leaves. -->
         <aside
           data-slot="graph-room"
           aria-label={words.statesFace}
@@ -844,17 +944,23 @@
         >
           <div class="flex min-w-0 items-center gap-space-2">
             {@render faces()}
-            <button
-              type="button"
-              aria-label={words.closeRoom}
-              title={words.closeRoom}
-              class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-              onclick={() => {
-                roomOpen = false;
-              }}
-            >
-              <IconClose aria-hidden="true" class="size-icon-md" />
-            </button>
+            <Tip label={words.closeRoom}>
+              {#snippet children(tip)}
+                <button
+                  {...mergeProps(tip, {
+                    onclick: () => {
+                      roomOpen = false;
+                      lit = null;
+                    },
+                  })}
+                  type="button"
+                  aria-label={words.closeRoom}
+                  class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+                >
+                  <IconClose aria-hidden="true" class="size-icon-md" />
+                </button>
+              {/snippet}
+            </Tip>
           </div>
           {#if face === "move"}
             {@render moveFace()}
@@ -868,9 +974,10 @@
     {#if !desk}
       <!-- Under the desk line: the room is the kit's bottom drawer, its stops
          head (the faces and the steps), half and whole; the page above it
-         stays live. Drawn in place, the surface its containing block
-         (`contain: layout`), so it stands on the surface's foot wherever
-         the surface stands. -->
+         stays live and ends at its top. Its grabber steps between the
+         stops; its Close is its own, 44px to a finger. Drawn in place, the
+         surface its containing block (`contain: layout`), so it stands on
+         the surface's foot wherever the surface stands. -->
       <Drawer.Root
         bind:activeSnapPoint={snap}
         bind:open={roomOpen}
@@ -880,6 +987,7 @@
         snapPoints={SNAPS}
       >
         <Drawer.Content
+          grabber={{ label: words.nextStop, onpress: nextStop }}
           height="cap"
           modal={false}
           onOpenAutoFocus={(event: Event) => event.preventDefault()}
@@ -896,14 +1004,31 @@
           >
             <div class="flex min-w-0 items-center gap-space-2">
               {@render faces()}
-              <Drawer.Close aria-label={words.closeRoom} />
+              <!-- The drawer's one Close, the ghost the kit's sheet heads draw. -->
+              <Drawer.Close>
+                {#snippet child({ props })}
+                  <Button
+                    {...mergeProps(props, {
+                      onclick: () => {
+                        lit = null;
+                      },
+                    })}
+                    aria-label={words.closeRoom}
+                    icon={IconClose}
+                    press="pressable"
+                    size="icon-sm"
+                    title={words.closeRoom}
+                    variant="ghost"
+                  />
+                {/snippet}
+              </Drawer.Close>
             </div>
-            {#if !single}
-              {@render stepper()}
-            {/if}
             {#if face === "move"}
               {@render moveFace()}
             {:else}
+              {#if !single && face === "states"}
+                {@render stepper()}
+              {/if}
               {@render statesFace(false)}
             {/if}
           </div>
