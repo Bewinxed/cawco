@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
+import { FETCH_CAP } from "./fetch-cap";
 import { LAUNCHD_START_XML } from "./launchd";
 import { writeStateFile } from "./state-file";
 import { systemProgram } from "./workspace-needs";
@@ -51,9 +52,11 @@ helper_live() {
   fi
   [ -n "$live_start" ] && [ "$live_start" = "$lock_start" ] && [ "$live_boot" = "$lock_boot" ]
 }
-# What the decider is given of this unit's environment: CawCo's own settings, and where things are.
+# What the decider is given of this unit's environment: CawCo's own settings, and where things are; and the
+# fetch cap every CawCo process starts with (fetch-cap.ts).
 forwarded() {
   env | grep -E '^(CAWCO_[A-Z0-9_]*|PATH|HOME|XDG_[A-Z_]*)='
+  printf '%s\\n' '${FETCH_CAP.name}=${FETCH_CAP.value}'
 }
 # Starts the update helper given as $1 as a one-shot job of the service manager.
 launch_decider() {

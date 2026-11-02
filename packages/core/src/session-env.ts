@@ -26,8 +26,8 @@
  * way on obelisk, 2026-10-19 09:28:30. No process CawCo hands its
  * environment to is its unit's: none gets the id.
  *
- * `BUN_CONFIG_MAX_HTTP_REQUESTS` is the agent's own fetch cap
- * ({@link AGENT_FETCH_CAP}); in a session's `bun install` it would be the
+ * `BUN_CONFIG_MAX_HTTP_REQUESTS` is CawCo's own processes' fetch cap
+ * (fetch-cap.ts `FETCH_CAP`); in a session's `bun install` it would be the
  * install's concurrency.
  *
  * A session gets only the `CAWCO_*` variables its own tools read
@@ -37,41 +37,13 @@
  * hub rather than inheriting the live ones.
  */
 import { CAWCO_ENV } from "./cawco-env";
+import { FETCH_CAP } from "./fetch-cap";
 
 /** CawCo's embedded pi's package dir: CawCo's own module graph's, never another process's. */
 const EMBEDDED_PI_DIR = "PI_PACKAGE_DIR";
 
 /** The id of the systemd unit CawCo runs in: CawCo's own unit's, never another process's. */
 const UNIT_INVOCATION = "INVOCATION_ID";
-
-/**
- * How many requests the agent's `fetch` has under way at once: Bun's
- * ceiling, set in its unit (cli service.ts), since Bun reads it at start
- * only. "`BUN_CONFIG_MAX_HTTP_REQUESTS` Sets the maximum number of
- * concurrent HTTP requests sent by `fetch` and `bun install`. `fetch`
- * defaults to `256`" (bun.com/docs/runtime/environment-variables); the
- * value is a u16, and one above 65535 leaves the default. A request past
- * the cap waits, unsent, until one under way ends (measured on Bun 1.4.4:
- * with 256 answers open, the next fetch was not sent in 3 s; at 65535,
- * 1000 open and the next answered in 0 ms).
- *
- * The agent's gateway relays each session's MCP streams to the hub with
- * `fetch` (mcp-oauth.ts `relayMcp`): the CawCo server's standalone GET
- * stream and each proxied fleet server's, open as long as the session, and
- * every tool call while it runs. At 256 the agent's own reads of the hub
- * waited behind them: a workspace create's ask where its project's large
- * files live (host-lfs.ts `askHub`) ran out its 15 s unsent ("the hub did
- * not say where project 70ac3d41…'s large files live within 15s",
- * obelisk, 2026-11-01), and went through once a session ended. What bounds
- * the relays now is the process's open files.
- *
- * Not `bun install`'s: its default is 64, which this would replace, so it
- * is CawCo's own process's and no other process gets it.
- */
-export const AGENT_FETCH_CAP = {
-  name: "BUN_CONFIG_MAX_HTTP_REQUESTS",
-  value: "65535",
-} as const;
 
 /**
  * The `CAWCO_*` a session's own tools read, each by its reader:
@@ -98,7 +70,7 @@ const defined = (
         entry[1] !== undefined &&
         entry[0] !== EMBEDDED_PI_DIR &&
         entry[0] !== UNIT_INVOCATION &&
-        entry[0] !== AGENT_FETCH_CAP.name &&
+        entry[0] !== FETCH_CAP.name &&
         keep(entry[0])
     )
   );

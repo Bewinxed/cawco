@@ -108,6 +108,7 @@ import {
 } from "@cawco/core/browser";
 import { timerMs } from "@cawco/core/clock";
 import { detach } from "@cawco/core/detach";
+import { sayFetchCap } from "@cawco/core/fetch-cap";
 import { CONTROL_FORGE_POST, readForgeAsk } from "@cawco/core/forge-post";
 import {
   CUSTODY_BOUND_MS,
@@ -4006,6 +4007,9 @@ export const runDaemon = (rediscover = false): void => {
   // A stall of its loop names what held it (loop-watch.ts), the transcript
   // index's steps among what it can name.
   watchLoop((line) => console.warn(line));
+  // Started without the fetch cap (by hand): the streams it relays can hold
+  // its own reads of the hub back, and it says so (core fetch-cap.ts).
+  sayFetchCap("agent");
   setSectionMarker(syncSection);
   // A broken law crashes the agent (core invariant.ts): sessiond keeps the
   // sessions' processes across its restart.

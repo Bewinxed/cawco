@@ -2,6 +2,7 @@ import "@cawco/core/no-huge-pages";
 import { readBuildInfo } from "@cawco/core/build-info";
 import { DatabaseHeld, lockDatabase } from "@cawco/core/db-lock";
 import { detach } from "@cawco/core/detach";
+import { sayFetchCap } from "@cawco/core/fetch-cap";
 import { Effect, Layer } from "effect";
 import {
   BIND_HOST,
@@ -60,6 +61,9 @@ const main = Effect.gen(function* () {
 
 /** Boots the hub: what running this file does, and what `cawco hub` calls. */
 export const startHub = async (): Promise<void> => {
+  // Started without the fetch cap (by hand): the streams it relays can hold
+  // its other requests back, and it says so (core fetch-cap.ts).
+  sayFetchCap("hub");
   // Before anything opens or moves the database: one hub to it (db-lock.ts).
   try {
     await lockDatabase(DB_PATH);

@@ -41,6 +41,7 @@ import { removeTree, removeTreeSync } from "../packages/agent/src/remove-tree";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
+import { withFetchCap } from "../packages/core/src/fetch-cap";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
 import { HARNESSES, type HarnessKind } from "../packages/core/src/harness";
@@ -1592,11 +1593,12 @@ const serviceSpawn = (
     ],
     {
       ...options,
-      env: {
+      // A fleet's processes start as their units start them: the fetch cap among it (core fetch-cap.ts).
+      env: withFetchCap({
         ...options.env,
         [STARTER_ENV]: String(process.pid),
         ...(wrap.length > 0 ? { [WRAPPED_ENV]: "1" } : {}),
-      },
+      }),
       detached: true,
     }
   );

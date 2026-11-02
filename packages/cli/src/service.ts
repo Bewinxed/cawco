@@ -15,6 +15,7 @@ import { AGENT_BUNDLE_ID } from "@cawco/core/agent-bundle";
 import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { withFetchCap } from "@cawco/core/fetch-cap";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
 import {
   forgetLaunchdStart,
@@ -27,7 +28,7 @@ import {
 } from "@cawco/core/launchd";
 import { hubDbPath } from "@cawco/core/paths";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
-import { AGENT_FETCH_CAP, hostEnvironment } from "@cawco/core/session-env";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -1107,9 +1108,6 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       command: layout.agent.command,
       environment: {
         [CAWCO_ENV.sessiondEndpoint]: sessiondSocket(),
-        // Bun reads it as the process starts: the session streams the agent
-        // relays never hold back its own reads of the hub (AGENT_FETCH_CAP).
-        [AGENT_FETCH_CAP.name]: AGENT_FETCH_CAP.value,
         ...(readEnv(CAWCO_ENV.hubUrl)
           ? { [CAWCO_ENV.hubUrl]: readEnv(CAWCO_ENV.hubUrl) as string }
           : {}),
@@ -1239,15 +1237,19 @@ const specFor = (
   };
 };
 
+/** Every unit's environment: its own settings over the shared ones, the fetch cap among them (core fetch-cap.ts). */
 const environment = (spec: ServiceSpec): [string, string][] =>
-  Object.entries({
-    PATH: servicePath(),
-    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-    XDG_DATA_HOME:
-      process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
-    ...spec.environment,
-    ...(spec.mode === "dev" ? { [MODE_ENV]: spec.mode } : {}),
-  });
+  Object.entries(
+    withFetchCap({
+      PATH: servicePath(),
+      XDG_CONFIG_HOME:
+        process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+      XDG_DATA_HOME:
+        process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
+      ...spec.environment,
+      ...(spec.mode === "dev" ? { [MODE_ENV]: spec.mode } : {}),
+    })
+  );
 
 const xml = (value: string): string =>
   value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");

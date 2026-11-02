@@ -9,6 +9,7 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { binaryRoot, helperIsLive } from "@cawco/core/binary-installation";
+import { withFetchCap } from "@cawco/core/fetch-cap";
 import {
   forgetLaunchdStart,
   launchdEnded,
@@ -39,16 +40,23 @@ export interface HelperJob {
  * directories a one-shot job would otherwise lack. The same set the wrapper's
  * resume path forwards (binary-wrapper.ts `forwarded`): the helper rewrites
  * the keeper's unit (`cawco binary-units`), whose path and text come from
- * XDG_CONFIG_HOME, XDG_DATA_HOME and PATH as the installer saw them.
+ * XDG_CONFIG_HOME, XDG_DATA_HOME and PATH as the installer saw them. And
+ * the fetch cap, as every CawCo process starts with it (core fetch-cap.ts).
  */
 function helperEnvironment(): [string, string][] {
-  return Object.entries(process.env).filter(
-    (entry): entry is [string, string] =>
-      entry[1] !== undefined &&
-      (entry[0].startsWith("CAWCO_") ||
-        entry[0].startsWith("XDG_") ||
-        entry[0] === "PATH" ||
-        entry[0] === "HOME")
+  return Object.entries(
+    withFetchCap(
+      Object.fromEntries(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] =>
+            entry[1] !== undefined &&
+            (entry[0].startsWith("CAWCO_") ||
+              entry[0].startsWith("XDG_") ||
+              entry[0] === "PATH" ||
+              entry[0] === "HOME")
+        )
+      )
+    )
   );
 }
 

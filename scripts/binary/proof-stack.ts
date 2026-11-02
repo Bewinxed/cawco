@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
 import { readWithin } from "../../packages/core/src/bounded";
 import { detach } from "../../packages/core/src/detach";
+import { withFetchCap } from "../../packages/core/src/fetch-cap";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -37,7 +38,8 @@ function spawn(
   // A proof hub never advertises on the real network: its mDNS would answer
   // for a scratch stack on whatever link the host sits on.
   const child = Bun.spawn([process.execPath, verb, ...args], {
-    env: { ...process.env, CAWCO_NO_MDNS: "1", ...extra },
+    // Its units' fetch cap (core fetch-cap.ts).
+    env: withFetchCap({ ...process.env, CAWCO_NO_MDNS: "1", ...extra }),
     stdout: "pipe",
     stderr: "pipe",
     stdin: "ignore",
@@ -242,12 +244,12 @@ function dashboard() {
     // The one descriptor (fd 3, `listener`) named as the dashboard's socket
     // unit names it (`FileDescriptorName=dashboard`); LISTEN_PID is set by
     // the child itself (proof-entry.ts), whose pid this process cannot know.
-    env: {
+    env: withFetchCap({
       ...process.env,
       LISTEN_FDS: "1",
       LISTEN_FDNAMES: "dashboard",
       CAWCO_PROOF_ACTIVATED_FD: "3",
-    },
+    }),
     stdio: ["ignore", "pipe", "pipe", listener],
   });
   children.push(child);

@@ -141,6 +141,7 @@
     "./task-edges": "./src/task-edges.ts",
     "./suggest": "./src/suggest.ts",
     "./session-env": "./src/session-env.ts",
+    "./fetch-cap": "./src/fetch-cap.ts",
     "./cawco-env": "./src/cawco-env.ts",
     "./archive": "./src/archive.ts",
     "./blocks": "./src/blocks.ts",
