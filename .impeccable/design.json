@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-02T09:00:00.000Z",
+  "generatedAt": "2026-11-02T13:00:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -2195,6 +2195,108 @@
           "#73ba63",
           "#97df87",
           "#bbffab"
+        ]
+      },
+      "c-clip-size": {
+        "role": "tertiary",
+        "displayName": "C Clip Size",
+        "canonical": "light-dark(oklch(51.00% 0.1400 251.40), oklch(70.00% 0.1450 251.40))",
+        "hex": "#1468b3",
+        "hexDark": "#53a2f5",
+        "tonalRamp": [
+          "#000043",
+          "#001f65",
+          "#004188",
+          "#0a63ad",
+          "#3885d3",
+          "#5da9fa",
+          "#81ceff",
+          "#a6f5ff"
+        ]
+      },
+      "c-clip-move": {
+        "role": "tertiary",
+        "displayName": "C Clip Move",
+        "canonical": "light-dark(oklch(51.00% 0.1500 292.50), oklch(70.00% 0.1550 292.50))",
+        "hex": "#6b51b3",
+        "hexDark": "#a28af5",
+        "tonalRamp": [
+          "#160042",
+          "#2c0065",
+          "#482988",
+          "#664cad",
+          "#866ed3",
+          "#a991fa",
+          "#ccb6ff",
+          "#f2dbff"
+        ]
+      },
+      "c-clip-fade": {
+        "role": "tertiary",
+        "displayName": "C Clip Fade",
+        "canonical": "light-dark(oklch(50.00% 0.1150 86.80), oklch(70.00% 0.1200 86.80))",
+        "hex": "#7f5d00",
+        "hexDark": "#bf9939",
+        "tonalRamp": [
+          "#1e0200",
+          "#3c1d00",
+          "#5b3b00",
+          "#7d5b00",
+          "#a07c30",
+          "#c49f55",
+          "#e9c479",
+          "#ffe99d"
+        ]
+      },
+      "c-clip-tint": {
+        "role": "tertiary",
+        "displayName": "C Clip Tint",
+        "canonical": "light-dark(oklch(51.00% 0.1650 349.80), oklch(70.00% 0.1700 349.80))",
+        "hex": "#a63273",
+        "hexDark": "#e96cae",
+        "tonalRamp": [
+          "#300014",
+          "#550030",
+          "#7a004e",
+          "#a02c6e",
+          "#c75190",
+          "#ef75b3",
+          "#ff99d8",
+          "#ffbffe"
+        ]
+      },
+      "c-clip-effect": {
+        "role": "tertiary",
+        "displayName": "C Clip Effect",
+        "canonical": "light-dark(oklch(51.00% 0.0930 186.70), oklch(70.00% 0.0950 186.70))",
+        "hex": "#00776f",
+        "hexDark": "#4cb2a8",
+        "tonalRamp": [
+          "#001411",
+          "#00312c",
+          "#00504a",
+          "#007169",
+          "#33948b",
+          "#5bb7ae",
+          "#80dcd2",
+          "#a6fff8"
+        ]
+      },
+      "c-clip-other": {
+        "role": "tertiary",
+        "displayName": "C Clip Other",
+        "canonical": "light-dark(oklch(0.495 0.014 74), oklch(0.778 0.012 78))",
+        "hex": "#676159",
+        "hexDark": "#bbb6ae",
+        "tonalRamp": [
+          "#0f0a05",
+          "#29241d",
+          "#47413a",
+          "#666058",
+          "#888179",
+          "#aba49b",
+          "#cfc8bf",
+          "#f4ede4"
         ]
       },
       "status-live-glyph": {
