@@ -2,7 +2,7 @@
  * The `open` a wrapper hands its bits-ui Root, so a Root opens whenever its
  * state is true, whenever that became true.
  *
- * bits-ui's presence (internal/presence-manager, 2.19.5) takes `open` as it
+ * bits-ui's presence (internal/presence-manager, 2.20.3) takes `open` as it
  * is when the Root is made, and lets the first run of its watch go by
  * unread, taking it for that same value. A Root whose `open` became true in
  * between was never drawn: the state said open and nothing was on screen.
