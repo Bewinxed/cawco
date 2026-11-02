@@ -3019,6 +3019,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       rmSync(join(folder, PROGRAM_FILE), { force: true });
       cpSync(nextFolder, folder, { recursive: true, force: true });
     }
+    // The state of the server its source names, as that server's frames
+    // left it in the version's doc ({@link staged}): the row's doc holds its
+    // own source's, set beside it since the fork, and the merge keeps
+    // whichever of two such sets its client id ranks last, never the newer.
+    const stage = servedOf(next)
+      ? (docs.doc(next.id).getMap("meta").get("stage") as
+          StageState | undefined)
+      : undefined;
     docs.merge(next.id, row.id, "agent");
     const promoted = db.update(row.id, {
       madeBy: next.madeBy,
@@ -3032,8 +3040,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     db.handOrigin(next.id, row.id);
     discard(next);
     versionMoved(promoted);
-    // A server the next version moved off is let go once nothing shows it.
-    keepServed(promoted, row, undefined);
+    // Its server's state written after the merge, so it stands over both
+    // docs' sets; a server the next version moved off is let go once
+    // nothing shows it.
+    keepServed(promoted, row, stage);
     // The program it opens on goes out to the person now: its Previews' stages warmed for it.
     const program = programOf(promoted);
     if (program !== undefined) {
