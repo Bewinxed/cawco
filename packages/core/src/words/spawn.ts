@@ -31,7 +31,7 @@ export const spawnWords = {
       listed: readonly string[],
       more: number
     ) =>
-      `${harness} on ${machine} does not list the model ${model}. It lists ${listed.join(", ")}${more > 0 ? `, and ${more} more` : ""}. Nothing was started.`,
+      `${harness} on ${machine} does not run ${model}. It lists ${listed.join(", ")}${more > 0 ? `, and ${more} more` : ""}.`,
     /** A model from a provider the harness lists nothing from. */
     noProvider: (
       harness: string,
@@ -39,10 +39,10 @@ export const spawnWords = {
       model: string,
       provider: string
     ) =>
-      `${harness} on ${machine} lists no model from ${provider}, so it cannot run ${model}: it holds no sign-in or key for ${provider} there. Nothing was started.`,
+      `${harness} on ${machine} has no sign-in or key for ${provider}, so it cannot run ${model}.`,
     /** Added when the model asked for is a harness's name. */
     harnessNamed: (model: string) =>
-      `${model} is a harness, not a model: delegate takes it as harness.`,
+      `${model} is a harness, not a model. Choose it as the harness.`,
   },
   /** Between a session and the account its launch places it on, in the line the hub logs of it. */
   launchesOn: "launches on",
