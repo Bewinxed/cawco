@@ -23,6 +23,7 @@
 
   const HANDLES: Handle[] = ["top", "top-left", "top-right"];
   /** The grown shape's corner, as the composer's canvas room hands it the stage. */
+  // golar-ignore-next-line house/no-render-dom-read -- only its states file draws this frame, on the component canvas, which mounts it in the browser
   const corner = { inset: 0, radius: numberOf("--radius-lg") };
   const value: GrabValue = $derived({ min: 0, max: height, now: height });
   const still = () => undefined;

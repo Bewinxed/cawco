@@ -26,7 +26,7 @@ import { dur, ease, motionOk } from "./curves.svelte";
 
 /** The leaving rows' beat. */
 const outMs = () => dur("--dur-exit");
-/** An incoming row's beat. */
+/** An incoming row's beat. @browser */
 export const inMs = () => dur("--dur-pop");
 /** Between one incoming row and the next. */
 const inStagger = () => dur("--dur-stagger");
@@ -101,7 +101,7 @@ export class ListSwap<T> {
     this.leaving = [];
   }
 
-  /** When the leaving lines have gone, from the swap. */
+  /** When the leaving lines have gone, from the swap. @browser */
   static leaveEnd(): number {
     return outMs();
   }
@@ -110,6 +110,8 @@ export class ListSwap<T> {
    * When the i-th incoming line starts, from the swap: never before the
    * leaving lines are out, so a row and the one it replaces are never both
    * in one place.
+   *
+   * @browser
    */
   static enterAt(i: number, notBefore = 0): number {
     return Math.max(
@@ -123,6 +125,8 @@ export class ListSwap<T> {
    * to its whole notes): they come in as a swap's new rows do (`ns-in-r`),
    * --dur-stagger apart and capped alike, with no lead, since no old row is
    * there to wait for. With reduced motion they are simply there.
+   *
+   * @browser
    */
   static reveal(rows: readonly Element[]): void {
     if (!motionOk.current) {

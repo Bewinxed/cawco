@@ -294,7 +294,7 @@
                 </div>
               {/each}
               {#key bodySwap.gen}
-                <div style:animation={bodySwap.rowAnim(i, ListSwap.leaveEnd())}>
+                <div style:animation={bodySwap.rowAnim(i)}>
                   {#if view === "chart"}
                     {@render plot(chart, true)}
                   {:else}

@@ -10,6 +10,7 @@ import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
 import { rawMotion } from "./raw-motion.mjs";
 import { rawClassValues } from "./raw-values.mjs";
+import { renderDomReads } from "./render-dom.mjs";
 import {
   dimensionBindings,
   rawDurationReads,
@@ -308,6 +309,7 @@ const FIND = {
   "house/no-raw-duration-read": rawDurationReads,
   "house/no-dimension-binding": dimensionBindings,
   "house/no-scroll-into-view": scrollIntoViews,
+  "house/no-render-dom-read": renderDomReads,
   "house/no-clip-with-move": clipWithMove,
   "house/no-class-join": classJoins,
   "house/no-raw-class-values": rawClassValues,

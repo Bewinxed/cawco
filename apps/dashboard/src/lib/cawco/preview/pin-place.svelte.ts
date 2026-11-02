@@ -249,6 +249,7 @@ export class FloatPlace {
   /** Its height with nothing capping it ({@link FloatSize}). */
   natural = $state(0);
   /** Its distance from the well's edges: `--space-2`. */
+  // golar-ignore-next-line house/no-render-dom-read -- a pin's card opens only on a person's act (composing, opening or resting on a pin); a server render draws none
   readonly gap = $derived(numberOf("--space-2") || 7);
   readonly #over: () => Over;
   /**

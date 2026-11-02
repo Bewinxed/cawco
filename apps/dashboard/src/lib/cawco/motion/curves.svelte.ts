@@ -153,7 +153,7 @@ const rootToken = (name: string): string => {
   }
   return tokens.get(name) as string;
 };
-/** A `--dur-*` token on the root, in ms. */
+/** A `--dur-*` token on the root, in ms. @browser */
 export const dur = (name: `--dur-${string}`): number => msOf(rootToken(name));
 
 /**
@@ -163,10 +163,12 @@ export const dur = (name: `--dur-${string}`): number => msOf(rootToken(name));
  */
 export const staggered = (n: number): string =>
   `min(calc(var(--dur-stagger) * ${n}), var(--dur-cascade))`;
+/** An `--ease-*` token on the root, as CSS. @browser */
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
+/** --pop-scale on the root, as its number. @browser */
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));
-/** A unitless or px token as its number (`--echo-scale`, `--ride-fade`). */
+/** A unitless or px token as its number (`--echo-scale`, `--ride-fade`). @browser */
 export const numberOf = (name: `--${string}`): number =>
   Number.parseFloat(rootToken(name));
 
@@ -176,6 +178,8 @@ const CUBIC_BEZIER = /cubic-bezier\(([^)]*)\)/u;
  * A `--ease-*` token as a function of progress, for motion drawn frame by
  * frame (a computed outline): the stylesheet's own `cubic-bezier()`, its
  * overshoot kept (`--ease-goo` runs past 1 and settles).
+ *
+ * @browser
  */
 export const curveOf = (name: `--ease-${string}`): ((t: number) => number) => {
   const css = rootToken(name);
@@ -211,6 +215,8 @@ const space = (name: string) => Number.parseFloat(rootToken(name)) || 0;
  * stops there are. With no stops to space (a block opening on its own), the
  * whole way takes --dur-panel, as a panel's does. `least`: the slowest it
  * may go and still take no longer than --dur-cascade.
+ *
+ * @browser
  */
 export function glideSpeed(
   distance: number,
@@ -232,6 +238,8 @@ export function glideSpeed(
  * way, so the rows it reaches are revealed at even times, and the room it
  * opens and the rows under it travel the same way at the same speed, so they
  * keep step with it. A distance too short for the fall is all fall.
+ *
+ * @browser
  */
 export function glide(distance: number, speed: number) {
   const outOf = Math.min(distance, space("--space-1"));

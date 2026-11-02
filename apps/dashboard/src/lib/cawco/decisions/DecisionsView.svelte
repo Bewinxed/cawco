@@ -106,7 +106,7 @@
         data-slot="dview"
         class="flex min-h-0 flex-col gap-space-3 group-mode-page/decisions:flex-auto"
         out:leave
-        style:animation={swap.rowAnim(0, ListSwap.leaveEnd())}
+        style:animation={swap.rowAnim(0)}
       >
         {#if page}
           <DecisionPage
