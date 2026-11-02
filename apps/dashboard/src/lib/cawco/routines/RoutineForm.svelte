@@ -33,6 +33,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
     NativeSelect,
     NativeSelectOption,
@@ -163,7 +164,7 @@
 
   /** The hub's read of the schedule as it stands, or that it can't read it. */
   let scheduleRead = $state<
-    | { key: string; preview: SchedulePreview }
+    | { key: string; cron: string; zone: string; preview: SchedulePreview }
     | { key: string; unread: true }
     | null
   >(null);
@@ -180,7 +181,7 @@
       hub.preview(expression, zone).then(
         (answer) => {
           if (live) {
-            scheduleRead = { key, preview: answer };
+            scheduleRead = { key, cron: expression, zone, preview: answer };
           }
         },
         (error: unknown) => {
@@ -196,35 +197,48 @@
       clearTimeout(settle);
     };
   });
-  /** The read for what the fields hold now; an older one says nothing. */
-  const current = $derived(
-    scheduleRead?.key === scheduleKey ? scheduleRead : null
+  /** Whether the hub refused what the fields hold now; an older read says nothing. */
+  const unread = $derived(
+    scheduleRead?.key === scheduleKey && "unread" in scheduleRead
   );
-  const preview = $derived(
-    current && "preview" in current ? current.preview : null
-  );
-  const unread = $derived(current !== null && "unread" in current);
 
+  /**
+   * The last schedule the hub read, kept on screen while it reads the next
+   * one, so the read-back changes in place instead of folding away and back.
+   * Gone only when there is nothing to read back: an empty schedule (the
+   * read cleared at once), one the hub can't read, or a hub that didn't
+   * answer.
+   */
+  const shownRead = $derived(
+    scheduleRead && "preview" in scheduleRead ? scheduleRead : null
+  );
   /** The read-back: its words on your clock (the ledger's, else the hub's), its next run, the strip's runs. */
   const readBack = $derived.by(() => {
-    if (!preview) {
+    if (!shownRead) {
       return null;
     }
+    const { preview } = shownRead;
     const [next] = preview.nextRuns;
-    if (next === undefined) {
-      return { runs: [], words: preview.words, next: words.noRunThisWeek };
-    }
-    const said = scheduleOf(cron, draft.timeZone, next);
-    return {
-      runs: preview.nextRuns,
-      words: said.raw
+    const said =
+      next === undefined
+        ? null
+        : scheduleOf(shownRead.cron, shownRead.zone, next);
+    const label =
+      said === null || said.raw
         ? preview.words
-        : [said.words, said.local].filter(Boolean).join(" · "),
-      next: words.nextRunAt(whenOf(next)),
+        : [said.words, said.local].filter(Boolean).join(" · ");
+    const nextRun =
+      next === undefined ? words.noRunThisWeek : words.nextRunAt(whenOf(next));
+    return {
+      label,
+      line: `${label} · ${nextRun}`,
+      runs: preview.nextRuns,
+      /** The hub is still reading what the fields hold now. */
+      reading: shownRead.key !== scheduleKey,
     };
   });
   /** The strip's now, taken with each read. */
-  const now = $derived(preview ? Date.now() : 0);
+  const now = $derived(shownRead ? Date.now() : 0);
 
   // --- what each field still needs ---------------------------------------------------
 
@@ -461,11 +475,16 @@
         in:unfold
         out:unfold
       >
-        <p class="m-0 type-body text-pretty text-ink-strong">
-          {readBack.words} · <span class="num">{readBack.next}</span>
+        <!-- One paragraph through MorphText (The Steady Swap Rule): a new
+             read changes its words and next run in place. -->
+        <p
+          class="num m-0 type-body text-pretty text-ink-strong"
+          aria-busy={readBack.reading || undefined}
+        >
+          <MorphText text={readBack.line} wrap />
         </p>
         {#if readBack.runs.length > 0}
-          <ScheduleStrip label={readBack.words} {now} runs={readBack.runs} />
+          <ScheduleStrip label={readBack.label} {now} runs={readBack.runs} />
         {/if}
       </div>
     {/if}
