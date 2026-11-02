@@ -49,7 +49,11 @@
   import { mergeProps } from "bits-ui";
   import { onMount, tick, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { motionOk, numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    motionOk,
+    numberOf,
+    sheetSlide,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -418,6 +422,13 @@
   let glass = $state<HTMLElement | null>(null);
   let viewJoined = $state(false);
   /**
+   * The view card is open. It is kept mounted while shut (`forceMount`), as
+   * the glass's own card is (GlassCard), so it goes back up behind the
+   * glass's cut on its close and rests there (motion/hang), never cut off
+   * as bits-ui unmounted it.
+   */
+  let viewOpen = $state(false);
+  /**
    * The drawer's stops, as vaul takes them: shares of the window's height
    * for a sheet as tall as its cap (`--c-sheet-max-h`, a share of the
    * window), so a stop showing `px` of it is that share less what the cap
@@ -622,7 +633,7 @@
               {/snippet}
             </Tip>
           {/if}
-          <Popover.Root>
+          <Popover.Root bind:open={viewOpen}>
             <Tip label={words.stageView}>
               {#snippet children(tip)}
                 <Popover.Trigger>
@@ -648,6 +659,8 @@
               aria-label={words.stageView}
               bind:joined={viewJoined}
               customAnchor={glass}
+              forceMount
+              inert={!viewOpen}
               onEscapeKeydown={personsOwn}
               onInteractOutside={personsOwn}
               side="bottom"
@@ -771,7 +784,7 @@
     <div
       data-slot="graph-page"
       class={[
-        "flex min-h-0 min-w-0 flex-1 gap-space-5 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
+        "flex min-h-0 min-w-0 flex-1 gap-space-5 overflow-clip ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
         desk && arrangement === "below" ? "flex-col" : "flex-row",
         !desk && roomOpen ? "pb-c-graph-drawer-head" : "pb-space-6",
       ]}
@@ -807,9 +820,21 @@
 
       {#if desk && roomOpen}
         <!-- The room: one surface, two faces, closed by Close or Esc. -->
+        <!-- It comes in from its edge and goes back there, as the app's
+             panels do (the sheet recipe's motion, `sheetSlide`: the
+             inspector's): from the trailing edge beside the stage, from the
+             foot under it. -->
         <aside
           data-slot="graph-room"
           aria-label={words.statesFace}
+          in:sheetSlide={{
+            axis: arrangement === "below" ? "Y" : "X",
+            leaving: false,
+          }}
+          out:sheetSlide={{
+            axis: arrangement === "below" ? "Y" : "X",
+            leaving: true,
+          }}
           class={[
             "relative flex min-h-0 min-w-0 flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile",
             arrangement === "below"
