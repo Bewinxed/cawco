@@ -7619,7 +7619,7 @@
         }
       }
     },
-    "/api/instances/{id}/artifacts/status": {
+    "/api/instances/{id}/artifacts/list": {
       "get": {
         "parameters": [
           {
@@ -7627,6 +7627,15 @@
             "in": "path",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "maxLength": 60,
               "type": "string"
             }
           },
@@ -7646,20 +7655,20 @@
             }
           }
         ],
-        "operationId": "getApiInstancesByIdArtifactsStatus",
+        "operationId": "getApiInstancesByIdArtifactsList",
         "responses": {
           "200": {
-            "description": "getApiInstancesByIdArtifactsStatus 200",
+            "description": "getApiInstancesByIdArtifactsList 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiInstancesByIdArtifactsStatus200"
+                  "$ref": "#/components/schemas/ArtifactList"
                 }
               }
             }
           },
           "422": {
-            "description": "getApiInstancesByIdArtifactsStatus 422",
+            "description": "getApiInstancesByIdArtifactsList 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28941,12 +28950,6 @@
           "$ref": "#/components/schemas/ArtifactHit"
         }
       },
-      "getApiInstancesByIdArtifactsStatus200": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/ArtifactStatus"
-        }
-      },
       "postApiInstancesByIdArtifactsByArtifactVerify200": {
         "type": "object",
         "properties": {
@@ -39862,6 +39865,34 @@
         "required": [
           "excerpt",
           "id"
+        ]
+      },
+      "ArtifactList": {
+        "description": "A page of `artifact_list`, newest first.",
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactStatus"
+            }
+          },
+          "next_cursor": {
+            "description": "What `cursor` takes for the page after this one; null on the last.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "description": "How many the whole list holds, every page.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "artifacts",
+          "next_cursor",
+          "total"
         ]
       },
       "ArtifactStatus": {

@@ -19,8 +19,8 @@ import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
 import type { DesignMap } from "@cawco/core/stage";
 import { z } from "zod";
 import type {
+  ArtifactList,
   ArtifactRead,
-  ArtifactStatus,
   Browsed,
   CommentRead,
   Created,
@@ -933,11 +933,16 @@ export function handoffTools(deps: HandoffDeps) {
       artifactList.name,
       artifactList.description,
       artifactList.input,
-      ({ waiting }) =>
-        actions.artifactCall(
+      ({ cursor, waiting }) => {
+        const query = new URLSearchParams({
+          ...(cursor ? { cursor } : {}),
+          ...(waiting ? { waiting: "true" } : {}),
+        }).toString();
+        return actions.artifactCall(
           "GET",
-          `/status${waiting ? "?waiting=true" : ""}`
-        ) as Promise<ArtifactStatus[]>,
+          `/list${query ? `?${query}` : ""}`
+        ) as Promise<ArtifactList>;
+      },
       artifactListWords,
       { annotations: READ_ONLY }
     ),

@@ -33,6 +33,9 @@ export const artifactToolWords = {
   othersArtifact: (what: string, session: string) =>
     `${what} is session ${session}'s: your delegation tree reads it, and only that session changes it.`,
   noArtifact: (id: string) => `This session has no artifact ${id}.`,
+  /** An `artifact_list` cursor that no page of it gave. */
+  notListCursor: (cursor: string) =>
+    `"${cursor}" is no cursor artifact_list gave: pass the next_cursor of its page before, or none for its newest page.`,
   /** Where a stage or a served preview runs, `dir` from its clone's root ("." the root itself): "Its server at the repo's root: live." */
   stageAt: (runs: "serve" | "sheet", dir: string, status: string) =>
     `Its ${runs === "serve" ? "server" : "stage"} ${dir === "." ? "at the repo's root" : `in ${dir}`}: ${status}`,

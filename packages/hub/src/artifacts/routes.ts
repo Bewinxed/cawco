@@ -356,13 +356,21 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // Each artifact with whose move it is (artifact_list).
+    // A page of every artifact the session acts on, with whose move each is (artifact_list).
     .get(
-      "/api/instances/:id/artifacts/status",
-      { query: t.Object({ waiting: t.Optional(t.BooleanString()) }) },
+      "/api/instances/:id/artifacts/list",
+      {
+        query: t.Object({
+          cursor: t.Optional(t.String({ maxLength: 60 })),
+          waiting: t.Optional(t.BooleanString()),
+        }),
+      },
       ({ params, query }) => {
         try {
-          return artifacts.status(params.id, query.waiting === true);
+          return artifacts.status(params.id, {
+            cursor: query.cursor,
+            waitingOnly: query.waiting === true,
+          });
         } catch (error) {
           return refused(error);
         }

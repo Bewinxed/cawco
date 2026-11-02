@@ -306,11 +306,22 @@ export const artifactRead = {
   },
 };
 
+/** How many artifacts a page of `artifact_list` holds. */
+export const LIST_PAGE = 25;
+
 export const artifactList = {
   name: "artifact_list",
   description:
-    "Your artifacts and your delegation tree's (a conversation's: its project's too), newest first, with whose move each is. `waiting: true` keeps those waiting on someone.",
-  input: { waiting: z.boolean().optional() },
+    "Every artifact your artifact tools act on (yours, your tree's, your project's pages, what its cold sessions left), newest first, with whose move each is. " +
+    `${LIST_PAGE} a page. \`waiting: true\` keeps those waiting on someone.`,
+  input: {
+    cursor: z
+      .string()
+      .max(60)
+      .optional()
+      .describe("A page's next_cursor, for the older ones."),
+    waiting: z.boolean().optional(),
+  },
 };
 
 export const artifactShow = {

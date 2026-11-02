@@ -13,6 +13,7 @@ import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
 import type { CanvasSpec, DesignMap, PageError } from "@cawco/core/stage";
 import type { movesSaid, renderSaid } from "../artifacts/component";
 import type {
+  ArtifactList,
   ArtifactRead,
   ArtifactStatus,
   Browsed,
@@ -29,7 +30,6 @@ import type {
   Shown,
 } from "../artifacts/service";
 import type { Picture, Presented } from "../mcp-tool";
-import { LISTED } from "./sessions";
 import {
   ago,
   ahead,
@@ -141,17 +141,16 @@ const statusLine = (status: ArtifactStatus, now: number): string => {
   return `- ${named(status)}, ${status.does}: ${quote(status.ask, 140)} · ${facts.join(" · ")}`;
 };
 
-/** `artifact_list`: the panel, newest first. */
-export const artifactListWords = (statuses: ArtifactStatus[]): string => {
+/** `artifact_list`: a page of every artifact the session's tools act on, newest first. */
+export const artifactListWords = (list: ArtifactList): string => {
   const now = Date.now();
-  const shown = statuses.slice(0, LISTED);
-  return statuses.length === 0
+  return list.total === 0
     ? "No artifacts: artifact_create opens one in the person's panel."
     : lines(
-        `${count(statuses.length, "artifact")}, newest first; every artifact tool takes the name:`,
-        shown.map((status) => statusLine(status, now)),
-        statuses.length > shown.length &&
-          `…and ${statuses.length - shown.length} older ones: artifact_delete takes those a newer one superseded.`
+        `${count(list.total, "artifact")}, newest first; every artifact tool takes the name:`,
+        list.artifacts.map((status) => statusLine(status, now)),
+        list.next_cursor &&
+          `…and older ones: cursor ${list.next_cursor} lists the next page.`
       );
 };
 

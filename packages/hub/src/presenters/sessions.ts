@@ -30,7 +30,7 @@ import {
 import { ago, ahead, count, handle, lasted, lines, quote } from "./words";
 
 /** How many of a list's newest a concise answer names; the rest are counted. */
-export const LISTED = 25;
+const LISTED = 25;
 
 /** A delegate's handle: its folder's name and its id's first eight, what handoff and stop_delegate take. */
 const tagOf = (node: Pick<DelegateNode, "instanceId" | "name">): string =>

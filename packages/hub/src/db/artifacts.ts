@@ -195,6 +195,8 @@ export interface ArtifactsDb {
    * read one session at a time, held the hub for seconds.
    */
   readonly ofInstances: (instanceIds: readonly string[]) => ArtifactRow[];
+  /** The artifacts a session made into another's panel (`madeBy`), newest first. */
+  readonly ofMaker: (instanceId: string) => ArtifactRow[];
   /** A project's artifacts, any of its sessions', newest first. */
   readonly ofProject: (projectId: string) => ArtifactRow[];
   /** Every page whose `state` took a change: the docs that may hold picks. */
@@ -437,6 +439,14 @@ export const artifactsDb = (
       .where(
         and(eq(artifacts.instanceId, instanceId), isNull(artifacts.heldFor))
       )
+      .orderBy(desc(artifacts.createdAt))
+      .all()
+      .map(artifactOf),
+  ofMaker: (instanceId) =>
+    db
+      .select()
+      .from(artifacts)
+      .where(and(eq(artifacts.madeBy, instanceId), isNull(artifacts.heldFor)))
       .orderBy(desc(artifacts.createdAt))
       .all()
       .map(artifactOf),

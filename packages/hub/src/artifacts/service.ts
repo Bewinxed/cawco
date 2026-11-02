@@ -229,6 +229,7 @@ import {
 } from "./page-changes";
 import { pagePictures } from "./page-pictures";
 import { picturePath, thumbnailPath } from "./sync";
+import { LIST_PAGE } from "./tools";
 
 /** How a tool names an artifact: its id or handle, else its name. */
 const ARTIFACT_KEYS: Handled<{ id: string; kind: string; name: string }> = {
@@ -737,6 +738,57 @@ export interface ArtifactStatus {
   /** Whose move it is: the person's (what Needs you lists it for: never opened, picks not made, marks not sent, an answer not looked at, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
   waitingOn: ("person" | "session")[];
 }
+
+/** A page of `artifact_list`, newest first. */
+export interface ArtifactList {
+  artifacts: ArtifactStatus[];
+  /** What `cursor` takes for the page after this one; null on the last. */
+  next_cursor: string | null;
+  /** How many the whole list holds, every page. */
+  total: number;
+}
+
+/** Newest made first; one id before another at the same time, so a cursor stands between any two. */
+const newestFirst = (a: ArtifactRow, b: ArtifactRow): number =>
+  b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1);
+
+/** A cursor: the last row of a page, by when it was made and its id. */
+const cursorOf = (row: ArtifactRow): string =>
+  `${row.createdAt.getTime().toString(36)}.${row.id}`;
+
+const CURSOR = /^([0-9a-z]{1,12})\.([0-9a-f-]{36})$/u;
+
+/**
+ * The {@link LIST_PAGE} rows of `rows` (sorted {@link newestFirst}) after
+ * `cursor`, and the cursor after them. Keyed on the last row shown, not a
+ * count, so a page made or deleted meanwhile neither repeats nor skips one.
+ */
+const pageOf = (
+  rows: ArtifactRow[],
+  cursor: string | undefined
+): { next: string | null; rows: ArtifactRow[] } => {
+  let from = 0;
+  if (cursor !== undefined) {
+    const parts = CURSOR.exec(cursor);
+    if (!parts) {
+      throw new ArtifactRefusal(400, artifactToolWords.notListCursor(cursor));
+    }
+    const at = Number.parseInt(parts[1] as string, 36);
+    const id = parts[2] as string;
+    const after = rows.findIndex(
+      (row) =>
+        row.createdAt.getTime() < at ||
+        (row.createdAt.getTime() === at && row.id < id)
+    );
+    from = after === -1 ? rows.length : after;
+  }
+  const page = rows.slice(from, from + LIST_PAGE);
+  const last = page.at(-1);
+  return {
+    next: last && from + LIST_PAGE < rows.length ? cursorOf(last) : null,
+    rows: page,
+  };
+};
 
 export interface Created {
   /** What a decision page's program left broken on the picks and the links; absent when nothing. */
@@ -6974,24 +7026,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * `artifact_list`: the session's artifacts (a project's conversation also gets
-     * every session's of its project), and its delegation tree's
-     * ({@link ofTree}), each of another session's with its `session`,
-     * newest first, each with whose move it is; `waiting` keeps those where
-     * it is somebody's.
+     * `artifact_list`: every artifact the session's artifact tools act on,
+     * newest first, a page of {@link LIST_PAGE} at a time from `cursor`
+     * ({@link pageOf}), each with whose move it is; `waitingOnly` keeps those
+     * where it is somebody's. What the tools reach is what it names
+     * ({@link nameable}: its own, its delegation tree's, its project's
+     * pages, a conversation's project's), what it made into another's panel
+     * (its maker reads and revises it, {@link revisable}), and what its
+     * project's cold writers left ({@link leftInProject}).
      */
-    status: (instanceId: string, waitingOnly = false): ArtifactStatus[] => {
+    status: (
+      instanceId: string,
+      {
+        cursor,
+        waitingOnly = false,
+      }: { cursor?: string; waitingOnly?: boolean } = {}
+    ): ArtifactList => {
       const instance = sessionOf(instanceId);
-      const holders = holdersInTree(instance);
       const rows = [
         ...new Map(
-          [...answerable(instance, holders), ...ofTree(instance, holders)].map(
-            (row) => [row.id, row]
-          )
+          [
+            ...nameable(instance),
+            ...db.ofMaker(instance.id),
+            ...leftInProject(instance),
+          ].map((row) => [row.id, row])
         ).values(),
-      ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      const all = rows.map((row) => statusOf(instance, row));
-      return waitingOnly ? all.filter((one) => one.waitingOn.length > 0) : all;
+      ].sort(newestFirst);
+      // Whose move it is reads each one's doc: only `waiting` reads them all.
+      const kept = waitingOnly
+        ? rows.filter((row) => statusOf(instance, row).waitingOn.length > 0)
+        : rows;
+      const page = pageOf(kept, cursor);
+      return {
+        artifacts: page.rows.map((row) => statusOf(instance, row)),
+        next_cursor: page.next,
+        total: kept.length,
+      };
     },
 
     /**
