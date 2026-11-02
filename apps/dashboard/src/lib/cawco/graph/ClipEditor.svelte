@@ -182,6 +182,51 @@
   /** The slider's value while a drag holds it; the row's own at rest. */
   let held = $state<number | null>(null);
 
+  /**
+   * The chosen curve drawn large, as it stands (or as the slider holds it
+   * while he drags), progress up against time across: Rive draws the key's
+   * curve beside its timeline, Jitter the chosen preset over its intensity
+   * slider (mobbin.com/screens/52027cf8-1895-4b57-9a0d-1323cdd0da87,
+   * mobbin.com/screens/807d0e3b-dec5-4e50-bfbe-431b86815e31). A curve kept
+   * in a clip's frames has no line of its own to draw.
+   */
+  const GRAPH = { w: 160, h: 90, low: -0.25, high: 1.25 } as const;
+  const yOf = (progress: number) =>
+    (GRAPH.h * (GRAPH.high - progress)) / (GRAPH.high - GRAPH.low);
+  const preview = $derived.by((): string | null => {
+    if (curve.shape === "own" && !bezier) {
+      return null;
+    }
+    if (curve.shape === "spring" && first.spring) {
+      const spring =
+        held === null
+          ? first.spring
+          : {
+              ...springOf(responseOf(first.spring), held),
+              mass: first.spring.mass,
+            };
+      const points = springEasing(spring)
+        .easing.slice("linear(".length, -1)
+        .split(",")
+        .map(Number);
+      return points
+        .map(
+          (at, i) =>
+            `${i === 0 ? "M" : "L"}${((GRAPH.w * i) / (points.length - 1)).toFixed(1)} ${yOf(at).toFixed(1)}`
+        )
+        .join(" ");
+    }
+    const bent =
+      held !== null &&
+      (curve.shape === "smooth" ||
+        curve.shape === "slowDown" ||
+        curve.shape === "speedUp")
+        ? bezierOf(easingOf(curve.shape, held))
+        : bezier;
+    const [x1 = 0, y1 = 0, x2 = 1, y2 = 1] = bent ?? [];
+    return `M0 ${yOf(0)} C${GRAPH.w * x1} ${yOf(y1)} ${GRAPH.w * x2} ${yOf(y2)} ${GRAPH.w} ${yOf(1)}`;
+  });
+
   const field =
     "hit-under touch-hit h-c-btn-h-sm w-full min-w-0 rounded-md border border-border-control bg-surface-raised px-space-2 type-label text-ink-strong num";
   const chip = (on: boolean) => [
@@ -276,6 +321,7 @@
         {/if}
       </fieldset>
 
+      <!-- mark-line: a column; the curve's graph stands under the shapes, beside no words -->
       <fieldset class="m-0 flex min-w-0 flex-col gap-space-2 border-0 p-0">
         <legend class="mb-space-2 type-label text-ink-muted"
           >{words.curve}</legend
@@ -312,6 +358,30 @@
             </button>
           {/each}
         </div>
+        {#if preview}
+          <svg
+            aria-hidden="true"
+            class="aspect-16/10 w-full overflow-visible rounded-md bg-surface-recess text-ink-strong"
+            data-slot="curve-graph"
+            fill="none"
+            preserveAspectRatio="none"
+            viewBox="0 0 {GRAPH.w} {GRAPH.h}"
+          >
+            <path
+              class="stroke-border-control"
+              d="M0 {yOf(0)} H{GRAPH.w} M0 {yOf(1)} H{GRAPH.w}"
+              stroke-dasharray="2 3"
+              vector-effect="non-scaling-stroke"
+            />
+            <path
+              d={preview}
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.5"
+              vector-effect="non-scaling-stroke"
+            />
+          </svg>
+        {/if}
         {#if curve.shape === "own"}
           <p class="m-0 type-meta text-ink-muted">{words.ownShape}</p>
         {/if}
