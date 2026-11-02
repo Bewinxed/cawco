@@ -258,11 +258,7 @@ export { default as IconHook } from "~icons/solar/routing-2-bold-duotone";
 /** A tab split under it (its menu's Split down). */
 export { default as IconSplitDown } from "~icons/solar/rows-2-bold-duotone";
 export { default as IconRulerPen } from "~icons/solar/ruler-cross-pen-bold-duotone";
-/** Two things weighed against each other: Compare. */
-export {
-  default as IconJev,
-  default as IconCompare,
-} from "~icons/solar/scale-bold-duotone";
+export { default as IconJev } from "~icons/solar/scale-bold-duotone";
 export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
 export { default as IconServerAlt } from "~icons/solar/server-bold-duotone";
 export { default as IconServerSquare } from "~icons/solar/server-square-bold-duotone";
@@ -296,8 +292,6 @@ export {
 export { default as IconStructureSolid } from "~icons/solar/structure-bold";
 export { default as IconStructure } from "~icons/solar/structure-bold-duotone";
 export { default as IconSun } from "~icons/solar/sun-bold-duotone";
-/** A tablet: the stage drawn at a tablet's width. */
-export { default as IconTablet } from "~icons/solar/tablet-bold-duotone";
 export { default as IconLab } from "~icons/solar/test-tube-bold-duotone";
 /** A transfer; a tab moved to another group (its menu's Move to group). */
 export {
