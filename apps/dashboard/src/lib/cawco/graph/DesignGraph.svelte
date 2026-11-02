@@ -353,9 +353,15 @@
     playhead = t;
     replays.seek(clipsNow(), t);
   };
-  /** The clips he tuned put in the move, which plays again on the stage at once. */
+  /**
+   * The clips he tuned put in the move, which plays at once from where the
+   * changed row now begins: he nudges a length or a curve "and feel[s] the
+   * difference before he writes a remark" (spec.md §2, "That's too slow.
+   * Let me try 260."), and the difference is that row's. What ran before
+   * it stands at its end; what runs with it plays with it.
+   */
   const retime = (changed: readonly Clip[]) => {
-    if (move.kind !== "ready") {
+    if (move.kind !== "ready" || changed.length === 0) {
       return;
     }
     const by = new Map(changed.map((clip) => [clip.id, clip]));
@@ -363,7 +369,7 @@
       ...move,
       clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
     };
-    playhead = 0;
+    playhead = Math.min(...changed.map((clip) => clip.start + clip.delay));
     play(1);
   };
 
