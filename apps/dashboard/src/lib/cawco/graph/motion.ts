@@ -10,14 +10,16 @@
  */
 import { graphWords as words } from "@cawco/core/words/graph";
 import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
-import { nameOf } from "./names";
+import { nameOf, thingOf } from "./names";
 
-/** How the person tuned a clip: a length, a delay, and a curve or a spring. */
-export interface Tuning {
+/** How the person tuned a clip: when it begins, how long it runs, and its curve. */
+interface Tuning {
   delay: number;
   duration: number;
-  /** A CSS easing: a token's curve, `cubic-bezier(…)`, or a spring's `linear(…)`. */
+  /** A CSS easing: `cubic-bezier(…)`, `linear`, or a spring's `linear(…)`. */
   easing: string;
+  /** A curve was chosen: a clip whose curve lived in its frames runs from its first frame to its last on it. */
+  shaped: boolean;
   /** The spring it was drawn from, when it is one. */
   spring: Spring | null;
 }
@@ -32,14 +34,14 @@ export interface Spring {
 export interface Clip {
   /** Neither its length nor its curve is a token's. */
   adHoc: boolean;
-  /** Its curve in words: a token's name, else what it is. */
+  /** Its curve in the house's words (a token's name), for the editor's token line alone. */
   curve: string;
   delay: number;
   duration: number;
   easing: string;
-  /** What moves, in words. */
+  /** What moves, in words: the thing a person names (`thing`), as it stands once the move has ended. */
   element: string;
-  /** Whether its curve is drawn into its frames, so only its length can change. */
+  /** Whether its curve is drawn into its frames. */
   framed: boolean;
   /** Its frames, as the engine ran them: what a replay draws. */
   frames: Keyframe[];
@@ -47,18 +49,22 @@ export interface Clip {
   how: string;
   id: string;
   property: string;
+  /** The spring it runs on, when the person drew one. */
+  spring: Spring | null;
   /** Since the move began, ms. */
   start: number;
   /** The element it moves, as the engine ran it. */
   target: Element | null;
+  /** What a person names for it: the control it is part of, else the element itself. One row of the move each. */
+  thing: Element | null;
   /** Its length's token, when one names it. */
   token: string | null;
-  /** What it was before the person tuned it, when they did. */
-  was: Tuning | null;
+  /** The clip as the engine ran it, when the person tuned it. */
+  was: Clip | null;
 }
 
 /** The duration ladder a clip may name (DESIGN.md, Motion grammar). */
-export const LADDER = [
+const LADDER = [
   "--dur-toggle",
   "--dur-control",
   "--dur-exit",
@@ -75,7 +81,7 @@ export const LADDER = [
 ] as const;
 
 /** The house curves, by token. */
-export const CURVES = [
+const CURVES = [
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
@@ -168,11 +174,14 @@ export function clipOf(animation: Animation, start: number, at: number): Clip {
     properties[0] ??
     "";
   const target = effect?.target ?? null;
+  const thing = target ? thingOf(target) : null;
   return {
     id: `${at}`,
     target,
+    thing,
+    spring: null,
     frames: effect?.getKeyframes() ?? [],
-    element: target ? nameOf(target) : words.element,
+    element: thing ? nameOf(thing) : words.element,
     property,
     how: words.how[first] ?? words.changes,
     start,
@@ -256,39 +265,281 @@ export class Replays {
   }
 }
 
-/** A tuned clip's curve in words: a framed clip keeps its own; a spring is a spring. */
-function curveAfter(clip: Clip, tuning: Tuning, easing: string): string {
-  if (clip.framed) {
-    return clip.curve;
-  }
-  return tuning.spring ? words.spring : curveWords(easing);
-}
-
-/** The clip run with the person's tuning, its old timing kept as `was`. */
-export function tune(clip: Clip, tuning: Tuning): Clip {
-  const was: Tuning = clip.was ?? {
-    delay: clip.delay,
-    duration: clip.duration,
-    easing: clip.easing,
-    spring: null,
-  };
+/** The clip run with the person's tuning; the clip as the engine ran it kept as `was`. */
+function tune(clip: Clip, tuning: Tuning): Clip {
+  const was = clip.was ?? clip;
   const token = tokenOf(tuning.duration);
-  const easing = clip.framed ? clip.easing : tuning.easing;
+  // A curve chosen for a clip whose curve lived in its frames: it runs from its first frame to its last on that curve.
+  const unframe = clip.framed && tuning.shaped;
+  const frames = unframe ? endsOf(clip.frames) : clip.frames;
+  const framed = clip.framed && !unframe;
+  const easing = framed ? clip.easing : tuning.easing;
   return {
     ...clip,
     delay: tuning.delay,
     duration: tuning.duration,
     easing,
-    curve: curveAfter(clip, tuning, easing),
+    frames,
+    framed,
+    spring: framed ? null : tuning.spring,
+    curve: framed ? "" : curveWords(easing),
     token,
-    adHoc: token === null || (!clip.framed && curveTokenOf(easing) === null),
+    adHoc: token === null || (!framed && curveTokenOf(easing) === null),
     was,
   };
 }
 
+/** A run of frames as its first and its last, their timing keys dropped. */
+function endsOf(frames: readonly Keyframe[]): Keyframe[] {
+  const bare = (frame: Keyframe | undefined): Keyframe =>
+    Object.fromEntries(
+      Object.entries(frame ?? {}).filter(([key]) => !MOTION_KEYS.has(key))
+    );
+  return [bare(frames[0]), bare(frames.at(-1))];
+}
+
 /** The clip put back as the engine ran it. */
-export const untune = (clip: Clip): Clip =>
-  clip.was ? tune({ ...clip, was: null }, clip.was) : clip;
+export const untune = (clip: Clip): Clip => clip.was ?? clip;
+
+/**
+ * One row of the move: one thing on the stage that moves, every clip that
+ * moves it together (a button's two labels cross-fading are the button
+ * changing). Its stretches are its clips' windows run together where they
+ * overlap.
+ */
+export interface Track {
+  /** Since the move began, ms: its first clip's begin. */
+  begins: number;
+  clips: Clip[];
+  /** Its last clip's end, ms. */
+  ends: number;
+  how: string;
+  /** Its first clip's id. */
+  id: string;
+  /** The one length its stretches share, else null. */
+  length: number | null;
+  name: string;
+  spans: { from: number; to: number }[];
+  thing: Element | null;
+}
+
+const beginOf = (clip: Clip) => clip.start + clip.delay;
+const endOf = (clip: Clip) => beginOf(clip) + clip.duration;
+
+/** Its how in words: one element's most telling, or "changes" for a thing whose parts move. */
+function howOf(clips: readonly Clip[]): string {
+  if (new Set(clips.map((clip) => clip.target)).size > 1) {
+    return words.changes;
+  }
+  const said = new Set(clips.map((clip) => clip.how));
+  return Object.values(words.how).find((how) => said.has(how)) ?? words.changes;
+}
+
+/** A track's stretches: its clips' windows, run together where they overlap. */
+function spansOf(sorted: readonly Clip[]): Track["spans"] {
+  const spans: Track["spans"] = [];
+  for (const clip of sorted) {
+    const last = spans.at(-1);
+    if (last && beginOf(clip) <= last.to) {
+      last.to = Math.max(last.to, endOf(clip));
+    } else {
+      spans.push({ from: beginOf(clip), to: endOf(clip) });
+    }
+  }
+  return spans;
+}
+
+/** The move's rows: its clips by the thing each moves, in the order each thing first moves. */
+export function tracksOf(clips: readonly Clip[]): Track[] {
+  const by = new Map<Element | string, Clip[]>();
+  for (const clip of clips) {
+    const key = clip.thing ?? clip.id;
+    by.set(key, [...(by.get(key) ?? []), clip]);
+  }
+  return [...by.values()]
+    .map((own): Track => {
+      const sorted = [...own].sort((a, b) => beginOf(a) - beginOf(b));
+      const spans = spansOf(sorted);
+      const lengths = new Set(spans.map((span) => span.to - span.from));
+      const first = sorted[0] as Clip;
+      return {
+        id: first.id,
+        clips: sorted,
+        thing: first.thing,
+        name: first.element,
+        how: howOf(sorted),
+        begins: beginOf(first),
+        ends: Math.max(...sorted.map(endOf)),
+        spans,
+        length: lengths.size === 1 ? ([...lengths][0] ?? null) : null,
+      };
+    })
+    .sort((a, b) => a.begins - b.begins);
+}
+
+/** When the track begins after the moment the move set it off, ms: its delay. */
+export const delayOf = (track: Track): number =>
+  track.begins - Math.min(...track.clips.map((clip) => clip.start));
+
+/**
+ * The track's clips moved and stretched so it runs from `from` to `to` ms
+ * into the move: each clip keeps its place and share of the track. A clip
+ * never begins before the moment the move set it off.
+ */
+export function retime(track: Track, from: number, to: number): Clip[] {
+  const scale = (to - from) / Math.max(1, track.ends - track.begins);
+  return track.clips.map((clip) => {
+    const begins = from + (beginOf(clip) - track.begins) * scale;
+    return tune(clip, {
+      delay: Math.max(0, Math.round(begins - clip.start)),
+      duration: Math.max(1, Math.round(clip.duration * scale)),
+      easing: clip.easing,
+      shaped: false,
+      spring: clip.spring,
+    });
+  });
+}
+
+/** Every clip of the track given one curve, and with a spring its length too. */
+export const reshape = (
+  track: Track,
+  easing: string,
+  spring: Spring | null,
+  duration?: number
+): Clip[] =>
+  track.clips.map((clip) =>
+    tune(clip, {
+      delay: clip.delay,
+      duration: duration ?? clip.duration,
+      easing,
+      shaped: true,
+      spring,
+    })
+  );
+
+/** Every clip of the track given one length, on its curve. */
+export const relength = (track: Track, duration: number): Clip[] =>
+  track.clips.map((clip) =>
+    tune(clip, {
+      delay: clip.delay,
+      duration,
+      easing: clip.easing,
+      shaped: false,
+      spring: clip.spring,
+    })
+  );
+
+/** Every clip of the track begun `delay` ms after the moment the move set it off. */
+export const redelay = (track: Track, delay: number): Clip[] => {
+  const by = delay - delayOf(track);
+  return track.clips.map((clip) =>
+    tune(clip, {
+      delay: Math.max(0, clip.delay + by),
+      duration: clip.duration,
+      easing: clip.easing,
+      shaped: false,
+      spring: clip.spring,
+    })
+  );
+};
+
+/**
+ * A curve in plain words, as motion tools name them (Jitter's presets, each
+ * with its intensity: jitter.video/changelog/2023-11-08-easings-intensity):
+ * a shape and how strongly it bends, from 0 (a straight line) to 1.
+ */
+export type Shape = "linear" | "smooth" | "slowDown" | "speedUp" | "spring";
+type Bent = "smooth" | "slowDown" | "speedUp";
+
+/** The straight line, and each shape at its strongest, as cubic-bezier's four numbers. */
+const LINE = [1 / 3, 1 / 3, 2 / 3, 2 / 3];
+const STRONGEST: Record<Bent, number[]> = {
+  smooth: [0.87, 0, 0.13, 1],
+  slowDown: [0.16, 1, 0.3, 1],
+  speedUp: [0.7, 0, 0.84, 0],
+};
+/** CSS's keywords as their four numbers (CSS Easing Functions Level 1). */
+const KEYWORDS: Record<string, number[]> = {
+  ease: [0.25, 0.1, 0.25, 1],
+  "ease-in": [0.42, 0, 1, 1],
+  "ease-out": [0, 0, 0.58, 1],
+  "ease-in-out": [0.42, 0, 0.58, 1],
+  linear: LINE,
+};
+/** How far off a shape a curve may stand and still be called by its name. */
+const NEAR = 0.2;
+/** A straight line, near enough. */
+const STRAIGHT = 0.02;
+
+/** A cubic-bezier's four numbers, from its CSS; null for a spring's `linear(…)` or steps. */
+export function bezierOf(easing: string): number[] | null {
+  const said = easing.trim();
+  const keyword = KEYWORDS[said];
+  if (keyword) {
+    return keyword;
+  }
+  const numbers = said.startsWith("cubic-bezier")
+    ? (said.match(NUMBERS) ?? []).map(Number)
+    : [];
+  return numbers.length === 4 ? numbers : null;
+}
+
+/** Four numbers as CSS. */
+export const cubic = (at: readonly number[]): string =>
+  // golar-ignore-next-line house/no-raw-motion -- a curve for the component under review, never the dashboard's own motion
+  `cubic-bezier(${at.map((one) => Number(one.toFixed(3))).join(", ")})`;
+
+/** A shape at `intensity`, as CSS. */
+export const easingOf = (shape: Bent, intensity: number): string =>
+  cubic(
+    LINE.map((one, i) => one + ((STRONGEST[shape][i] ?? one) - one) * intensity)
+  );
+
+/** How near `bezier` stands to `shape`, and at what intensity. */
+function nearness(
+  bezier: readonly number[],
+  shape: Bent
+): { intensity: number; off: number } {
+  const way = LINE.map((one, i) => (STRONGEST[shape][i] ?? one) - one);
+  const from = bezier.map((one, i) => one - (LINE[i] ?? 0));
+  const along =
+    way.reduce((sum, one, i) => sum + one * (from[i] ?? 0), 0) /
+    way.reduce((sum, one) => sum + one * one, 0);
+  const intensity = Math.max(0, Math.min(1, along));
+  return {
+    intensity,
+    off: Math.hypot(...from.map((one, i) => one - (way[i] ?? 0) * intensity)),
+  };
+}
+
+/** A clip's curve as a shape and its intensity; `own` when no shape is near it. */
+export function shapeOfCurve(
+  easing: string,
+  spring: Spring | null
+): { intensity: number; shape: Shape | "own" } {
+  if (spring) {
+    return { shape: "spring", intensity: spring.bounce };
+  }
+  const bezier = bezierOf(easing);
+  if (!bezier) {
+    return { shape: "own", intensity: 0 };
+  }
+  if (bezier.every((one, i) => Math.abs(one - (LINE[i] ?? 0)) < STRAIGHT)) {
+    return { shape: "linear", intensity: 0 };
+  }
+  let best: { intensity: number; off: number; shape: Shape | "own" } = {
+    shape: "own",
+    intensity: 0,
+    off: NEAR,
+  };
+  for (const shape of Object.keys(STRONGEST) as Bent[]) {
+    const near = nearness(bezier, shape);
+    if (near.off < best.off) {
+      best = { shape, ...near };
+    }
+  }
+  return { shape: best.shape, intensity: best.intensity };
+}
 
 const STEP = 1 / 120;
 const SETTLED = 0.001;
