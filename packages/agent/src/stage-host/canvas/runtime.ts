@@ -53,7 +53,6 @@ import {
   sectionName,
   sectionPlansOf,
 } from "@cawco/core/stage";
-import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { shellWords } from "@cawco/core/words/shell";
 import { Chrome } from "./chrome";
 import {
@@ -70,6 +69,7 @@ import {
   snapshot,
   valuesOf,
 } from "./measure";
+import { queriesIn, userEventIn } from "./play";
 import {
   allClass,
   emptyReach,

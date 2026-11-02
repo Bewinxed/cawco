@@ -91,7 +91,7 @@ export const OpenManyMembers = {
 /** Many members on the grid, one unreachable and one that can't run. */
 export const ManyMembersDesk = {
   args: { members: added, facts: addedFacts },
-  parameters: { viewport: 1440, records: "members" },
+  parameters: { viewport: 1440 },
 };
 
 /** The hub writing Approach's hand-over: its glyph breathes. */
@@ -107,7 +107,6 @@ export const Handing = {
 
 /** The hub refused Approach's hand-over: its words stand under the tile, with Try again. */
 export const Refused = {
-  tags: ["failure"],
   args: {
     fault: {
       kinds: ["approach"],

@@ -8,7 +8,6 @@
  * meta's args are every story's; a story's own args are what it changes.
  */
 
-import type { CanvasQueries, UserEvent } from "@cawco/core/stage-play";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { routinesWords } from "@cawco/core/words/routines";
 import RoutineForm from "./RoutineForm.svelte";
@@ -104,28 +103,6 @@ const hub = (over: Partial<RoutineFormHub> = {}): RoutineFormHub => ({
   create: () => new Promise(() => undefined),
   ...over,
 });
-
-/** The hub refusing a create a moment after it was asked: it couldn't reach the project's machine. */
-const refusing = hub({
-  create: () =>
-    new Promise((_, refuse) =>
-      setTimeout(() => refuse(new Error("The hub didn't answer (502).")), 600)
-    ),
-});
-
-/** What a flow's `play` is handed on the canvas (core stage-play.ts). */
-interface Play {
-  canvas: CanvasQueries;
-  update: (next: Record<string, unknown>) => Promise<void>;
-  userEvent: UserEvent;
-}
-
-const CREATE = new RegExp(`^${routinesWords.createRoutine}`, "u");
-
-/** Create pressed on the filled form. */
-const pressCreate = async ({ canvas, userEvent }: Play) => {
-  await userEvent.click(canvas.getByRole("button", { name: CREATE }));
-};
 
 /** A prompt three times the usual length, in one paragraph, for the narrow frames. */
 const LONG_PROMPT =
@@ -226,7 +203,6 @@ export const CustomPhone = {
 
 /** A custom schedule the hub can't read: the form's own sentence under it, naming the five values in order with an example, and no read-back. */
 export const InvalidSchedule = {
-  tags: ["failure"],
   args: { draft: unreadable },
   parameters: { viewport: 1440 },
 };
@@ -241,8 +217,6 @@ export const InvalidSchedulePhone = {
 export const Saving = {
   args: { draft: filled, saving: true },
   parameters: { viewport: 1440 },
-  from: "Filled",
-  play: pressCreate,
 };
 
 /** Creating, on a phone. */
@@ -255,13 +229,6 @@ export const SavingPhone = {
 export const FailedSave = {
   args: { draft: filled, failure: unanswered },
   parameters: { viewport: 1440 },
-  tags: ["failure"],
-  from: "Filled",
-  play: async (context: Play) => {
-    await context.update({ hub: refusing });
-    await pressCreate(context);
-    await context.userEvent.wait(800);
-  },
 };
 
 /** The hub didn't answer the create, on a phone. */
@@ -272,14 +239,12 @@ export const FailedSavePhone = {
 
 /** The hub refused the delegate type: its words, and choose another. */
 export const FailedType = {
-  tags: ["failure"],
   args: { draft: filled, failure: noType },
   parameters: { viewport: 1440 },
 };
 
 /** The project's delegate types couldn't be read: why, and the hub's pick stands. */
 export const TypesUnread = {
-  tags: ["failure"],
   args: {
     draft: filled,
     hub: hub({
