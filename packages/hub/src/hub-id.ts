@@ -16,6 +16,8 @@ import { DB_PATH } from "./config";
 const HUB_ID_PATH = resolve(dirname(DB_PATH), "hub-id");
 
 let id: string | undefined;
+/** Whether this process minted {@link id}: no hub ran in this database's folder before it. */
+let minted = false;
 
 /** This hub's id, read once (minted and written on the first run). */
 export const hubId = (): string => {
@@ -29,8 +31,19 @@ export const hubId = (): string => {
     id = kept;
     return id;
   }
-  const minted = crypto.randomUUID();
-  writeStateFileSync(HUB_ID_PATH, `${minted}\n`, { mode: 0o600 });
-  id = minted;
+  const made = crypto.randomUUID();
+  writeStateFileSync(HUB_ID_PATH, `${made}\n`, { mode: 0o600 });
+  id = made;
+  minted = true;
   return id;
+};
+
+/**
+ * Whether this hub's id was kept beside the database by an earlier start:
+ * false on the first start in its folder, which is also where a copy of
+ * another hub's database (a `VACUUM INTO` a scratch hub boots on) starts.
+ */
+export const hubIdKept = (): boolean => {
+  hubId();
+  return !minted;
 };

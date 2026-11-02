@@ -367,6 +367,16 @@ export const sshMachines = sqliteTable(
   {
     /** 12 random hex: names the connection's control socket (ssh-tunnels.ts `controlPath`). */
     id: text("id").primaryKey(),
+    /**
+     * The hub that holds this connection, by its id (hub-id.ts, kept beside
+     * the database): the one hub that opens it, ends its stale session and
+     * admits its machine. A copy of the database (a scratch hub booted on a
+     * `VACUUM INTO` of the live one) starts with an id of its own, so it
+     * leaves every row of the hub it was copied from alone. Null on a row
+     * made before rows named their hub, until that hub claims it
+     * (db/ssh-machines.ts `claim`).
+     */
+    hubId: text("hub_id"),
     /** `user@host`, or a `Host` from the hub user's `~/.ssh/config`. */
     target: text("target").notNull(),
     /** The SSH port the person gave, or null: whatever `ssh` connects to. */

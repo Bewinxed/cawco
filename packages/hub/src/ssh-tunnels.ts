@@ -40,6 +40,13 @@
  * A connection that ends is opened again, after 1 s, doubling to a minute
  * while it keeps failing; and every joined machine's is opened when the hub
  * starts. A hub that is down is a machine offline, like any machine.
+ *
+ * Only the hub that added a machine holds its connection: each record names
+ * its hub (`ssh_machines.hub_id`, the id hub-id.ts keeps beside the
+ * database), and this hub reads no other's (db/ssh-machines.ts). A scratch
+ * hub booted on a copy of another hub's database has an id of its own, so
+ * it dials none of that hub's machines: it neither ends the session that
+ * hub holds the machine's port with (step 2) nor takes the machine over.
  */
 
 import { randomBytes } from "node:crypto";
@@ -56,6 +63,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
+import { hubIdKept } from "./hub-id";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { SshDoor } from "./ssh-door";
 
@@ -272,7 +280,7 @@ export interface SshTunnels {
     sshPort: number | null,
     line: (text: string) => void
   ) => TunnelOpen;
-  /** Opens every joined machine's connection: the hub starting. */
+  /** Opens the connection of every joined machine this hub holds: the hub starting. */
   readonly start: () => void;
 }
 
@@ -989,6 +997,18 @@ export const createSshTunnels = ({
       }
     },
     start: () => {
+      const claimed = db.claim(hubIdKept());
+      if (claimed > 0) {
+        console.info(
+          `[ssh] ${claimed} machine${claimed === 1 ? "" : "s"} added over SSH before records named their hub: this hub's, which added them`
+        );
+      }
+      const elsewhere = db.heldElsewhere();
+      if (elsewhere > 0) {
+        console.info(
+          `[ssh] ${elsewhere} machine${elsewhere === 1 ? "" : "s"} in this database ${elsewhere === 1 ? "is" : "are"} held by another hub (this database is a copy of its): this hub opens no connection to ${elsewhere === 1 ? "it" : "them"}`
+        );
+      }
       for (const row of db.unjoined()) {
         db.remove(row.id);
       }

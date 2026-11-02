@@ -123,6 +123,7 @@ import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { type DelegateTypesShape, makeDelegateTypes } from "../delegate-types";
 import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
+import { hubId } from "../hub-id";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
@@ -9867,7 +9868,7 @@ const make = async (path: string): Promise<DbShape> => {
     ingress: ingressDb(db),
     relays: relaysDb(db),
     asks: asksDb(db),
-    sshMachines: sshMachinesDb(db),
+    sshMachines: sshMachinesDb(db, hubId),
     memoryFacts: memoryFactsDb(db),
     trackers: trackersDb(db),
     taskLinks: taskLinksOf,

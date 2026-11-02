@@ -2402,6 +2402,13 @@
       "when": 1793642676773,
       "tag": "0350_delegate_events_parent",
       "breakpoints": true
+    },
+    {
+      "idx": 351,
+      "version": "6",
+      "when": 1793644679951,
+      "tag": "0351_ssh_machines_hub",
+      "breakpoints": true
     }
   ]
 }
