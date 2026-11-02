@@ -13,7 +13,8 @@
   as Canvas's Open to draw does. Each draws the version the page's media
   names, the artifact's newest, whatever version its panel keeps open. A
   page stands at its own address on this page's origin
-  (`/__cawco/page/<id>/`); naming no width it is as tall as
+  (`/__cawco/page/<id>/`), loaded at once with no turn, a screen's skeleton
+  standing over it until its frame has loaded; naming no width it is as tall as
   its content up to the media cap. One taller than its frame scrolls inside
   it, the house edge fade over its head and foot while more is past them,
   so nothing is cut off without a way to see it. A dev server's or a
@@ -680,21 +681,34 @@
     return () => clearTimeout(after);
   });
 
-  /** It stands drawn: a screen once its frame has loaded, a canvas once it has also said its shape. */
-  const standing = $derived(screen ? shaped : shaped && drawn);
+  /** A page's own address on this page's origin, which its frame loads at once (it takes no turn); null for any other kind. */
+  const pageAddress = $derived(
+    held?.kind === "page" ? `/__cawco/page/${held.id}/` : null
+  );
+  /** The page address its frame last finished loading: it stands drawn while that is the one it shows. */
+  let pageLoaded = $state<string | null>(null);
+  /** It has a frame to wait for: a page, or an embed the hub opened an origin for. */
+  const framed = $derived(pageAddress !== null || !!held?.embed);
+  /** It stands drawn: a page or a screen once its frame has loaded, a canvas once it has also said its shape. */
+  const standing = $derived.by(() => {
+    if (pageAddress !== null) {
+      return pageLoaded === pageAddress;
+    }
+    return screen ? shaped : shaped && drawn;
+  });
   /**
-   * What the embed's status says while it isn't drawn: waiting for its turn
+   * What its status says while it isn't drawn: an embed waiting for its turn
    * among the page's embeds (or for its card to come near the view), or
-   * opening on its turn; nothing once it stands drawn or failed. Its line
-   * arrives after `--dur-wait-grace` by CSS (`animate-wait-grace-in`), from
-   * the moment it mounts, so every Preview not yet drawn says so, wherever it
-   * is in the queue.
+   * opening on its turn; a page opening from the moment it mounts; nothing
+   * once it stands drawn or failed. Its line arrives after `--dur-wait-grace`
+   * by CSS (`animate-wait-grace-in`), from the moment it mounts, so every
+   * Preview not yet drawn says so, wherever it is in the queue.
    */
   const waitLine = $derived.by(() => {
-    if (!held?.embed || standing || failed) {
+    if (!framed || standing || failed) {
       return "";
     }
-    return turnState === "waiting"
+    return pageAddress === null && turnState === "waiting"
       ? decisionsWords.previewQueued(named())
       : decisionsWords.previewOpening(named());
   });
@@ -774,34 +788,47 @@
   fills={pageSized && picture === undefined}
   {picture}
   said={refusal}
-  status={held?.embed && !fault ? wait : undefined}
+  status={framed && !fault ? wait : undefined}
 >
-  {#if held?.kind === "page"}
-    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. -->
-    <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load measures the page, so the frame is as tall as it. -->
-    <!-- biome-ignore lint/security/useIframeSandbox: a page CawCo serves itself under /__cawco, which needs scripts and its own origin to run, and with both a sandbox holds nothing back. -->
-    <iframe
-      bind:this={frame}
-      class={[
-        "block rounded-xs border-0 bg-surface-page not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
-        screenTall === null && "max-h-c-media-max-h",
-        picture === undefined ? "w-full" : "flex-none",
-        tall === null && screenTall === null && "aspect-16/10",
-      ]}
-      data-cawco-artifact={id}
-      data-more-above={more.above || undefined}
-      data-more-below={more.below || undefined}
-      data-slot="embed"
-      onload={sized}
-      src={`/__cawco/page/${held.id}/`}
-      style:--fade="var(--c-edge-fade-len)"
-      style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
-      style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
-      style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
-      style:block-size={framedHeight}
-      style:inline-size={picture === undefined ? undefined : `${picture}px`}
-      title={named()}
-    ></iframe>
+  {#if pageAddress !== null}
+    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. Until its frame has loaded it holds a screen's skeleton at the frame's own box, and past the grace the wait's line stands over it (`status`), as a screen's embed does: never a blank box. -->
+    <div class={["relative", picture === undefined ? "w-full" : "flex-none"]}>
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load measures the page, so the frame is as tall as it, and says it stands drawn. -->
+      <!-- biome-ignore lint/security/useIframeSandbox: a page CawCo serves itself under /__cawco, which needs scripts and its own origin to run, and with both a sandbox holds nothing back. -->
+      <iframe
+        bind:this={frame}
+        class={[
+          "block rounded-xs border-0 bg-surface-page transition-opacity duration-(--dur-fade) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
+          screenTall === null && "max-h-c-media-max-h",
+          picture === undefined ? "w-full" : "flex-none",
+          tall === null && screenTall === null && "aspect-16/10",
+          !standing && "opacity-0",
+        ]}
+        data-cawco-artifact={id}
+        data-drawn={standing || undefined}
+        data-more-above={more.above || undefined}
+        data-more-below={more.below || undefined}
+        data-slot="embed"
+        onload={(event) => {
+          pageLoaded = event.currentTarget.getAttribute("src");
+          sized();
+        }}
+        src={pageAddress}
+        style:--fade="var(--c-edge-fade-len)"
+        style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
+        style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+        style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+        style:block-size={framedHeight}
+        style:inline-size={picture === undefined ? undefined : `${picture}px`}
+        title={named()}
+      ></iframe>
+      {#if !standing}
+        <!-- The screen's skeleton over the page still loading; it goes in its reveal. -->
+        <div class="absolute inset-0" out:reveal>
+          {@render screenWait()}
+        </div>
+      {/if}
+    </div>
   {:else if held?.embed}
     <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so its box holds its picture's own shape as the page's media knows it from its first paint (the kit's picture where none was ever drawn), its skeleton a layer over it until it stands drawn (said and loaded), its frame loading at no height under that layer, then at its own height. Past the grace the wait's line stands at the box's top over the skeleton, until it stands drawn; then the row stands over the frame, empty. An origin that can't be reached, a frame the proxy's own page stands in, a canvas that says it can't draw, or one that says nothing within DRAW_MS says why in its place and shape past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div
