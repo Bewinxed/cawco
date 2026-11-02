@@ -53,6 +53,11 @@ export const noticeWords = {
   makeTasks: (title: string) => `Asked to make tasks from “${title}”`,
   /** The person's approval of a task, told to the session that filed it (hub task-approval.ts). */
   approved: (title: string) => `Told you approved “${title}”`,
+  /** A setup page's place cloned onto its machine after the Send (hub server.ts `cloneProjectPlace`); `where` names the machine. */
+  cloned: (where: string) => `Told the repository is cloned onto ${where}`,
+  /** And when it could not be. */
+  cloneFailed: (where: string) =>
+    `Told the repository could not be cloned onto ${where}`,
   /** The person's Retry on failed work, from the tray (hub server.ts `retryFromTray`). */
   retried: "Asked to try its work again",
   /** What the agent was sent, as the row opens to it. */

@@ -56,7 +56,7 @@ export const SETUP_CARDS = [
   },
   {
     id: "place",
-    send: "Adds the machine and folder picked with cawco.pickPlace() as the project's checkout.",
+    send: "Adds the machine and folder picked with cawco.pickPlace() as the project's checkout. Picked with cawco.pickPlace({ clone: url }), it clones that repository into the folder first, after the Send, and its result comes to you as its own notice.",
   },
   {
     id: "routines",
@@ -159,26 +159,44 @@ export const setupFactsWords = (facts: SetupFacts): string =>
 export interface SetupApply {
   /** Renames the project (project-edit.ts, the dashboard's rename); a refusal throws. */
   name: (projectId: string, name: string) => Promise<void>;
-  /** Adds the place picked as the project's checkout; a refusal throws. */
-  place: (
-    projectId: string,
-    place: { machineId: string; path: string }
-  ) => Promise<void>;
+  /**
+   * Adds the place picked as the project's checkout, its `clone` URL cloned
+   * into `path` first when it names one; a refusal throws.
+   */
+  place: (projectId: string, place: PlacePicked) => Promise<void>;
   /** Applies a shipped template: its files, its starter skills, the project's template (tasks.ts `applyTemplate`). */
   shape: (projectId: string, template: StagesTemplate) => Promise<void>;
 }
 
+/**
+ * The `place` pick as Send applies it: a machine and a folder on it, and the
+ * repository to clone there when the page named one (`cawco.pickPlace({ clone })`).
+ */
+export interface PlacePicked {
+  clone?: string;
+  machineId: string;
+  path: string;
+}
+
 const placeOf = (
   state: Record<string, ChoiceEntry>
-): { machineId: string; path: string } | undefined => {
+): PlacePicked | undefined => {
   const entry: ChoiceEntry | undefined = state.place;
   const value = entry?.value as
-    { machineId?: unknown; path?: unknown } | null | undefined;
-  return typeof value?.machineId === "string" &&
+    { clone?: unknown; machineId?: unknown; path?: unknown } | null | undefined;
+  if (!(
+    typeof value?.machineId === "string" &&
     typeof value.path === "string" &&
     value.path.startsWith("/")
-    ? { machineId: value.machineId, path: value.path }
-    : undefined;
+  )) {
+    return;
+  }
+  const clone = typeof value.clone === "string" ? value.clone.trim() : "";
+  return {
+    machineId: value.machineId,
+    path: value.path,
+    ...(clone ? { clone } : {}),
+  };
 };
 
 const nameOf = (state: Record<string, ChoiceEntry>): string | undefined => {
@@ -199,18 +217,24 @@ const shapeOf = (
  * When the person sends a project's setup page, by any path (the page's own
  * `cawco.send`, the panel's Send): the name in its `name` field, the shipped
  * template picked on `shape` and the place picked on `place` are applied
- * before Caw hears the picks, so he writes only the project's files. Any
+ * before Caw hears the picks, so he writes only the project's files. Only
+ * picks made since the last Send (`sentAt`) apply: a Send again for one
+ * pick (a place whose clone failed) leaves the stages Caw wrote alone. Any
  * other artifact is left alone. Answers whether it was the setup page.
  */
 export const applySetupPicks = async (
   artifact: { kind: string; name: string },
   projectId: string | null | undefined,
-  state: Record<string, ChoiceEntry>,
+  picks: Record<string, ChoiceEntry>,
+  sentAt: string | null,
   apply: SetupApply
 ): Promise<boolean> => {
   if (!projectId || artifact.kind !== "page" || artifact.name !== SETUP_PAGE) {
     return false;
   }
+  const state = Object.fromEntries(
+    Object.entries(picks).filter(([, entry]) => !sentAt || entry.at > sentAt)
+  );
   const name = nameOf(state);
   if (name) {
     await apply.name(projectId, name);

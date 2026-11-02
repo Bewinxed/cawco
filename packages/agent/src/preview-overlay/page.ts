@@ -1163,9 +1163,10 @@ declare global {
       /**
        * Asks the person for a machine and a folder on it, with CawCo's own
        * machine list and folder browser; the pick is stored under `place`
-       * like a `set`, and answered, or null when they cancel.
+       * like a `set`, and answered, or null when they cancel. With `clone`,
+       * the repository URL to clone into that folder rides the pick.
        */
-      pickPlace: () => Promise<PlacePick | null>;
+      pickPlace: (asked?: { clone?: string }) => Promise<PlacePick | null>;
     };
   }
 }
@@ -1173,9 +1174,11 @@ declare global {
 /**
  * A machine and a folder on it, as `cawco.pickPlace` answers: the machine's
  * id, its label (the name the dashboard shows it by, core `machineLabel`)
- * and the folder's full path.
+ * and the folder's full path; and the repository to clone there, when the
+ * page asked with one (hub setup.ts `PlacePicked`).
  */
 interface PlacePick {
+  clone?: string;
   label: string;
   machineId: string;
   path: string;
@@ -1228,11 +1231,13 @@ Object.defineProperty(window, "cawco", {
       }
       return () => listeners.delete(heard);
     }) as Window["cawco"]["on"],
-    pickPlace: async () => {
-      const place = placeOf(await askHost("cawco/pick-place", { pageHash }));
-      if (!place) {
+    pickPlace: async (asked?: { clone?: string }) => {
+      const picked = placeOf(await askHost("cawco/pick-place", { pageHash }));
+      if (!picked) {
         return null;
       }
+      const clone = asked?.clone?.trim();
+      const place = clone ? { ...picked, clone } : picked;
       await change({ choice: "place", pageHash, value: place });
       return place;
     },

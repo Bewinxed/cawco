@@ -1762,12 +1762,14 @@ export interface ArtifactServiceDeps {
   screen: (artifact: ArtifactRow, sync: string) => Promise<CanvasScreen>;
   /**
    * What a send applies before the session hears it (setup.ts
-   * `applySetupPicks`); a refusal throws and nothing is sent.
+   * `applySetupPicks`), `sentAt` the Send before it (null for the first);
+   * a refusal throws and nothing is sent.
    */
   sending: (
     instance: InstanceRow,
     artifact: ArtifactRow,
-    state: Record<string, ChoiceEntry>
+    state: Record<string, ChoiceEntry>,
+    sentAt: string | null
   ) => Promise<void>;
   /**
    * A workspace preview's server (agent stage.ts `ensureServed`), started or
@@ -8333,6 +8335,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
+     * Pick `choice` of artifact `id`, as it stands, counted as not sent: the
+     * hub could not apply it (a setup place whose clone failed), so the
+     * person's next Send carries it and applies it again.
+     */
+    unsend: (id: string, choice: string): void => {
+      if (!db.get(id)) {
+        return;
+      }
+      const entry = stateOf(docs.doc(id))[choice];
+      if (!entry) {
+        return;
+      }
+      docs.transact(id, "hub", (live) =>
+        live
+          .getMap("state")
+          .set(choice, { ...entry, at: new Date().toISOString() })
+      );
+    },
+
+    /**
      * The person's Send (the panel's Send, a page's `cawco.send`): their
      * picks are applied (`sending`) and the session hears it has new
      * responses to read ({@link ArtifactServiceDeps.signal}), the note
@@ -8377,6 +8399,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         throw error;
       }
       const { picked, note } = owes;
+      const { sentAt } = metaOf(doc);
       saySend(
         row,
         body,
@@ -8387,7 +8410,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         )
       );
       if (picked) {
-        await deps.sending(instance, row, state);
+        await deps.sending(instance, row, state, sentAt);
       }
       await deps.signal(instance, row, { since: row.deliveredSeq });
       const at = new Date().toISOString();

@@ -76,7 +76,7 @@ For values the person tunes rather than picks (a radius, a colour, a spring), ke
 - `cawco.set(key, value)` — any JSON value under a key of its own.
 - `cawco.send(text?, control?)` — the person's Send: you hear that the page has new responses, and `artifact_read` says your text beside their Send. `control` names what they pressed (`"page-send"` for the page's Send button, `"page-key"` for its ⌘/Ctrl+Enter), so the hub's journal can say it.
 - `cawco.on("picks", (picks) => …)` — the stored picks now and after every change, yours included (`artifact_update`'s patches arrive here too): `{ [id]: { options, note, value, pageHash, at } }`. Returns a function that stops listening.
-- `cawco.pickPlace()` — CawCo asks the person for a machine and a folder on it with its own pickers, stores the pick under `place` as `{ machineId, label, path }` and answers it, or null when they cancel. `label` is the name CawCo shows the machine by: a card names the place as "<label> — <path>".
+- `cawco.pickPlace()` — CawCo asks the person for a machine and a folder on it with its own pickers, stores the pick under `place` as `{ machineId, label, path }` and answers it, or null when they cancel. `cawco.pickPlace({ clone: url })` stores `clone` with it: the repository to clone into that folder. `label` is the name CawCo shows the machine by: a card names the place as "<label> — <path>".
 
 Each returns a promise that settles when the change is in the page's artifact, which the hub keeps: the page reads and writes the artifact's document itself, so a pick made in the panel, in the page's own tab or by your `artifact_update` patch shows in every open view.
 

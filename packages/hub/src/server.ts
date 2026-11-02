@@ -886,7 +886,7 @@ import {
 } from "./project-settings";
 import { createProjectStarters, starterRoutes } from "./project-starters";
 import { createProjectStops } from "./project-stops";
-import { readRemote } from "./projects";
+import { cloneRepository, readRemote } from "./projects";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
 import {
@@ -13538,6 +13538,105 @@ export const createServer = (
     };
   };
 
+  /** Each setup clone running now, by machine and folder ({@link cloneProjectPlace}). */
+  const clonesRunning = new Set<string>();
+
+  /**
+   * A setup page's place that names a repository to clone (setup.ts
+   * `PlacePicked`): checked now, then cloned once the Send has answered, as
+   * a clone takes as long as its repository and a Send's request ends long
+   * before that ({@link cloneRepository}, the machine's own git and
+   * credentials). Cloned, or found there already, it is added as the
+   * project's checkout, its remote read from the clone, which joins a
+   * project that has that remote already ({@link addProjectPlace}). Either
+   * way the session that holds the page (`instance`) is told, as a notice of
+   * the person's act; on a failure the page's `place` pick is counted as
+   * unsent again, so their next Send tries again. A Send again for a folder
+   * still being cloned is refused.
+   */
+  const cloneProjectPlace = (
+    instance: InstanceRow,
+    artifactId: string,
+    projectId: string,
+    place: { clone: string; machineId: string; path: string }
+  ): void => {
+    if (!db.project(projectId)) {
+      throw new PlaceRefusal(404, "No project with that id on this hub.");
+    }
+    if (!db.listAgents().some((row) => row.machineId === place.machineId)) {
+      throw new PlaceRefusal(404, "No machine with that id on this hub.");
+    }
+    const path = askedMachinePath(
+      place.machineId,
+      place.path,
+      (message, cause) => new PlaceRefusal(400, message, { cause })
+    );
+    const where = machineName(place.machineId);
+    const key = `${place.machineId}\0${path}`;
+    if (clonesRunning.has(key)) {
+      throw new PlaceRefusal(
+        409,
+        `${place.clone} is still being cloned onto ${where} at ${path}; the conversation hears when it ends.`
+      );
+    }
+    clonesRunning.add(key);
+    const failed = (why: string): void => {
+      artifacts.unsend(artifactId, "place");
+      sendYours(instance, {
+        by: "act",
+        line: noticeWords.cloneFailed(where),
+        text: `CawCo could not clone ${place.clone} onto ${where} at ${path}: ${why}. Nothing was added; the setup page's place pick stands unsent, so the person's next Send of the page tries it again.`,
+      });
+    };
+    const cloning = async (): Promise<void> => {
+      const outcome = await cloneRepository(
+        runOnMachine,
+        place.machineId,
+        where,
+        place.clone,
+        path
+      );
+      if (outcome.kind === "refused") {
+        failed(outcome.why);
+        return;
+      }
+      try {
+        await addProjectPlace(projectId, place.machineId, path);
+      } catch (error) {
+        failed(error instanceof Error ? error.message : String(error));
+        return;
+      }
+      // A remote another project has folds this one into it (project-merge.ts).
+      const into =
+        db.project(projectId) ??
+        db
+          .listProjects()
+          .find((project) =>
+            project.places.some(
+              (each) => each.machineId === place.machineId && each.path === path
+            )
+          );
+      sendYours(instance, {
+        by: "act",
+        line: noticeWords.cloned(where),
+        text: [
+          outcome.kind === "there"
+            ? `${path} on ${where} is a checkout of ${place.clone} already, so CawCo used it as it is: it is the project's checkout now.`
+            : `CawCo cloned ${place.clone} onto ${where} at ${path}: it is the project's checkout now.`,
+          ...(into && into.id !== projectId
+            ? [
+                `That repository was the project “${into.name}”'s already, so this project joined it: its tasks, files, places and this conversation are “${into.name}”'s now.`,
+              ]
+            : []),
+        ].join(" "),
+      });
+    };
+    detach(
+      cloning().finally(() => clonesRunning.delete(key)),
+      `setup clone ${where}:${path}`
+    );
+  };
+
   /**
    * The person's word on an artifact, to its session: one event of origin
    * {@link ARTIFACT_ORIGIN}, never their bubble. Their picks' Send is a
@@ -14489,7 +14588,7 @@ export const createServer = (
       const refused = await dropPage(instance, projectId, name);
       return refused && { status: refused.code, refused: refused.refused };
     },
-    sending: async (instance, artifact, state) => {
+    sending: async (instance, artifact, state, sentAt) => {
       // A step of the session's plan that waited on a card picked here stops waiting.
       plans.waitsMoved(instance.id);
       // His Send of a project's decision page decides it: its record and log are written from these picks.
@@ -14499,23 +14598,38 @@ export const createServer = (
       // A project's setup page: its name, shape and place applied before
       // its writer hears the picks, and the Send its approval of the
       // AGENTS.md and delegate types it writes from them (caw.ts `setupSent`).
-      const setup = await applySetupPicks(artifact, instance.projectId, state, {
-        // Its name field's refusal is the send's to answer, as a place's is.
-        name: async (projectId, name) => {
-          await projectEdits.edit(projectId, { name }).catch((error) => {
-            throw error instanceof ProjectEditRefusal
-              ? new PlaceRefusal(error.status, error.message)
-              : error;
-          });
-        },
-        shape: async (projectId, template) => {
-          await tasks.applyTemplate(projectId, template, YOU_ACTOR);
-        },
-        // A refusal is an ArtifactRefusal too: the send answers it.
-        place: async (projectId, place) => {
-          await addProjectPlace(projectId, place.machineId, place.path);
-        },
-      });
+      const setup = await applySetupPicks(
+        artifact,
+        instance.projectId,
+        state,
+        sentAt,
+        {
+          // Its name field's refusal is the send's to answer, as a place's is.
+          name: async (projectId, name) => {
+            await projectEdits.edit(projectId, { name }).catch((error) => {
+              throw error instanceof ProjectEditRefusal
+                ? new PlaceRefusal(error.status, error.message)
+                : error;
+            });
+          },
+          shape: async (projectId, template) => {
+            await tasks.applyTemplate(projectId, template, YOU_ACTOR);
+          },
+          // A refusal is an ArtifactRefusal too: the send answers it. A clone
+          // is checked now and runs after the Send, its result told.
+          place: async (projectId, place) => {
+            const { clone } = place;
+            if (clone) {
+              cloneProjectPlace(instance, artifact.id, projectId, {
+                ...place,
+                clone,
+              });
+              return;
+            }
+            await addProjectPlace(projectId, place.machineId, place.path);
+          },
+        }
+      );
       if (setup && instance.projectId) {
         lead?.setupSent(instance.projectId, instance.id);
       }
