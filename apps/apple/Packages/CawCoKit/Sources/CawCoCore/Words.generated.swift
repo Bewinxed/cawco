@@ -2650,6 +2650,11 @@ public enum Words {
             "Open \(name)"
         }
 
+        /// A media output the hub serves but the browser cannot decode.
+        public static func notShown(name: String) -> String {
+            "\(name) is there, but it could not be shown here."
+        }
+
         /// A `*.post.json` that does not read as a post, and why.
         public static func notPost(name: String, problem: String) -> String {
             "\(name) does not read as a post. \(problem)"

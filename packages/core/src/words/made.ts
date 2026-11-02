@@ -15,6 +15,9 @@ export const madeWords = {
   open: "Open",
   /** An image output, read out as the way to it whole. */
   openFile: (name: string) => `Open ${name}`,
+  /** A media output the hub serves but the browser cannot decode. */
+  notShown: (name: string) =>
+    `${name} is there, but it could not be shown here.`,
   /** A `*.post.json` that does not read as a post, and why. */
   notPost: (name: string, problem: string) =>
     `${name} does not read as a post. ${problem}`,

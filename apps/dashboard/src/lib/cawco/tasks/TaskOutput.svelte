@@ -122,7 +122,7 @@
     const words = await fetch(at).then(
       async (response) =>
         response.ok
-          ? `${name} is there, but it could not be shown here.`
+          ? madeWords.notShown(name)
           : failureWords(
               await hubRefusal(response, `so ${name} could not be shown.`)
             ),
