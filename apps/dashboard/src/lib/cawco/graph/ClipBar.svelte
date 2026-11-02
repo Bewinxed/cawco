@@ -26,13 +26,30 @@
   } = $props();
 
   const STEP = 10;
-  const start = $derived(clip.start + clip.delay);
+  const onStep = (ms: number) => Math.round(ms / STEP) * STEP;
+  /** The earliest step it may begin on: never before the moment the move set it off. */
+  const floor = $derived(Math.ceil(clip.start / STEP) * STEP);
+  /**
+   * The handles at rest, on the slider's steps. bits-ui's Slider snaps a
+   * value off its steps and hands the snap to `onValueChange` (its root's
+   * `watch`); a clip begins at whatever millisecond the engine started it,
+   * so its handles, given as they were, came back snapped, were held, were
+   * put back off the steps by `within`, and snapped again, an effect loop
+   * (`effect_update_depth_exceeded`). Every value it is given is a step.
+   */
+  const rest = $derived.by(() => {
+    const from = Math.max(floor, onStep(clip.start + clip.delay));
+    return [
+      from,
+      Math.max(from + STEP, onStep(clip.start + clip.delay + clip.duration)),
+    ];
+  });
   /** The handles while a drag holds them. */
   let held = $state<number[] | null>(null);
-  const value = $derived(held ?? [start, start + clip.duration]);
-  /** Never before the moment the move set it off; never shorter than one step. */
-  const within = ([from = start, to = start]: number[]): number[] => {
-    const begins = Math.max(clip.start, Math.min(from, scale - STEP));
+  const value = $derived(held ?? rest);
+  /** On the steps, from its floor; never shorter than one step. */
+  const within = ([from = floor, to = floor]: number[]): number[] => {
+    const begins = Math.max(floor, Math.min(from, scale - STEP));
     return [begins, Math.max(begins + STEP, Math.min(to, scale))];
   };
 </script>
@@ -45,9 +62,9 @@
     held = within(next);
   }}
   onValueCommit={(next: number[]) => {
-    const [from = start, to = start] = within(next);
+    const [from = floor, to = floor] = within(next);
     held = null;
-    if (from !== start || to - from !== clip.duration) {
+    if (from !== rest[0] || to !== rest[1]) {
       ontune({
         delay: from - clip.start,
         duration: to - from,
