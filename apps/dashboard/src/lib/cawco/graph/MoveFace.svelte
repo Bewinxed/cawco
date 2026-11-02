@@ -56,6 +56,7 @@
     IconPlay,
     IconTuning,
   } from "#lib/icons.js";
+  import { browser } from "$app/env";
   import ClipBar from "./ClipBar.svelte";
   import ClipEditor from "./ClipEditor.svelte";
   import {
@@ -132,7 +133,7 @@
   /** A figure on every mark that stands a figure's room past the last: every mark, every second, every fourth… */
   const figureEvery = $derived.by(() => {
     const apart = lane > 0 ? (lane * STEP) / scale : 0;
-    const room = numberOf("--space-8");
+    const room = browser ? numberOf("--space-8") : 0;
     return apart <= 0
       ? 1
       : Math.max(1, 2 ** Math.ceil(Math.log2(Math.max(1, room / apart))));
