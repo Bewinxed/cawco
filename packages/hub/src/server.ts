@@ -475,6 +475,10 @@ import {
   type FolderWeight,
   isFolderGone,
 } from "@cawco/core/preview-proxy";
+import {
+  remoteWithoutCredential,
+  withoutRemoteCredential,
+} from "@cawco/core/remote-credential";
 import { protocolRange } from "@cawco/core/runtime";
 import {
   type DesignMap,
@@ -13572,11 +13576,13 @@ export const createServer = (
       (message, cause) => new PlaceRefusal(400, message, { cause })
     );
     const where = machineName(place.machineId);
+    // Every word that names the repository names it with no credential; the clone takes it as given.
+    const shown = remoteWithoutCredential(place.clone).url;
     const key = `${place.machineId}\0${path}`;
     if (clonesRunning.has(key)) {
       throw new PlaceRefusal(
         409,
-        `${place.clone} is still being cloned onto ${where} at ${path}; the conversation hears when it ends.`
+        `${shown} is still being cloned onto ${where} at ${path}; the conversation hears when it ends.`
       );
     }
     clonesRunning.add(key);
@@ -13585,7 +13591,7 @@ export const createServer = (
       sendYours(instance, {
         by: "act",
         line: noticeWords.cloneFailed(where),
-        text: `CawCo could not clone ${place.clone} onto ${where} at ${path}: ${why}. Nothing was added; the setup page's place pick stands unsent, so the person's next Send of the page tries it again.`,
+        text: `CawCo could not clone ${shown} onto ${where} at ${path}: ${withoutRemoteCredential(why, place.clone)}. Nothing was added; the setup page's place pick stands unsent, so the person's next Send of the page tries it again.`,
       });
     };
     const cloning = async (): Promise<void> => {
@@ -13621,8 +13627,8 @@ export const createServer = (
         line: noticeWords.cloned(where),
         text: [
           outcome.kind === "there"
-            ? `${path} on ${where} is a checkout of ${place.clone} already, so CawCo used it as it is: it is the project's checkout now.`
-            : `CawCo cloned ${place.clone} onto ${where} at ${path}: it is the project's checkout now.`,
+            ? `${path} on ${where} is a checkout of ${shown} already, so CawCo used it as it is: it is the project's checkout now.`
+            : `CawCo cloned ${shown} onto ${where} at ${path}: it is the project's checkout now.`,
           ...(into && into.id !== projectId
             ? [
                 `That repository was the project “${into.name}”'s already, so this project joined it: its tasks, files, places and this conversation are “${into.name}”'s now.`,

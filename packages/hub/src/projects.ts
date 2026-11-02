@@ -6,6 +6,7 @@
  */
 
 import type { CommandResult } from "@cawco/core";
+import { withoutRemoteCredential } from "@cawco/core/remote-credential";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { quote } from "./landing";
@@ -138,6 +139,20 @@ const gitReason = (result: CommandResult): string => {
 };
 
 /**
+ * {@link cloneAt} with `url`'s credential, when it carries one, out of the
+ * refusal's words (git quotes the URL it was given): the clone itself uses
+ * the URL as given.
+ */
+export const cloneRepository = async (
+  ...args: Parameters<typeof cloneAt>
+): Promise<CloneOutcome> => {
+  const outcome = await cloneAt(...args);
+  return outcome.kind === "refused"
+    ? { kind: "refused", why: withoutRemoteCredential(outcome.why, args[3]) }
+    : outcome;
+};
+
+/**
  * `url` cloned onto `machineId` at `path` (absolute), with the machine's own
  * git and its owner's credentials: git takes any URL form it knows. A folder
  * that is already a checkout of `url` is used as it is; one that holds
@@ -146,7 +161,7 @@ const gitReason = (result: CommandResult): string => {
  * Never throws: an offline machine or a failed clone is a refusal with its
  * reason, `where` naming the machine in it.
  */
-export const cloneRepository = async (
+const cloneAt = async (
   run: (
     machineId: string,
     cwd: string,

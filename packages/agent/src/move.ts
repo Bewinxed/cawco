@@ -44,6 +44,7 @@ import {
 } from "@cawco/core";
 import { hubRepoSegment } from "@cawco/core/hub-repo";
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
+import { remoteWithoutCredential } from "@cawco/core/remote-credential";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -142,36 +143,6 @@ export const holdDeclaredSecret = (basic: string): void => {
       declaredSecrets.add(part);
     }
   }
-};
-
-/**
- * A remote's URL with any credential it carries taken off, and that
- * credential as HTTP Basic (base64 of `user:password`, decoded from the
- * URL's percent-encoding). Only http(s) URLs carry one: `ssh://git@…` and
- * `git@host:…` name an ssh login, not a secret, and stay as they are.
- */
-const remoteWithoutCredential = (
-  remote: string
-): { url: string; basic?: string } => {
-  let parsed: URL;
-  try {
-    parsed = new URL(remote);
-  } catch {
-    return { url: remote };
-  }
-  if (!(
-    (parsed.protocol === "https:" || parsed.protocol === "http:") &&
-    (parsed.username || parsed.password)
-  )) {
-    return { url: remote };
-  }
-  const pair = `${decodeURIComponent(parsed.username)}:${decodeURIComponent(parsed.password)}`;
-  parsed.username = "";
-  parsed.password = "";
-  return {
-    url: parsed.toString(),
-    basic: Buffer.from(pair).toString("base64"),
-  };
 };
 
 /**
