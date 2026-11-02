@@ -2,12 +2,20 @@
   /**
    * A row's bar on the move's one scale (MoveFace: the ruler, every bar and
    * the playhead share it), and its timing's handles (bits-ui's Slider, two
-   * thumbs): the start handle is when the thing begins to move (never
-   * before the moment the move set it off), the end handle when it comes to
-   * rest. Its stretches of motion are drawn on the bar; a thing that moves
-   * twice shows both. A drag draws the bar where it is held; letting go
-   * moves and stretches the row's clips together (motion `retime`), and the
-   * move plays on the stage at once. The arrow keys move a handle by 10 ms.
+   * thumbs): the start handle is when the thing begins to move, the end
+   * handle when it comes to rest. Its stretches of motion are drawn on the
+   * bar in its kind's colour (the `c-clip-*` tokens); a thing that moves
+   * twice shows both. The moment the move set it off stands as a tick on
+   * the lane: no handle passes it. While he has tuned it, its timing as the
+   * engine ran it stands as a dashed outline under the bar.
+   *
+   * A drag snaps the row's length to the duration ladder (motion
+   * `snapLength`), as the owner decided ("Snap, and ⌥ frees it"); with ⌥
+   * held it moves on 10 ms steps, off the ladder. A drag on the bar's body
+   * moves the whole stretch and keeps its length (DialKit's clip move).
+   * Letting go moves and stretches the row's clips together (motion
+   * `retime`), and the move plays once on the stage. The arrow keys move a
+   * handle by 10 ms.
    *
    * Under a finger each handle's 44px area stops at the midpoint between
    * the two (DESIGN.md, The 44 Touch Rule: `--hit-gap-x`), so a finger on
@@ -16,12 +24,14 @@
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import type { Track } from "./motion";
+  import { type ClipKind, snapLength, type Track } from "./motion";
 
   let {
     track,
     name,
     scale,
+    original = null,
+    disabled = false,
     onretime,
     onhold,
   }: {
@@ -30,6 +40,10 @@
     name: string;
     /** The scale's end, ms: the ruler's. */
     scale: number;
+    /** Its stretches as the engine ran them, while he has tuned it: drawn as an outline. */
+    original?: Track["spans"] | null;
+    /** Shown as the engine ran it (Original): nothing to drag. */
+    disabled?: boolean;
     /** The row's new stretch, ms into the move. */
     onretime: (from: number, to: number) => void;
     /** The stretch a drag holds, as it moves (null: let go), so the row's words follow it. */
@@ -39,9 +53,7 @@
   const STEP = 10;
   const onStep = (ms: number) => Math.round(ms / STEP) * STEP;
   /** The earliest step it may begin on: never before the moment the move set it off. */
-  const floor = $derived(
-    Math.ceil(Math.min(...track.clips.map((clip) => clip.start)) / STEP) * STEP
-  );
+  const floor = $derived(Math.ceil(track.setOff / STEP) * STEP);
   /**
    * Every value the handles take, at rest or held: on the steps, from the
    * floor, never shorter than one step, and inside the lane (0 to `scale`,
@@ -56,40 +68,105 @@
    * The handles at rest, on the slider's steps (bits-ui's Slider snaps a
    * value off its steps and hands the snap back to `onValueChange`, which
    * held off-step values looped on: `effect_update_depth_exceeded`), and
-   * inside the lane: a row beginning within half a step of the lane's end
-   * rounded its start onto the max and set its end a step past it.
+   * inside the lane.
    */
   const rest = $derived(within([onStep(track.begins), onStep(track.ends)]));
   let held = $state<number[] | null>(null);
   const value = $derived(held ?? rest);
   const pct = (t: number) => `${(t / scale) * 100}%`;
+  /** ⌥ is down: a drag moves on the 10 ms steps, off the ladder. */
+  let free = $state(false);
 
-  /** The bar's width, px: how far apart the two handles stand on screen. */
+  /**
+   * A handle's drag as the ladder takes it: the handle that moved sets the
+   * row's length to the ladder's nearest, the other stays; with ⌥, as held.
+   */
+  const snapped = (next: number[]): number[] => {
+    const [from = floor, to = floor] = next;
+    if (free) {
+      return within(next);
+    }
+    const [wasFrom = floor] = value;
+    const length = snapLength(to - from);
+    return from === wasFrom
+      ? within([from, from + length])
+      : within([Math.max(floor, to - length), to]);
+  };
+  const hold = (next: number[]) => {
+    held = next;
+    const [from = floor, to = floor] = next;
+    onhold({ from, to });
+  };
+  const commit = (next: number[]) => {
+    const [from = floor, to = floor] = next;
+    held = null;
+    onhold(null);
+    if (from !== rest[0] || to !== rest[1]) {
+      onretime(from, to);
+    }
+  };
+
+  /** The bar's width, px: how far apart the two handles stand on screen, and what a body drag's pixels are in ms. */
   let wide = $state(0);
   /** The handle's drawn width, px (`w-space-1`). */
   const HANDLE = 4;
   const apart = $derived(
     Math.max(0, (((value[1] ?? 0) - (value[0] ?? 0)) / scale) * wide - HANDLE)
   );
+
+  /** A drag on the bar's body: where it was taken, and the stretch it moves. */
+  let moving: { at: number; from: number; to: number } | null = null;
+  const takeBody = (event: PointerEvent) => {
+    if (disabled || wide === 0) {
+      return;
+    }
+    // The slider's own press would jump the nearer handle here.
+    event.stopPropagation();
+    event.preventDefault();
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    const [from = floor, to = floor] = value;
+    moving = { at: event.clientX, from, to };
+  };
+  const moveBody = (event: PointerEvent) => {
+    if (!moving) {
+      return;
+    }
+    const length = moving.to - moving.from;
+    const by = onStep(((event.clientX - moving.at) / wide) * scale);
+    const from = Math.max(floor, Math.min(scale - length, moving.from + by));
+    hold([from, from + length]);
+  };
+  const letBody = () => {
+    if (moving) {
+      moving = null;
+      commit(held ?? rest);
+    }
+  };
+
+  /** Each kind's ink, as whole classes. */
+  const INK: Record<ClipKind, string> = {
+    size: "bg-c-clip-size",
+    move: "bg-c-clip-move",
+    fade: "bg-c-clip-fade",
+    tint: "bg-c-clip-tint",
+    effect: "bg-c-clip-effect",
+    other: "bg-c-clip-other",
+  };
 </script>
 
 <Slider.Root
   class="relative flex h-c-btn-h-sm w-full touch-none items-center select-none"
+  {disabled}
   max={scale}
   min={0}
-  onValueChange={(next: number[]) => {
-    held = within(next);
-    const [from = floor, to = floor] = held;
-    onhold({ from, to });
+  onpointerdown={(event: PointerEvent) => {
+    free = event.altKey;
   }}
-  onValueCommit={(next: number[]) => {
-    const [from = floor, to = floor] = within(next);
-    held = null;
-    onhold(null);
-    if (from !== rest[0] || to !== rest[1]) {
-      onretime(from, to);
-    }
+  onpointermove={(event: PointerEvent) => {
+    free = event.altKey;
   }}
+  onValueChange={(next: number[]) => hold(snapped(next))}
+  onValueCommit={(next: number[]) => commit(snapped(next))}
   step={STEP}
   thumbPositioning="exact"
   type="multiple"
@@ -97,24 +174,53 @@
 >
   {#snippet children({ thumbItems })}
     <span
-      class="relative h-space-2 w-full grow overflow-clip rounded-pill bg-surface-fill"
+      class="relative h-space-2 w-full grow rounded-pill bg-surface-fill"
       {@attach frameSize((node: HTMLElement) => {
         wide = node.clientWidth;
       })}
     >
+      {#if original}
+        <!-- Its timing as the engine ran it, under the tuned bar. -->
+        {#each original as span, at (at)}
+          <span
+            aria-hidden="true"
+            class="absolute -inset-y-px start-(--from) w-(--wide) rounded-pill border border-dashed border-ink-muted"
+            style:--from={pct(span.from)}
+            style:--wide={pct(span.to - span.from)}
+          ></span>
+        {/each}
+      {/if}
       {#if held || track.spans.length === 1}
-        <Slider.Range class="absolute h-full rounded-pill bg-ink-muted" />
+        <Slider.Range
+          class={["absolute h-full cursor-grab rounded-pill", INK[track.kind]]}
+          onpointercancel={letBody}
+          onpointerdown={takeBody}
+          onpointermove={moveBody}
+          onpointerup={letBody}
+          title={disabled ? undefined : words.moveClip(name)}
+        />
       {:else}
         <!-- Its stretches of motion, each where it runs. -->
         {#each track.spans as span, at (at)}
           <span
-            class="absolute inset-y-0 start-(--from) w-(--wide) rounded-pill bg-ink-muted"
+            class={[
+              "absolute inset-y-0 start-(--from) w-(--wide) rounded-pill",
+              INK[track.kind],
+            ]}
             style:--from={pct(span.from)}
             style:--wide={pct(span.to - span.from)}
           ></span>
         {/each}
       {/if}
     </span>
+    <!-- The moment the move set it off: no handle passes it. -->
+    <span
+      aria-label={words.triggeredAt(Math.round(track.setOff))}
+      class="absolute inset-y-space-2 start-(--at) w-px bg-ink-muted"
+      role="img"
+      style:--at={pct(track.setOff)}
+      title={words.triggeredAt(Math.round(track.setOff))}
+    ></span>
     {#each thumbItems as { index } (index)}
       <Slider.Thumb
         aria-label={index === 0 ? words.clipStarts(name) : words.clipEnds(name)}

@@ -164,6 +164,12 @@
   --color-brand-hover: var(--brand-hover);
   --color-brand-wash: var(--brand-wash);
   --color-c-target-tint: var(--c-target-tint);
+  --color-c-clip-size: var(--c-clip-size);
+  --color-c-clip-move: var(--c-clip-move);
+  --color-c-clip-fade: var(--c-clip-fade);
+  --color-c-clip-tint: var(--c-clip-tint);
+  --color-c-clip-effect: var(--c-clip-effect);
+  --color-c-clip-other: var(--c-clip-other);
   --color-c-change-ring: var(--c-change-ring);
   --color-brand-ink: var(--brand-ink);
   --color-brand-ink-strong: var(--brand-ink-strong);

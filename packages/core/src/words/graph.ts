@@ -157,9 +157,32 @@ export const graphWords = {
   /** The ruler's unit, beside the playhead's figure. */
   msUnit: "ms",
   /** A tuned clip says so on its row, before and after. */
-  tuned: (before: string, after: string) => `Changed: ${before} → ${after}`,
-  /** Where a tuning goes, said once in the editor. */
-  tunedGoes: "Changes here go to the agent.",
+  tuned: (before: string, after: string) =>
+    `Changed: ${before} → ${after}, sent to the agent`,
+
+  /** The head's switch once there are edits: the animation as read, or as changed; its name for a reader. */
+  timings: "Timings",
+  original: "Original",
+  edited: "Edited",
+  /** The moment a row's animation was started, before any delay: its mark on the lane. */
+  triggeredAt: (ms: number) => `Triggered at ${ms} ms`,
+  /** A row with several animations, opened into one row each. */
+  showClips: (n: number) => `Show ${n} animations`,
+  hideClips: (n: number) => `Hide ${n} animations`,
+  /** A row's duration chip when its length is the design system's, and its name for a reader. */
+  durationChip: (ms: number, name: string) => `${ms} ms · ${name}`,
+  durationOf: (ms: number, name: string) =>
+    `${ms} ms, the design system's “${name}” duration`,
+  /** The dashed chip, its length off the ladder (⌥), and its name for a reader. */
+  freeOf: (ms: number) => `${ms} ms, not from the design system`,
+  /** A spring row: its bar's figure, and what a reader hears for it. */
+  springFigure: (ms: number) => `~${ms} ms`,
+  springSettles: (ms: number) => `Spring, settles in about ${ms} ms`,
+  /** The bar's body, dragged: the whole animation along the lane. */
+  moveClip: (clip: string) => `Move ${clip}`,
+  /** The editor's curve sections: the house's curves, then the shapes. */
+  designSystem: "Design system",
+  shapesHead: "Shapes",
 
   /** A list state's record sets, each a variant. */
   recordsOne: "One record",

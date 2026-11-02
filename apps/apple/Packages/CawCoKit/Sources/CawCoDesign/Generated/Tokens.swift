@@ -192,6 +192,18 @@ public enum Palette {
     public static let brandWash = Palette.named("brand-wash")
     /// The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through.
     public static let cTargetTint = Palette.named("c-target-tint")
+    /// The design graph's Animation timeline: the bar and glyph of a clip that grows or opens a box (unfolds, widens, opens: height, width, clip-path). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance.
+    public static let cClipSize = Palette.named("c-clip-size")
+    /// The design graph's Animation timeline: the bar and glyph of a clip that moves, scales or turns its element (transform, translate, scale, rotate). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance.
+    public static let cClipMove = Palette.named("c-clip-move")
+    /// The design graph's Animation timeline: the bar and glyph of a clip that fades (opacity). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance.
+    public static let cClipFade = Palette.named("c-clip-fade")
+    /// The design graph's Animation timeline: the bar and glyph of a clip that changes a colour (background, ink, border). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance.
+    public static let cClipTint = Palette.named("c-clip-tint")
+    /// The design graph's Animation timeline: the bar and glyph of a clip that blurs or lifts (filter, box-shadow). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance.
+    public static let cClipEffect = Palette.named("c-clip-effect")
+    /// The design graph's Animation timeline: the bar and glyph of a clip whose property is none of the kinds (a custom property's). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance.
+    public static let cClipOther = Palette.named("c-clip-other")
     /// The ring round what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): the done glyph's green, drawn on the element's own shape outside its box, so it never covers what the element says; never coral (The One Target Rule).
     public static let cChangeRing = Palette.named("c-change-ring")
     public static let brandInk = Palette.named("brand-ink")
