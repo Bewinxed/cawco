@@ -81,6 +81,7 @@
     IconSun,
     IconTablet,
   } from "#lib/icons.js";
+  import { browser } from "$app/env";
   import Journey from "./Journey.svelte";
   import MoveFace, { type MoveState, type Timings } from "./MoveFace.svelte";
   import {
@@ -184,13 +185,15 @@
    * edge.
    */
   const besideLine = $derived(
-    numberOf("--c-graph-stage-min") +
-      numberOf("--c-graph-room-w") +
-      numberOf("--space-5") +
-      numberOf("--space-7") +
-      numberOf("--space-6") +
-      DIVIDER +
-      ROUNDING
+    browser
+      ? numberOf("--c-graph-stage-min") +
+          numberOf("--c-graph-room-w") +
+          numberOf("--space-5") +
+          numberOf("--space-7") +
+          numberOf("--space-6") +
+          DIVIDER +
+          ROUNDING
+      : 0
   );
   const desk = $derived(surface === 0 || surface >= besideLine);
 
@@ -599,7 +602,9 @@
   );
   const shareOf = (px: number) =>
     Math.min(1, px / windowHeight + (1 - capShare));
-  const head = $derived(shareOf(numberOf("--c-graph-drawer-head")));
+  const head = $derived(
+    shareOf(browser ? numberOf("--c-graph-drawer-head") : 0)
+  );
   const SNAPS = $derived([head, shareOf(windowHeight / 2), 1]);
   let snap = $state<number | string | null>(null);
   $effect(() => {
@@ -683,10 +688,14 @@
   const leastShare = (px: number) => Math.ceil(splitShare(px) * 100) / 100;
   /** Each pane's least: its surface's least width and the pane's own inset beside the edge (`pe-space-2`, `ms-space-3`). */
   const stageLeast = $derived(
-    leastShare(numberOf("--c-graph-stage-min") + numberOf("--space-2"))
+    leastShare(
+      browser ? numberOf("--c-graph-stage-min") + numberOf("--space-2") : 0
+    )
   );
   const roomLeast = $derived(
-    leastShare(numberOf("--c-graph-room-w") + numberOf("--space-3"))
+    leastShare(
+      browser ? numberOf("--c-graph-room-w") + numberOf("--space-3") : 0
+    )
   );
   /**
    * The room's share: the width he dragged it to, else what the stage at
@@ -702,7 +711,9 @@
         roomLeast,
         splitShare(
           untrack(() => roomDragged) ??
-            splitWidth - (width ?? stageWidth) - numberOf("--space-5")
+            splitWidth -
+              (width ?? stageWidth) -
+              (browser ? numberOf("--space-5") : 0)
         )
       )
     )

@@ -46,6 +46,7 @@
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
   import { theme } from "#lib/theme.svelte.js";
+  import { browser } from "$app/env";
   import { layoutWhole } from "./layout";
   import MachineNode from "./MachineNode.svelte";
   import { holesOf, type Review } from "./model";
@@ -73,13 +74,17 @@
   /** Each card's height as drawn, by its state. */
   let heights = $state<Record<string, number>>({});
   /** The cards' lengths and the groups' room, read off the tokens. */
-  const lengths = $derived({
-    card: numberOf("--c-graph-node-w"),
-    head: numberOf("--space-7"),
-    pad: numberOf("--space-3"),
-    label: numberOf("--c-graph-label"),
-    labelLine: numberOf("--space-5"),
-  });
+  const lengths = $derived(
+    browser
+      ? {
+          card: numberOf("--c-graph-node-w"),
+          head: numberOf("--space-7"),
+          pad: numberOf("--space-3"),
+          label: numberOf("--c-graph-label"),
+          labelLine: numberOf("--space-5"),
+        }
+      : { card: 0, head: 0, pad: 0, label: 0, labelLine: 0 }
+  );
   /** A hidden line in the label's own type, at its widest: what an act's label takes. */
   let ruler = $state<HTMLElement>();
   const labelSize = (label: string) => {
