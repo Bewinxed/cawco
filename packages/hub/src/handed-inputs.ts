@@ -448,9 +448,9 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
   ): Promise<HandedFile[]> => {
     const item = itemOf(caller, id, "assets");
     const folder = deps.outputsFolder(item);
-    if (!(item.projectId && item.outputs?.length)) {
+    if (!item.projectId) {
       throw new HandedInputRefusal(
-        `{ assets: "${id}" }: ${item.title} (${short(item.id)}) handed in no outputs, so ${folder}/ holds nothing of it`
+        `{ assets: "${id}" }: ${item.title} (${short(item.id)}) is in no project, so there is no ${folder}/ to copy from`
       );
     }
     const { projectId } = item;
