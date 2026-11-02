@@ -15,13 +15,11 @@
    *
    * Three surfaces apart, so each reads (DESIGN.md, The Frame Recesses
    * Rule): the map on the room's raised surface, each group recessed on
-   * it, the cards raised on the group. The map is framed as the house's
-   * task canvas frames its graph (TaskCanvasFit), with the spec's floor:
-   * never under the zoom where its 12px words stand at 12px (spec, The
-   * whole set: "it never scales type under 12px"); fitted whole when it
-   * fits there, else at that zoom from its start, the rest a pan away
-   * ("where the whole set does not fit at its readable size, it
-   * scrolls"). The Fit tool frames the same way, so a view he has not
+   * it, the cards raised on the group. The map opens fitted to every card,
+   * by Svelte Flow's own `fitView` with the house's fit (flow/fit.ts
+   * `FIT`), and fits again in place as the cards' measured heights lay it
+   * out anew or the room changes size, while the view is still a fit
+   * (FlowAutoFit). The Fit tool frames the same way, so a view he has not
    * moved is already its frame. No zoom figure. The kept card wears the list's
    * on-stage face. One press keeps a state, or, while comparing, compares
    * with it; resting on a card changes nothing.
@@ -43,9 +41,10 @@
   } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
-  import TaskCanvasFit from "#lib/cawco/views/canvas/TaskCanvasFit.svelte";
+  import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
+  import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
   import { theme } from "#lib/theme.svelte.js";
   import { layoutWhole } from "./layout";
   import MachineNode from "./MachineNode.svelte";
@@ -68,10 +67,6 @@
 
   const nodeTypes = { state: StateNode, machine: MachineNode };
   const edgeTypes = { route: RouteEdge };
-  /** The zoom where the map's smallest words (meta, 12px) stand at 12px: the least it takes, and the most a frame takes. */
-  const READABLE = 1;
-  /** Its zoom range: never under the readable size; in to twice it. */
-  const ZOOMS = { minZoom: READABLE, maxZoom: 2 } as const;
   /** A card's height until Svelte Flow has measured it: a name and a note's two lines. */
   const ESTIMATE = 72;
 
@@ -215,9 +210,13 @@
 
   /** The view is the person's once he pans or zooms; the tools' frame gives it back. */
   let held = $state(false);
-  let fit = $state<ReturnType<typeof TaskCanvasFit>>();
-  /** Every card is drawn at its measured height and laid out by it: the first frame waits for this. */
-  const measured = $derived(review.order.every((id) => (heights[id] ?? 0) > 0));
+  let fit = $state<ReturnType<typeof FlowAutoFit>>();
+  /** Where the cards stand, as a key: laid out anew by their measured heights, the map fits again. */
+  const placed = $derived(
+    Object.entries(layout.states)
+      .map(([id, box]) => `${id}:${box.x},${box.y},${box.h}`)
+      .join(";")
+  );
   let zoom = $state(1);
 </script>
 
@@ -233,7 +232,9 @@
     deleteKey={null}
     elementsSelectable={false}
     {edgeTypes}
-    {...ZOOMS}
+    fitView
+    fitViewOptions={FIT}
+    {...ZOOM}
     nodesConnectable={false}
     nodesDraggable={false}
     nodesFocusable={false}
@@ -255,13 +256,11 @@
         zoom = value;
       }}
     />
-    <TaskCanvasFit
+    <FlowAutoFit
       bind:this={fit}
-      direction="TB"
-      floor={READABLE}
       {held}
+      layout={placed}
       nodeCount={nodes.length}
-      ready={measured}
     />
     <WholeMeasure
       {heights}
@@ -272,7 +271,7 @@
     <Panel position="bottom-center">
       <FlowCanvasTools
         figure={false}
-        fit={() => fit?.frame(true)}
+        fit={() => fit?.fit()}
         onfit={() => {
           held = false;
         }}
