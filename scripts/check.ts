@@ -567,6 +567,11 @@ const gated: Gated[] = [
     "packages/hub/skills/decision-page/kit/",
   ]),
   bun("scripts/token-alias-check.ts", ["design/tokens/"]),
+  bun("scripts/patched-dependencies-check.ts", [
+    "package.json",
+    "bun.lock",
+    "patches/",
+  ]),
   {
     ...bun("scripts/design-sidecar-check.ts", []),
     // Its verdict is git's: the files it compares and the commits that last
