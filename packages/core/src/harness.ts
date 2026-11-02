@@ -2860,8 +2860,9 @@ export interface CommandRun {
   gate?: string;
   id: string;
   /**
-   * The command moves the workspace's worktree to this commit: a rebase
-   * onto it, a checkout of it. A move that would write a path the boundary
+   * The command moves the workspace's worktree to this commit: a landing's
+   * `git reset --keep` to its rebased commit (hub landing.ts
+   * `landedRebase`), a checkout of it. A move that would write a path the boundary
    * keeps from every command (core clone-denies.ts `cloneDenies`) runs
    * with git on the host, the sandbox down (agent hub-command.ts
    * `movedCommand`); any move that leaves such a path other than its HEAD

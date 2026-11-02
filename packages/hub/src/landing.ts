@@ -11,7 +11,10 @@
  * branch without them.
  *
  * An item gates before it takes a turn: fetch, rebase onto the branch as it
- * is now (a conflict is undone and goes back to the delegate), check that
+ * is now (a conflict is undone and goes back to the delegate), the rebase
+ * made off the workspace's working tree, which then moves to it once and is
+ * written nowhere else ({@link landedRebase}: watchers there, a preview's
+ * dev server among them, never see a tree between the two), check that
  * this machine may push there ({@link pushCheck}: refused, the landing ends
  * in git's words with no step run), and run the landing gate on that tree
  * (the steps its project declares in gate.md: gate-file.ts, work-items.ts
@@ -164,7 +167,7 @@ export interface LandingDeps<F> {
    * running then (machine-pause.ts `CommandStopped`), all but the push
    * (`lands`): one the remote may have taken already runs to its end, and
    * the branch says whether it landed. `moves`, the commit a command moves
-   * the worktree to (the rebase onto origin's branch): its machine runs it
+   * the worktree to (a landing's move to its rebased commit, {@link landedRebase}): its machine runs it
    * on its host, the sandbox down, when it writes a path the boundary keeps
    * from every command (machine-pause.ts `CommandOptions.moves`).
    */
@@ -355,20 +358,145 @@ export const LOGS_TRAILER = "Agent-Logs-Url";
 const stampCommand = (url: string): string =>
   `m=$(git log -1 --format=%B) && t=$(git log -1 --format=%aI | sed 's/+/%2B/') && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${quote(`${LOGS_TRAILER}: ${url}?at=`)}"$t") && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
 
+/** The line before the rebased commit in {@link stampedRebase}'s output. */
+const HEAD_MARK = "cawco-head";
+/** A full commit name, SHA-1's or SHA-256's. */
+const COMMIT_SHA = /^[0-9a-f]{40,64}$/u;
+
 /**
- * HEAD's own commits rebased onto `upstream`, each stamped with `url`
- * ({@link stampCommand}); `keepBase`, on the commit they already start from
- * and with their merges kept (`--keep-base --rebase-merges`), for a branch
- * pushed as it is. A rebase that stops (a conflict, a stamp that failed) is
- * undone, and its output ends with {@link CONFLICT_MARK} and the conflicted
- * files when there are any.
+ * The cone-mode sparse-checkout patterns of the files at the root alone,
+ * what `git sparse-checkout init --cone` writes: "any paths immediately under
+ * leading directories (including the toplevel directory) will also be
+ * included" (git-sparse-checkout(1), "Internals: cone mode handling").
  */
-export const stampedRebase = (
+const ROOT_FILES_ONLY = "/*\\n!/*/\\n";
+
+/**
+ * The rebase's sparse checkout, for its git alone and every git its
+ * `--exec` runs: git passes a `-c` on to the commands it starts
+ * (`GIT_CONFIG_PARAMETERS`, git(1) `-c`), and leaves the `GIT_CONFIG_COUNT`
+ * entries the workspace's git already carries (its door, agent hub-git.ts)
+ * as they are.
+ */
+const SPARSE = "-c core.sparseCheckout=true -c core.sparseCheckoutCone=true";
+
+/**
+ * HEAD's own commits rebased onto `upstream` and stamped with `url`
+ * ({@link stampCommand}), in a worktree of their own, so the workspace's
+ * working tree is never written: its output ends with {@link HEAD_MARK} and
+ * the rebased commit, which {@link landedRebase} then moves the workspace to
+ * in one step. `keepBase` keeps them on the commit they start from, with
+ * their merges (`--keep-base --rebase-merges`), for a branch pushed as it is.
+ *
+ * A `git rebase` in the workspace's own worktree checks out the commit it
+ * starts from and writes each commit's files as it picks it, so every
+ * watcher there saw the work undone and done again in a burst. Vite's
+ * watcher keeps only the first change of a file in 50 ms (vitejs/vite#23719,
+ * chokidar 3's `_throttle(EV_CHANGE, path, 50)`), and a preview went on
+ * serving a file deleted mid-burst (2026-11-02, a `Failed to resolve import`
+ * of a file the tip no longer had).
+ *
+ * The rebase's worktree is git's documented recipe, `git worktree add
+ * --no-checkout`, which "can be used to suppress checkout in order to make
+ * customizations, such as configuring sparse-checkout" (git-worktree(1)),
+ * in the workspace's scratch dir (`$TMPDIR`). Its sparse checkout holds the
+ * files at the root alone ({@link ROOT_FILES_ONLY}), set by its commands'
+ * own config ({@link SPARSE}) and the worktree's own `info/sparse-checkout`
+ * (`--path-format`, git 2.31), so neither the repository's config nor any
+ * other worktree's changes: a rebase writes only the files it conflicts on
+ * outside them (git-sparse-checkout(1): "special cases (such as hitting
+ * conflicts when merging/rebasing)"). No LFS object is fetched for it
+ * (`GIT_LFS_SKIP_SMUDGE`): nothing reads its files. The worktree goes when
+ * the command ends, whatever it ends with.
+ *
+ * A rebase that stops (a conflict, a stamp that failed) is undone there,
+ * and its output ends with {@link CONFLICT_MARK} and the conflicted files
+ * when there are any.
+ */
+const stampedRebase = (
   upstream: string,
   url: string,
   keepBase = false
 ): string =>
-  `git rebase${keepBase ? " --keep-base --rebase-merges" : ""} --exec ${quote(stampCommand(url))} ${quote(upstream)} || { files=$(git diff --name-only --diff-filter=U); git rebase --abort; if [ -n "$files" ]; then printf '${CONFLICT_MARK}\\n%s\\n' "$files"; fi; exit 1; }`;
+  [
+    `w=$(mktemp -d "\${TMPDIR:-/tmp}/cawco-rebase.XXXXXX") || exit 1`,
+    `trap 'git worktree remove --force "$w" >/dev/null 2>&1 || { rm -rf "$w"; git worktree prune; }' EXIT`,
+    `git worktree add --quiet --no-checkout --detach "$w" HEAD || exit 1`,
+    `( cd "$w" && export GIT_LFS_SKIP_SMUDGE=1 && s=$(git rev-parse --path-format=absolute --git-path info/sparse-checkout) && mkdir -p "\${s%/*}" && printf '${ROOT_FILES_ONLY}' > "$s" && git ${SPARSE} read-tree -mu HEAD && { git ${SPARSE} rebase${keepBase ? " --keep-base --rebase-merges" : ""} --exec ${quote(stampCommand(url))} ${quote(upstream)} || { files=$(git diff --name-only --diff-filter=U); git rebase --abort; if [ -n "$files" ]; then printf '${CONFLICT_MARK}\\n%s\\n' "$files"; fi; exit 1; }; } && printf '${HEAD_MARK}\\n%s\\n' "$(git rev-parse HEAD)" )`,
+  ].join("\n");
+
+/** The commit {@link stampedRebase}'s output names, after its {@link HEAD_MARK}; undefined when it names none. */
+const rebasedHead = (stdout: string): string | undefined => {
+  const at = stdout.lastIndexOf(`${HEAD_MARK}\n`);
+  const sha = at < 0 ? "" : stdout.slice(at + HEAD_MARK.length + 1).trim();
+  return COMMIT_SHA.test(sha) ? sha : undefined;
+};
+
+/** What {@link landedRebase} came to: HEAD where it is now, and whether it moved. */
+export type Rebased =
+  | { kind: "rebased"; head: string; moved: boolean }
+  | { kind: "conflict"; files: string }
+  | Refusal;
+
+/**
+ * The workspace's commits rebased onto `upstream` and stamped
+ * ({@link stampedRebase}, off its working tree), then its worktree moved to
+ * them once: `git reset --keep`, which "updates files in the working tree
+ * that are different between <commit> and HEAD" (git-reset(1)) and writes no
+ * other. A rebase whose commits hold HEAD's tree (a stamp alone, a branch
+ * already on its upstream) writes no file; one onto a newer upstream writes
+ * each file the two trees differ in, once. A conflict leaves the workspace
+ * as it was. `run` is {@link LandingDeps.run}; `noWait`, its own. The move
+ * is a {@link LandingDeps.run} `moves`, made even to the commit HEAD is
+ * already at, which writes nothing: its machine refuses it when the
+ * workspace's own commits change harness project config, and runs it on its
+ * host when it writes a path the boundary keeps from every command (agent
+ * hub-command.ts `movedCommand`), as it did the rebase in the worktree.
+ */
+export async function landedRebase(
+  run: LandingDeps<unknown>["run"],
+  upstream: string,
+  url: string,
+  keepBase: boolean,
+  noWait: boolean
+): Promise<Rebased> {
+  const before = await run("git rev-parse HEAD", LOCAL_MS, noWait);
+  if (before.exitCode !== 0) {
+    return refusal("read", before);
+  }
+  const rebase = await run(
+    stampedRebase(upstream, url, keepBase),
+    LOCAL_MS,
+    noWait
+  );
+  if (rebase.exitCode !== 0) {
+    const at = rebase.stdout.lastIndexOf(CONFLICT_MARK);
+    return at >= 0
+      ? {
+          kind: "conflict",
+          files: rebase.stdout.slice(at + CONFLICT_MARK.length).trim(),
+        }
+      : refusal("rebase", rebase);
+  }
+  const head = rebasedHead(rebase.stdout);
+  if (!head) {
+    return {
+      kind: "refused",
+      step: "rebase",
+      detail: `the rebase named no commit it ended on: ${detailOf(rebase)}`,
+    };
+  }
+  const moved = await run(
+    `git reset --quiet --keep ${quote(head)}`,
+    LOCAL_MS,
+    noWait,
+    false,
+    head
+  );
+  return moved.exitCode === 0
+    ? { kind: "rebased", head, moved: head !== before.stdout.trim() }
+    : refusal("rebase", moved);
+}
 
 /**
  * One step of the landing gate as it runs: a step the project declares
@@ -506,24 +634,17 @@ async function onBase<F>(
   if (Number(ahead.stdout.trim()) === 0) {
     return { kind: "nothing" };
   }
-  const before = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
-  const rebase = await deps.run(
-    stampedRebase(`origin/${base}`, deps.logsUrl),
-    LOCAL_MS,
-    inTurn,
+  const rebased = await landedRebase(
+    deps.run,
+    `origin/${base}`,
+    deps.logsUrl,
     false,
-    `origin/${base}`
+    inTurn
   );
-  if (rebase.exitCode !== 0) {
-    const at = rebase.stdout.lastIndexOf(CONFLICT_MARK);
-    return at >= 0
-      ? {
-          kind: "conflict",
-          files: rebase.stdout.slice(at + CONFLICT_MARK.length).trim(),
-        }
-      : refusal("rebase", rebase);
+  if (rebased.kind !== "rebased") {
+    return rebased;
   }
-  const head = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
+  const { head } = rebased;
   const onto = await run(`git rev-parse ${target}`, LOCAL_MS);
   if (onto.exitCode !== 0) {
     return refusal("read", onto);
@@ -543,7 +664,7 @@ async function onBase<F>(
       kind: "on-base",
       head,
       onto: onto.stdout.trim(),
-      rebased: head !== before,
+      rebased: rebased.moved,
     }
   );
 }
@@ -852,24 +973,24 @@ async function pushOwnBranch(
       if (Number(ahead.stdout.trim()) === 0) {
         return { kind: "nothing" };
       }
-      const from = await run(
-        `git merge-base ${quote(`origin/${base}`)} HEAD`,
-        LOCAL_MS
+      const stamped = await landedRebase(
+        run,
+        `origin/${base}`,
+        deps.logsUrl,
+        true,
+        false
       );
-      if (from.exitCode !== 0) {
-        return refusal("read", from);
+      if (stamped.kind === "conflict") {
+        return {
+          kind: "refused",
+          step: "rebase",
+          detail: `the rebase that stamps its commits where they stand conflicted on ${stamped.files}`,
+        };
       }
-      const stamped = await run(
-        stampedRebase(`origin/${base}`, deps.logsUrl, true),
-        LOCAL_MS,
-        false,
-        false,
-        from.stdout.trim()
-      );
-      if (stamped.exitCode !== 0) {
-        return refusal("rebase", stamped);
+      if (stamped.kind !== "rebased") {
+        return stamped;
       }
-      const sha = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
+      const sha = stamped.head;
       if (deps.stopped?.()) {
         return { kind: "stopped" };
       }

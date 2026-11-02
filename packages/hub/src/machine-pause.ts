@@ -55,8 +55,8 @@ export interface CommandOptions {
    */
   readonly movable?: boolean;
   /**
-   * The command moves the workspace's worktree to this commit, a rebase onto
-   * it or a checkout of it (core `CommandRun.moves`): the machine runs it on
+   * The command moves the workspace's worktree to this commit, a landing's
+   * reset to its rebased commit or a checkout of it (core `CommandRun.moves`): the machine runs it on
    * its host, the workspace's sandbox down, when it writes a path the
    * boundary keeps from every command, and fails it when it leaves one other
    * than HEAD has it.

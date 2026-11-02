@@ -749,8 +749,9 @@ const namesIn = (out: string): string[] =>
   [...new Set(out.split("\0").filter(Boolean))].sort();
 
 /**
- * A {@link CommandRun.moves} command in `workspace`: the hub's rebase onto
- * a commit, a checkout of one. The boundary keeps every clone-side deny path
+ * A {@link CommandRun.moves} command in `workspace`: a landing's move to
+ * its rebased commit (hub landing.ts `landedRebase`, `git reset --keep`), a
+ * checkout of one. The boundary keeps every clone-side deny path
  * from its commands (clone-denies.ts `cloneDenies`: `.mcp.json`,
  * OpenCode's config, Claude Code's project settings), so a move that writes
  * one there fails, or, for a checkout without `--force`, prints "unable to

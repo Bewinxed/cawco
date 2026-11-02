@@ -1,15 +1,16 @@
 /**
  * `bun scripts/logs-trailer-check.ts`: the `Agent-Logs-Url` stamp the hub
  * puts on every commit it lands (hub landing.ts `stampedRebase`,
- * `stampCommand`), run with real git in a scratch repository, through the
- * same `git` shell function the hub's commands start with (core safe-git.ts
- * `SAFE_GIT_SHELL`).
+ * `stampCommand`) and the rebase that carries it (`landedRebase`: off the
+ * working tree, then one `git reset --keep`), run with real git in a scratch
+ * repository, through the same `git` shell function the hub's commands start
+ * with (core safe-git.ts `SAFE_GIT_SHELL`).
  *
  * A branch of four commits, each with its own author date, (one with a `Co-Authored-By` trailer, one with
  * another session's link above one, one whose subject starts with `#`, one
  * with no body) is stamped, stamped again, rebased onto a newer upstream
- * and stamped, and a second branch is stamped where it stands
- * (`keepBase`). After each, the laws:
+ * and stamped, a second branch is stamped where it stands (`keepBase`), and
+ * a third conflicts with its upstream. After each, the laws:
  *
  * - Law A: each commit carries exactly one `Agent-Logs-Url`, a link into
  *   the session.
@@ -21,21 +22,45 @@
  * - Law E: that link is exactly the session's, at the commit's own author
  *   date: `<url>?at=<%aI, its + as %2B>`, the moment it was made, kept
  *   through every stamp, the rebase onto a newer upstream among them.
+ * - Law F: a landing whose commits keep HEAD's tree (every stamp here, the
+ *   first included, which rewrites every message) writes no file of the
+ *   working tree: each keeps its inode and its change time, and none comes
+ *   or goes.
+ * - Law G: the rebase onto a newer upstream writes only the files the old
+ *   and new HEAD differ in; every other keeps its inode and change time, and
+ *   the worktree ends clean.
+ * - Law H: a rebase that conflicts (the same new file added on both sides,
+ *   below a folder the rebase's sparse worktree leaves out) answers
+ *   `conflict` naming it, and leaves HEAD, the index and every file as they
+ *   were.
+ * - Law I: no landing leaves its rebase's worktree behind: `git worktree
+ *   list` names the repository's own alone, and the scratch dir is empty.
  *
  * Run by `bun run check` (scripts/check.ts); it fails on any law broken.
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import type { CommandResult } from "../packages/core/src/harness";
 import { SAFE_GIT_SHELL } from "../packages/core/src/safe-git";
-import { LOGS_TRAILER, stampedRebase } from "../packages/hub/src/landing";
+import { LOGS_TRAILER, landedRebase } from "../packages/hub/src/landing";
 
 const URL_NOW = "https://hub.example.ts.net:3455/session/3f2a9c1e";
 const URL_OLD = "http://old-host:3455/session/77aa00bb";
 
 const dir = mkdtempSync(join(tmpdir(), "logs-trailer-"));
+/** The commands' `TMPDIR`, where the rebase makes its worktree: empty again after each landing (Law I). */
+const scratch = mkdtempSync(join(tmpdir(), "logs-trailer-scratch-"));
 const env = {
   ...process.env,
+  TMPDIR: scratch,
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_AUTHOR_NAME: "Session",
@@ -64,7 +89,78 @@ const sh = (cmd: string): string => {
   return done.stdout.toString();
 };
 
+/** One command as the hub's landing runs it (work-items.ts `runIn`): the shell function first, its result whatever it exits with. */
+const run = (cmd: string): Promise<CommandResult> => {
+  const done = Bun.spawnSync(["sh", "-c", `${SAFE_GIT_SHELL}${cmd}`], {
+    cwd: dir,
+    env,
+  });
+  return Promise.resolve({
+    exitCode: done.exitCode,
+    stdout: done.stdout.toString(),
+    stderr: done.stderr.toString(),
+  });
+};
+
+/** The hub's rebase of the checked-out branch onto `upstream`, as both landings run it. */
+const land = (upstream: string, keepBase = false) =>
+  landedRebase(run, upstream, URL_NOW, keepBase, false);
+
+/** {@link land}, which must have rebased: HEAD where it is now. */
+const landed = async (upstream: string, keepBase = false): Promise<string> => {
+  const outcome = await land(upstream, keepBase);
+  if (outcome.kind !== "rebased") {
+    throw new Error(`the landing onto ${upstream}: ${JSON.stringify(outcome)}`);
+  }
+  return outcome.head;
+};
+
+/** Every file of the working tree, `.git` aside, by path: its inode and its change time, which any write moves. */
+const written = (): Map<string, string> => {
+  const files = new Map<string, string>();
+  const walk = (at: string) => {
+    for (const entry of readdirSync(join(dir, at), { withFileTypes: true })) {
+      const path = at ? `${at}/${entry.name}` : entry.name;
+      if (path === ".git") {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        walk(path);
+      } else {
+        const stat = lstatSync(join(dir, path), { bigint: true });
+        files.set(path, `${stat.ino}:${stat.ctimeNs}`);
+      }
+    }
+  };
+  walk("");
+  return files;
+};
+
+/** Law F, G or H's look: the paths of `before` and `now` that changed, came or went, `differ` aside. */
+const touched = (
+  before: Map<string, string>,
+  now: Map<string, string>,
+  differ: ReadonlySet<string> = new Set()
+): string[] =>
+  [...new Set([...before.keys(), ...now.keys()])].filter(
+    (path) => !differ.has(path) && before.get(path) !== now.get(path)
+  );
+
+/** Law I's look, after each landing. */
+const leftNothing = (when: string): void => {
+  const worktrees = sh("git worktree list --porcelain")
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "));
+  const left = readdirSync(scratch);
+  law(
+    `Law I (${when})`,
+    worktrees.length === 1 && left.length === 0,
+    `worktrees ${JSON.stringify(worktrees)}, scratch holds ${JSON.stringify(left)}`
+  );
+};
+
 const commit = (file: string, message: string): void => {
+  mkdirSync(dirname(join(dir, file)), { recursive: true });
   writeFileSync(join(dir, file), `${file} ${message}\n`);
   authored += 60_000;
   env.GIT_AUTHOR_DATE = `${new Date(authored).toISOString().slice(0, 19)}${ZONES[(authored / 60_000) % 2]}`;
@@ -153,30 +249,58 @@ try {
     "Add a\n\nWhy a.\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
   );
   commit(
-    "b",
+    "src/deep/b",
     `Add b\n\n${LOGS_TRAILER}: ${URL_OLD}\nCo-Authored-By: Claude <noreply@anthropic.com>`
   );
   commit("c", "#12 add c\n\nA body line.");
-  commit("d", "Add d");
+  commit("src/d", "Add d");
   const before = shapes("main..ws");
 
-  sh(stampedRebase("main", URL_NOW));
+  let files = written();
+  await landed("main");
   stampedAsBefore("first stamp", "main..ws", before);
+  law(
+    "Law F (first stamp)",
+    touched(files, written()).length === 0,
+    `it wrote ${JSON.stringify(touched(files, written()))}`
+  );
+  leftNothing("first stamp");
 
   const head = sh("git rev-parse HEAD").trim();
-  sh(stampedRebase("main", URL_NOW));
+  files = written();
+  await landed("main");
   law(
     "Law C (second stamp)",
     sh("git rev-parse HEAD").trim() === head,
     "HEAD moved"
   );
   stampedAsBefore("second stamp", "main..ws", before);
+  law(
+    "Law F (second stamp)",
+    touched(files, written()).length === 0,
+    `it wrote ${JSON.stringify(touched(files, written()))}`
+  );
+  leftNothing("second stamp");
 
   sh("git checkout -q main");
-  commit("e", "Upstream e");
+  commit("src/deep/e", "Upstream e");
   sh("git checkout -q ws");
   const stamped = shapes("main..ws");
-  sh(stampedRebase("main", URL_NOW));
+  const old = sh("git rev-parse HEAD").trim();
+  files = written();
+  const moved = await landed("main");
+  const differ = new Set(
+    sh(`git diff --name-only ${old} ${moved}`).split("\n").filter(Boolean)
+  );
+  law(
+    "Law G (rebased)",
+    differ.size === 1 &&
+      differ.has("src/deep/e") &&
+      touched(files, written(), differ).length === 0 &&
+      sh("git status --porcelain").trim() === "",
+    `the trees differ in ${JSON.stringify([...differ])}; it also wrote ${JSON.stringify(touched(files, written(), differ))}; status ${JSON.stringify(sh("git status --porcelain"))}`
+  );
+  leftNothing("rebased");
   const rebased = shapes("main..ws");
   law(
     "Law B (rebased)",
@@ -196,25 +320,52 @@ try {
 
   sh("git checkout -q -b own main~1");
   commit("f", "Add f\n\nCo-Authored-By: Claude <noreply@anthropic.com>");
-  commit("g", "Add g");
+  commit("src/g", "Add g");
   const fork = sh("git merge-base main own").trim();
   const ownBefore = shapes("main..own");
-  sh(stampedRebase("main", URL_NOW, true));
+  files = written();
+  await landed("main", true);
   law(
     "Law D (keep base)",
     sh("git rev-parse HEAD~2").trim() === fork,
     "the commits moved off the commit they started from"
   );
   stampedAsBefore("keep base", "main..own", ownBefore);
+  law(
+    "Law F (keep base)",
+    touched(files, written()).length === 0,
+    `it wrote ${JSON.stringify(touched(files, written()))}`
+  );
+  leftNothing("keep base");
   const ownHead = sh("git rev-parse HEAD").trim();
-  sh(stampedRebase("main", URL_NOW, true));
+  await landed("main", true);
   law(
     "Law C (keep base, again)",
     sh("git rev-parse HEAD").trim() === ownHead,
     "HEAD moved"
   );
+  leftNothing("keep base, again");
+
+  sh("git checkout -q -b clash main~1");
+  commit("src/deep/e", "Clashing e");
+  const clashHead = sh("git rev-parse HEAD").trim();
+  const clashIndex = sh("git ls-files -s");
+  files = written();
+  const clash = await land("main");
+  law(
+    "Law H (conflict)",
+    clash.kind === "conflict" &&
+      clash.files === "src/deep/e" &&
+      sh("git rev-parse HEAD").trim() === clashHead &&
+      sh("git ls-files -s") === clashIndex &&
+      sh("git status --porcelain").trim() === "" &&
+      touched(files, written()).length === 0,
+    `it came to ${JSON.stringify(clash)}; it wrote ${JSON.stringify(touched(files, written()))}; status ${JSON.stringify(sh("git status --porcelain"))}`
+  );
+  leftNothing("conflict");
 } finally {
   rmSync(dir, { recursive: true, force: true });
+  rmSync(scratch, { recursive: true, force: true });
 }
 
 if (failures.length > 0) {
@@ -224,5 +375,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  "logs-trailer-check: laws A–E held over 4 stamps of 6 commits (first, again, rebased onto a newer upstream, kept on its base)"
+  "logs-trailer-check: laws A–I held over 6 landings of 6 commits (first, again, rebased onto a newer upstream, kept on its base, again) and one that conflicts"
 );
