@@ -559,6 +559,8 @@ public enum Size {
     public static let cGraphRoomW: Double = 400
     /// A state in the design graph's whole set (Svelte Flow node): its name in the label role and its note in meta over two lines, at 1:1 so no type renders under 12px; four across a desk room past 900px.
     public static let cGraphNodeW: Double = 208
+    /// The widest a move's act stands on its arrow in the design graph's whole set ("Each run an orchestrator" on one line, a longer act wrapping), so dagre leaves it room between the ranks and it never stands on a card.
+    public static let cGraphLabel: Double = 160
     /// The design graph's drawer at its head stop under the desk line: the grabber, the faces' segmented row and the journey's steps, each 44px to a finger, so the stage above stands whole (spec, Widths: 390).
     public static let cGraphDrawerHead: Double = 148
     /// The narrowest the design graph's stage stands beside its room on a desk (spec: at 1440 the stage never under 600px); under it the room becomes the drawer.
