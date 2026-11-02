@@ -129,6 +129,8 @@ const TrialMarkerSchema = z.object({
   previous: z.string(),
   /** Why a rollback was decided: the problem that stood at the deadline. */
   reason: z.string().optional(),
+  /** How many resumed helpers in a row failed to decide it (cli binary-apply.ts `RESUME_TRIES` ends it). */
+  resumesFailed: z.number().int().nonnegative().optional(),
   role: BinaryInstallationSchema.shape.role,
   /** Unix seconds: units started after this run the trial build. */
   swappedAt: z.number(),

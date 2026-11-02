@@ -5,7 +5,10 @@
  */
 
 import type { Subprocess } from "bun";
+import { readWithin } from "./bounded";
 import { hostEnvironment } from "./session-env";
+import { unhandled } from "./unhandled";
+import { updatesWords } from "./words/updates";
 
 /** A command that ran to its end: its exit code, what it wrote, and the signal that ended it, if one did. */
 export interface Ran {
@@ -42,6 +45,47 @@ export const runCaptured = async (
   return { code, signalCode: child.signalCode, stdout, stderr };
 };
 
-/** Runs a system tool in the host's environment and the C locale, so the words it prints parse the same on every machine. */
-export const runInC = (argv: readonly string[]): Promise<Ran> =>
-  runCaptured(argv, { env: { ...hostEnvironment(), LC_ALL: "C" } });
+/**
+ * How long a system tool is given to end: 120 s. The longest one waits by
+ * design is a `systemctl --user start|stop` on its job, which systemd ends
+ * at the unit's start or stop timeout (SIGKILL on a stop); no CawCo unit
+ * sets one, so it is the user manager's default, 90 s
+ * (https://www.freedesktop.org/software/systemd/man/latest/systemd-system.conf.html:
+ * "DefaultTimeoutStartSec= and DefaultTimeoutStopSec= default to 90 s in the
+ * system manager and 90 s in the user manager"). Every other call (launchctl
+ * bootstrap, bootout, kickstart, list; systemd-run; lsof; a 3 s sample)
+ * answers well inside it. The update helper's own service calls take the
+ * same bound (cli binary-apply.ts `SERVICE_TIMEOUT_MS`).
+ */
+const SYSTEM_TOOL_MS = 120_000;
+
+/**
+ * A command as a failure names it: every argument but those that set a value
+ * (`--setenv=KEY=value`, `--unit=…`), so what it was handed (an environment's
+ * secrets among it) never reaches a log or a machine's row.
+ */
+const named = (argv: readonly string[]): string =>
+  argv.filter((arg) => !arg.includes("=")).join(" ");
+
+/**
+ * Runs a system tool in the host's environment and the C locale, so the words
+ * it prints parse the same on every machine, given {@link SYSTEM_TOOL_MS} to
+ * end. One that has not is stopped, and the call throws naming it: a service
+ * manager that does not answer never holds its caller (an update helper's
+ * launch, a keeper's handover) for good.
+ */
+export const runInC = async (argv: readonly string[]): Promise<Ran> => {
+  const ran = await readWithin(SYSTEM_TOOL_MS, (signal) =>
+    runCaptured(argv, { env: { ...hostEnvironment(), LC_ALL: "C" }, signal })
+  );
+  switch (ran.kind) {
+    case "answered":
+      return ran.value;
+    case "unanswered":
+      throw new Error(
+        updatesWords.didNotEnd(named(argv), Math.round(ran.after / 1000))
+      );
+    default:
+      unhandled("read", ran);
+  }
+};

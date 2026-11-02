@@ -16,8 +16,7 @@ import {
   launchdJobs,
   launchdProgram,
 } from "@cawco/core/launchd";
-import { runCaptured } from "@cawco/core/run-captured";
-import { hostEnvironment } from "@cawco/core/session-env";
+import { runInC } from "@cawco/core/run-captured";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** How long a launched helper has to take its lock; one that holds none after it has gone. */
@@ -100,9 +99,13 @@ export async function launchHelper(
   return { label, name: `launchd (gui/${process.getuid?.()}/${label})` };
 }
 
-/** Has the service manager start the helper's job; throws its words when it refuses. */
+/**
+ * Has the service manager start the helper's job; throws its words when it
+ * refuses, and says so when it did not answer within its bound
+ * ({@link runInC}): the install then fails with that, never waits on it.
+ */
 const startHelper = async (argv: string[]): Promise<void> => {
-  const ran = await runCaptured(argv, { env: hostEnvironment() });
+  const ran = await runInC(argv);
   if (ran.code !== 0) {
     throw new Error(`The update helper could not start: ${ran.stderr.trim()}`);
   }
@@ -163,10 +166,20 @@ export async function removeFinishedHelpers(): Promise<void> {
       ) {
         return;
       }
-      await Bun.spawn(
-        ["launchctl", "bootout", `gui/${process.getuid?.()}/${label}`],
-        { env: hostEnvironment(), stdout: "ignore", stderr: "ignore" }
-      ).exited;
+      // Its answer is not read: a job already gone is gone all the same. One
+      // that did not answer within its bound keeps its file for the next pass.
+      try {
+        await runInC([
+          "launchctl",
+          "bootout",
+          `gui/${process.getuid?.()}/${label}`,
+        ]);
+      } catch (error) {
+        console.warn(
+          `[update] ${label}: ${error instanceof Error ? error.message : String(error)}; it is removed on a later pass`
+        );
+        return;
+      }
       await rm(path, { force: true });
       await forgetLaunchdStart(label);
     })

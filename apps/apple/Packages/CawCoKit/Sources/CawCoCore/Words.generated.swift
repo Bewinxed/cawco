@@ -1836,7 +1836,16 @@ public enum Words {
             "· \(name) · waiting for its hub"
         }
 
-        /// The agent's log line when its hub refused or dropped the connection (`code`) before it answered `what`: no answer, never a failed attempt.
+        /// A step of an install (a service manager call, a build's `binary-units`) given its bound, and stopped past it.
+        public static func didNotEnd(what: String, seconds: Int) -> String {
+            "\(what) did not end within \(seconds) s, so it was stopped"
+        }
+
+        /// An update's trial whose resumed deciders each failed: the trial is ended, the machine left on the build it runs.
+        public static func trialUndecided(version: String, tries: Int, why: String) -> String {
+            "The trial of \(version) could not be decided after \(tries) tries: \(why). The machine stays on the build it runs."
+        }
+
         public static func hubDropped(hub: String, code: String, what: String) -> String {
             "the hub at \(hub) refused or dropped the connection (\(code)) before it answered \(what); nothing was done on it, and it is asked again on the next tick"
         }

@@ -94,6 +94,7 @@ import {
   type ReleaseManifest,
   verifyManifest,
 } from "@cawco/core/release-manifest";
+import { runCaptured } from "@cawco/core/run-captured";
 import { runtimeVersion } from "@cawco/core/runtime";
 import {
   isDamagedRecord,
@@ -102,6 +103,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
@@ -296,8 +298,20 @@ export async function applyBinary(
 }
 
 /**
+ * How many resumed helpers in a row may fail to decide a trial before the
+ * trial is ended undecided ({@link endUndecided}): 3. A resume is a fresh
+ * process from the running build, launched again within seconds (agent
+ * binary-update.ts `#keepDecider`, every `HELPER_START_MS`), so what fails it
+ * three times over is no passing fault, and a fourth would fail alike.
+ */
+const RESUME_TRIES = 3;
+
+/**
  * `--resume`: decides the open trial a helper left undecided (it died, or the
- * machine rebooted), or finishes the decision it had written.
+ * machine rebooted), or finishes the decision it had written. A resume that
+ * fails is counted on the trial (`resumesFailed`); the {@link RESUME_TRIES}th
+ * ends it ({@link endUndecided}), so no machine says installing, or holds
+ * every newer build back behind the open trial, for good.
  */
 export async function resumeBinary(): Promise<void> {
   const found = await readTrial();
@@ -322,9 +336,46 @@ export async function resumeBinary(): Promise<void> {
     await say(`end ${trial.version}`);
   } catch (error) {
     await say(`resume failed ${message(error)}`);
+    await countFailedResume(message(error));
   } finally {
     await rm(lockPath(), { force: true });
   }
+}
+
+/** A resume that failed, counted on the trial still open; the {@link RESUME_TRIES}th ends it. */
+async function countFailedResume(why: string): Promise<void> {
+  const trial = await readTrial();
+  if (!trial) {
+    return;
+  }
+  const failed = (trial.resumesFailed ?? 0) + 1;
+  if (failed < RESUME_TRIES) {
+    await writeJsonAtomic(trialPath(), { ...trial, resumesFailed: failed });
+    return;
+  }
+  await endUndecided(trial, failed, why);
+}
+
+/**
+ * A trial no helper could decide ends undecided: the state says failed with
+ * the last resume's reason, the build is the failed one (as a rollback's is,
+ * so auto-update does not take it again unasked), and the trial goes. The
+ * machine stays on the build `current` names, and the agent goes on to what
+ * its hub offers next.
+ */
+async function endUndecided(
+  trial: TrialMarker,
+  tries: number,
+  why: string
+): Promise<void> {
+  await writeState({
+    phase: "failed",
+    failedVersion: trial.version,
+    heldChildren: undefined,
+    error: updatesWords.trialUndecided(trial.version, tries, why),
+  });
+  await rm(trialPath(), { force: true });
+  await say(`ended ${trial.version} undecided after ${tries} resumes: ${why}`);
 }
 
 type KeeperMove =
@@ -369,23 +420,36 @@ async function awaitWelcome(endpoint: string, job: KeeperJob): Promise<void> {
 }
 
 /**
+ * How long a build's `binary-units` is given: 4 minutes. With `--services` on
+ * a Mac it may load the hub's, the dashboard's and the agent's LaunchAgents
+ * again, each waited out of launchd for up to 60 s after its bootout (cli
+ * service.ts `BOOTOUT_WAIT_MS`) and then bootstrapped: three of those, and on
+ * Linux a daemon-reload and a socket's restart, each a service manager call
+ * within {@link SERVICE_TIMEOUT_MS}.
+ */
+const BINARY_UNITS_MS = 4 * 60_000;
+
+/**
  * `cawco binary-units` (with `args`) from `version`'s own executable: units as
  * that build writes them, never as the build running this helper does. What
- * it said, on one line.
+ * it said, on one line. One that has not ended within
+ * {@link BINARY_UNITS_MS} is stopped and throws saying so: the install goes
+ * on to its verdict, never waits on it.
  */
 async function binaryUnits(
   version: string,
   args: readonly string[] = []
 ): Promise<string> {
-  const units = Bun.spawn(
-    [versionExecutable(version), "binary-units", ...args],
-    { stdout: "pipe", stderr: "pipe" }
+  const what = `${version}'s binary-units${args.length > 0 ? ` ${args.join(" ")}` : ""}`;
+  const ran = await readWithin(BINARY_UNITS_MS, (signal) =>
+    runCaptured([versionExecutable(version), "binary-units", ...args], {
+      signal,
+    })
   );
-  const [out, err, code] = await Promise.all([
-    new Response(units.stdout).text(),
-    new Response(units.stderr).text(),
-    units.exited,
-  ]);
+  if (ran.kind !== "answered") {
+    throw new Error(updatesWords.didNotEnd(what, Math.round(ran.after / 1000)));
+  }
+  const { code, stderr: err, stdout: out } = ran.value;
   if (code !== 0) {
     throw new Error(
       `binary-units exited ${code}: ${failureSentence(err) ?? out.trim()}`
