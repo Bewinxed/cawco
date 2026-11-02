@@ -19,11 +19,15 @@
    * every word where it was written, and says why and what to do over the
    * commit row.
    *
-   * The hub is a prop (`hub`), and so is the state it opens in (`draft`,
-   * `saving`, `failure`), so its states file draws each state with no hub.
+   * The hub is a prop (`hub`), and so is the state it stands in (`draft`,
+   * `saving`, `failure`, `attempted`), so its states file draws each state
+   * with no hub. It follows those props while mounted: each is a writable
+   * derived of its prop (svelte.dev/docs/svelte/$derived, "you can
+   * temporarily override their values by reassigning them"), so what the
+   * person types holds until the prop is set again, and a state set in
+   * place on a mounted form is the state it shows.
    */
   import { routinesWords as words } from "@cawco/core/words/routines";
-  import { untrack } from "svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -62,6 +66,7 @@
     draft: opening = {},
     saving: openSaving = false,
     failure: openFailure = null,
+    attempted: openAttempted = false,
     focus = true,
   }: {
     projectId: string;
@@ -69,12 +74,14 @@
     oncreated: (routine: Routine) => void;
     oncancel: () => void;
     hub?: RoutineFormHub;
-    /** What its fields hold when it opens; its `cron` opens as the choice that writes it. */
+    /** What its fields hold; its `cron` stands as the choice that writes it. */
     draft?: Partial<RoutineDraft>;
-    /** It opens with a create going (its states file). */
+    /** A create is going (its states file). */
     saving?: boolean;
-    /** It opens with a create refused, in these words (its states file). */
+    /** A create was refused, in these words (its states file). */
     failure?: string | null;
+    /** Create was pressed: every blank field says what it needs (its states file). */
+    attempted?: boolean;
     /** Its name field takes the focus as it opens. */
     focus?: boolean;
   } = $props();
@@ -87,22 +94,28 @@
   /** How long typing rests before the schedule is read back. */
   const PREVIEW_SETTLE_MS = 250;
 
-  let draft = $state(
-    untrack(() => ({
+  /** Its fields as the person edits them: a fresh copy of `draft` each time the prop is set. */
+  const draft = $derived.by(() => {
+    const fields = $state({
       name: opening.name ?? "",
       prompt: opening.prompt ?? "",
       timeZone: opening.timeZone ?? readerZone(),
       delegateType: opening.delegateType ?? null,
       target: opening.target ?? "delegate",
-    }))
-  );
-  let when = $state<When>(
-    untrack(() => (opening.cron ? choiceOf(opening.cron) : { ...FIRST_WHEN }))
-  );
-  let saving = $state(untrack(() => openSaving));
-  let failure = $state<string | null>(untrack(() => openFailure));
+    });
+    return fields;
+  });
+  /** When it runs, as the person edits it: the choice that writes `draft.cron` each time the prop is set. */
+  const when = $derived.by(() => {
+    const chosen = $state<When>(
+      opening.cron ? choiceOf(opening.cron) : { ...FIRST_WHEN }
+    );
+    return chosen;
+  });
+  let saving = $derived(openSaving);
+  let failure = $derived<string | null>(openFailure);
   /** Create was pressed: every blank field says what it needs. */
-  let attempted = $state(false);
+  let attempted = $derived(openAttempted);
   let touched = $state<Record<"name" | "prompt" | "time" | "custom", boolean>>({
     name: false,
     prompt: false,
