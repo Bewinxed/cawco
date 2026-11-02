@@ -668,7 +668,11 @@ import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { OwedMove } from "./db/owed-moves";
-import { projectOfOrigin, projectOrigin } from "./db/previews";
+import {
+  artifactOfOrigin,
+  projectOfOrigin,
+  projectOrigin,
+} from "./db/previews";
 import type {
   ContinuationAsker,
   PriorConversation,
@@ -12540,7 +12544,7 @@ export const createServer = (
   /**
    * Session `instanceId`'s panel shows nothing now. What it showed goes on
    * being served on its own origin, for its own tab and the decision cards
-   * that show it, until its session ends ({@link endPreviews}).
+   * that show it, for as long as that artifact lasts ({@link endArtifactOrigin}).
    */
   const closePreview = (
     instanceId: string
@@ -12557,34 +12561,36 @@ export const createServer = (
   /**
    * A session ended: its preview closes, its preview origin's port is free
    * again, and every pass its browser was given (`artifact_browse`) is gone.
+   * Each artifact it made or showed keeps its own origin
+   * ({@link endArtifactOrigin}): a preview handed up outlives its maker.
    */
   const endPreviews = (instanceId: string): void => {
     closePreview(instanceId);
     db.previewPasses.revoke({ instanceId });
-    endOrigin(instanceId);
+    previewListeners.release(instanceId);
   };
 
   /**
-   * Preview origin `key` (a session's, a project's) ended: its listener
-   * stops and its port is free again, and so is each artifact origin it
-   * opened, their machines' listeners stopped too.
+   * Artifact `id` went: its own origin ({@link embedKey}) ends with it, its
+   * listener stopped and its port free again, and its machine's listener
+   * stopped too. The one end of an artifact's origin: the session that
+   * opened it, or held it, ending leaves it standing.
    */
-  const endOrigin = (key: string): void => {
+  const endArtifactOrigin = (id: string): void => {
+    const key = embedKey(id);
     previewListeners.release(key);
-    for (const embed of previewListeners.releaseEmbeds(key)) {
-      const target = embedTargets.get(embed);
-      embedTargets.delete(embed);
-      if (target && !("page" in target.source)) {
-        detach(
-          callAgent(
-            target.machineId,
-            PREVIEW_STOP,
-            [{ instanceId: embed }],
-            BUSY_TIMEOUT_MS
-          ),
-          "embedded preview stop"
-        );
-      }
+    const target = embedTargets.get(key);
+    embedTargets.delete(key);
+    if (target && !("page" in target.source)) {
+      detach(
+        callAgent(
+          target.machineId,
+          PREVIEW_STOP,
+          [{ instanceId: key }],
+          BUSY_TIMEOUT_MS
+        ),
+        "embedded preview stop"
+      );
     }
   };
 
@@ -14586,8 +14592,10 @@ export const createServer = (
         publishPreview(instanceId, "open", now);
       }
     },
-    // A preview gone holds the workspace it showed no longer.
+    // A preview gone holds the workspace it showed no longer, and its own
+    // origin ends with it.
     removed: (row) => {
+      endArtifactOrigin(row.id);
       if (row.kind === "preview" && row.machineId) {
         workItems.settleShown(row.machineId);
       }
@@ -15379,6 +15387,30 @@ export const createServer = (
     },
     reach: reachPreview,
     stageAnswered: (artifactId) => artifacts.stageAnswered(artifactId),
+    target: (key) => {
+      const artifactId = artifactOfOrigin(key);
+      if (artifactId === null) {
+        return previewTargets.get(key);
+      }
+      const row = embedTargets.has(key)
+        ? undefined
+        : db.artifacts.get(artifactId);
+      if (row?.machineId && !("page" in row.source)) {
+        keepEmbedTarget(shownArtifact(row), row.source, row.machineId);
+      }
+      return embedTargets.get(key);
+    },
+    workspaceHolds: (artifactId) => {
+      const source = db.artifacts.get(artifactId)?.source;
+      const workspace =
+        source && "port" in source ? source.workspace : undefined;
+      return (
+        workspace !== undefined &&
+        db
+          .workspacesNamed(workspace)
+          .some((row) => row.id === workspace && row.state !== "archived")
+      );
+    },
     unreachable: previewUnreachable,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     pictures: artifactPictures(artifacts.pictures),
@@ -29707,9 +29739,12 @@ export const createServer = (
           },
           hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
           hasProject: (id) => db.project(id) !== undefined,
+          // Its newest version's (a next one held for its owner's panel
+          // included), as artifact_browse and a decision page's Preview
+          // take it: the version the owner's panel opened last may be older.
           artifactAddress: (id) => {
-            const row = db.artifacts.get(id);
-            const owner = originKeyOf(id);
+            const row = artifacts.newest(id);
+            const owner = row && originKeyOf(row.id);
             if (!(row && owner)) {
               return;
             }
@@ -33545,8 +33580,9 @@ export const createServer = (
         );
         db.deleteProject(params.id);
         // Its pages' origin goes with it (its port's row went in the
-        // delete), and every machine preview its pages opened.
-        endOrigin(projectOrigin(params.id));
+        // delete); each machine preview its pages showed keeps its own,
+        // which ends with that artifact.
+        previewListeners.release(projectOrigin(params.id));
         projectsChanged();
         // Its hooks leave every place it had.
         for (const machineId of machines) {

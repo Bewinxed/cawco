@@ -34,7 +34,8 @@ export const previewRoutes = (deps: {
   /** Whether the hub keeps project `id`. */
   hasProject: (id: string) => boolean;
   /**
-   * The origin artifact `id` is served on, its listener started when it has
+   * The origin artifact `id`'s newest version is served on (a next version
+   * held for its owner's panel included), its listener started when it has
    * none: a machine's preview or sheet its own, anything else its session's
    * or its project's. Undefined when no session or project holds it.
    */

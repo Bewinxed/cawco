@@ -7303,6 +7303,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
+     * Artifact `id`'s newest version ({@link newestVersion}): the next one
+     * its maker's change waits as, else itself. Undefined when the hub
+     * doesn't hold it.
+     */
+    newest: (id: string): ArtifactRow | undefined => {
+      const row = db.get(id);
+      return row && newestVersion(row);
+    },
+
+    /**
      * A decision page's program and what its media show now, for the page
      * the hub serves (preview.ts `servePage`): the hash its overlay carries,
      * and each artifact its Canvas and Preview pieces name, null once the hub

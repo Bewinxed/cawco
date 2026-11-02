@@ -134,8 +134,9 @@ export const shownArtifact = (
  * sheet), which its session's panel, its own tab and every decision page's
  * Preview of it load: its target here and its listener on a port of its own
  * are keyed by the artifact ({@link embedKey}), apart from every session's,
- * and its port is kept while the origin that opened it lives (db previews.ts
- * `artifactOrigin`, `createPreviewListeners`' `holds`). A dev server and a
+ * and both last as long as the artifact, whichever session opened or held
+ * it (server.ts `endArtifactOrigin`); its port is kept while its work does
+ * (db previews.ts `artifactOrigin`, `createPreviewListeners`' `holds`). A dev server and a
  * stage serve from their root, so no other origin can show one under a path
  * of its own; the machine keys its listener by the same key. It is never in {@link previewTargets}.
  */
@@ -469,11 +470,25 @@ export interface PreviewListenerDeps {
   socket: ReturnType<typeof artifactSocket>;
   /** Artifact `artifactId`'s stage answered its page through the relay (core `PREVIEW_SERVED_HEADER`): it is reachable. */
   stageAnswered: (artifactId: string) => void;
+  /**
+   * What origin `key` shows now: a session's panel's target; an artifact's
+   * own origin's ({@link embedKey}), made again from its artifact when the
+   * hub holds none (it restarted since a frame named it), so the address it
+   * was handed under answers as long as the artifact lasts. Undefined when
+   * nothing does.
+   */
+  target: (key: string) => PreviewTarget | undefined;
   /** The machine's listener at `upstream` refused a connection: the next request reaches the preview again. */
   unreachable: (
     instanceId: string,
     upstream: NonNullable<PreviewTarget["upstream"]>
   ) => void;
+  /**
+   * Whether artifact `artifactId` shows a server in a workspace that is
+   * still active: retirement waits on such an artifact (work-items.ts
+   * `previewedBy`), and its origin keeps its port while the work does.
+   */
+  workspaceHolds: (artifactId: string) => boolean;
 }
 
 /** An artifact's sync socket, its send (`/send`) or a canvas's picture (`/picture`), on the origin that serves it only ({@link PreviewListenerDeps.originOf}). */
@@ -603,7 +618,7 @@ async function pingSession(
   instanceId: string,
   deps: PreviewListenerDeps
 ): Promise<Response> {
-  const target = targetsOf(instanceId).get(instanceId);
+  const target = deps.target(instanceId);
   // A session's or a project's origin serves only what the hub holds: a
   // machine's preview answers on its artifact's own origin.
   if (!(target && isEmbed(instanceId)) || "page" in target.source) {
@@ -916,7 +931,7 @@ async function serveSession(
   if (hubsOwn(pathname)) {
     return new Response("Not found", { status: 404 });
   }
-  const target = targetsOf(instanceId).get(instanceId);
+  const target = deps.target(instanceId);
   if (!target) {
     previewFailed(HOP, instanceId, "its session shows no preview");
     return downResponse("closed", 404);
@@ -1467,13 +1482,13 @@ export function createPreviewListeners(
   const sessions = new Map<string, Listener>();
   /**
    * Each machine artifact's listener on the port it keeps (made again as a
-   * frame next names it, after a mode change too), by its key, with the origin of the
-   * page that shows it and every origin that page was served on: exactly
-   * those may frame it.
+   * frame next names it, after a mode change or a restart too), by its key,
+   * with every origin a page that shows it was served on: exactly those may
+   * frame it. It lasts as long as its artifact, whoever opened it.
    */
   const embeds = new Map<
     string,
-    { ancestors: Set<string>; listener: Listener; owner: string }
+    { ancestors: Set<string>; listener: Listener }
   >();
   /** Host mode's one listener. */
   let byHost: Listener | undefined;
@@ -1529,16 +1544,13 @@ export function createPreviewListeners(
 
   /**
    * The session or project that holds origin `key`'s port: a session's or a
-   * project's origin itself; an embed's, the origin that opened it, or with
-   * no listener open (after a restart) its artifact's own. Undefined when
-   * none does.
+   * project's origin itself; an embed's, the origin of its artifact now
+   * (the session that holds it, after a hand-up or a move too). Undefined
+   * when none does.
    */
   const holderOf = (key: string): string | undefined => {
     const artifactId = artifactOfOrigin(key);
-    if (artifactId === null) {
-      return key;
-    }
-    return embeds.get(key)?.owner ?? deps.originOf(artifactId);
+    return artifactId === null ? key : deps.originOf(artifactId);
   };
 
   /**
@@ -1547,7 +1559,8 @@ export function createPreviewListeners(
    * frame of it open on a screen ({@link viewers}); a project's, while the
    * hub keeps the project; a session's, while the session is used
    * (`sessionUsed`: its process may run, or a screen follows it); an
-   * artifact's, while the session that opened it is used or a used
+   * artifact's, while the workspace whose server it shows is active
+   * (`workspaceHolds`), the session that holds it is used, or a used
    * session's panel shows it. The OS holds the port itself while a listener
    * is bound (`unheld`); the stored port is the one the origin comes back
    * to, a claim that counts only while this holds, as Portless keeps a
@@ -1565,11 +1578,12 @@ export function createPreviewListeners(
     if (artifactId === null) {
       return deps.sessionUsed(key);
     }
-    const opener = holderOf(key);
+    const holder = holderOf(key);
     return (
-      (opener !== undefined &&
-        projectOfOrigin(opener) === null &&
-        deps.sessionUsed(opener)) ||
+      deps.workspaceHolds(artifactId) ||
+      (holder !== undefined &&
+        projectOfOrigin(holder) === null &&
+        deps.sessionUsed(holder)) ||
       [...previewTargets].some(
         ([instanceId, target]) =>
           target.artifact.id === artifactId && deps.sessionUsed(instanceId)
@@ -1815,21 +1829,19 @@ export function createPreviewListeners(
 
   /**
    * A machine artifact's listener on the port it keeps ({@link portFor}),
-   * so its origin is the same one across the hub's restarts while the
-   * origin that opened it lives: the port it keeps while that still opens,
+   * so its origin is the same one across the hub's restarts while its
+   * artifact lasts ({@link holds}): the port it keeps while that still opens,
    * else the lowest of the range no other origin holds, kept from then on.
    */
   const openEmbed = (
-    key: string,
-    owner: string
-  ): { ancestors: Set<string>; listener: Listener; owner: string } => {
+    key: string
+  ): { ancestors: Set<string>; listener: Listener } => {
     portFor(key, (port) => {
       if (!unheld(port)) {
         return false;
       }
       try {
         embeds.set(key, {
-          owner,
           ancestors: new Set<string>(),
           listener: listen(port, () => key, portLock),
         });
@@ -1880,18 +1892,24 @@ export function createPreviewListeners(
   /**
    * Each kept port is checked once ({@link holds}): one no origin holds
    * now lets it go; each session or project that holds one and has no
-   * listener yet gets one on it (`bind`). A machine artifact's opens as a
-   * frame names it ({@link openEmbed}): only its page knows who may frame it.
+   * listener yet gets one on it (`bind`), a machine artifact's too
+   * ({@link openEmbed}), so the address it was handed under answers again;
+   * a decision page that frames it names its own origin as it loads.
    */
   const bindKept = (): void => {
     letUnusedGo();
     for (const { key } of db.ports()) {
-      if (!(sessions.has(key) || isEmbed(key))) {
-        try {
+      if (sessions.has(key) || embeds.has(key)) {
+        continue;
+      }
+      try {
+        if (isEmbed(key)) {
+          openEmbed(key);
+        } else {
           bind(key);
-        } catch (thrown) {
-          previewFailed(HOP, key, causeOf(thrown));
         }
+      } catch (thrown) {
+        previewFailed(HOP, key, causeOf(thrown));
       }
     }
   };
@@ -2009,7 +2027,7 @@ export function createPreviewListeners(
      * origin too, named by its key or port.
      */
     embed(key: string, owner: string, pageAt?: URL): PreviewAddress {
-      const held = embeds.get(key) ?? openEmbed(key, owner);
+      const held = embeds.get(key) ?? openEmbed(key);
       // The page that shows it, as the browser reached it: that exact origin may frame it.
       const framer = pageAt && pageOrigin(owner, pageAt);
       if (framer) {
@@ -2018,18 +2036,7 @@ export function createPreviewListeners(
       return addressAt(key, held.listener.port);
     },
 
-    /** The artifacts' origins origin `owner` (a session, a project) opened end with it, each letting its port go: their keys, so their machines' listeners stop too. */
-    releaseEmbeds(owner: string): string[] {
-      const gone = [...embeds]
-        .filter(([, embed]) => embed.owner === owner)
-        .map(([key]) => key);
-      for (const key of gone) {
-        release(key);
-      }
-      return gone;
-    },
-
-    /** The origin's owner ended (a session, a project): its listener stops and its port is free again. */
+    /** The origin's owner ended (a session, a project, an artifact): its listener stops and its port is free again. */
     release,
 
     /** Whether the hub reaches a preview origin's ping itself now ({@link reachOrigin}). */

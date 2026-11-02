@@ -34042,10 +34042,10 @@
             "$ref": "#/components/schemas/HubAuthFrame"
           },
           {
-            "$ref": "#/components/schemas/PreviewFrame"
+            "$ref": "#/components/schemas/StageFrame"
           },
           {
-            "$ref": "#/components/schemas/StageFrame"
+            "$ref": "#/components/schemas/PreviewFrame"
           },
           {
             "$ref": "#/components/schemas/BrowserFrame"
@@ -34208,8 +34208,8 @@
           "propertyName": "kind",
           "mapping": {
             "hub_auth": "#/components/schemas/HubAuthFrame",
-            "preview": "#/components/schemas/PreviewFrame",
             "stage": "#/components/schemas/StageFrame",
+            "preview": "#/components/schemas/PreviewFrame",
             "browsers": "#/components/schemas/BrowserFrame",
             "browser_handback": "#/components/schemas/BrowserHandedBackFrame",
             "stage-clone": "#/components/schemas/StageCloneFrame",
