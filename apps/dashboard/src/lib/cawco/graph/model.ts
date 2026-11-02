@@ -4,14 +4,18 @@
  * (CSF 3, `<Component>.stories.ts`) and the agent's canvas spec (`group`,
  * `edges`). Nothing new is asked of either:
  * - a **state** is a story, named by its export in plain words, its note
- *   its doc comment, its width its `parameters.viewport`, a failure where
- *   its CSF `tags` say `failure`;
+ *   its own doc comment, its width its `parameters.viewport`, an error
+ *   state where its CSF `tags` say `failure`;
  * - a **machine** is a heading the spec's `group` names (a story grouped
  *   under a word that is no story's), its path the file's own order; a
  *   file the spec groups nothing of is one machine, the section's name;
- * - a **variant** is a story the spec groups under another story; a story
- *   whose `parameters.records` names a list arg offers that list in three
- *   sizes (one, many, the longest names) as variants of its own;
+ * - a story the spec groups under another story at another width is that
+ *   state at that width (`widths`): the view's width choice draws it, never
+ *   a variant of its own;
+ * - a **variant** is a story grouped under another at the same width, or,
+ *   for a story whose `parameters.records` names a list arg, that list in
+ *   three sizes (one, many, the longest names); the state as written is no
+ *   variant, it is the state with none picked;
  * - a **move** is a story's `from` (with its `play`, run on the stage) or
  *   one of the spec's `edges` (drawn, nothing to play).
  */
@@ -61,7 +65,7 @@ export interface ReviewInput {
   source: string;
 }
 
-/** A way a state is drawn: the state as written, a story grouped under it, or a record set. */
+/** A way a state is drawn other than as written: a story grouped under it at its width, or a record set. */
 interface Variant {
   args: Record<string, unknown>;
   id: string;
@@ -84,9 +88,11 @@ export interface GraphState {
   name: string;
   note: string | null;
   play: Story["play"] | null;
-  /** The state as written first, then the stories under it, then its record sets. */
+  /** The stories under it at its width, then its record sets. */
   variants: Variant[];
   width: number | null;
+  /** The state drawn at other widths, by its stories at those widths. */
+  widths: { args: Record<string, unknown>; story: string; width: number }[];
 }
 
 interface Machine {
@@ -123,8 +129,9 @@ export interface Holes {
 }
 
 const CASE_BREAK = /([a-z0-9])([A-Z])/gu;
+/** An export and the doc comment right over it: a comment's words never cross its own `*\/`, so the file's header is no story's note. */
 const COMMENTED_EXPORT =
-  /(?:\/\*\*([\s\S]*?)\*\/\s*)?export const (\w+)\s*(?::[^=]+)?=/gu;
+  /(?:\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*)?export const (\w+)\s*(?::[^=]+)?=/gu;
 const COMMENT_LINE = /^\s*\*\s?/gmu;
 
 /** `FailedSave` → "Failed save". */
@@ -221,16 +228,8 @@ function stateOf(
     failure: story.tags?.includes("failure") ?? false,
     from: story.from && names.has(story.from) ? story.from : null,
     play: story.play ?? null,
-    variants: [
-      {
-        id: one.name,
-        story: one.name,
-        name: words.asWritten,
-        note: one.note,
-        width,
-        args,
-      },
-    ],
+    variants: [],
+    widths: [],
   };
 }
 
@@ -293,20 +292,35 @@ export function reviewOf(input: ReviewInput): Review {
   for (const one of exported) {
     const held = states[parentOf(one.name) ?? ""];
     const story = input.module[one.name] as Story;
-    held?.variants.push({
+    const width = widthOf(story);
+    const args = { ...meta.args, ...story.args };
+    if (!held) {
+      continue;
+    }
+    if (width !== null && width !== held.width) {
+      held.widths.push({ args, story: one.name, width });
+      continue;
+    }
+    held.variants.push({
       id: one.name,
       story: one.name,
       name: storyWords(one.name),
       note: one.note,
-      width: widthOf(story),
-      args: { ...meta.args, ...story.args },
+      width,
+      args,
     });
   }
   for (const id of order) {
     const state = states[id] as GraphState;
     const arg = (input.module[id] as Story).parameters?.records;
     if (arg) {
-      state.variants.push(...recordSets(state.variants[0] as Variant, arg, id));
+      state.variants.push(
+        ...recordSets(
+          { args: state.args, story: id, width: state.width },
+          arg,
+          id
+        )
+      );
     }
   }
 

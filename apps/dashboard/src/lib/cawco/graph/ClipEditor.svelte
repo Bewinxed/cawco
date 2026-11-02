@@ -142,13 +142,12 @@
         </div>
       </fieldset>
 
-      <fieldset class="m-0 flex flex-col gap-space-2 border-0 p-0">
-        <legend class="mb-space-2 type-label text-ink-muted"
-          >{words.curve}</legend
-        >
-        {#if clip.framed}
-          <p class="m-0 type-meta text-ink-muted">{words.keyframedNoCurve}</p>
-        {:else}
+      {#if !clip.framed}
+        <!-- A clip whose curve lives in its frames changes its length alone. -->
+        <fieldset class="m-0 flex flex-col gap-space-2 border-0 p-0">
+          <legend class="mb-space-2 type-label text-ink-muted"
+            >{words.curve}</legend
+          >
           <div class="flex flex-wrap gap-space-1">
             {#each [...CURVES, "linear"] as name (name)}
               {@const value =
@@ -178,8 +177,8 @@
               {words.spring}
             </button>
           </div>
-        {/if}
-      </fieldset>
+        </fieldset>
+      {/if}
 
       <button
         type="button"

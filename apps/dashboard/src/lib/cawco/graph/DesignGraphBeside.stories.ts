@@ -9,7 +9,7 @@ export default {
   component: DesignGraphFrame,
   args: {
     arrangement: "beside",
-    ask: { component: "Routine form", state: "FailedSave", seeing: "journey" },
+    ask: { component: "Routine form", state: "FailedSave" },
   },
 };
 

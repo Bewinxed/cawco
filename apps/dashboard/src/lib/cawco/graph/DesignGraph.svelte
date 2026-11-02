@@ -1,12 +1,14 @@
 <script lang="ts" module>
-  /** What the agent's ask names: the component in front, the state it opens on, and the way of seeing. */
+  /** What the agent's ask names: the component in front, the state it opens on, and the face the room opens on. */
   export interface Ask {
     component?: string;
-    /** The room's face it opens on: the states (the default) or the move. */
-    face?: "states" | "move";
-    seeing?: "journey" | "whole";
+    /** The room's face it opens on: the states (the default), the whole set, or the move. */
+    face?: Face;
     state?: string;
   }
+
+  /** The room's three faces: the states list with its steps, the whole set, the move. */
+  export type Face = "states" | "whole" | "move";
 
   /**
    * Where the states and the move stand on a desk: the explore's one axis.
@@ -22,40 +24,58 @@
    * The design graph (spec.md §5; its surface brief under
    * apps/dashboard/.impeccable/surfaces): where the owner judges a
    * component an agent built. The stage holds the real component in the
-   * state he keeps; with it one room with two faces, the states (the
-   * journey or the whole set) and the move into the kept state. Resting a
-   * fine pointer on a state previews it, pressing keeps it, a tap keeps
-   * it. Compare, a switch that stays on, draws what differs from the kept
-   * state. The move into a kept state plays once as it arrives, then its
-   * playhead rests at its start. Several components under one ask: one in
-   * front, the others behind its name's menu.
+   * state he keeps, and only that: a press on a state keeps it, and
+   * nothing else changes the stage. Beside it one room, its one switch
+   * (fluid-tabs) choosing its face: the states list with its steps, the
+   * whole set, or the move into the kept state. Compare, a switch that
+   * stays on, compares the kept state with the one before it at once,
+   * and a press on another state compares with that one instead; the
+   * stage keeps the kept state and rings what differs. The move into a
+   * kept state plays once as it arrives, then its playhead rests at its
+   * start. Several components under one ask: one in front, the others
+   * behind its name's menu.
    *
    * One bar of one row (DESIGN.md, The Title Bars Follow Liquid Glass
    * Rule): leading the component's name (its menu when there are several),
-   * centre the way of seeing, trailing one glass group of bare symbols
-   * (Compare, the stage's view, the room). Under the desk line (900px of
-   * its own width) the room is the kit's bottom drawer, its stops head,
-   * half and whole, the stage whole above it at the head stop.
+   * trailing one glass group of bare symbols (Compare, the stage's view,
+   * the room). The view is a card hung from the glass (HangCard, as the
+   * app's own glass hangs its cards): the widths as device glyphs, the
+   * scheme as sun and moon, Reduce motion as a switch. Under the desk line
+   * (900px of its own width) the room is the kit's bottom drawer, its
+   * stops head, half and whole, the stage whole above it at the head stop.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { mergeProps } from "bits-ui";
   import { onMount, tick, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { motionOk, numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
+  import { HangCard } from "#lib/components/ui/hang-card/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronDown,
     IconClose,
-    IconColumns,
+    IconCompare,
     IconLayers,
+    IconMaximize,
+    IconMonitor,
+    IconMoon,
+    IconPhone,
     IconSidebar,
+    IconSun,
+    IconTablet,
   } from "#lib/icons.js";
   import Journey from "./Journey.svelte";
   import MoveFace, { type MoveState } from "./MoveFace.svelte";
@@ -68,7 +88,7 @@
     tune,
     untune,
   } from "./motion";
-  import Stage, { type Shown, type ShownRole } from "./Stage.svelte";
+  import Stage, { type Shown } from "./Stage.svelte";
   import Stepper from "./Stepper.svelte";
   import WholeSet from "./WholeSet.svelte";
 
@@ -100,12 +120,12 @@
   );
   const review = $derived(reviews[front] as Review);
 
-  /** A state and one of its variants (the state as written by default). */
+  /** A state and one of its variants (null: the state as written). */
   interface Pick {
     state: string;
-    variant: string;
+    variant: string | null;
   }
-  /** Where a component opens: the state the ask names (a variant's state too), else its first. */
+  /** Where a component opens: the state the ask names (a variant's or a width's state too), else its first. */
   const first = (one: Review): Pick => {
     const asked =
       one.name === ask.component || reviews.length === 1
@@ -114,10 +134,13 @@
     const holder = one.order.find(
       (id) =>
         id === asked ||
-        one.states[id]?.variants.some((variant) => variant.id === asked)
+        one.states[id]?.variants.some((each) => each.id === asked) ||
+        one.states[id]?.widths.some((size) => size.story === asked)
     );
     const state = holder ?? one.order[0] ?? "";
-    return { state, variant: holder && asked ? asked : state };
+    const variant =
+      one.states[state]?.variants.find((each) => each.id === asked)?.id ?? null;
+    return { state, variant };
   };
   /** The kept state of each component, by its name. */
   let keptOf = $state<Record<string, Pick>>(
@@ -126,13 +149,10 @@
     )
   );
   const kept = $derived(keptOf[review.name] ?? first(review));
-  let preview = $state<Pick | null>(null);
   let comparing = $state(false);
-  let compared = $state<Pick | null>(null);
-  let seeing = $state<"journey" | "whole">(
-    untrack(() => ask.seeing ?? "journey")
-  );
-  let face = $state<"states" | "move">(untrack(() => ask.face ?? "states"));
+  /** The state the kept one is compared with, while comparing. */
+  let against = $state<string | null>(null);
+  let face = $state<Face>(untrack(() => ask.face ?? "states"));
   let roomOpen = $state(untrack(() => arrangement !== "stage"));
   let width = $state<number | null>(null);
   let scheme = $state<"light" | "dark">(
@@ -143,62 +163,63 @@
   );
   let reduce = $state(false);
   const still = $derived(reduce || !motionOk.current);
-  let machine = $state(untrack(() => review.states[kept.state]?.machine ?? ""));
-  $effect(() => {
-    // The journey walks the kept state's machine.
-    const next = review.states[kept.state]?.machine;
-    if (next) {
-      untrack(() => {
-        machine = next;
-      });
-    }
-  });
-
-  const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
   let surface = $state(0);
   /** The desk line, of the surface's own width (DESIGN.md breakpoints: 900px). */
   const desk = $derived(surface === 0 || surface >= 900);
 
-  const drawOf = (pick: Pick): Shown => {
+  /**
+   * A state as the stage draws it: a record set's args when one is picked;
+   * at a width he picked that one of its stories is written for (its
+   * phone story at 390), that story's; else as written.
+   */
+  const drawOf = (pick: Pick, atWidth: number | null): Shown => {
     const state = review.states[pick.state];
-    const variant =
-      state?.variants.find((one) => one.id === pick.variant) ??
-      state?.variants[0];
+    const variant = state?.variants.find((one) => one.id === pick.variant);
+    const sized =
+      atWidth === null
+        ? null
+        : state?.widths.find((one) => one.width === atWidth);
     return {
-      args: variant?.args ?? review.args,
+      args: variant?.args ?? sized?.args ?? state?.args ?? review.args,
       name: state?.name ?? pick.state,
-      story: variant?.story ?? pick.state,
-      variant: variant && variant.id !== pick.state ? variant.name : null,
-      width: variant?.width ?? state?.width ?? null,
+      story: variant?.story ?? sized?.story ?? pick.state,
+      variant: variant?.name ?? null,
+      width: sized?.width ?? state?.width ?? null,
       line: state?.line ?? null,
     };
   };
-  const shownPick = $derived(preview ?? (comparing ? compared : null) ?? kept);
-  const shown = $derived(drawOf(shownPick));
-  const keptArgs = $derived(
-    comparing && (preview ?? compared) ? drawOf(kept).args : null
+  const shown = $derived(drawOf(kept, width));
+  const againstShown = $derived(
+    comparing && against
+      ? drawOf({ state: against, variant: null }, width)
+      : null
   );
-  const roleOf = (): ShownRole => {
-    if (shownPick === kept) {
-      return "kept";
-    }
-    return comparing ? "compared" : "previewing";
-  };
-  const role = $derived(roleOf());
 
-  const keep = (state: string, variant: string) => {
-    preview = null;
-    if (comparing) {
-      compared = { state, variant };
+  /** What Compare compares with first: the state before the kept one on its path, else the one after, else the file's next. */
+  const before = (on: Review, state: string): string | null => {
+    const path =
+      on.machines.find((one) => one.path.includes(state))?.path ?? [];
+    const at = path.indexOf(state);
+    const others = on.order.filter((id) => id !== state);
+    return path[at - 1] ?? path[at + 1] ?? others[0] ?? null;
+  };
+  const setComparing = (on: boolean) => {
+    comparing = on;
+    against = on ? before(review, kept.state) : null;
+  };
+  /** A press on a state: while comparing, compare with it; else keep it (a record set too). */
+  const press = (state: string, variant: string | null) => {
+    if (comparing && state !== kept.state) {
+      against = state;
       return;
     }
-    keptOf = { ...keptOf, [review.name]: { state, variant } };
+    keep(state, variant);
   };
-  /** A fine pointer resting on a state shows it, unless it is what the stage already shows. */
-  const onpreview = (state: string, variant: string | null) => {
-    const shownNow = comparing ? compared : kept;
-    const same = shownNow?.state === state && shownNow.variant === variant;
-    preview = variant && fine.current && !same ? { state, variant } : null;
+  const keep = (state: string, variant: string | null) => {
+    keptOf = { ...keptOf, [review.name]: { state, variant } };
+    if (comparing && against === state) {
+      against = before(review, state);
+    }
   };
 
   // --- The move into the kept state ------------------------------------------
@@ -227,7 +248,7 @@
     const into = moveInto(on, pick.state);
     const to = on.states[pick.state];
     const from = into ? on.states[into.from] : null;
-    if (!(into && to?.play && from && pick.variant === pick.state)) {
+    if (!(into && to?.play && from && pick.variant === null)) {
       move = { kind: "none", state: to?.name ?? pick.state };
       return;
     }
@@ -257,12 +278,14 @@
       }
     }
   };
-  // Each kept state arrives with its move, once.
+  // Each kept drawing arrives with its move, once: the stage mounts it
+  // afresh, so the move is read again on the instance it shows.
   $effect(() => {
     const on = review;
     const pick = kept;
+    const drawing = shown;
     untrack(() => {
-      if (!comparing) {
+      if (drawing) {
         arrive(on, pick);
       }
     });
@@ -352,13 +375,21 @@
       false
   );
   const path = $derived(
-    review.machines.find((one) => one.name === machine)?.path ?? []
+    review.machines.find((one) => one.path.includes(kept.state))?.path ?? []
   );
   const at = $derived(path.indexOf(kept.state));
   const single = $derived(review.order.length === 1);
-  const WIDTHS = [390, 680, 1440] as const;
+  /** The widths the stage is drawn at, each a device's glyph; its own first. */
+  const WIDTHS = [
+    { value: 390, icon: IconPhone, name: words.phone },
+    { value: 680, icon: IconTablet, name: words.tablet },
+    { value: 1440, icon: IconMonitor, name: words.desk },
+  ] as const;
   const DESK_FORM = 1280;
-  const ownWidth = $derived(drawOf(kept).width ?? DESK_FORM);
+  const ownWidth = $derived(drawOf(kept, null).width ?? DESK_FORM);
+  /** The head's glass, which the view's card hangs from, and whether it hangs. */
+  let glass = $state<HTMLElement | null>(null);
+  let viewJoined = $state(false);
   /**
    * The drawer's stops, as vaul takes them: shares of the window's height
    * for a sheet as tall as its cap (`--c-sheet-max-h`, a share of the
@@ -403,87 +434,30 @@
       snap = head;
     }
   });
-  const comparedState = $derived(comparing ? (compared?.state ?? null) : null);
 </script>
 
-{#snippet machinesNav()}
-  {#if review.machines.length > 1}
-    <!-- The region names: the one navigation that brings their states into view. -->
-    <nav
-      aria-label={words.statesFace}
-      class="-mx-space-1 flex min-w-0 flex-none gap-space-1 overflow-x-auto px-space-1 pb-space-1"
-    >
-      {#each review.machines as one (one.name)}
-        <button
-          type="button"
-          aria-current={one.name === machine ? "true" : undefined}
-          class={[
-            "pointer-hit touch-hit h-c-btn-h-sm flex-none rounded-pill px-space-3 type-label transition-control",
-            one.name === machine
-              ? "bg-selected-bg text-selected-ink"
-              : "text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong",
-          ]}
-          onclick={() => {
-            machine = one.name;
-          }}>{one.name}</button
-        >
-      {/each}
-    </nav>
-  {/if}
-{/snippet}
-
-{#snippet seeingSwitch(open: boolean)}
-  <Tabs.Root bind:value={seeing} class="min-w-0">
-    <Tabs.List aria-label={words.seeing} class="w-full">
-      {#each [["journey", words.journey], ["whole", words.wholeSet]] as const as [value, label] (value)}
-        <Tabs.Trigger
-          {value}
-          onclick={() => {
-            if (open) {
-              roomOpen = true;
-              face = "states";
-            }
-          }}>{label}</Tabs.Trigger
-        >
-      {/each}
-    </Tabs.List>
-  </Tabs.Root>
-{/snippet}
-
-{#snippet statesFace(axis: "column" | "row", journeyHere: boolean)}
+{#snippet statesFace(stepperHere: boolean)}
   {#if single}
     <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
       {words.oneState}
     </p>
+  {:else if face === "whole"}
+    <WholeSet
+      against={comparing ? against : null}
+      kept={kept.state}
+      onpress={press}
+      {review}
+    />
   {:else}
-    {@render machinesNav()}
-    {#if seeing === "journey" && journeyHere}
-      <Journey
-        {axis}
-        compared={comparedState}
-        kept={kept.state}
-        keptVariant={kept.variant}
-        {machine}
-        onpress={keep}
-        {onpreview}
-        {review}
-      />
-    {:else}
-      <div
-        class="min-h-0 flex-1 overflow-hidden rounded-md bg-surface-recess-deep"
-      >
-        <WholeSet
-          compared={comparedState}
-          direction={axis === "row" ? "across" : "down"}
-          focus={machine}
-          kept={kept.state}
-          keptVariant={kept.variant}
-          onpress={keep}
-          {onpreview}
-          {review}
-        />
-      </div>
-    {/if}
+    <Journey
+      against={comparing ? against : null}
+      kept={kept.state}
+      keptVariant={kept.variant}
+      onpress={press}
+      onstep={(next) => keep(next, null)}
+      {review}
+      stepper={stepperHere}
+    />
   {/if}
 {/snippet}
 
@@ -502,20 +476,28 @@
 {/snippet}
 
 {#snippet faces()}
-  <Tabs.Root bind:value={face} class="min-w-0 flex-1">
-    <Tabs.List class="w-full">
-      <Tabs.Trigger value="states">{words.statesFace}</Tabs.Trigger>
-      <Tabs.Trigger value="move">{words.moveFace}</Tabs.Trigger>
-    </Tabs.List>
-  </Tabs.Root>
+  <Tabs
+    class="min-w-0 flex-1"
+    onValueChange={(next) => {
+      face = next === "whole" || next === "move" ? next : "states";
+    }}
+    size="compact"
+    value={face}
+  >
+    <TabsList aria-label={words.faces}>
+      <TabItem label={words.statesFace} value="states" />
+      <TabItem label={words.wholeSet} value="whole" />
+      <TabItem label={words.moveFace} value="move" />
+    </TabsList>
+  </Tabs>
 {/snippet}
 
 {#snippet stepper()}
   <Stepper
     {at}
-    {machine}
+    machine={review.states[kept.state]?.machine ?? ""}
     name={review.states[kept.state]?.name ?? ""}
-    onstep={(next) => keep(next, next)}
+    onstep={(next) => keep(next, null)}
     {path}
   />
 {/snippet}
@@ -563,8 +545,8 @@
                   () => String(front),
                   (next: string) => {
                     front = Number(next);
-                    preview = null;
-                    compared = null;
+                    against = null;
+                    comparing = false;
                   }
                 }
               >
@@ -573,9 +555,6 @@
                     <span
                       class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
                       >{one.name}</span
-                    >
-                    <span class="type-meta text-ink-muted num"
-                      >{words.stateCount(one.order.length)}</span
                     >
                   </DropdownMenu.RadioItem>
                 {/each}
@@ -591,36 +570,35 @@
         {/if}
       </div>
 
-      {#if desk && !single && arrangement !== "stage"}
-        <div class="flex-none">{@render seeingSwitch(true)}</div>
-      {/if}
-
-      <div class="flex flex-1 justify-end">
-        <BarGlass form="group">
-          <Tip label={comparing ? words.compareOff : words.compareOn}>
-            {#snippet children(tip)}
-              <button
-                data-bar-item
-                {...mergeProps(tip, {
-                  onclick: () => {
-                    comparing = !comparing;
-                    compared = null;
-                    preview = null;
-                  },
-                })}
-                aria-label={words.compare}
-                aria-pressed={comparing}
-                class="select-none touch-hit press-tint aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
-                type="button"
-              >
-                <IconColumns data-slot="bar-symbol" aria-hidden="true" />
-              </button>
-            {/snippet}
-          </Tip>
-          <DropdownMenu.Root>
+      <div
+        class="flex flex-1 justify-end"
+        {@attach (node: HTMLElement) => {
+          glass = node.querySelector<HTMLElement>('[data-slot="tools"]');
+        }}
+      >
+        <BarGlass form="group" joined={viewJoined}>
+          {#if !single}
+            <Tip label={words.compare}>
+              {#snippet children(tip)}
+                <button
+                  data-bar-item
+                  {...mergeProps(tip, {
+                    onclick: () => setComparing(!comparing),
+                  })}
+                  aria-label={words.compare}
+                  aria-pressed={comparing}
+                  class="select-none touch-hit press-tint aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
+                  type="button"
+                >
+                  <IconCompare data-slot="bar-symbol" aria-hidden="true" />
+                </button>
+              {/snippet}
+            </Tip>
+          {/if}
+          <Popover.Root>
             <Tip label={words.stageView}>
               {#snippet children(tip)}
-                <DropdownMenu.Trigger>
+                <Popover.Trigger>
                   {#snippet child({ props })}
                     <button
                       data-bar-item
@@ -632,52 +610,109 @@
                       <IconLayers data-slot="bar-symbol" aria-hidden="true" />
                     </button>
                   {/snippet}
-                </DropdownMenu.Trigger>
+                </Popover.Trigger>
               {/snippet}
             </Tip>
-            <DropdownMenu.Content align="end" width="regular">
-              <DropdownMenu.Group>
-                <DropdownMenu.GroupHeading
-                  >{words.width}</DropdownMenu.GroupHeading
-                >
-                <DropdownMenu.RadioGroup
-                  bind:value={
-                    () => String(width ?? "own"),
-                    (next: string) => {
-                      width = next === "own" ? null : Number(next);
-                    }
-                  }
-                >
-                  <DropdownMenu.RadioItem value="own"
-                    >{words.ownWidth(ownWidth)}</DropdownMenu.RadioItem
+            <!-- The view, hung from the glass as the app's glass hangs its
+                 cards: it comes down out of the glass and goes back up. -->
+            <HangCard
+              align="end"
+              anchor={glass}
+              aria-label={words.stageView}
+              bind:joined={viewJoined}
+              customAnchor={glass}
+              side="bottom"
+              sideOffset={0}
+            >
+              <div class="flex min-w-0 flex-col gap-space-4 p-space-4">
+                <div class="flex min-w-0 flex-col gap-space-2">
+                  <span class="type-label text-ink-muted">{words.width}</span>
+                  <ToggleGroup.Root
+                    aria-label={words.width}
+                    onValueChange={(next: string) => {
+                      if (next) {
+                        width = next === "own" ? null : Number(next);
+                      }
+                    }}
+                    type="single"
+                    value={width === null ? "own" : String(width)}
                   >
-                  {#each WIDTHS as one (one)}
-                    <DropdownMenu.RadioItem value={String(one)}
-                      >{words.widthPx(one)}</DropdownMenu.RadioItem
-                    >
-                  {/each}
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Group>
-              <DropdownMenu.Separator />
-              <DropdownMenu.Group>
-                <DropdownMenu.GroupHeading
-                  >{words.scheme}</DropdownMenu.GroupHeading
+                    <Tip label={words.ownWidth(ownWidth)}>
+                      {#snippet children(tip)}
+                        <ToggleGroup.Item
+                          {...tip}
+                          aria-label={words.ownWidth(ownWidth)}
+                          value="own"
+                        >
+                          <!-- mark-line: the device's glyph stands over its figure, not beside it -->
+                          <span
+                            class="flex flex-col items-center gap-space-row"
+                            data-box
+                          >
+                            <IconMaximize aria-hidden="true" />
+                            <span class="type-meta num">{ownWidth}</span>
+                          </span>
+                        </ToggleGroup.Item>
+                      {/snippet}
+                    </Tip>
+                    {#each WIDTHS as one (one.value)}
+                      <Tip label={words.widthOf(one.name, one.value)}>
+                        {#snippet children(tip)}
+                          <ToggleGroup.Item
+                            {...tip}
+                            aria-label={words.widthOf(one.name, one.value)}
+                            value={String(one.value)}
+                          >
+                            <!-- mark-line: the device's glyph stands over its figure, not beside it -->
+                            <span
+                              class="flex flex-col items-center gap-space-row"
+                              data-box
+                            >
+                              <one.icon aria-hidden="true" />
+                              <span class="type-meta num">{one.value}</span>
+                            </span>
+                          </ToggleGroup.Item>
+                        {/snippet}
+                      </Tip>
+                    {/each}
+                  </ToggleGroup.Root>
+                </div>
+                <div
+                  class="flex min-w-0 items-center justify-between gap-space-4"
                 >
-                <DropdownMenu.RadioGroup bind:value={scheme}>
-                  <DropdownMenu.RadioItem value="light"
-                    >{words.light}</DropdownMenu.RadioItem
+                  <span class="type-label text-ink-muted">{words.scheme}</span>
+                  <Tabs
+                    onValueChange={(next) => {
+                      scheme = next === "dark" ? "dark" : "light";
+                    }}
+                    size="compact"
+                    value={scheme}
                   >
-                  <DropdownMenu.RadioItem value="dark"
-                    >{words.dark}</DropdownMenu.RadioItem
-                  >
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Group>
-              <DropdownMenu.Separator />
-              <DropdownMenu.CheckboxItem bind:checked={reduce}
-                >{words.reduceMotion}</DropdownMenu.CheckboxItem
-              >
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+                    <TabsList aria-label={words.scheme}>
+                      <TabItem
+                        glyphOnly
+                        icon={IconSun}
+                        label={words.light}
+                        value="light"
+                      />
+                      <TabItem
+                        glyphOnly
+                        icon={IconMoon}
+                        label={words.dark}
+                        value="dark"
+                      />
+                    </TabsList>
+                  </Tabs>
+                </div>
+                <label
+                  class="flex min-w-0 items-center justify-between gap-space-4 type-label text-ink-row"
+                >
+                  <span>{words.reduceMotion}</span>
+                  <Switch bind:checked={reduce} />
+                </label>
+              </div>
+            </HangCard>
+          </Popover.Root>
           <Tip label={roomOpen ? words.closeRoom : words.openRoom}>
             {#snippet children(tip)}
               <button
@@ -728,23 +763,16 @@
         {/if}
         <Stage
           bind:this={stage}
-          against={drawOf(kept).name}
-          kept={keptArgs}
+          against={againstShown}
           {review}
-          {role}
           {scheme}
           {shown}
           {stale}
           {width}
         />
         {#if desk && arrangement === "stage" && !single}
-          <!-- The steps on the stage's own foot, the region names beside them. -->
-          <div
-            class="flex min-w-0 flex-wrap items-center justify-between gap-space-3 pt-space-3"
-          >
-            <div class="min-w-0 flex-1">{@render stepper()}</div>
-            {@render machinesNav()}
-          </div>
+          <!-- The steps on the stage's own foot. -->
+          <div class="min-w-0 pt-space-3">{@render stepper()}</div>
         {/if}
       </div>
 
@@ -762,9 +790,6 @@
         >
           <div class="flex min-w-0 items-center gap-space-2">
             {@render faces()}
-            {#if arrangement === "below" && face === "states" && !single}
-              <div class="min-w-0 flex-1">{@render seeingSwitch(false)}</div>
-            {/if}
             <button
               type="button"
               aria-label={words.closeRoom}
@@ -777,13 +802,10 @@
               <IconClose aria-hidden="true" class="size-icon-md" />
             </button>
           </div>
-          {#if face === "states"}
-            {@render statesFace(
-              arrangement === "below" ? "row" : "column",
-              arrangement !== "stage"
-            )}
-          {:else}
+          {#if face === "move"}
             {@render moveFace()}
+          {:else}
+            {@render statesFace(arrangement !== "stage")}
           {/if}
         </aside>
       {/if}
@@ -825,13 +847,10 @@
             {#if !single}
               {@render stepper()}
             {/if}
-            {#if face === "states"}
-              {#if !single}
-                {@render seeingSwitch(false)}
-              {/if}
-              {@render statesFace("column", true)}
-            {:else}
+            {#if face === "move"}
               {@render moveFace()}
+            {:else}
+              {@render statesFace(false)}
             {/if}
           </div>
         </Drawer.Content>
