@@ -3805,6 +3805,38 @@
       },
       "$description": "A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (the artifact panel's surface brief, Artifact panel, canvas and ink)."
     },
+    "c-graph-room-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 400,
+        "unit": "px"
+      },
+      "$description": "The design graph's room beside its stage on a desk (DESIGN.md, Artifact panel, canvas and ink; the graph's surface brief): a state's name and its one-line note at the body size beside its glyph cell and its marks, and a clip's row with its bar under its name, without wrapping a typical note past two lines."
+    },
+    "c-graph-node-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 208,
+        "unit": "px"
+      },
+      "$description": "A state in the design graph's whole set (Svelte Flow node): its name in the label role and its note in meta over two lines, at 1:1 so no type renders under 12px; four across a desk room past 900px."
+    },
+    "c-graph-drawer-head": {
+      "$type": "dimension",
+      "$value": {
+        "value": 148,
+        "unit": "px"
+      },
+      "$description": "The design graph's drawer at its head stop under the desk line: the grabber, the faces' segmented row and the journey's steps, each 44px to a finger, so the stage above stands whole (spec, Widths: 390)."
+    },
+    "c-graph-stage-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 600,
+        "unit": "px"
+      },
+      "$description": "The narrowest the design graph's stage stands beside its room on a desk (spec: at 1440 the stage never under 600px); under it the room becomes the drawer."
+    },
     "c-pin-list-share": {
       "$type": "number",
       "$value": 0.3,
