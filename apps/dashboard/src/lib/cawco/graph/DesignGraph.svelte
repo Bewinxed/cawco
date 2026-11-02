@@ -109,14 +109,14 @@
   } = $props();
 
   const reviews = $derived(inputs.map(reviewOf));
-  let front = $state(
-    untrack(() =>
-      Math.max(
-        0,
-        reviews.findIndex((one) => one.name === ask.component)
-      )
+  /** The component the ask names, else the first: the one in front until he picks another. */
+  const askedFront = $derived(
+    Math.max(
+      0,
+      reviews.findIndex((one) => one.name === ask.component)
     )
   );
+  let front = $derived(askedFront);
   const review = $derived(reviews[front] as Review);
 
   /** A state and one of its variants (null: the state as written). */
@@ -151,7 +151,9 @@
   let comparing = $state(false);
   /** The state the kept one is compared with, while comparing. */
   let against = $state<string | null>(null);
-  let face = $state<Face>(untrack(() => ask.face ?? "states"));
+  /** The face the ask names: the room's until he picks another. */
+  const askedFace = $derived<Face>(ask.face ?? "states");
+  let face = $derived<Face>(askedFace);
   let roomOpen = $state(true);
   let width = $state<number | null>(null);
   let scheme = $state<"light" | "dark">(

@@ -6,6 +6,7 @@ import path from "node:path";
 import { defineRule } from "golar/unstable";
 import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
+import { followsProps } from "./follows-props.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
 import { rawMotion } from "./raw-motion.mjs";
@@ -314,6 +315,7 @@ const FIND = {
   "house/no-class-join": classJoins,
   "house/no-raw-class-values": rawClassValues,
   "house/no-raw-motion": rawMotion,
+  "house/follows-props": followsProps,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,
