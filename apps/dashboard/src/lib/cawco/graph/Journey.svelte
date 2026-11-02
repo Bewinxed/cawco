@@ -42,7 +42,13 @@
 </script>
 
 <div data-slot="journey" class="flex min-h-0 min-w-0 flex-1 flex-col">
-  <div class="-mx-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto px-space-1">
+  <!-- Its scrollbar's gutter held whether or not the list overflows: the
+       steps at its foot come and go with the kept state's path (Stepper
+       draws none for a path of one), and a scrollbar that came with them
+       took its width from the rows, which wrapped anew. -->
+  <div
+    class="-mx-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto px-space-1 scrollbar-gutter-stable"
+  >
     {#each review.machines as one (one.name)}
       <section
         aria-label={one.name}
