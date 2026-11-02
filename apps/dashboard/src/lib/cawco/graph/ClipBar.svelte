@@ -43,21 +43,25 @@
     Math.ceil(Math.min(...track.clips.map((clip) => clip.start)) / STEP) * STEP
   );
   /**
-   * The handles at rest, on the slider's steps: bits-ui's Slider snaps a
-   * value off its steps and hands the snap back to `onValueChange`, which
-   * held off-step values looped on (`effect_update_depth_exceeded`).
+   * Every value the handles take, at rest or held: on the steps, from the
+   * floor, never shorter than one step, and inside the lane (0 to `scale`,
+   * the ruler's end, which is the slider's max). The start gives way first
+   * at the lane's end, so the end never passes the max.
    */
-  const rest = $derived.by(() => {
-    const from = Math.max(floor, onStep(track.begins));
-    return [from, Math.max(from + STEP, onStep(track.ends))];
-  });
+  const within = ([from = floor, to = floor]: number[]): number[] => {
+    const begins = Math.min(scale - STEP, Math.max(floor, from));
+    return [begins, Math.min(scale, Math.max(begins + STEP, to))];
+  };
+  /**
+   * The handles at rest, on the slider's steps (bits-ui's Slider snaps a
+   * value off its steps and hands the snap back to `onValueChange`, which
+   * held off-step values looped on: `effect_update_depth_exceeded`), and
+   * inside the lane: a row beginning within half a step of the lane's end
+   * rounded its start onto the max and set its end a step past it.
+   */
+  const rest = $derived(within([onStep(track.begins), onStep(track.ends)]));
   let held = $state<number[] | null>(null);
   const value = $derived(held ?? rest);
-  /** On the steps, from its floor; never shorter than one step. */
-  const within = ([from = floor, to = floor]: number[]): number[] => {
-    const begins = Math.max(floor, Math.min(from, scale - STEP));
-    return [begins, Math.max(begins + STEP, Math.min(to, scale))];
-  };
   const pct = (t: number) => `${(t / scale) * 100}%`;
 
   /** The bar's width, px: how far apart the two handles stand on screen. */
