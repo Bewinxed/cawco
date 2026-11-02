@@ -161,7 +161,7 @@
 
   {#if stepper}
     <div class="border-t border-border-hairline pt-space-2">
-      <Stepper {at} name={review.states[kept]?.name ?? ""} {onstep} {path} />
+      <Stepper {at} {onstep} {path} />
     </div>
   {/if}
 </div>
