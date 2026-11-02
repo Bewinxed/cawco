@@ -338,12 +338,26 @@
 
   // --- Keys ---------------------------------------------------------------------
 
+  /**
+   * Only the person's own press or key closes what he opened. A move's
+   * play presses inside the stage with events of its own making
+   * (core stage-play.ts `userEventIn`: a `pointerdown` that bubbles to the
+   * document, a focus, keys), and the view card's layer read that
+   * `pointerdown` as a press outside it and closed: picking a width draws
+   * the state's story at that width, whose move plays as it arrives.
+   */
+  const personsOwn = (event: Event) => {
+    if (!event.isTrusted) {
+      event.preventDefault();
+    }
+  };
+
   onMount(() => {
     const key = (event: KeyboardEvent) => {
       const field = (event.target as HTMLElement | null)?.closest(
         "input, textarea, select, [contenteditable='true']"
       );
-      if (event.key === "Escape" && !field && roomOpen) {
+      if (event.key === "Escape" && event.isTrusted && !field && roomOpen) {
         roomOpen = false;
       }
     };
@@ -621,6 +635,8 @@
               aria-label={words.stageView}
               bind:joined={viewJoined}
               customAnchor={glass}
+              onEscapeKeydown={personsOwn}
+              onInteractOutside={personsOwn}
               side="bottom"
               sideOffset={0}
             >
