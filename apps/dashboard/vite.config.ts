@@ -9,6 +9,7 @@ import {
 } from "@cawco/core/browser-gate";
 import { unlayeredRules, withLayerOrder } from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
+import { devServerWords } from "@cawco/core/words/dev-server";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -34,15 +35,17 @@ import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
  * `CAWCO_HUB_URL` into every session's shell, and a leaf's dev server that
  * fell back on it, or on `localhost:3456`, put its test pages on the live hub:
  * a test script's Escape there denied the owner's parked question. So a vite
- * server never reads `CAWCO_HUB_URL`, and refuses to start without its own.
+ * server never reads `CAWCO_HUB_URL` and has no default hub.
  *
- * The `/api` route reads `CAWCO_HUB_URL`, in dev (SSR in this process) and in
- * preview (the built server, imported into this process) alike, so this
- * process's copy is set to the dev hub before either loads. The production
- * server is serve.js under node, which never loads this file.
- *
- * The refusal is the servers' own (`hubProxy`'s hooks), not the config's:
- * a tool that loads this config as a `serve` starts no server.
+ * Without its own it still starts: a route that talks to no hub (the `/dev`
+ * benches, a stage's components) serves as ever, and each request that needs
+ * the hub is refused as it comes, in `devServerWords.devHubUnset`, which
+ * names the variable. The `/api` route reads `CAWCO_HUB_URL`, in dev (SSR in
+ * this process) and in preview (the built server, imported into this process)
+ * alike, so this process's copy is set to the dev hub, or removed without
+ * one, before either loads; the route answers a request that finds none with
+ * that refusal. The `/ws` socket is refused by `hubProxy`'s upgrade listener.
+ * The production server is serve.js under node, which never loads this file.
  */
 /**
  * adapter-node's output tree. scripts/publish-build.ts renames it to `build/`,
@@ -50,17 +53,9 @@ import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
  */
 const BUILD_OUT = ".build-next";
 
-const DEV_HUB_ENV = "CAWCO_DEV_HUB_URL";
-const DEV_HUB = process.env[DEV_HUB_ENV];
-const devHub = (): URL => {
-  if (!DEV_HUB) {
-    console.error(
-      `[cawco] a vite server needs ${DEV_HUB_ENV}, the hub it talks to (e.g. ${DEV_HUB_ENV}=http://localhost:4456 bun run dev); it never reads CAWCO_HUB_URL, which in a session's shell is the live hub.`
-    );
-    process.exit(1);
-  }
-  return new URL(DEV_HUB);
-};
+const DEV_HUB = process.env.CAWCO_DEV_HUB_URL;
+/** The hub's socket, as the browser opens it on this server. */
+const HUB_SOCKET = /^\/ws(?:[/?]|$)/u;
 
 /**
  * The house faces (scripts/house-faces.ts), written into `src/house-faces/`
@@ -125,8 +120,9 @@ const SERVED_DIRS = (() => {
 
 /**
  * The vite servers' (`vite dev`, and `vite preview`, the built dashboard the
- * probes drive) hold on the hub: a server refuses to start without its own
- * (`devHub`), and the hub's `/ws` socket goes through `server.proxy` below.
+ * probes drive) hold on the hub: the hub's `/ws` socket goes through
+ * `server.proxy` below, and on a server started without `CAWCO_DEV_HUB_URL`
+ * each such socket is answered with the refusal and closed.
  * Previews are never served here: each is an origin of its own.
  *
  * Also the whole fix for a stray upgrade killing the server: `http.Server`
@@ -146,12 +142,6 @@ const hubProxy = (): Plugin => ({
 });
 
 function holdUpgrades(server: ViteDevServer | PreviewServer) {
-  // A CawCo stage (live components, `CAWCO_STAGE`) serves components and
-  // talks to no hub: it asks for none. Every other server names its own.
-  if (!process.env.CAWCO_STAGE) {
-    devHub();
-  }
-
   server.httpServer?.on("upgrade", (req, socket) => {
     socket.on("error", (error: NodeJS.ErrnoException) => {
       server.config.logger.warn(
@@ -159,6 +149,12 @@ function holdUpgrades(server: ViteDevServer | PreviewServer) {
         { timestamp: true }
       );
     });
+    if (!DEV_HUB && HUB_SOCKET.test(req.url ?? "")) {
+      const words = devServerWords.devHubUnset;
+      socket.end(
+        `HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(words)}\r\nConnection: close\r\n\r\n${words}`
+      );
+    }
   });
 }
 
@@ -490,9 +486,15 @@ export const groupsByCombinator = (): Plugin => ({
 });
 
 export default defineConfig(({ command }) => {
-  // A build talks to no hub; only a vite server does, and only to the dev hub.
-  if (command === "serve" && DEV_HUB) {
-    process.env.CAWCO_HUB_URL = DEV_HUB;
+  // A build talks to no hub; only a vite server does, and only to the dev
+  // hub: the session shell's CAWCO_HUB_URL (the live hub) never survives
+  // into it.
+  if (command === "serve") {
+    if (DEV_HUB) {
+      process.env.CAWCO_HUB_URL = DEV_HUB;
+    } else {
+      delete process.env.CAWCO_HUB_URL;
+    }
   }
   return {
     plugins: [

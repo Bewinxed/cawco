@@ -5,6 +5,7 @@ import {
   PREVIEW_PORT_PASS_COOKIE,
 } from "@cawco/core/frames";
 import { OWNER_COOKIE, OWNER_COOKIE_SECURE } from "@cawco/core/hub-auth";
+import { devServerWords } from "@cawco/core/words/dev-server";
 import {
   HUB_UNREACHABLE,
   HUB_UNREACHABLE_HEADER,
@@ -59,20 +60,19 @@ const PROXY_HEADERS = [
  * `fetch("ws://…/ws/api/agents")`, which fetch cannot dial (ws scheme), and
  * every load returned "Failed to connect to hub server".
  *
- * Under `vite dev` or `vite preview` this process's CAWCO_HUB_URL is the
- * required `CAWCO_DEV_HUB_URL`, set by vite.config.ts before this module
- * loads; the production server (serve.js) does not start without it. Read on
- * the first request, not as the module loads: a build imports this module
- * and talks to no hub.
+ * Under `vite dev` or `vite preview` this process's CAWCO_HUB_URL is
+ * `CAWCO_DEV_HUB_URL`, set by vite.config.ts before this module loads, and
+ * absent when that is unset; the production server (serve.js) does not start
+ * without it. So no CAWCO_HUB_URL means a vite server with no hub of its own,
+ * and the request is refused (`undefined`). Read on the first request, not as
+ * the module loads: a build imports this module and talks to no hub.
  */
 let hubUrl: string | undefined;
-const hubOrigin = (): string => {
+const hubOrigin = (): string | undefined => {
   if (hubUrl === undefined) {
     const raw = readEnv(CAWCO_ENV.hubUrl);
     if (!raw) {
-      throw new Error(
-        `The dashboard's server has no ${CAWCO_ENV.hubUrl}, so it cannot reach the hub.`
-      );
+      return;
     }
     hubUrl = raw
       .replace(WS_SCHEME, "http$1://")
@@ -107,8 +107,15 @@ async function proxyToHub(
     request,
     params: { path },
   } = event;
+  const hub = hubOrigin();
+  if (hub === undefined) {
+    return new Response(devServerWords.devHubUnset, {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
   const url = new URL(request.url);
-  const targetUrl = `${hubOrigin()}/api/${path}${url.search}`;
+  const targetUrl = `${hub}/api/${path}${url.search}`;
   const authorization = request.headers.get("authorization");
   // The person's paired-device cookie (core hub-auth.ts), which the hub
   // reads who is calling from, and their preview pass, which a sign-out of

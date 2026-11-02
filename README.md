@@ -44,7 +44,7 @@ Use a machine without an installed CawCo stack running, or stop that stack first
 bun run --filter '@cawco/sessiond' start
 ```
 
-In another terminal at the repository root, start the hub, machine daemon, and dashboard in development mode. The dashboard's dev server talks only to the hub named in `CAWCO_DEV_HUB_URL` and refuses to start without it:
+In another terminal at the repository root, start the hub, machine daemon, and dashboard in development mode. The dashboard's dev server talks only to the hub named in `CAWCO_DEV_HUB_URL`; without it, every request that needs the hub is refused:
 
 ```sh
 CAWCO_DEV_HUB_URL=http://localhost:3456 bun run dev:all
