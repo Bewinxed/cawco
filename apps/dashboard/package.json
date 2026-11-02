@@ -16,7 +16,7 @@
     "variants": "bun scripts/build-variants.ts"
   },
   "overrides": {
-    "vite": "^8.3.4"
+    "vite": "^8.3.5"
   },
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^4.0.0",
@@ -78,6 +78,6 @@
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "unplugin-icons": "^24.0.0",
     "vaul-svelte": "^1.0.0-next.7",
-    "vite": "^8.3.4"
+    "vite": "^8.3.5"
   }
 }
