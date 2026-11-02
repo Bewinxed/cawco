@@ -13,8 +13,9 @@
    *
    * With nothing running it is the plain question: Forget, the delete,
    * "Forgotten" held in place, then the project's page leaves for home.
-   * With sessions running it stops them first ("Stop 3 and forget", then
-   * "Stop 3 mid-turn and forget"), each row confirmed as its machine ends it,
+   * With sessions running it stops them first on one press ("Stop 3 and
+   * forget"; a second, "Stop 3 mid-turn and forget", only when a turn would
+   * be cut short), each row confirmed as its machine ends it,
    * and the delete runs once the ring is whole ("Forgetting…", "Forgotten").
    * The hub refuses the delete while anything of the project runs, so a
    * failure keeps the project: the row says why, and Try again stops what

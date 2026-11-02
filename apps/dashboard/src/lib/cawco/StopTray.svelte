@@ -22,9 +22,11 @@
    * ended word held in place, then gone.
    *
    * With sessions running it lists them as the rail nests them (each lead
-   * with its delegates), and asks twice on one button: "Stop 3 and …", then
-   * "Stop 3 mid-turn and …", its words growing the warning in place. The
-   * second press stops them all in one request. A row turns Stopped only
+   * with its delegates) on one button, "Stop 3 and …", whose press stops
+   * them all in one request. Only when that would cut a turn short (a row
+   * Working or Needs you, `midTurn`) does the first press arm instead,
+   * "Stop 3 mid-turn and …", its words growing the warning in place, and
+   * the second one stops. A row turns Stopped only
    * when the hub says its machine confirmed the end (`project.stop`), never
    * at the ask; then its tile leaves the row and flies into the button's
    * icon slot, where a ring fills a share per landing while the row folds
@@ -71,6 +73,7 @@
   import { standing, trailOf, trayHere } from "./stop-tray-here.svelte";
   import {
     forgetWords,
+    midTurn,
     type StopJob,
     type StopRow,
     stopShare,
@@ -177,8 +180,8 @@
     if (inert) {
       return;
     }
-    if (phase === "list") {
-      // A double-click never carries through the morph into the stop.
+    if (phase === "list" && midTurn(job).length > 0) {
+      // A double-click never carries through the arming morph into the stop.
       inert = true;
       after(dur("--dur-panel"), () => {
         inert = false;
@@ -299,8 +302,11 @@
         return words.plain;
       case "list":
         return words.stop(listed);
-      case "armed":
-        return words.armed(listed);
+      case "armed": {
+        // A turn that ended while armed leaves nothing to warn of.
+        const cut = midTurn(job).length;
+        return cut > 0 ? words.armed(listed, cut) : words.stop(listed);
+      }
       case "fail":
         return commonWords.tryAgain;
       case "done":
@@ -309,7 +315,7 @@
       case "stopping":
         break;
     }
-    return words.armed(total);
+    return words.stop(total);
   });
   // The count winds down as stops land, and holds at the last one while its
   // tile is still on its way: the ending word is next.

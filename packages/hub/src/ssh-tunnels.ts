@@ -51,7 +51,9 @@ import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { tetherArgs, untether } from "@cawco/core/tether";
 import { unhandled } from "@cawco/core/unhandled";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -349,27 +351,39 @@ const freePort = (): number => {
  * BatchMode: "user interaction such as password prompts and host key
  * confirmation requests will be disabled". It leads a process group of its
  * own, so a stop ends it and a `ProxyCommand` it runs.
+ *
+ * It runs under the tether (core tether.ts), its stdin the hub's end of a
+ * pipe, so it ends with the hub however the hub ends: the service hub's
+ * SIGTERM is the kernel's (lifetime.ts), so no JavaScript runs to end it,
+ * and `detached` (`setsid()`) takes it out of the hub's process group. A
+ * hub run outside the service's cgroup (a scratch hub, a `bun --watch`)
+ * left its masters running, reparented, holding their machines' ports.
+ * None is kept across a restart on purpose: the next hub tells any it
+ * finds to exit (`clearControl`, as it connects) and opens its own.
  */
 const master = (
   row: SshMachineRow,
   path: string
-): Bun.Subprocess<"ignore", "ignore", "pipe"> =>
+): Bun.Subprocess<"pipe", "ignore", "pipe"> =>
   Bun.spawn(
     [
-      "ssh",
-      "-N",
-      "-o",
-      "BatchMode=yes",
-      ...sshOptions(row.sshPort),
-      "-M",
-      "-S",
-      path,
-      "--",
-      row.target,
+      systemProgram("sh"),
+      ...tetherArgs([
+        "ssh",
+        "-N",
+        "-o",
+        "BatchMode=yes",
+        ...sshOptions(row.sshPort),
+        "-M",
+        "-S",
+        path,
+        "--",
+        row.target,
+      ]),
     ],
     {
       env: hostEnvironment(),
-      stdin: "ignore",
+      stdin: "pipe",
       stdout: "ignore",
       stderr: "pipe",
       detached: true,
@@ -418,8 +432,8 @@ const eachLine = async (
 };
 
 /**
- * Ends `ssh`'s process group, when it still runs: `ssh` was spawned
- * `detached`, so it leads its own group.
+ * Ends `ssh`'s process group, when it still runs: the master's tether was
+ * spawned `detached`, so it leads its own group, `ssh` in it.
  */
 const end = (child: Bun.Subprocess | null): void => {
   const leader =
@@ -859,6 +873,7 @@ export const createSshTunnels = ({
     const refusal = await bringUp(tunnel, row, path, child);
     await reading;
     const code = await child.exited;
+    untether(child.stdin);
     const steady = tunnel.upAt > 0 && Date.now() - tunnel.upAt >= STEADY_MS;
     tunnel.child = null;
     tunnel.running = false;

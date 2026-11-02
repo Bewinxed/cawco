@@ -42,6 +42,7 @@
     "./process-identity": "./src/process-identity.ts",
     "./db-lock": "./src/db-lock.ts",
     "./signal": "./src/signal.ts",
+    "./tether": "./src/tether.ts",
     "./signal-wall": "./src/signal-wall.ts",
     "./machine-room": "./src/machine-room.ts",
     "./live-processes": "./src/live-processes.ts",

@@ -34,6 +34,7 @@ import { StopJobSchema } from "#lib/cawco/stored-shapes.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import {
+  cawco,
   cawOf,
   configureCaw,
   deleteProject,
@@ -99,8 +100,11 @@ export interface StopJob {
 
 /** What a forget's tray says in each state. */
 export interface StopWords {
-  /** The second press: "Stop 3 mid-turn and forget". */
-  armed: (n: number) => string;
+  /**
+   * The second press, asked only while `cut` of the `n` listed are mid-turn:
+   * "Stop 3 mid-turn and forget", "Stop 3, 1 mid-turn, and forget".
+   */
+  armed: (n: number, cut: number) => string;
   /** The confirm's word once it has run. */
   ended: string;
   /** The confirm's word while the stops land and the tray's own end runs. */
@@ -122,7 +126,10 @@ export function forgetWords(name: string): StopWords {
     title: `Forget ${name}?`,
     plain: "Forget",
     stop: (n) => `Stop ${n} and forget`,
-    armed: (n) => `Stop ${n} mid-turn and forget`,
+    armed: (n, cut) =>
+      cut === n
+        ? `Stop ${n} mid-turn and forget`
+        : `Stop ${n}, ${cut} mid-turn, and forget`,
     ending: "Forgetting…",
     ended: "Forgotten",
     line: (phase, n, done) => {
@@ -192,6 +199,16 @@ const asRows = (
     gone: false,
     error: null,
   }));
+
+/**
+ * The rows a stop now would cut mid-turn: still running here, and working
+ * or waiting on the person as the rows themselves say (StopTray `statusOf`).
+ * An idle session's stop ends nothing under way, so it is never asked twice.
+ */
+export const midTurn = (job: StopJob): StopRow[] =>
+  job.rows.filter(
+    (row) => row.state === "running" && cawco.activityOf(row.s.id) !== "idle"
+  );
 
 /** The key a job is kept under. */
 const keyOf = (kind: StopKind, projectId: string) => `${kind}:${projectId}`;
@@ -361,7 +378,8 @@ class StopWork {
 
   /**
    * The confirm: Caw off turns him off and stops the checked rows; a forget
-   * arms, then stops them all; either tries again, or ends with nothing running.
+   * stops them all, arming first only when that would cut a turn short
+   * (`midTurn`); either tries again, or ends with nothing running.
    */
   press(job: StopJob): void {
     if (
@@ -369,10 +387,10 @@ class StopWork {
       (job.phase === "list" || job.phase === "none")
     ) {
       this.turnOff(job);
-    } else if (job.phase === "list") {
+    } else if (job.phase === "list" && midTurn(job).length > 0) {
       job.phase = "armed";
       this.keep();
-    } else if (job.phase === "armed") {
+    } else if (job.phase === "list" || job.phase === "armed") {
       job.total = job.rows.length;
       this.stop(
         job,

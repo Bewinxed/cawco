@@ -10,8 +10,10 @@ import UIKit
 ///
 /// With nothing running it is the plain question: Forget, the delete, gone.
 /// With sessions running it names each one where the decision is made,
-/// nested as the rail nests them (a session, then its delegates), and asks twice
-/// on one button: "Stop 3 and forget", then "Stop 3 mid-turn and forget".
+/// nested as the rail nests them (a session, then its delegates), on one
+/// button: "Stop 3 and forget", whose press stops them all. Only when that
+/// would cut a turn short (a row Working or Needs you, `midTurn`) does the
+/// first press arm instead, "Stop 3 mid-turn and forget", and the second stop.
 /// A row turns Stopped only when the hub says its machine confirmed the end
 /// (`project.stop`), never at the ask, and folds away; a session whose
 /// machine is away says "Stops when <machine> is back", and counts once the
@@ -126,18 +128,25 @@ final class ForgetProjectDialog: KitDialogController {
         }
     }
 
-    // MARK: The two presses
+    // MARK: The presses
+
+    /// The rows a stop now would cut mid-turn: still running, and working or
+    /// waiting on the person as their rows say. An idle one's stop ends
+    /// nothing under way, so it is never asked twice.
+    private var midTurn: Int {
+        rows.filter { $0.state == .running && home.activity($0.session.id) != .idle }.count
+    }
 
     private func press() {
         guard !inert else { return }
         switch phase {
-        case .list:
+        case .list where midTurn > 0:
             phase = .armed
             // A double tap never carries through the morph into the stop.
             inert = true
             DispatchQueue.main.asyncAfter(deadline: .now() + Motion.durPanel) { [weak self] in self?.inert = false }
             morph { render() }
-        case .armed:
+        case .list, .armed:
             total = rows.count
             stop(rows.map(\.session.id))
         case .fail:
@@ -357,7 +366,12 @@ final class ForgetProjectDialog: KitDialogController {
         case .unread, .fail: ("Try again", false)
         case .none: ("Forget", false)
         case .list: ("Stop \(n) and forget", false)
-        case .armed: ("Stop \(n) mid-turn and forget", false)
+        case .armed:
+            switch midTurn {
+            case 0: ("Stop \(n) and forget", false)
+            case n: ("Stop \(n) mid-turn and forget", false)
+            case let cut: ("Stop \(n), \(cut) mid-turn, and forget", false)
+            }
         case .stopping: ("Stopping \(max(left, 1))…", true)
         case .ending: ("Forgetting…", true)
         case .done: ("Forgotten", false)
