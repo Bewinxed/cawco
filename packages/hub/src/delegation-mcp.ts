@@ -398,7 +398,7 @@ export function createDelegationMcp(options: {
 }) {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
-  let adminNames = new Set(admin.map((t) => t.name));
+  let adminNames: ReadonlySet<string> = new Set(admin.map((t) => t.name));
   const moduleUrl = new URL("./delegation-tools.ts", import.meta.url);
   const adminModuleUrl = new URL("./admin-tools.ts", import.meta.url);
   if (typeof __CAWCO_RELEASE__ !== "boolean") {
@@ -855,14 +855,14 @@ export function createDelegationMcp(options: {
    * when every group's tools reach it; `roles:check` fails otherwise.
    */
   const unrouted = (): string[] => [
-    ...groups.flatMap(([names, list]) =>
-      (list?.(undefined) ?? [])
+    ...groups.flatMap(([names, toolsOf]) =>
+      (toolsOf?.(undefined) ?? [])
         .map((tool) => tool.name)
-        .filter((name) => !names.has(name))
+        .filter((listed) => !names.has(listed))
     ),
     ...(options.tasks ? taskTools(undefined) : [])
       .map((tool) => tool.name)
-      .filter((name) => !TASK_TOOLS.has(name)),
+      .filter((listed) => !TASK_TOOLS.has(listed)),
   ];
 
   /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */

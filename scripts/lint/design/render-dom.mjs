@@ -55,6 +55,39 @@ function tagged(text, start) {
   return open >= 0 && BROWSER_TAG.test(before.slice(open));
 }
 
+/** The names one top-level statement gives `@browser` functions, by `text`. */
+function taggedNames(text, statement) {
+  const declaration =
+    statement.type === "ExportNamedDeclaration" && statement.declaration
+      ? statement.declaration
+      : statement;
+  const doc = tagged(text, statement.start);
+  switch (declaration.type) {
+    case "FunctionDeclaration":
+      return doc && declaration.id ? [declaration.id.name] : [];
+    case "VariableDeclaration":
+      return doc
+        ? declaration.declarations
+            .filter((d) => d.id.type === "Identifier")
+            .map((d) => d.id.name)
+        : [];
+    case "ClassDeclaration":
+      return declaration.id
+        ? declaration.body.body
+            .filter(
+              (member) =>
+                member.type === "MethodDefinition" &&
+                member.static &&
+                member.key.type === "Identifier" &&
+                tagged(text, member.start)
+            )
+            .map((member) => `${declaration.id.name}.${member.key.name}`)
+        : [];
+    default:
+      return [];
+  }
+}
+
 const browserNames = new Map();
 /**
  * The names a module's `@browser` functions are called by: an exported or
@@ -66,7 +99,6 @@ function browserNamesOf(model) {
   if (known) {
     return known;
   }
-  const names = new Set();
   const body =
     model.kind === "svelte"
       ? [
@@ -74,70 +106,55 @@ function browserNamesOf(model) {
           ...(model.ast.instance?.content.body ?? []),
         ]
       : model.ast.body;
-  for (const statement of body) {
-    const declaration =
-      statement.type === "ExportNamedDeclaration" && statement.declaration
-        ? statement.declaration
-        : statement;
-    const doc = tagged(model.text, statement.start);
-    if (declaration.type === "FunctionDeclaration" && doc && declaration.id) {
-      names.add(declaration.id.name);
-    } else if (declaration.type === "VariableDeclaration" && doc) {
-      for (const d of declaration.declarations) {
-        if (d.id.type === "Identifier") {
-          names.add(d.id.name);
-        }
-      }
-    } else if (declaration.type === "ClassDeclaration" && declaration.id) {
-      for (const member of declaration.body.body) {
-        if (
-          member.type === "MethodDefinition" &&
-          member.static &&
-          member.key.type === "Identifier" &&
-          tagged(model.text, member.start)
-        ) {
-          names.add(`${declaration.id.name}.${member.key.name}`);
-        }
-      }
-    }
-  }
+  const names = new Set(
+    body.flatMap((statement) => taggedNames(model.text, statement))
+  );
   browserNames.set(model.file, names);
   return names;
 }
 
-/** The `@browser` name a call calls, as its module names it, or null. */
-function calledName(model, callee) {
-  const [head, member] =
-    callee.type === "Identifier"
-      ? [callee, null]
-      : callee.type === "MemberExpression" &&
-          !callee.computed &&
-          callee.object.type === "Identifier" &&
-          callee.property.type === "Identifier"
-        ? [callee.object, callee.property.name]
-        : [null, null];
-  if (!head) {
-    return null;
+/** The name a call is made by and the member it calls on it: `dur(…)`, `ListSwap.enterAt(…)`. */
+function calleeParts(callee) {
+  if (callee.type === "Identifier") {
+    return { head: callee, member: null };
   }
+  if (
+    callee.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.object.type === "Identifier" &&
+    callee.property.type === "Identifier"
+  ) {
+    return { head: callee.object, member: callee.property.name };
+  }
+  return null;
+}
+
+/** The module's `@browser` names and the head's name in it, or null. */
+function namesFor(model, head) {
   const binding = bindingAt(model, head.name, head.start);
-  let names;
-  let name;
   if (binding?.kind === "import") {
     const file = moduleFile(binding.source, model.file);
     if (!file || binding.imported === "*" || binding.imported === "default") {
       return null;
     }
-    names = browserNamesOf(modelOf(file));
-    name = binding.imported;
-  } else if (binding?.start === 0 && binding.end === model.text.length) {
-    // The file's own top level.
-    names = browserNamesOf(model);
-    name = head.name;
-  } else {
+    return { names: browserNamesOf(modelOf(file)), name: binding.imported };
+  }
+  // The file's own top level.
+  if (binding?.start === 0 && binding.end === model.text.length) {
+    return { names: browserNamesOf(model), name: head.name };
+  }
+  return null;
+}
+
+/** The `@browser` name a call calls, as its module names it, or null. */
+function calledName(model, callee) {
+  const parts = calleeParts(callee);
+  const found = parts && namesFor(model, parts.head);
+  if (!found) {
     return null;
   }
-  const full = member ? `${name}.${member}` : name;
-  return names.has(full) ? full : null;
+  const full = parts.member ? `${found.name}.${parts.member}` : found.name;
+  return found.names.has(full) ? full : null;
 }
 
 const ROUTES = path.join(DASHBOARD, "src/routes");
