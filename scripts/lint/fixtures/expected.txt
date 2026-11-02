@@ -71,3 +71,5 @@ scripts/lint/fixtures/design/planted.ts:44:49 house/no-raw-motion
 scripts/lint/fixtures/design/planted-render-dom.svelte:12:18 house/no-render-dom-read
 scripts/lint/fixtures/design/planted-render-dom.svelte:13:25 house/no-render-dom-read
 scripts/lint/fixtures/design/planted-render-dom.svelte:21:24 house/no-render-dom-read
+scripts/lint/fixtures/design/planted-props.svelte:12:16 house/follows-props
+scripts/lint/fixtures/design/planted-props.svelte:13:14 house/follows-props
