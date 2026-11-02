@@ -12,7 +12,8 @@
    * - anything else: its file row, and Open shows the file itself (the
    *   output's own route, in a tab of its own).
    * Its file row heads it, so every output is one press from the task. A
-   * file the hub does not hold yet says so in the hub's words.
+   * file the hub does not hold yet says so in the hub's words, a picture,
+   * video or audio too (its element's error asks the hub why).
    * `compact` draws it small, for the project's Made list. `bare` leaves the
    * file row out where the surface already heads it with the path (the file
    * card, FolderFile); a plain file keeps its row, Open being all it has.
@@ -23,11 +24,13 @@
     parsePost,
   } from "@cawco/core/deliverables";
   import { madeWords } from "@cawco/core/words/made";
+  import type { Attachment } from "svelte/attachments";
+  import { on } from "svelte/events";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { track } from "#lib/cawco/track.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
-  import { failureWords } from "../hub-read";
+  import { failureWords, hubRefusal } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { readOutputText } from "../project-tasks";
@@ -97,6 +100,42 @@
       gone = true;
     };
   });
+
+  /**
+   * A picture, video or audio is drawn by the platform from `src`, and the
+   * platform says nothing of why it could not be: on its error the same
+   * `src` is asked once more, to read the hub's refusal into `problem`.
+   */
+  const media = $derived(
+    kind === "image" || kind === "video" || kind === "audio"
+  );
+  $effect(() => {
+    if (!media) {
+      return;
+    }
+    // A new file is tried fresh.
+    track(src);
+    problem = null;
+  });
+  async function mediaFailed() {
+    const at = src;
+    const words = await fetch(at).then(
+      async (response) =>
+        response.ok
+          ? `${name} is there, but it could not be shown here.`
+          : failureWords(
+              await hubRefusal(response, `so ${name} could not be shown.`)
+            ),
+      (error: unknown) => failureWords(error)
+    );
+    if (at === src) {
+      problem = words;
+    }
+  }
+
+  /** The element's own error event, held as an attachment: no press on it. */
+  const whenFailed: Attachment<HTMLMediaElement | HTMLImageElement> = (node) =>
+    on(node, "error", mediaFailed);
 
   /** The image opens in the Lightbox, out of the thumbnail it was pressed on. */
   let image = $state<HTMLImageElement | null>(null);
@@ -201,6 +240,7 @@
             class="block max-w-full max-h-c-task-output-image-h group-data-compact:max-h-c-task-output-compact-h rounded-sm"
             {src}
             bind:this={image}
+            {@attach whenFailed}
           />
         </button>
       {:else if kind === "video"}
@@ -211,11 +251,18 @@
           controls
           preload="metadata"
           {src}
+          {@attach whenFailed}
           in:reveal
         ></video>
       {:else if kind === "audio"}
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
-        <audio class="w-full" controls preload="metadata" {src} in:reveal
+        <audio
+          class="w-full"
+          controls
+          preload="metadata"
+          {src}
+          {@attach whenFailed}
+          in:reveal
         ></audio>
       {/if}
     </div>

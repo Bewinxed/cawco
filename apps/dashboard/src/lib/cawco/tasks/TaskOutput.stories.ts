@@ -12,6 +12,7 @@ import TaskOutput from "./TaskOutput.svelte";
 /** The cawco project, whose folder holds these files. */
 const PROJECT = "70ac3d41-5a28-4a31-8e9e-3be2b03d1516";
 const PICTURE = "assets/7e946561/check2-whole.png";
+const MISSING = "assets/nowhere/missing.png";
 const LOG = "assets/task-sheet-captures-v2/live/iPhone-log.txt";
 
 export default {
@@ -36,4 +37,9 @@ export const PictureBare = { args: { bare: true } };
 /** A plain file: its row and Open, even bare. */
 export const File = {
   args: { path: LOG, src: folderRawHref(PROJECT, LOG), bare: true },
+};
+
+/** A picture the hub does not hold: the hub's words where it would be. */
+export const PictureRefused = {
+  args: { path: MISSING, src: folderRawHref(PROJECT, MISSING) },
 };
