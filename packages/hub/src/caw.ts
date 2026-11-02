@@ -80,7 +80,7 @@ import { topsAtCaw } from "./caw-own";
 import type { DbShape } from "./db";
 import type { Origin } from "./db/schema";
 import { boardTitle } from "./labels";
-import { sentence, tool } from "./mcp-tool";
+import { type McpTool, sentence, tool } from "./mcp-tool";
 import { AGENTS_FILE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import {
@@ -102,6 +102,7 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
+import type { CawToolName } from "./roles";
 import {
   SETUP_CARDS,
   SETUP_PARTS,
@@ -1716,7 +1717,9 @@ export const createCaw = ({
           async () => VIEW_PROMPT,
           sentence
         ),
-      ];
+        // Only names roles.ts lists: the hub routes those to this list and
+        // scopes them to a project; any other is listed and never reached.
+      ] satisfies (McpTool & { name: CawToolName })[];
     },
   };
   return api;

@@ -15,6 +15,8 @@ A setup is one decision page, `setup`, that the person sends once. Nothing is wr
 
 ## 1. Read the facts
 
+Your first words come before any work on the page: the person watches an unnamed, silent project until you speak. Load `project_setup` and `project_name` alone now (where tools load by search, both in one search); the decision-page skill, its kit and the page's tools wait for step 3.
+
 Call `project_setup` (with `change` when the person named parts). It answers: the project's name and whether it is still the placeholder, the template tapped on New project (or none), every shipped template with its stages and delegate types, the current stages.md and tasks by stage, its places and the machines online, and the page's card ids with what Send applies for each. Done when you hold the facts and know which cards apply.
 
 ## 2. Name it and say what you read
@@ -33,7 +35,7 @@ The cards, in this order, each only when it applies, with exactly these ids:
    - With none tapped, the one or two shipped templates whose stages fit their words, and no others.
    - `own`, labelled "Caw drafts the stages from what you wrote", with the stages you draft under it. Recommend it when no template fits the work as they described it.
    Option ids are the template names from `project_setup`, and `own`.
-3. **`stages`: Stages.** The picked shape's stages as a strip: each name in an editable field, each kind in words (to do, active, waiting, you, done, dropped), what each hooks ("runs the writer", "waits until post_at", "after 7 days"). Store the list with `cawco.set("stages", [{ "name": …, "kind": … }, …])` on every edit. Keep one stage of kind `you`. The person reshapes it by a note ("add a stage for waiting on the embassy"): revise the page in place with `artifact_update`, picks kept.
+3. **`stages`: Stages.** The picked shape's stages as a strip: each name in an editable field as the board draws it, words in sentence case ("Your call", "Review"), each kind in words (to do, active, waiting, you, done, dropped), what each hooks ("runs the writer", "waits until post_at", "after 7 days"). Store the list with `cawco.set("stages", [{ "name": …, "kind": … }, …])` on every edit. A stage's name in stages.md is that name lowercased with each space as `-` (`your-call`), which the board draws back as "Your call": offer names of plain lowercase words after the first letter, with no punctuation, so each one reads on the board as it was typed. Keep one stage of kind `you`. The person reshapes it by a note ("add a stage for waiting on the embassy"): revise the page in place with `artifact_update`, picks kept.
 4. **`delegates`: Delegate types.** Only when a stage runs a type or the words call for one. Each type: its name, one line of its brief from their words, harness and model, several picks (`data-cawco-multiple`). For a shipped template, its own types with briefs fitted to the words; for `own`, the types you propose (a researcher for web-facing work, a writer).
 5. **`place`: Place.** Only when the words hold a repository URL or a path, or the shape is code, and the project has no checkout yet (or the person asked to move it). One button calling `cawco.pickPlace()`; once picked the card reads "<label> — <path>" from `cawco.on("picks", …)` (`picks.place.value`). When the words hold a repository URL, the card offers to clone it onto a machine: the button calls `cawco.pickPlace({ clone: "<url>" })`, the card names the repository, and the folder picked is where the clone goes (a new folder is fine). Otherwise the project's folder on the hub is its place and no card appears.
 6. **`routines`: Routines.** Only when the words name a rhythm ("Mondays", "every morning", "weekly"): each routine proposed with its schedule.
@@ -50,7 +52,7 @@ The person picks and sends the page when they are ready. Say nothing more until 
 
 You hear that the page has new responses; `artifact_read()` has them in full. CawCo has already applied the `name`, the shipped template picked on `shape` (its stages.md, its delegate types and its starter skills) and the `place`: leave those. A place to clone is cloning as you write; its result comes as its own notice. Cloned, say so in a sentence. Not cloned, tell the person git's reason in one sentence: the page keeps the pick, so their next Send tries again. Then, with `folder_write`:
 
-- **stages.md** from the stages they kept: the template's block with their names, or for `own` the block you drafted. It must read cleanly; `folder_write` refuses it with the reason, which you fix.
+- **stages.md** from the stages they kept: the template's block with their names, or for `own` the block you drafted, each name as typed made lowercase with each space as `-` ("Your call" is `your-call`). It must read cleanly; `folder_write` refuses it with the reason, which you fix.
 - **delegates/<type>.md** for each type they kept: front matter (harness, model, effort, role, lands) and the type's brief from their words. A shipped template's types are written already under their names; rewrite a brief only where their words change the work.
 - **AGENTS.md** from the aim paragraph, corrected by their note: what the project is and how its work is done, in CawCo's voice, no paths inside its sentences.
 - On a pivot, move each task to the stage the person picked for it.

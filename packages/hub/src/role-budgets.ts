@@ -135,7 +135,16 @@ export const measureRoles = (): RoleSize[] =>
   }));
 
 /** Every role's tools as a session of it is listed them ({@link RoleTools}), from one stood-up delegation MCP whose tools are read, never called. */
-export const listRoleTools = (): RoleTools[] => {
+export const listRoleTools = (): RoleTools[] => standUp().roles;
+
+/**
+ * The tools a group lists that the hub routes elsewhere (delegation-mcp.ts
+ * `unrouted`): each is listed to a session and refused at its call.
+ */
+export const unroutedTools = (): string[] => standUp().unrouted;
+
+/** One stood-up delegation MCP's listings and unrouted tools, read, never called. */
+const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
   const rows = SESSION_ROLES.map((role): InstanceRow => ({
     id: role,
     machineId: "machine",
@@ -321,7 +330,7 @@ export const listRoleTools = (): RoleTools[] => {
       }).tools(actor),
   });
   try {
-    return SESSION_ROLES.map((role) => {
+    const roles = SESSION_ROLES.map((role) => {
       const listed = mcp.list(role);
       if (!listed) {
         throw new Error(`No measuring session for role ${role}.`);
@@ -333,6 +342,7 @@ export const listRoleTools = (): RoleTools[] => {
         tools: listed.tools.map(({ _meta, ...tool }) => tool),
       };
     });
+    return { roles, unrouted: mcp.unrouted() };
   } finally {
     lifetime.close();
   }

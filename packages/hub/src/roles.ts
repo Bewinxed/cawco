@@ -105,17 +105,27 @@ const TASK_READ = [
   "task_comment",
 ] as const satisfies readonly TaskTool[];
 
-/** The project's own tools caw.ts answers: its views, its folder on the hub, its Setup's steps. */
+/**
+ * The project's own tools caw.ts answers: its views and how one is
+ * written, its folder on the hub, its Setup's steps and its first name.
+ * caw.ts's `tools` lists no other (its `CawToolName`), and the hub routes
+ * these names to it (delegation-mcp.ts `groups`).
+ */
 const CAW_PROJECT_TOOLS = [
   "view_draft",
   "view_query",
+  "view_guide",
   "folder_read",
   "folder_write",
   "project_setup",
+  "project_name",
 ] as const;
 
-/** The tools caw.ts answers (its `tools`): views, the folder, Setup's steps. */
+/** The tools caw.ts answers (its `tools`). */
 export const CAW_TOOLS = CAW_PROJECT_TOOLS;
+
+/** A tool caw.ts may list: one the hub routes to it and scopes to a project. */
+export type CawToolName = (typeof CAW_TOOLS)[number];
 
 /**
  * A project's own tools: caw.ts's, its settings (project-settings.ts), how

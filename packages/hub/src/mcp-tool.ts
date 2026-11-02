@@ -104,15 +104,15 @@ const resultOf = (presented: Presented): CallToolResult =>
  * answer is more than a sentence), and its call, which parses the input,
  * runs it, and presents the answer.
  */
-export function tool<T extends z.ZodRawShape, R>(
-  name: string,
+export function tool<T extends z.ZodRawShape, R, N extends string = string>(
+  name: N,
   description: string,
   input: T,
   /** The domain answer; `format`, for a tool whose detailed form reads more (find's neighbouring turns). */
   run: (args: z.infer<z.ZodObject<T>>, format: ResponseFormat) => Promise<R>,
   present: Presenter<R, z.infer<z.ZodObject<T>>>,
   options: ToolOptions<R, z.infer<z.ZodObject<T>>> = {}
-): McpTool {
+): McpTool & { name: N } {
   const formats = (present as unknown) !== sentence;
   const shape = formats
     ? { ...input, response_format: responseFormat() }

@@ -809,24 +809,61 @@ export function createDelegationMcp(options: {
     return await projectFromSessionTool(() => make(actor)).call(input);
   };
 
-  /** One of the project tools (views, the project's folder), its role already checked. */
-  const cawCall = async (
-    actor: InstanceRow,
-    name: string,
-    input: Record<string, unknown>,
-    toolUseId: string | undefined
-  ): Promise<CallToolResult> => {
-    const entry = options
-      .cawTools?.(actor, toolUseId)
-      .find((tool) => tool.name === name);
-    if (!entry) {
-      throw new Error(`Unknown tool ${name}`);
-    }
-    return await entry.call(input);
-  };
+  /**
+   * Each group of tools a module answers, by the names the hub routes to
+   * it: a call goes to the group whose names hold it ({@link groupCall}),
+   * so a tool a group lists and its names leave out is listed to a session
+   * and refused at its call ({@link unrouted}, `roles:check`). Each one
+   * that parks an ask, a design proposal or a routine is handed the call's
+   * id, which it is drawn at or reads its why off.
+   */
+  const groups: [
+    ReadonlySet<string>,
+    (
+      | ((
+          caller: InstanceRow | undefined,
+          callId?: string
+        ) => (
+          | ProjectTool
+          | HubTool
+          | BrowserTool
+          | ConnectTool
+          | AskTool
+          | CawTool
+          | TriageTool
+        )[])
+      | undefined
+    ),
+  ][] = [
+    [new Set(CAW_TOOLS), options.cawTools],
+    [new Set(TRIAGE_TOOLS), options.triageTools],
+    [ASK_TOOLS, options.askTools],
+    [BROWSER_TOOLS, options.browserTools],
+    [CONNECT_TOOLS, options.connectTools],
+    [HUB_TOOLS, options.hubTools],
+    [MEMORY_TOOLS, options.memoryTools],
+    [RELAY_TOOLS, options.relayTools],
+    [ROUTINE_TOOLS, options.routineTools],
+    [INGRESS_TOOLS, options.ingressTools],
+    [ACTION_TOOLS, options.actionTools],
+  ];
 
-  const CAWS: ReadonlySet<string> = new Set(CAW_TOOLS);
-  const TRIAGES: ReadonlySet<string> = new Set(TRIAGE_TOOLS);
+  /**
+   * The tools a group lists whose names route elsewhere: each would be
+   * listed to a session and refused at its call as unavailable (caw.ts's
+   * `project_name` and `view_guide`, missing from roles.ts's list). Empty
+   * when every group's tools reach it; `roles:check` fails otherwise.
+   */
+  const unrouted = (): string[] => [
+    ...groups.flatMap(([names, list]) =>
+      (list?.(undefined) ?? [])
+        .map((tool) => tool.name)
+        .filter((name) => !names.has(name))
+    ),
+    ...(options.tasks ? taskTools(undefined) : [])
+      .map((tool) => tool.name)
+      .filter((name) => !TASK_TOOLS.has(name)),
+  ];
 
   /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */
   const call = async (
@@ -884,51 +921,16 @@ export function createDelegationMcp(options: {
     if (options.tasks && TASK_TOOLS.has(name)) {
       return await taskCall(actor, name, input, cut);
     }
-    if (CAWS.has(name) && options.cawTools) {
-      return await cawCall(actor, name, input, toolUseId);
-    }
-    if (TRIAGES.has(name) && options.triageTools) {
-      const entry = options
-        .triageTools(actor)
-        .find((tool) => tool.name === name);
-      if (!entry) {
-        throw new Error(`Unknown tool ${name}`);
-      }
-      return await entry.call(input);
-    }
-    return await projectToolCall(actor, name, input, toolUseId);
+    return await groupCall(actor, name, input, toolUseId);
   };
 
-  /** A routine, ingress, approved-action, relay or memory tool (routines.ts, ingress.ts, actions.ts, relay.ts, memory.ts), or one of the hub's own (hub-tools.ts), bound to the caller. */
-  const projectToolCall = async (
+  /** A tool of one of the {@link groups} (caw.ts, fleet-watch.ts, routines.ts, ingress.ts, actions.ts, relay.ts, memory.ts, hub-tools.ts and the asks), bound to the caller. */
+  const groupCall = async (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
     toolUseId: string | undefined
   ): Promise<CallToolResult | undefined> => {
-    // Each group by the names it answers; one that parks an ask, a design
-    // proposal or a routine is handed the call's id, which it is drawn at
-    // or reads its why off.
-    const groups: [
-      ReadonlySet<string>,
-      (
-        | ((
-            caller: InstanceRow,
-            callId?: string
-          ) => (ProjectTool | HubTool | BrowserTool | ConnectTool | AskTool)[])
-        | undefined
-      ),
-    ][] = [
-      [ASK_TOOLS, options.askTools],
-      [BROWSER_TOOLS, options.browserTools],
-      [CONNECT_TOOLS, options.connectTools],
-      [HUB_TOOLS, options.hubTools],
-      [MEMORY_TOOLS, options.memoryTools],
-      [RELAY_TOOLS, options.relayTools],
-      [ROUTINE_TOOLS, options.routineTools],
-      [INGRESS_TOOLS, options.ingressTools],
-      [ACTION_TOOLS, options.actionTools],
-    ];
     const group = groups.find(([names]) => names.has(name))?.[1]?.(
       actor,
       toolUseId
@@ -1446,5 +1448,5 @@ export function createDelegationMcp(options: {
     return said;
   };
 
-  return { handle, call, list, toolsMayHaveChanged, handoffAs };
+  return { handle, call, list, toolsMayHaveChanged, handoffAs, unrouted };
 }
