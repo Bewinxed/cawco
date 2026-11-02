@@ -80,6 +80,7 @@
   import Journey from "./Journey.svelte";
   import MoveFace, { type MoveState } from "./MoveFace.svelte";
   import {
+    type Move,
     moveInto,
     pathOf,
     previousOf,
@@ -251,55 +252,120 @@
   };
   const clipsNow = (): Clip[] => (move.kind === "ready" ? move.clips : []);
 
-  /** The move into `pick` on `on` played on the stage, its clips read; then its playhead rests at its start. */
+  /** The state the live instance stands in, by component, and the pick it was reached for. */
+  let onStage: { key: string; review: string; state: string } | null = null;
+  const keyOf = (on: Review, pick: Pick) =>
+    `${on.name}\u0000${pick.state}\u0000${pick.variant ?? ""}`;
+  /** A state's args as the stage draws it at the width he picked. */
+  const argsOf = (pick: Pick) => drawOf(pick, width).args;
+
+  /** The state a pick names, by its name; "" when it names none. */
+  const nameIn = (on: Review, state: string) => on.states[state]?.name ?? "";
+
+  /**
+   * The component opened on the stage for `pick`: at the from state when
+   * the states file plays a move into it (the move then plays once as it
+   * arrives), else at the pick itself, at rest. Answers whether the move is
+   * still to play.
+   */
+  const openFor = async (
+    on: Review,
+    pick: Pick,
+    played: Move | null
+  ): Promise<boolean> => {
+    const opening: Pick = played ? { state: played.from, variant: null } : pick;
+    await stage?.reach(argsOf(opening));
+    onStage = {
+      key: keyOf(on, opening),
+      review: on.name,
+      state: opening.state,
+    };
+    return played !== null;
+  };
+
+  /**
+   * The stage brought to `pick` on `on` (Stage `reach`, the one way it
+   * moves): its args set on the live instance, or, when the states file
+   * plays the move into it from the state on stage, that play run on it.
+   * What the engine ran is the Animation face's, from the state that stood
+   * there; then its playhead rests at its start.
+   */
   const arrive = async (on: Review, pick: Pick) => {
+    const key = keyOf(on, pick);
+    if (onStage?.key === key) {
+      return;
+    }
     stop();
     replays.release();
     run += 1;
     const mine = run;
     playhead = 0;
-    const into = moveInto(on, pick.state);
-    const to = on.states[pick.state];
-    const from = into ? on.states[into.from] : null;
-    if (!(into && to?.play && from && pick.variant === null)) {
-      move = { kind: "none", state: to?.name ?? pick.state };
-      opened.add(on.name);
-      return;
-    }
-    move = { kind: "reading", from: from.name, to: to.name };
-    await tick();
+    const to = nameIn(on, pick.state) || pick.state;
+    const into = pick.variant === null ? moveInto(on, pick.state) : null;
+    const played = into && on.states[pick.state]?.play ? into : null;
+    const none: MoveState = { kind: "none", state: to };
     try {
-      const clips = (await stage?.playMove(from.args, to.play, still)) ?? [];
-      if (mine !== run) {
+      if (onStage?.review !== on.name && !(await openFor(on, pick, played))) {
+        move = mine === run ? none : move;
+        opened.add(on.name);
         return;
       }
-      move = { kind: "ready", from: from.name, to: to.name, clips };
-      // On open, once: the region the move changed brought into view with
-      // room for its ring, the state's own evidence. A press after that
-      // keeps the stage's scroll where he left it.
-      if (!opened.has(on.name)) {
-        opened.add(on.name);
-        await stage?.reveal(regionOf(clips));
-      }
+      await pressOn(on, pick, played, mine);
     } catch (error) {
-      if (mine === run) {
+      // A play that threw left the instance part-way: no state is on stage.
+      onStage = { key: "", review: on.name, state: "" };
+      if (mine === run && move.kind === "reading") {
         move = {
           kind: "failed",
-          from: from.name,
-          to: to.name,
+          from: move.from,
+          to: move.to,
           why: error instanceof Error ? error.message : String(error),
         };
       }
     }
   };
-  // Each kept drawing arrives with its move, once: the stage mounts it
-  // afresh, so the move is read again on the instance it shows.
+
+  /** The live instance moved to `pick` from the state on stage: by the played move when it starts there, else by its args; its clips read. */
+  const pressOn = async (
+    on: Review,
+    pick: Pick,
+    played: Move | null,
+    mine: number
+  ) => {
+    const to = nameIn(on, pick.state) || pick.state;
+    const none: MoveState = { kind: "none", state: to };
+    const from = nameIn(on, onStage?.state ?? "");
+    const play =
+      played && onStage?.state === played.from
+        ? (on.states[pick.state]?.play ?? null)
+        : null;
+    move = from ? { kind: "reading", from, to } : none;
+    await tick();
+    const clips = await stage?.reach(argsOf(pick), play, still);
+    if (!clips) {
+      return;
+    }
+    onStage = { key: keyOf(on, pick), review: on.name, state: pick.state };
+    if (mine !== run) {
+      return;
+    }
+    move = from ? { kind: "ready", from, to, clips } : none;
+    // On open, once: the region the move changed brought into view with
+    // room for its ring, the state's own evidence. A press after that
+    // keeps the stage's scroll where he left it.
+    if (!opened.has(on.name)) {
+      opened.add(on.name);
+      await stage?.reveal(regionOf(clips));
+    }
+  };
+  // Each kept state is reached on the one live instance; a width or a
+  // scheme picked lays it out anew and moves nothing.
   $effect(() => {
     const on = review;
     const pick = kept;
-    const drawing = shown;
+    const drawn = stage;
     untrack(() => {
-      if (drawing) {
+      if (drawn) {
         arrive(on, pick);
       }
     });
