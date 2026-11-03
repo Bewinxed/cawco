@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-02T12:00:00.000Z",
+  "generatedAt": "2026-11-03T12:00:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -2298,6 +2298,36 @@
           "#cfc8bf",
           "#f4ede4"
         ]
+      },
+      "c-clip-size-wash": {
+        "role": "tertiary",
+        "displayName": "C Clip Size Wash",
+        "canonical": "light-dark(oklch(51.00% 0.1400 251.40 / 0.22), oklch(70.00% 0.1450 251.40 / 0.22))"
+      },
+      "c-clip-move-wash": {
+        "role": "tertiary",
+        "displayName": "C Clip Move Wash",
+        "canonical": "light-dark(oklch(51.00% 0.1500 292.50 / 0.22), oklch(70.00% 0.1550 292.50 / 0.22))"
+      },
+      "c-clip-fade-wash": {
+        "role": "tertiary",
+        "displayName": "C Clip Fade Wash",
+        "canonical": "light-dark(oklch(50.00% 0.1150 86.80 / 0.22), oklch(70.00% 0.1200 86.80 / 0.22))"
+      },
+      "c-clip-tint-wash": {
+        "role": "tertiary",
+        "displayName": "C Clip Tint Wash",
+        "canonical": "light-dark(oklch(51.00% 0.1650 349.80 / 0.22), oklch(70.00% 0.1700 349.80 / 0.22))"
+      },
+      "c-clip-effect-wash": {
+        "role": "tertiary",
+        "displayName": "C Clip Effect Wash",
+        "canonical": "light-dark(oklch(51.00% 0.0930 186.70 / 0.22), oklch(70.00% 0.0950 186.70 / 0.22))"
+      },
+      "c-clip-other-wash": {
+        "role": "tertiary",
+        "displayName": "C Clip Other Wash",
+        "canonical": "light-dark(oklch(0.495 0.014 74 / 0.22), oklch(0.778 0.012 78 / 0.22))"
       },
       "status-live-glyph": {
         "role": "tertiary",
