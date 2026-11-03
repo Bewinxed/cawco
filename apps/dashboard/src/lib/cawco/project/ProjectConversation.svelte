@@ -18,8 +18,9 @@
    * - Its two tabs (decision page `onboarding-design`, card `artifact-open`):
    *   Assistant, the conversation; Preview, what the conversation shows (a
    *   preview, a canvas, a component, a page: PreviewPane, the same pane a
-   *   session's split holds). The switch stands at the head's trailing end
-   *   while there is something to show; Caw showing something brings it to
+   *   session's split holds). The switch leads the head while there is
+   *   something to show, where the preview's own bar holds its switch, so it
+   *   never moves as the tabs change; Caw showing something brings it to
    *   the front, and the panel widens as Preview opens (the page's grid reads
    *   `lead.tab`, CawFloat). On Preview the pane's own head is the panel's one
    *   bar, the switch at its end (The Title Bars Follow Liquid Glass Rule).
@@ -338,8 +339,8 @@
     "calc(var(--space-4) + var(--safe-bottom) + var(--c-composer-panel) + var(--c-tray-row) + var(--space-2))";
 </script>
 
-<!-- Assistant and Preview: the switch at the trailing end of whichever bar
-     heads the panel, his on Assistant, the preview's own on Preview. -->
+<!-- Assistant and Preview: the switch leading whichever bar heads the
+     panel, his on Assistant, the preview's own on Preview. -->
 {#snippet switcher()}
   <Tabs
     onValueChange={(next) => {
@@ -366,6 +367,12 @@
     data-caw-head
     hidden={onPreview}
   >
+    {#if previewOpen}
+      <!-- The switch leads the bar, where the preview's own bar holds it
+           (SideSurface, as a session's Plan | Preview), so it stays put as
+           the tabs change. -->
+      {@render switcher()}
+    {/if}
     <CawFace size={18} status={lead.status} />
     <div class="flex min-w-0 flex-auto flex-col items-start">
       {#if shown}
@@ -403,9 +410,6 @@
       >
     </div>
     <div class="flex flex-none items-center gap-space-1">
-      {#if previewOpen}
-        {@render switcher()}
-      {/if}
       {#if shown}
         <Tip label={conversationWords.newConversation}>
           {#snippet children(tip)}

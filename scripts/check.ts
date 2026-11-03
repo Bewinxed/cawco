@@ -549,6 +549,14 @@ const gated: Gated[] = [
   bun("apps/dashboard/scripts/spacing-ratchet.ts", DASH),
   inDashboard("scripts/build-tokens.ts", "--check"),
   inDashboard("scripts/build-variants.ts", "--check"),
+  {
+    ...inDashboard("scripts/stage-glyphs.ts", "--check"),
+    inputs: [
+      ...DASH,
+      "packages/core/src/",
+      "packages/hub/skills/decision-page/kit/",
+    ],
+  },
   bun("packages/hub/scripts/skills-check.ts", ["packages/hub/"]),
   run("packages/core", "faces:check", [
     "assets/",

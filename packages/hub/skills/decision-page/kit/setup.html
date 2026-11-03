@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Set up Your PR team</title>
+<style>{{KIT_CSS}}</style>
+</head>
+<body>
+<main class="dp">
+  <!-- The setup page (the project-setup skill): one draft, every part editable in place, one Set it up. Fill every <…> and remove what does not apply. -->
+  <header class="dp-hero">
+    <span><img class="caw-l" src="caw/light-ready-160.webp" alt="Caw" width="72" height="72"><img class="caw-d" src="caw/dark-ready-160.webp" alt="" width="72" height="72"></span>
+    <div><h1>Set up Your PR team</h1></div>
+  </header>
+  <p class="dp-offline" data-dp-offline hidden>Picks are kept only when CawCo shows this page: publish it with artifact_create.</p>
+
+  <!-- name: the name you gave it, and what it is for in your own words (the seed of AGENTS.md). Both are kept by their `name`. -->
+  <article class="dp-card" id="name">
+    <label class="su-field su-name">Name<input id="name-field" name="name" value="Your PR team"></label>
+    <label class="su-field">What it's for<textarea id="aim-field" name="aim" rows="4">A personal PR team: the job search, visa applications and renewals, travel booked around them, and a public voice. Research and drafts are done by delegates; every message, post and application goes out only once you send it.</textarea></label>
+    <span class="su-sub">Every session in this project reads this.</span>
+  </article>
+
+  <!-- stages: the strip. One <li class="su-stage"> per stage in order, each its name as the board reads it ("Your call"), its kind selected, its look as data-icon and data-color, the hooks it keeps as data-runs, data-until, data-after, data-by, and what they do in words in .su-hook. data-shape: the shipped template it starts from, or "own". -->
+  <article class="dp-card" id="stages">
+    <header><h2>How work moves</h2></header>
+    <ol class="su-strip" data-su-strip data-shape="own">
+      <li class="su-stage" data-kind="todo" data-icon="inbox" data-color="cyan">
+        <button class="su-look" type="button"></button>
+        <input id="stage-inbox" value="Inbox" data-cawco-unkept>
+        <select class="su-kind" id="stage-inbox-kind" data-cawco-unkept>
+          <option value="todo" selected>To do</option><option value="active">Active</option><option value="waiting">Waiting</option><option value="you">Needs you</option><option value="done">Done</option><option value="dropped">Dropped</option>
+        </select>
+        <div class="su-acts"><button class="su-act" type="button" data-su-move="-1">←</button><button class="su-act" type="button" data-su-move="1">→</button><button class="su-act" type="button" data-su-remove>Remove</button></div>
+      </li>
+      <li class="su-stage" data-kind="active" data-icon="pen" data-color="amber" data-runs="writer">
+        <button class="su-look" type="button"></button>
+        <input id="stage-drafted" value="Drafted" data-cawco-unkept>
+        <select class="su-kind" id="stage-drafted-kind" data-cawco-unkept>
+          <option value="todo">To do</option><option value="active" selected>Active</option><option value="waiting">Waiting</option><option value="you">Needs you</option><option value="done">Done</option><option value="dropped">Dropped</option>
+        </select>
+        <span class="su-hook">Runs the writer</span>
+        <div class="su-acts"><button class="su-act" type="button" data-su-move="-1">←</button><button class="su-act" type="button" data-su-move="1">→</button><button class="su-act" type="button" data-su-remove>Remove</button></div>
+      </li>
+      <li><button class="su-add" type="button" data-su-add>Add a stage</button></li>
+    </ol>
+  </article>
+  <!-- A new stage's tile: keep it as it stands. -->
+  <template data-su-stage>
+    <li class="su-stage" data-kind="active">
+      <button class="su-look" type="button"></button>
+      <input value="" data-cawco-unkept placeholder="Stage name">
+      <select class="su-kind" data-cawco-unkept>
+        <option value="todo">To do</option><option value="active" selected>Active</option><option value="waiting">Waiting</option><option value="you">Needs you</option><option value="done">Done</option><option value="dropped">Dropped</option>
+      </select>
+      <div class="su-acts"><button class="su-act" type="button" data-su-move="-1">←</button><button class="su-act" type="button" data-su-move="1">→</button><button class="su-act" type="button" data-su-remove>Remove</button></div>
+    </li>
+  </template>
+
+  <!-- delegates: only when a stage runs a type or the words call for one; each a row, ticked, kept under `delegates`. -->
+  <article class="dp-card" id="delegates">
+    <header><h2>Who does the work</h2></header>
+    <p class="dp-why">Neither sends anything out: their work comes back to you.</p>
+    <div class="su-rows">
+      <label class="su-row"><input type="checkbox" name="delegates" value="writer" checked><b>Writer</b><span>Drafts applications, cover letters, posts and replies in your voice.</span><span>Claude Code · Opus</span></label>
+    </div>
+  </article>
+
+  <footer class="dp-done"><span data-dp-sent></span><button class="dp-send" type="button" data-dp-send>Set it up</button></footer>
+</main>
+<!-- The look's picker, one for the page: the kit fills it. -->
+<div class="su-picker" popover data-su-picker>
+  <fieldset data-su-glyphs><legend>Glyph</legend></fieldset>
+  <fieldset data-su-colors><legend>Colour</legend></fieldset>
+</div>
+<script>{{KIT_JS}}</script>
+{{SETUP}}
+</body>
+</html>

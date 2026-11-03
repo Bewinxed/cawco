@@ -66,7 +66,8 @@
     aria-live="polite"
     class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
   >
-    {#if progress.phase !== "page"}<LiveDot />{/if}
+    {#if progress.phase !== "page" && progress.phase !== "waiting"}<LiveDot
+      />{/if}
     <MorphText text={progress.doing} />
   </p>
   <ThinkingSteps class="self-stretch">

@@ -7,8 +7,11 @@
    * down in the head the open panel moves with him. His face keeps saying
    * what he is doing either way. His on/off is the project's, under the
    * head's `⋯`. While he works on a project's setup in his panel
-   * (`lead.inPanel`, SetupWell) the seat stands empty: he is there.
+   * (`lead.inPanel`, SetupWell) he is there, not here: the seat stays (it
+   * is his panel's anchor, and a press still puts the panel away) and
+   * shows its `standIn` glyph, or nothing.
    */
+  import type { Component } from "svelte";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import { land } from "#lib/cawco/motion/share.svelte.js";
@@ -19,11 +22,14 @@
     projectId,
     projectName,
     size = 48,
+    standIn,
   }: {
     lead: CawLead;
     projectId: string;
     projectName: string;
     size?: number;
+    /** What the seat shows while his panel holds him (the setup scene's folder glyph). */
+    standIn?: Component;
   } = $props();
 
   /** He holds his still: idle, the done hold, and working when his loop is off. */
@@ -57,7 +63,12 @@
   {@attach anchors}
   {@attach land(() => `caw:${projectId}`, { uniform: true })}
 >
-  {#if lead.shown && !lead.inPanel}
+  {#if lead.inPanel}
+    {#if standIn}
+      {@const Glyph = standIn}
+      <Glyph aria-hidden="true" class="size-icon-lg text-ink-muted" />
+    {/if}
+  {:else if lead.shown}
     <Caw next={HEAD_NEXT} {size} status={lead.status} {still} />
   {/if}
 </button>
