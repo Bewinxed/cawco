@@ -21,14 +21,12 @@
   import { shellWords } from "@cawco/core/words/shell";
   import { untrack } from "svelte";
   import { track } from "#lib/cawco/track.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import { IconAlert, IconGlobe, IconLock, IconRefresh } from "#lib/icons.js";
+  import { IconAlert, IconRefresh } from "#lib/icons.js";
   import { newId } from "../id";
   import { appear } from "../motion/curves.svelte";
-  import OriginText from "../OriginText.svelte";
   import { store, stored } from "../storage";
   import { startFromPanel, takeOverFromPanel } from "./browser-acts";
   import {
@@ -389,43 +387,6 @@
   data-browser-mine={mine || undefined}
   data-slot="browser-view"
 >
-  <!-- The address band: the page in front and who has control. -->
-  <div
-    class="flex flex-none flex-wrap items-center gap-x-space-2 gap-y-space-1 min-w-0 px-space-3 py-space-2 border-b border-border-hairline bg-surface-raised type-meta"
-    data-slot="browser-band"
-  >
-    <span
-      class="mark-line flex flex-1 items-center gap-space-1 min-w-0 text-ink-strong"
-    >
-      <span class="mark-cell flex-none text-ink-muted">
-        {#if mine}<IconLock />{:else}<IconGlobe />{/if}
-      </span>
-      <span class="min-w-0 wrap-anywhere" data-slot="browser-origin">
-        {#if browser?.origin}<OriginText
-            origin={browser.origin}
-          />{:else}{browserWords.noPage}{/if}
-      </span>
-    </span>
-    <span
-      class="flex flex-none items-center gap-space-2 text-ink-muted"
-      data-slot="browser-control"
-    >
-      {mine ? browserWords.youHaveControl : browserWords.agentDriving}
-      {#if mine}
-        <Badge data-slot="browser-private"
-          ><IconLock /><span>{browserWords.private}</span></Badge
-        >
-      {/if}
-    </span>
-    {#if host === "local"}
-      <p
-        class="basis-full m-0 text-ink-muted text-pretty"
-        data-slot="browser-local"
-      >
-        {browserWords.localLine}
-      </p>
-    {/if}
-  </div>
   <div
     bind:this={well}
     class="relative flex-1 min-h-0 overflow-hidden bg-surface-recess"
@@ -560,4 +521,15 @@
       </p>
     {/if}
   </div>
+  {#if host === "local"}
+    <!-- At the well's foot, never a band under the head (DESIGN.md,
+         The address): the address and who has control stand in the
+         panel's head. -->
+    <p
+      class="flex-none m-0 px-space-3 py-space-2 type-meta text-ink-muted text-pretty"
+      data-slot="browser-local"
+    >
+      {browserWords.localLine}
+    </p>
+  {/if}
 </section>

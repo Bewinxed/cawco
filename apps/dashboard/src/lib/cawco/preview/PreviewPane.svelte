@@ -137,6 +137,7 @@
   import { landKey } from "../motion/keyed.svelte";
   import { settleAway } from "../motion/rest.js";
   import { closeInto } from "../motion/share.svelte";
+  import OriginText from "../OriginText.svelte";
   import { pageVisible } from "../page-visible.svelte";
   import { pressOutside } from "../press-outside";
   import { refusals } from "../refusals.svelte";
@@ -3550,6 +3551,14 @@
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
+    if (isBrowser) {
+      all.push({
+        key: "address",
+        priority: HEAD_PRIORITY.address,
+        bar: addressBar,
+        menu: addressMenu,
+      });
+    }
     if (isBrowser && browserRow) {
       all.push({
         key: "control",
@@ -3743,6 +3752,44 @@
   >
     <IconSend /><span>{commentWords.sendCount(unsentCount)}</span>
   </DropdownMenu.Item>
+{/snippet}
+
+{#snippet addressBar()}
+  <!-- The page in front, in the head's centre where the mode stands on other
+       artifacts (DESIGN.md, The address): who has control as the mark (its
+       name in its tooltip), the origin cut from its start, or "No page
+       open". No band stands under the head. -->
+  {@const held = !!browserRow?.takeover}
+  {@const who = held
+    ? `${browserWords.youHaveControl}. ${browserWords.private}`
+    : browserWords.agentDriving}
+  <span
+    data-slot="browser-address"
+    class="mark-line flex min-w-0 items-center gap-space-1 type-meta text-ink-strong"
+  >
+    <span
+      data-box
+      class="mark-cell flex-none text-ink-muted"
+      aria-label={who}
+      role="img"
+      title={who}
+    >
+      {#if held}<IconLock />{:else}<IconGlobe />{/if}
+    </span>
+    <span
+      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      data-slot="browser-origin"
+    >
+      {#if browserRow?.origin}<OriginText
+          origin={browserRow.origin}
+        />{:else}{browserWords.noPage}{/if}
+    </span>
+  </span>
+{/snippet}
+{#snippet addressMenu()}
+  <DropdownMenu.Label
+    >{browserRow?.origin ?? browserWords.noPage}</DropdownMenu.Label
+  >
 {/snippet}
 
 {#snippet controlBar()}

@@ -34,6 +34,8 @@ export interface HeadItem {
 
 /** The order the controls give up the head, first kept first (a browser's Take over or Hand back, Send, the mode, Comments, Expand, Reload, Inspect, the canvas view, Undock, Open in new tab, New canvas). */
 export const HEAD_PRIORITY = {
+  /** A browser's address, the head's centre: it stands before every control. */
+  address: -1,
   control: 0,
   send: 1,
   mode: 2,
