@@ -141,20 +141,17 @@
     {@attach morph({ on: ["data-fill"] })}
     {@attach settled ? rememberCard(page.url.pathname) : undefined}
   >
-    <!-- The actions stand beside the title and its line, centred on the pair
-         (DESIGN.md, Layout), while the pair keeps 9rem beside them: its
-         line wraps first; only actions wider than that leave go under it. -->
-    <header
-      data-slot="head"
+    <!-- No head of its own (DESIGN.md, Layout: "A page has no head of its
+         own under the bar"; The Title Bars Follow Liquid Glass Rule): the
+         rail names the section on a desk and the phone's bar names it beside
+         Back, so the page opens on its purpose, a line of content, with the
+         actions on the rows beside it; the line wraps first, and only
+         actions wider than its 9rem leave go under it. -->
+    <div
+      data-slot="lead"
       class="flex flex-wrap items-center justify-between gap-space-3"
     >
       <div class="flex min-w-36 grow basis-0 flex-col gap-space-1">
-        <h1
-          data-slot="title"
-          class="type-title tracking-title text-balance text-ink-strong"
-        >
-          {section.label}
-        </h1>
         {#if section.purpose}
           <p class="flex flex-wrap items-center gap-space-2 text-pretty">
             {section.purpose}
@@ -169,7 +166,7 @@
           {@render actions(down)}
         </div>
       {/if}
-    </header>
+    </div>
     {#if !ready && problem}
       {@render fault(problem)}
     {:else}
