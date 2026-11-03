@@ -176,8 +176,9 @@
   <!-- The page's width, to its gutter: as the project page stands, no cap
        of its own leaving a wider margin on the right than any other page. -->
   <div data-slot="col" class="m-0 flex flex-col gap-space-group">
-    <!-- The page head (DESIGN.md Layout): the title over its one line, the
-         actions centred on the pair, the first group 96px under the bar. -->
+    <!-- No head of its own (DESIGN.md, Layout): the bar's title names the
+         page, so it opens on its one line, the filters beside it, the first
+         group under them. -->
     <header
       data-slot="top"
       class="flex min-h-(--head) flex-wrap items-center gap-space-3 max-phone:contents"
@@ -187,7 +188,6 @@
         data-slot="page-head"
         class="me-auto flex min-w-0 flex-col gap-space-1"
       >
-        <h1 class="m-0 type-title text-balance text-ink-strong">Usage</h1>
         <p class="m-0 type-body text-pretty text-ink-muted">{description}</p>
       </div>
       <Select.Root

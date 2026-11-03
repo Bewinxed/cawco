@@ -46,6 +46,7 @@
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import { barStrip } from "./bar-strip.svelte";
   import { cawco } from "./client.svelte";
+  import { SECTIONS } from "./config/sections";
   import ConnectWindow from "./connect/ConnectWindow.svelte";
   import { connect } from "./connect/installs.svelte";
   import { continuing } from "./continue.svelte";
@@ -933,6 +934,11 @@
    * What the bar names: the page's own name where it has one (a
    * conversation's title, a project's name), else its section.
    */
+  /** The Configure section the page is in, named in a phone's bar beside Back. */
+  const configSection = $derived(
+    SECTIONS.find((one) => one.slug === page.url.pathname.split("/")[2])
+      ?.label ?? null
+  );
   const crumb = $derived.by(() => {
     // A path nothing answers is not a section: the bar says what happened.
     if (routeError) {
@@ -954,8 +960,12 @@
           return "New project";
         }
         return (id ? cawco.project(id)?.name : undefined) ?? "Project";
+      // Configure's rail names Configure and the section chosen in it: the
+      // bar repeats neither (DESIGN.md, The Title Bars Follow Liquid Glass
+      // Rule); on a phone, where the rail is a page of its own, the bar
+      // leads Back to it with the section's name (configSection).
       case "config":
-        return "Configure";
+        return "";
       case "usage":
         return "Usage";
       // The MCP server sign-in's return (its page: "Finishing sign-in").
@@ -1242,7 +1252,7 @@
                leads back to it: Back, the chevron alone in its glass group,
                named by where it goes (DESIGN.md, The Title Bars Follow
                Liquid Glass Rule: "Back and Close are symbols"). -->
-            <div data-slot="crumb" class="flex" in:riseIn out:crossOut>
+            <div data-slot="crumb" class="flex min-w-0" in:riseIn out:crossOut>
               <BarGlass form="group">
                 <BarItem
                   href="/config"
@@ -1250,6 +1260,13 @@
                   label={configureWords.backTo(configureWords.title)}
                 />
               </BarGlass>
+              {#if configSection}
+                <span
+                  data-slot="title"
+                  class="ms-space-2 min-w-0 self-center truncate type-label text-ink-strong"
+                  >{configSection}</span
+                >
+              {/if}
             </div>
           {:else}
             <!-- Padding, not margin: the crumb leaving is pinned where its
