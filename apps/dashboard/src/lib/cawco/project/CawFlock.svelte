@@ -7,10 +7,8 @@
    * live Caw, who is his seat or his panel's setup element. No Rive runs for
    * them and nothing moves.
    *
-   * Each stands in a place of his own, a share of the floor's width, so a
-   * later walk or peck (his rig, once the person approves it) can take each
-   * from where he stands without moving the layout. Decoration: a screen
-   * reader does not hear it.
+   * Each stands in a place of his own, a share of the floor's width.
+   * Decoration: a screen reader does not hear it.
    */
   import type { CawFile } from "#lib/cawco/home/Caw.svelte";
   import CawFace from "#lib/cawco/home/CawFace.svelte";

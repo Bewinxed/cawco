@@ -2860,6 +2860,16 @@ public enum Words {
         /// The panel head's action: a new session in the project, its words the first prompt.
         public static let newConversation = "New conversation"
 
+        /// His composer's hint, in the panel's hero and on his conversation: it names him, never "the agent".
+        public enum Placeholder {
+            public static let full = "Message Caw…  /  for commands, @ to mention"
+
+            public static let short = "Message Caw…"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["full": full, "short": short]
+        }
+
         /// The panel head's action: the conversation on show, as a tab.
         public static let openAsTab = "Open as a tab"
 
