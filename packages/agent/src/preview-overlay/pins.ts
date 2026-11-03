@@ -802,7 +802,10 @@ export function startPins(deps: PinsDeps): Pins {
       onAction: ["--on-action"],
       raised: ["--surface-raised"],
       recessed: ["--surface-fill-strong"],
-      muted: ["--ink-muted"],
+      // The hollow pill's figure and the recessed one's, each measured for
+      // words on its face (DESIGN.md, A pin's pill).
+      figure: ["--brand-ink-strong"],
+      row: ["--ink-row"],
       focus: ["--focus-ring"],
       shadow: ["--shadow-tint"],
       dot: ["--status-live-glyph"],
@@ -827,7 +830,8 @@ export function startPins(deps: PinsDeps): Pins {
       onAction: read.onAction,
       raised: read.raised,
       recessed: read.recessed,
-      muted: read.muted,
+      figure: read.figure,
+      row: read.row,
       focus: read.focus,
       shadow: read.shadow,
       dot: read.dot,
@@ -927,12 +931,12 @@ export function startPins(deps: PinsDeps): Pins {
     const faces: Record<PinState, { edge: string; face: string; ink: string }> =
       {
         provisional: { edge: paint.action, face: paint.raised, ink: "" },
-        unsent: { edge: paint.action, face: paint.raised, ink: paint.action },
+        unsent: { edge: paint.action, face: paint.raised, ink: paint.figure },
         sent: { edge: paint.action, face: paint.action, ink: paint.onAction },
         resolved: {
           edge: paint.recessed,
           face: paint.recessed,
-          ink: paint.muted,
+          ink: paint.row,
         },
       };
     const look = faces[state];

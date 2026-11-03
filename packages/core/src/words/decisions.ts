@@ -151,7 +151,7 @@ export const decisionsWords = {
     `${count} more ${group} ${count === 1 ? "page" : "pages"}`,
   /** The list's search. */
   search: "Search decisions",
-  clearSearch: "Clear the search",
+  clearSearch: commonWords.clearSearch,
   noMatch: (query: string) => `No decisions for “${query}”`,
   /** ‹ back from an opened page, said for the screen reader and in its tooltip. */
   back: commonWords.backTo("Decisions"),

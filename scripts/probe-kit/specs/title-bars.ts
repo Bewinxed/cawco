@@ -85,7 +85,22 @@ const run = async (kit: Kit) => {
     cwd: src,
   });
   const at = `${base}/project/${project.id}`;
-  const house = new HouseRules(kit, "title-bars", {});
+  const house = new HouseRules(kit, "title-bars", {
+    except: [
+      {
+        rule: "coral",
+        selector: '[data-slot="pin-row"] .mark-cell, [data-slot="head-pill"]',
+        reason:
+          "a comment's pill on its state's face, filled action-solid once sent and ringed in it until then (DESIGN.md, A pin's pill): what the comment is, not an act",
+      },
+      {
+        rule: "coral",
+        selector: '[data-slot="pin-row"] mark',
+        reason:
+          "Find's matching words marked in `selection` (DESIGN.md, The Comments rail)",
+      },
+    ],
+  });
   const SEAT = '[data-slot="caw-seat"]';
   const PANEL = "[data-caw-panel]";
 
@@ -558,7 +573,14 @@ const run = async (kit: Kit) => {
       ],
     ];
   for (const [state, widths, then] of threadStates) {
-    await surface(state, SESSION, '[data-slot="side-head"]', widths, then);
+    await surface(
+      state,
+      SESSION,
+      '[data-slot="side-head"]',
+      widths,
+      then,
+      state.endsWith("peek") ? '[data-slot="pin-peek"]' : CARD
+    );
   }
 
   // The artifact panel with the rail open, and expanded, read whole.
@@ -578,7 +600,8 @@ const run = async (kit: Kit) => {
         closes === (sheet ? 1 : 0),
         JSON.stringify({ closes, sheet })
       );
-    }
+    },
+    '[data-slot="side-card"]'
   );
   await surface(
     "artifact panel expanded",
@@ -593,7 +616,8 @@ const run = async (kit: Kit) => {
         await expand.click();
         await tab.waitForTimeout(900);
       }
-    }
+    },
+    '[data-slot="side-card"]'
   );
 
   // The split's edge: nothing at rest, its grip under the pointer.

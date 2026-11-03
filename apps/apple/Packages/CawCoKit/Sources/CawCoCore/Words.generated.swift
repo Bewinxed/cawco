@@ -885,6 +885,9 @@ public enum Words {
         /// Asks again for what failed to be read or done.
         public static let tryAgain = "Try again"
 
+        /// A search field's Clear: its words gone, every row back.
+        public static let clearSearch = "Clear the search"
+
         /// An editor's save, once what it edits exists.
         public static let saveChanges = "Save changes"
 

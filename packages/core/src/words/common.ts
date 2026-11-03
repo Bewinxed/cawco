@@ -9,6 +9,8 @@
 export const commonWords = {
   /** Asks again for what failed to be read or done. */
   tryAgain: "Try again",
+  /** A search field's Clear: its words gone, every row back. */
+  clearSearch: "Clear the search",
   /** An editor's save, once what it edits exists. */
   saveChanges: "Save changes",
   /** Starts a session: the strip's +, the dialog's title. */

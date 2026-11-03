@@ -3637,7 +3637,6 @@
         bar: commentsBar,
         menu: commentsMenu,
         count: { glyph: IconChat, n: listOpen ? 0 : openCount, of: "Comments" },
-        words: true,
       });
     }
     all.push({
@@ -4006,7 +4005,11 @@
 {/snippet}
 
 {#snippet commentsBar()}
-  <!-- The Comments rail's toggle; the count is the open comments', drawn only while the rail is shut. -->
+  <!-- The Comments rail's toggle, its glyph and the open comments' count at
+       every width (DESIGN.md, Artifact panel: "Comments stays its glyph and
+       count at every width"), the count only while the rail is shut; its
+       name is its tooltip's and the screen reader's. The rail under it says
+       no "Comments" of its own. -->
   <Button
     data-slot="comments"
     aria-expanded={listOpen}
@@ -4014,13 +4017,13 @@
     data-link-down={linkDown ? "" : undefined}
     expanded="pressed"
     onclick={() => showList(!listOpen)}
-    size="sm"
+    size={(openCount > 0 && !listOpen) || !pinsShown || linkDown
+      ? "sm"
+      : "icon-sm"}
     title={commentsTitle}
     variant="ghost"
   >
-    <IconChat /><span class="in-form-compact:hidden" data-slot="comments-label"
-      >Comments</span
-    >
+    <IconChat />
     {#if openCount > 0 && !listOpen}
       <span data-slot="count" class="min-w-c-count-digit">{openCount}</span>
     {/if}

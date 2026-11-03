@@ -424,7 +424,10 @@
      which starts at the card's top and blurs under them from the first
      scroll. The peek takes no press, so it has none. -->
 <div
-  class="relative flex flex-auto flex-col min-h-0 min-w-0 timeline-scope-transcript-head data-whole:shrink-0"
+  class={[
+    "relative flex flex-auto flex-col min-h-0 min-w-0 timeline-scope-transcript-head data-whole:shrink-0",
+    !peek && "min-h-c-top-bar-h",
+  ]}
   data-whole={squeezed || undefined}
   data-slot="pin-thread"
   style:--groups-w="{groupsW}px"
@@ -483,9 +486,10 @@
     </BarFloat>
   {/if}
   <!-- What the comment holds, the one part that scrolls; the reply under it,
-       never a scroll away. -->
+       never a scroll away. Under the groups the bar's scroll edge parts it
+       from them; the house edge fade says there is more past either edge. -->
   <div
-    class="relative flex flex-auto flex-col gap-space-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain scroll-timeline-transcript-head"
+    class="kit-edge-fade-block relative flex flex-auto flex-col gap-space-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain scroll-timeline-transcript-head"
     data-pin-room
     onscroll={readAt}
     bind:this={roomEl}
@@ -563,21 +567,14 @@
         />
       </div>
     {:else if !peek && pin.resolvedAt}
-      <div
+      <!-- Resolved, and when: Reopen is the floating group's, said once. -->
+      <p
         data-slot="resolved"
-        class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+        class="m-0 shrink-0 min-w-0 text-ink-muted type-meta num"
+        role="status"
       >
-        <p class="m-0 min-w-0 text-ink-muted num" role="status">
-          {said.resolvedAgo(resolvedAge)}
-        </p>
-        <Button
-          label={said.reopen}
-          onclick={() => onresolve(false)}
-          pad="none"
-          size="sm"
-          variant="link"
-        />
-      </div>
+        {said.resolvedAgo(resolvedAge)}
+      </p>
     {/if}
     {#if !peek && whyNotSent && markState(pin) === "unsent"}
       <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
@@ -705,6 +702,8 @@
       sendError={problem ?? ""}
       {sending}
     />
-    <AskHere asker={asks} at="delete" />
   </div>
+  <!-- Delete, asked in the card itself, under the reply: a question of its
+       own, never a line of the foot's. -->
+  <AskHere asker={asks} at="delete" />
 {/if}

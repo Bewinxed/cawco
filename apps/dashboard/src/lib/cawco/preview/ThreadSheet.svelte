@@ -171,7 +171,7 @@
           preventCycle
         />
         <div
-          class="flex min-h-0 min-w-0 flex-1 flex-col gap-space-2 overflow-x-hidden px-space-3 pt-space-2 pb-(--sheet-pb)"
+          class="kit-edge-fade-block flex min-h-0 min-w-0 flex-1 flex-col gap-space-2 overflow-x-hidden px-space-3 pt-space-2 pb-(--sheet-pb)"
           data-slot="thread-sheet-body"
         >
           {@render children()}

@@ -5,11 +5,12 @@
  * {@link NAME_KEEPS}px, Close stands last, and the rest stand by priority
  * ({@link HEAD_PRIORITY}) while they fit, each in its narrowest form (the
  * mode as one button, the chosen mode's glyph opening the three; Send
- * and Comments by glyph and count), the first with no room and every one
+ * by glyph and count), the first with no room and every one
  * after it going in head order into one More menu before Close, so a wider
  * head never stands fewer. Then forms widen, each only where the room left
  * holds it: the mode takes its three segments back, then, on a pane
- * {@link WORDS_FROM}px or wider, Send and then Comments their words.
+ * {@link WORDS_FROM}px or wider, Send its word. Comments is its glyph and
+ * count at every width.
  */
 import type { Component, Snippet } from "svelte";
 
@@ -28,7 +29,7 @@ export interface HeadItem {
   menu: Snippet;
   /** Its place in {@link HEAD_PRIORITY}: the lower stands while the higher goes to More. */
   priority: number;
-  /** `bar` says words its glyph and count stand without (Send, Comments): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */
+  /** `bar` says words its glyph and count stand without (Send): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */
   words?: boolean;
 }
 
@@ -52,7 +53,7 @@ export const HEAD_PRIORITY = {
 /** The name keeps its own width up to this, in px, before any control stands. */
 export const NAME_KEEPS = 120;
 
-/** A pane this wide, in px, or wider lets Send and Comments say their words where the room holds them. */
+/** A pane this wide, in px, or wider lets Send say its word where the room holds it. */
 export const WORDS_FROM = 640;
 
 /** How a control stands in the head: whole, or in its narrowest form (the mode's one button, a glyph without its words). */

@@ -50,7 +50,7 @@
  * rules are taste the house has not made a rule of.
  */
 // biome-ignore-all lint/performance/useTopLevelRegex: the reads run serialized into the page (`page.evaluate`), so each regex lives inside its function
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { userLayerPath } from "../../packages/core/src/paths";
@@ -645,7 +645,13 @@ function houseRead(args: InPageArgs): InPageRead {
       out.push(`background-image ${image.slice(0, 60)}`);
     }
     out.push(...edges(s));
-    if (s.boxShadow !== "none") {
+    // A shadow whose every colour is clear (a kit button's ring and drop
+    // composed at rest, all transparent) draws nothing, as a clear
+    // gradient doesn't.
+    if (
+      s.boxShadow !== "none" &&
+      [...s.boxShadow.matchAll(COLOR_FN)].some((m) => rgba(m[0])[3] > 0.02)
+    ) {
       out.push(`box-shadow ${s.boxShadow.slice(0, 60)}`);
     }
     return out;
@@ -1389,6 +1395,27 @@ function houseRead(args: InPageArgs): InPageRead {
             continue;
           }
         }
+        // A floating bar's scroll edge effect over the cut (BarFloat's
+        // HeadFade): it takes no press, so no hit test finds it.
+        const scrollEdge = [
+          ...document.querySelectorAll('[data-slot="head-fade"]'),
+        ].find((one) => {
+          const b = one.getBoundingClientRect();
+          return (
+            !sc.contains(one) &&
+            (one.parentElement?.contains(sc) ?? false) &&
+            point[0] >= b.left &&
+            point[0] <= b.right &&
+            point[1] >= b.top &&
+            point[1] <= b.bottom
+          );
+        });
+        if (scrollEdge) {
+          named.push(
+            `${describe(sc)}'s ${side} cut stands under ${describe(scrollEdge)}, the bar's scroll edge effect (DESIGN.md, The Title Bars Follow Liquid Glass Rule)`
+          );
+          continue;
+        }
         const holder = masked(sc);
         if (holder) {
           const vertical = side === "top" || side === "bottom";
@@ -1881,20 +1908,31 @@ function houseRead(args: InPageArgs): InPageRead {
         }
       }
       if (!skip.has("loose-list")) {
-        const alike = rows
-          .map((one) => one.r)
-          .filter((r) => r.height >= 14 && r.height <= 64 && r.width >= 100)
-          .sort((a, b) => a.top - b.top);
+        const like = (r: DOMRect) =>
+          r.height >= 14 && r.height <= 64 && r.width >= 100;
+        const inOrder = rows.map((one) => one.r).sort((a, b) => a.top - b.top);
+        const alike = inOrder.filter(like);
         const hs = alike.map((r) => r.height);
         const ws = alike.map((r) => r.width);
+        // A gap is between two rows that stand next to each other: one
+        // across a taller row (a transcript's turn between two of its
+        // notices) is that row, not air.
+        const gaps = inOrder.slice(1).flatMap((r, i) => {
+          const before = inOrder[i] as DOMRect;
+          return like(r) && like(before) ? [r.top - before.bottom] : [];
+        });
+        // A virtual list places its rows itself (virtua's absolute items):
+        // what stands between two drawn rows is rows not drawn yet.
+        const placed = rows.some(
+          (one) => style(one.el).position === "absolute"
+        );
         if (
+          !placed &&
           alike.length >= 3 &&
+          gaps.length >= 2 &&
           Math.max(...hs) <= Math.min(...hs) * 1.5 &&
           Math.max(...ws) <= Math.min(...ws) * 1.3
         ) {
-          const gaps = alike
-            .slice(1)
-            .map((r, i) => r.top - (alike[i] as DOMRect).bottom);
           const mid = (of: number[]) =>
             [...of].sort((a, b) => a - b)[Math.floor(of.length / 2)] ?? 0;
           const gap = mid(gaps);
@@ -2643,6 +2681,21 @@ export class HouseRules {
   /** One line per rule over every state read, then the exemptions, the excused, the named and the unread. */
   report(): void {
     const exempt = this.opts.exempt ?? {};
+    // Every finding, whole, beside the spec's shots: a check line names five.
+    mkdirSync(this.kit.out, { recursive: true });
+    writeFileSync(
+      `${this.kit.out}/house-${this.label}.json`,
+      JSON.stringify(
+        Object.fromEntries(
+          [...this.found].map(([rule, byKey]) => [
+            rule,
+            [...byKey].map(([key, one]) => ({ ...one, finding: key })),
+          ])
+        ),
+        null,
+        2
+      )
+    );
     const impeccableDown = [...this.impeccable].filter((one) => one !== "ran");
     for (const rule of RULES) {
       const { says, by } = HOUSE_RULES[rule];

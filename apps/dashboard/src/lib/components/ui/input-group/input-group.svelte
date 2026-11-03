@@ -47,6 +47,9 @@
   class={cn(
     "touch-hit hit-under [--hit-edge:1px]",
     "relative flex w-full min-w-0 items-center",
+    // A search field's Clear is the group's own button, in the house ink:
+    // the engine's blue cancel glyph never draws.
+    "[&_input::-webkit-search-cancel-button]:appearance-none",
     "border field-edge",
     look === "bar"
       ? "h-c-btn-h rounded-pill border-border-hairline bg-material-panel shadow-tile glass-backdrop contrast-more:border-border-contrast contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-contrast reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"

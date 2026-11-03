@@ -561,6 +561,25 @@
               bind:ref={searchField}
               bind:value={query}
             />
+            {#if query}
+              <InputGroup.Addon align="inline-end">
+                <!-- Clears and keeps the field, its caret in it. -->
+                <InputGroup.Button
+                  aria-label={said.clearSearch}
+                  data-slot="search-clear"
+                  onclick={() => {
+                    query = "";
+                    searchField?.focus();
+                  }}
+                  onpointerdown={(event: PointerEvent) =>
+                    event.preventDefault()}
+                  size="icon-xs"
+                  title={said.clearSearch}
+                >
+                  <IconClose />
+                </InputGroup.Button>
+              </InputGroup.Addon>
+            {/if}
           </InputGroup.Root>
         </div>
       {/if}
@@ -613,7 +632,7 @@
   </BarFloat>
   <div
     data-slot="rows"
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain scroll-timeline-transcript-head pt-c-top-bar-h"
+    class="kit-edge-fade-block relative flex-auto min-h-0 overflow-y-auto overscroll-contain scroll-timeline-transcript-head pt-c-top-bar-h"
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
     }}

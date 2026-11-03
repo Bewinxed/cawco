@@ -360,12 +360,14 @@
       <span data-slot="rail-cell" class="rail-cell"
         ><ResponseGlyph class="size-icon-sm" /></span
       >
-      <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+      <!-- Clipped along the line only, so the name's reach above and
+           below it (`pointer-hit`, `touch-hit`) is never cut. -->
+      <span data-slot="ftitle" class="min-w-0 overflow-x-clip text-ellipsis"
         >{responses.lead}
         <button
           aria-busy={opening}
           data-slot="aname"
-          class="select-none py-space-1 px-0 border-none border-current bg-transparent text-ink-strong underline decoration-current/35 underline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--dur-control) can-hover:motion-safe:ease-out"
+          class="select-none pointer-hit touch-hit py-0 px-0 border-none border-current bg-transparent text-ink-strong underline decoration-current/35 underline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--dur-control) can-hover:motion-safe:ease-out"
           onclick={openResponses}
           title="Open {responses.name}"
           type="button"

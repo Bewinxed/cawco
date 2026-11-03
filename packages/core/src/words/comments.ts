@@ -48,6 +48,7 @@ export const commentWords = {
   // The rail.
   comments: "Comments",
   searchComments: "Search comments",
+  clearSearch: commonWords.clearSearch,
   sort: "Sort",
   newestFirst: "Newest first",
   topOfPageFirst: "Top of page first",

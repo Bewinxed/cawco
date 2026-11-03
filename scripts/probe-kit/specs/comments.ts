@@ -1904,7 +1904,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     .getAttribute("aria-label")
     .catch(() => null);
   on.kit.check(
-    "4: comment_resolve takes pin 1 off the page and into Resolved; its row opens its thread with the pill recessed on the page, the Resolved band with Reopen, and the field saying Reply to reopen",
+    "4: comment_resolve takes pin 1 off the page and into Resolved; its row opens its thread with the pill recessed on the page, the Resolved line, Reopen in its glass group, and the field saying Reply to reopen",
     left === 0 &&
       openRows === 1 &&
       resolved === 1 &&
@@ -3325,9 +3325,11 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
     ([, number]) => number === target
   )?.[0];
   const card = on.page.locator(`[data-pin-card="${target}"]`);
-  // The head holds the name and what acts on the pin (Resolve, Delete, ⋯, Close) on its row; the foot is the chat composer as the reply.
+  // What acts on the pin (Resolve, Delete, ⋯, Close) floats on one row over the thread; the foot is the chat composer as the reply.
   const parts = await card.evaluate((el) => {
-    const head = el.querySelector('[data-slot="head"]');
+    const head = el.querySelector(
+      '[data-slot="pin-thread"] > [data-slot="bar"]'
+    );
     const named = [...(head?.querySelectorAll("button[aria-label]") ?? [])].map(
       (button) => button.getAttribute("aria-label") ?? ""
     );
@@ -3347,7 +3349,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
     };
   });
   on.kit.check(
-    "c: the thread's head holds Resolve, Delete comment, its ⋯ and Close on one row, the name under them; its foot is the chat composer, Attach and the Reply glyph",
+    "c: Resolve, Delete comment, its ⋯ and Close float on one row over the thread, its name its first content; its foot is the chat composer, Attach and the Reply glyph",
     parts.named[0] === "Resolve" &&
       parts.named[1] === commentWords.deleteComment &&
       parts.named.at(-1) === "Close" &&
@@ -3358,7 +3360,11 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
       parts.foot.includes("Reply"),
     JSON.stringify(parts)
   );
-  await card.locator('[data-slot="head"] [data-slot="delete"]').click();
+  await card
+    .locator(
+      '[data-slot="pin-thread"] > [data-slot="bar"] [data-slot="delete"]'
+    )
+    .click();
   const ask = card.locator('[data-ask="delete"]');
   const asked = await ask
     .waitFor({ timeout: 3000 })
@@ -4380,7 +4386,7 @@ interface SizingBox {
 
 /**
  * The open thread in `screen` as a person sees it, read from the engine:
- * its box, the well's (the pin room), its head's and its reply's boxes
+ * its box, the well's (the pin room), its floating actions' and its reply's boxes
  * before and after its replies are scrolled to their middle, the newest
  * entry's first line from the room's top as it opened, and whether it is
  * the foot sheet. In the page.
@@ -4397,12 +4403,19 @@ const sizingRead = (screen: Page, number: number) =>
       `[data-slot="pin-card"][data-pin-card="${n}"]`
     );
     const room = card?.querySelector<HTMLElement>("[data-pin-room]");
-    const head = card?.querySelector('[data-slot="head"]');
+    // Its actions float over the thread's top (PinCard's BarFloat): they
+    // are its head now, and the thread opens under them.
+    const head = card?.querySelector(
+      '[data-slot="pin-thread"] > [data-slot="bar"]'
+    );
     const foot = card?.querySelector('[data-slot="foot"]');
     const newest = room?.querySelector('[data-slot="thread"] > li:last-child');
+    const under = head?.getBoundingClientRect().height ?? 0;
     const opensAt =
       room && newest
-        ? newest.getBoundingClientRect().top - room.getBoundingClientRect().top
+        ? newest.getBoundingClientRect().top -
+          room.getBoundingClientRect().top -
+          under
         : null;
     const before = { head: boxOf(head), foot: boxOf(foot) };
     let after = before;
@@ -5260,7 +5273,7 @@ const sizingHold = async (
     JSON.stringify(read)
   );
   on.kit.check(
-    `${tag}: the long reply opens at its first line, ${read.opensAt === null ? "unread" : `${Math.round(read.opensAt)}px`} from the top of the room it scrolls in, or the whole thread stands in view (${read.room?.client} of ${read.room?.scroll}px)`,
+    `${tag}: the long reply opens at its first line, ${read.opensAt === null ? "unread" : `${Math.round(read.opensAt)}px`} under the actions floating over the room it scrolls in, or the whole thread stands in view (${read.room?.client} of ${read.room?.scroll}px)`,
     read.opensAt !== null &&
       (Math.abs(read.opensAt) <= 1 ||
         (!!read.room &&
@@ -10823,10 +10836,12 @@ const restartChecks = async (on: On) => {
 const HUB_DOWN =
   /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established/u;
 
-/** The thread head's controls by their names, and each one's top. */
+/** The thread's floating controls by their names, and each one's top. */
 const threadHead = (card: Locator) =>
   card.evaluate((el) => {
-    const head = el.querySelector('[data-slot="head"]');
+    const head = el.querySelector(
+      '[data-slot="pin-thread"] > [data-slot="bar"]'
+    );
     const buttons = [...(head?.querySelectorAll("button[aria-label]") ?? [])];
     return {
       named: buttons.map((button) => button.getAttribute("aria-label") ?? ""),
@@ -10873,7 +10888,9 @@ const deleteHeadChecks = async (on: On) => {
     const card = await openThread({ ...on, page: screen }, where, n);
     const head = await threadHead(card);
     await card
-      .locator(`[data-slot="head"] button[aria-label="More for comment ${n}"]`)
+      .locator(
+        `[data-slot="pin-thread"] > [data-slot="bar"] button[aria-label="More for comment ${n}"]`
+      )
       .click()
       .catch(() => undefined);
     const menu = await screen
