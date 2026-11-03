@@ -252,13 +252,23 @@
 {#snippet body()}
   {#if !hosted && grabber}
     <!-- The grabber's own box is the press: its pill drawn inside it, the
-         area round it the touch rule's. -->
+         area round it the touch rule's. A finger's or a mouse's press on it
+         is also vaul's release of the sheet: its pointerup sets
+         `isReleasing` until the next tick (use-drawer-root.svelte.js:367),
+         and a stop asked for inside that window is dropped
+         (use-snap-points.svelte.js:115, `if (!activeSnapPoint.current ||
+         releasing) return;`), so the sheet lagged a stop behind every tap.
+         The step is taken a task later, once the release has settled, as
+         vaul's own Handle takes its cycle (use-drawer-handle.svelte.js,
+         `handleStartCycle`). -->
     <button
       type="button"
       aria-label={grabber.label}
       data-slot="drawer-grabber"
       class="touch-hit mx-auto mt-space-2 mb-space-1 hidden h-space-5 w-c-grabber-w shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
-      onclick={grabber.onpress}
+      onclick={() => {
+        setTimeout(grabber.onpress);
+      }}
     >
       <span aria-hidden="true" class={cn(grabberVariants(), "my-0")}></span>
     </button>
