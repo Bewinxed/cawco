@@ -113,7 +113,8 @@
   name: string,
   label: string,
   kind: StageKind | null,
-  cards: TaskSummary[]
+  cards: TaskSummary[],
+  look?: Pick<Stage, "color" | "icon">
 )}
   <TaskColumn
     {cards}
@@ -122,6 +123,8 @@
     drop={name ? stageDropTarget(() => name, onmove) : undefined}
     foot={name && name === newIn ? addTask : undefined}
     {hrefOf}
+    color={look?.color}
+    icon={look?.icon}
     {kind}
     {label}
     {moving}
@@ -154,7 +157,8 @@
         stage.name,
         stageLabel(stage.name),
         stage.kind,
-        byStage.get(stage.name) ?? []
+        byStage.get(stage.name) ?? [],
+        stage
       )}
     {/each}
     {#if stray.length > 0}

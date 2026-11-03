@@ -36572,6 +36572,10 @@
         "description": "The journey as the hub holds it, whole: what `GET /api/stream-relay`\nanswers (with the asking page's {@link RelayAnswer.domain}) and every\n`stream_relay.journey` frame carries, so every place that draws the card\nshows the same ticks.",
         "type": "object",
         "properties": {
+          "answered": {
+            "description": "The relay was offered and answered (Set up, or Later): the first-run\nrow's relay step stands ticked (home FirstRun), set up or not.",
+            "type": "boolean"
+          },
           "asks": {
             "description": "Needs you holds its row: set up, not put away (Later, Done for now), and not yet live and proven from outside.",
             "type": "boolean"
@@ -36616,6 +36620,7 @@
           }
         },
         "required": [
+          "answered",
           "asks",
           "candidates",
           "done",
@@ -39155,8 +39160,8 @@
             }
           },
           "source": {
-            "$ref": "#/components/schemas/StagesViewSource",
-            "description": "`file`: the project's stages.md; `template`: it has none, and the code template stands in."
+            "$ref": "#/components/schemas/StagesSource",
+            "description": "`file`: the project's stages.md; `template`: it has none and was set up\nas the code template, which the hub reads in its place; `none`: it is\nnot set up yet (no stages.md, no template), and it has no stages."
           },
           "stages": {
             "type": "array",
@@ -39300,11 +39305,28 @@
           "who"
         ]
       },
+      "StagesSource": {
+        "description": "Where a project's stages come from (StagesView `source`).",
+        "type": "string",
+        "enum": [
+          "file",
+          "none",
+          "template"
+        ]
+      },
       "Stage": {
         "type": "object",
         "properties": {
+          "color": {
+            "$ref": "#/components/schemas/StageColor",
+            "description": "Its mark's colour (stages.md `color:`); none: the muted ink."
+          },
           "hooks": {
             "$ref": "#/components/schemas/StageHooks"
+          },
+          "icon": {
+            "$ref": "#/components/schemas/StageIcon",
+            "description": "Its mark's glyph (stages.md `icon:`); none: no mark but its kind's."
           },
           "kind": {
             "$ref": "#/components/schemas/StageKind"
@@ -63719,6 +63741,47 @@
           "stopped"
         ]
       },
+      "StageColor": {
+        "type": "string",
+        "enum": [
+          "amber",
+          "cyan",
+          "green",
+          "orange"
+        ]
+      },
+      "StageIcon": {
+        "type": "string",
+        "enum": [
+          "archive",
+          "bolt",
+          "book",
+          "calendar",
+          "chat",
+          "clock",
+          "code",
+          "done",
+          "eye",
+          "globe",
+          "graph",
+          "hourglass",
+          "idea",
+          "inbox",
+          "lab",
+          "list",
+          "map",
+          "money",
+          "palette",
+          "pen",
+          "phone",
+          "pin",
+          "rocket",
+          "search",
+          "send",
+          "trash",
+          "user"
+        ]
+      },
       "StageHooksBy": {
         "type": "string",
         "enum": [
@@ -63726,13 +63789,6 @@
           "routine",
           "session",
           "you"
-        ]
-      },
-      "StagesViewSource": {
-        "type": "string",
-        "enum": [
-          "file",
-          "template"
         ]
       },
       "TaskHistoryState": {

@@ -605,8 +605,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       stored?.state === "live"
         ? streamRelayUrls(stored.address, stored.hostname)
         : [];
+    const answered = db.askedAt() !== null;
     if (!journey) {
       return {
+        answered,
         open: false,
         asks: false,
         done: false,
@@ -620,6 +622,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     const computed = compute(journey);
     const done = computed.startDone && computed.proved;
     return {
+      answered,
       open: true,
       asks: journey.closed === null && !done,
       done,

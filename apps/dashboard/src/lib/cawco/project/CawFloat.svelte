@@ -23,21 +23,39 @@
    * the page, it stands at the page's sheet layer (`--layer-sheet`), under
    * the floating surfaces: a menu opened from the page (the project's ⋯)
    * and his settings sheet stand over it, never under its composer.
+   *
+   * On Preview (`lead.tab`, ProjectConversation's switch) the panel widens
+   * to hold what he shows: docked beside the page, the page's grid gives
+   * its column more of the width (the project page); under the page, its
+   * row more of the height; on a phone the sheet stands at the screen's
+   * full height under its top inset, as New session's sheet does. Back on Assistant it narrows again.
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import type { PendingPermission } from "../client.svelte";
   import { appearOnMount } from "../motion/curves.svelte";
   import { stopWork } from "../stop-work.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import ProjectConversation from "./ProjectConversation.svelte";
+  import type { SetupProgress } from "./setup-progress";
 
   let {
     lead,
     projectId,
     projectName,
-  }: { lead: CawLead; projectId: string; projectName: string } = $props();
+    setup = null,
+    asksElsewhere,
+  }: {
+    lead: CawLead;
+    projectId: string;
+    projectName: string;
+    /** ProjectConversation's `setup`: his setup element while he drafts it. */
+    setup?: SetupProgress | null;
+    /** ProjectConversation's `asksElsewhere`: the questions the board draws. */
+    asksElsewhere?: (request: PendingPermission) => boolean;
+  } = $props();
 
   /** A phone: the page is one scroller with the views bar at its foot (ViewBar's line). */
   const phone = new MediaQuery("(max-width: 639px)");
@@ -106,6 +124,10 @@
     <Drawer.Content
       class="z-(--layer-sheet)"
       data-caw-float-sheet
+      data-caw-preview={lead.tab === "preview" || undefined}
+      style={lead.tab === "preview"
+        ? "--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))"
+        : undefined}
       height="cap"
       modal={false}
       ownHead
@@ -114,7 +136,14 @@
     >
       <div class="flex min-h-0 flex-auto flex-col overflow-hidden">
         {#key projectId}
-          <ProjectConversation {lead} {projectId} {projectName} sheet />
+          <ProjectConversation
+            {asksElsewhere}
+            {lead}
+            {projectId}
+            {projectName}
+            {setup}
+            sheet
+          />
         {/key}
       </div>
     </Drawer.Content>
@@ -138,7 +167,13 @@
     })}
   >
     {#key projectId}
-      <ProjectConversation {lead} {projectId} {projectName} />
+      <ProjectConversation
+        {asksElsewhere}
+        {lead}
+        {projectId}
+        {projectName}
+        {setup}
+      />
     {/key}
   </aside>
 {/if}

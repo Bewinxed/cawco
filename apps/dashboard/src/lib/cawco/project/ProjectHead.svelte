@@ -30,8 +30,9 @@
    * capsule (the kit's BarGlass, `form="group"`) of bare symbols, each named
    * in its tooltip: Ask Caw (his panel on a new conversation, the caret in his
    * composer: work in a project starts by telling Caw, PRD §5.6), Spin off,
-   * and More holding Pick stages (while the code stages stand in), Project
-   * details…, Caw's settings (CawPanel, off More: a popover on a desk, the
+   * and More holding its setup (Finish setting it up while it is not set
+   * up, Change how it runs once it is: the project-setup skill's one page,
+   * through Caw), Project details…, Caw's settings (CawPanel, off More: a popover on a desk, the
    * bottom sheet on touch), Spend and Forget
    * (and, under 640px, Spin off, New task, Filter tasks… and Ask Caw for a
    * view), each with its glyph. Nothing in the head is on the coral: no view
@@ -97,7 +98,7 @@
     onnewtask,
     onask,
     onfilter,
-    onstages,
+    setup,
     detailsAfterChecks,
   }: {
     /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
@@ -110,8 +111,8 @@
     onnewtask: () => void;
     /** Ask Caw for a view, from the menu; null while Caw can't start. */
     onask: ((anchor: HTMLElement) => void) | null;
-    /** Pick the project's stages, from the menu; null once it has its own. */
-    onstages: ((anchor: HTMLElement) => void) | null;
+    /** Its setup, from the menu: finish it, or change how it runs; null while Caw can't start. */
+    setup: { label: string; run: () => void } | null;
     /** Rows the details show under Merge checks (ProjectDetails). */
     detailsAfterChecks?: Snippet;
   } = $props();
@@ -507,16 +508,10 @@
             {/if}
             <DropdownMenu.Separator />
           {/if}
-          {#if onstages}
-            <DropdownMenu.Item
-              onSelect={() => {
-                if (more) {
-                  onstages?.(more);
-                }
-              }}
-            >
+          {#if setup}
+            <DropdownMenu.Item onSelect={() => setup?.run()}>
               <IconColumns />
-              <span>{projectWords.pickStages}</span>
+              <span>{setup.label}</span>
             </DropdownMenu.Item>
           {/if}
           <DropdownMenu.Item onSelect={() => openDetails()}>

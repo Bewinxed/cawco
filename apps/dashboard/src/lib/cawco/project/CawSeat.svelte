@@ -6,7 +6,8 @@
    * (`lead.anchor`): over an empty board he stands at 80, and when he sits
    * down in the head the open panel moves with him. His face keeps saying
    * what he is doing either way. His on/off is the project's, under the
-   * head's `⋯`.
+   * head's `⋯`. While he works on a project's setup in his panel
+   * (`lead.inPanel`, SetupWell) the seat stands empty: he is there.
    */
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
@@ -56,7 +57,7 @@
   {@attach anchors}
   {@attach land(() => `caw:${projectId}`, { uniform: true })}
 >
-  {#if lead.shown}
+  {#if lead.shown && !lead.inPanel}
     <Caw next={HEAD_NEXT} {size} status={lead.status} {still} />
   {/if}
 </button>

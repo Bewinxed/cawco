@@ -3976,6 +3976,14 @@
       },
       "$description": "Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters; shorter where the room under his seat is less."
     },
+    "c-flock-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      },
+      "$description": "The floor of a project's board before it is set up (SetupScene): Caw's flock stands on it (CawFlock), his rig at 72 with the room a raised wing takes, and the scene's middle stands clear of it."
+    },
     "c-top-bar-h": {
       "$type": "dimension",
       "$value": {
@@ -7172,7 +7180,15 @@
         "value": 50,
         "unit": "ms"
       },
-      "$description": "Between one letter of a typed example and the next: New project's placeholder typing its examples (decision page onboarding-design, card describe-hint); it erases at half this."
+      "$description": "Between one letter of a typed example and the next: New project's placeholder typing its examples once, then resting (decision page onboarding-design, card describe-hint, the person's pick); it erases at half this."
+    },
+    "dur-caw-blend": {
+      "$type": "duration",
+      "$value": {
+        "value": 640,
+        "unit": "ms"
+      },
+      "$description": "One pose of Caw's rig into the next, on ease-in-out (caw-rig/rig.ts BLEND_MS): a step of his flock's walk takes this, so his travel and his waddle land together (CawFlock)."
     },
     "dur-cascade": {
       "$type": "duration",
