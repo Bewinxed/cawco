@@ -166,6 +166,46 @@ export function bearing<W extends Pick<LimitWindow, "resetsAt" | "scopeLabel">>(
 }
 
 /**
+ * A week's pace line at `now`, percent: the share of it gone since it
+ * opened (`100 × (now − opened) / span`), the use that spends it evenly to
+ * its reset. Null for a window that is not a week, or whose opening is not
+ * known.
+ */
+export const paceLine = (window: Clocked, now: number): number | null => {
+  const opened = openedAt(window);
+  const span = windowSpan(window);
+  if (window.group !== "weekly" || opened === null || !span) {
+    return null;
+  }
+  return Math.min(100, Math.max(0, (100 * (now - opened)) / span));
+};
+
+/**
+ * The week of `windows` (the bearing ones: the week over all models and the
+ * session's model's own) used furthest past its pace line ({@link
+ * paceLine}) at `now`, with its use and its line, percent; undefined when
+ * none is past it. An account with no week is never ahead of one.
+ */
+export const aheadOfWeek = <W extends Clocked & Used>(
+  windows: readonly W[],
+  now: number
+): { line: number; used: number; window: W } | undefined => {
+  let furthest: { line: number; used: number; window: W } | undefined;
+  for (const window of windows) {
+    const line = paceLine(window, now);
+    const used = windowUsed(window, now);
+    if (
+      line !== null &&
+      used > line &&
+      (!furthest || used - line > furthest.used - furthest.line)
+    ) {
+      furthest = { line, used, window };
+    }
+  }
+  return furthest;
+};
+
+/**
  * The window that binds now: among `windows` (the bearing ones), the one
  * with the least left at `now`, and that share left, percent. Null when
  * there are none.

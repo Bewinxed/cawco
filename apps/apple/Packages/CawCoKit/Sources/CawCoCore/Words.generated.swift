@@ -3202,6 +3202,16 @@ public enum Words {
             "may start \(names)"
         }
 
+        /// The account its sessions start on, on the row's line, by the name CawCo gives it.
+        public static func prefersAccount(account: String) -> String {
+            "account \(account)"
+        }
+
+        /// A type saved naming an account the fleet doesn't have (`account`: the id given).
+        public static func noAccount(account: String) -> String {
+            "There is no account \(account)."
+        }
+
         /// The editor.
         public static let what = "delegate type"
 

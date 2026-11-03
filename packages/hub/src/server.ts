@@ -30624,8 +30624,11 @@ export const createServer = (
         websocket(),
         hubAuth.routes(),
         dashboardErrorsRoutes(),
-        delegateTypesRoutes(delegateTypes, (name) =>
-          db.trash.put({ kind: "delegateType", key: name }, Date.now())
+        delegateTypesRoutes(
+          delegateTypes,
+          (name) =>
+            db.trash.put({ kind: "delegateType", key: name }, Date.now()),
+          (id) => db.accounts.get(id) !== undefined
         ),
         projectDelegateTypesRoutes(projectTypes, (id) =>
           db.listProjects().some((project) => project.id === id)

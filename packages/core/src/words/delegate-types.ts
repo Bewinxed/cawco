@@ -33,6 +33,10 @@ export const delegateTypesWords = {
   /** What its sessions may start, on the row's line: every type, or the ones named (`names`, joined). */
   mayStartAny: "may start any type",
   mayStartShort: (names: string) => `may start ${names}`,
+  /** The account its sessions start on, on the row's line, by the name CawCo gives it. */
+  prefersAccount: (account: string) => `account ${account}`,
+  /** A type saved naming an account the fleet doesn't have (`account`: the id given). */
+  noAccount: (account: string) => `There is no account ${account}.`,
 
   /** The editor. */
   what: "delegate type",

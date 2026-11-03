@@ -272,8 +272,14 @@ export const delegateWords = (result: DelegateResult): string =>
 export const startedWords = (result: Pick<HandoffResult, "text">): string =>
   result.text;
 
-/** One delegate type as a line: what it is for, then what it runs. */
-const typeLine = (type: DelegateType & { source?: string }): string => {
+/**
+ * One delegate type as a line: what it is for, then what it runs. Its
+ * preferred account by the name `names` gives it (by id), else its id.
+ */
+const typeLine = (
+  type: DelegateType & { source?: string },
+  names: Readonly<Record<string, string>> = {}
+): string => {
   const runs = [
     `${type.harness} ${type.model}`,
     ...(type.effort ? [`${type.effort} effort`] : []),
@@ -289,6 +295,13 @@ const typeLine = (type: DelegateType & { source?: string }): string => {
             : delegateTypesUiWords.mayStartShort(type.mayStart.join(", ")),
         ]
       : []),
+    ...(type.account
+      ? [
+          delegateTypesUiWords.prefersAccount(
+            names[type.account] ?? type.account
+          ),
+        ]
+      : []),
     ...(type.source === "project" ? ["the project's own"] : []),
   ];
   return `- ${type.name}: ${type.description.replace(/\s+/gu, " ").trim()} (${runs.join("; ")})`;
@@ -296,13 +309,15 @@ const typeLine = (type: DelegateType & { source?: string }): string => {
 
 /** `list_delegate_types` and admin_delegate_types_read's list: each type, a line. */
 export const delegateTypesWords = (catalog: {
+  /** The fleet's account names by id, for a type's preferred account. */
+  accountNames?: Readonly<Record<string, string>>;
   types: (DelegateType & { source?: string })[];
 }): string =>
   catalog.types.length === 0
     ? "No delegate types are configured."
     : lines(
         `${count(catalog.types.length, "delegate type")}; delegate's type takes the name:`,
-        catalog.types.map(typeLine)
+        catalog.types.map((type) => typeLine(type, catalog.accountNames))
       );
 
 /** `generate_image`: where it is, how big. */

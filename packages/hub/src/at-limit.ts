@@ -7,6 +7,7 @@ import {
   type AtLimit,
   accountNameAmong,
   accountsWords,
+  aheadOfWeek,
   bearing,
   clockWords,
   configurePage,
@@ -54,9 +55,9 @@ import {
   type Arrival,
   accountRows,
   type PlacementInput,
+  pacedOrder,
   pinnedOf,
   runsOutBy,
-  strategyOrder,
 } from "./placement";
 import { createRebalancer, readForecast, sessionBurn } from "./rebalance";
 import { isLive } from "./work-items";
@@ -594,13 +595,15 @@ const reasonsOf = (weighed: readonly Weighed[]): StopReason[] =>
  * The accounts that fit, best first (rule 4): those its cache carries to
  * first, then within each, those that last before those that don't, then
  * the kind's strategy (the delegate type's account at its head, as placement
- * has it), then a sign-in a turn proved, as a tie-breaker only, then the most
+ * has it; an account ahead of its week after every one that isn't, placement
+ * `pacedOrder`), then a sign-in a turn proved, as a tie-breaker only, then the most
  * room left after the move.
  */
 const ordered = (input: StopInput, fit: readonly Weighed[]): Weighed[] => {
   const { strategy, now } = input;
-  const order = strategyOrder(strategy.kind, strategy.pinned ?? undefined);
+  const order = pacedOrder(strategy.kind, strategy.pinned ?? undefined);
   const ranked = (one: Weighed) => ({
+    ahead: aheadOfWeek(one.account.windows, now) !== undefined,
     id: one.account.id,
     order: one.account.order,
     createdAt: one.account.createdAt,

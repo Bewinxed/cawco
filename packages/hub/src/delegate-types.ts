@@ -17,6 +17,7 @@ import {
   EFFORT_LEVELS,
   HARNESSES,
 } from "@cawco/core";
+import { delegateTypesWords } from "@cawco/core/words/delegate-types";
 import { Elysia, t } from "elysia";
 import { undoable } from "./db/trash";
 
@@ -188,11 +189,13 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
  * The three routes: `GET /api/delegate-types`, `PUT /api/delegate-types/:name`,
  * `DELETE /api/delegate-types/:name`. A standalone Elysia app so `server.ts`
  * mounts it with one `.use()` rather than growing its own route list. A
- * delete goes into the hub's trash (`trash`, db/trash.ts) for its Undo.
+ * delete goes into the hub's trash (`trash`, db/trash.ts) for its Undo. A
+ * type's `account` must be one of the fleet's (`accountKnown`).
  */
 export const delegateTypesRoutes = (
   store: DelegateTypesShape,
-  trash: (name: string) => number | undefined
+  trash: (name: string) => number | undefined,
+  accountKnown: (id: string) => boolean
 ) =>
   new Elysia()
     .get("/api/delegate-types", () => ({ types: store.list() }))
@@ -218,6 +221,9 @@ export const delegateTypesRoutes = (
         const problem = delegateTypeProblem(draft);
         if (problem) {
           return status(400, problem);
+        }
+        if (draft.account !== undefined && !accountKnown(draft.account)) {
+          return status(400, delegateTypesWords.noAccount(draft.account));
         }
         return store.put(draft as DelegateType);
       }

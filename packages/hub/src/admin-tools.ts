@@ -8,6 +8,8 @@
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
 import {
+  type Account,
+  accountNames,
   type ConnectionAuth,
   EFFORT_LEVELS,
   type FleetAgent,
@@ -446,6 +448,28 @@ const harnessConfigHandler =
     });
   };
 
+/** The delegate type tool's `account` parameter, as the agent calling it reads it. */
+const TYPE_ACCOUNT_DESCRIPTION =
+  "Account id its sessions start on wherever it can take them; otherwise the provider's strategy chooses. Optional for put.";
+
+/**
+ * A delegate types answer (the list, or one type saved) with the fleet's
+ * account names beside it, so a type's preferred account reads by the name
+ * CawCo gives it (core `accountNames`).
+ */
+const withAccountNames = async (answer: unknown): Promise<unknown> => {
+  if (!answer || typeof answer !== "object") {
+    return answer;
+  }
+  const { accounts } = (await api("GET", "/api/accounts")) as {
+    accounts: Account[];
+  };
+  return {
+    ...answer,
+    accountNames: Object.fromEntries(accountNames(accounts)),
+  };
+};
+
 /** The admin tools, separated from the handoff tools so the MCP server composes them. */
 export function adminTools() {
   return [
@@ -505,6 +529,7 @@ export function adminTools() {
           .describe(
             "Connections its sessions may call (admin_connections_read)."
           ),
+        account: z.string().optional().describe(TYPE_ACCOUNT_DESCRIPTION),
       },
       async ({
         action,
@@ -517,9 +542,10 @@ export function adminTools() {
         denyTools,
         mayStart,
         connections,
+        account,
       }) => {
         if (action === "list") {
-          return await api("GET", "/api/delegate-types");
+          return withAccountNames(await api("GET", "/api/delegate-types"));
         }
         if (!name) {
           throw new Error("name is required for put and delete");
@@ -549,9 +575,10 @@ export function adminTools() {
               denyTools,
               mayStart,
               connections,
+              account,
             }),
           }
-        );
+        ).then(withAccountNames);
       },
       delegateTypeSettingsWords
     ),

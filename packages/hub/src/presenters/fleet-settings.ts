@@ -84,12 +84,17 @@ export const delegateTypeSettingsWords = (
     return removedWords(`delegate type ${asked.name}`, answer);
   }
   if (asked.action === "list") {
-    return delegateTypesWords(answer as { types: DelegateType[] });
+    return delegateTypesWords(
+      answer as { accountNames?: Record<string, string>; types: DelegateType[] }
+    );
   }
-  return delegateTypesWords({ types: [answer as DelegateType] }).replace(
-    CATALOG_HEAD,
-    "Saved delegate type:\n"
-  );
+  const { accountNames, ...saved } = answer as DelegateType & {
+    accountNames?: Record<string, string>;
+  };
+  return delegateTypesWords({
+    types: [saved],
+    ...(accountNames ? { accountNames } : {}),
+  }).replace(CATALOG_HEAD, "Saved delegate type:\n");
 };
 
 const connectionLine = (connection: ConnectionView): string =>

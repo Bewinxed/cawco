@@ -4,6 +4,7 @@ import {
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
+  aheadOfWeek,
   bearing,
   clockWords,
   configurePage,
@@ -18,6 +19,7 @@ import {
   type ProviderRouting,
   type StrategyChoice,
   spanWords,
+  windowNoun,
   windowOpen,
   windowResetAt,
   windowUsed,
@@ -236,8 +238,10 @@ const picked = (accounts: Account[], asked: string): Account | undefined => {
   );
 };
 
-/** What the four strategies order accounts by: fill-first order, binding use, the earliest reset and when it runs out. */
+/** What the four strategies order accounts by: fill-first order, binding use, the earliest reset and when it runs out; and whether it is ahead of its week. */
 export interface Ranked {
+  /** Its week is used past its pace line (core `aheadOfWeek`): it goes after every account that isn't ({@link pacedOrder}). */
+  ahead: boolean;
   /** The use of the window that binds it now, percent: the most used of its bearing windows ({@link Usage.binding}). */
   binding: number;
   createdAt: number;
@@ -281,7 +285,7 @@ const byReset = (a: Ranked, b: Ranked): number => {
  * reset among its bearing windows, then the least used binding window. Every
  * account is read on its own windows, whichever it has.
  */
-export const strategyOrder =
+const strategyOrder =
   (strategy: PlacementStrategy, pinnedId: string | undefined) =>
   (a: Ranked, b: Ranked): number => {
     switch (strategy) {
@@ -298,6 +302,20 @@ export const strategyOrder =
         return byFillFirst(a, b);
     }
   };
+
+/**
+ * The strategy's order with the pace line before it: an account ahead of its
+ * week goes after every account that isn't, whatever the strategy says,
+ * for every strategy and every kind of session. An account with no week is
+ * never ahead. The order at-limit's decision weighs the accounts that fit
+ * in; placement applies the same rule by choosing among those that aren't
+ * ahead first ({@link decide}).
+ */
+export const pacedOrder =
+  (strategy: PlacementStrategy, pinnedId: string | undefined) =>
+  (a: Ranked, b: Ranked): number =>
+    Number(a.ahead) - Number(b.ahead) ||
+    strategyOrder(strategy, pinnedId)(a, b);
 
 const byOrder = (list: Account[]): Account[] => [...list].sort(byFillFirst);
 
@@ -413,8 +431,14 @@ class Usage {
     return at === null || !window ? undefined : { at, window };
   }
 
+  /** Its week used furthest past its pace line, for this session's model (core `aheadOfWeek`); undefined when none is. */
+  ahead(id: string) {
+    return aheadOfWeek(this.#bearing(id), this.#input.now);
+  }
+
   /** What the strategies order it by ({@link strategyOrder}). */
   ranked = (account: Account): Ranked => ({
+    ahead: this.ahead(account.id) !== undefined,
     id: account.id,
     order: account.order,
     createdAt: account.createdAt,
@@ -554,6 +578,22 @@ class Usage {
 }
 
 type Choice = { account: Account; why: string } | undefined;
+
+/** The sentence placement adds when the pace line moved back the account its strategy alone would have chosen. */
+const movedBackWords = (
+  named: string,
+  back: { line: number; used: number; window: LimitWindow }
+): string =>
+  `${named} is ahead of its ${windowNoun(back.window)} (${pct(back.used)} used with ${pct(back.line)} of it gone), so it went last.`;
+
+/** Pinned's sentence when the pace line moved the pin back and fill-first chose a backup. */
+const pinMovedBackWords = (
+  pin: string,
+  back: { line: number; used: number; window: LimitWindow },
+  named: string,
+  said: string
+): string =>
+  `The pinned account ${pin} is ahead of its ${windowNoun(back.window)} (${pct(back.used)} used with ${pct(back.line)} of it gone), so it went last and fill-first chose ${named}, the first backup with headroom (${said}).`;
 
 /** Pinned: the pinned account; when it is out, fill-first over the accounts that back it up. */
 const pinned = (
@@ -719,7 +759,7 @@ const explicitPick = (
 };
 
 /** The strategy's choice among the candidates, or nothing when none of them can take it. */
-const decide = (
+const byStrategy = (
   strategy: PlacementStrategy,
   candidates: Account[],
   pinnedId: string | undefined,
@@ -739,6 +779,50 @@ const decide = (
     default:
       return undefined;
   }
+};
+
+/**
+ * The strategy's choice among the candidates, the pace line first: those
+ * ahead of their week ({@link Usage.ahead}) are chosen from only when none
+ * of the others can take it. When the line moved back the account the
+ * strategy alone would have chosen, the sentence says so.
+ */
+const decide = (
+  strategy: PlacementStrategy,
+  candidates: Account[],
+  pinnedId: string | undefined,
+  usage: Usage,
+  name: (id: string) => string,
+  current: string | undefined
+): Choice => {
+  const pick = (among: Account[]) =>
+    among.length > 0
+      ? byStrategy(strategy, among, pinnedId, usage, name, current)
+      : undefined;
+  const ahead = candidates.filter((one) => usage.ahead(one.id) !== undefined);
+  const chosen =
+    pick(candidates.filter((one) => !ahead.includes(one))) ?? pick(ahead);
+  const alone = ahead.length > 0 ? pick(candidates) : undefined;
+  const back =
+    chosen && alone && alone.account.id !== chosen.account.id
+      ? usage.ahead(alone.account.id)
+      : undefined;
+  if (!(chosen && alone && back)) {
+    return chosen;
+  }
+  const passed = usage.name(alone.account);
+  return {
+    account: chosen.account,
+    why:
+      strategy === "pinned" && alone.account.id === pinnedId
+        ? pinMovedBackWords(
+            passed,
+            back,
+            usage.name(chosen.account),
+            usage.said(chosen.account.id)
+          )
+        : `${chosen.why} ${movedBackWords(passed, back)}`,
+  };
 };
 
 /** Accounts signed in on the session's machine, and of those the ones its project and task allow. */

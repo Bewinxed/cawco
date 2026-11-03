@@ -243,9 +243,17 @@ export interface Stress {
 }
 
 /**
- * Whether an account is stressed: a window of it runs out (or is out) before
- * it resets, less `waitMs` (a reset that near is waited for, as at the
- * limit). The window that runs out first; null when none does.
+ * How far ahead a forecast run-out moves running sessions: five hours, for
+ * every window, fleet-wide. A run-out further off moves nobody: the forecast
+ * steers new placement and the screens until it comes this close.
+ */
+const LOOK_AHEAD_MS = 5 * HOUR_MS;
+
+/**
+ * Whether an account is stressed: a window of it runs out (or is out) within
+ * {@link LOOK_AHEAD_MS} and before it resets, less `waitMs` (a reset that
+ * near is waited for, as at the limit). The window that runs out first; null
+ * when none does.
  */
 const stressOf = (
   forecast: AccountForecast | undefined,
@@ -261,6 +269,7 @@ const stressOf = (
     const runsOutAt = window.utilization >= 100 ? now : window.runsOutAt;
     if (
       runsOutAt === undefined ||
+      runsOutAt - now > LOOK_AHEAD_MS ||
       (resetAt !== null && runsOutAt >= resetAt - waitMs)
     ) {
       continue;
@@ -468,7 +477,11 @@ interface Source {
   waitMs: number;
 }
 
-/** Whether `source` no longer runs out: below its limit, with the pace left lasting to its reset. */
+/**
+ * Whether `source` no longer runs out: below its limit, with the pace left
+ * lasting to its reset, or running out past {@link LOOK_AHEAD_MS}, where a
+ * forecast moves nobody.
+ */
 const lasts = (source: Source, now: number): boolean => {
   const { stress, relieved, waitMs } = source;
   if (stress.window.utilization >= 100) {
@@ -478,10 +491,10 @@ const lasts = (source: Source, now: number): boolean => {
   if (pace <= 0) {
     return true;
   }
+  const out = now + ((100 - stress.window.utilization) / pace) * HOUR_MS;
   return (
-    stress.resetAt !== null &&
-    now + ((100 - stress.window.utilization) / pace) * HOUR_MS >=
-      stress.resetAt - waitMs
+    out - now > LOOK_AHEAD_MS ||
+    (stress.resetAt !== null && out >= stress.resetAt - waitMs)
   );
 };
 
