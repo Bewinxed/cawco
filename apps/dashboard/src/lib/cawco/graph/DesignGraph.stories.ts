@@ -138,3 +138,26 @@ export const MoveFailed = {
   },
   parameters: { viewport: 1440 },
 };
+
+// --- The map at a phone's width (the owner's look, decision page
+// design-graph-phone-map): fitted whole in the 390 drawer its words drew at
+// 2.6px. Each option at the drawer's half stop, judged on the page itself
+// (/dev/design-graph?story=…), where the window is the surface's. ---
+
+/** A zoom floor: no word draws under 10px; the map pans past the drawer's edge. */
+export const MapPhoneFloor = {
+  args: { ask: { face: "whole" }, opensAt: "half", phoneMap: "floor" },
+  parameters: { viewport: 390 },
+};
+
+/** Its words dropped while they draw under 10px: the map stays fitted, its shapes alone. */
+export const MapPhoneShapes = {
+  args: { ask: { face: "whole" }, opensAt: "half", phoneMap: "shapes" },
+  parameters: { viewport: 390 },
+};
+
+/** The map as a list of states and their moves under 640px. */
+export const MapPhoneList = {
+  args: { ask: { face: "whole" }, opensAt: "half", phoneMap: "list" },
+  parameters: { viewport: 390 },
+};

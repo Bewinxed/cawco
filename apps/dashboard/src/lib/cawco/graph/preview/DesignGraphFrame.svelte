@@ -21,7 +21,12 @@
     withRoster = false,
     alone = null,
     lang,
-  }: Pick<ComponentProps<typeof DesignGraph>, "ask" | "stale"> & {
+    opensAt,
+    phoneMap,
+  }: Pick<
+    ComponentProps<typeof DesignGraph>,
+    "ask" | "stale" | "opensAt" | "phoneMap"
+  > & {
     /** Whether the ask names the roster beside the routine form. */
     withRoster?: boolean;
     /** The one component under review in place of the routine form. */
@@ -61,5 +66,5 @@
     tall = screenHeight(node.clientWidth);
   })}
 >
-  <DesignGraph {ask} {inputs} {lang} {stale} />
+  <DesignGraph {ask} {inputs} {lang} {opensAt} {phoneMap} {stale} />
 </div>
