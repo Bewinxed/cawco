@@ -204,6 +204,18 @@ public enum Palette {
     public static let cClipEffect = Palette.named("c-clip-effect")
     /// The design graph's Animation timeline: the bar and glyph of a clip whose property is none of the kinds (a custom property's). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance.
     public static let cClipOther = Palette.named("c-clip-other")
+    /// The design graph's Animation timeline: the fill of a size clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-size).
+    public static let cClipSizeWash = Palette.named("c-clip-size-wash")
+    /// The design graph's Animation timeline: the fill of a move clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-move).
+    public static let cClipMoveWash = Palette.named("c-clip-move-wash")
+    /// The design graph's Animation timeline: the fill of a fade clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-fade).
+    public static let cClipFadeWash = Palette.named("c-clip-fade-wash")
+    /// The design graph's Animation timeline: the fill of a tint clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-tint).
+    public static let cClipTintWash = Palette.named("c-clip-tint-wash")
+    /// The design graph's Animation timeline: the fill of a effect clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-effect).
+    public static let cClipEffectWash = Palette.named("c-clip-effect-wash")
+    /// The design graph's Animation timeline: the fill of a other clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-other).
+    public static let cClipOtherWash = Palette.named("c-clip-other-wash")
     /// The ring round what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): the done glyph's green, drawn on the element's own shape outside its box, so it never covers what the element says; never coral (The One Target Rule).
     public static let cChangeRing = Palette.named("c-change-ring")
     public static let brandInk = Palette.named("brand-ink")

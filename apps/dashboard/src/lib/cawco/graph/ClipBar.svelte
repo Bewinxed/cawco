@@ -3,11 +3,15 @@
    * A row's bar on the move's one scale (MoveFace: the ruler, every bar and
    * the playhead share it), and its timing's handles (bits-ui's Slider, two
    * thumbs): the start handle is when the thing begins to move, the end
-   * handle when it comes to rest. Its stretches of motion are drawn on the
-   * bar in its kind's colour (the `c-clip-*` tokens); a thing that moves
-   * twice shows both. The moment the move set it off stands as a tick on
-   * the lane: no handle passes it. While he has tuned it, its timing as the
-   * engine ran it stands as a dashed outline under the bar.
+   * handle when it comes to rest. Round 29's bar: a plain rounded bar in
+   * its kind's wash with its kind's edge (the `c-clip-*` tokens), the lane
+   * bare round it; a thing that moves twice shows both stretches. Its two
+   * handles are thin marks inside its ends, shown while the pointer rests
+   * on the lane, a handle has the focus, or a drag holds it; under a
+   * finger each still takes a 44px area. The moment the move set it off
+   * stands as a tick on the lane: no handle passes it. While he has tuned
+   * it, its timing as the engine ran it stands as a dashed outline under
+   * the bar.
    *
    * A drag snaps the row's length to the duration ladder (motion
    * `snapLength`), as the owner decided ("Snap, and ⌥ frees it"); with ⌥
@@ -105,17 +109,30 @@
     const [from = floor, to = floor] = next;
     held = null;
     onhold(null);
-    if (from !== rest[0] || to !== rest[1]) {
-      onretime(from, to);
+    if (from === rest[0] && to === rest[1]) {
+      return;
     }
+    // An end left where it rests keeps its own time, the drag's length
+    // kept: the rest stands on the slider's steps, and a start 4 ms off a
+    // step moved onto it when only the end was dragged.
+    let shift = 0;
+    if (from === rest[0]) {
+      shift = track.begins - from;
+    } else if (to === rest[1]) {
+      shift = track.ends - to;
+    }
+    onretime(from + shift, to + shift);
   };
 
   /** The bar's width, px: how far apart the two handles stand on screen, and what a body drag's pixels are in ms. */
   let wide = $state(0);
-  /** The handle's drawn width, px (`w-space-1`). */
+  /** The handle's drawn width, px (`w-space-1`): each stands that far inside its end. */
   const HANDLE = 4;
   const apart = $derived(
-    Math.max(0, (((value[1] ?? 0) - (value[0] ?? 0)) / scale) * wide - HANDLE)
+    Math.max(
+      0,
+      (((value[1] ?? 0) - (value[0] ?? 0)) / scale) * wide - 2 * HANDLE
+    )
   );
 
   /** A drag on the bar's body: where it was taken, and the stretch it moves. */
@@ -147,8 +164,17 @@
     }
   };
 
-  /** Each kind's ink, as whole classes. */
-  const INK: Record<ClipKind, string> = {
+  /** Each kind's bar: its wash and its edge, as whole classes. */
+  const BAR: Record<ClipKind, string> = {
+    size: "bg-c-clip-size-wash border-c-clip-size",
+    move: "bg-c-clip-move-wash border-c-clip-move",
+    fade: "bg-c-clip-fade-wash border-c-clip-fade",
+    tint: "bg-c-clip-tint-wash border-c-clip-tint",
+    effect: "bg-c-clip-effect-wash border-c-clip-effect",
+    other: "bg-c-clip-other-wash border-c-clip-other",
+  };
+  /** Each kind's handle mark. */
+  const MARK: Record<ClipKind, string> = {
     size: "bg-c-clip-size",
     move: "bg-c-clip-move",
     fade: "bg-c-clip-fade",
@@ -159,7 +185,7 @@
 </script>
 
 <Slider.Root
-  class="relative flex h-c-btn-h-sm w-full touch-none items-center select-none"
+  class="group/bar relative flex h-c-pill-h w-full touch-none items-center select-none"
   {disabled}
   max={scale}
   min={0}
@@ -178,7 +204,7 @@
 >
   {#snippet children({ thumbItems })}
     <span
-      class="relative h-space-2 w-full grow rounded-pill bg-surface-fill"
+      class="relative h-full w-full grow"
       {@attach frameSize((node: HTMLElement) => {
         wide = node.clientWidth;
       })}
@@ -188,7 +214,7 @@
         {#each original as span, at (at)}
           <span
             aria-hidden="true"
-            class="absolute -inset-y-px start-(--from) w-(--wide) rounded-pill border border-dashed border-ink-muted"
+            class="absolute inset-y-0 start-(--from) w-(--wide) rounded-xs border border-dashed border-ink-muted"
             style:--from={pct(span.from)}
             style:--wide={pct(span.to - span.from)}
           ></span>
@@ -196,7 +222,11 @@
       {/if}
       {#if held || track.spans.length === 1}
         <Slider.Range
-          class={["absolute h-full cursor-grab rounded-pill", INK[track.kind]]}
+          class={[
+            "absolute inset-y-0 rounded-xs border",
+            disabled ? "cursor-default" : "cursor-grab",
+            BAR[track.kind],
+          ]}
           onpointercancel={letBody}
           onpointerdown={takeBody}
           onpointermove={moveBody}
@@ -208,8 +238,8 @@
         {#each track.spans as span, at (at)}
           <span
             class={[
-              "absolute inset-y-0 start-(--from) w-(--wide) rounded-pill",
-              INK[track.kind],
+              "absolute inset-y-0 start-(--from) w-(--wide) rounded-xs border",
+              BAR[track.kind],
             ]}
             style:--from={pct(span.from)}
             style:--wide={pct(span.to - span.from)}
@@ -220,16 +250,26 @@
     <!-- The moment the move set it off: no handle passes it. -->
     <span
       aria-label={words.triggeredAt(figureOf(Math.round(track.setOff), lang))}
-      class="absolute inset-y-space-2 start-(--at) w-px bg-ink-muted"
+      class="absolute inset-y-space-1 start-(--at) w-px bg-border-control"
       role="img"
       style:--at={pct(track.setOff)}
       title={words.triggeredAt(figureOf(Math.round(track.setOff), lang))}
     ></span>
     {#each thumbItems as { index } (index)}
+      <!-- A thin mark inside the bar's end, shown on rest, focus and drag. -->
       <Slider.Thumb
         aria-label={index === 0 ? words.clipStarts(name) : words.clipEnds(name)}
         aria-valuetext={words.ms(figureOf(value[index] ?? 0, lang))}
-        class="pointer-hit touch-hit block h-space-4 w-space-1 cursor-ew-resize rounded-pill bg-ink-strong transition-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 can-hover:hover:scale-y-125"
+        class={[
+          "pointer-hit touch-hit block h-space-3 w-space-1 cursor-ew-resize rounded-pill transition-opacity duration-(--dur-control) ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2",
+          held
+            ? "opacity-100"
+            : "opacity-0 focus-visible:opacity-100 can-hover:group-hover/bar:opacity-100",
+          // Inside its end: the slider places the thumb by its own `translate`.
+          index === 0 ? "ms-space-1" : "-ms-space-1",
+          disabled && "hidden",
+          MARK[track.kind],
+        ]}
         style="--hit-gap-x: {apart}px"
         {index}
       />

@@ -15,7 +15,7 @@
    * under Advanced following. Under Advanced: the delay, the curve's four
    * numbers, and a spring's mass, stiffness and damping. The house's own
    * timing, when it is one, is named on the last line. Every change plays
-   * on the stage once; the row says it was changed and sent to the agent.
+   * on the stage once, and the row's chip for the value marks it changed.
    */
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
@@ -26,6 +26,7 @@
     bezierOf,
     type Clip,
     cubic,
+    curveGlyph,
     curveTokenOf,
     delayOf,
     easingOf,
@@ -152,28 +153,18 @@
     first.spring ? Math.round(responseOf(first.spring) * 1000) : duration
   );
 
-  /** Each shape drawn: its curve from the start to the end, in a 24-unit box. */
+  /** Each shape drawn: its curve from the start to the end, in a 24-unit box (motion `curveGlyph`, as the rows draw theirs). */
   const glyphOf = (shape: Shape): string => {
-    if (shape === "linear") {
-      return "M2 22 L22 2";
+    if (shape === "linear" || shape === "spring") {
+      return (
+        curveGlyph(
+          shape === "linear"
+            ? "linear"
+            : springEasing(springOf(0.5, 0.45)).easing
+        ) ?? ""
+      );
     }
-    if (shape === "spring") {
-      const points = springEasing(springOf(0.5, 0.45))
-        .easing.slice(7, -1)
-        .split(",")
-        .map(Number);
-      return points
-        .map(
-          (along, i) =>
-            `${i === 0 ? "M" : "L"}${(2 + (20 * i) / (points.length - 1)).toFixed(1)} ${(22 - 16 * along).toFixed(1)}`
-        )
-        .join(" ");
-    }
-    const [x1 = 0, y1 = 0, x2 = 1, y2 = 1] =
-      bezierOf(easingOf(shape, 0.9)) ?? [];
-    const x = (t: number) => (2 + 20 * t).toFixed(1);
-    const y = (t: number) => (22 - 20 * t).toFixed(1);
-    return `M2 22 C${x(x1)} ${y(y1)} ${x(x2)} ${y(y2)} 22 2`;
+    return curveGlyph(easingOf(shape, 0.9)) ?? "";
   };
   const SHAPES: Shape[] = ["linear", "smooth", "slowDown", "speedUp", "spring"];
   /** The house's own timing, named only when the clip's timing is one (its length a token, its curve a token's or its frames'). */
@@ -315,7 +306,7 @@
 
 <section
   data-slot="clip-editor"
-  aria-label={words.edit(name)}
+  aria-label={name}
   class="flex min-w-0 flex-col gap-space-4 rounded-md bg-surface-recess p-space-3"
 >
   <fieldset class="m-0 flex min-w-0 flex-col gap-space-2 border-0 p-0">

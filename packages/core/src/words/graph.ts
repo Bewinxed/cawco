@@ -119,13 +119,8 @@ export const graphWords = {
   /** A clip's element when nothing names it. */
   element: "Element",
 
-  /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds, 260 ms"; a thing that moves at two moments of different lengths says its whole stretch. */
-  clipName: (element: string, how: string, ms: Figure) =>
-    `${element} ${how}, ${ms} ms`,
-  clipSpan: (element: string, how: string, from: Figure, to: Figure) =>
-    `${element} ${how}, ${from}–${to} ms`,
-  /** The clip editor. */
-  edit: (clip: string) => `Change ${clip}`,
+  /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds". Its length lives in its chip; its words are the press that opens its editor. */
+  clipName: (element: string, how: string) => `${element} ${how}`,
   length: "Duration",
   /** Lengths offered first, in plain words with their figure beside each. */
   lengths: [
@@ -159,11 +154,27 @@ export const graphWords = {
   delay: "Delay",
   reset: "Reset",
   ms: (value: Figure) => `${value} ms`,
-  /** The ruler's unit, beside the playhead's figure. */
+  /** A length's unit, beside its figure in the editor. */
   msUnit: "ms",
-  /** A tuned clip says so on its row, before and after. */
-  tuned: (before: string, after: string) =>
-    `Changed: ${before} → ${after}, sent to the agent`,
+  /** An edited chip, coral and dashed: pressing it puts that one value back as the agent built it. Its name and tooltip. */
+  resetLength: (ms: Figure) => `Reset length to ${ms} ms`,
+  resetCurve: (curve: string) => `Reset curve to ${curve}`,
+  /** The start chip's value is its delay; 0 when the agent set none. */
+  resetDelay: (ms: Figure) => `Reset delay to ${ms} ms`,
+  /** The head's count once anything is edited. */
+  edits: (n: number, said: Figure) => (n === 1 ? "1 edit" : `${said} edits`),
+  /** Reset, every value back: the visible word is `reset`; a reader hears its object. */
+  resetAll: "Reset all edits",
+  /** The start chip, shown only when the clip starts after the move sets it off. */
+  startsAt: (ms: Figure) => `+${ms} ms`,
+  startsAfter: (ms: Figure) => `Starts ${ms} ms after the move sets it off`,
+  /** The curve chip's name for a reader; its glyph is drawn, so the word says what the name is. */
+  curveOf: (curve: string) => `Curve: ${curve}`,
+  /** The property chip: what the clip changes, when it is one number. */
+  property: (name: string, from: Figure, to: Figure, unit: string) =>
+    `${name} ${from} → ${to} ${unit}`,
+  propertyOf: (name: string, from: Figure, to: Figure, unit: string) =>
+    `${name} from ${from} to ${to} ${unit}`,
 
   /** The head's switch once there are edits: the animation as read, or as changed; its name for a reader. */
   timings: "Timings",
@@ -174,15 +185,13 @@ export const graphWords = {
   /** A row with several animations, opened into one row each. */
   showClips: (n: number) => `Show ${n} animations`,
   hideClips: (n: number) => `Hide ${n} animations`,
-  /** A row's duration chip when its length is the design system's, and its name for a reader. */
-  durationChip: (ms: Figure, name: string) => `${ms} ms · ${name}`,
-  durationOf: (ms: Figure, name: string) =>
-    `${ms} ms, the design system's “${name}” duration`,
-  /** The dashed chip, its length off the ladder (⌥), and its name for a reader. */
-  freeOf: (ms: Figure) => `${ms} ms, not from the design system`,
-  /** A spring row: its bar's figure, and what a reader hears for it. */
+  /** The length chip's badge, when the length is a design system duration: the badge's tooltip and reader name. */
+  durationOf: (name: string) => `The design system's “${name}” duration`,
+  /** A length no token names: the figure's tooltip. */
+  freeOf: "Not a design system duration",
+  /** A spring row: its chip's figure; a spring has no set length, so its figure is when it settles. */
   springFigure: (ms: Figure) => `~${ms} ms`,
-  springSettles: (ms: Figure) => `Spring, settles in about ${ms} ms`,
+  springSettles: (ms: Figure) => `A spring, settled by ${ms} ms`,
   /** The bar's body, dragged: the whole animation along the lane. */
   moveClip: (clip: string) => `Move ${clip}`,
   /** The editor's curve sections: the house's curves, then the shapes. */

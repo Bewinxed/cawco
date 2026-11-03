@@ -1504,6 +1504,84 @@
           "css": "oklch(from {color.action-hover} calc(l - 0.03) c h)"
         }
       }
+    },
+    "c-clip-size-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.7, -0.046249, -0.137426],
+        "alpha": 0.22
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-size} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-move-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.7, 0.059316, -0.143201],
+        "alpha": 0.22
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-move} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-fade-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.7, 0.006699, 0.119813],
+        "alpha": 0.22
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-fade} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-tint-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.7, 0.167313, -0.030104],
+        "alpha": 0.22
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-tint} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-effect-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.7, -0.094351, -0.011084],
+        "alpha": 0.22
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-effect} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-other-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.778, 0.002495, 0.011738],
+        "alpha": 0.22
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-other} 22%, transparent)"
+        }
+      }
     }
   },
   "effect": {
