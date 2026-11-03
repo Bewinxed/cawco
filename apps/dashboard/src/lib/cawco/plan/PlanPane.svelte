@@ -59,6 +59,7 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { IconClose } from "#lib/icons.js";
@@ -223,29 +224,22 @@
   {@attach room}
   out:popOut|global={{ side: "top" }}
 >
+  <!-- One row with no ground (DESIGN.md, The Title Bars Follow Liquid Glass
+       Rule): the card's name, then Close, a bare symbol in its glass group.
+       A task attempt's id is a fact in the body, never in the bar. -->
   <header
     data-slot="plan-head"
-    class="flex items-center gap-space-2 py-space-2 pe-space-2 ps-space-4 border-b border-b-border-hairline"
+    class="flex h-c-top-bar-h flex-none items-center gap-space-2 pe-space-2 ps-space-4"
   >
     <h2
-      class="flex-auto min-w-0 m-0 flex items-baseline gap-space-2 text-size-label font-medium text-ink-strong"
+      class="flex-auto min-w-0 m-0 truncate text-size-label font-medium text-ink-strong"
       id={titleId}
     >
-      <span class="flex-none">{cardTitle}</span>
-      {#if todosOnly && plan?.taskId}
-        <span
-          class="min-w-0 type-code text-ink-subtle overflow-clip text-ellipsis whitespace-nowrap"
-          >{plan.taskId}</span
-        >
-      {/if}
+      {cardTitle}
     </h2>
-    <Button
-      aria-label="Close"
-      class="touch-hit"
-      onclick={shut}
-      size="icon-sm"
-      variant="ghost"><IconClose /></Button
-    >
+    <BarGlass form="group">
+      <BarItem icon={IconClose} label="Close" onclick={shut} />
+    </BarGlass>
   </header>
   <!-- The parts, flat on the surface: a heading, then what it names. -->
   <div
@@ -254,6 +248,14 @@
     class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-3 pbe-space-4 px-space-4 flex flex-col gap-space-2"
     style:--more-px="0"
   >
+    {#if todosOnly && plan?.taskId}
+      <p
+        data-slot="plan-task"
+        class="m-0 min-w-0 truncate type-code text-ink-subtle"
+      >
+        {plan.taskId}
+      </p>
+    {/if}
     {#if steps.length > 0}
       {#if stepsHeaded}
         <h3
