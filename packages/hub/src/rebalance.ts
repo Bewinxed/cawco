@@ -10,9 +10,11 @@ import {
   keepsGoingOnExtraUsage,
   LIMITED_PROVIDERS,
   namedAccount,
+  openedAt,
   type RebalanceNotice,
   tokenWords,
   type WindowForecast,
+  type WindowRef,
   windowWords,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -41,7 +43,13 @@ import {
   weightedTokens,
 } from "./forecast";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { type Arrival, SESSION_WINDOW_MS, WINDOW_MS } from "./placement";
+import type { Arrival } from "./placement";
+
+/**
+ * How far back a session's burn is read from its turns: five hours, a time
+ * constant of its own, not any account's window.
+ */
+const BURN_SPAN_MS = 5 * HOUR_MS;
 
 /**
  * Rebalancing a provider's accounts on a machine before any limit (at-limit
@@ -128,7 +136,7 @@ export const readForecast = (
 /**
  * Each session running on one of `ids`, or owed to one, as it arrives there
  * ({@link Arrival}): since its launch (now, for one owed), burning what its
- * own turns of the last 5 hours burn on any of the provider's accounts, else
+ * own turns of the last {@link BURN_SPAN_MS} burn on any of the provider's accounts, else
  * what its kind's sessions with turns then burn ({@link kindBurn}). One with
  * neither burns nothing anyone can say.
  */
@@ -171,7 +179,7 @@ const arrivalsOf = (
 
 /**
  * What a session burns, in weighted tokens an hour, from its own turns over
- * the last 5 hours; null when it has none recorded.
+ * the last {@link BURN_SPAN_MS}; null when it has none recorded.
  */
 export const sessionBurn = (
   turns: readonly TurnUsageRow[],
@@ -180,8 +188,7 @@ export const sessionBurn = (
 ): number | null => {
   const mine = turns.filter(
     (turn) =>
-      turn.instanceId === instanceId &&
-      turn.at.getTime() > now - SESSION_WINDOW_MS
+      turn.instanceId === instanceId && turn.at.getTime() > now - BURN_SPAN_MS
   );
   const [first] = mine;
   if (!first) {
@@ -195,7 +202,7 @@ export const sessionBurn = (
 
 /**
  * What a new session of a kind is expected to burn, in weighted tokens an
- * hour: the sessions of that kind with turns in the last 5 hours on the
+ * hour: the sessions of that kind with turns in the last {@link BURN_SPAN_MS} on the
  * provider's accounts, their burn averaged. Null when none had turns.
  */
 export const kindBurn = (
@@ -206,7 +213,7 @@ export const kindBurn = (
   const burns = new Map<string, number>();
   for (const turns of forecast.turns.values()) {
     for (const turn of turns) {
-      if (turn.at.getTime() > now - SESSION_WINDOW_MS) {
+      if (turn.at.getTime() > now - BURN_SPAN_MS) {
         burns.set(
           turn.instanceId,
           (burns.get(turn.instanceId) ?? 0) + weightedTokens(turn)
@@ -219,7 +226,7 @@ export const kindBurn = (
     return null;
   }
   const total = mine.reduce((sum, [, w]) => sum + w, 0);
-  return total / mine.length / (SESSION_WINDOW_MS / HOUR_MS);
+  return total / mine.length / (BURN_SPAN_MS / HOUR_MS);
 };
 
 /** An account forecast to run out before its window resets. */
@@ -286,8 +293,8 @@ const sessionShares = (
   named: string,
   now: number
 ): Map<string, SessionShare> => {
-  const length = WINDOW_MS[stress.window.kind] ?? SESSION_WINDOW_MS;
-  const opened = (stress.resetAt ?? now) - length;
+  // A window of no known opening holds no turns: each session counts an even part.
+  const opened = openedAt(stress.window) ?? now;
   const spent = new Map<string, number>();
   let total = 0;
   for (const turn of turns) {
@@ -329,9 +336,35 @@ const sessionShares = (
   );
 };
 
+/** An account's binding window in a forecast (core `AccountForecast.bindingWindow`), as its forecast reads it. */
+const bindingOf = (
+  forecast: Pick<ForecastRead, "forecasts">,
+  accountId: string
+): WindowForecast | undefined => {
+  const account = forecast.forecasts.find((one) => one.accountId === accountId);
+  const ref: WindowRef | null | undefined = account?.bindingWindow;
+  return ref
+    ? account?.windows.find(
+        (one) => one.kind === ref.kind && one.scopeLabel === ref.scopeLabel
+      )
+    : undefined;
+};
+
+/** What one percent of `window` of account `accountId` costs in weighted tokens; undefined when unmeasured. */
+const tokensPerPctOf = (
+  forecast: Pick<ForecastRead, "paces">,
+  accountId: string,
+  window: Pick<WindowForecast, "kind" | "scopeLabel">
+): number | undefined =>
+  forecast.paces
+    .get(accountId)
+    ?.find(
+      (one) => one.kind === window.kind && one.scopeLabel === window.scopeLabel
+    )?.tokensPerPct ?? undefined;
+
 /**
  * What re-reading `row`'s context on `target` costs, as a percent of its
- * 5-hour window, where what a percent of it costs is measured
+ * binding window, where what a percent of it costs is measured
  * (forecast.ts `tokensPerPercent`); undefined when it is not, or the
  * context was never reported.
  */
@@ -340,13 +373,14 @@ const reReadCost = (
   row: Pick<LimitRow, "cacheTtl" | "contextTokens">,
   target: Account
 ): { pct: number; window: string } | undefined => {
-  const perPct = forecast.paces
-    .get(target.id)
-    ?.find((one) => one.kind === "session")?.tokensPerPct;
-  return perPct && row.contextTokens !== null
+  const window = bindingOf(forecast, target.id);
+  const perPct = window
+    ? tokensPerPctOf(forecast, target.id, window)
+    : undefined;
+  return window && perPct && row.contextTokens !== null
     ? {
         pct: reReadWeight(row.contextTokens, row.cacheTtl) / perPct,
-        window: "5-hour",
+        window: windowWords(window),
       }
     : undefined;
 };
@@ -449,21 +483,20 @@ const lasts = (source: Source, now: number): boolean => {
 
 /**
  * The burn a session takes to its target, weighted tokens an hour: its own,
- * where its turns are recorded, else its share of its account's 5-hour pace
- * in that window's weighted tokens, where a percent of it is measured.
+ * where its turns are recorded, else its share of its account's pace in its
+ * binding window, in that window's weighted tokens, where a percent of it
+ * is measured.
  */
 const burnOf = (source: Source, share: SessionShare): number => {
   if (share.burn !== null) {
     return share.burn;
   }
-  const pace =
-    source.fromForecast?.windows.find((one) => one.kind === "session")?.pace ??
-    0;
-  const perPct =
-    source.forecast.paces
-      .get(source.from.id)
-      ?.find((one) => one.kind === "session")?.tokensPerPct ?? 0;
-  return share.share * pace * perPct;
+  const window = bindingOf(source.forecast, source.from.id);
+  if (!window) {
+    return 0;
+  }
+  const perPct = tokensPerPctOf(source.forecast, source.from.id, window) ?? 0;
+  return share.share * (window.pace ?? 0) * perPct;
 };
 
 /** What one planned move came to: stop the account's moves, skip this one, owed to its turn's end, or moved. */
@@ -538,7 +571,9 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       because: warm
         ? { kind: "forecast", runsOutAt: stress.runsOutAt }
         : { kind: "cold", wake: false },
-      ...(pct === undefined ? {} : { cost: { pct, window: "5-hour" } }),
+      ...(pct === undefined || !weighed.window
+        ? {}
+        : { cost: { pct, window: windowWords(weighed.window) } }),
     };
     const going = (): void => {
       source.out.to = target;
@@ -680,7 +715,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     }
     // Charged now, before any await, so the next decision counts it.
     ports.admission.charge(
-      fresh.id,
+      fresh,
       target.id,
       weighed.moveUsd === null
         ? null
@@ -727,7 +762,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       return false;
     }
     console.info(
-      `[rebalance] The sessions on ${accountNameAmong(from, forecast.accounts)} stay there, though its ${windowWords(stress.window)} window is forecast to run out at ${clockWords(stress.runsOutAt)}: past its plan they keep going on its extra usage, as its setting says.`
+      `[rebalance] The sessions on ${accountNameAmong(from, forecast.accounts)} stay there, though its ${windowWords(stress.window) ? `${windowWords(stress.window)} ` : ""}window is forecast to run out at ${clockWords(stress.runsOutAt)}: past its plan they keep going on its extra usage, as its setting says.`
     );
     return true;
   };

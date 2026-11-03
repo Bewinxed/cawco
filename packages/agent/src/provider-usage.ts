@@ -45,7 +45,7 @@ const soon = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
  * OpenCode Go's windows as the windows placement and at-limit read: its
- * rolling 5-hour window is the `session` one, its weekly the `weekly_all`.
+ * rolling window is the `session` one, its weekly the `weekly_all`.
  */
 const goWindows = (windows: LimitWindow[]): LimitWindow[] =>
   windows.map((window) => {

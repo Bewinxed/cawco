@@ -539,7 +539,7 @@ public enum Words {
 
             public static let pinnedAccount = "Pinned account"
 
-            /// A card as a screen reader hears it: "Spread: The account with the most headroom".
+            /// A card as a screen reader hears it: "Spread: The account that lasts longest with the session on it".
             public static func card(label: String, line: String) -> String {
                 "\(label): \(line)"
             }
@@ -584,8 +584,8 @@ public enum Words {
         public static let strategies: [Strategy] = [
             Strategy(id: "pinned", label: "Pinned", line: "Always one account"),
             Strategy(id: "fill-first", label: "Fill first", line: "In your order; the next when one is blocked"),
-            Strategy(id: "spread", label: "Spread", line: "The account with the most headroom"),
-            Strategy(id: "soonest-reset", label: "Soonest reset", line: "Whose 5-hour window resets first"),
+            Strategy(id: "spread", label: "Spread", line: "The account that lasts longest with the session on it"),
+            Strategy(id: "soonest-reset", label: "Soonest reset", line: "Whose window resets first"),
         ]
 
         public enum AtLimit {
@@ -674,6 +674,61 @@ public enum Words {
             }
         }
 
+        /// A window's name, by its group (`session`, `weekly`, `monthly`; `other`: a window of a length CawCo has no name for), in three forms: in a sentence's slot ("A hit its weekly limit"; `other` is empty, so the slot reads "its limit"), as a noun ("40% left of its week"), and as a limit bar's label. A model's own window puts its scope first in a sentence and a noun ("Fable weekly", "Fable week"), after in a label ("Week · Fable").
+        public enum Windows {
+            public enum Sentence {
+                public static let session = "5-hour"
+
+                public static let weekly = "weekly"
+
+                public static let monthly = "monthly"
+
+                public static let other = ""
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["session": session, "weekly": weekly, "monthly": monthly, "other": other]
+            }
+
+            public enum Noun {
+                public static let session = "5 hours"
+
+                public static let weekly = "week"
+
+                public static let monthly = "month"
+
+                public static let other = "window"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["session": session, "weekly": weekly, "monthly": monthly, "other": other]
+            }
+
+            public enum Label {
+                public static let session = "5-hour"
+
+                public static let weekly = "Week"
+
+                public static let monthly = "Month"
+
+                public static let other = "Window"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["session": session, "weekly": weekly, "monthly": monthly, "other": other]
+            }
+
+            /// A model's own window in a sentence or as a noun: "Fable weekly", "Fable week".
+            public static func scoped(scope: String, name: String) -> String {
+                "\(scope) \(name)"
+            }
+
+            /// A model's own window as a bar's label: "Week · Fable".
+            public static func scopedLabel(label: String, scope: String) -> String {
+                "\(label) · \(scope)"
+            }
+
+            /// A window of no known length where placement lists an account's windows: "another window 20%".
+            public static let another = "another window"
+        }
+
         public enum Figure {
             public static let blocked = "blocked"
 
@@ -689,7 +744,7 @@ public enum Words {
                 hours > 0 ? "\(hours)h \(Words.pad2(minutes))m" : "\(minutes)m"
             }
 
-            /// A window that just reset: the whole of it, ahead.
+            /// A lane drawn as a 5-hour window, just reset: the whole of it ahead.
             public static let window = "5h"
 
             public static let policyBelow = "At the limit → the policy below"

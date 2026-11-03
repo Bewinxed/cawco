@@ -17,8 +17,10 @@ import type { LimitWindow } from "./types";
  * (https://github.com/crafter-station/not-codex-micro/blob/main/RESEARCH.md;
  * Codex's own parser, codex-rs/codex-api/src/rate_limits.rs.) Each window maps
  * onto the {@link LimitWindow} placement, forecasts and at-limit already read,
- * by its length: 18000 s is the 5-hour window (`session`), 604800 s the
- * weekly one (`weekly_all`). The token is read at call time for one request
+ * by its length: 18000 s is the `session` window, 604800 s the weekly one
+ * (`weekly_all`), and a window of any other length is kept under a kind of
+ * its own (`window_86400s`), of no group CawCo knows a span for, so it is
+ * read as a window of unknown length rather than left out. The token is read at call time for one request
  * and never logged, persisted or returned.
  *
  * `CAWCO_CHATGPT_BASE_URL` points the read at another host: a test-only
@@ -54,17 +56,24 @@ interface UsageRaw {
 const FIVE_HOURS_S = 18_000;
 const WEEK_WINDOW_S = 604_800;
 
-/** The window kind and group a window of this length is, or nothing for a length CawCo has no window for. */
+/**
+ * The window kind and group a window of this length is: a kind of its own,
+ * of group `other`, for a length CawCo has no name for; `window` when the
+ * answer gave no length.
+ */
 const shapeOf = (
   seconds: number | null | undefined
-): { kind: string; group: string } | undefined => {
+): { kind: string; group: string } => {
   if (seconds === FIVE_HOURS_S) {
     return { kind: "session", group: "session" };
   }
   if (seconds === WEEK_WINDOW_S) {
     return { kind: "weekly_all", group: "weekly" };
   }
-  return undefined;
+  return {
+    kind: typeof seconds === "number" ? `window_${seconds}s` : "window",
+    group: "other",
+  };
 };
 
 const severityOf = (percent: number): string => {
@@ -74,14 +83,14 @@ const severityOf = (percent: number): string => {
   return percent >= 80 ? "warning" : "normal";
 };
 
-/** The answer's windows, by length; a window of a length CawCo has no kind for is left out. */
+/** The answer's windows, by length ({@link shapeOf}). */
 const chatgptWindows = (body: UsageRaw, now = Date.now()): LimitWindow[] =>
   [body.rate_limit?.primary_window, body.rate_limit?.secondary_window].flatMap(
     (raw) => {
-      const shape = raw ? shapeOf(raw.limit_window_seconds) : undefined;
-      if (!(raw && shape)) {
+      if (!raw) {
         return [];
       }
+      const shape = shapeOf(raw.limit_window_seconds);
       const percent = raw.used_percent ?? 0;
       let resetsAt: string | null = null;
       if (typeof raw.reset_at === "number") {

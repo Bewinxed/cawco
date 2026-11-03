@@ -238,6 +238,7 @@
     "./task-history": "./src/task-history.ts",
     "./work-items": "./src/work-items.ts",
     "./usage/types": "./src/usage/types.ts",
+    "./usage/windows": "./src/usage/windows.ts",
     "./stream": "./src/stream.ts",
     "./connections": "./src/connections.ts",
     "./fleet-watch": "./src/fleet-watch.ts",

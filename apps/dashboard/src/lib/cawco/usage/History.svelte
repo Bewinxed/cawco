@@ -268,7 +268,7 @@
           </figcaption>
           {#if chart.missing}
             <p data-slot="note" class="type-meta text-ink-muted">
-              No 5-hour window is running.
+              This range follows a 5-hour window, and none is running.
             </p>
           {:else if !ready}
             <div out:revealOut>

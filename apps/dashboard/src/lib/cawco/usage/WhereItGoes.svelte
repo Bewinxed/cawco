@@ -381,7 +381,7 @@
 
   {#if start === null}
     <p data-slot="note" class="type-meta text-ink-muted">
-      No 5-hour window is running for
+      This range follows a 5-hour window, and none is running for
       {harness === "claude" ? "Claude" : "opencode"}.
     </p>
   {:else if failed && !view}

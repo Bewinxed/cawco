@@ -49122,7 +49122,7 @@
                     ]
                   },
                   "window": {
-                    "description": "The window that refused it, as {@link windowWords} names it.",
+                    "description": "The window that refused it, as core usage/windows.ts `windowWords` names it.",
                     "type": [
                       "null",
                       "string"
@@ -49191,7 +49191,7 @@
                     ]
                   },
                   "cost": {
-                    "description": "What the re-read cost on `to`: a percent of its window; absent when unpriced.",
+                    "description": "What the re-read cost on `to`: a percent of the window it is counted against, named as `windowWords` names it; absent when unpriced.",
                     "type": "object",
                     "properties": {
                       "pct": {
@@ -54989,6 +54989,13 @@
               "string"
             ]
           },
+          "windowKinds": {
+            "description": "The account's window set: the windows (core usage/windows.ts\n`windowKey`) the provider's last report that named its windows carried\n(a Claude `rate_limit_event`'s `unifiedWindows`, a usage endpoint's\nanswer). A held window outside it is gone. Null until a report names\nthem: the windows held are all that is known, and a Claude account keeps\nthe session window it holds until one does.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "windows": {
             "type": "array",
             "items": {
@@ -55353,7 +55360,7 @@
         ]
       },
       "ProviderForecast": {
-        "description": "A provider's accounts as a forecast: each account's windows, and which\naccount carries a person's new sessions (`yours`) and a session's\n(`delegates`) from now to the 5-hour horizon.",
+        "description": "A provider's accounts as a forecast: each account's windows, and which\naccount carries a person's new sessions (`yours`) and a session's\n(`delegates`) from now to the relay's horizon.",
         "type": "object",
         "properties": {
           "accounts": {
@@ -55439,6 +55446,10 @@
         "description": "One window of an account, and where it is heading: `pace` is percent per\nhour from the account's successive readings in this window, null when no\nsession runs on it (nothing CawCo can see is spending it); `runsOutAt` is\nwhen it reaches 100% at that pace, only when that lands before its reset.\nA window past its reset with no newer reading is a fresh one: 0%, no pace.",
         "type": "object",
         "properties": {
+          "group": {
+            "description": "How long it runs (core `LimitWindow.group`): `session`, `weekly`, `monthly`, or another.",
+            "type": "string"
+          },
           "kind": {
             "type": "string"
           },
@@ -55468,6 +55479,7 @@
           }
         },
         "required": [
+          "group",
           "kind",
           "pace",
           "resetsAt",
@@ -57773,7 +57785,7 @@
                     ]
                   },
                   "window": {
-                    "description": "The window that refused it, as {@link windowWords} names it.",
+                    "description": "The window that refused it, as core usage/windows.ts `windowWords` names it.",
                     "type": [
                       "null",
                       "string"
@@ -57842,7 +57854,7 @@
                     ]
                   },
                   "cost": {
-                    "description": "What the re-read cost on `to`: a percent of its window; absent when unpriced.",
+                    "description": "What the re-read cost on `to`: a percent of the window it is counted against, named as `windowWords` names it; absent when unpriced.",
                     "type": "object",
                     "properties": {
                       "pct": {

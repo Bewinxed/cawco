@@ -281,6 +281,7 @@ export function stagedData(
       pace && pace > 0 ? now + ((100 - used) / pace) * HOUR_MS : undefined;
     return {
       kind,
+      group: kind === "session" ? "session" : "weekly",
       pace,
       resetsAt: iso(resetIn),
       scopeLabel: null,

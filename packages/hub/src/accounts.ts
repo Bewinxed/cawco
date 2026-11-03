@@ -19,6 +19,7 @@ import {
   type SigninState,
   sameIdentity,
   type UsageLimitsResponse,
+  windowKey,
 } from "@cawco/core";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
@@ -683,9 +684,14 @@ export const noteProviderReading = (
     );
     return false;
   }
+  // The endpoint answers every window the account has: its set is those.
   db.accounts.putReading(
     reading.accountId,
-    { windows: reading.windows, subscription: reading.plan },
+    {
+      windows: reading.windows,
+      windowKinds: reading.windows.map(windowKey),
+      subscription: reading.plan,
+    },
     reading.readAt
   );
   for (const window of reading.windows) {
@@ -709,7 +715,9 @@ export const noteProviderReading = (
  * response came earlier says a lower percent after another said a higher
  * one. Within one window (same kind, scope and reset) use only accumulates
  * until the reset, so a lower percent there is an older header, and the
- * window keeps the higher reading.
+ * window keeps the higher reading. The window set the event names (core
+ * `ObservedReading.windowKinds`) is the account's whatever its percents:
+ * the filter drops older percents, never a window from the set.
  */
 export const noteRateLimit = (
   db: DbShape,
@@ -736,6 +744,7 @@ export const noteRateLimit = (
     accountId,
     {
       windows: newer,
+      windowKinds: observed.windowKinds,
       ...(observed.overage ? { overage: observed.overage } : {}),
     },
     now

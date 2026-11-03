@@ -4,18 +4,28 @@ import {
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
+  bearing,
   clockWords,
   configurePage,
+  earliestReset,
+  headroom,
   keepsGoingOnExtraUsage,
   type LimitWindow,
   modelScope,
+  openedAt,
   type PlacementExplain,
   type PlacementStrategy,
   type ProviderRouting,
   type StrategyChoice,
   spanWords,
+  windowOpen,
+  windowResetAt,
+  windowUsed,
+  windowWords,
 } from "@cawco/core";
-import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { HOUR_MS } from "@cawco/core/time";
+import { accountsWords } from "@cawco/core/words/accounts";
+import { spawnWords } from "@cawco/core/words/spawn";
 import type { AccountPaces } from "./forecast";
 
 /**
@@ -105,27 +115,7 @@ export const unreportedHarnessRefusal = (
 ): string =>
   `${machine} hasn't said yet whether it can run ${HARNESS_NAMES[harness] ?? harness}: its agent is still checking. Start the session again in a moment. Nothing was started.`;
 
-/** A window's use now: one whose reset has passed with no newer reading is a fresh window. */
-const used = (window: LimitWindow | undefined, now: number): number => {
-  if (!window) {
-    return 0;
-  }
-  if (window.resetsAt && Date.parse(window.resetsAt) <= now) {
-    return 0;
-  }
-  return window.percent;
-};
-
 const pct = (value: number): string => `${Math.round(value)}%`;
-
-/** A 5-hour window's length: one not open yet opens at the session's first use. */
-export const SESSION_WINDOW_MS = 5 * HOUR_MS;
-/** How long each window kind runs: when the current one opened, from its reset. */
-export const WINDOW_MS: Record<string, number> = {
-  session: SESSION_WINDOW_MS,
-  weekly_all: 7 * DAY_MS,
-  weekly_scoped: 7 * DAY_MS,
-};
 
 /**
  * A session launched onto an account, or owed to it (a move at its turn's
@@ -142,33 +132,28 @@ export interface Arrival {
   since: number;
 }
 
-/** One window of an account as the run-out test reads it. */
-export interface CarryWindow {
-  kind: string;
+/** One window of an account as the run-out test reads it: the window as read, and its pace. */
+export interface CarryWindow extends Pick<
+  LimitWindow,
+  "group" | "kind" | "percent" | "resetsAt" | "scopeLabel"
+> {
   /** Percent an hour since it opened; null when unmeasured. */
   pace: number | null;
-  resetsAt: string | null;
-  scopeLabel: string | null;
-  utilization: number;
 }
 
 /**
  * The burn arriving on `accountId` that `window`'s pace misses, weighted
  * tokens an hour: each arrival's burn times the part of the window so far it
- * was not there for (all of it in a window not open yet; none for one there
- * since the window opened).
+ * was not there for (all of it in a window not open yet, or of no known
+ * length; none for one there since the window opened).
  */
 const arrivingBurn = (
   arrivals: readonly Arrival[],
   accountId: string,
-  window: Pick<CarryWindow, "kind" | "resetsAt">,
+  window: Pick<CarryWindow, "group" | "resetsAt">,
   now: number
 ): number => {
-  const reset = window.resetsAt ? Date.parse(window.resetsAt) : null;
-  const opened =
-    reset !== null && reset > now
-      ? reset - (WINDOW_MS[window.kind] ?? SESSION_WINDOW_MS)
-      : now;
+  const opened = windowOpen(window, now) ? (openedAt(window) ?? now) : now;
   return arrivals
     .filter((one) => one.accountId === accountId)
     .reduce((sum, one) => {
@@ -183,42 +168,27 @@ const arrivingBurn = (
 /**
  * When an account runs out before a window of it resets, at its pace with
  * `added` percent an hour on top, soonest first; null when it lasts to every
- * reset. A window not open yet is a fresh 5-hour one (resetting 5 hours from
- * now, from nothing used) or no limit; an account with no 5-hour window read
- * has a fresh one. The one test placement's carry test and rebalance's
- * moves both run.
+ * reset. Only the account's own windows are walked, each open one to its
+ * own reset: a window not open has no reset to run out before, and a window
+ * the account does not have (a verified Ultra account's session window) is never made
+ * up. The one test placement's carry test and rebalance's moves both run.
  */
 const runsOutWith = (
   windows: readonly CarryWindow[],
   added: (window: CarryWindow) => number,
   now: number
 ): number | null => {
-  const all = windows.some((one) => one.kind === "session")
-    ? windows
-    : [
-        ...windows,
-        {
-          kind: "session",
-          scopeLabel: null,
-          pace: null,
-          resetsAt: null,
-          utilization: 0,
-        },
-      ];
   let soonest: number | null = null;
-  for (const window of all) {
-    const at = window.resetsAt ? Date.parse(window.resetsAt) : null;
-    const open = at !== null && at > now;
-    if (!open && window.kind !== "session") {
+  for (const window of windows) {
+    const reset = windowResetAt(window);
+    if (reset === null || reset <= now) {
       continue;
     }
-    const reset = open && at !== null ? at : now + SESSION_WINDOW_MS;
-    const spent = open ? window.utilization : 0;
     const rate = (window.pace ?? 0) + added(window);
     if (rate <= 0) {
       continue;
     }
-    const out = now + (Math.max(100 - spent, 0) / rate) * HOUR_MS;
+    const out = now + (Math.max(100 - window.percent, 0) / rate) * HOUR_MS;
     if (out < reset && (soonest === null || out < soonest)) {
       soonest = out;
     }
@@ -266,15 +236,17 @@ const picked = (accounts: Account[], asked: string): Account | undefined => {
   );
 };
 
-/** What the four strategies order accounts by: fill-first order, binding use, and when the 5-hour window resets. */
+/** What the four strategies order accounts by: fill-first order, binding use, the earliest reset and when it runs out. */
 export interface Ranked {
-  /** The higher of its 5-hour and weekly use, percent ({@link Usage.binding}). */
+  /** The use of the window that binds it now, percent: the most used of its bearing windows ({@link Usage.binding}). */
   binding: number;
   createdAt: number;
   id: string;
   order: number;
-  /** When its 5-hour window resets; one not open yet counts as resetting 5 hours from now ({@link Usage.resetOf}). */
-  sessionReset: number;
+  /** The soonest reset among its bearing windows (core `earliestReset`); null when none is open. */
+  reset: number | null;
+  /** When it runs out with this session on it ({@link Usage.runsOut}); null when it lasts to every reset, or nothing measures it. */
+  runsOut: number | null;
 }
 
 /** Fill-first: lowest in order first, older first among equals. */
@@ -283,12 +255,31 @@ const byFillFirst = (
   b: Pick<Ranked, "createdAt" | "order">
 ): number => a.order - b.order || a.createdAt - b.createdAt;
 
+/** Spread: the account that lasts to every reset first, then the one that runs out last. */
+const byLasting = (a: Ranked, b: Ranked): number => {
+  if (a.runsOut === null || b.runsOut === null) {
+    return Number(a.runsOut !== null) - Number(b.runsOut !== null);
+  }
+  return b.runsOut - a.runsOut;
+};
+
+/** Soonest reset: the earliest reset first; one with no window open has none to order by and goes after. */
+const byReset = (a: Ranked, b: Ranked): number => {
+  if (a.reset === null || b.reset === null) {
+    return Number(a.reset === null) - Number(b.reset === null);
+  }
+  return a.reset - b.reset;
+};
+
 /**
  * The kind's strategy as an ordering, best first: the one each strategy below
  * picks from, and the order at-limit's decision (at-limit.ts `decideStop`)
  * weighs the accounts that fit in. Pinned puts the pin first, then fill-first
- * over the rest; fill-first goes by order; spread by lowest binding use, then
- * order; soonest-reset by the earliest 5-hour reset, then lowest binding use.
+ * over the rest; fill-first goes by order; spread by how long it lasts with
+ * the session on it (to every reset first, then the latest run-out), then
+ * the least used binding window, then order; soonest-reset by the earliest
+ * reset among its bearing windows, then the least used binding window. Every
+ * account is read on its own windows, whichever it has.
  */
 export const strategyOrder =
   (strategy: PlacementStrategy, pinnedId: string | undefined) =>
@@ -300,9 +291,9 @@ export const strategyOrder =
           byFillFirst(a, b)
         );
       case "spread":
-        return a.binding - b.binding || a.order - b.order;
+        return byLasting(a, b) || a.binding - b.binding || a.order - b.order;
       case "soonest-reset":
-        return a.sessionReset - b.sessionReset || a.binding - b.binding;
+        return byReset(a, b) || a.binding - b.binding;
       case "fill-first":
         return byFillFirst(a, b);
     }
@@ -315,6 +306,13 @@ export const pinnedOf = (
   choice: StrategyChoice,
   accounts: Account[]
 ): string | undefined => choice.pinnedAccountId ?? byOrder(accounts)[0]?.id;
+
+/** The order {@link Usage.said} lists an account's windows in: by length, over all models before one model's. */
+const SAID_ORDER: Record<string, number> = {
+  session: 0,
+  weekly: 1,
+  monthly: 2,
+};
 
 /** What placement reads of each account's windows, for one model scope at one moment. */
 class Usage {
@@ -336,31 +334,28 @@ class Usage {
   name = (account: Account): string =>
     accountNameAmong(account, this.#input.accounts);
 
-  #window(id: string, kind: string): LimitWindow | undefined {
+  /** The windows of account `id` that bear on this session (core `bearing`): its own, whichever it has. */
+  #bearing(id: string): LimitWindow[] {
     const windows =
       this.#input.readings.find((one) => one.accountId === id)?.windows ?? [];
-    return windows.find(
-      (w) =>
-        w.kind === kind &&
-        (kind !== "weekly_scoped" || w.scopeLabel === this.#scope)
-    );
+    return bearing(windows, this.#scope, this.#input.now);
   }
 
-  session(id: string): number {
-    return used(this.#window(id, "session"), this.#input.now);
+  /** The use of the window that binds it now, percent: the most used of its bearing windows; 0 with none read. */
+  binding(id: string): number {
+    const binds = headroom(this.#bearing(id), this.#input.now);
+    return binds ? 100 - binds.left : 0;
   }
 
+  /** The most used of its weekly windows, percent: what its reserve is read against. */
   weekly(id: string): number {
     const { now } = this.#input;
-    const scoped = this.#scope
-      ? used(this.#window(id, "weekly_scoped"), now)
-      : 0;
-    return Math.max(used(this.#window(id, "weekly_all"), now), scoped);
-  }
-
-  /** The higher of its 5-hour and weekly use: what stops it first. */
-  binding(id: string): number {
-    return Math.max(this.session(id), this.weekly(id));
+    return Math.max(
+      0,
+      ...this.#bearing(id)
+        .filter((window) => window.group === "weekly")
+        .map((window) => windowUsed(window, now))
+    );
   }
 
   /**
@@ -399,22 +394,15 @@ class Usage {
   read = (account: Account): boolean =>
     this.#input.readings.some((one) => one.accountId === account.id);
 
-  /** Whether its 5-hour window is open: it has a reset still ahead. */
-  opened(id: string): boolean {
-    const window = this.#window(id, "session");
-    return !!window?.resetsAt && Date.parse(window.resetsAt) > this.#input.now;
-  }
-
-  /**
-   * When its 5-hour window resets. One with no window open counts as opening
-   * now, so as resetting {@link SESSION_WINDOW_MS} from now: that is when it
-   * would, since the window starts at its first use.
-   */
-  resetOf(id: string): number {
-    const window = this.#window(id, "session");
-    return this.opened(id) && window?.resetsAt
-      ? Date.parse(window.resetsAt)
-      : this.#input.now + SESSION_WINDOW_MS;
+  /** Its bearing window that resets soonest, and when (core `earliestReset`); undefined when none is open. */
+  resetting(id: string): { at: number; window: LimitWindow } | undefined {
+    const windows = this.#bearing(id);
+    const at = earliestReset(windows, this.#input.now);
+    const window =
+      at === null
+        ? undefined
+        : windows.find((one) => windowResetAt(one) === at);
+    return at === null || !window ? undefined : { at, window };
   }
 
   /** What the strategies order it by ({@link strategyOrder}). */
@@ -423,37 +411,44 @@ class Usage {
     order: account.order,
     createdAt: account.createdAt,
     binding: this.binding(account.id),
-    sessionReset: this.resetOf(account.id),
+    reset: this.resetting(account.id)?.at ?? null,
+    runsOut: this.runsOut(account.id),
   });
 
   /**
-   * The windows that limit this session on account `id` (its 5-hour, its
-   * week, its model's week), as the run-out test reads them: each one's use
-   * as read, its pace, and what a percent of it costs in weighted tokens
-   * (null when unmeasured, or with no paces given).
+   * The windows that limit this session on account `id` (its bearing
+   * windows, whichever it has), as the run-out test reads them: each one as
+   * read, its pace, and what a percent of it costs in weighted tokens (null
+   * when unmeasured, or with no paces given).
    */
   carryWindows(id: string): PacedWindow[] {
-    const kinds: [string, string | null][] = [
-      ["session", null],
-      ["weekly_all", null],
-      ...(this.#scope
-        ? [["weekly_scoped", this.#scope] as [string, string | null]]
-        : []),
-    ];
-    return kinds.map(([kind, scopeLabel]) => {
-      const window = this.#window(id, kind);
+    return this.#bearing(id).map((window) => {
       const pace = this.#input.paces
         ?.get(id)
-        ?.find((one) => one.kind === kind && one.scopeLabel === scopeLabel);
+        ?.find(
+          (one) =>
+            one.kind === window.kind && one.scopeLabel === window.scopeLabel
+        );
       return {
-        kind,
-        scopeLabel,
-        resetsAt: window?.resetsAt ?? null,
-        utilization: window?.percent ?? 0,
+        kind: window.kind,
+        group: window.group,
+        scopeLabel: window.scopeLabel,
+        resetsAt: window.resetsAt,
+        percent: window.percent,
         pace: pace?.pace ?? null,
         tokensPerPct: pace?.tokensPerPct ?? null,
       };
     });
+  }
+
+  /** Whether anything measures how account `id` is heading: paces were given and one of its windows has a pace or a cost per percent. */
+  measured(id: string): boolean {
+    return (
+      this.#input.paces !== undefined &&
+      this.carryWindows(id).some(
+        (one) => one.pace !== null || one.tokensPerPct !== null
+      )
+    );
   }
 
   /**
@@ -498,8 +493,8 @@ class Usage {
 
   /**
    * When an account with no room takes a session again: the latest of its
-   * bench and the resets of the windows that stop it (spent, or past its
-   * reserve). Undefined when nothing read names that moment.
+   * bench and the resets of the windows that stop it (spent, or a week past
+   * its reserve). Undefined when nothing read names that moment.
    */
   backAt(account: Account): number | undefined {
     const { now, bench } = this.#input;
@@ -512,31 +507,41 @@ class Usage {
       )
       .map((one) => one.until);
     const reserve = account.reservePct ?? Number.POSITIVE_INFINITY;
-    const stopping = [
-      [this.#window(account.id, "session"), 100],
-      [this.#window(account.id, "weekly_all"), reserve],
-      ...(this.#scope
-        ? [[this.#window(account.id, "weekly_scoped"), reserve] as const]
-        : []),
-    ] as const;
-    const resets = stopping.flatMap(([window, reservePct]) =>
-      window?.resetsAt &&
-      used(window, now) >= Math.min(100, reservePct) &&
-      Date.parse(window.resetsAt) > now
-        ? [Date.parse(window.resetsAt)]
-        : []
-    );
+    const resets = this.#bearing(account.id).flatMap((window) => {
+      const at = windowResetAt(window);
+      const stops = window.group === "weekly" ? Math.min(100, reserve) : 100;
+      return at !== null && at > now && windowUsed(window, now) >= stops
+        ? [at]
+        : [];
+    });
     const all = [...benched, ...resets];
     return all.length > 0 ? Math.max(...all) : undefined;
   }
 
+  /**
+   * Its bearing windows' use, as a sentence quotes it ("weekly 60%, Fable
+   * weekly 15%" on a verified Ultra account), by length, over all models
+   * before one model's; "no reading yet" when it has none.
+   */
   said(id: string): string {
+    const { now } = this.#input;
     const account = this.#input.accounts.find((one) => one.id === id);
     const credits =
       account && this.binding(id) >= 100 && this.onExtraUsage(account)
         ? `; past its plan, it runs on extra usage: ${this.#credits}`
         : "";
-    return `5-hour ${pct(this.session(id))}, weekly ${pct(this.weekly(id))}${credits}`;
+    const windows = [...this.#bearing(id)].sort(
+      (a, b) =>
+        (SAID_ORDER[a.group] ?? 3) - (SAID_ORDER[b.group] ?? 3) ||
+        Number(a.scopeLabel !== null) - Number(b.scopeLabel !== null)
+    );
+    const listed = windows
+      .map(
+        (window) =>
+          `${windowWords(window) || accountsWords.windows.another} ${pct(windowUsed(window, now))}`
+      )
+      .join(", ");
+    return `${listed || spawnWords.account.noReading}${credits}`;
   }
 }
 
@@ -578,27 +583,46 @@ const fillFirst = (candidates: Account[], usage: Usage): Choice => {
     : undefined;
 };
 
-/** Spread: the lowest binding use. */
+/**
+ * Spread: the account that lasts longest with this session on it ({@link
+ * Usage.runsOut}, the sessions already arriving there counted): one that
+ * lasts to every reset, else the one that runs out last; ties to the least
+ * used binding window, then order. With nothing measured, the least used
+ * binding window alone.
+ */
 const spread = (candidates: Account[], usage: Usage): Choice => {
   const order = strategyOrder("spread", undefined);
   const [account] = [...candidates].sort((a, b) =>
     order(usage.ranked(a), usage.ranked(b))
   );
-  return account
-    ? {
-        account,
-        why: `${usage.name(account)} has the lowest use (${usage.said(account.id)}).`,
-      }
-    : undefined;
+  if (!account) {
+    return undefined;
+  }
+  const named = usage.name(account);
+  const said = usage.said(account.id);
+  const out = usage.runsOut(account.id);
+  if (!usage.measured(account.id)) {
+    return {
+      account,
+      why: `No pace is measured yet, so ${named} has the most left of its tightest window (${said}).`,
+    };
+  }
+  return {
+    account,
+    why:
+      out === null
+        ? `${named} lasts to every reset with the session on it (${said}).`
+        : `No account lasts to every reset with the session on it; ${named} runs out last, at ${clockWords(out)} (${said}).`,
+  };
 };
 
 /**
- * Soonest-reset: among those with headroom, by 5-hour reset (one with no
- * window open as resetting 5 hours from now), ties to most headroom, the
- * first that can carry the load to its reset ({@link Usage.runsOut}, the
- * sessions already arriving there counted). When none can, a session
- * re-placed stays where it is (`current`); a new one goes where it would run
- * out last. Without paces, the order alone decides.
+ * Soonest-reset: among those with headroom, by the earliest reset among its
+ * bearing windows (one with no window open has none and goes after), ties
+ * to most headroom, the first that can carry the load to its reset ({@link
+ * Usage.runsOut}, the sessions already arriving there counted). When none
+ * can, a session re-placed stays where it is (`current`); a new one goes
+ * where it would run out last. Without paces, the order alone decides.
  */
 const soonestReset = (
   candidates: Account[],
@@ -621,17 +645,19 @@ const soonestReset = (
   if (stays) {
     return {
       account,
-      why: `No account with headroom lasts to its reset with it, so it stays on ${named} (${usage.said(account.id)}).`,
+      why: `No account with headroom lasts to every reset with it, so it stays on ${named} (${usage.said(account.id)}).`,
     };
   }
-  const head = usage.opened(account.id)
-    ? `${named}'s 5-hour window resets soonest (${clockWords(usage.resetOf(account.id))}) and it has headroom (${usage.said(account.id)})`
-    : `${named} has headroom and no window open yet (counts as resetting in 5h; ${usage.said(account.id)})`;
+  const resetting = usage.resetting(account.id);
+  const which = resetting ? windowWords(resetting.window) : "";
+  const head = resetting
+    ? `${named}'s ${which ? `${which} ` : ""}window resets soonest (${clockWords(resetting.at)}) and it has headroom (${usage.said(account.id)})`
+    : `${named} has headroom and no reset ahead, as none of its windows is open yet (${usage.said(account.id)})`;
   if (!carrier) {
     const out = usage.runsOut(account.id);
     return {
       account,
-      why: `${named} has headroom (${usage.said(account.id)}); no account with headroom lasts to its reset with it, and ${named} runs out last, at ${out === null ? "?" : clockWords(out)}.`,
+      why: `${named} has headroom (${usage.said(account.id)}); no account with headroom lasts to every reset with it, and ${named} runs out last, at ${out === null ? "?" : clockWords(out)}.`,
     };
   }
   const passed = ranked

@@ -563,16 +563,18 @@
           ];
         } else if (one.neverBackup) {
           line = [spawnWords.account.neverBackup];
-        } else if (ring?.w5) {
+        } else if (ring?.binds) {
+          // The window that binds it now, whichever it has: a verified
+          // Ultra account's is its week.
+          const { binds } = ring;
           line = [
-            { strong: spawnWords.account.left(ring.w5.left) },
-            ...(ring.w5.resetsAt === null
-              ? [spawnWords.account.ofFiveHours]
-              : [
-                  spawnWords.account.ofFiveHoursResets(
-                    fmt(ring.w5.resetsAt - now)
-                  ),
-                ]),
+            { strong: spawnWords.account.left(binds.left) },
+            binds.resetsAt === null
+              ? spawnWords.account.ofWindow(binds.noun)
+              : spawnWords.account.ofWindowResets(
+                  binds.noun,
+                  fmt(binds.resetsAt - now)
+                ),
           ];
         }
         return {

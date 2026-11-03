@@ -7,9 +7,11 @@ import {
   type AtLimit,
   accountNameAmong,
   accountsWords,
+  bearing,
   clockWords,
   configurePage,
   dayWords,
+  earliestReset,
   type HeldReason,
   keepsGoingOnExtraUsage,
   type LimitWindow,
@@ -20,8 +22,11 @@ import {
   OVER_STATUSES,
   type PlacementStrategy,
   type RebalanceNotice,
+  spentWindow,
   tokenWords,
   type WaitReason,
+  windowResetAt,
+  windowUsed,
   windowWords,
 } from "@cawco/core";
 import {
@@ -32,12 +37,12 @@ import { detach } from "@cawco/core/detach";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
   type Admission,
+  type Figure,
+  figuresOf,
   type Ledger,
-  movePctOf,
   NEXT_TURN_ALLOWANCE_USD,
   pricedTokens,
   projectedMove,
-  roomAfterPct,
   usdWords,
 } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
@@ -51,7 +56,6 @@ import {
   type PlacementInput,
   pinnedOf,
   runsOutBy,
-  SESSION_WINDOW_MS,
   strategyOrder,
 } from "./placement";
 import { createRebalancer, readForecast, sessionBurn } from "./rebalance";
@@ -202,7 +206,9 @@ export type StopCause =
   "limit" | "refused-credential" | "extra-usage" | "forecast";
 
 /** Another account of the session's provider as the decision reads it: placement's row, the ledger's figures, and whether a turn on the session's machine proved its sign-in lately. */
-interface StopAccount extends AccountRow, Ledger {
+interface StopAccount extends AccountRow {
+  /** What admission holds of it for this session's move (admission.ts `ledger`). */
+  ledger: Ledger;
   proven: boolean;
 }
 
@@ -263,15 +269,18 @@ export interface StopTarget {
   compact: boolean;
   /** It lasts to every reset with the session's burn and what already arrives there. */
   lasts: boolean;
-  /** What this move takes of its window, percent, its next turn's allowance in; null when unmeasured or unpriced. */
+  /** What this move takes of {@link window}, percent, its next turn's allowance in; null when unmeasured or unpriced. */
   movePct: number | null;
   /** The re-read's own cost, dollars; null when its model is unpriced. */
   moveUsd: number | null;
-  /** What its binding window has left once this move and those before it land, percent. */
+  /** What {@link window} has left once this move and those before it land, percent. */
   roomAfter: number;
   /** When it runs out with the session on it; null when it lasts. */
   runsOutAt: number | null;
+  /** Dollars per percent of {@link window}; null when unmeasured. */
   usdPerPct: number | null;
+  /** The window the move is counted against: of those that bear, the one with the least room after it (admission.ts `figuresOf`); null when none is read. */
+  window: Figure["window"];
 }
 
 /** Why one other account didn't take the session, or that it could (core `HeldReason`). */
@@ -355,25 +364,9 @@ export const cacheCarries = (a: Account, b: Account, warm: boolean): boolean =>
   sameOrganization(a, b) &&
   SAME_ORGANIZATION_CARRY_CACHE_READ >= CACHE_KEPT_AT;
 
-/** A window's use at `now`: one whose reset has passed with no newer reading is a fresh one. */
-const usedAt = (
-  window: Pick<AccountRow["windows"][number], "resetsAt" | "utilization">,
-  now: number
-): number =>
-  window.resetsAt && Date.parse(window.resetsAt) <= now
-    ? 0
-    : window.utilization;
-
-/** The higher of an account's windows' use: what stops it first. */
+/** The most used of an account's bearing windows: the one that stops it first. */
 const bindingOf = (account: Pick<AccountRow, "windows">, now: number): number =>
-  Math.max(0, ...account.windows.map((window) => usedAt(window, now)));
-
-/** When an account's 5-hour window resets; one not open yet counts as resetting 5 hours from now. */
-const sessionResetOf = (account: Pick<AccountRow, "windows">, now: number) => {
-  const window = account.windows.find((one) => one.kind === "session");
-  const at = window?.resetsAt ? Date.parse(window.resetsAt) : null;
-  return at !== null && at > now ? at : now + SESSION_WINDOW_MS;
-};
+  Math.max(0, ...account.windows.map((window) => windowUsed(window, now)));
 
 /** One account weighed for the session: what a move there costs and leaves, and why it doesn't fit (none when it does). */
 interface Weighed {
@@ -386,10 +379,6 @@ interface Weighed {
   target: StopTarget;
 }
 
-/** Whether a ledger leaves a move unmeasured: the account takes one at a time then. */
-const unmeasured = (account: StopAccount, movePct: number | null): boolean =>
-  movePct === null || account.spentPct === null || account.pendingPct === null;
-
 /** Why `account` doesn't take the session now, in the order the rules read; undefined when it fits. */
 const reasonOf = (
   input: StopInput,
@@ -397,14 +386,13 @@ const reasonOf = (
   weighed: {
     binding: number;
     carries: boolean;
-    left: number;
-    movePct: number | null;
-    roomAfter: number;
+    figure: Figure;
     runsOutAt: number | null;
   }
 ): HeldReason | undefined => {
   const { now, policy, strategy } = input;
-  const { binding, carries, left, movePct, roomAfter, runsOutAt } = weighed;
+  const { binding, carries, figure, runsOutAt } = weighed;
+  const { left, movePct, roomAfter } = figure;
   if (!account.signedIn) {
     return { kind: "signin" };
   }
@@ -430,7 +418,7 @@ const reasonOf = (
   ) {
     return { kind: "backup" };
   }
-  if (unmeasured(account, movePct) && account.pendingMoves > 0) {
+  if (figure.unmeasured && account.ledger.pendingMoves > 0) {
     return { kind: "alone" };
   }
   if (roomAfter <= 0) {
@@ -460,10 +448,8 @@ const weigh = (
     oneOrganization(current.organization, account.organization) &&
     SAME_ORGANIZATION_CARRY_CACHE_READ >= CACHE_KEPT_AT;
   const projected = projectedMove(session, tokens, carries, now);
-  const movePct = movePctOf(projected, account.usdPerPct);
+  const figure = figuresOf(account.ledger, projected);
   const binding = bindingOf(account, now);
-  const roomAfter = roomAfterPct(binding, account, movePct);
-  const left = roomAfterPct(binding, account, null);
   const runsOutAt = runsOutBy(
     account.windows,
     session.burn ?? 0,
@@ -487,20 +473,19 @@ const weigh = (
       reported >= policy.moveWholeUnderK * 1000,
     lasts: runsOutAt === null,
     moveUsd: projected.reReadUsd,
-    movePct,
-    roomAfter,
+    movePct: figure.movePct,
+    roomAfter: figure.roomAfter,
     runsOutAt,
-    usdPerPct: account.usdPerPct,
+    usdPerPct: figure.usdPerPct,
+    window: figure.window,
   };
   const out = reasonOf(input, account, {
     binding,
     carries,
-    left,
-    movePct,
-    roomAfter,
+    figure,
     runsOutAt,
   });
-  return { account, binding, out, left, target };
+  return { account, binding, out, left: figure.left, target };
 };
 
 /** The reasons a decision names: every other account, by its own reason, or that it could take the session. */
@@ -535,7 +520,8 @@ const ordered = (input: StopInput, fit: readonly Weighed[]): Weighed[] => {
     order: one.account.order,
     createdAt: one.account.createdAt,
     binding: one.binding,
-    sessionReset: sessionResetOf(one.account, now),
+    reset: earliestReset(one.account.windows, now),
+    runsOut: one.target.runsOutAt,
   });
   return [...fit].sort(
     (a, b) =>
@@ -777,39 +763,19 @@ const SETTLE_FOR_MS = 2 * MINUTE_MS;
  */
 type Cause = Exclude<StopCause, "forecast">;
 
-/** The windows that limit a session on `model`: the 5-hour, the week, and its model's week. */
-const windowsFor = (
-  reading: AccountReading | undefined,
-  model: string | null,
-  now: number
-): LimitWindow[] => {
-  const scope = modelScope(model ?? undefined);
-  return (reading?.windows ?? []).filter(
-    (window) =>
-      (window.kind === "session" ||
-        window.kind === "weekly_all" ||
-        (window.kind === "weekly_scoped" && window.scopeLabel === scope)) &&
-      (!window.resetsAt || Date.parse(window.resetsAt) > now)
-  );
-};
-
-/** The window at its limit that resets last: the one that refused the session. */
+/**
+ * The window at its limit that resets last, of those bearing on a session
+ * on `model` (core `bearing`, `spentWindow`): the one that refused it.
+ */
 const fullWindow = (
   reading: AccountReading | undefined,
   model: string | null,
   now: number
 ): LimitWindow | undefined =>
-  windowsFor(reading, model, now)
-    .filter((window) => window.percent >= 100 && window.resetsAt)
-    .reduce<LimitWindow | undefined>(
-      (latest, window) =>
-        !latest ||
-        Date.parse(window.resetsAt as string) >
-          Date.parse(latest.resetsAt as string)
-          ? window
-          : latest,
-      undefined
-    );
+  spentWindow(
+    bearing(reading?.windows ?? [], modelScope(model ?? undefined), now),
+    now
+  );
 
 /**
  * When `accountId` takes a session on `model` again: the latest bench that
@@ -833,10 +799,8 @@ export const refusedUntil = (
     )
     .map((one) => one.until);
   const full = fullWindow(reading, model, now);
-  const latest = [
-    ...benched,
-    ...(full ? [Date.parse(full.resetsAt as string)] : []),
-  ];
+  const fullReset = full ? windowResetAt(full) : null;
+  const latest = [...benched, ...(fullReset === null ? [] : [fullReset])];
   return latest.length > 0 ? Math.max(...latest) : null;
 };
 
@@ -1041,7 +1005,7 @@ export const accountsRead = (
   return {
     accounts: rows.map((one) => ({
       ...one,
-      ...admission.ledger(one.id, row.id, now),
+      ledger: admission.ledger(one.id, row.id, row.model, now),
       proven: proven.has(one.id),
     })),
     burn: sessionBurn([...forecast.turns.values()].flat(), row.id, now),
@@ -1157,7 +1121,8 @@ const kWords = (tokens: number): string => tokenWords(tokens);
 
 /**
  * What a move to `target` re-reads and leaves, as a journal line says it:
- * "re-reads 412k tokens cold for $3.30 (≈1.7% of jude@'s window, 74% after)".
+ * "re-reads 412k tokens cold for $3.30 (≈0.1% of jude@'s weekly window,
+ * leaving it 38%)", the window the move is counted against named.
  */
 export const moveSideWords = (
   target: StopTarget,
@@ -1165,10 +1130,12 @@ export const moveSideWords = (
   named: string
 ): string => {
   const how = target.carries ? "from its carried cache" : "cold";
+  const name = target.window ? windowWords(target.window) : "";
+  const window = `${named}'s ${name ? `${name} ` : ""}window`;
   const share =
     target.movePct === null
-      ? `${named}'s window isn't measured in dollars yet`
-      : `≈${target.movePct.toFixed(1)}% of ${named}'s window, ${Math.round(100 - target.roomAfter)}% after`;
+      ? `${window} isn't measured in dollars yet`
+      : `≈${target.movePct.toFixed(1)}% of ${window}, leaving it ${Math.round(target.roomAfter)}%`;
   return `re-reads ${kWords(tokens)} ${how} for ${usdWords(target.moveUsd)} (${share})`;
 };
 
@@ -1536,7 +1503,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       from: namedAccount(current, accounts),
       to: namedAccount(target, accounts),
       sameOrganization: weighed.carries,
-      ...(pct === undefined ? {} : { cost: { pct, window: "5-hour" } }),
+      ...(pct === undefined || !weighed.window
+        ? {}
+        : { cost: { pct, window: windowWords(weighed.window) } }),
       ...(cause === "refused-credential"
         ? { because: { kind: "refused" as const } }
         : {}),
@@ -1859,7 +1828,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     input: StopInput
   ): void => {
     ports.admission.charge(
-      row.id,
+      row,
       target.id,
       weighed.moveUsd === null
         ? null

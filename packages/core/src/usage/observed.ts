@@ -1,5 +1,6 @@
 import { type AccountOverage, modelScope } from "../accounts";
 import type { LimitWindow } from "./types";
+import { bearing, windowKey, windowResetAt } from "./windows";
 
 /**
  * Rate-limit windows as Claude Code reports them, and the only source CawCo
@@ -18,7 +19,7 @@ const iso = (seconds: number | undefined): string | null =>
 
 /**
  * `utilization` is a FRACTION of the window (0–1). Values above 1 are
- * legitimate — a lower-priority episode can run past the 5-hour cap — so this
+ * legitimate — a lower-priority episode can run past a window's cap — so this
  * scales without clamping and leaves presentation to the reader.
  */
 const percent = (utilization: number): number => utilization * 100;
@@ -33,9 +34,14 @@ const percent = (utilization: number): number => utilization * 100;
 const OVERAGE_INCLUDED_SCOPE = "Fable";
 
 /**
- * The windows an event's `unifiedWindows` carries, and the
+ * The windows an event's `unifiedWindows` may carry, and the
  * {@link LimitWindow} each is (Claude Code's `Ct`: `five_hour` "5h",
- * `seven_day` "7d", `seven_day_overage_included` "7d_oi").
+ * `seven_day` "7d", `seven_day_overage_included` "7d_oi"). Each is
+ * optional: Claude Code 0.3.316 builds `unifiedWindows` from the
+ * `anthropic-ratelimit-unified-<window>-*` headers the response carried and
+ * leaves out a window it got none for ("Windows absent from the account
+ * state are absent here"), so a verified Ultra account's events carry no
+ * `five_hour` at all, and the account has no 5-hour window.
  */
 const UNIFIED = [
   { key: "five_hour", kind: "session", group: "session", scope: null },
@@ -97,6 +103,14 @@ export interface ObservedReading {
   /** The window that refused the request, when one did: its model scope (null: every model) and reset. */
   exhausted: { resetsAt: string | null; scope: string | null } | null;
   overage: AccountOverage | null;
+  /**
+   * The account's window set (core `AccountReading.windowKinds`): the
+   * windows `unifiedWindows` carried, with the model weeks only a binding
+   * claim reports (Opus's, Sonnet's), which `unifiedWindows` never names, as
+   * the event or the held reading has them open. Null when the event carries
+   * no `unifiedWindows`: it says nothing of the set.
+   */
+  windowKinds: string[] | null;
   windows: LimitWindow[];
 }
 
@@ -137,20 +151,16 @@ const refusalOf = (
 
 /**
  * The windows the account held at their limit before the event, still
- * before their reset, that bear on `scope`'s requests: the 5-hour, the week,
- * and `scope`'s own week.
+ * before their reset, that bear on `scope`'s requests (core usage/windows.ts
+ * `bearing`): every window over all models, and `scope`'s own.
  */
 const heldSpent = (session: ObservedSession, scope: string | null): Spent[] =>
-  session.held.flatMap((one) => {
-    const resets = one.resetsAt ? Date.parse(one.resetsAt) : Number.NaN;
-    const bears =
-      one.kind === "session" ||
-      one.kind === "weekly_all" ||
-      (one.kind === "weekly_scoped" && one.scopeLabel === scope);
-    return bears && one.percent >= 100 && resets > session.now
+  bearing(session.held, scope, session.now).flatMap((one) => {
+    const resets = windowResetAt(one);
+    return one.percent >= 100 && resets !== null
       ? [
           {
-            scope: one.kind === "weekly_scoped" ? scope : null,
+            scope: one.scopeLabel === null ? null : scope,
             resetsAt: resets / 1000,
           },
         ]
@@ -162,14 +172,14 @@ const heldSpent = (session: ObservedSession, scope: string | null): Spent[] =>
  * credits because a window was at its limit, so the models that window
  * covers are refused until it resets. Which window, from the first that
  * says:
- * - one the event carries at its limit (the 5-hour or the week: every
+ * - one the event carries at its limit (one over all models: every
  *   model; the overage-included week: its model);
  * - one the account held at its limit before the event, for the refused
  *   request's model (Claude Code's 429 may carry no windows);
  * - else the refused request's model, whose own week the event does not
  *   carry (Opus's, Sonnet's): its model alone, until the credits refill, or
- *   until that week resets when the account held it and held its 5-hour
- *   and week short of their limits (so the week is the one spent).
+ *   until that week resets when the account held it and held none of its
+ *   windows over all models at its limit (so the week is the one spent).
  * A model with no family to scope by is refused on every model's terms.
  */
 const creditsRefused = (
@@ -194,36 +204,65 @@ const creditsRefused = (
 
 /**
  * When `scope`'s refused requests run again: its own week's reset, when the
- * account held that week and held its 5-hour and week short of their
- * limits, and it comes before the credits refill (`credits`, epoch seconds).
+ * account held that week and held none of its windows over all models at
+ * its limit (a window it has none of, as a verified Ultra account has no
+ * session window, is short of it), and it comes before the credits refill
+ * (`credits`, epoch seconds).
  */
 const ownWeekResets = (
   session: ObservedSession | undefined,
   scope: string | null,
   credits: number | undefined
 ): number | undefined => {
-  const held = session?.held ?? [];
-  const short = (kind: string) =>
-    held.some((one) => one.kind === kind && one.percent < 100);
-  const week = held.find(
+  if (!(session && scope)) {
+    return credits;
+  }
+  const open = bearing(session.held, scope, session.now);
+  const short = open.every(
+    (one) => one.scopeLabel !== null || one.percent < 100
+  );
+  const week = open.find(
     (one) => one.kind === "weekly_scoped" && one.scopeLabel === scope
   );
-  const resets = week?.resetsAt ? Date.parse(week.resetsAt) / 1000 : null;
-  return scope &&
-    short("session") &&
-    short("weekly_all") &&
-    resets !== null &&
-    resets * 1000 > (session?.now ?? 0) &&
-    (credits === undefined || resets < credits)
+  const at = week ? windowResetAt(week) : null;
+  const resets = at === null ? null : at / 1000;
+  return short && resets !== null && (credits === undefined || resets < credits)
     ? resets
     : credits;
 };
 
+/** The window set's keys `unifiedWindows` can speak for: a held window of another key is one only a binding claim reports. */
+const UNIFIED_KEYS: ReadonlySet<string> = new Set(
+  UNIFIED.map((one) => windowKey({ kind: one.kind, scopeLabel: one.scope }))
+);
+
 /**
- * The windows, overage and exhaustion one `rate_limit_event` reports. The
- * unified windows give the 5-hour, weekly and overage-included weekly
- * reading; the binding window (`rateLimitType`) adds a model's own weekly
- * window when it is one; a `rejected` status says the binding window is
+ * The account's window set an event names ({@link ObservedReading.windowKinds}):
+ * the windows it carries, and the held model weeks only a binding claim
+ * reports, still open; null when it carries no `unifiedWindows`.
+ */
+const windowKindsOf = (
+  info: ObservedRateLimitInfo,
+  windows: readonly LimitWindow[],
+  session: ObservedSession | undefined
+): string[] | null => {
+  if (!info.unifiedWindows || Object.keys(info.unifiedWindows).length === 0) {
+    return null;
+  }
+  const others = session
+    ? bearing(session.held, undefined, session.now).filter(
+        (one) => !UNIFIED_KEYS.has(windowKey(one))
+      )
+    : [];
+  return [...new Set([...windows, ...others].map(windowKey))];
+};
+
+/**
+ * The windows, overage and exhaustion one `rate_limit_event` reports, and
+ * the account's window set. The unified windows give whichever of the
+ * session, weekly and overage-included weekly windows the account has; the
+ * binding window (`rateLimitType`) adds a model's own weekly window when it
+ * is one; a `rejected` status says the binding window is
  * spent until its reset, for its model when it is one model's. The
  * usage-credit claim (`overage`) is the overage state, not a window.
  */
@@ -272,7 +311,12 @@ export function observedReading(
         ? creditsRefused(info, session)
         : { scope: scope ?? null, resetsAt: iso(info.resetsAt) };
   }
-  return { windows, overage: overageOf(info), exhausted };
+  return {
+    windows,
+    windowKinds: windowKindsOf(info, windows, session),
+    overage: overageOf(info),
+    exhausted,
+  };
 }
 
 /**

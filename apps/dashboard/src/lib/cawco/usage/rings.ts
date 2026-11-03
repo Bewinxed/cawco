@@ -31,6 +31,7 @@ import {
   CLAUDE_READING_CURRENT_MS,
   type LimitWindow,
 } from "@cawco/core/usage/types";
+import { bearing, headroom, windowNoun } from "@cawco/core/usage/windows";
 import { dayTime, readMeter } from "../usage";
 
 /** How far the carry answer looks ahead: one 5-hour window. */
@@ -64,6 +65,12 @@ export interface RingAccount {
   bindName: string;
   /** When the binding window runs out at its pace; null: it lasts. */
   bindOut: number | null;
+  /**
+   * The window that binds it now, whichever it has (core `headroom` over
+   * every model's windows): the least left, its clock, and its name as a
+   * noun ("5 hours", "week", "Fable week"). Null with no window read.
+   */
+  binds: (RingWindow & { noun: string }) | null;
   /** When the first span it carries you in starts (now, or later). */
   carryFrom: number | null;
   /** When the span it carries you in ends (it carries now, or next). */
@@ -314,6 +321,17 @@ function accountRing(
     ? (benched?.until ?? limitWindow?.resetsAt ?? null)
     : null;
   const { bind, bindName } = bindOf(bound, limitOn);
+  const least = headroom(
+    bearing(
+      windows.map((w) => ({ ...w, percent: w.utilization })),
+      undefined,
+      now
+    ),
+    now
+  )?.window;
+  const leastRing = ringWindow(least);
+  const binds =
+    least && leastRing ? { ...leastRing, noun: windowNoun(least) } : null;
   const reserved =
     account.reservePct !== null &&
     weekAll !== undefined &&
@@ -337,6 +355,7 @@ function accountRing(
     month: null,
     bind,
     bindName,
+    binds,
     bindOut: bound?.runsOutAt ?? null,
     limitOn,
     backAt,
@@ -517,6 +536,8 @@ export function openCodeRing(
     .map((w) => w?.runsOutAt ?? null)
     .filter((at): at is number => at !== null);
   const state = stateOf(spent ? "5h" : null, Boolean(reading.stale), false);
+  const least = headroom(bearing(reading.windows, undefined, now), now)?.window;
+  const leastRing = least ? win(least.group) : null;
   let limitOn: RingAccount["limitOn"] = null;
   if (spent) {
     limitOn = spent[0] === "5h" ? "5h" : "week";
@@ -535,6 +556,8 @@ export function openCodeRing(
     month,
     bind: limitOn ?? "5h",
     bindName: limitOn === "week" ? "week" : "5-hour",
+    binds:
+      least && leastRing ? { ...leastRing, noun: windowNoun(least) } : null,
     bindOut: outs.length > 0 ? Math.min(...outs) : null,
     limitOn,
     backAt: spent ? (spent[1]?.resetsAt ?? null) : null,
@@ -952,7 +975,7 @@ const estimateOf = (r: RingAccount, now: number): string =>
 /** The routing's reason as placement applies it (hub placement.ts). */
 const DELEGATE_WHY: Record<string, string> = {
   "first in your order": "it’s the first in your order with room.",
-  "resets soonest": "its 5-hour limit resets soonest.",
+  "resets soonest": "its window resets soonest.",
   pinned: "delegates are pinned to it.",
 };
 

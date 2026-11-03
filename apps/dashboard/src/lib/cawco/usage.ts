@@ -12,6 +12,7 @@ import type {
   UsageSpend,
   UsageSummary,
 } from "@cawco/core/usage/types";
+import { windowLabel, windowSpan } from "@cawco/core/usage/windows";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start
@@ -118,42 +119,6 @@ export const totalTokensOf = (r: {
 }): number => r.input + r.output + r.cacheCreation + r.cacheRead + r.reasoning;
 
 /* ---- Limit windows (DESIGN.md, Limit bar) ------------------------------- */
-
-/** "5-hour", "Week", "Week · Fable", "Month". */
-function windowLabel(w: LimitWindow): string {
-  const base =
-    { session: "5-hour", weekly: "Week", monthly: "Month" }[w.group] ?? w.kind;
-  return w.scopeLabel ? `${base} · ${w.scopeLabel}` : base;
-}
-
-/**
- * How long a window runs, from its group (core's `LimitWindow`): 5 hours, 7
- * days, or the calendar month that ends at its reset. Null for a group no
- * provider has named, or a monthly window with no reset to count back from.
- */
-function windowSpan(w: LimitWindow): number | null {
-  if (w.group === "session") {
-    return 5 * HOUR_MS;
-  }
-  if (w.group === "weekly") {
-    return 7 * DAY_MS;
-  }
-  if (w.group === "monthly" && w.resetsAt) {
-    const end = new Date(w.resetsAt);
-    const start = new Date(end);
-    start.setUTCMonth(end.getUTCMonth() - 1);
-    return end.getTime() - start.getTime();
-  }
-  return null;
-}
-
-/** When the window started, from its reset and its span. */
-export function windowStart(w: LimitWindow): number | null {
-  const span = windowSpan(w);
-  return span !== null && w.resetsAt
-    ? new Date(w.resetsAt).getTime() - span
-    : null;
-}
 
 /**
  * The OpenCode Go plan's reading, out of each machine's (read with that

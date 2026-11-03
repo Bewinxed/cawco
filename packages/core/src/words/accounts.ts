@@ -275,7 +275,7 @@ export const accountsWords = {
     /** The strategy a tab has, after its name: "Your sessions · Spread". */
     trail: (strategy: string) => `· ${strategy}`,
     pinnedAccount: "Pinned account",
-    /** A card as a screen reader hears it: "Spread: The account with the most headroom". */
+    /** A card as a screen reader hears it: "Spread: The account that lasts longest with the session on it". */
     card: (label: string, line: string) => `${label}: ${line}`,
     forks: "Forks stay on their parent’s account, whatever the strategy.",
     order: "Order: drag to change it",
@@ -306,12 +306,12 @@ export const accountsWords = {
     {
       id: "spread",
       label: "Spread",
-      line: "The account with the most headroom",
+      line: "The account that lasts longest with the session on it",
     },
     {
       id: "soonest-reset",
       label: "Soonest reset",
-      line: "Whose 5-hour window resets first",
+      line: "Whose window resets first",
     },
   ] satisfies StrategyWords[] as readonly StrategyWords[],
 
@@ -389,6 +389,42 @@ export const accountsWords = {
       `It has waited more than ${hours} ${hours === 1 ? "hour" : "hours"}, so it isn’t carried on by itself. Write to it to carry on, or stop it. Its conversation is kept as it was.`,
   },
 
+  // ── A limit window's name (core usage/windows.ts `windowWords`) ───────
+  /**
+   * A window's name, by its group (`session`, `weekly`, `monthly`; `other`:
+   * a window of a length CawCo has no name for), in three forms: in a
+   * sentence's slot ("A hit its weekly limit"; `other` is empty, so the slot
+   * reads "its limit"), as a noun ("40% left of its week"), and as a limit
+   * bar's label. A model's own window puts its scope first in a sentence and
+   * a noun ("Fable weekly", "Fable week"), after in a label ("Week · Fable").
+   */
+  windows: {
+    sentence: {
+      session: "5-hour",
+      weekly: "weekly",
+      monthly: "monthly",
+      other: "",
+    },
+    noun: {
+      session: "5 hours",
+      weekly: "week",
+      monthly: "month",
+      other: "window",
+    },
+    label: {
+      session: "5-hour",
+      weekly: "Week",
+      monthly: "Month",
+      other: "Window",
+    },
+    /** A model's own window in a sentence or as a noun: "Fable weekly", "Fable week". */
+    scoped: (scope: string, name: string) => `${scope} ${name}`,
+    /** A model's own window as a bar's label: "Week · Fable". */
+    scopedLabel: (label: string, scope: string) => `${label} · ${scope}`,
+    /** A window of no known length where placement lists an account's windows: "another window 20%". */
+    another: "another window",
+  },
+
   // ── The strategy figures (figure.ts) ──────────────────────────────────
   figure: {
     blocked: "blocked",
@@ -398,7 +434,7 @@ export const accountsWords = {
     /** A time left: "4h 05m", "12m". */
     time: (hours: number, minutes: number) =>
       hours > 0 ? `${hours}h ${pad2(minutes)}m` : `${minutes}m`,
-    /** A window that just reset: the whole of it, ahead. */
+    /** A lane drawn as a 5-hour window, just reset: the whole of it ahead. */
     window: "5h",
     policyBelow: "At the limit → the policy below",
     unusedWasted: "What’s unused at reset is wasted, so it goes first.",

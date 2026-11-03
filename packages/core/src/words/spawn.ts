@@ -177,8 +177,10 @@ export const spawnWords = {
     atLimit: "at its limit, back in ",
     neverBackup: "never a backup, only when picked",
     left: (percent: number) => `${percent}% left`,
-    ofFiveHours: " of 5 hours",
-    ofFiveHoursResets: (when: string) => ` of 5 hours, resets in ${when}`,
+    /** After `left`, the binding window by its noun ("5 hours", "week", "Fable week"): " of its week". */
+    ofWindow: (name: string) => ` of its ${name}`,
+    ofWindowResets: (name: string, when: string) =>
+      ` of its ${name}, resets in ${when}`,
   },
 
   /** The effort chip and its scale. */

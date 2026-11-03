@@ -369,9 +369,9 @@ export const DEFAULT_AT_LIMIT: AtLimit = {
 };
 
 /**
- * The strategies a provider's routing can choose from. Spread weighs each
- * account's use and Soonest reset its 5-hour reset, both read from the
- * account's limits; a provider whose limits CawCo doesn't read
+ * The strategies a provider's routing can choose from. Spread weighs how
+ * long each account lasts and Soonest reset when its windows reset, both
+ * read from the account's limits; a provider whose limits CawCo doesn't read
  * ({@link LIMITED_PROVIDERS}) has neither, so for it they would only ever
  * place as Fill first does. It offers Pinned and Fill first.
  */
@@ -551,6 +551,15 @@ export interface AccountReading {
   overage: AccountOverage | null;
   /** `subscriptionType` as `accountInfo()` reports it. */
   subscription: string | null;
+  /**
+   * The account's window set: the windows (core usage/windows.ts
+   * `windowKey`) the provider's last report that named its windows carried
+   * (a Claude `rate_limit_event`'s `unifiedWindows`, a usage endpoint's
+   * answer). A held window outside it is gone. Null until a report names
+   * them: the windows held are all that is known, and a Claude account keeps
+   * the session window it holds until one does.
+   */
+  windowKinds: string[] | null;
   windows: LimitWindow[];
 }
 
@@ -570,6 +579,8 @@ export interface AccountBench {
  * A window past its reset with no newer reading is a fresh one: 0%, no pace.
  */
 export interface WindowForecast {
+  /** How long it runs (core `LimitWindow.group`): `session`, `weekly`, `monthly`, or another. */
+  group: string;
   kind: string;
   pace: number | null;
   resetsAt: string | null;
@@ -626,7 +637,7 @@ export function pushCarry(
 /**
  * A provider's accounts as a forecast: each account's windows, and which
  * account carries a person's new sessions (`yours`) and a session's
- * (`delegates`) from now to the 5-hour horizon.
+ * (`delegates`) from now to the relay's horizon.
  */
 export interface ProviderForecast {
   accounts: AccountForecast[];
@@ -1217,7 +1228,7 @@ export type AccountMove =
       /** Both accounts in one organization: its prompt cache came along. */
       sameOrganization: boolean;
       tokens: number | null;
-      /** The window that refused it, as {@link windowWords} names it. */
+      /** The window that refused it, as core usage/windows.ts `windowWords` names it. */
       window: string | null;
       /** When that window resets, epoch ms; null when nothing said. */
       resetsAt: number | null;
@@ -1232,7 +1243,7 @@ export type AccountMove =
         | { kind: "forecast"; runsOutAt: number }
         | { kind: "cold"; wake: boolean }
         | { kind: "refused" };
-      /** What the re-read cost on `to`: a percent of its window; absent when unpriced. */
+      /** What the re-read cost on `to`: a percent of the window it is counted against, named as `windowWords` names it; absent when unpriced. */
       cost?: { pct: number; window: string };
       /**
        * What the move ended with its old process: work it held for later (its
@@ -1372,19 +1383,6 @@ export type EndedBy =
  * one is done it goes on in the conversation it has.
  */
 export type ContinueStep = "prepare" | "summary" | "start";
-
-/** "5-hour", "weekly", "weekly Opus": a window as a sentence names it. */
-export const windowWords = (
-  window: Pick<LimitWindow, "kind" | "scopeLabel">
-): string => {
-  if (window.kind === "session") {
-    return "5-hour";
-  }
-  if (window.kind === "weekly_scoped" && window.scopeLabel) {
-    return `weekly ${window.scopeLabel}`;
-  }
-  return "weekly";
-};
 
 /** "12 min", "2h 10m", "3d 4h": a span ahead, rounded up to the minute. */
 export const spanWords = (ms: number): string => {
@@ -1529,7 +1527,7 @@ const movedWords = (
     };
   }
   const cost = move.cost
-    ? ` (≈${Math.max(1, Math.round(move.cost.pct))}% of ${move.to.name}'s ${move.cost.window} window)`
+    ? ` (≈${Math.max(1, Math.round(move.cost.pct))}% of ${move.to.name}'s ${move.cost.window ? `${move.cost.window} ` : ""}window)`
     : "";
   if (move.because?.kind === "refused") {
     return {
@@ -1578,7 +1576,7 @@ const endedWorkWords = (ended: { tasks: number; wakeups: number }): string => {
     : "";
 };
 
-/** Whose limit sent it and when that resets: "A hit its 5-hour limit · resets in 3h 10m". */
+/** Whose limit sent it and when that resets: "A hit its weekly limit · resets in 3d 4h". */
 const limitHitWords = (
   move: Extract<AccountMove, { kind: "moved" }>,
   now: number
@@ -1891,7 +1889,7 @@ const runningLine = (group: RebalanceNotice["running"][number]): string => {
   return `${sessionsWords(group.moved + group.left)} on ${on} forecast to run out at ${clockWords(group.runsOutAt)}; ${group.moved} moved to ${group.to.name} between turns (${why})${left}`;
 };
 
-/** One held session moved: "180k re-read ≈ 2% of design@'s 5-hour window". */
+/** One held session moved: "180k re-read ≈ 2% of design@'s weekly window". */
 const heldMoveWords = (
   one: RebalanceNotice["held"][number]["moved"][number]
 ): string => {
@@ -1899,7 +1897,7 @@ const heldMoveWords = (
     return `${thousands(one.tokens)} to ${one.to.name}, cache kept`;
   }
   return one.cost
-    ? `${thousands(one.tokens)} re-read ≈ ${Math.max(1, Math.round(one.cost.pct))}% of ${one.to.name}'s ${one.cost.window} window`
+    ? `${thousands(one.tokens)} re-read ≈ ${Math.max(1, Math.round(one.cost.pct))}% of ${one.to.name}'s ${one.cost.window ? `${one.cost.window} ` : ""}window`
     : `${thousands(one.tokens)} re-read on ${one.to.name}`;
 };
 

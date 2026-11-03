@@ -1,6 +1,7 @@
 <script lang="ts">
   import { bucketStart } from "@cawco/core/usage/tokens";
   import type { LimitWindow } from "@cawco/core/usage/types";
+  import { openedAt } from "@cawco/core/usage/windows";
   /**
    * Usage: will it last, first. The Limits block
    * leads with the window that stops you first and every window under it;
@@ -16,11 +17,7 @@
   import LimitsBlock from "#lib/cawco/usage/LimitsBlock.svelte";
   import ProjectSpend from "#lib/cawco/usage/ProjectSpend.svelte";
   import WhereItGoes from "#lib/cawco/usage/WhereItGoes.svelte";
-  import {
-    hubMidnight,
-    speakingReading,
-    windowStart,
-  } from "#lib/cawco/usage.js";
+  import { hubMidnight, speakingReading } from "#lib/cawco/usage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
@@ -92,7 +89,7 @@
     reading: { windows: LimitWindow[] } | undefined
   ): number | null => {
     const w = reading?.windows.find((x) => x.group === "session");
-    const start = w ? windowStart(w) : null;
+    const start = w ? openedAt(w) : null;
     return start === null ? null : bucketStart(start);
   };
 

@@ -3,12 +3,16 @@ import {
   type AccountBench,
   type AccountForecast,
   type AccountReading,
+  bearing,
   type CarrySpan,
   type LimitWindow,
   type ProviderRouting,
   pushCarry,
   type WindowForecast,
   type WindowRef,
+  windowKey,
+  windowResetAt,
+  windowSpan,
 } from "@cawco/core";
 import { HOUR_MS } from "@cawco/core/time";
 import type { DbShape } from "./db";
@@ -16,12 +20,13 @@ import { place } from "./placement";
 
 /**
  * Where a provider's accounts are heading: each window's pace and when it
- * runs out, and which account carries new sessions until the 5-hour horizon.
- * Pure: a function of the stored readings, their history and the routing, so
- * every reader (the usage screen, the at-limit logic) gets the same answer.
+ * runs out, and which account carries new sessions until the relay's
+ * horizon. Pure: a function of the stored readings, their history and the
+ * routing, so every reader (the usage screen, the at-limit logic) gets the
+ * same answer.
  */
 
-/** How far the carry sequence looks ahead: one 5-hour window. */
+/** How far the carry sequence looks ahead: the relay's horizon, five hours. */
 const HORIZON_MS = 5 * HOUR_MS;
 
 /** One point of a window's history: its use and when it was read. */
@@ -93,6 +98,7 @@ const windowForecast = (
   const reset = resetMs(window);
   const base = {
     kind: window.kind,
+    group: window.group,
     scopeLabel: window.scopeLabel,
     resetsAt: window.resetsAt,
   };
@@ -114,12 +120,17 @@ const windowForecast = (
 };
 
 /**
- * The window that limits an account: among its 5-hour, week and per-model
- * week windows, the one that runs out soonest at its pace; when none runs out
- * before its reset, the one that resets latest. A window with no known reset
- * resets latest of all. Null when there are no windows.
+ * The window that limits an account at its pace: among the windows bearing
+ * on it (core `bearing`, every model's with the account read as a whole),
+ * whichever it has, the one that runs out soonest at its pace; when none
+ * runs out before its reset, the one that resets latest. A window with no
+ * known reset resets latest of all. Null when none bears.
  */
-const bindingWindow = (windows: WindowForecast[]): WindowRef | null => {
+const bindingWindow = (
+  all: WindowForecast[],
+  now: number
+): WindowRef | null => {
+  const windows = bearing(all, undefined, now);
   const ref = (window: WindowForecast | undefined): WindowRef | null =>
     window ? { kind: window.kind, scopeLabel: window.scopeLabel } : null;
   const runningOut = windows.filter(
@@ -324,7 +335,7 @@ export const accountForecasts = (
     );
     return {
       accountId: account.id,
-      bindingWindow: bindingWindow(windows),
+      bindingWindow: bindingWindow(windows, now),
       lastSeenAt: reading?.lastSeenAt ?? null,
       windows,
     };
@@ -342,64 +353,104 @@ export interface CarryInput {
   signedIn: ReadonlySet<string>;
 }
 
-/**
- * Which account carries new sessions of `kind` from now to the horizon, as
- * placement would choose at each step. The fleet's burn — the summed 5-hour
- * pace of the accounts with sessions running — moves onto whichever account
- * carries; the others hold where they are, since nothing CawCo sees spends
- * them. An account that would run out is out until its 5-hour window resets,
- * as Claude Code would bench it; a span with nothing able to carry is null.
- */
-/** The 5-hour window of an account in a forecast. */
-const sessionOf = (forecasts: AccountForecast[], id: string) =>
-  forecasts
-    .find((one) => one.accountId === id)
-    ?.windows.find((window) => window.kind === "session");
+/** One window of an account as the walk moves it: its use, and its reset (null: none ahead is known). */
+interface WalkWindow {
+  group: string;
+  key: string;
+  reset: number | null;
+  use: number;
+}
 
-/** The walk's state: each account's 5-hour use and reset as time moves, and who is out. */
+/**
+ * The fleet's burn into each window, percent an hour, by window
+ * ({@link windowKey}): the summed pace of that window across the accounts
+ * with sessions running, so the session pace spends into session windows and
+ * each week's pace into weeks. A window no account spends burns nothing.
+ */
+const burnsOf = (forecasts: AccountForecast[]): Map<string, number> => {
+  const burns = new Map<string, number>();
+  for (const forecast of forecasts) {
+    for (const window of forecast.windows) {
+      const key = windowKey(window);
+      burns.set(key, (burns.get(key) ?? 0) + (window.pace ?? 0));
+    }
+  }
+  return burns;
+};
+
+/** The walk's state: each account's windows' use and reset as time moves, and who is out. */
 class Walk {
   readonly #input: CarryInput;
   readonly bench: AccountBench[];
-  readonly reset = new Map<string, number | null>();
-  readonly use = new Map<string, number>();
+  /** Each account's windows, by account id: its own, whichever it has. */
+  readonly windows = new Map<string, WalkWindow[]>();
 
   constructor(input: CarryInput) {
     this.#input = input;
     this.bench = [...input.bench];
     for (const account of input.accounts) {
-      const window = sessionOf(input.forecasts, account.id);
-      const at = window?.resetsAt ? Date.parse(window.resetsAt) : null;
-      this.use.set(account.id, window?.utilization ?? 0);
-      this.reset.set(account.id, at !== null && at > input.now ? at : null);
+      const forecast = input.forecasts.find(
+        (one) => one.accountId === account.id
+      );
+      this.windows.set(
+        account.id,
+        (forecast?.windows ?? []).map((window) => {
+          const at = windowResetAt(window);
+          return {
+            key: windowKey(window),
+            group: window.group,
+            use: window.utilization,
+            reset: at !== null && at > input.now ? at : null,
+          };
+        })
+      );
     }
   }
 
-  /** Windows that reset by `t` start fresh. */
+  /** Windows that reset by `t` start fresh, each to reset again a span of its own later (none ahead for one of no known length). */
   freshen(t: number): void {
-    for (const [id, at] of this.reset) {
-      if (at !== null && at <= t) {
-        this.use.set(id, 0);
-        this.reset.set(id, at + HORIZON_MS);
+    for (const windows of this.windows.values()) {
+      for (const window of windows) {
+        if (window.reset !== null && window.reset <= t) {
+          const span = windowSpan({
+            group: window.group,
+            resetsAt: new Date(window.reset).toISOString(),
+          });
+          window.use = 0;
+          window.reset = span === null ? null : window.reset + span;
+        }
       }
     }
   }
 
   /** The readings as they stand at `t`, for placement to read. */
   #readings(): AccountReading[] {
-    return this.#input.readings.map((reading) => ({
-      ...reading,
-      windows: reading.windows.map((window) => {
-        if (window.kind !== "session") {
-          return window;
-        }
-        const at = this.reset.get(reading.accountId);
-        return {
-          ...window,
-          percent: this.use.get(reading.accountId) ?? window.percent,
-          resetsAt: at ? new Date(at).toISOString() : window.resetsAt,
-        };
-      }),
-    }));
+    return this.#input.readings.map((reading) => {
+      const walked = new Map(
+        (this.windows.get(reading.accountId) ?? []).map((one) => [one.key, one])
+      );
+      return {
+        ...reading,
+        windows: reading.windows.map((window) => {
+          const at = walked.get(windowKey(window));
+          return at
+            ? {
+                ...window,
+                percent: at.use,
+                resetsAt:
+                  at.reset === null
+                    ? window.resetsAt
+                    : new Date(at.reset).toISOString(),
+              }
+            : window;
+        }),
+      };
+    });
+  }
+
+  /** Whether an account is spent in the walk: one of its windows is at its limit. */
+  spent(id: string): boolean {
+    return (this.windows.get(id) ?? []).some((window) => window.use >= 100);
   }
 
   /** Who placement chooses at `t`, when it can carry anything at all. */
@@ -428,16 +479,54 @@ class Walk {
     const carrier = placed.ok ? placed.accountId : null;
     const out =
       !carrier ||
-      (this.use.get(carrier) ?? 0) >= 100 ||
+      this.spent(carrier) ||
       this.bench.some((one) => one.accountId === carrier && one.until > t);
     return out ? null : carrier;
+  }
+
+  /**
+   * When `id` runs out carrying from `t` at `burns`, and on which window:
+   * the window its burn fills first; null when none fills.
+   */
+  runsOut(
+    id: string,
+    burns: ReadonlyMap<string, number>,
+    t: number
+  ): { at: number; window: WalkWindow } | null {
+    let soonest: { at: number; window: WalkWindow } | null = null;
+    for (const window of this.windows.get(id) ?? []) {
+      const burn = burns.get(window.key) ?? 0;
+      if (burn <= 0) {
+        continue;
+      }
+      const at = t + (Math.max(100 - window.use, 0) / burn) * HOUR_MS;
+      if (!soonest || at < soonest.at) {
+        soonest = { at, window };
+      }
+    }
+    return soonest;
+  }
+
+  /** Spends `burns` into `id`'s windows from `t` to `until`. */
+  spend(
+    id: string,
+    burns: ReadonlyMap<string, number>,
+    t: number,
+    until: number
+  ): void {
+    for (const window of this.windows.get(id) ?? []) {
+      window.use += ((burns.get(window.key) ?? 0) * (until - t)) / HOUR_MS;
+    }
   }
 
   /** The next moment after `t` an account comes back: a bench ends or a window resets. */
   nextBack(t: number): number {
     const later = [
       ...this.bench.map((one) => one.until),
-      ...[...this.reset.values()].filter((at): at is number => at !== null),
+      ...[...this.windows.values()]
+        .flat()
+        .map((window) => window.reset)
+        .filter((at): at is number => at !== null),
     ].filter((at) => at > t);
     return later.length > 0 ? Math.min(...later) : Number.POSITIVE_INFINITY;
   }
@@ -445,24 +534,22 @@ class Walk {
 
 /**
  * Which account carries new sessions of `kind` from now to the horizon, as
- * placement would choose at each step. The fleet's burn — the summed 5-hour
- * pace of the accounts with sessions running — moves onto whichever account
- * carries; the others hold where they are, since nothing CawCo sees spends
- * them. An account that would run out is out until its 5-hour window resets,
- * as Claude Code would bench it; a span with nothing able to carry is null.
+ * placement would choose at each step. The fleet's burn into each window
+ * ({@link burnsOf}) moves onto whichever account carries, into its own
+ * windows, whichever it has; the others hold where they are, since nothing
+ * CawCo sees spends them. An account that would run out is out until the
+ * window that ran out resets, as Claude Code would bench it; a span with
+ * nothing able to carry is null.
  */
 export const carrySequence = (input: CarryInput): CarrySpan[] => {
   const horizon = input.now + HORIZON_MS;
-  const burn = input.forecasts.reduce(
-    (sum, one) => sum + (sessionOf([one], one.accountId)?.pace ?? 0),
-    0
-  );
+  const burns = burnsOf(input.forecasts);
   const walk = new Walk(input);
   const spans: CarrySpan[] = [];
 
   let t = input.now;
   // A bound on steps: each one ends at a run-out or a reset, of which a
-  // handful of accounts have few within five hours.
+  // handful of accounts have few within the horizon.
   for (let step = 0; step < 64 && t < horizon; step += 1) {
     walk.freshen(t);
     const carrier = walk.carrier(t);
@@ -473,17 +560,16 @@ export const carrySequence = (input: CarryInput): CarrySpan[] => {
       t = until;
       continue;
     }
-    const use = walk.use.get(carrier) ?? 0;
-    const runsOut =
-      burn > 0 ? t + ((100 - use) / burn) * HOUR_MS : Number.POSITIVE_INFINITY;
+    const out = walk.runsOut(carrier, burns, t);
+    const runsOut = out?.at ?? Number.POSITIVE_INFINITY;
     const until = Math.min(horizon, runsOut, walk.nextBack(t));
     pushCarry(spans, carrier, t, until);
-    walk.use.set(carrier, use + (burn * (until - t)) / HOUR_MS);
-    if (until === runsOut && runsOut < horizon) {
+    walk.spend(carrier, burns, t, until);
+    if (out && until === runsOut && runsOut < horizon) {
       walk.bench.push({
         accountId: carrier,
         scope: null,
-        until: walk.reset.get(carrier) ?? until + HORIZON_MS,
+        until: out.window.reset ?? horizon,
       });
     }
     // A reset of the carrier itself before it ran out leaves it carrying,

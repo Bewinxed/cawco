@@ -1,9 +1,19 @@
-import { accountNameAmong, costForUsage, OVER_STATUSES } from "@cawco/core";
+import {
+  accountNameAmong,
+  bearing,
+  costForUsage,
+  headroom,
+  type LimitWindow,
+  modelScope,
+  OVER_STATUSES,
+  openedAt,
+  windowKey,
+  windowUsed,
+} from "@cawco/core";
 import { DAY_MS } from "@cawco/core/time";
 import type { LimitRow } from "./at-limit";
 import type { DbShape } from "./db";
 import { historyPoints, usdPerPercent } from "./forecast";
-import { SESSION_WINDOW_MS } from "./placement";
 
 /**
  * The ledger every move of a session onto another account (a held session
@@ -12,11 +22,13 @@ import { SESSION_WINDOW_MS } from "./placement";
  * never takes the whole herd at once. Each session is charged its projected
  * re-read (its context written into the target's cold cache, or read from it
  * when its warm cache carries) plus an allowance for its next real turn, in
- * dollars, against the target's 5-hour window measured in dollars per
- * percent from that account's own history (forecast.ts `usdPerPercent`).
- * What a target has left after a move ({@link roomAfterPct}) is the one
- * figure a decision reads of it here: at-limit.ts `decideStop` weighs it
- * with everything else it knows, and nothing here refuses a move.
+ * dollars, against every window of the target that bears on the session
+ * (core `bearing`), each measured in dollars per percent from that
+ * account's own history of it (forecast.ts `usdPerPercent`). What the
+ * target has left after a move in the window with the least left then
+ * ({@link figuresOf}) is the one figure a decision reads of it here:
+ * at-limit.ts `decideStop` weighs it with everything else it knows, and
+ * nothing here refuses a move.
  *
  * The target's measured state is its reading plus the spend `turn_usage`
  * recorded there since that reading (a Claude turn that reached the model
@@ -24,13 +36,15 @@ import { SESSION_WINDOW_MS } from "./placement";
  * stands only while its move's cost is not in that state: it goes once the
  * session's first turn on the target is recorded, once it sleeps on the
  * target with no turn there (nothing more of the move's cost is coming; a
- * wake is admitted again like any move), once it is over, or at the
- * window's reset. One that sleeps still owing its move (taken up at its
- * wake) keeps its charge: it is not on the target yet.
+ * wake is admitted again like any move), once it is over, or at the reset
+ * of any window it was charged against. One that sleeps still owing its
+ * move (taken up at its wake) keeps its charge: it is not on the target
+ * yet.
  *
  * Affinity ({@link admittedHere}): a session moved onto its account inside
- * that account's current 5-hour window stays there. Another account freeing
- * is never a reason to move it again; only its own limit is.
+ * the current window of the window that binds there stays (on a verified
+ * Ultra account, its week). Another account freeing is never a reason to
+ * move it again; only its own limit is.
  */
 
 /**
@@ -55,36 +69,62 @@ export interface Projected {
 }
 
 /**
- * What the ledger holds of one target account now, each a percent of its
- * 5-hour window: the spend recorded since its reading (`spentPct`), the
- * moves admitted there and not landed yet (`pendingPct`, `pendingMoves` of
- * them). Null where a percent is unmeasured (`usdPerPct` null) or a spend
- * unpriced.
+ * What the ledger holds of one window of a target account now, each a
+ * percent of that window: its use as read (`usedPct`), the spend recorded
+ * since the reading (`spentPct`), the moves admitted there and not landed
+ * yet (`pendingPct`). Null where a percent is unmeasured (`usdPerPct` null)
+ * or a spend unpriced.
  */
-export interface Ledger {
-  pendingMoves: number;
+export interface WindowLedger {
   pendingPct: number | null;
   spentPct: number | null;
   usdPerPct: number | null;
+  usedPct: number;
+  window: Pick<LimitWindow, "group" | "kind" | "scopeLabel">;
+}
+
+/**
+ * What the ledger holds of one target account now: the moves admitted
+ * there and not landed yet (`pendingMoves`), and each window of it that
+ * bears on the session moving ({@link WindowLedger}).
+ */
+export interface Ledger {
+  pendingMoves: number;
+  windows: WindowLedger[];
+}
+
+/**
+ * One move's figures on its target: the window with the least room once it
+ * has landed (`window`; null when the target has no window read), what the
+ * move takes of that window and what it leaves. A window not measured in
+ * dollars counts its use as read alone.
+ */
+export interface Figure {
+  /** What it has left now, before the move, percent: the least of every window's room. */
+  left: number;
+  /** What this move takes of {@link window}, percent; null when unmeasured or unpriced. */
+  movePct: number | null;
+  /** What {@link window} has left after it ({@link roomAfterPct}). */
+  roomAfter: number;
+  /** No window that bears is measured in dollars, or the one measured has an unpriced spend or charge: the target takes one move at a time. */
+  unmeasured: boolean;
+  /** Dollars per percent of {@link window}; null when unmeasured. */
+  usdPerPct: number | null;
+  window: WindowLedger["window"] | null;
 }
 
 /** One move's figures on its target, for a journal line and the wake path: the ledger, and what the move takes and leaves. */
-export interface Figures extends Ledger {
-  /** What this move takes of the target's 5-hour window, percent; null when unmeasured or unpriced. */
-  movePct: number | null;
+export interface Figures extends Figure {
+  pendingMoves: number;
   projected: Projected;
-  /** What the target's 5-hour window has left after it ({@link roomAfterPct}). */
-  roomAfter: number;
-  /** The target's 5-hour window read now, percent. */
-  usedPct: number;
 }
 
 interface Charge {
   accountId: string;
   at: number;
   instanceId: string;
-  /** The target's 5-hour reset when it was charged: a new window drops it. */
-  resetsAt: string | null;
+  /** The reset of every window it was charged against, by window: a new window of any of them drops it. */
+  resets: ReadonlyMap<string, string | null>;
   usd: number | null;
 }
 
@@ -138,7 +178,7 @@ export const projectedMove = (
 };
 
 /** What a move takes of a window measured at `usdPerPct`, percent; null when unmeasured or unpriced. */
-export const movePctOf = (
+const movePctOf = (
   projected: Projected,
   usdPerPct: number | null
 ): number | null =>
@@ -151,9 +191,9 @@ export const movePctOf = (
  * reading, the moves admitted there and this one have landed, percent: what
  * goes unmeasured counts nothing.
  */
-export const roomAfterPct = (
+const roomAfterPct = (
   usedPct: number,
-  ledger: Pick<Ledger, "pendingPct" | "spentPct">,
+  ledger: Pick<WindowLedger, "pendingPct" | "spentPct">,
   movePct: number | null
 ): number =>
   100 -
@@ -162,19 +202,60 @@ export const roomAfterPct = (
     (ledger.pendingPct ?? 0) +
     (movePct ?? 0));
 
-/** The 5-hour window of `accountId`'s reading, open at `now`. */
-const sessionWindow = (db: DbShape, accountId: string, now: number) => {
+/**
+ * A move's figures from a target's ledger and its projected cost
+ * ({@link Figure}): every window's room after the move, the least of them
+ * the one read. A move is measured when some window is measured in dollars
+ * with its spend and charges priced.
+ */
+export const figuresOf = (
+  ledger: Pick<Ledger, "windows">,
+  projected: Projected
+): Figure => {
+  let least: Figure | null = null;
+  let left = 100;
+  for (const one of ledger.windows) {
+    const movePct = movePctOf(projected, one.usdPerPct);
+    const roomAfter = roomAfterPct(one.usedPct, one, movePct);
+    left = Math.min(left, roomAfterPct(one.usedPct, one, null));
+    if (!least || roomAfter < least.roomAfter) {
+      least = {
+        window: one.window,
+        movePct,
+        roomAfter,
+        usdPerPct: one.usdPerPct,
+        left: 0,
+        unmeasured: true,
+      };
+    }
+  }
+  const measured = ledger.windows.some(
+    (one) =>
+      one.usdPerPct !== null && one.spentPct !== null && one.pendingPct !== null
+  );
+  return least
+    ? { ...least, left, unmeasured: !measured }
+    : {
+        window: null,
+        movePct: null,
+        roomAfter: 100,
+        usdPerPct: null,
+        left,
+        unmeasured: true,
+      };
+};
+
+/** The windows of `accountId`'s reading that bear on a session of model scope `scope` at `now` (core `bearing`). */
+const bearingWindows = (
+  db: DbShape,
+  accountId: string,
+  scope: string | null,
+  now: number
+) => {
   const reading = db.accounts
     .readings()
     .find((one) => one.accountId === accountId);
-  const window = reading?.windows.find((one) => one.kind === "session");
-  const open =
-    window && !(window.resetsAt && Date.parse(window.resetsAt) <= now);
-  return {
-    reading,
-    percent: open ? window.percent : 0,
-    resetsAt: open ? window.resetsAt : null,
-  };
+  return { reading, windows: bearing(reading?.windows ?? [], scope, now) };
 };
 
 export const createAdmission = (db: DbShape) => {
@@ -182,21 +263,30 @@ export const createAdmission = (db: DbShape) => {
   const charges = new Map<string, Charge>();
   const perPctRead = new Map<string, { at: number; value: number | null }>();
 
-  /** Dollars per percent of `accountId`'s 5-hour window, from its own history. */
-  const perPctOf = (accountId: string, now: number): number | null => {
-    const known = perPctRead.get(accountId);
+  /**
+   * Dollars per percent of one of `accountId`'s windows, from its own
+   * history of it: a week measures as a session window does, its readings
+   * grouped by reset.
+   */
+  const perPctOf = (
+    accountId: string,
+    window: Pick<LimitWindow, "kind" | "scopeLabel">,
+    now: number
+  ): number | null => {
+    const key = `${accountId}\u0000${windowKey(window)}`;
+    const known = perPctRead.get(key);
     if (known && now - known.at < PER_PCT_FOR_MS) {
       return known.value;
     }
     const since = now - LOOKBACK_MS;
     const history = historyPoints(db, accountId, since);
     const value = usdPerPercent(
-      { kind: "session", scopeLabel: null },
+      { kind: window.kind, scopeLabel: window.scopeLabel },
       history,
       db.turnUsage.list({ accountId, since }),
       accountId
     );
-    perPctRead.set(accountId, { at: now, value });
+    perPctRead.set(key, { at: now, value });
     return value;
   };
 
@@ -223,13 +313,22 @@ export const createAdmission = (db: DbShape) => {
   const prune = (now: number): void => {
     for (const [id, charge] of charges) {
       const [row] = db.getInstancesByIds([id]);
-      const window = sessionWindow(db, charge.accountId, now);
       if (!row || OVER_STATUSES.has(row.status)) {
         release(id, "as the session is over");
         continue;
       }
-      if (window.resetsAt !== charge.resetsAt) {
-        release(id, "as its 5-hour window reset");
+      const { windows } = bearingWindows(
+        db,
+        charge.accountId,
+        modelScope(row.model),
+        now
+      );
+      const open = new Map(windows.map((one) => [windowKey(one), one]));
+      const reset = [...charge.resets].some(
+        ([key, at]) => at !== null && open.get(key)?.resetsAt !== at
+      );
+      if (reset) {
+        release(id, "as a window it was charged against reset");
         continue;
       }
       const first = db.turnUsage
@@ -248,24 +347,16 @@ export const createAdmission = (db: DbShape) => {
    * The spend `turn_usage` recorded on `accountId` since its reading, in
    * dollars: the turns its reading has not taken in. A Claude turn that
    * reached the model confirms the reading up to it, so only the others
-   * count; within the open 5-hour window, or since the last one reset.
-   * Null when one of them is unpriced.
+   * count; within `window`, from when it opened (core `openedAt`; since the
+   * reading, for a window of no known length). Null when one of them is
+   * unpriced.
    */
   const spentSince = (
     accountId: string,
-    window: ReturnType<typeof sessionWindow>,
-    now: number
+    lastSeenAt: number,
+    window: Pick<LimitWindow, "group" | "resetsAt">
   ): number | null => {
-    // The open window began 5 hours before its reset; a window over began
-    // a new one at its reset.
-    const held = window.reading?.windows.find((one) => one.kind === "session");
-    let opened = now - SESSION_WINDOW_MS;
-    if (window.resetsAt) {
-      opened = Date.parse(window.resetsAt) - SESSION_WINDOW_MS;
-    } else if (held?.resetsAt) {
-      opened = Date.parse(held.resetsAt);
-    }
-    const since = Math.max(window.reading?.lastSeenAt ?? 0, opened);
+    const since = Math.max(lastSeenAt, openedAt(window) ?? lastSeenAt);
     const turns = db.turnUsage
       .list({ accountId, since })
       .filter((turn) => turn.at.getTime() > since);
@@ -275,76 +366,109 @@ export const createAdmission = (db: DbShape) => {
   };
 
   /**
-   * What the ledger holds of `accountId` now for a move of `instanceId`
-   * ({@link Ledger}): the charges of every other session standing there, and
-   * the spend recorded since its reading, each over what a percent of its
-   * 5-hour window costs. A charge unpriced, or a spend, makes its percent
-   * null; so does a window not measured in dollars yet.
+   * What the ledger holds of `accountId` now for a move of `instanceId`, a
+   * session of model `model` ({@link Ledger}): the charges of every other
+   * session standing there, and the spend recorded since its reading, each
+   * over what a percent of each bearing window costs. A charge unpriced, or
+   * a spend, makes its percent null; so does a window not measured in
+   * dollars yet.
    */
   const ledger = (
     accountId: string,
     instanceId: string,
+    model: string | null,
     now: number
   ): Ledger => {
     prune(now);
-    const usdPerPct = perPctOf(accountId, now);
     const standing = [...charges.values()].filter(
       (one) => one.accountId === accountId && one.instanceId !== instanceId
     );
     const pendingUsd = standing.some((one) => one.usd === null)
       ? null
       : standing.reduce((sum, one) => sum + (one.usd ?? 0), 0);
-    const spentUsd = spentSince(
+    const { reading, windows } = bearingWindows(
+      db,
       accountId,
-      sessionWindow(db, accountId, now),
+      modelScope(model),
       now
     );
-    const measured = usdPerPct !== null && usdPerPct > 0;
     return {
-      usdPerPct: measured ? usdPerPct : null,
       pendingMoves: standing.length,
-      pendingPct:
-        measured && pendingUsd !== null ? pendingUsd / usdPerPct : null,
-      spentPct: measured && spentUsd !== null ? spentUsd / usdPerPct : null,
+      windows: windows.map((window) => {
+        const perPct = perPctOf(accountId, window, now);
+        const usdPerPct = perPct !== null && perPct > 0 ? perPct : null;
+        const spentUsd = spentSince(
+          accountId,
+          reading?.lastSeenAt ?? 0,
+          window
+        );
+        return {
+          window: {
+            kind: window.kind,
+            group: window.group,
+            scopeLabel: window.scopeLabel,
+          },
+          usedPct: windowUsed(window, now),
+          usdPerPct,
+          pendingPct:
+            usdPerPct !== null && pendingUsd !== null
+              ? pendingUsd / usdPerPct
+              : null,
+          spentPct:
+            usdPerPct !== null && spentUsd !== null
+              ? spentUsd / usdPerPct
+              : null,
+        };
+      }),
     };
   };
 
   /**
    * A move of `session` onto `targetId` priced as `projected`: the ledger
-   * there, what the move takes of its 5-hour window and what that window has
-   * left after it ({@link roomAfterPct}). Read by the wake path (server.ts
-   * `replaceAtWake`); a limit's and a rebalance's moves read the same figures
-   * through their decision (at-limit.ts `decideStop`).
+   * there, and the figures of the window with the least room after it
+   * ({@link figuresOf}). Read by the wake path (server.ts `replaceAtWake`);
+   * a limit's and a rebalance's moves read the same figures through their
+   * decision (at-limit.ts `decideStop`).
    */
   const check = (
-    instanceId: string,
+    session: Pick<LimitRow, "id" | "model">,
     targetId: string,
     projected: Projected,
     now: number
   ): Figures => {
-    const held = ledger(targetId, instanceId, now);
-    const usedPct = sessionWindow(db, targetId, now).percent;
-    const movePct = movePctOf(projected, held.usdPerPct);
+    const held = ledger(targetId, session.id, session.model, now);
     return {
-      ...held,
+      ...figuresOf(held, projected),
+      pendingMoves: held.pendingMoves,
       projected,
-      usedPct,
-      movePct,
-      roomAfter: roomAfterPct(usedPct, held, movePct),
     };
   };
 
   return {
     check,
     ledger,
-    /** Charges `instanceId`'s move onto `accountId` at `usd` (its re-read and next turn; null when unpriced). */
-    charge(instanceId: string, accountId: string, usd: number | null): void {
+    /**
+     * Charges `instanceId`'s move onto `accountId` at `usd` (its re-read and
+     * next turn; null when unpriced), against every window there that bears
+     * on its model.
+     */
+    charge(
+      session: Pick<LimitRow, "id" | "model">,
+      accountId: string,
+      usd: number | null
+    ): void {
       const now = Date.now();
-      charges.set(instanceId, {
+      const { windows } = bearingWindows(
+        db,
         accountId,
-        instanceId,
+        modelScope(session.model),
+        now
+      );
+      charges.set(session.id, {
+        accountId,
+        instanceId: session.id,
         at: now,
-        resetsAt: sessionWindow(db, accountId, now).resetsAt,
+        resets: new Map(windows.map((one) => [windowKey(one), one.resetsAt])),
         usd,
       });
     },
@@ -372,9 +496,10 @@ export const createAdmission = (db: DbShape) => {
       }
     },
     /**
-     * Whether `row` was moved onto the account it is on inside that
-     * account's current 5-hour window (its last `moved` line lands there):
-     * it stays, and no other account freeing moves it again.
+     * Whether `row` was moved onto the account it is on inside the current
+     * window of the window that binds there now (core `headroom`; its last
+     * `moved` line lands there): it stays, and no other account freeing
+     * moves it again. On a verified Ultra account that is its week.
      */
     admittedHere(row: LimitRow, now = Date.now()): boolean {
       if (!row.accountId) {
@@ -389,11 +514,15 @@ export const createAdmission = (db: DbShape) => {
       if (!(last?.move.kind === "moved" && last.move.to.id === row.accountId)) {
         return false;
       }
-      const { resetsAt } = sessionWindow(db, row.accountId, now);
-      const opened = resetsAt
-        ? Date.parse(resetsAt) - SESSION_WINDOW_MS
-        : now - SESSION_WINDOW_MS;
-      return last.at >= opened;
+      const { windows } = bearingWindows(
+        db,
+        row.accountId,
+        modelScope(row.model),
+        now
+      );
+      const binds = headroom(windows, now)?.window;
+      const opened = binds ? openedAt(binds) : null;
+      return opened !== null && last.at >= opened;
     },
   };
 };

@@ -411,6 +411,7 @@ import {
   WORKSPACE_CREATE_TIMEOUT_MS,
   type WorkInFlight,
   waitArtifact,
+  windowWords,
   withMovedLine,
   withReminder,
   workWords,
@@ -28957,8 +28958,11 @@ export const createServer = (
     figures: ReturnType<typeof admission.check>,
     tokens: number,
     toName: string
-  ): string =>
-    `re-reading ${tokenWords(tokens)} cold costs ${usdWords(figures.projected.reReadUsd)}, ${figures.movePct === null ? `and ${toName}'s window isn't measured in dollars yet` : `≈${figures.movePct.toFixed(1)}% of ${toName}'s 5-hour window, leaving it ${Math.round(figures.roomAfter)}%`}`;
+  ): string => {
+    const name = figures.window ? windowWords(figures.window) : "";
+    const window = `${toName}'s ${name ? `${name} ` : ""}window`;
+    return `re-reading ${tokenWords(tokens)} cold costs ${usdWords(figures.projected.reReadUsd)}, ${figures.movePct === null ? `and ${window} isn't measured in dollars yet` : `≈${figures.movePct.toFixed(1)}% of ${window}, leaving it ${Math.round(figures.roomAfter)}%`}`;
+  };
 
   /**
    * Why a cold wake's move to `toName` doesn't go, in words; undefined when
@@ -28970,7 +28974,7 @@ export const createServer = (
     toName: string,
     reRead: string
   ): string | undefined => {
-    if (figures.movePct === null) {
+    if (figures.unmeasured) {
       return figures.pendingMoves > 0
         ? `another move is still landing on ${toName}`
         : undefined;
@@ -29027,7 +29031,7 @@ export const createServer = (
     const now = Date.now();
     const tokens = pricedTokens(row.contextTokens, contextWindowNow(row));
     const figures = admission.check(
-      row.id,
+      row,
       to.id,
       projectedMove(row, tokens, false, now),
       now
@@ -29042,7 +29046,7 @@ export const createServer = (
     }
     const { reReadUsd, allowanceUsd } = figures.projected;
     admission.charge(
-      row.id,
+      row,
       to.id,
       reReadUsd === null ? null : reReadUsd + allowanceUsd
     );
@@ -34538,7 +34542,7 @@ export const createServer = (
         }
       )
       // Each account's windows with their pace and run-out, and which account
-      // carries a person's and a session's new sessions to the 5-hour horizon.
+      // carries a person's and a session's new sessions to the relay's horizon.
       .get(
         "/api/accounts/forecast",
         { query: t.Object({ provider: accountProvider }) },

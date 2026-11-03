@@ -1,8 +1,11 @@
 import {
+  bearing,
   type ClaudeLimits,
   cacheHit,
   type Envelope,
+  headroom,
   type KeepAlive,
+  modelScope,
   type NeutralResultMessage,
   type NeutralUserMessage,
   OVER_STATUSES,
@@ -103,14 +106,13 @@ export const keepAliveState = (
   if (row.cacheCold) {
     return { ...base, state: "cold" };
   }
-  if (
-    usage?.windows.some(
-      (window) =>
-        window.kind === "session" &&
-        window.severity === "critical" &&
-        (!window.resetsAt || Date.parse(window.resetsAt) > now)
-    )
-  ) {
+  // Paused while the window that binds the session (core `headroom` over
+  // its bearing windows, whichever the account has) is critical.
+  const binds = headroom(
+    bearing(usage?.windows ?? [], modelScope(row.model), now),
+    now
+  )?.window;
+  if (binds?.severity === "critical") {
     return { ...base, state: "paused-usage" };
   }
   const expires = promptCacheExpiresAt(row);

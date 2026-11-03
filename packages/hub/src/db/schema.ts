@@ -2474,6 +2474,12 @@ export const accountReadings = sqliteTable("account_readings", {
     .references(() => accounts.id, { onDelete: "cascade" }),
   subscription: text("subscription"),
   overage: storedJson(AccountOverageSchema)("overage"),
+  /**
+   * The account's window set as its provider's last report that named it
+   * carried (core `AccountReading.windowKinds`): the keys of its windows.
+   * Null until a report names it.
+   */
+  windowKinds: storedJson(z.array(z.string()))("window_kinds"),
   lastSeenAt: timestamp("last_seen_at").notNull(),
 });
 

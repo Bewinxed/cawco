@@ -17,6 +17,7 @@ import {
   type LimitWindow,
   type ModelInfo,
   type ProviderRouting,
+  windowKey as windowSetKey,
 } from "@cawco/core";
 import { DAY_MS } from "@cawco/core/time";
 import { and, asc, eq, gt, gte, inArray, lte, max, ne, sql } from "drizzle-orm";
@@ -125,18 +126,17 @@ export interface AccountsDb {
   /**
    * Lays one report over the account's reading: windows replace the ones of
    * the same kind and scope, the rest are kept, except a kept one whose reset
-   * has passed by `at`, which is over and is dropped. Appends every window
-   * that moved to the history series. The reading's time is `at` only when
-   * the report carries windows: a plan alone (a probe's, a session's start)
-   * says nothing of them.
+   * has passed by `at`, which is over, and one outside the window set the
+   * report names (`windowKinds`, core `AccountReading.windowKinds`), which
+   * the account no longer has: both are dropped. A report naming no set
+   * keeps the one held. Appends every window that moved to the history
+   * series. The reading's time is `at` only when the report carries
+   * windows: a plan alone (a probe's, a session's start) says nothing of
+   * them.
    */
   readonly putReading: (
     accountId: string,
-    report: {
-      overage?: AccountOverage | null;
-      subscription?: string | null;
-      windows?: LimitWindow[];
-    },
+    report: ReadingReport,
     at?: number
   ) => void;
   /**
@@ -215,6 +215,15 @@ const sameIdentityAs = (
     eq(accounts.orgId, identity.orgId)
   );
 
+/** One report laid over an account's reading ({@link AccountsDb.putReading}). */
+interface ReadingReport {
+  overage?: AccountOverage | null;
+  subscription?: string | null;
+  /** The account's window set, as the report names it; null or absent: it names none. */
+  windowKinds?: string[] | null;
+  windows?: LimitWindow[];
+}
+
 /** A window's identity in a reading: its kind and the model it is scoped to. */
 const windowKey = (w: LimitWindow): string =>
   `${w.kind}\u0000${w.scopeLabel ?? ""}`;
@@ -226,13 +235,10 @@ const windowKey = (w: LimitWindow): string =>
  */
 const readingValues = (
   previous: typeof accountReadings.$inferSelect | undefined,
-  report: {
-    overage?: AccountOverage | null;
-    subscription?: string | null;
-    windows?: LimitWindow[];
-  },
+  report: ReadingReport,
   at: number
 ) => ({
+  windowKinds: report.windowKinds ?? previous?.windowKinds ?? null,
   subscription:
     report.subscription === undefined
       ? (previous?.subscription ?? null)
@@ -245,16 +251,26 @@ const readingValues = (
       : new Date(at),
 });
 
-/** The held windows a report at `at` did not name whose reset has passed by then. */
+/**
+ * The held windows a report at `at` did not name that are gone: one whose
+ * reset has passed by then, and one outside the window set the report
+ * names (`kinds`; null: it names none).
+ */
 const overWindows = (
   held: ReadonlyMap<string, LimitWindow>,
   reported: readonly LimitWindow[],
+  kinds: readonly string[] | null,
   at: number
 ): LimitWindow[] => {
   const named = new Set(reported.map(windowKey));
+  const set = kinds ? new Set(kinds) : null;
   return [...held].flatMap(([key, w]) => {
+    if (named.has(key)) {
+      return [];
+    }
     const reset = w.resetsAt ? Date.parse(w.resetsAt) : Number.NaN;
-    return !named.has(key) && Number.isFinite(reset) && reset <= at ? [w] : [];
+    const over = Number.isFinite(reset) && reset <= at;
+    return over || (set && !set.has(windowSetKey(w))) ? [w] : [];
   });
 };
 
@@ -607,6 +623,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           windows: windows.get(row.accountId) ?? [],
           subscription: row.subscription,
           overage: row.overage,
+          windowKinds: row.windowKinds,
           lastSeenAt: row.lastSeenAt.getTime(),
         }));
     },
@@ -667,13 +684,15 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           })
           .run();
         // A window this report did not name whose reset has passed is over:
-        // what it said is of a window that no longer runs. The windows
-        // reported replace their own rows, read after the ones this report
-        // did not name; every other window stays as it was.
+        // what it said is of a window that no longer runs. One outside the
+        // window set the report names is a window the account no longer
+        // has. The windows reported replace their own rows, read after the
+        // ones this report did not name; every other window stays as it was.
+        const kinds = report.windowKinds ?? null;
         const replaced = [
-          ...(report.windows === undefined
+          ...(report.windows === undefined && kinds === null
             ? []
-            : overWindows(before, reported, at)),
+            : overWindows(before, reported, kinds, at)),
           ...reported,
         ];
         for (const w of replaced) {
