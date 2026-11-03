@@ -26,6 +26,7 @@
     stepper = true,
     onpress,
     onstep,
+    lang,
   }: {
     review: Review;
     kept: string;
@@ -35,6 +36,8 @@
     stepper?: boolean;
     onpress: (state: string, variant: string | null) => void;
     onstep: (state: string) => void;
+    /** The page's language, for the steps' figures. */
+    lang: string | undefined;
   } = $props();
 
   const path = $derived(pathOf(review));
@@ -161,7 +164,7 @@
 
   {#if stepper}
     <div class="border-t border-border-hairline pt-space-2">
-      <Stepper {at} {onstep} {path} />
+      <Stepper {at} {lang} {onstep} {path} />
     </div>
   {/if}
 </div>
