@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { deliverableKind } from "@cawco/core/deliverables";
   /**
    * A file of the project's folder on the hub, at its address on the
    * project page (`?file=<path>`, folderFileHref), drawn as what it is
@@ -12,7 +13,7 @@
    * A path the hub refuses (not in the folder, outside it) says so in the
    * hub's words; only the hub reads the folder.
    */
-  import { deliverableKind } from "@cawco/core/deliverables";
+  import { commonWords } from "@cawco/core/words/common";
   import { filesWords } from "@cawco/core/words/files";
   import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -29,8 +30,8 @@
     projectId,
     path,
     onclose,
-    page = false,
     backLabel = "",
+    page = false,
   }: {
     projectId: string;
     path: string;
@@ -152,7 +153,7 @@
       <BarGlass form="group">
         <BarItem
           icon={IconChevronLeft}
-          label={backLabel ? `Back to ${backLabel}` : "Back"}
+          label={commonWords.backTo(backLabel)}
           onclick={onclose}
         />
       </BarGlass>

@@ -158,7 +158,9 @@
   <DelegateTail instanceId={id} note={noteOf(id, tone)} />
   {#if open}
     <div data-slot="acts" class="mt-space-3 flex gap-space-2">
-      <Button href={open} size="sm" variant="outline">Open session</Button>
+      <Button href={open} size="sm" variant="outline"
+        >{commonWords.openSession}</Button
+      >
     </div>
   {/if}
 </div>

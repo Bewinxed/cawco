@@ -922,6 +922,17 @@ public enum Words {
 
         /// Sends again what the hub never took: a message's, a comment's line.
         public static let sendAgain = "Send again"
+
+        /// Back, the chevron alone, named by where it goes (DESIGN.md, The Title Bars Follow Liquid Glass Rule).
+        public static func backTo(place: String) -> String {
+            "Back to \(place)"
+        }
+
+        /// Close, the close symbol alone: a sheet's, a card's, a column's.
+        public static let close = "Close"
+
+        /// Dives into a session from where it is glanced at: the peek, its card.
+        public static let openSession = "Open session"
     }
 
     public enum Transcript {

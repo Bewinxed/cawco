@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
+  import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
   /**
    * Caw's panel on the project's page (CawFloat): the project's
    * conversation, a session like any other drawn by SessionPane, docked, so
@@ -18,8 +20,7 @@
    *   session's card (SessionDetails); on the conversation the project's
    *   events reach, its harness and model are the project's (ModelSection).
    */
-  import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
-  import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
+  import { commonWords } from "@cawco/core/words/common";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { untrack } from "svelte";
@@ -299,7 +300,7 @@
           <BarGlass form="group">
             <Drawer.Close>
               {#snippet child({ props })}
-                <BarItem icon={IconClose} label="Close" {props} />
+                <BarItem icon={IconClose} label={commonWords.close} {props} />
               {/snippet}
             </Drawer.Close>
           </BarGlass>

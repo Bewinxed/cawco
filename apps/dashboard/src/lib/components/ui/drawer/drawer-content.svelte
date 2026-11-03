@@ -61,6 +61,7 @@
 </script>
 
 <script lang="ts">
+  import { commonWords } from "@cawco/core/words/common";
   import type { ComponentProps, Snippet } from "svelte";
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
   import { mirror } from "#lib/cawco/page-marks.js";
@@ -272,7 +273,7 @@
         <BarGlass form="group">
           <DrawerPrimitive.Close>
             {#snippet child({ props })}
-              <BarItem icon={IconClose} label="Close" {props} />
+              <BarItem icon={IconClose} label={commonWords.close} {props} />
             {/snippet}
           </DrawerPrimitive.Close>
         </BarGlass>

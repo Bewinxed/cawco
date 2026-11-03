@@ -104,9 +104,9 @@
     onmove,
     onchanged,
     onclose,
+    backLabel = "",
     onopen,
     page = false,
-    backLabel = "",
     switcher,
   }: {
     projectId: string;
@@ -126,7 +126,7 @@
     onopen: (id: string) => void;
     /** A phone: the task is its own page, with Back, not a card beside the board. */
     page?: boolean;
-    /** What Back says on a phone's page. */
+    /** Where Back goes on a phone's page (its project), named in its tooltip ("Back to …"). */
     backLabel?: string;
     /** The switch between what stands beside a conversation (SideSplit). */
     switcher?: Snippet;
@@ -805,7 +805,7 @@
       <BarGlass form="group">
         <BarItem
           icon={IconChevronLeft}
-          label={backLabel ? `Back to ${backLabel}` : "Back"}
+          label={commonWords.backTo(backLabel)}
           onclick={onclose}
         />
       </BarGlass>
