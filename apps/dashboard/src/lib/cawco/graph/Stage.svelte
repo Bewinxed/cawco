@@ -476,9 +476,9 @@
   let marker = $state<HTMLElement>();
   /**
    * Brings the region `els` stand in into view in the stage's scroller,
-   * room for a ring round it, never cut at its head: on open, the region
-   * the kept state changed. While comparing, the first difference's ring
-   * stands for it.
+   * room for a ring round it, never cut at its head: the region the kept
+   * state changed, as the phone's drawer moves to another stop. While
+   * comparing, the first difference's ring stands for it.
    */
   export async function reveal(els: readonly Element[]): Promise<void> {
     const first = against ? found[0] : undefined;
