@@ -72,13 +72,33 @@ export const normaliseRemote = (url: string): string | null => {
 /** A remote read is local git; past this the machine is not going to answer it. */
 const REMOTE_READ_MS = 10_000;
 
+/** A root commit as git prints one: a sha1 or sha256 object name. */
+const ROOT_COMMIT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+
+/** What a checkout says of the repository it is: its remote and its root commit. */
+export interface CheckoutRepository {
+  /** Its `origin`, normalised ({@link normaliseRemote}); null: none read. */
+  readonly remote: string | null;
+  /**
+   * The root commit HEAD reaches by first parents: which repository the
+   * folder is, the same in every clone of it on any machine (core
+   * hub-repo.ts). Null: none read (no commit yet, or not a repository).
+   */
+  readonly root: string | null;
+}
+
+/** A checkout nothing was read of. */
+export const NOTHING_READ: CheckoutRepository = { remote: null, root: null };
+
 /**
- * The normalised `origin` of the folder `path` on `machineId`, read by running
- * git there. Anything that keeps it from answering (an offline machine, a
- * folder that is gone or not a repository, no `origin`) is null, never an
- * error: a project without a remote is still a project.
+ * The repository the folder `path` on `machineId` is, read by one run of
+ * git there: its normalised `origin` and its root commit. Anything that
+ * keeps either from answering (an offline machine, a folder that is gone or
+ * not a repository, no `origin`, no commit) is null, never an error: a
+ * project without a remote is still a project. An offline machine answers
+ * neither.
  */
-export const readRemote = async (
+export const readCheckout = async (
   run: (
     machineId: string,
     cwd: string,
@@ -87,17 +107,24 @@ export const readRemote = async (
   ) => Promise<CommandResult>,
   machineId: string,
   path: string
-): Promise<string | null> => {
+): Promise<CheckoutRepository> => {
   try {
     const result = await run(
       machineId,
       path,
-      `${SAFE_GIT_SHELL}git remote get-url origin`,
+      `${SAFE_GIT_SHELL}printf '%s\\n%s\\n' "$(git remote get-url origin 2>/dev/null)" "$(git rev-list --max-parents=0 --first-parent HEAD 2>/dev/null)"`,
       REMOTE_READ_MS
     );
-    return result.exitCode === 0 ? normaliseRemote(result.stdout) : null;
+    if (result.exitCode !== 0) {
+      return NOTHING_READ;
+    }
+    const [origin = "", root = ""] = result.stdout.split("\n");
+    return {
+      remote: origin.trim() ? normaliseRemote(origin) : null,
+      root: ROOT_COMMIT.test(root.trim()) ? root.trim() : null,
+    };
   } catch {
-    return null;
+    return NOTHING_READ;
   }
 };
 

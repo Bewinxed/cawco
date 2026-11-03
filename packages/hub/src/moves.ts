@@ -112,6 +112,8 @@ export interface MoveState {
   progress?: MoveJob["progress"];
   /** The first prompt's send, so it goes once whatever restarts. */
   promptUuid: string;
+  /** The source's root commit: the target's checkout is that repository, recorded as it is added. */
+  root?: string;
   /** The snapshot taken, or (no snapshot step) the source's HEAD to check out. */
   snapshot?: MoveSnapshotResult;
   /** The branch a snapshot goes to. */
@@ -687,6 +689,50 @@ export const createMoves = (deps: MovesDeps) => {
     };
   };
 
+  /**
+   * The checkout among `theres` (the project's on the target) whose root
+   * commit is `root`: each as recorded, one never recorded read on the
+   * target now while it is here, and kept.
+   */
+  const sameOnTarget = async (
+    root: string,
+    targetMachineId: string,
+    theres: readonly PlaceRow[]
+  ): Promise<PlaceRow | undefined> => {
+    const recorded = theres.find((place) => place.root === root);
+    if (recorded || !deps.online(targetMachineId)) {
+      return recorded;
+    }
+    const unread = theres.filter((place) => place.root === null);
+    const read = await Promise.all(
+      unread.map((place) => inspect(targetMachineId, place.path))
+    );
+    return unread.find((place, at) => {
+      const checkout = read[at];
+      if (checkout?.root) {
+        db.setPlaceRoot(place.id, checkout.root);
+      }
+      return checkout?.root === root;
+    });
+  };
+
+  /**
+   * A source whose root was never recorded, read now: kept, and its
+   * repository looked for on the target as a recorded one is.
+   */
+  const readNow = (
+    sourcePlace: PlaceRow,
+    read: MoveInspection,
+    targetMachineId: string,
+    theres: readonly PlaceRow[]
+  ): Promise<PlaceRow | undefined> => {
+    if (!read.root || sourcePlace.root) {
+      return Promise.resolve(undefined);
+    }
+    db.setPlaceRoot(sourcePlace.id, read.root);
+    return sameOnTarget(read.root, targetMachineId, theres);
+  };
+
   /** No move: the project's checkout `there` on the target is the source's repository already. */
   const alreadyThere = (project: ProjectRow, there: PlaceRow): Plan => ({
     project,
@@ -707,7 +753,10 @@ export const createMoves = (deps: MovesDeps) => {
    * goes, what it fetches, and why it can't, as the New session modal's
    * reading line says it. A checkout of the project on the target that is
    * the source's repository (the same root commit) needs no move; one of
-   * another of its repositories is no reason not to move.
+   * another of its repositories is no reason not to move. Each checkout's
+   * root is the one its machine last said ({@link PlaceRow.root}), so a
+   * source whose machine is away still finds its repository on the target;
+   * only a root never recorded is read live, the source's from its machine.
    */
   const plan = async (
     projectId: string,
@@ -719,10 +768,19 @@ export const createMoves = (deps: MovesDeps) => {
       throw new MoveRefused(404, `There is no project ${projectId}.`);
     }
     const sourcePlace = sourceOf(project, asked.from);
-    const theres = project.places.filter(
-      (place) =>
-        place.machineId === targetMachineId && place.kind === "checkout"
-    );
+    // A folder asked for is where it goes, whatever else is checked out there.
+    const theres = asked.path
+      ? []
+      : project.places.filter(
+          (place) =>
+            place.machineId === targetMachineId && place.kind === "checkout"
+        );
+    const known = sourcePlace?.root
+      ? await sameOnTarget(sourcePlace.root, targetMachineId, theres)
+      : undefined;
+    if (known) {
+      return alreadyThere(project, known);
+    }
     const refused = sourceRefusal(project, sourcePlace, targetMachineId);
     if (refused || !sourcePlace) {
       return refusedPlan(project, asked.path ?? "", refused ?? "");
@@ -737,20 +795,16 @@ export const createMoves = (deps: MovesDeps) => {
     // A plain folder being made a repository is read once it is one (or
     // stayed a folder): what the move asks never depends on which finished first.
     await deps.settled(sourcePlace.machineId, sourcePlace.path);
-    const [sourceInspection, targetInspection, ...checkouts] =
-      await Promise.all([
-        inspect(sourcePlace.machineId, sourcePlace.path),
-        inspect(targetMachineId, targetPath),
-        ...(asked.path
-          ? []
-          : theres.map((place) => inspect(targetMachineId, place.path))),
-      ]);
-    const same = theres.find((_, at) => {
-      const checkout = checkouts[at];
-      return (
-        checkout !== undefined && sameRepository(sourceInspection, checkout)
-      );
-    });
+    const [sourceInspection, targetInspection] = await Promise.all([
+      inspect(sourcePlace.machineId, sourcePlace.path),
+      inspect(targetMachineId, targetPath),
+    ]);
+    const same = await readNow(
+      sourcePlace,
+      sourceInspection,
+      targetMachineId,
+      theres
+    );
     if (same) {
       return alreadyThere(project, same);
     }
@@ -1030,6 +1084,7 @@ export const createMoves = (deps: MovesDeps) => {
       ),
       targetHome: t.home,
       bigFiles: s.bigFiles,
+      ...(s.root ? { root: s.root } : {}),
       snapshotBranch: moveBranch(deps.machineName(sourceMachineId)),
       steps,
       bytes: s.bytes,
@@ -1251,6 +1306,9 @@ export const createMoves = (deps: MovesDeps) => {
       path: state.targetPath,
       kind: "checkout",
     });
+    if (state.root) {
+      db.setPlaceRoot(place.id, state.root);
+    }
     if (added) {
       deps.placesChanged(place.machineId, row.projectId);
     }

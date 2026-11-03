@@ -233,6 +233,7 @@ export const MoveStateShape = z.object({
   moved: z.string().optional(),
   progress: MoveJobShape.shape.progress.optional(),
   promptUuid: z.string(),
+  root: z.string().optional(),
   snapshot: MoveSnapshotResultShape.optional(),
   snapshotBranch: z.string(),
   sourceHome: z.string(),

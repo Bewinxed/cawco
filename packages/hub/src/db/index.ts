@@ -744,10 +744,10 @@ export interface DbShape {
     lastTurnAt: number | null;
     threads: number;
   };
-  /** Every project's checkouts on `machineId`, oldest first: each one's `origin` is a link to read. */
+  /** Every project's checkouts on `machineId`, oldest first: each one's `origin` and root commit are to read. */
   readonly checkoutsOn: (
     machineId: string
-  ) => { projectId: string; path: string }[];
+  ) => { id: string; projectId: string; path: string }[];
   /** The gate workspaces, still with their checkout, that run a workspace's landing gate steps (the iOS build) on other machines. */
   readonly checkWorkspacesOf: (workspaceId: string) => WorkspaceRow[];
   /**
@@ -814,7 +814,8 @@ export interface DbShape {
   readonly createProject: (project: {
     id: string;
     name: string;
-    checkout?: { machineId: string; path: MachinePath };
+    /** Its first checkout, with the root commit read there (null: none read). */
+    checkout?: { machineId: string; path: MachinePath; root?: string | null };
     remote: string | null;
     /** Made with Caw: its Caw starts on. */
     caw?: boolean;
@@ -2170,6 +2171,9 @@ export interface DbShape {
   ) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
+  /** A move's "Don't move", remembered on its project; null forgets it. */
+  /** Records the root commit checkout place `id` was read at. */
+  readonly setPlaceRoot: (id: string, commit: string) => void;
   /** The accounts the project's sessions may run on; null: every account. */
   readonly setProjectAccounts: (id: string, accounts: string[] | null) => void;
   /** The project's spend cap and what reaching it does (project-caps.ts). */
@@ -2213,7 +2217,6 @@ export interface DbShape {
       >
     >
   ) => void;
-  /** A move's "Don't move", remembered on its project; null forgets it. */
   readonly setProjectMoveDeclined: (id: string, at: Date | null) => void;
   /** The stage template a project last had applied: its starter skills follow it. */
   readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
@@ -7791,6 +7794,7 @@ const make = async (path: string): Promise<DbShape> => {
     checkoutsOn: (machineId) =>
       db
         .select({
+          id: projectPlaces.id,
           projectId: projectPlaces.projectId,
           path: projectPlaces.path,
         })
@@ -7810,6 +7814,12 @@ const make = async (path: string): Promise<DbShape> => {
         .onConflictDoNothing()
         .returning({ remote: projectLinks.remote })
         .all().length > 0,
+    setPlaceRoot: (id, commit) => {
+      db.update(projectPlaces)
+        .set({ root: commit })
+        .where(eq(projectPlaces.id, id))
+        .run();
+    },
     projectLinkPublishedFrom: (projectId, segment) =>
       db
         .select({ remote: projectLinks.remote })
@@ -8544,6 +8554,7 @@ const make = async (path: string): Promise<DbShape> => {
               projectId: id,
               machineId: checkout.machineId,
               path: checkout.path,
+              root: checkout.root ?? null,
               kind: "checkout",
               isPrimary: true,
             })

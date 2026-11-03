@@ -764,6 +764,15 @@ export const projectPlaces = sqliteTable(
     isPrimary: integer("is_primary", { mode: "boolean" })
       .notNull()
       .default(false),
+    /**
+     * A checkout's root commit, the one its HEAD reaches by first parents:
+     * which repository it is, the same in every clone on any machine (core
+     * hub-repo.ts). Read with its origin as it is added and at each register
+     * of its machine (server.ts `learnCheckout`), so a move knows whether a
+     * checkout on the target is the source's repository with the source's
+     * machine away (moves.ts `plan`). Null: not read yet, or no commit.
+     */
+    root: text("root"),
     createdAt: stampedNow("created_at"),
   },
   (table) => [

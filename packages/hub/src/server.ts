@@ -902,7 +902,7 @@ import {
 } from "./project-settings";
 import { createProjectStarters, starterRoutes } from "./project-starters";
 import { createProjectStops } from "./project-stops";
-import { cloneRepository, readRemote } from "./projects";
+import { cloneRepository, NOTHING_READ, readCheckout } from "./projects";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
 import {
@@ -13625,7 +13625,7 @@ export const createServer = (
     // (agent layer.ts), a move makes it a repository with the person's yes
     // (moves.ts `askFor`), and a publish as it reads it (repo-publish.ts).
     // Its repository, a project's second among them, is linked by its origin.
-    await learnRemote(project.id, machineId, path);
+    await learnCheckout(place);
     return {
       ...projectOut(db.project(project.id) ?? project),
       place,
@@ -24361,18 +24361,28 @@ export const createServer = (
   };
 
   /**
-   * A project's link to the repository one of its checkouts is, read from
-   * its `origin`. Nothing read (the machine away, no `origin`) leaves it
-   * for the next chance. A link another project already has makes the two
-   * one project (project-merge.ts).
+   * What one of a project's checkouts says of its repository, read there:
+   * its root commit, kept on the checkout (a move compares it with the
+   * source's machine away, moves.ts `plan`), and its `origin`, linked to the
+   * project. Nothing read (the machine away, no `origin`, no commit) leaves
+   * it for the next chance. A link another project already has makes the
+   * two one project (project-merge.ts).
    */
-  const learnRemote = async (
-    projectId: string,
-    machineId: string,
-    path: string
-  ): Promise<void> => {
-    const remote = await readRemote(runOnMachine, machineId, path);
-    if (remote && db.addProjectLink(projectId, remote)) {
+  const learnCheckout = async (place: {
+    id: string;
+    projectId: string;
+    machineId: string;
+    path: string;
+  }): Promise<void> => {
+    const { remote, root } = await readCheckout(
+      runOnMachine,
+      place.machineId,
+      place.path
+    );
+    if (root) {
+      db.setPlaceRoot(place.id, root);
+    }
+    if (remote && db.addProjectLink(place.projectId, remote)) {
       await mergeSameRemote(merging, remote);
     }
   };
@@ -24516,6 +24526,31 @@ export const createServer = (
     return making;
   };
 
+  /** A folder of a repository `known` links joins it as a checkout, its root commit kept. */
+  const joinProject = (
+    known: ProjectRow,
+    checkout: { machineId: string; path: MachinePath; root: string | null }
+  ): ProjectMade => {
+    const { place, added } = db.addPlace({
+      projectId: known.id,
+      machineId: checkout.machineId,
+      path: checkout.path,
+      kind: "checkout",
+    });
+    if (checkout.root) {
+      db.setPlaceRoot(place.id, checkout.root);
+    }
+    if (added) {
+      placesChanged(checkout.machineId, known.id);
+    }
+    return {
+      project: db.project(known.id) ?? known,
+      place,
+      placeAdded: added,
+      joined: true,
+    };
+  };
+
   const makeOrJoinProject = async (asked: ProjectAsk): Promise<ProjectMade> => {
     const checkout = asked.checkout && {
       machineId: asked.checkout.machineId,
@@ -24526,30 +24561,17 @@ export const createServer = (
       ),
     };
     folderReadable(checkout?.machineId);
-    const remote = checkout
-      ? await readRemote(runOnMachine, checkout.machineId, checkout.path)
-      : null;
+    const { remote, root } = checkout
+      ? await readCheckout(runOnMachine, checkout.machineId, checkout.path)
+      : NOTHING_READ;
     const known = remote ? db.projectByRemote(remote) : undefined;
     if (known && checkout) {
-      const { place, added } = db.addPlace({
-        projectId: known.id,
-        ...checkout,
-        kind: "checkout",
-      });
-      if (added) {
-        placesChanged(checkout.machineId, known.id);
-      }
-      return {
-        project: db.project(known.id) ?? known,
-        place,
-        placeAdded: added,
-        joined: true,
-      };
+      return joinProject(known, { ...checkout, root });
     }
     const created = db.createProject({
       id: crypto.randomUUID(),
       name: asked.name,
-      ...(checkout ? { checkout } : {}),
+      ...(checkout ? { checkout: { ...checkout, root } } : {}),
       remote,
       caw: asked.caw ?? false,
       tapped: asked.tapped ?? null,
@@ -35131,8 +35153,8 @@ export const createServer = (
               Promise.all(
                 db
                   .checkoutsOn(message.machineId)
-                  .map(({ projectId, path }) =>
-                    learnRemote(projectId, message.machineId, path)
+                  .map((checkout) =>
+                    learnCheckout({ ...checkout, machineId: message.machineId })
                   )
               ).catch((error: unknown) =>
                 console.warn(

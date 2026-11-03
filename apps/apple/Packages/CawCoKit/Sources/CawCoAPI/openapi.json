@@ -31756,6 +31756,12 @@
                   },
                   "projectId": {
                     "type": "string"
+                  },
+                  "root": {
+                    "type": [
+                      "null",
+                      "string"
+                    ]
                   }
                 },
                 "required": [
@@ -31765,7 +31771,8 @@
                   "kind",
                   "machineId",
                   "path",
-                  "projectId"
+                  "projectId",
+                  "root"
                 ]
               }
             },
@@ -31947,6 +31954,12 @@
               },
               "projectId": {
                 "type": "string"
+              },
+              "root": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
             },
             "required": [
@@ -31956,7 +31969,8 @@
               "kind",
               "machineId",
               "path",
-              "projectId"
+              "projectId",
+              "root"
             ]
           },
           "placeAdded": {
@@ -31991,6 +32005,12 @@
                 },
                 "projectId": {
                   "type": "string"
+                },
+                "root": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 }
               },
               "required": [
@@ -32000,7 +32020,8 @@
                 "kind",
                 "machineId",
                 "path",
-                "projectId"
+                "projectId",
+                "root"
               ]
             }
           },
@@ -32213,6 +32234,12 @@
                 },
                 "projectId": {
                   "type": "string"
+                },
+                "root": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 }
               },
               "required": [
@@ -32222,7 +32249,8 @@
                 "kind",
                 "machineId",
                 "path",
-                "projectId"
+                "projectId",
+                "root"
               ]
             }
           },
@@ -32411,6 +32439,12 @@
               },
               "projectId": {
                 "type": "string"
+              },
+              "root": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
             },
             "required": [
@@ -32420,7 +32454,8 @@
               "kind",
               "machineId",
               "path",
-              "projectId"
+              "projectId",
+              "root"
             ]
           },
           "placeAdded": {
@@ -32455,6 +32490,12 @@
                 },
                 "projectId": {
                   "type": "string"
+                },
+                "root": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 }
               },
               "required": [
@@ -32464,7 +32505,8 @@
                 "kind",
                 "machineId",
                 "path",
-                "projectId"
+                "projectId",
+                "root"
               ]
             }
           },
@@ -32649,6 +32691,12 @@
                 },
                 "projectId": {
                   "type": "string"
+                },
+                "root": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 }
               },
               "required": [
@@ -32658,7 +32706,8 @@
                 "kind",
                 "machineId",
                 "path",
-                "projectId"
+                "projectId",
+                "root"
               ]
             }
           },
