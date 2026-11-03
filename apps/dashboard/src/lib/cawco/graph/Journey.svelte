@@ -120,11 +120,12 @@
        draws none for a path of one), and a scrollbar that came with them
        took its width from the rows, which wrapped anew. -->
   <!-- Hover is the list's one ghost, as the app's own lists draw it; the
-       kept row is marked in its own words (StateItem), never a fill. -->
+       kept row is marked in its own words (StateItem), never a fill. Cut
+       at an edge, the list fades there (the house edge fade). -->
   <div
     bind:this={list}
     {@attach heard}
-    class="-mx-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto px-space-1 scrollbar-gutter-stable"
+    class="kit-edge-fade-block -mx-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto px-space-1 scrollbar-gutter-stable"
     {@attach highlight({ rows: '[data-slot="state-item"]' })}
   >
     <div class="min-w-0" {@attach relaid}>
