@@ -273,6 +273,42 @@
     --c-clip-effect: var(--mark-5);
     /* The design graph's Animation timeline: the bar and glyph of a clip whose property is none of the kinds (a custom property's). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance. */
     --c-clip-other: var(--ink-muted);
+    /* The design graph's Animation timeline: the fill of a size clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-size). */
+    --c-clip-size-wash: color-mix(
+      in oklab,
+      var(--c-clip-size) 22%,
+      transparent
+    );
+    /* The design graph's Animation timeline: the fill of a move clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-move). */
+    --c-clip-move-wash: color-mix(
+      in oklab,
+      var(--c-clip-move) 22%,
+      transparent
+    );
+    /* The design graph's Animation timeline: the fill of a fade clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-fade). */
+    --c-clip-fade-wash: color-mix(
+      in oklab,
+      var(--c-clip-fade) 22%,
+      transparent
+    );
+    /* The design graph's Animation timeline: the fill of a tint clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-tint). */
+    --c-clip-tint-wash: color-mix(
+      in oklab,
+      var(--c-clip-tint) 22%,
+      transparent
+    );
+    /* The design graph's Animation timeline: the fill of a effect clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-effect). */
+    --c-clip-effect-wash: color-mix(
+      in oklab,
+      var(--c-clip-effect) 22%,
+      transparent
+    );
+    /* The design graph's Animation timeline: the fill of a other clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-other). */
+    --c-clip-other-wash: color-mix(
+      in oklab,
+      var(--c-clip-other) 22%,
+      transparent
+    );
     /* The ring round what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): the done glyph's green, drawn on the element's own shape outside its box, so it never covers what the element says; never coral (The One Target Rule). */
     --c-change-ring: var(--status-done-glyph);
     --brand-ink: var(--coral-11);
