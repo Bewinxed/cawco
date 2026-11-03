@@ -72,7 +72,8 @@ checks.report();                      // one PASS/FAIL line per rule over every 
 ```
 
 Any page, from the command line, once per width (under 640 a phone's touch
-screen), exiting 1 on any finding. It reads once the page has drawn:
+screen), in the scheme the page follows from the OS (`--scheme`, light when
+not given), exiting 1 on any finding. It reads once the page has drawn:
 something in the scope to read and no element coming or going for a quiet
 second, up to 30s (`untilDrawn`; a dev route vite is still compiling holds
 3 elements at `load`), and says so when the bound runs out. A read whose
@@ -80,7 +81,7 @@ scope drew nothing fails every rule, there and in a spec's report
 (`specs/web/drawn-wait`):
 
 ```sh
-bun scripts/probe-kit/rendered-checks.ts <url> --width 1540x800 --width 390x844 [--scope <selector>]
+bun scripts/probe-kit/rendered-checks.ts <url> --width 1540x800 --width 390x844 [--scope <selector>] [--scheme light|dark]
 ```
 
 | Rule | Read by | What it reads |
