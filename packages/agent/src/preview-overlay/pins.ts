@@ -77,6 +77,19 @@ import {
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
+import {
+  type ComputePositionReturn,
+  computePosition,
+  detectOverflow,
+  flip,
+  type Middleware,
+  offset,
+  type Placement,
+  type Platform,
+  platform,
+  shift,
+  type VirtualElement,
+} from "@floating-ui/dom";
 import { absences } from "./absent";
 import { artifact, PLACED } from "./artifact";
 import { type Box, clipOf, grow, meets, pageBox, rectOf } from "./frames";
@@ -100,7 +113,7 @@ const SVG = "http://www.w3.org/2000/svg";
 const RING = 2;
 /** The radius of a pill's tail corner: `--radius-hair`. */
 const TAIL_R = 2;
-/** The longest text whose lines a pin's point is read against (`lineEnd`), characters. Our call: a paragraph's, never a page's. */
+/** The longest text whose lines a pin's point is read against (`lineAt`), characters. Our call: a paragraph's, never a page's. */
 const LINE_READ_MOST = 4000;
 /** Room round a mark's crop, px. Our call. */
 const CROP_PAD = 24;
@@ -177,8 +190,8 @@ export interface Pins {
   cropOf: (id: string) => { box: Box; el: Element | null; look: string } | null;
   /** The comment being written stands here (its hollow pill, no number yet), or none. */
   draft: (target: DraftTarget | null) => void;
-  /** Pins drawn again where their elements stand now. */
-  draw: () => void;
+  /** Pins drawn again where their elements stand now: done once they are painted (Floating UI places them in a promise). */
+  draw: () => Promise<void>;
   /** The layer fixed to the viewport, where pins on the page as a whole stand. */
   fixed: SVGSVGElement;
   /** The pin the host focused (J, K, its row), outlined and brought into view out from under the host's chrome; or none. */
@@ -243,8 +256,28 @@ interface Standing {
   /** On the page as a whole: drawn at the viewport's top-right, fixed to it. */
   page: boolean;
   shown: boolean;
-  /** The pill stands up-left of its point (a mid-line press moved to its line's start): its tail on the point's right. */
-  start?: boolean;
+}
+
+/**
+ * What a pill is placed against, the page's px: the point it stands on, and
+ * the line of words that point is on; what it stands on (its element's box,
+ * or its ink's) and its element; on the page as a whole, the viewport's
+ * corner. A pin on ink is always shown: its box is the ink's, drawn where
+ * it stands.
+ */
+interface Spot {
+  box: Box;
+  el: Element | null;
+  ink?: true;
+  line: Box | null;
+  page: boolean;
+  point: [number, number];
+}
+
+/** A pill as placed: its box and tail, and the point its tail stands on, the page's px. */
+interface Placed {
+  at: [number, number];
+  pill: Pill;
 }
 
 /** The corner a pill's tail is, standing on its point; none for a pin on the page as a whole. */
@@ -257,6 +290,55 @@ interface Pill {
 }
 
 const round = (n: number) => Math.round(n * 10_000) / 10_000;
+
+/** The page's edges a pill keeps off: its ring's width in from the document's (its top, not the viewport's, so a pill never turns over as the page scrolls). */
+const EDGES = { padding: RING, rootBoundary: "document" } as const;
+
+/** The corner of a pill standing on its point, by where Floating UI placed the pill round it. */
+const TAILS: Partial<Record<Placement, Tail>> = {
+  "top-start": "bottom-start",
+  "top-end": "bottom-end",
+  "bottom-start": "top-start",
+  "bottom-end": "top-end",
+  "right-end": "bottom-start",
+  "left-end": "bottom-end",
+};
+
+/** A box of the page's px as Floating UI reads a reference: a virtual element, its box in the viewport now, through every frame it stands in (frames.ts `pageBox`). */
+const pageReference = (box: Box): VirtualElement => ({
+  getBoundingClientRect: () =>
+    DOMRect.fromRect({
+      x: box.x - scrollX,
+      y: box.y - scrollY,
+      width: box.w,
+      height: box.h,
+    }),
+});
+
+/** Whether the pill as `flip` left it fits on its side: with no room past a line's end nor before its start, it stands at its point instead. */
+const roomOnSide: Middleware = {
+  name: "room",
+  async fn(state) {
+    const overflow = await detectOverflow(state, EDGES);
+    const side = state.placement.split("-")[0] as keyof typeof overflow;
+    return { data: { fits: overflow[side] <= 0 } };
+  },
+};
+
+/** The pill Floating UI placed, `w` by `h`, its tail, and the point its tail stands on. */
+const placedAt = (
+  { placement, x, y }: ComputePositionReturn,
+  w: number,
+  h: number
+): Placed => {
+  const tail = TAILS[placement] ?? "bottom-start";
+  const right = tail.endsWith("end");
+  const below = tail.startsWith("bottom");
+  return {
+    at: [right ? x + w : x, below ? y + h : y],
+    pill: { box: { x, y, w, h }, tail },
+  };
+};
 
 /** `box` with {@link CROP_PAD} round it. */
 export const padded = (box: Box): Box => ({
@@ -508,51 +590,36 @@ export function startPins(deps: PinsDeps): Pins {
     !!el &&
     (el === el.ownerDocument.body || el === el.ownerDocument.documentElement);
 
-  /** Where `el` stands with a pin at `point` on it, the page's px. */
-  const standingOn = (
+  /** Where `el` stands with a pin at `point` on it, the page's px: the point, and the line of words it is on. */
+  const spotOn = (
     el: Element,
-    point: { x: number; y: number } | undefined,
-    paint: Paint
-  ): Standing => {
+    point: { x: number; y: number } | undefined
+  ): Spot => {
     const box = pageBox(el);
     if (isPage(el)) {
-      return { at: [0, 0], box, el, page: true, shown: true };
+      return { box, el, line: null, page: true, point: [0, 0] };
     }
-    const spot = point ?? { x: 1, y: 0 };
+    const at = point ?? { x: 1, y: 0 };
     const pressed: [number, number] = [
-      box.x + spot.x * box.w,
-      box.y + spot.y * box.h,
+      box.x + at.x * box.w,
+      box.y + at.y * box.h,
     ];
-    const line = lineEnd(el, pressed, paint);
-    const at = line?.at ?? pressed;
-    return {
-      at,
-      box,
-      el,
-      page: false,
-      shown: showsAt(el, at),
-      ...(line?.start ? { start: true } : {}),
-    };
+    return { box, el, line: lineAt(el, pressed), page: false, point: pressed };
   };
 
   /**
-   * A point pressed in the middle of a line of `el`'s words, moved to that
-   * line's end, at its foot: the pill stands up-right of its point, so on
-   * the press itself it would stand over the words of the line above and
-   * of its own. At the line's end it stands in the line's own band past its
-   * last word, covering none. Where the line runs to the page's edge and
-   * leaves no room past it, it stands before the line's first word instead
-   * (`start`: up-left of the point, in the margin the line starts after).
-   * Null where the point is on no line of words (a picture, the padding,
-   * past a line's end), or neither side of the line has a pill's room. A
-   * long element's lines are not read: past {@link LINE_READ_MOST}
-   * characters the press stands where it was.
+   * The line of `el`'s words a point pressed in its middle is on, the
+   * page's px: the pill stands past that line's end, or before its start
+   * (`place`), never on the press itself, where it would stand over the
+   * words of the line above and of its own. Floating UI's `inline` reads a
+   * reference's lines, but of two or more that meet it takes the band of
+   * the outermost, not the line under a point; so the line is read here
+   * from the same `getClientRects`. Null where the point is on no line of
+   * words (a picture, the padding, past a line's end). A long element's
+   * lines are not read: past {@link LINE_READ_MOST} characters the press
+   * stands where it was.
    */
-  const lineEnd = (
-    el: Element,
-    [px, py]: [number, number],
-    paint: Paint
-  ): { at: [number, number]; start: boolean } | null => {
+  const lineAt = (el: Element, [px, py]: [number, number]): Box | null => {
     if (
       el.ownerDocument !== document ||
       (el.textContent?.length ?? 0) > LINE_READ_MOST
@@ -570,34 +637,32 @@ export function startPins(deps: PinsDeps): Pins {
       return null;
     }
     const right = Math.max(...fragments.map((r) => r.right));
-    const left = Math.min(...fragments.map((r) => r.left));
-    const bottom = Math.max(...fragments.map((r) => r.bottom));
-    const room = document.documentElement.clientWidth - RING;
     if (x >= right) {
       return null;
     }
-    // The room past the line's end: a three-figure pill and its rings; before
-    // its start, in the page's margin: a two-figure pill and its ring.
-    if (right + pillWidth("000", paint) + 2 * RING <= room) {
-      return { at: [right + scrollX + 1, bottom + scrollY], start: false };
-    }
-    if (left - pillWidth("00", paint) - RING >= 0) {
-      return { at: [left + scrollX - 1, bottom + scrollY], start: true };
-    }
-    return null;
+    const left = Math.min(...fragments.map((r) => r.left));
+    const top = Math.min(...fragments.map((r) => r.top));
+    const bottom = Math.max(...fragments.map((r) => r.bottom));
+    return {
+      x: left + scrollX,
+      y: top + scrollY,
+      w: right - left,
+      h: bottom - top,
+    };
   };
 
   /** Where pin `pin` stands in the page now, or null when it is not on it. */
-  const standing = (pin: Pin, paint: Paint): Standing | null => {
+  const spotOf = (pin: Pin): Spot | null => {
     if (pin.ink) {
       const box = deps.groupBox(pin.ink);
       return box
         ? {
-            at: [box.x + box.w, box.y],
             box,
             el: anchoredEl(pin),
+            ink: true,
+            line: null,
             page: false,
-            shown: true,
+            point: [box.x + box.w, box.y],
           }
         : null;
     }
@@ -606,10 +671,103 @@ export function startPins(deps: PinsDeps): Pins {
     }
     if (wholePage(pin.anchor)) {
       const el = deps.locate(pin.anchor)?.el ?? document.body;
-      return el ? standingOn(el, undefined, paint) : null;
+      return el ? spotOn(el, undefined) : null;
     }
     const found = deps.locate(pin.anchor);
-    return found ? standingOn(found.el, pin.point, paint) : null;
+    return found ? spotOn(found.el, pin.point) : null;
+  };
+
+  /**
+   * Where a pill `w` wide stands on its spot, placed by Floating UI
+   * (`computePosition`) against a virtual reference in the page's px: past
+   * its line's end, in the line's band (`right-end`), else before its start
+   * (`left-end`); with room on neither side, or on no line, up-right of its
+   * point (`top-start`), up-left where the page's width leaves no room on
+   * the right, below where its top leaves none above (`flip`), held off the
+   * page's edges (`shift`). Its tail is the corner standing on the point.
+   * One on the page as a whole stands at the viewport's top-right corner,
+   * `--space-2` in, with no tail: no reference to place it against.
+   */
+  const place = async (
+    spot: Spot,
+    w: number,
+    paint: Paint
+  ): Promise<Placed> => {
+    const h = paint.height;
+    if (spot.page) {
+      const right = document.documentElement.clientWidth;
+      return {
+        at: [0, 0],
+        pill: {
+          box: { x: right - paint.inset - w, y: paint.inset, w, h },
+          tail: "none",
+        },
+      };
+    }
+    // The pill is drawn in the layer at the page's origin, not laid out:
+    // Floating UI reads the page's edges off its root, places the pill in
+    // the page's px (offset from the window), is told its size, and lays it
+    // left to right on every page.
+    const root = document.documentElement;
+    const sized: Platform = {
+      ...platform,
+      getDimensions: () => ({ width: w, height: h }),
+      getOffsetParent: () => window,
+      isRTL: () => false,
+    };
+    if (spot.line) {
+      const onLine = await computePosition(pageReference(spot.line), root, {
+        placement: "right-end",
+        platform: sized,
+        middleware: [
+          offset(1),
+          flip({
+            ...EDGES,
+            crossAxis: false,
+            fallbackPlacements: ["left-end"],
+          }),
+          roomOnSide,
+          shift(EDGES),
+        ],
+      });
+      if (onLine.middlewareData.room?.fits) {
+        return placedAt(onLine, w, h);
+      }
+    }
+    const [px, py] = spot.point;
+    const atPoint = await computePosition(
+      pageReference({ x: px, y: py, w: 0, h: 0 }),
+      root,
+      {
+        placement: "top-start",
+        platform: sized,
+        middleware: [
+          flip({
+            ...EDGES,
+            fallbackPlacements: ["top-end", "bottom-start", "bottom-end"],
+          }),
+          shift(EDGES),
+        ],
+      }
+    );
+    return placedAt(atPoint, w, h);
+  };
+
+  /** Where a pill `w` wide stands on `spot` now: placed ({@link place}), and whether its frames show its point. */
+  const standingAt = async (
+    spot: Spot,
+    w: number,
+    paint: Paint
+  ): Promise<Standing & { pill: Pill }> => {
+    const { at, pill } = await place(spot, w, paint);
+    return {
+      at,
+      box: spot.box,
+      el: spot.el,
+      page: spot.page,
+      pill,
+      shown: spot.page || !!spot.ink || showsAt(spot.el, at),
+    };
   };
 
   /**
@@ -710,38 +868,6 @@ export function startPins(deps: PinsDeps): Pins {
       ...[..."0123456789"].map((d) => measure?.measureText(d).width ?? 0)
     );
     return Math.max(paint.height, digit * label.length + 2 * paint.pad);
-  };
-
-  /**
-   * Where a pill `w` wide stands on its point `at` (the page's px): up-right
-   * of it, its tail on the point; up-left where the page's width leaves no
-   * room on the right; below where its top leaves none above. One on the
-   * page as a whole stands at the viewport's top-right corner, `--space-2`
-   * in, with no tail.
-   */
-  const pillAt = (where: Standing, w: number, paint: Paint): Pill => {
-    const h = paint.height;
-    if (where.page) {
-      const right = document.documentElement.clientWidth;
-      return {
-        box: { x: right - paint.inset - w, y: paint.inset, w, h },
-        tail: "none",
-      };
-    }
-    const [px, py] = where.at;
-    const edge = RING;
-    const right = scrollX + document.documentElement.clientWidth - edge;
-    const left = px + w <= right && !where.start ? px : px - w;
-    const above = py - h >= edge;
-    const top = above ? py - h : py;
-    const fromRight = left !== px;
-    let tail: Tail;
-    if (above) {
-      tail = fromRight ? "bottom-end" : "bottom-start";
-    } else {
-      tail = fromRight ? "top-end" : "top-start";
-    }
-    return { box: { x: Math.max(edge, left), y: top, w, h }, tail };
   };
 
   const stateOf = (pin: Pin | null): PinState => {
@@ -1064,31 +1190,53 @@ export function startPins(deps: PinsDeps): Pins {
     });
 
   /**
-   * Places each pin on the page, painting a pill for each its frames show;
-   * answers those drawn on the page and in the layer fixed to the viewport,
-   * and those that are gone: no anchor finds them, no frame they stand in is
-   * loading, and they have stood so for a while ({@link absences}).
+   * Where each pin stands now, placed ({@link standingAt}); the pins no
+   * anchor finds, apart. A resolved pin stands on the page only while its
+   * thread is open.
    */
-  const placeAll = (all: Pin[], paint: Paint) => {
+  const placeAll = async (all: Pin[], paint: Paint) => {
     const missing: Pin[] = [];
-    // A resolved pin stands on the page only while its thread is open.
     const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
+    const spots: { pin: Pin; spot: Spot }[] = [];
+    for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
+      const spot = spotOf(pin);
+      if (spot) {
+        spots.push({ pin, spot });
+      } else {
+        missing.push(pin);
+      }
+    }
+    const standings = await Promise.all(
+      spots.map(({ pin, spot }) =>
+        standingAt(spot, pillWidth(String(pin.number), paint), paint)
+      )
+    );
+    return {
+      missing,
+      standing: spots.map(({ pin }, i) => ({ pin, where: standings[i] })),
+    };
+  };
+
+  /**
+   * Each placed pin painted, a pill for each its frames show; answers those
+   * drawn on the page and in the layer fixed to the viewport, and those
+   * that are gone: no anchor finds them, no frame they stand in is loading,
+   * and they have stood so for a while ({@link absences}).
+   */
+  const paintAll = (
+    { missing, standing }: Awaited<ReturnType<typeof placeAll>>,
+    paint: Paint
+  ) => {
     const drawn: DrawnPill[] = [];
     const drawnFixed: DrawnPill[] = [];
-    for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
-      const where = standing(pin, paint);
-      if (!where) {
-        missing.push(pin);
-        continue;
-      }
-      const pill = pillAt(where, pillWidth(String(pin.number), paint), paint);
-      placed.set(pin.id, { ...where, pill });
+    for (const { pin, where } of standing) {
+      placed.set(pin.id, where);
       // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
       if (where.shown) {
         (where.page ? drawnFixed : drawn).push({
-          group: pinPill(pin, pill, paint),
+          group: pinPill(pin, where.pill, paint),
           id: pin.id,
-          pill,
+          pill: where.pill,
           number: pin.number,
         });
       }
@@ -1117,19 +1265,17 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   /** Where the comment being written stands now: on its ink, or on its element (the one the page holds now); null where neither stands. */
-  const draftStanding = (
-    draft: DraftTarget & { standing?: Standing; pill?: Pill },
-    paint: Paint
-  ): Standing | null => {
+  const draftSpot = (draft: DraftTarget): Spot | null => {
     if (draft.ink) {
       const box = deps.groupBox(draft.ink);
       return box
         ? {
-            at: [box.x + box.w, box.y],
             box,
             el: draft.el,
+            ink: true,
+            line: null,
             page: false,
-            shown: true,
+            point: [box.x + box.w, box.y],
           }
         : null;
     }
@@ -1139,7 +1285,7 @@ export function startPins(deps: PinsDeps): Pins {
       drafted = { ...now };
     }
     const el = now?.el ?? draft.el;
-    return el.isConnected ? standingOn(el, (now ?? draft).point, paint) : null;
+    return el.isConnected ? spotOn(el, (now ?? draft).point) : null;
   };
 
   /** The comment being written's kept `<g>`: a press on it, while it is parked, opens its composer again. */
@@ -1170,20 +1316,18 @@ export function startPins(deps: PinsDeps): Pins {
    * whole.
    */
   const drawDraft = (
+    where: (Standing & { pill: Pill }) | null,
     paint: Paint
   ): { g: SVGGElement; page: boolean } | null => {
     if (!drafted) {
       return null;
     }
-    const where = draftStanding(drafted, paint);
-    if (!(where && drafted)) {
-      if (drafted) {
-        drafted.standing = undefined;
-        drafted.pill = undefined;
-      }
+    if (!where) {
+      drafted.standing = undefined;
+      drafted.pill = undefined;
       return null;
     }
-    const pill = pillAt(where, paint.height, paint);
+    const { pill } = where;
     drafted.standing = where;
     drafted.pill = pill;
     const g = draftPillOf();
@@ -1225,6 +1369,17 @@ export function startPins(deps: PinsDeps): Pins {
     return [name, dots];
   };
 
+  /** Where the comment being written stands now, placed; null where it stands nowhere. */
+  const placeDraft = (paint: Paint) => {
+    const spot = drafted && draftSpot(drafted);
+    return spot ? standingAt(spot, paint.height, paint) : null;
+  };
+
+  /** Draws asked for so far: a draw placing its pills paints them only while no later one was asked for. */
+  let draws = 0;
+  /** The latest draw: done once it, or a draw asked for after it, has painted. */
+  let lastDraw: Promise<void> = Promise.resolve();
+
   /**
    * The pins drawn where their elements stand now. Each pin's anchor is read
    * again first ({@link reanchor}), so a pin found again stands in this very
@@ -1232,10 +1387,19 @@ export function startPins(deps: PinsDeps): Pins {
    * ({@link settle}), as the overlay's own placing, which wakes no draw.
    * Every pill, stack and the draft keeps its node: each layer is brought to
    * hold what is drawn now, a node moved only where it stands elsewhere.
+   * Floating UI places the pills (`computePosition`, which answers in a
+   * promise); a draw a later one overtook while they were placed paints
+   * nothing, and is done when that later one is.
    */
-  function draw() {
-    placed.clear();
+  function draw(): Promise<void> {
+    draws += 1;
+    lastDraw = drawNow(draws);
+    return lastDraw;
+  }
+
+  async function drawNow(asked: number): Promise<void> {
     if (!(onPage() && artifact.keeps())) {
+      placed.clear();
       holdIn(layer, []);
       holdIn(fixed, []);
       forgetUnheld();
@@ -1250,16 +1414,36 @@ export function startPins(deps: PinsDeps): Pins {
     fitToPage(layer, drawing);
     // The paint is read off the page's style, which forces its style and
     // layout there and then: a page with no pins is not made to pay for it.
+    const paint = drawing ? paintOf() : null;
+    const [pinsAt, draftAt] = paint
+      ? await Promise.all([placeAll(all, paint), placeDraft(paint)])
+      : [null, null];
+    if (asked !== draws) {
+      return lastDraw;
+    }
+    paintDrawn(moves, paint && pinsAt ? { draftAt, paint, pinsAt } : null);
+  }
+
+  /** What a draw placed, painted: each layer brought to hold its pills, the moved and gone written, the host told. */
+  function paintDrawn(
+    moves: Pin[],
+    drawn: {
+      draftAt: (Standing & { pill: Pill }) | null;
+      paint: Paint;
+      pinsAt: Awaited<ReturnType<typeof placeAll>>;
+    } | null
+  ) {
+    placed.clear();
     let gone: Pin[] = [];
     const onLayer: SVGElement[] = [];
     const onFixed: SVGElement[] = [];
-    if (drawing) {
-      const paint = paintOf();
-      const at = placeAll(all, paint);
+    if (drawn) {
+      const { draftAt, paint, pinsAt } = drawn;
+      const at = paintAll(pinsAt, paint);
       ({ gone } = at);
       onLayer.push(...at.layer);
       onFixed.push(...at.fixed);
-      const draft = drawDraft(paint);
+      const draft = drawDraft(draftAt, paint);
       if (draft) {
         (draft.page ? onFixed : onLayer).push(draft.g);
       }
@@ -1487,6 +1671,10 @@ export function startPins(deps: PinsDeps): Pins {
    * at the well's foot), brought out again.
    */
   const keepClear = () => {
+    // Where they stand once the draw in hand has placed them.
+    lastDraw.then(bringOutUnder, bringOutUnder);
+  };
+  const bringOutUnder = () => {
     const under = (at: Standing, face: Pill) =>
       !at.page && covered.some((one) => meets(shownBox(at, face), one));
     const where = tracked ? placed.get(tracked) : undefined;
