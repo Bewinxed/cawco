@@ -28,8 +28,6 @@ export const graphWords = {
   openRoom: "Open panel",
   /** The phone drawer's grabber: a press steps it to its next stop. */
   nextStop: "Resize panel",
-  /** The kept row's mark: the state the stage shows. */
-  onStage: "Showing",
   /** The component in front, when the ask names several: the switch's name. */
   components: "Component",
   /** A state the states file tags as a failure: its glyph's name and tooltip in the whole set. */
