@@ -336,7 +336,7 @@
   // The provider's defaults (core `defaultRouting`), taken when a row is chosen.
   let yours = $state<StrategyChoice>({ strategy: "pinned" });
   let delegates = $state<StrategyChoice>({ strategy: "fill-first" });
-  let atLimit = $state({ ...DEFAULT_AT_LIMIT });
+  let atLimit = $state(structuredClone(DEFAULT_AT_LIMIT));
   /** Both accounts, the one there was first; the new one goes last. */
   const pair = $derived(
     full && existing && account
@@ -395,7 +395,7 @@
         ? { strategy: "pinned", pinnedAccountId: other?.id }
         : { ...defaults.yours });
     delegates = held?.delegates ?? { ...defaults.delegates };
-    atLimit = held?.atLimit ?? { ...DEFAULT_AT_LIMIT };
+    atLimit = held?.atLimit ?? structuredClone(DEFAULT_AT_LIMIT);
     dragged = held?.dragged ?? null;
     nickname = held?.nickname ?? resumed.label ?? "";
     step = Math.max(

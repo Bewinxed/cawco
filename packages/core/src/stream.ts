@@ -220,12 +220,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    choices route (since removed) carried no `upstream`, a project carries no answer
  *    of its own, and the `fleet.upstream` frame is gone. A page built for 43
  *    sends a choice the hub refuses, so it reloads first.
+ * 45: a provider's at-limit policy carries how a moving session is compacted
+ *    (`AtLimit.compaction`) and no `prepareAtPct`, and a transcript's account
+ *    line may announce a move whole (`moving`) or say a compaction ran before
+ *    its move. A page built for 44 reads a `prepareAtPct` the hub no longer
+ *    sends and draws lines it does not know, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 44;
+export const WIRE_PROTOCOL = 45;
 
 /**
  * What a session's stream carries: the changes each frame made to its

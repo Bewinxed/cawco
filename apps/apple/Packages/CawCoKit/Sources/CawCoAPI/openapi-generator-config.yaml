@@ -26,6 +26,7 @@ typeOverrides:
     BinaryUpdatePolicyChannel: OpenEnums.BinaryUpdatePolicyChannel
     BinaryUpdateStateHubWait: OpenEnums.BinaryUpdateStateHubWait
     BlockMetadataAction: OpenEnums.BlockMetadataAction
+    BlockMetadataAt: OpenEnums.BlockMetadataAt
     BlockMetadataCompact: OpenEnums.BlockMetadataCompact
     BlockMetadataCompactResult: OpenEnums.BlockMetadataCompactResult
     BlockMetadataHandoffKind: OpenEnums.BlockMetadataHandoffKind
@@ -47,6 +48,7 @@ typeOverrides:
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
     CommentAttachmentKind: OpenEnums.CommentAttachmentKind
+    CompactMethod: OpenEnums.CompactMethod
     ComponentDocTypes: OpenEnums.ComponentDocTypes
     ConnectAskFrameAccess: OpenEnums.ConnectAskFrameAccess
     ConnectionAuth: OpenEnums.ConnectionAuth

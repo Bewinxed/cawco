@@ -14,6 +14,7 @@
  * storyboards these are. The lanes' clocks and fills are illustrations of a
  * strategy, not anybody's readings.
  */
+import { type CompactMethod, DEFAULT_AT_LIMIT } from "@cawco/core/accounts";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { ease } from "../motion/curves.svelte";
 
@@ -27,7 +28,9 @@ export interface Lane {
 
 /** The at-limit numbers the limit figure is driven by. */
 export interface Policy {
-  /** Compact it after the move at this many k tokens or more. */
+  /** How a session at its limit is made small once it is this large (core `Compaction.atLimit`). */
+  method: CompactMethod;
+  /** Make it small as it moves at this many k tokens or more. */
   over: number;
   /** Wait if the window resets within this many minutes. */
   wait: number;
@@ -769,7 +772,15 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       return F;
     },
     limit(stage, { lanes, policy }) {
-      const { wait: Wm, over: K } = policy ?? { wait: 15, over: 200 };
+      const {
+        wait: Wm,
+        over: K,
+        method,
+      } = policy ?? {
+        wait: DEFAULT_AT_LIMIT.waitMinutes,
+        over: DEFAULT_AT_LIMIT.moveWholeUnderK,
+        method: DEFAULT_AT_LIMIT.compaction.atLimit,
+      };
       const [Wa, Pa] = lanes;
       const F = layout(stage, "limit", [
         { lane: Wa, fill: 0.85, clock: resets(12) },
@@ -793,12 +804,15 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       ];
       const at = (x: number, y: number, more = "") =>
         `translate(${x}px,${y}px)${more ? ` ${more}` : ""}`;
-      /** What the policy does with a scene: a reset close enough is waited for; else it moves whole, compacted there when large. */
+      /** What the policy does with a scene: a reset close enough is waited for; else it moves, compacted or continued from a summary there when large, as the policy's method says. */
       const branchOf = (q: (typeof scenes)[number]) => {
         if (q.w <= Wm) {
           return "wait";
         }
-        return q.tok >= K ? "compact" : "move";
+        if (q.tok < K || method === "whole") {
+          return "move";
+        }
+        return method === "summary" ? "summary" : "compact";
       };
       scenes.forEach((q, qi) => {
         const { t0, t1 } = q;
@@ -848,10 +862,19 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
             .to(t0 + 1.15, at(s0.x - 5, s0.y - 5, "scale(1)"), 0.3, mk);
           return;
         }
-        // Moved whole: the chip crosses to the free account, which re-reads
-        // it; a large one is then compacted there, the chip shrinking.
-        const compact = branch === "compact";
-        F.cap(t0 + 0.1, capEnd, compact ? words.compacts : words.movesWhole);
+        // Moved: the chip crosses to the free account, which re-reads it; a
+        // large one is then compacted or continued from a summary there,
+        // the chip shrinking.
+        const compact = branch !== "move";
+        F.cap(
+          t0 + 0.1,
+          capEnd,
+          {
+            compact: words.compacts,
+            summary: words.summarises,
+            move: words.movesWhole,
+          }[branch]
+        );
         clocks.push([t0, t1, () => resets(q.w)]);
         const moved = tch.to(t0 + 0.2, at(s0.x - 5, s0.y - 5 + dyY), 0.7, mk);
         if (compact) {

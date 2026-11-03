@@ -61,7 +61,7 @@
     untrack(() => ({
       yours: { ...routing.yours },
       delegates: { ...routing.delegates },
-      atLimit: { ...routing.atLimit },
+      atLimit: $state.snapshot(routing.atLimit),
     }))
   );
   let order = $state(untrack(() => accounts.map((account) => account.id)));

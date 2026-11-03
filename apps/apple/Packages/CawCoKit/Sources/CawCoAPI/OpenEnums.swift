@@ -762,6 +762,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/BlockMetadataAt`.
+    public enum BlockMetadataAt: OpenEnum {
+        case ahead
+        case limit
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "ahead": self = .ahead
+            case "limit": self = .limit
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .ahead: "ahead"
+            case .limit: "limit"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.ahead, .limit]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/BlockMetadataCompact`.
     public enum BlockMetadataCompact: OpenEnum {
         case compacted
@@ -1598,6 +1636,47 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.file, .image, .text]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/CompactMethod`.
+    public enum CompactMethod: OpenEnum {
+        case native
+        case summary
+        case whole
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "native": self = .native
+            case "summary": self = .summary
+            case "whole": self = .whole
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .native: "native"
+            case .summary: "summary"
+            case .whole: "whole"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.native, .summary, .whole]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

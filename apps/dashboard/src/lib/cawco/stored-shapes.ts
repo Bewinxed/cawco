@@ -5,6 +5,8 @@
  */
 import type {
   AtLimit as AtLimitType,
+  Compaction as CompactionType,
+  CompactMethod as CompactMethodType,
   PlacementStrategy as PlacementStrategyType,
   StrategyChoice as StrategyChoiceType,
 } from "@cawco/core/accounts";
@@ -147,11 +149,22 @@ import type { KeptUpdates as KeptUpdatesType } from "./updates/updates.svelte";
 import type { Visit as VisitType } from "./working-set.svelte";
 import type { SessionContext as SessionContextType } from "./workspace/tree";
 
+const CompactMethodShape = z.enum(["native", "summary", "whole"]);
+
+const HarnessKindShape = z.enum(HARNESSES);
+export const HarnessKindSchema: z.ZodType<HarnessKindType> = HarnessKindShape;
+
+const CompactionShape = z.object({
+  atLimit: CompactMethodShape,
+  beforeMove: CompactMethodShape,
+  summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
+});
+
 const AtLimitShape = z.object({
+  compaction: CompactionShape,
   delegateWork: z.literal("move"),
   move: z.boolean(),
   moveWholeUnderK: z.number(),
-  prepareAtPct: z.number(),
   staleAfterHours: z.number(),
   waitMinutes: z.number(),
 });
@@ -170,9 +183,6 @@ const StrategyChoiceShape = z.object({
 });
 export const StrategyChoiceSchema: z.ZodType<StrategyChoiceType> =
   StrategyChoiceShape;
-
-const HarnessKindShape = z.enum(HARNESSES);
-export const HarnessKindSchema: z.ZodType<HarnessKindType> = HarnessKindShape;
 
 const ContinueSourceShape = z.object({
   cwd: z.string(),
@@ -982,10 +992,12 @@ const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 /** Every schema of an exported type, proved against that type. */
 prove<
   [
+    Same<z.output<typeof CompactMethodShape>, CompactMethodType>,
+    Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
+    Same<z.output<typeof CompactionShape>, CompactionType>,
     Same<z.output<typeof AtLimitShape>, AtLimitType>,
     Same<z.output<typeof PlacementStrategyShape>, PlacementStrategyType>,
     Same<z.output<typeof StrategyChoiceShape>, StrategyChoiceType>,
-    Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
     Same<z.output<typeof ContinueSourceShape>, ContinueSourceType>,
     Same<z.output<typeof EmbedShapeShape>, EmbedShapeType>,
     Same<z.output<typeof CanvasShapesShape>, CanvasShapesType>,

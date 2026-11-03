@@ -2437,6 +2437,13 @@
       "when": 1793684218258,
       "tag": "0355_queued_task_asked",
       "breakpoints": true
+    },
+    {
+      "idx": 356,
+      "version": "6",
+      "when": 1793684278258,
+      "tag": "0356_routing_compaction",
+      "breakpoints": true
     }
   ]
 }

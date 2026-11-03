@@ -84,6 +84,8 @@
     switch (move.kind) {
       case "waiting":
         return move.until;
+      case "moving":
+        return move.at;
       case "moved":
       case "stopped":
         return move.resetsAt;
@@ -126,6 +128,7 @@
         return null;
       case "continued":
       case "moved":
+      case "moving":
         break;
     }
     return one.to?.hue ?? null;

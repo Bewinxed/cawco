@@ -44,7 +44,8 @@ export interface ContinueRequest {
   images?: SendPayload["images"];
   note?: string;
   /**
-   * Who writes the summary; absent only with {@link asksOnly}, which writes
+   * Who writes the summary; absent, the source's provider's policy (core
+   * `Compaction.summarizer`). Unread with {@link asksOnly}, which writes
    * none. Absent `model`: the harness's own default. Absent `account`:
    * placed as any start is.
    */
@@ -178,7 +179,7 @@ export function summariserPrompt(
   note: string | undefined
 ): string {
   return [
-    "Below is the transcript of a coding-agent session, up to its last few turns. Old tool output is hidden; failed calls keep the head of their error. A section labelled as compacted by the source session is that session's own earlier summary.",
+    "Below is the transcript of a coding-agent session, up to its last few turns. Tool calls and their results are kept, each clipped to its head and tail. A section labelled as compacted by the source session is that session's own earlier summary.",
     "",
     "<transcript>",
     middle.join("\n\n"),

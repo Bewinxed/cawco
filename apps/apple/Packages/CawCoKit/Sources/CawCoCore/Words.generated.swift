@@ -597,11 +597,32 @@ public enum Words {
 
             public static let minutes = "minutes"
 
-            public static let over = "Compact it after the move if it’s over"
+            /// The floor under which a session moves whole, never compacted (core `AtLimit.moveWholeUnderK`).
+            public static let over = "Move it whole if it’s under"
 
             public static let kTokens = "k tokens"
 
-            public static let compacts = "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn."
+            /// How a session moving to another organization is made small, by the moment it moves at (core `Compaction`).
+            public static let beforeMove = "Moved ahead of its limit"
+
+            public static let atLimit = "Moved at its limit"
+
+            public enum Methods {
+                public static let native = "Its own /compact"
+
+                public static let summary = "A summary"
+
+                public static let whole = "Whole"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["native": native, "summary": summary, "whole": whole]
+            }
+
+            /// Under the choice while A summary is picked.
+            public static let summaryHint = "It goes on in a fresh conversation: the summary, its open items, the files it touched and its last few turns."
+
+            /// The heading of the picker for who writes summaries (core `Compaction.summarizer`).
+            public static let summarizer = "Summaries written by"
 
             public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
 
@@ -611,15 +632,17 @@ public enum Words {
             public static let staleHours = "hours after its reset"
 
             public static let staleAfter = "Stopped longer, it waits in Needs you until you write to it or stop it."
-
-            /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "over": over, "kTokens": kTokens, "compacts": compacts, "terms": terms, "stale": stale, "staleHours": staleHours, "staleAfter": staleAfter]
         }
 
         public enum Stalled {
             /// Moving to an account with room, now or once its turn ends.
             public static func moving(from: String, to: String) -> String {
                 "Stopped at \(from)’s limit; continues on \(to)"
+            }
+
+            /// Its move whole to `to` is announced, and goes at `clock` ("20:17") unless it is stopped.
+            public static func movingAt(from: String, to: String, clock: String) -> String {
+                "Stopped at \(from)’s limit; moves whole to \(to) at \(clock)"
             }
 
             /// Its move to `to` waits for work in flight (`work`: "1 command running"), which no resume brings back: it moves when that ends, or at `clock` ("20:17") at the latest, ending it.
@@ -761,6 +784,8 @@ public enum Words {
 
             public static let compacts = "Moves it whole, then compacts it"
 
+            public static let summarises = "Continues it from a summary"
+
             public static func tokens(k: Int) -> String {
                 "\(k)k"
             }
@@ -829,7 +854,20 @@ public enum Words {
 
                 public static let moveWholeUnderK = 200
 
-                public static let prepareAtPct = 90
+                public enum Compaction {
+                    public static let beforeMove = "native"
+
+                    public static let atLimit = "summary"
+
+                    public enum Summarizer {
+                        public static let harness = "claude"
+
+                        public static let model = "claude-sonnet-5-5"
+
+                        /// Each word by the key it stands under, for a lookup by data value.
+                        public static let byKey: [String: String] = ["harness": harness, "model": model]
+                    }
+                }
 
                 public static let delegateWork = "move"
             }

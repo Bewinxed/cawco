@@ -172,6 +172,7 @@ import {
   CLAUDE_CONVERSATION_GONE,
   CLAUDE_PROVIDER,
   CLI_OUTDATED,
+  COMPACT_METHODS,
   COMPACT_RELAUNCH,
   COMPACTION_ORIGIN,
   CONFIGURE_BINARY_UPDATES,
@@ -255,6 +256,7 @@ import {
   contextFitRefusal,
   continuedInWords,
   DEFAULT_AT_LIMIT,
+  DEFAULT_COMPACTION,
   DELEGATE_SUMMARIES_LIMIT,
   delegateAskText,
   deriveTitleFromFirstMessage,
@@ -592,9 +594,13 @@ import { createAsks } from "./asks";
 import {
   type AccountsRead,
   accountsRead,
+  type CompactionPlan,
   cacheCarries,
+  compactedLine,
+  compactionPlan,
   createAtLimit,
   type Kept,
+  type MoveHow,
   refusedUntil,
   type Stall,
   type TakenUpBy,
@@ -819,7 +825,12 @@ import {
   notificationRoutes,
   turnCollapseId,
 } from "./notifications";
-import { COMPACT_FOCUS, createOpenItems, filingPrompt } from "./open-items";
+import {
+  COMPACT_FOCUS,
+  COMPACT_KEEP,
+  createOpenItems,
+  filingPrompt,
+} from "./open-items";
 import { watchPairingRequests } from "./pairing-requests";
 import {
   type AnswerFrom,
@@ -1560,6 +1571,8 @@ const strategyChoice = t.Object({
   strategy: t.Union(PLACEMENT_STRATEGIES.map((one) => t.Literal(one))),
   pinnedAccountId: t.Optional(t.String()),
 });
+/** A compaction method (core `CompactMethod`), as the routing's policy names it. */
+const compactMethod = t.Union(COMPACT_METHODS.map((one) => t.Literal(one)));
 /** Deduplicate recently orphaned replies without retaining every request forever. */
 const UNROUTED_REPLY_LIMIT = 4096;
 /** Workspace controls only the hub sends: a dashboard's control naming one is refused at the relay. */
@@ -1619,12 +1632,16 @@ const WORKSPACE_TIMEOUT_MS = 60_000;
 const CONTINUATION_KEPT_MS = 5 * 60_000;
 /** Who asked, as a continuation's log line says it. */
 const askerWords = (by: ContinuationAsker): string => {
-  if (by.kind === "session") {
-    return `session ${by.id} (continue_session)`;
+  switch (by.kind) {
+    case "session":
+      return `session ${by.id} (continue_session)`;
+    case "task":
+      return `your comment on ${by.id} (attach or spawn)`;
+    case "move":
+      return `its move to ${by.to}, as its provider's compaction policy says`;
+    case "person":
+      return "a person (the dashboard or the API)";
   }
-  return by.kind === "task"
-    ? `your comment on ${by.id} (attach or spawn)`
-    : "a person (the dashboard or the API)";
 };
 /** The origin of the hub's word to a sender that its message did not arrive. */
 const UNDELIVERED_ORIGIN = "undelivered";
@@ -1754,7 +1771,8 @@ const permissionModeSchema = t.Union(
 
 /** Continue in new session: every field of the summariser and target is the caller's to name. */
 const continueBody = t.Object({
-  // Who writes the summary; left out with `asksOnly`, which writes none.
+  // Who writes the summary; left out, the source's provider's policy
+  // (core `Compaction.summarizer`). Unread with `asksOnly`, which writes none.
   summarizer: t.Optional(
     t.Object({
       harness: harnessSchema,
@@ -9858,6 +9876,13 @@ export const createServer = (
     const plan = db.atLimit.compaction(instanceId);
     if (plan) {
       return !stepUuids(plan).includes(uuid);
+    }
+    // Going on from a summary as its move: what it is sent goes to the new
+    // conversation once it has opened, or back to it if the summary fails;
+    // only its filing turn, sent under the job's id, goes now.
+    const job = moveJobOf(instanceId);
+    if (job) {
+      return uuid !== job.id;
     }
     return db.atLimit.hold(instanceId) !== undefined;
   };
@@ -18054,6 +18079,17 @@ export const createServer = (
   };
 
   /**
+   * Who writes a continuation's summary: the one its asker chose, else its
+   * source's provider's policy (core `Compaction.summarizer`).
+   */
+  const summarizerAsked = (
+    request: ContinueRequest,
+    sourceId: string
+  ): { harness: HarnessKind; model?: string; account?: string } =>
+    request.summarizer ??
+    summarizerOf(db.getInstancesByIds([sourceId])[0] ?? {});
+
+  /**
    * Whether the chosen models fit, by the same rule the dashboard's pickers
    * show, and whether a source holding a work item goes on where it runs (its
    * workspace's clone): a refusal naming why, or nothing.
@@ -18068,10 +18104,10 @@ export const createServer = (
       return misplaced;
     }
     if (prepared.prompt) {
-      if (!request.summarizer) {
-        return "Choose who summarises the session, or continue from your asks alone.";
-      }
-      const { harness, model } = request.summarizer;
+      const { harness, model } = summarizerAsked(
+        request,
+        prepared.source.instanceId
+      );
       const refusal = contextFitRefusal(
         await contextWindowOf(prepared.source.machineId, harness, model),
         prepared.summariseInputTokens + SUMMARISER_OUTPUT_RESERVE_TOKENS
@@ -18458,12 +18494,17 @@ export const createServer = (
     return row;
   };
 
-  /** Whether a job's source files its open items first: a person's Continue of a session CawCo runs. */
+  /**
+   * Whether a job's source files its open items first: a person's Continue
+   * of a session CawCo runs, and a move's ahead of its limit, which can still
+   * take a turn there.
+   */
   const filesFirst = (
     prepared: PreparedContinuation,
     askedBy: ContinuationAsker
   ): boolean =>
-    askedBy.kind === "person" &&
+    (askedBy.kind === "person" ||
+      (askedBy.kind === "move" && askedBy.stopped === false)) &&
     db.getInstancesByIds([prepared.source.instanceId]).length > 0;
 
   /** A job's first step once nothing holds it: its source's filing turn, else what follows that. */
@@ -18651,12 +18692,19 @@ export const createServer = (
     }
   };
 
-  /** A job fails in the words the hub got: the source was only read, and goes on as it was. */
+  /**
+   * A job fails in the words the hub got: the source was only read, and goes
+   * on as it was; one its move asked for moves as its harness's own
+   * `/compact` instead ({@link moveAfterFailedSummary}).
+   */
   const failContinuation = (row: ContinuationRow, reason: string): void => {
     moveContinuation(row.id, { stage: "failed", error: reason });
     console.warn(
       `[continuation] ${row.prepared.source.title} couldn't continue in a new session: ${reason}.`
     );
+    if (row.askedBy.kind === "move") {
+      detach(moveAfterFailedSummary(row, reason), "move after its summary");
+    }
   };
 
   /**
@@ -18689,8 +18737,8 @@ export const createServer = (
    */
   const continuationSummary = async (row: ContinuationRow): Promise<string> => {
     const { source, prompt } = row.prepared;
-    const { summarizer } = row.request;
-    if (!(prompt && row.summariserInstanceId && summarizer)) {
+    const summarizer = summarizerAsked(row.request, row.sourceInstanceId);
+    if (!(prompt && row.summariserInstanceId)) {
       throw new Error("a summarising continuation has no summariser prompt");
     }
     const cancelled = () => cancelledContinuation(row.id);
@@ -18806,8 +18854,31 @@ export const createServer = (
     foldContinued(job, source);
   };
 
+  /** The move a summary went on as, as its continued line says what sent it. */
+  const continuedAs = (
+    by: Extract<ContinuationAsker, { kind: "move" }>
+  ): NonNullable<Extract<AccountMove, { kind: "continued" }>["move"]> => {
+    const { move } = by;
+    if (move.kind !== "moved") {
+      return {
+        at: by.stopped ? "limit" : "ahead",
+        window: null,
+        resetsAt: null,
+      };
+    }
+    return {
+      at: by.stopped ? "limit" : "ahead",
+      window: move.window,
+      resetsAt: move.resetsAt,
+      ...(move.because ? { because: move.because } : {}),
+      ...(move.asked ? { asked: true as const } : {}),
+    };
+  };
+
   /** Who asked for a continuation, as its line's detail names them. */
-  const askerLine = (by: ContinuationAsker): string => {
+  const askerLine = (
+    by: Exclude<ContinuationAsker, { kind: "move" }>
+  ): string => {
     if (by.kind === "task") {
       return `your comment on ${by.id}`;
     }
@@ -18840,13 +18911,15 @@ export const createServer = (
       ? db.getInstancesByIds([job.summariserInstanceId])[0]
       : undefined;
     const asks = !!job.request.asksOnly;
+    const by = job.askedBy;
     noteAtLimit(target, {
       kind: "continued",
       from: named(source.accountId),
       to: named(target.accountId),
       writtenOn: asks ? null : named(summariser?.accountId),
-      by: askerLine(job.askedBy),
-      asked: true,
+      ...(by.kind === "move"
+        ? { move: continuedAs(by) }
+        : { by: askerLine(by), asked: true as const }),
       ...(asks ? { asks: true as const } : {}),
       tokens: job.prepared.liveContextTokens,
       preparedAtPct: null,
@@ -19055,6 +19128,10 @@ export const createServer = (
     console.info(
       `[continuation] ${row.prepared.source.title}: its continuation in a new session was cancelled while ${row.stage}. Nothing starts from it.`
     );
+    // A move's summary cancelled: what waited for it goes to the source.
+    if (row.askedBy.kind === "move") {
+      releaseOwed({ instanceId: row.sourceInstanceId });
+    }
     return { row: cancelled };
   };
 
@@ -22834,6 +22911,62 @@ export const createServer = (
   };
 
   /**
+   * How `row`'s move to `to` makes it small, by the one rule (at-limit.ts
+   * `compactionPlan`): what stopped it (its limit, its refused sign-in), or
+   * `cause` when nothing did. Whole for a session on no account.
+   */
+  const planFor = (
+    row: StoredRow,
+    to: Account,
+    stopped: "limit" | "signin" | undefined,
+    cause: "hand" | "forecast"
+  ): CompactionPlan => {
+    const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
+    if (!from) {
+      return { method: "whole", chosen: false };
+    }
+    const window = contextWindowNow(row);
+    const stoppedBy = {
+      limit: "limit",
+      signin: "refused-credential",
+    } as const;
+    return compactionPlan({
+      carries: cacheCarries(from, to, cacheExpiry(row) !== null),
+      cause: stopped ? stoppedBy[stopped] : cause,
+      compactable: !inputRefusal(row.id, {
+        kind: "system",
+        name: COMPACTION_ORIGIN,
+      }),
+      policy: db.accounts.routing(from.provider).atLimit,
+      reported:
+        row.contextTokens === null
+          ? null
+          : Math.min(row.contextTokens, window ?? row.contextTokens),
+    });
+  };
+
+  /**
+   * `move`, the line a move whole would write, as a move `plan` compacts
+   * ({@link moveAs}); undefined when it moves whole.
+   */
+  const howFor = (
+    row: StoredRow,
+    move: AccountMove | null,
+    plan: CompactionPlan,
+    cause: "hand" | "forecast"
+  ): MoveHow | undefined => {
+    if (plan.method === "whole" || move?.kind !== "moved") {
+      return;
+    }
+    return {
+      cause,
+      line: crypto.randomUUID(),
+      plan,
+      move: compactedLine(move, plan, row.harness),
+    };
+  };
+
+  /**
    * Moves `row` to `account` because a person asked, the line "Moved to …"
    * written as it moves. Its data is carried into the account's dir first
    * ({@link moveRowsToAccount}) and only then does its row name the account:
@@ -22886,6 +23019,15 @@ export const createServer = (
     }
     // A move it still owed (asked mid-turn, to another account) is over.
     owedMoves.delete(row.id);
+    const how = howFor(
+      row,
+      move,
+      planFor(row, account, stopped, "hand"),
+      "hand"
+    );
+    if (how) {
+      return await moveByHandCompacted(row, account, how, stopped);
+    }
     const { kept } = await moveRowsToAccount(
       row.machineId,
       [row],
@@ -22920,6 +23062,67 @@ export const createServer = (
       state: "moved",
       accountId: account.id,
       why: handMovedWords(live, title, fromName, toName),
+    };
+  };
+
+  /**
+   * A person's move of `row` to `account` that compacts it as its provider's
+   * policy says (`how`, {@link moveAs}): before the move, or from a summary,
+   * it goes once that is done, and the answer says it waits; after it, it
+   * moves now. One whose carry can't happen now is owed or refused as a
+   * move whole is.
+   */
+  const moveByHandCompacted = async (
+    row: StoredRow,
+    account: Account,
+    how: MoveHow,
+    stopped: "limit" | "signin" | undefined
+  ): Promise<
+    | { accountId: string; state: "moved" | "pending"; why: string }
+    | { refusal: string }
+  > => {
+    const title = sessionName(row);
+    const fromName = accountWords(row.accountId);
+    const toName = accountNameAmong(account, db.accounts.list());
+    const done = await moveAs(row, account.id, stopped ?? false, how);
+    if ("kept" in done) {
+      const why = done.kept;
+      if (why.running) {
+        owedMoves.set(row.id, {
+          byHand: true,
+          to: account.id,
+          move: how.move,
+          waits: why.later ? "work" : "turn",
+        });
+        return {
+          state: "pending",
+          accountId: account.id,
+          why: `${title} can't move from ${fromName} to ${toName} yet: ${why.why}. ${keptNextWords(why, toName)}`,
+        };
+      }
+      return {
+        refusal: `${title} stays on ${fromName}, not moved to ${toName}: ${why.why}. Nothing changed; move it again once that is fixed.`,
+      };
+    }
+    db.atLimit.dropHold(row.id);
+    publishInstances(row.machineId);
+    publishStalls();
+    if ("later" in done) {
+      return {
+        state: "pending",
+        accountId: account.id,
+        why:
+          how.plan.method === "summary"
+            ? `${title}: ${accountsWords.atLimit.summaryHint}`
+            : `${title}: ${accountMoveSentence(how.move, Date.now())}`,
+      };
+    }
+    const said = done.move ?? how.move;
+    noteAtLimit(row, said, how.line);
+    return {
+      state: "moved",
+      accountId: account.id,
+      why: `${title}: ${accountMoveSentence(said, Date.now())}`,
     };
   };
 
@@ -23091,6 +23294,31 @@ export const createServer = (
     /** The record is still this move's: no newer ask replaced it. */
     const still = () => owedMoves.get(stored.id)?.to === to;
     const stopped = stoppedNow(stored.id, carry);
+    // Weighed now it goes: a move owed before it was compacted (a person's,
+    // a rebalance's) compacts as the policy says; one whose line already
+    // says how it was compacted goes as it is.
+    const toAccount = db.accounts.get(to);
+    const cause = owed.byHand ? "hand" : "forecast";
+    const how =
+      toAccount && owed.move?.kind === "moved" && !owed.move.compact
+        ? howFor(
+            stored,
+            owed.move,
+            planFor(stored, toAccount, stopped, cause),
+            cause
+          )
+        : undefined;
+    if (how) {
+      const compacted = moveOwedCompacted(
+        stored,
+        owed,
+        to,
+        how,
+        stopped
+      ).finally(() => owedCarries.delete(instanceId));
+      owedCarries.set(instanceId, compacted);
+      return compacted;
+    }
     // Read before the carry, which ends its process at rest.
     const live = processWorks(stored);
     const carried = moveRowsToAccount(
@@ -23128,6 +23356,37 @@ export const createServer = (
       });
     owedCarries.set(instanceId, carried);
     return carried;
+  };
+
+  /**
+   * A move `stored` owed ({@link takeUpOwedMove}) that compacts it as its
+   * provider's policy says (`how`, {@link moveAs}): its record goes as it is
+   * taken up, its line written as the move goes; one whose carry can't
+   * happen now is kept as an uncarried move whole is.
+   */
+  const moveOwedCompacted = async (
+    stored: StoredRow,
+    owed: OwedMove,
+    to: string,
+    how: MoveHow,
+    stopped: "limit" | "signin" | undefined
+  ): Promise<void> => {
+    const mine = () => owedMoves.get(stored.id)?.to === to;
+    if (mine()) {
+      owedMoves.delete(stored.id);
+    }
+    const done = await moveAs(stored, to, stopped ?? false, how);
+    if ("kept" in done) {
+      owedMoves.set(stored.id, owed);
+      keepUncarried(stored, owed, to, done.kept, true);
+      return;
+    }
+    db.atLimit.dropHold(stored.id);
+    publishInstances(stored.machineId);
+    publishStalls();
+    if (!("later" in done)) {
+      noteAtLimit(stored, done.move ?? how.move, how.line);
+    }
   };
 
   /**
@@ -26099,7 +26358,7 @@ export const createServer = (
       const prepared = await prepareContinuation(row.id, comment);
       const { harness } = prepared.source;
       const request: ContinueRequest = {
-        summarizer: { harness },
+        summarizer: summarizerOf(row),
         target: {
           harness,
           ...(row.model ? { model: row.model } : {}),
@@ -27669,9 +27928,11 @@ export const createServer = (
   };
 
   /**
-   * A session moved at its account's limit that compacts once there (the
-   * at-limit controller's decision: another organization, `moveWholeUnderK` or
-   * more; db `limit_compactions`), its first steps on the new account:
+   * A session compacted natively as it moves (at-limit.ts `compactionPlan`:
+   * another organization, `moveWholeUnderK` or more; db
+   * `limit_compactions`): its first steps on the new account after the move,
+   * or on its own before it (core `AccountMove` `compactFirst`), the move
+   * following their end ({@link moveCompacted}):
    *
    * 0. `carrying`, when its limit or sign-in stopped it: its carry-on, the
    *    turn that answers what the refused turn asked. Its refused message has
@@ -27679,11 +27940,13 @@ export const createServer = (
    *    would be read with it as one turn; the carry-on is that turn's own.
    * 1. `filing`: one turn whose only job is to file its open items in its
    *    records (open-items.ts `filingPrompt`).
-   * 2. `compacting`: Claude Code's own `/compact`, with the hub's focus
-   *    ({@link COMPACT_FOCUS}), sent once the filing turn has ended. Its
-   *    summary reads the whole conversation, the one uncached read the move
-   *    pays anyway; the fleet's SessionStart hook on the `compact` source
-   *    lists the open items after it (`cawco tool open_items`).
+   * 2. `compacting`: its harness's own `/compact`, with the hub's focus
+   *    ({@link COMPACT_FOCUS}), sent once the filing turn has ended. After
+   *    the move, its summary reads the whole conversation, the one uncached
+   *    read the move pays anyway; before it, it reads it warm. For Claude
+   *    Code the fleet's SessionStart hook on the `compact` source lists the
+   *    open items after it (`cawco tool open_items`); OpenCode's takes no
+   *    focus, and neither it nor pi lists them, which the move's line says.
    *
    * Each goes `ahead` of everything the session is owed, alone: every
    * other send waits at the hub until the compaction ends ({@link
@@ -27777,10 +28040,22 @@ export const createServer = (
         compactionSend(row, plan.filingUuid, filingPrompt("compacted"));
         return;
       case "compacting":
-        compactionSend(row, plan.compactUuid, `/compact ${COMPACT_FOCUS}`);
+        compactionSend(
+          row,
+          plan.compactUuid,
+          `/compact ${compactFocus(plan.move)}`
+        );
         return;
     }
   };
+
+  /**
+   * The focus a compaction's `/compact` carries: {@link COMPACT_FOCUS},
+   * whose last sentence promises the open items listed after, which only
+   * Claude Code's hook does; pi's keeps the rest. (OpenCode's takes none.)
+   */
+  const compactFocus = (move: AccountMove): string =>
+    move.kind === "moved" && move.compactBy ? COMPACT_KEEP : COMPACT_FOCUS;
 
   /**
    * Starts `row`'s compaction, just relaunched on its new account: its
@@ -27805,8 +28080,9 @@ export const createServer = (
       endedStep: null,
     };
     db.atLimit.putCompaction(plan);
+    const first = move.kind === "moved" && move.compactFirst;
     console.info(
-      `[at-limit] ${sessionName(row)} ${stopped ? "carries on past what stopped it, then files its open items" : "files its open items now"}, then Claude Code compacts it on its new account; everything else it is sent waits until that ends.`
+      `[at-limit] ${sessionName(row)} ${stopped ? "carries on past what stopped it, then files its open items" : "files its open items now"}, then its own /compact runs ${first ? "where it is, before its move" : "on its new account"}; everything else it is sent waits until that ends.`
     );
     sendStep(row, plan);
   };
@@ -27826,13 +28102,24 @@ export const createServer = (
     noteAtLimit(row, { ...plan.move, compact: stage }, plan.lineId, at);
   };
 
-  /** Ends a compaction as `stage`, `why` in the hub's log, and lets what waited for it go. */
+  /**
+   * Ends a compaction as `stage`, `why` in the hub's log, and lets what
+   * waited for it go; one ahead of its move makes that move first
+   * ({@link moveCompacted}), what waited going to it there.
+   */
   const endCompaction = (
     plan: { instanceId: string; lineId: string; move: AccountMove },
     stage: "compacted" | "stopped",
     why: string
   ): void => {
     db.atLimit.dropCompaction(plan.instanceId);
+    if (plan.move.kind === "moved" && plan.move.compactFirst) {
+      console.info(
+        `[at-limit] ${plan.instanceId.slice(0, 8)}: ${why}. It moves to ${accountWords(plan.move.to.id)} now.`
+      );
+      detach(moveCompacted(plan, plan.move, stage), "move after compaction");
+      return;
+    }
     sayCompaction(plan, stage);
     const [row] = db.getInstancesByIds([plan.instanceId]);
     console.info(
@@ -27973,7 +28260,7 @@ export const createServer = (
       db.atLimit.patchCompaction(instanceId, { stage: "compacting" });
       sayCompaction(plan, "compacting");
       console.info(
-        `[at-limit] ${sessionName(row)} filed its open items; Claude Code's /compact goes now.`
+        `[at-limit] ${sessionName(row)} filed its open items; its own /compact goes now.`
       );
       sendStep(row, { ...plan, stage: "compacting" });
       return;
@@ -27982,9 +28269,76 @@ export const createServer = (
       plan,
       plan.compacted ? "compacted" : "stopped",
       plan.compacted
-        ? "Claude Code compacted it on its new account"
+        ? "its own /compact compacted it"
         : "its /compact ended without compacting, so it goes on with its whole conversation"
     );
+  };
+
+  /**
+   * The move a compaction ahead of it waited for (core `AccountMove`
+   * `compactFirst`), made now its compaction has ended as `stage`, compacted
+   * or stopped (then whole): its conversation carried to the account its
+   * line names and relaunched there ({@link carryTo}), its line said again
+   * as it ends, and what waited goes there. One its process still keeps
+   * where it is owes the move to its turn's end ({@link owedMoves}), its
+   * line written as it lands.
+   */
+  const moveCompacted = async (
+    plan: { instanceId: string; lineId: string },
+    move: Extract<AccountMove, { kind: "moved" }>,
+    stage: "compacted" | "stopped"
+  ): Promise<void> => {
+    const [row] = db.getInstancesByIds([plan.instanceId]);
+    if (!row) {
+      return;
+    }
+    // Compacted, it re-reads what its compaction left, once a reading smaller
+    // than the one the move was weighed at says so; the cost weighed then
+    // was the whole conversation's, so it is said only for a move whole.
+    const { cost, ...rest } = move;
+    const smaller =
+      row.contextTokens !== null &&
+      move.tokens !== null &&
+      row.contextTokens < move.tokens;
+    const said: Extract<AccountMove, { kind: "moved" }> =
+      stage === "compacted"
+        ? {
+            ...rest,
+            compact: stage,
+            tokens: smaller ? row.contextTokens : move.tokens,
+          }
+        : { ...move, compact: stage };
+    const done = await carryTo(row, move.to.id, false, undefined, undefined);
+    if ("kept" in done) {
+      unnoteAtLimit(row, plan.lineId);
+      owedMoves.set(row.id, {
+        to: move.to.id,
+        move: said,
+        waits: done.kept.later ? "work" : "turn",
+        ...(move.asked ? { byHand: true as const } : {}),
+      });
+      console.info(
+        `[at-limit] ${sessionName(row)} can't move to ${accountWords(move.to.id)} yet: ${done.kept.why}. It moves when that ends.`
+      );
+      return;
+    }
+    const at = db.atLimit
+      .events([row.id])
+      .find((event) => event.id === plan.lineId)?.at;
+    const { ended } = done;
+    noteAtLimit(
+      row,
+      ended && (ended.tasks.length > 0 || ended.wakeups > 0)
+        ? {
+            ...said,
+            ended: { tasks: ended.tasks.length, wakeups: ended.wakeups },
+          }
+        : said,
+      plan.lineId,
+      at
+    );
+    publishStalls();
+    releaseOwed({ instanceId: row.id });
   };
 
   /** A person's interrupt or stop of a compacting session: the compaction ends there. */
@@ -27999,15 +28353,28 @@ export const createServer = (
     }
   };
 
-  /** A frame of a compacting session: Claude Code's compaction boundary after its `/compact` went is the compaction done. */
+  /**
+   * A frame of a compacting session: its harness's compaction boundary after
+   * its `/compact` went is the compaction done (Claude Code's and pi's at its
+   * end, OpenCode's as it starts); a failure said after it (OpenCode's
+   * `compact_result: "failed"`) undoes that.
+   */
   const observeCompaction = (instanceId: string, message: unknown): void => {
-    const frame = message as { subtype?: string; type?: string };
-    if (frame.type !== "system" || frame.subtype !== "compact_boundary") {
+    const frame = message as {
+      compact_result?: string;
+      subtype?: string;
+      type?: string;
+    };
+    if (frame.type !== "system") {
+      return;
+    }
+    const failed = frame.compact_result === "failed";
+    if (frame.subtype !== "compact_boundary" && !failed) {
       return;
     }
     const plan = db.atLimit.compaction(instanceId);
     if (plan?.stage === "compacting") {
-      db.atLimit.patchCompaction(instanceId, { compacted: true });
+      db.atLimit.patchCompaction(instanceId, { compacted: !failed });
     }
   };
 
@@ -29193,8 +29560,8 @@ export const createServer = (
    * account's dir, relaunched there with it: what the move ended first, then,
    * when its limit or sign-in stopped it, its carry-on, the two read as the
    * one turn that answers what the refused turn asked; with `compact`, that
-   * carry-on is the compaction's first step, and its filing turn and Claude
-   * Code's `/compact` follow it, before anything else it is owed (which
+   * carry-on is the compaction's first step, and its filing turn and its
+   * harness's `/compact` follow it, before anything else it is owed (which
    * waits behind them, {@link compactions}). Relaunched only when its
    * process worked before the move (`live`, {@link processWorks}); one at
    * rest is moved, and what it is told next (its carry-on, a compaction's
@@ -29237,6 +29604,289 @@ export const createServer = (
     }
   };
 
+  /** A session's row as a mover reads it. */
+  type MoverRow = ReturnType<typeof db.getInstancesByIds>[number];
+
+  /**
+   * Carries `row`'s conversation whole to `accountId` and relaunches it
+   * there ({@link relaunchMoved}), `compact` its native compaction after the
+   * move. Its process ends at rest and its data goes into the account's dir,
+   * and only then does its row say the account; it starts again there when
+   * that process worked (read before the carry ends it). One that did not
+   * move stays on its account; a process the carry ended there is asleep. A
+   * stopped session's move ends what it holds for later, unless no person
+   * waits on it: then it waits for that work up to the cap from
+   * `laterSince`. A rebalance's of a running one waits for it.
+   */
+  const carryTo = async (
+    row: MoverRow,
+    accountId: string,
+    stopped: false | "limit" | "signin",
+    compact: { line: string; move: AccountMove } | undefined,
+    laterSince: number | undefined
+  ): Promise<{ kept: Kept } | { ended?: MoveEnded }> => {
+    if (!(registry.agent(row.machineId) && row.sessionId)) {
+      return {
+        kept: {
+          running: false,
+          why: row.sessionId
+            ? `${machineName(row.machineId)} is not connected.`
+            : "it has no conversation to copy yet",
+        },
+      };
+    }
+    const live = processWorks(row);
+    const { kept, ended } = await moveRowsToAccount(
+      row.machineId,
+      [row],
+      accountId,
+      true,
+      stopped || undefined,
+      laterSince
+    );
+    const why = kept.get(row.id);
+    if (why) {
+      return { kept: why };
+    }
+    const agent = registry.agent(row.machineId);
+    const [now] = db.getInstancesByIds([row.id]);
+    if (!(agent && now?.sessionId)) {
+      return {
+        kept: {
+          running: false,
+          why: `${machineName(row.machineId)} is not connected.`,
+        },
+      };
+    }
+    relaunchMoved(
+      agent,
+      { ...now, sessionId: now.sessionId },
+      stopped,
+      compact,
+      live
+    );
+    const what = ended.get(row.id);
+    return what ? { ended: what } : {};
+  };
+
+  /**
+   * THE ONE MOVER: `row` to `accountId`, made small as `how`'s plan says
+   * (at-limit.ts `compactionPlan`; absent, whole). Whole, or natively after
+   * the move: carried now ({@link carryTo}). Natively before it: its filing
+   * turn and its harness's `/compact` run where it is, and the move follows
+   * once they end ({@link compactFirst}). From a summary: the same session
+   * goes on in a fresh conversation on `accountId` ({@link continueAsMove});
+   * a summary that can't be written for it takes the harness's `/compact`
+   * for this move instead, its line saying why. Every mover calls this: the
+   * at-limit controller, the rebalance, a person's move and a move owed to a
+   * turn's end.
+   */
+  const moveAs = async (
+    row: MoverRow,
+    accountId: string,
+    stopped: false | "limit" | "signin",
+    asked: MoveHow | undefined,
+    laterSince?: number
+  ): Promise<
+    | { kept: Kept }
+    | { ended?: MoveEnded; move?: Extract<AccountMove, { kind: "moved" }> }
+    | { later: true }
+  > => {
+    if (!asked || asked.plan.method === "whole") {
+      return carryTo(row, accountId, stopped, undefined, laterSince);
+    }
+    let how = asked;
+    if (how.plan.method === "summary") {
+      const refusal = await continueAsMove(row, accountId, stopped, how);
+      if (refusal === undefined) {
+        return { later: true };
+      }
+      how = nativeInstead(row, how, refusal);
+    }
+    if (how.plan.method === "native" && how.plan.when === "before") {
+      compactFirst(row, how);
+      return { later: true };
+    }
+    const done = await carryTo(
+      row,
+      accountId,
+      stopped,
+      { line: how.line, move: how.move },
+      laterSince
+    );
+    return "kept" in done ? done : { ...done, move: how.move };
+  };
+
+  /**
+   * `how` as the native compaction a summary that could not be written for
+   * this move falls back to, at the same moment, its line saying why
+   * (`refusal`, the hub's words).
+   */
+  const nativeInstead = (
+    row: Pick<MoverRow, "harness" | "id">,
+    how: MoveHow,
+    refusal: string
+  ): MoveHow & { plan: { method: "native"; when: "before" | "after" } } => {
+    const when = how.plan.method === "whole" ? "after" : how.plan.when;
+    console.info(
+      `[at-limit] ${sessionName(row)} can't go on from a summary as its move: ${refusal}. Its own /compact runs ${when} the move instead.`
+    );
+    const plan = { method: "native" as const, when };
+    return {
+      ...how,
+      plan,
+      move: {
+        ...compactedLine(how.move, plan, row.harness),
+        summaryRefused: refusal,
+      },
+    };
+  };
+
+  /**
+   * Compacts `row` where it is, warm, before its move (core `AccountMove`
+   * `compactFirst`): its line is written now, then its filing turn and its
+   * harness's `/compact` run ({@link startCompaction}); the move to the
+   * account the line names follows their end ({@link moveCompacted}).
+   */
+  const compactFirst = (row: MoverRow, how: MoveHow): void => {
+    noteAtLimit(row, how.move, how.line);
+    startCompaction(row, how.line, how.move, false);
+  };
+
+  /** Who writes `row`'s summaries: its provider's policy (core `Compaction.summarizer`), the default's on no account. */
+  const summarizerOf = (row: {
+    accountId?: string | null;
+  }): { harness: HarnessKind; model: string } => {
+    const provider = row.accountId
+      ? db.accounts.get(row.accountId)?.provider
+      : undefined;
+    return provider
+      ? db.accounts.routing(provider).atLimit.compaction.summarizer
+      : DEFAULT_COMPACTION.summarizer;
+  };
+
+  /**
+   * `row` going on from a summary as its move to `to` (core `Compaction`
+   * `summary`): a continuation the move asked for, which stays one session
+   * ({@link foldContinued}) on `to`, on its own harness and model, the
+   * summary written by its provider's summariser. Ahead of a limit
+   * (`stopped` false) it files its open items first, as it can still take a
+   * turn; stopped, its records are read as they stand. Undefined once the
+   * job is filed; why not, in the hub's words, when it could not be: the
+   * summariser's model can't fit the conversation, the conversation can't
+   * be read, or the job can't wait for its work in flight.
+   */
+  const continueAsMove = async (
+    row: MoverRow,
+    to: string,
+    stopped: false | "limit" | "signin",
+    how: MoveHow
+  ): Promise<string | undefined> => {
+    const asker: ContinuationAsker = {
+      kind: "move",
+      to,
+      stopped,
+      line: how.line,
+      move: how.move,
+    };
+    let release: () => void = () => undefined;
+    try {
+      release = await cloneForContinuation(row.id);
+      const prepared = await prepareContinuation(row.id);
+      const request: ContinueRequest = {
+        summarizer: summarizerOf(row),
+        target: {
+          harness: row.harness,
+          ...(row.model ? { model: row.model } : {}),
+          account: to,
+          machineId: row.machineId,
+          ...(row.permissionMode
+            ? { fallbackPermissionMode: row.permissionMode as PermissionMode }
+            : {}),
+        },
+      };
+      const refusal = await continuationRefusal(prepared, request, asker);
+      if (refusal) {
+        return refusal;
+      }
+      const inFlight = await inFlightFor(row.id, asker);
+      if ("refusal" in inFlight) {
+        return inFlight.refusal;
+      }
+      startContinuation(prepared, request, asker, inFlight.work);
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    } finally {
+      release();
+    }
+  };
+
+  /**
+   * Whether `instanceId` is going on from a summary as its move now: a job
+   * its move asked for ({@link continueAsMove}) that has not settled. What
+   * it is sent waits at the hub meanwhile, and goes to the new conversation.
+   */
+  const continuingAsMove = (instanceId: string): boolean =>
+    moveJobOf(instanceId) !== undefined;
+
+  /** The job going on from a summary as `instanceId`'s move ({@link continuingAsMove}), while it has not settled. */
+  const moveJobOf = (instanceId: string): ContinuationRow | undefined =>
+    db
+      .continuationRows()
+      .find(
+        (row) =>
+          row.sourceInstanceId === instanceId &&
+          row.askedBy.kind === "move" &&
+          !SETTLED.has(row.stage)
+      );
+
+  /**
+   * A summary its move asked for failed after its job was filed (`row`, in
+   * the failure's words): the move goes on as the harness's own `/compact`
+   * at the same moment, its line saying why; nothing when the source runs
+   * no more.
+   */
+  const moveAfterFailedSummary = async (
+    row: ContinuationRow,
+    reason: string
+  ): Promise<void> => {
+    const asker = row.askedBy;
+    const [source] = db.getInstancesByIds([row.sourceInstanceId]);
+    if (asker.kind !== "move" || asker.move.kind !== "moved" || !source) {
+      return;
+    }
+    const how = nativeInstead(
+      source,
+      {
+        cause: asker.stopped ? "limit" : "hand",
+        line: asker.line,
+        move: asker.move,
+        plan: { method: "summary", when: asker.stopped ? "after" : "before" },
+      },
+      reason
+    );
+    if (how.plan.when === "before") {
+      compactFirst(source, how);
+      return;
+    }
+    const done = await carryTo(
+      source,
+      asker.to,
+      asker.stopped,
+      { line: how.line, move: how.move },
+      undefined
+    );
+    if ("kept" in done) {
+      console.warn(
+        `[at-limit] ${sessionName(source)} stays on ${accountWords(source.accountId)}: its summary failed (${reason}), and moving it to ${accountWords(asker.to)} to compact it there failed too: ${done.kept.why}. Its limit decides again at the next look.`
+      );
+      releaseOwed({ instanceId: source.id });
+      return;
+    }
+    noteAtLimit(source, how.move, how.line);
+  };
+
   const atLimit = createAtLimit({
     db,
     lifetime,
@@ -29263,57 +29913,15 @@ export const createServer = (
       );
       publishUsage();
     },
-    move: async (row, accountId, stopped, compact, laterSince) => {
-      if (!(registry.agent(row.machineId) && row.sessionId)) {
-        return {
-          kept: {
-            running: false,
-            why: row.sessionId
-              ? `${machineName(row.machineId)} is not connected.`
-              : "it has no conversation to copy yet",
-          },
-        };
+    move: moveAs,
+    moving: (row) =>
+      db.atLimit.compaction(row.id) !== undefined || continuingAsMove(row.id),
+    dropCompaction: (row) => {
+      const plan = db.atLimit.compaction(row.id);
+      if (plan) {
+        db.atLimit.dropCompaction(row.id);
+        unnoteAtLimit(row, plan.lineId);
       }
-      // Its process ends at rest and its data goes into the account's dir,
-      // and only then does its row say the account; it starts again there
-      // when that process worked (read before the carry ends it).
-      // One that did not move stays on its account, held until its reset;
-      // a process the carry ended there is asleep, woken at that reset.
-      // A stopped session's move ends what it holds for later, unless no
-      // person waits on it: then it waits for that work up to the cap from
-      // `laterSince`. A rebalance's of a running one waits for it.
-      const live = processWorks(row);
-      const { kept, ended } = await moveRowsToAccount(
-        row.machineId,
-        [row],
-        accountId,
-        true,
-        stopped || undefined,
-        laterSince
-      );
-      const why = kept.get(row.id);
-      if (why) {
-        return { kept: why };
-      }
-      const agent = registry.agent(row.machineId);
-      const [now] = db.getInstancesByIds([row.id]);
-      if (!(agent && now?.sessionId)) {
-        return {
-          kept: {
-            running: false,
-            why: `${machineName(row.machineId)} is not connected.`,
-          },
-        };
-      }
-      relaunchMoved(
-        agent,
-        { ...now, sessionId: now.sessionId },
-        stopped,
-        compact,
-        live
-      );
-      const what = ended.get(row.id);
-      return what ? { ended: what } : {};
     },
     resume: carryOn,
     // A stale hold's notice in Needs you, kept and gone as a held item's is.
@@ -30596,9 +31204,6 @@ export const createServer = (
         },
         async ({ params, body, set, status }) => {
           const { askedBy, ...request } = body;
-          if (!(request.summarizer || request.asksOnly)) {
-            return status(400, "summarizer is required unless asksOnly is set");
-          }
           const asker: ContinuationAsker = askedBy
             ? { kind: "session", id: askedBy }
             : { kind: "person" };
@@ -34563,8 +35168,17 @@ export const createServer = (
               moveWholeUnderK: t.Integer({ minimum: 0 }),
               // Shipped apps send no cutoff: they keep the one saved.
               staleAfterHours: t.Optional(t.Integer({ minimum: 1 })),
-              // Read by nothing; shipped apps still send it (core AtLimit).
-              prepareAtPct: t.Optional(t.Integer({ minimum: 0, maximum: 100 })),
+              // Shipped apps send none: they keep the one saved.
+              compaction: t.Optional(
+                t.Object({
+                  beforeMove: compactMethod,
+                  atLimit: compactMethod,
+                  summarizer: t.Object({
+                    harness: harnessSchema,
+                    model: t.String({ minLength: 1 }),
+                  }),
+                })
+              ),
             }),
           }),
         },
@@ -34597,17 +35211,15 @@ export const createServer = (
               );
             }
           }
+          const saved = db.accounts.routing(params.provider).atLimit;
           const routing = {
             provider: params.provider,
             ...body,
             atLimit: {
               ...body.atLimit,
               staleAfterHours:
-                body.atLimit.staleAfterHours ??
-                db.accounts.routing(params.provider).atLimit.staleAfterHours,
-              // Kept for the shipped apps that read it (core AtLimit).
-              prepareAtPct:
-                body.atLimit.prepareAtPct ?? DEFAULT_AT_LIMIT.prepareAtPct,
+                body.atLimit.staleAfterHours ?? saved.staleAfterHours,
+              compaction: body.atLimit.compaction ?? saved.compaction,
               delegateWork: DEFAULT_AT_LIMIT.delegateWork,
             },
           };
@@ -37318,6 +37930,7 @@ export const createServer = (
                     if (cacheRow.accountId) {
                       atLimit.turnEnded(cacheRow.id);
                     }
+                    compactionTurnEnded(cacheRow.id);
                   }
                   // Its account changed during the turn (its model crossed a
                   // provider, or a person moved it): it moves now, at the

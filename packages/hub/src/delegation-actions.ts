@@ -1482,30 +1482,31 @@ function coldRefusalText(
 
 type ContinueSessionInput = Parameters<HandoffActions["continueSession"]>[0];
 
-/** The summariser as `continue_session` names it: `harness/model`. */
+/** The summariser as `continue_session` names it: `harness/model`, or its account's policy's when it names none. */
 const summariserOf = (input: ContinueSessionInput): string =>
-  `${input.summarizer_harness}/${input.summarizer_model}`;
+  input.summarizer_harness
+    ? `${input.summarizer_harness}/${input.summarizer_model ?? "its default model"}`
+    : "The summariser its account's routing names";
 
 /**
  * What a continuation goes on from, as the hub's continue route takes it:
- * its asks alone, or a summary by the summariser named. Refused
- * when neither is asked.
+ * its asks alone, or a summary by the summariser named, else by the one its
+ * account's routing names (core `Compaction.summarizer`).
  */
 const continuedFrom = (
   input: ContinueSessionInput
-): { asksOnly: true } | { summarizer: { harness: string; model: string } } => {
+):
+  { asksOnly: true } | { summarizer?: { harness: string; model?: string } } => {
   if (input.from === "asks") {
     return { asksOnly: true };
   }
-  if (!(input.summarizer_harness && input.summarizer_model)) {
-    throw new Error(
-      'Name summarizer_harness and summarizer_model, or continue with from: "asks", which summarises nothing.'
-    );
+  if (!input.summarizer_harness) {
+    return {};
   }
   return {
     summarizer: {
       harness: input.summarizer_harness,
-      model: input.summarizer_model,
+      ...(input.summarizer_model ? { model: input.summarizer_model } : {}),
     },
   };
 };

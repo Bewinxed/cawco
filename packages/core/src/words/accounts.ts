@@ -11,7 +11,7 @@
  * shows each; a word marked "the app's alone" is one only the app says,
  * where the HIG asks for something the web does another way.
  */
-import type { AccountHue, PlacementStrategy } from "../accounts";
+import type { AccountHue, CompactMethod, PlacementStrategy } from "../accounts";
 import { commonWords } from "./common";
 import { andList, pad2 } from "./helpers";
 
@@ -321,10 +321,22 @@ export const accountsWords = {
     move: "Move running sessions between accounts",
     wait: "Wait if the window resets within",
     minutes: "minutes",
-    over: "Compact it after the move if it’s over",
+    /** The floor under which a session moves whole, never compacted (core `AtLimit.moveWholeUnderK`). */
+    over: "Move it whole if it’s under",
     kTokens: "k tokens",
-    compacts:
-      "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn.",
+    /** How a session moving to another organization is made small, by the moment it moves at (core `Compaction`). */
+    beforeMove: "Moved ahead of its limit",
+    atLimit: "Moved at its limit",
+    methods: {
+      native: "Its own /compact",
+      summary: "A summary",
+      whole: "Whole",
+    } satisfies Record<CompactMethod, string>,
+    /** Under the choice while A summary is picked. */
+    summaryHint:
+      "It goes on in a fresh conversation: the summary, its open items, the files it touched and its last few turns.",
+    /** The heading of the picker for who writes summaries (core `Compaction.summarizer`). */
+    summarizer: "Summaries written by",
     terms:
       "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
     /** The cutoff past which a held session is no longer carried on by itself (core `AtLimit.staleAfterHours`). */
@@ -339,6 +351,9 @@ export const accountsWords = {
     /** Moving to an account with room, now or once its turn ends. */
     moving: (from: string, to: string) =>
       `Stopped at ${from}’s limit; continues on ${to}`,
+    /** Its move whole to `to` is announced, and goes at `clock` ("20:17") unless it is stopped. */
+    movingAt: (from: string, to: string, clock: string) =>
+      `Stopped at ${from}’s limit; moves whole to ${to} at ${clock}`,
     /**
      * Its move to `to` waits for work in flight (`work`: "1 command running"),
      * which no resume brings back: it moves when that ends, or at `clock`
@@ -442,6 +457,7 @@ export const accountsWords = {
     waits: (minutes: number) => `Waits ${minutes}m for the window to reset`,
     movesWhole: "Moves the whole conversation",
     compacts: "Moves it whole, then compacts it",
+    summarises: "Continues it from a summary",
     tokens: (k: number) => `${k}k`,
     reread: (k: number) => `re-read ${k}k`,
     compacted: (k: number) => `${k}k compacted`,

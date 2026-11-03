@@ -20176,16 +20176,6 @@
               }
             }
           },
-          "400": {
-            "description": "postApiInstancesByIdContinue 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
           "409": {
             "description": "postApiInstancesByIdContinue 409",
             "content": {
@@ -27376,10 +27366,52 @@
                         "minimum": 1,
                         "type": "integer"
                       },
-                      "prepareAtPct": {
-                        "minimum": 0,
-                        "maximum": 100,
-                        "type": "integer"
+                      "compaction": {
+                        "type": "object",
+                        "properties": {
+                          "beforeMove": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "summary",
+                              "whole"
+                            ]
+                          },
+                          "atLimit": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "summary",
+                              "whole"
+                            ]
+                          },
+                          "summarizer": {
+                            "type": "object",
+                            "properties": {
+                              "harness": {
+                                "type": "string",
+                                "enum": [
+                                  "claude",
+                                  "opencode",
+                                  "pi"
+                                ]
+                              },
+                              "model": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "harness",
+                              "model"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "beforeMove",
+                          "atLimit",
+                          "summarizer"
+                        ]
                       }
                     },
                     "required": [
@@ -33085,6 +33117,9 @@
           "atLimit": {
             "type": "object",
             "properties": {
+              "compaction": {
+                "$ref": "#/components/schemas/Compaction"
+              },
               "delegateWork": {
                 "type": "string",
                 "enum": [
@@ -33097,9 +33132,6 @@
               "moveWholeUnderK": {
                 "type": "number"
               },
-              "prepareAtPct": {
-                "type": "number"
-              },
               "staleAfterHours": {
                 "type": "number"
               },
@@ -33108,10 +33140,10 @@
               }
             },
             "required": [
+              "compaction",
               "delegateWork",
               "move",
               "moveWholeUnderK",
-              "prepareAtPct",
               "staleAfterHours",
               "waitMinutes"
             ]
@@ -49098,7 +49130,20 @@
                   },
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",
-                    "description": "Moved at its limit to another organization with a context of the\npolicy's `moveWholeUnderK` or more: it files its open items, then is\ncompacted natively, as its first steps on `to`. The line is said\nagain under its id as that goes."
+                    "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
+                  },
+                  "compactFirst": {
+                    "description": "The compaction runs on `from`, warm, and the move follows it: the\npolicy's `beforeMove`. Absent: it runs on `to` after the move.",
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "compactBy": {
+                    "$ref": "#/components/schemas/Exclude",
+                    "description": "The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less."
+                  },
+                  "summaryRefused": {
+                    "description": "The policy said to go on from a summary, which could not be written\nfor this move, in the hub's words: its harness's `/compact` ran\ninstead.",
+                    "type": "string"
                   },
                   "relaunched": {
                     "description": "Its process ended on `to` before it took a step of the compaction,\nand the hub started it again there to take it.",
@@ -49136,7 +49181,7 @@
                     ]
                   },
                   "because": {
-                    "description": "Why it moved other than at a limit: its account was forecast to run\nout at `runsOutAt` (a rebalance between turns), its cache was cold at\nits wake, so the move re-read nothing extra, or Claude Code refused\n`from`'s credential for good (`refused`: the hub signed it out there).\nAbsent: its account's limit refused a turn, or a person asked.",
+                    "description": "Why it moved other than at a limit ({@link MoveBecause}); absent: its account's limit refused a turn, or a person asked.",
                     "anyOf": [
                       {
                         "type": "object",
@@ -49187,6 +49232,20 @@
                         "required": [
                           "kind"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "extra-usage"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
                       }
                     ]
                   },
@@ -49231,6 +49290,56 @@
                   "to",
                   "tokens",
                   "window"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "A move whole the policy chose for a context large enough to compact\n({@link Compaction} `whole`): it goes at `at` by itself, from `from`\nto `to`, unless a person stops the session before then.",
+                    "type": "string",
+                    "enum": [
+                      "moving"
+                    ]
+                  },
+                  "from": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "at": {
+                    "type": "number"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
+                  "cost": {
+                    "description": "What the re-read will cost on `to`: a percent of its window; absent when unpriced.",
+                    "type": "object",
+                    "properties": {
+                      "pct": {
+                        "type": "number"
+                      },
+                      "window": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pct",
+                      "window"
+                    ]
+                  }
+                },
+                "required": [
+                  "at",
+                  "from",
+                  "kind",
+                  "to",
+                  "tokens"
                 ]
               },
               {
@@ -49312,6 +49421,105 @@
                     "description": "It restarted from the person's own messages alone: nothing was summarised.",
                     "const": true,
                     "type": "boolean"
+                  },
+                  "move": {
+                    "description": "It went on from a summary as its move to `to`, as the policy says\n({@link Compaction} `summary`): at its account's limit (`limit`:\nthe window that refused it and when that resets, or its refused\nsign-in), or ahead of one (`ahead`: its account's forecast run-out,\nits extra usage, or a person's move, `because`). Absent: a session\nor a task asked for it.",
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "$ref": "#/components/schemas/BlockMetadataAt"
+                      },
+                      "because": {
+                        "description": "Why a session moved other than at a limit refusing a turn of it\n({@link AccountMove} `moved`): its account was forecast to run out at\n`runsOutAt` (a rebalance between turns), its cache was cold at its wake,\nso the move re-read nothing extra, Claude Code refused `from`'s\ncredential for good (`refused`: the hub signed it out there), or a turn\nof it ran on `from`'s extra usage past its plan, which says to move then.",
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "forecast"
+                                ]
+                              },
+                              "runsOutAt": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "runsOutAt"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "cold"
+                                ]
+                              },
+                              "wake": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "wake"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "refused"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "extra-usage"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          }
+                        ]
+                      },
+                      "asked": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "window": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      },
+                      "resetsAt": {
+                        "type": [
+                          "null",
+                          "number"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "resetsAt",
+                      "window"
+                    ]
                   },
                   "tokens": {
                     "type": [
@@ -54906,9 +55114,12 @@
         ]
       },
       "AtLimit": {
-        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move whole to another account that can take it (the hub's\n`decideStop`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), also files its open items and is compacted by\nClaude Code's own `/compact` as its first steps there, before anything it\nis owed. A live work item's session is answered so whoever started its\nrefused turn, the hub's own word to it included; every other word of the\nhub's a limit refused is left until a person or the session's parent\nwrites.",
+        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move to another account that can take it (the hub's\n`decideStop`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), is compacted as `compaction` says for the\nmoment it moves at. A live work item's session is answered so whoever\nstarted its refused turn, the hub's own word to it included; every other\nword of the hub's a limit refused is left until a person or the session's\nparent writes.",
         "type": "object",
         "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/Compaction"
+          },
           "delegateWork": {
             "description": "Read by nothing: a delegate's work at its limit is answered as any\nsession's is, moved to an account with room or held until the earliest\nreset. Sent as `move`, which is what the hub does, only because the\nTestFlight builds 20261017 and 20261018 require it, which the hub's wire\ncheck holds to (packages/hub/scripts/openapi.ts). It goes in the change\nthat expires them.",
             "type": "string",
@@ -54922,10 +55133,6 @@
           "moveWholeUnderK": {
             "type": "number"
           },
-          "prepareAtPct": {
-            "description": "Read by nothing (the summary written ahead of the limit it timed is\ngone): sent at its default only because the TestFlight builds 20261015\nand 20261015.3 require it, which the hub's wire check holds to\n(packages/hub/scripts/openapi.ts). It goes in the change that expires\nthem.",
-            "type": "number"
-          },
           "staleAfterHours": {
             "description": "How long past its reset a held session is still carried on by itself\n(a sign-in hold, which has no reset, counts from when it was held).\nOlder, its hold goes stale: nothing sends to it or wakes it until a\nperson or its parent writes to it, and it waits in Needs you and in its\nparent's `delegate_list` (hub at-limit.ts `goneStale`).",
             "type": "number"
@@ -54935,12 +55142,56 @@
           }
         },
         "required": [
+          "compaction",
           "delegateWork",
           "move",
           "moveWholeUnderK",
-          "prepareAtPct",
           "staleAfterHours",
           "waitMinutes"
+        ]
+      },
+      "Compaction": {
+        "description": "How a session is compacted when it moves, by the moment the hub moves it\n(hub at-limit.ts `compactionPlan`, the one rule every mover reads). A\ncontext under {@link AtLimit.moveWholeUnderK} thousand tokens, or one whose\ncache carries to the account it moves to, moves whole whatever this says.\nA session that stays on its organization is left to its harness's own\nautomatic compaction.",
+        "type": "object",
+        "properties": {
+          "atLimit": {
+            "$ref": "#/components/schemas/CompactMethod",
+            "description": "Nothing can run on its account (its limit refused a turn, its sign-in\nwas refused): `summary` goes on from a summary on the target; `native`\nmoves it whole and compacts it there, cold; `whole` moves it as it is.\nA summary that can't be written for a move (its summariser can't fit\nthe conversation, can't be placed, or the conversation can't be read)\ntakes `native` for that move, its line saying why."
+          },
+          "beforeMove": {
+            "$ref": "#/components/schemas/CompactMethod",
+            "description": "Its account can run it still (forecast to run out, on extra usage past\nits plan, a person's move): `native` files its open items and compacts\nit there, warm, then moves it; `summary` files them, then goes on from a\nsummary on the target; `whole` moves it as it is."
+          },
+          "summarizer": {
+            "description": "Who writes a summary: its harness and model, placed as any start is.",
+            "type": "object",
+            "properties": {
+              "harness": {
+                "$ref": "#/components/schemas/HarnessKind"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "harness",
+              "model"
+            ]
+          }
+        },
+        "required": [
+          "atLimit",
+          "beforeMove",
+          "summarizer"
+        ]
+      },
+      "CompactMethod": {
+        "description": "How a session's context is made small as it moves to another organization,\nwhose cache it can't read: its harness's own `/compact` after a turn that\nfiles its open items (`native`), a fresh conversation of the same session\nopened on a summary {@link Compaction.summarizer} writes (`summary`), or\nnothing, the conversation moved as it is (`whole`).",
+        "type": "string",
+        "enum": [
+          "native",
+          "summary",
+          "whole"
         ]
       },
       "StrategyChoice": {
@@ -57761,7 +58012,20 @@
                   },
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",
-                    "description": "Moved at its limit to another organization with a context of the\npolicy's `moveWholeUnderK` or more: it files its open items, then is\ncompacted natively, as its first steps on `to`. The line is said\nagain under its id as that goes."
+                    "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
+                  },
+                  "compactFirst": {
+                    "description": "The compaction runs on `from`, warm, and the move follows it: the\npolicy's `beforeMove`. Absent: it runs on `to` after the move.",
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "compactBy": {
+                    "$ref": "#/components/schemas/Exclude",
+                    "description": "The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less."
+                  },
+                  "summaryRefused": {
+                    "description": "The policy said to go on from a summary, which could not be written\nfor this move, in the hub's words: its harness's `/compact` ran\ninstead.",
+                    "type": "string"
                   },
                   "relaunched": {
                     "description": "Its process ended on `to` before it took a step of the compaction,\nand the hub started it again there to take it.",
@@ -57799,7 +58063,7 @@
                     ]
                   },
                   "because": {
-                    "description": "Why it moved other than at a limit: its account was forecast to run\nout at `runsOutAt` (a rebalance between turns), its cache was cold at\nits wake, so the move re-read nothing extra, or Claude Code refused\n`from`'s credential for good (`refused`: the hub signed it out there).\nAbsent: its account's limit refused a turn, or a person asked.",
+                    "description": "Why it moved other than at a limit ({@link MoveBecause}); absent: its account's limit refused a turn, or a person asked.",
                     "anyOf": [
                       {
                         "type": "object",
@@ -57850,6 +58114,20 @@
                         "required": [
                           "kind"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "extra-usage"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
                       }
                     ]
                   },
@@ -57894,6 +58172,56 @@
                   "to",
                   "tokens",
                   "window"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "A move whole the policy chose for a context large enough to compact\n({@link Compaction} `whole`): it goes at `at` by itself, from `from`\nto `to`, unless a person stops the session before then.",
+                    "type": "string",
+                    "enum": [
+                      "moving"
+                    ]
+                  },
+                  "from": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "at": {
+                    "type": "number"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
+                  "cost": {
+                    "description": "What the re-read will cost on `to`: a percent of its window; absent when unpriced.",
+                    "type": "object",
+                    "properties": {
+                      "pct": {
+                        "type": "number"
+                      },
+                      "window": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pct",
+                      "window"
+                    ]
+                  }
+                },
+                "required": [
+                  "at",
+                  "from",
+                  "kind",
+                  "to",
+                  "tokens"
                 ]
               },
               {
@@ -57975,6 +58303,105 @@
                     "description": "It restarted from the person's own messages alone: nothing was summarised.",
                     "const": true,
                     "type": "boolean"
+                  },
+                  "move": {
+                    "description": "It went on from a summary as its move to `to`, as the policy says\n({@link Compaction} `summary`): at its account's limit (`limit`:\nthe window that refused it and when that resets, or its refused\nsign-in), or ahead of one (`ahead`: its account's forecast run-out,\nits extra usage, or a person's move, `because`). Absent: a session\nor a task asked for it.",
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "$ref": "#/components/schemas/BlockMetadataAt"
+                      },
+                      "because": {
+                        "description": "Why a session moved other than at a limit refusing a turn of it\n({@link AccountMove} `moved`): its account was forecast to run out at\n`runsOutAt` (a rebalance between turns), its cache was cold at its wake,\nso the move re-read nothing extra, Claude Code refused `from`'s\ncredential for good (`refused`: the hub signed it out there), or a turn\nof it ran on `from`'s extra usage past its plan, which says to move then.",
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "forecast"
+                                ]
+                              },
+                              "runsOutAt": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "runsOutAt"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "cold"
+                                ]
+                              },
+                              "wake": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "wake"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "refused"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "extra-usage"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ]
+                          }
+                        ]
+                      },
+                      "asked": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "window": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      },
+                      "resetsAt": {
+                        "type": [
+                          "null",
+                          "number"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "resetsAt",
+                      "window"
+                    ]
                   },
                   "tokens": {
                     "type": [
@@ -61676,6 +62103,13 @@
           "compacting",
           "filing",
           "stopped"
+        ]
+      },
+      "BlockMetadataAt": {
+        "type": "string",
+        "enum": [
+          "ahead",
+          "limit"
         ]
       },
       "BlockMetadataAction": {

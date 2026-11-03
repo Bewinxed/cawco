@@ -855,6 +855,12 @@ const rank = (from: string): number => {
 };
 const byLocalName = (a: string, b: string): number => {
   const [x = a, y = b] = [a.split(" as ")[1], b.split(" as ")[1]];
+  // Biome's order: letters case-insensitively first ("CompactionType"
+  // before "CompactMethodType"), then by code point.
+  const [lx, ly] = [x.toLowerCase(), y.toLowerCase()];
+  if (lx !== ly) {
+    return lx < ly ? -1 : 1;
+  }
   return x < y ? -1 : Number(x > y);
 };
 

@@ -16,6 +16,7 @@
  */
 
 import { RESTART_WAIT_CAP_MS } from "./binary-updates";
+import type { HarnessKind } from "./harness";
 import { MINUTE_MS } from "./time";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
@@ -316,19 +317,69 @@ export interface StrategyChoice {
 }
 
 /**
+ * How a session's context is made small as it moves to another organization,
+ * whose cache it can't read: its harness's own `/compact` after a turn that
+ * files its open items (`native`), a fresh conversation of the same session
+ * opened on a summary {@link Compaction.summarizer} writes (`summary`), or
+ * nothing, the conversation moved as it is (`whole`).
+ */
+export type CompactMethod = "native" | "summary" | "whole";
+
+export const COMPACT_METHODS: readonly CompactMethod[] = [
+  "native",
+  "summary",
+  "whole",
+];
+
+/**
+ * How a session is compacted when it moves, by the moment the hub moves it
+ * (hub at-limit.ts `compactionPlan`, the one rule every mover reads). A
+ * context under {@link AtLimit.moveWholeUnderK} thousand tokens, or one whose
+ * cache carries to the account it moves to, moves whole whatever this says.
+ * A session that stays on its organization is left to its harness's own
+ * automatic compaction.
+ */
+export interface Compaction {
+  /**
+   * Nothing can run on its account (its limit refused a turn, its sign-in
+   * was refused): `summary` goes on from a summary on the target; `native`
+   * moves it whole and compacts it there, cold; `whole` moves it as it is.
+   * A summary that can't be written for a move (its summariser can't fit
+   * the conversation, can't be placed, or the conversation can't be read)
+   * takes `native` for that move, its line saying why.
+   */
+  atLimit: CompactMethod;
+  /**
+   * Its account can run it still (forecast to run out, on extra usage past
+   * its plan, a person's move): `native` files its open items and compacts
+   * it there, warm, then moves it; `summary` files them, then goes on from a
+   * summary on the target; `whole` moves it as it is.
+   */
+  beforeMove: CompactMethod;
+  /** Who writes a summary: its harness and model, placed as any start is. */
+  summarizer: { harness: HarnessKind; model: string };
+}
+
+export const DEFAULT_COMPACTION: Compaction = {
+  beforeMove: "native",
+  atLimit: "summary",
+  summarizer: { harness: "claude", model: "claude-sonnet-5-5" },
+};
+
+/**
  * What a running session does when its account hits its limit: wait for the
- * reset, or move whole to another account that can take it (the hub's
+ * reset, or move to another account that can take it (the hub's
  * `decideStop`). `waitMinutes`: a reset this close is waited for.
  * `moveWholeUnderK`: a context under this many thousand tokens moves whole
  * and goes on; one of this many or more, moved to another organization
- * (whose cache it can't read), also files its open items and is compacted by
- * Claude Code's own `/compact` as its first steps there, before anything it
- * is owed. A live work item's session is answered so whoever started its
- * refused turn, the hub's own word to it included; every other word of the
- * hub's a limit refused is left until a person or the session's parent
- * writes.
+ * (whose cache it can't read), is compacted as `compaction` says for the
+ * moment it moves at. A live work item's session is answered so whoever
+ * started its refused turn, the hub's own word to it included; every other
+ * word of the hub's a limit refused is left until a person or the session's
+ * parent writes.
  */
 export interface AtLimit {
+  compaction: Compaction;
   /**
    * Read by nothing: a delegate's work at its limit is answered as any
    * session's is, moved to an account with room or held until the earliest
@@ -340,14 +391,6 @@ export interface AtLimit {
   delegateWork: "move";
   move: boolean;
   moveWholeUnderK: number;
-  /**
-   * Read by nothing (the summary written ahead of the limit it timed is
-   * gone): sent at its default only because the TestFlight builds 20261015
-   * and 20261015.3 require it, which the hub's wire check holds to
-   * (packages/hub/scripts/openapi.ts). It goes in the change that expires
-   * them.
-   */
-  prepareAtPct: number;
   /**
    * How long past its reset a held session is still carried on by itself
    * (a sign-in hold, which has no reset, counts from when it was held).
@@ -364,7 +407,7 @@ export const DEFAULT_AT_LIMIT: AtLimit = {
   waitMinutes: 15,
   staleAfterHours: 24,
   moveWholeUnderK: 200,
-  prepareAtPct: 90,
+  compaction: DEFAULT_COMPACTION,
   delegateWork: "move",
 };
 
@@ -1193,13 +1236,27 @@ export interface HeldAccount {
 }
 
 /**
- * Where the compaction after an at-limit move stands ({@link AccountMove}
+ * Where the native compaction of a move stands ({@link AccountMove}
  * `moved`): the session files its open items in its records (`filing`),
- * then Claude Code's own `/compact` runs (`compacting`); it ends compacted,
+ * then its harness's own `/compact` runs (`compacting`); it ends compacted,
  * or stopped (a person interrupted or stopped either turn, or the
  * compaction failed), the conversation then going on whole.
  */
 export type CompactStage = "filing" | "compacting" | "compacted" | "stopped";
+
+/**
+ * Why a session moved other than at a limit refusing a turn of it
+ * ({@link AccountMove} `moved`): its account was forecast to run out at
+ * `runsOutAt` (a rebalance between turns), its cache was cold at its wake,
+ * so the move re-read nothing extra, Claude Code refused `from`'s
+ * credential for good (`refused`: the hub signed it out there), or a turn
+ * of it ran on `from`'s extra usage past its plan, which says to move then.
+ */
+export type MoveBecause =
+  | { kind: "forecast"; runsOutAt: number }
+  | { kind: "cold"; wake: boolean }
+  | { kind: "refused" }
+  | { kind: "extra-usage" };
 
 /**
  * What the hub did when a running session's account reached its limit: the
@@ -1212,12 +1269,27 @@ export type AccountMove =
       /** Moved because a person asked (`POST /api/instances/:id/account`), not at a limit. */
       asked?: true;
       /**
-       * Moved at its limit to another organization with a context of the
-       * policy's `moveWholeUnderK` or more: it files its open items, then is
-       * compacted natively, as its first steps on `to`. The line is said
-       * again under its id as that goes.
+       * Moved to another organization with a context of the policy's
+       * `moveWholeUnderK` or more, compacted natively ({@link Compaction}):
+       * it files its open items, then its harness's `/compact` runs, as its
+       * first steps on `to`, or on `from` before the move
+       * ({@link compactFirst}). The line is said again under its id as that
+       * goes.
        */
       compact?: CompactStage;
+      /**
+       * The compaction runs on `from`, warm, and the move follows it: the
+       * policy's `beforeMove`. Absent: it runs on `to` after the move.
+       */
+      compactFirst?: true;
+      /** The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less. */
+      compactBy?: "opencode" | "pi";
+      /**
+       * The policy said to go on from a summary, which could not be written
+       * for this move, in the hub's words: its harness's `/compact` ran
+       * instead.
+       */
+      summaryRefused?: string;
       /**
        * Its process ended on `to` before it took a step of the compaction,
        * and the hub started it again there to take it.
@@ -1232,17 +1304,8 @@ export type AccountMove =
       window: string | null;
       /** When that window resets, epoch ms; null when nothing said. */
       resetsAt: number | null;
-      /**
-       * Why it moved other than at a limit: its account was forecast to run
-       * out at `runsOutAt` (a rebalance between turns), its cache was cold at
-       * its wake, so the move re-read nothing extra, or Claude Code refused
-       * `from`'s credential for good (`refused`: the hub signed it out there).
-       * Absent: its account's limit refused a turn, or a person asked.
-       */
-      because?:
-        | { kind: "forecast"; runsOutAt: number }
-        | { kind: "cold"; wake: boolean }
-        | { kind: "refused" };
+      /** Why it moved other than at a limit ({@link MoveBecause}); absent: its account's limit refused a turn, or a person asked. */
+      because?: MoveBecause;
       /** What the re-read cost on `to`: a percent of the window it is counted against, named as `windowWords` names it; absent when unpriced. */
       cost?: { pct: number; window: string };
       /**
@@ -1251,6 +1314,20 @@ export type AccountMove =
        * account brings back. The session is told on arrival what ended.
        */
       ended?: { tasks: number; wakeups: number };
+    }
+  | {
+      /**
+       * A move whole the policy chose for a context large enough to compact
+       * ({@link Compaction} `whole`): it goes at `at` by itself, from `from`
+       * to `to`, unless a person stops the session before then.
+       */
+      kind: "moving";
+      from: NamedAccount;
+      to: NamedAccount;
+      at: number;
+      tokens: number | null;
+      /** What the re-read will cost on `to`: a percent of its window; absent when unpriced. */
+      cost?: { pct: number; window: string };
     }
   | {
       kind: "waiting";
@@ -1297,6 +1374,21 @@ export type AccountMove =
       asked?: true;
       /** It restarted from the person's own messages alone: nothing was summarised. */
       asks?: true;
+      /**
+       * It went on from a summary as its move to `to`, as the policy says
+       * ({@link Compaction} `summary`): at its account's limit (`limit`:
+       * the window that refused it and when that resets, or its refused
+       * sign-in), or ahead of one (`ahead`: its account's forecast run-out,
+       * its extra usage, or a person's move, `because`). Absent: a session
+       * or a task asked for it.
+       */
+      move?: {
+        at: "limit" | "ahead";
+        because?: MoveBecause;
+        asked?: true;
+        window: string | null;
+        resetsAt: number | null;
+      };
       tokens: number | null;
       /**
        * Null on every line written now (no summary is written ahead of a
@@ -1526,9 +1618,10 @@ const movedWords = (
       detail: `Moved here from ${move.from.name}`,
     };
   }
-  const cost = move.cost
-    ? ` (≈${Math.max(1, Math.round(move.cost.pct))}% of ${move.to.name}'s ${move.cost.window ? `${move.cost.window} ` : ""}window)`
-    : "";
+  const cost = costWords(move.cost, move.to.name);
+  if (move.compact) {
+    return compactedMoveWords(move, cost, now);
+  }
   if (move.because?.kind === "refused") {
     return {
       line: `Moved to ${move.to.name}: ${move.from.name}'s sign-in was refused`,
@@ -1536,9 +1629,6 @@ const movedWords = (
         ? "Same organization, cache kept"
         : `Re-read ${tokenWords(move.tokens)}${cost}`,
     };
-  }
-  if (move.compact) {
-    return compactedMoveWords(move, cost, now);
   }
   const line = move.sameOrganization
     ? `Moved to ${move.to.name} · same organization, cache kept`
@@ -1576,11 +1666,17 @@ const endedWorkWords = (ended: { tasks: number; wakeups: number }): string => {
     : "";
 };
 
+/** What sent a move, as its line's last clause reads it: the account it left, and why. */
+interface MoveSent {
+  asked?: true;
+  because?: MoveBecause;
+  from: { name: string };
+  resetsAt: number | null;
+  window: string | null;
+}
+
 /** Whose limit sent it and when that resets: "A hit its weekly limit · resets in 3d 4h". */
-const limitHitWords = (
-  move: Extract<AccountMove, { kind: "moved" }>,
-  now: number
-): string => {
+const limitHitWords = (move: MoveSent, now: number): string => {
   const left = move.resetsAt === null ? 0 : move.resetsAt - now;
   return [
     `${move.from.name} hit its ${move.window ? `${move.window} ` : ""}limit`,
@@ -1588,36 +1684,115 @@ const limitHitWords = (
   ].join(" · ");
 };
 
+/** A move's cost as its line says it: " (≈3% of B’s 5-hour window)", or nothing when unpriced. */
+const costWords = (
+  cost: { pct: number; window: string } | undefined,
+  to: string
+): string =>
+  cost
+    ? ` (≈${Math.max(1, Math.round(cost.pct))}% of ${to}'s ${cost.window ? `${cost.window} ` : ""}window)`
+    : "";
+
 /**
- * A move at the limit that compacts once there, by where that stands: "Moved
- * to B, compacting next", "Moved to B, compacting", "Moved to B, then
- * compacted", or "compaction stopped" with the whole conversation kept.
+ * What sent a move at its limit, as its line's last clause says it: the
+ * window that refused it and when that resets ("A hit its 5-hour limit ·
+ * resets in 3h 10m"), or its refused sign-in.
+ */
+const hitWords = (move: MoveSent, now: number): string =>
+  move.because?.kind === "refused"
+    ? `${move.from.name}’s sign-in was refused`
+    : limitHitWords(move, now);
+
+/**
+ * What sent a move ahead of its account's limit, as its line's last clause
+ * says it: its account's forecast run-out, its extra usage, or a person.
+ */
+const aheadWords = (move: MoveSent, now: number): string => {
+  if (move.because?.kind === "forecast") {
+    return `ahead of ${move.from.name}’s run-out at ${clockWords(move.because.runsOutAt)}`;
+  }
+  if (move.because?.kind === "extra-usage") {
+    return `${move.from.name} is on extra usage`;
+  }
+  return move.asked ? "as asked" : hitWords(move, now);
+};
+
+/** A line with a clause after its first: "Moved to B, compacting next · no summary: … · re-read 412k tokens". */
+const afterFirst = (line: string, clause: string | undefined): string => {
+  if (!clause) {
+    return line;
+  }
+  const [head, ...rest] = line.split(" · ");
+  return [head, clause, ...rest].join(" · ");
+};
+
+/** What a harness's own /compact left out, after the open items were filed: said for OpenCode and pi. */
+const compactedWords = (by: "opencode" | "pi" | undefined): string => {
+  switch (by) {
+    case "opencode":
+      return "Its open items were filed first, not listed after · OpenCode’s /compact chose what to keep on its own";
+    case "pi":
+      return "Its open items were filed first, not listed after";
+    case undefined:
+      return "Its open items were filed first and listed after";
+  }
+};
+
+/**
+ * A move compacted by its harness's own /compact, by where that stands:
+ * after the move, on `to` ("Moved to B, compacting next"), or before it, on
+ * `from` ("Compacting before its move to B", then "Compacted on A, then
+ * moved to B"), or stopped, the whole conversation kept. One whose summary
+ * could not be written says why after its first clause.
  */
 const compactedMoveWords = (
   move: Extract<AccountMove, { kind: "moved" }>,
   cost: string,
   now: number
 ): { line: string; detail: string } => {
+  const said = move.compactFirst
+    ? compactedFirstWords(move, cost, now)
+    : compactedAfterWords(move, cost, now);
+  return {
+    line: afterFirst(
+      said.line,
+      move.summaryRefused ? `no summary: ${move.summaryRefused}` : undefined
+    ),
+    detail: said.detail,
+  };
+};
+
+/** The harness whose /compact runs, by name. */
+const compactHarness = (move: Extract<AccountMove, { kind: "moved" }>) =>
+  accountsWords.harnesses[move.compactBy ?? "claude"];
+
+/** A compaction on `to` after the move, by its stage. */
+const compactedAfterWords = (
+  move: Extract<AccountMove, { kind: "moved" }>,
+  cost: string,
+  now: number
+): { line: string; detail: string } => {
   const to = move.to.name;
   const tokens = tokenWords(move.tokens);
+  const harness = compactHarness(move);
   const hit = move.relaunched
-    ? `its process ended before it took that turn, so the hub started it again · ${limitHitWords(move, now)}`
-    : limitHitWords(move, now);
+    ? `its process ended before it took that turn, so the hub started it again · ${hitWords(move, now)}`
+    : hitWords(move, now);
   switch (move.compact) {
     case "filing":
       return {
         line: `Moved to ${to}, compacting next · re-read ${tokens}${cost}`,
-        detail: `It files its open items, then Claude Code compacts it; what is sent to it waits until then · stop the turn to send it now · ${hit}`,
+        detail: `It files its open items, then ${harness} compacts it; what is sent to it waits until then · stop the turn to send it now · ${hit}`,
       };
     case "compacting":
       return {
         line: `Moved to ${to}, compacting · re-read ${tokens}${cost}`,
-        detail: `Claude Code's own /compact; what is sent to it waits until then · stop the turn to send it now · ${hit}`,
+        detail: `${harness}’s own /compact; what is sent to it waits until then · stop the turn to send it now · ${hit}`,
       };
     case "compacted":
       return {
         line: `Moved to ${to}, then compacted · re-read ${tokens} once${cost}`,
-        detail: `Its open items were filed first and listed after · ${hit}`,
+        detail: `${compactedWords(move.compactBy)} · ${hit}`,
       };
     case "stopped":
     case undefined:
@@ -1626,6 +1801,59 @@ const compactedMoveWords = (
         detail: `It goes on with its whole conversation · ${hit}`,
       };
   }
+};
+
+/** A compaction on `from` before the move, by its stage: the move follows it, whole once it stopped. */
+const compactedFirstWords = (
+  move: Extract<AccountMove, { kind: "moved" }>,
+  cost: string,
+  now: number
+): { line: string; detail: string } => {
+  const { name: to } = move.to;
+  const { name: from } = move.from;
+  const tokens = tokenWords(move.tokens);
+  const harness = compactHarness(move);
+  const why = move.relaunched
+    ? `its process ended before it took that turn, so the hub started it again · ${aheadWords(move, now)}`
+    : aheadWords(move, now);
+  switch (move.compact) {
+    case "filing":
+      return {
+        line: `Compacting before its move to ${to} · ${tokens} on ${from}`,
+        detail: `It files its open items, then ${harness} compacts it on ${from}; what is sent to it waits until it has moved · stop the turn to move it whole now · ${why}`,
+      };
+    case "compacting":
+      return {
+        line: `Compacting before its move to ${to} · ${tokens} on ${from}`,
+        detail: `${harness}’s own /compact, on ${from}; what is sent to it waits until it has moved · stop the turn to move it whole now · ${why}`,
+      };
+    case "compacted":
+      return {
+        line: `Compacted on ${from}, then moved to ${to} · re-read ${tokens}${cost}`,
+        detail: `${compactedWords(move.compactBy)} · ${why}`,
+      };
+    case "stopped":
+    case undefined:
+      return {
+        line: `Moved to ${to} whole · compaction stopped, re-read ${tokens}${cost}`,
+        detail: `It goes on with its whole conversation · ${why}`,
+      };
+  }
+};
+
+/** A move whole announced ahead of its moment, counting down to it at `now`. */
+const movingWords = (
+  move: Extract<AccountMove, { kind: "moving" }>,
+  now: number
+): { line: string; detail: string } => {
+  const left = move.at - now;
+  return {
+    line:
+      left > 0
+        ? `Moves whole to ${move.to.name} in ${spanWords(left)}`
+        : `Moves whole to ${move.to.name}`,
+    detail: `Re-read ${tokenWords(move.tokens)}${costWords(move.cost, move.to.name)} · stop the session to keep it on ${move.from.name}`,
+  };
 };
 
 /**
@@ -1651,6 +1879,8 @@ export const accountMoveWords = (
         detail: waitingDetail(move, now),
       };
     }
+    case "moving":
+      return movingWords(move, now);
     case "stopped":
       return stoppedWords(move, now);
     case "signed-out":
@@ -1666,7 +1896,7 @@ export const accountMoveWords = (
         detail: unmovedNext(move),
       };
     case "continued":
-      return continuedWords(move);
+      return continuedWords(move, now);
   }
 };
 
@@ -1684,7 +1914,7 @@ const costliestWords = (moves: readonly AccountMove[]): string | undefined => {
     (move) => move.compact !== undefined && move.compact !== "stopped"
   );
   if (compacted) {
-    return `compacted on ${compacted.to.name}`;
+    return `compacted on ${(compacted.compactFirst ? compacted.from : compacted.to).name}`;
   }
   const [cold] = moved
     .filter(
@@ -1798,10 +2028,36 @@ export const accountMoveSentence = (move: AccountMove, now: number): string => {
   return `${head} ${detail.replace(TRAILING_STOP, "")}.`;
 };
 
+/**
+ * A continuation that was its move (the policy's summary, {@link Compaction}):
+ * where it went on, what stayed behind, what it opened on, where its summary
+ * was written, and what sent it.
+ */
+const continuedMoveWords = (
+  move: Extract<AccountMove, { kind: "continued" }>,
+  as: NonNullable<Extract<AccountMove, { kind: "continued" }>["move"]>,
+  now: number
+): { line: string; detail: string } => {
+  const from = move.from?.name ?? "the conversation before";
+  const sent: MoveSent = { ...as, from: { name: from } };
+  return {
+    line: `Continued${move.to ? ` on ${move.to.name}` : ""} from a summary · ${tokenWords(move.tokens)} stayed on ${from}`,
+    detail: [
+      "It goes on from the summary, its open items, the files it touched and its last few turns",
+      ...(move.writtenOn ? [`summary written on ${move.writtenOn.name}`] : []),
+      as.at === "limit" ? hitWords(sent, now) : aheadWords(sent, now),
+    ].join(" · "),
+  };
+};
+
 /** A continuation in words: where it went on, what stayed behind, and where its summary was written. */
 const continuedWords = (
-  move: Extract<AccountMove, { kind: "continued" }>
+  move: Extract<AccountMove, { kind: "continued" }>,
+  now: number
 ): { line: string; detail: string } => {
+  if (move.move && !move.asks) {
+    return continuedMoveWords(move, move.move, now);
+  }
   const stayed = `${tokenWords(move.tokens)} stayed ${move.from ? `on ${move.from.name}` : "in the conversation before"}`;
   if (move.asks) {
     return {

@@ -13,11 +13,14 @@ import type {
   AccountProvider as AccountProviderType,
   AccountReport as AccountReportType,
   AtLimit as AtLimitType,
+  Compaction as CompactionType,
+  CompactMethod as CompactMethodType,
   CompactStage as CompactStageType,
   ContinueStep as ContinueStepType,
   EndedBy as EndedByType,
   HeldAccount as HeldAccountType,
   HeldReason as HeldReasonType,
+  MoveBecause as MoveBecauseType,
   NamedAccount as NamedAccountType,
   WaitReason as WaitReasonType,
 } from "./accounts";
@@ -1294,6 +1297,13 @@ const NamedAccountShape = z.object({
   name: z.string(),
 });
 
+const MoveBecauseShape = z.union([
+  z.object({ kind: z.literal("forecast"), runsOutAt: z.number() }),
+  z.object({ kind: z.literal("cold"), wake: z.boolean() }),
+  z.object({ kind: z.literal("refused") }),
+  z.object({ kind: z.literal("extra-usage") }),
+]);
+
 const HeldReasonShape = z.union([
   z.object({ kind: z.literal("signin") }),
   z.object({ kind: z.literal("allowed"), by: z.enum(["project", "task"]) }),
@@ -1351,6 +1361,9 @@ const AccountMoveShape = z.union([
     kind: z.literal("moved"),
     asked: z.literal(true).optional(),
     compact: CompactStageShape.optional(),
+    compactFirst: z.literal(true).optional(),
+    compactBy: z.enum(["opencode", "pi"]).optional(),
+    summaryRefused: z.string().optional(),
     relaunched: z.literal(true).optional(),
     from: NamedAccountShape,
     to: NamedAccountShape,
@@ -1358,15 +1371,17 @@ const AccountMoveShape = z.union([
     tokens: z.number().nullable(),
     window: z.string().nullable(),
     resetsAt: z.number().nullable(),
-    because: z
-      .union([
-        z.object({ kind: z.literal("forecast"), runsOutAt: z.number() }),
-        z.object({ kind: z.literal("cold"), wake: z.boolean() }),
-        z.object({ kind: z.literal("refused") }),
-      ])
-      .optional(),
+    because: MoveBecauseShape.optional(),
     cost: z.object({ pct: z.number(), window: z.string() }).optional(),
     ended: z.object({ tasks: z.number(), wakeups: z.number() }).optional(),
+  }),
+  z.object({
+    kind: z.literal("moving"),
+    from: NamedAccountShape,
+    to: NamedAccountShape,
+    at: z.number(),
+    tokens: z.number().nullable(),
+    cost: z.object({ pct: z.number(), window: z.string() }).optional(),
   }),
   z.object({
     kind: z.literal("waiting"),
@@ -1385,6 +1400,15 @@ const AccountMoveShape = z.union([
     by: z.string().optional(),
     asked: z.literal(true).optional(),
     asks: z.literal(true).optional(),
+    move: z
+      .object({
+        at: z.enum(["limit", "ahead"]),
+        because: MoveBecauseShape.optional(),
+        asked: z.literal(true).optional(),
+        window: z.string().nullable(),
+        resetsAt: z.number().nullable(),
+      })
+      .optional(),
     tokens: z.number().nullable(),
     preparedAtPct: z.number().nullable(),
   }),
@@ -1418,11 +1442,19 @@ const AccountOverageShape = z.object({
 export const AccountOverageSchema: z.ZodType<AccountOverageType> =
   AccountOverageShape;
 
+const CompactMethodShape = z.enum(["native", "summary", "whole"]);
+
+const CompactionShape = z.object({
+  atLimit: CompactMethodShape,
+  beforeMove: CompactMethodShape,
+  summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
+});
+
 const AtLimitShape = z.object({
+  compaction: CompactionShape,
   delegateWork: z.literal("move"),
   move: z.boolean(),
   moveWholeUnderK: z.number(),
-  prepareAtPct: z.number(),
   staleAfterHours: z.number(),
   waitMinutes: z.number(),
 });
@@ -2357,6 +2389,7 @@ prove<
     Same<z.output<typeof CompactStageShape>, CompactStageType>,
     Same<z.output<typeof AccountHueShape>, AccountHueType>,
     Same<z.output<typeof NamedAccountShape>, NamedAccountType>,
+    Same<z.output<typeof MoveBecauseShape>, MoveBecauseType>,
     Same<z.output<typeof HeldReasonShape>, HeldReasonType>,
     Same<z.output<typeof HeldAccountShape>, HeldAccountType>,
     Same<z.output<typeof WaitReasonShape>, WaitReasonType>,
@@ -2364,6 +2397,8 @@ prove<
     Same<z.output<typeof ContinueStepShape>, ContinueStepType>,
     Same<z.output<typeof AccountMoveShape>, AccountMoveType>,
     Same<z.output<typeof AccountOverageShape>, AccountOverageType>,
+    Same<z.output<typeof CompactMethodShape>, CompactMethodType>,
+    Same<z.output<typeof CompactionShape>, CompactionType>,
     Same<z.output<typeof AtLimitShape>, AtLimitType>,
     Same<z.output<typeof ResultArtifactShape>, ResultArtifactType>,
     Same<z.output<typeof AttemptResultShape>, AttemptResultType>,

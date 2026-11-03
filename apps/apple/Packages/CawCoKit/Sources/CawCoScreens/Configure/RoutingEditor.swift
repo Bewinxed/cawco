@@ -684,8 +684,7 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         rows.axis = .vertical
         let words = Words.Accounts.AtLimit.self
         rows.addArrangedSubview(line(words.wait, field: wait, value: value.waitMinutes, unit: words.minutes, id: "wait"))
-        rows.addArrangedSubview(line(words.over, field: over, value: value.moveWholeUnderK, unit: words.kTokens,
-                                     aside: words.compacts, id: "over"))
+        rows.addArrangedSubview(line(words.over, field: over, value: value.moveWholeUnderK, unit: words.kTokens, id: "over"))
         let stage = UIStackView(arrangedSubviews: [figure])
         stage.isLayoutMarginsRelativeArrangement = true
         stage.directionalLayoutMargins = .init(top: Space.space3, leading: 0, bottom: Space.space3, trailing: 0)

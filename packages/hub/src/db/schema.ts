@@ -1,6 +1,7 @@
 import type {
   AccountHue,
   AccountKind,
+  AccountMove,
   AccountProvider,
   AccountSetupStep,
   AtPlanLimit,
@@ -3406,13 +3407,29 @@ export const continuations = sqliteTable("continuations", {
 /**
  * Who asked for a continuation: a person (the dashboard's or the app's
  * "Continue in new session", or the API with no session named), a session's
- * `continue_session`, or a comment on a task whose ended attempt's session
- * is cold (jev-tasks.ts, Attach or spawn).
+ * `continue_session`, a comment on a task whose ended attempt's session
+ * is cold (jev-tasks.ts, Attach or spawn), or a move that goes on from a
+ * summary.
  */
 export type ContinuationAsker =
   | { kind: "person" }
   | { kind: "session"; id: string }
-  | { kind: "task"; id: string };
+  | { kind: "task"; id: string }
+  | {
+      /**
+       * Its provider's compaction policy, as its move to account `to`
+       * (core `Compaction` `summary`, server.ts `continueAsMove`): `stopped`
+       * says what stopped it there (its limit, its refused sign-in), or
+       * false ahead of a limit; `move` is the line the move would have
+       * written whole, under the id `line`, which a summary that fails
+       * writes as the native compaction it falls back to.
+       */
+      kind: "move";
+      line: string;
+      move: AccountMove;
+      stopped: false | "limit" | "signin";
+      to: string;
+    };
 
 /**
  * What kind of line the hub keeps in a session's transcript:

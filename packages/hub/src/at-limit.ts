@@ -71,12 +71,13 @@ import { isLive } from "./work-items";
  * (platform.claude.com/docs/en/build-with-claude/prompt-caching: "Different
  * organizations never share caches"), unless both accounts are in one
  * organization. A context of `moveWholeUnderK` or more moved to another
- * organization then files its open items and is compacted by Claude Code's
- * own `/compact` as its first steps there (server.ts `compactions`): that
- * compaction is the one uncached read the move pays anyway, and a context
- * small enough to carry on cheaply follows it. Nothing here summarises a
- * session or starts a fresh conversation. Every outcome is one line in its
- * transcript saying what it cost (core `AccountMove`). Moves happen only
+ * organization is compacted as its provider's policy says for the moment it
+ * moves at (core `Compaction`, {@link compactionPlan}, the one rule every
+ * mover reads): its harness's own `/compact` before the move, warm, or after
+ * it, cold (server.ts `compactions`); a fresh conversation of the same
+ * session opened on a summary (server.ts `continueAsMove`); or moved whole,
+ * announced first ({@link WHOLE_MOVE_NOTICE_MS}). Every outcome is one line
+ * in its transcript saying what it cost (core `AccountMove`). Moves happen only
  * between turns. A session stopped at its limit, or on its refused sign-in,
  * runs no turn. When a person waits on it, nothing it holds for later (a
  * background command, a monitor, a wake-up) keeps it where it is: its move
@@ -219,7 +220,7 @@ interface StopSession {
   /** When its prompt cache lapses on its account, as measured; null when it is cold. */
   cacheExpiresAt: number | null;
   cacheTtl: string | null;
-  /** Whether it takes the compaction's steps once moved (at-limit ports `compactable`). */
+  /** Whether it takes the hub's word to compact (at-limit ports `compactable`): one that doesn't moves whole. */
   compactable: boolean;
   /** The last request's prompt, as its harness last reported it; null when never. */
   context: number | null;
@@ -255,7 +256,10 @@ export interface StopInput {
     resetAt: number | null;
   };
   now: number;
-  policy: Pick<AtLimit, "move" | "moveWholeUnderK" | "waitMinutes">;
+  policy: Pick<
+    AtLimit,
+    "compaction" | "move" | "moveWholeUnderK" | "waitMinutes"
+  >;
   session: StopSession;
   strategy: StopStrategy;
 }
@@ -265,14 +269,14 @@ export interface StopTarget {
   accountId: string;
   /** One organization and its cache still warm: the move reads it from cache ({@link cacheCarries}). */
   carries: boolean;
-  /** It files its open items and is compacted natively once there. */
-  compact: boolean;
   /** It lasts to every reset with the session's burn and what already arrives there. */
   lasts: boolean;
   /** What this move takes of {@link window}, percent, its next turn's allowance in; null when unmeasured or unpriced. */
   movePct: number | null;
   /** The re-read's own cost, dollars; null when its model is unpriced. */
   moveUsd: number | null;
+  /** How the move compacts it ({@link compactionPlan}). */
+  plan: CompactionPlan;
   /** What {@link window} has left once this move and those before it land, percent. */
   roomAfter: number;
   /** When it runs out with the session on it; null when it lasts. */
@@ -289,6 +293,91 @@ interface StopReason {
   backAt?: number;
   reason: HeldReason;
 }
+
+/**
+ * How one move makes the session small ({@link compactionPlan}): moved whole
+ * (`chosen`: the policy said `whole` for a context it would otherwise
+ * compact, so the move is announced and goes {@link WHOLE_MOVE_NOTICE_MS}
+ * later unless a person stops the session), or compacted by `method`
+ * `before` the move, on the account it leaves, or `after` it, on the one it
+ * reaches.
+ */
+export type CompactionPlan =
+  | { method: "whole"; chosen: boolean }
+  | { method: "native" | "summary"; when: "before" | "after" };
+
+/** Whether a cause leaves its session runnable where it is: anything but its limit or its refused sign-in. */
+const runnable = (cause: StopCause | "hand"): boolean =>
+  cause !== "limit" && cause !== "refused-credential";
+
+/**
+ * THE ONE COMPACTION RULE: how a move of a session compacts it, read by every
+ * mover (a limit, a refused sign-in, extra usage, a forecast, a person's
+ * move). A move its cache carries to, a context under the policy's
+ * `moveWholeUnderK` thousand tokens or not reported, and a session that
+ * takes no word of the hub's (`compactable` false: its work item finished)
+ * move whole. Otherwise its provider's `compaction`: `beforeMove` while its
+ * account can still run it, compacted `before` the move; `atLimit` when it
+ * can't, compacted `after`.
+ */
+export const compactionPlan = (how: {
+  carries: boolean;
+  cause: StopCause | "hand";
+  compactable: boolean;
+  policy: Pick<AtLimit, "compaction" | "moveWholeUnderK">;
+  /** Its context as its harness last reported it, capped at its model's window; null when never. */
+  reported: number | null;
+}): CompactionPlan => {
+  const { compaction, moveWholeUnderK } = how.policy;
+  if (
+    how.carries ||
+    !how.compactable ||
+    how.reported === null ||
+    how.reported < moveWholeUnderK * 1000
+  ) {
+    return { method: "whole", chosen: false };
+  }
+  const before = runnable(how.cause);
+  const method = before ? compaction.beforeMove : compaction.atLimit;
+  return method === "whole"
+    ? { method, chosen: true }
+    : { method, when: before ? "before" : "after" };
+};
+
+/**
+ * How long a move whole the policy chose for a large context waits after it
+ * is announced in the session's transcript (core `AccountMove` `moving`):
+ * a person who stops the session meanwhile keeps it where it is.
+ */
+export const WHOLE_MOVE_NOTICE_MS = 5 * MINUTE_MS;
+
+/**
+ * `move`, a move's line, as one `plan` compacts says it: natively, its
+ * stages from `filing`, before the move when the plan says so, by the
+ * harness `harness` names when it is not Claude Code. A plan that doesn't
+ * compact natively leaves it as it is.
+ */
+export const compactedLine = (
+  move: Extract<AccountMove, { kind: "moved" }>,
+  plan: CompactionPlan,
+  harness: string
+): Extract<AccountMove, { kind: "moved" }> =>
+  plan.method === "native"
+    ? {
+        ...move,
+        compact: "filing",
+        ...(plan.when === "before" ? { compactFirst: true as const } : {}),
+        ...(harness === "opencode" || harness === "pi"
+          ? { compactBy: harness }
+          : {}),
+      }
+    : move;
+
+/** A context as {@link compactionPlan} reads it: its last report, capped at its model's window. */
+const reportedOf = (session: Pick<StopSession, "context" | "window">) =>
+  session.context === null
+    ? null
+    : Math.min(session.context, session.window ?? session.context);
 
 /**
  * Why it waits: a wait's reason as its line keeps it ({@link WaitReason}: a
@@ -457,20 +546,16 @@ const weigh = (
     account.id,
     now
   );
-  const reported =
-    session.context === null
-      ? null
-      : Math.min(session.context, session.window ?? session.context);
   const target: StopTarget = {
     accountId: account.id,
     carries,
-    compact:
-      !carries &&
-      input.cause !== "refused-credential" &&
-      input.cause !== "forecast" &&
-      session.compactable &&
-      reported !== null &&
-      reported >= policy.moveWholeUnderK * 1000,
+    plan: compactionPlan({
+      carries,
+      cause: input.cause,
+      compactable: session.compactable,
+      policy,
+      reported: reportedOf(session),
+    }),
     lasts: runsOutAt === null,
     moveUsd: projected.reReadUsd,
     movePct: figure.movePct,
@@ -560,19 +645,20 @@ const ordered = (input: StopInput, fit: readonly Weighed[]): Weighed[] => {
  * 7. its cache outlasting that reset: it waits, for nothing (`free`), unless a
  *    person waits on it, the reset is further than the policy's wait, and an
  *    account fits: then it moves cold;
- * 8. an account that fits: it moves cold, compacted there when its context is
- *    `moveWholeUnderK` or more;
+ * 8. an account that fits: it moves cold, compacted as {@link compactionPlan}
+ *    says;
  * 9. none fits: it waits until its own reset, or until the account that
  *    frees first and would take it does, when that is sooner, every
  *    account's reason named.
  *
  * A refused credential can't go on where it is at all: neither a fork, the
- * policy, nor a reset keeps it there (rules 2, 3, 6 and 7 pass it by), and it
- * is moved whole, never compacted. At a forecast (`forecast`, the rebalance)
- * a wait means it stays: a move its cache carries to goes only to an account
- * that lasts; a cold move only when its cache is cold already, or a person
- * waits on it and the move re-reads less than the policy's floor would; it
- * is never compacted.
+ * policy, nor a reset keeps it there (rules 2, 3, 6 and 7 pass it by). At a
+ * forecast (`forecast`, the rebalance) a wait means it stays: a move its
+ * cache carries to goes only to an account that lasts; a cold move that
+ * compacts goes, its compaction small; a cold move whole only when its cache
+ * is cold already, or a person waits on it and the move re-reads less than
+ * the policy's floor would, as staying warm until its limit costs the same
+ * re-read later.
  */
 export const decideStop = (input: StopInput): StopDecision => {
   const { now, policy, session, current, cause } = input;
@@ -691,8 +777,10 @@ const coldVerdict = (
   if (outlasts && !(session.presence === "watched" && coldTier.length > 0)) {
     return wait("free");
   }
-  // 8, at a forecast: across organizations only cold, or watched and cheap.
-  if (cause === "forecast" && coldTier.length > 0 && warm) {
+  // 8, at a forecast: a move whole across organizations only cold, or
+  // watched and cheap.
+  const [first] = coldTier;
+  if (cause === "forecast" && first?.target.plan.method === "whole" && warm) {
     const floor = projectedMove(
       session,
       policy.moveWholeUnderK * 1000,
@@ -820,9 +908,23 @@ export interface AccountsRead {
   window: number | null;
 }
 
+/**
+ * How a move compacts its session ({@link AtLimitPorts.move}): its plan, the
+ * line its move writes (`move`, under the id `line`), which a compaction says
+ * again as it goes, and what moved it.
+ */
+export interface MoveHow {
+  cause: StopCause | "hand";
+  line: string;
+  move: Extract<AccountMove, { kind: "moved" }>;
+  plan: CompactionPlan;
+}
+
 /** What a carry that went did: what it ended of its process's work held for later (core `MoveEnded`), when anything. */
 interface Carried {
   ended?: MoveEnded;
+  /** Its line as the move made it, when that is not the line it was asked with (a summary that could not be written). */
+  move?: Extract<AccountMove, { kind: "moved" }>;
 }
 
 /** What the hub does for the controller: the parts that reach machines. */
@@ -850,13 +952,19 @@ export interface AtLimitPorts {
   carryHandMove: (row: LimitRow) => Promise<void>;
   changed: () => void;
   /**
-   * Whether `row` takes the compaction's steps once moved (its filing turn
-   * and `/compact`): a session whose work item is finished takes the hub's
-   * word from nobody (work-items.ts `refusal`), so it moves whole and is not
+   * Whether `row` takes the compaction's steps (its filing turn and
+   * `/compact`): a session whose work item is finished takes the hub's word
+   * from nobody (work-items.ts `refusal`), so it moves whole and is not
    * compacted, never held behind a step that can't be sent.
    */
   compactable: (row: LimitRow) => boolean;
   db: DbShape;
+  /**
+   * Ends `row`'s compaction ahead of a move it no longer makes (its limit
+   * refused a turn of it meanwhile), its line taken back: what its limit
+   * decides now replaces it.
+   */
+  dropCompaction: (row: LimitRow) => void;
   /**
    * The account a person moved `row` to and it has not reached yet (server.ts
    * `moveByHand`, owed to its turn's end): while there is one, the move is
@@ -877,20 +985,30 @@ export interface AtLimitPorts {
    * given: then the move waits for that work until it has been held
    * {@link RESTART_WAIT_CAP_MS} since `laterSince` (its hold's start), and
    * ends it after. A session moved between turns before any limit waits for
-   * its next message, and its move waits for what it holds for later. With
-   * `compact` (the line `line` already written for it, which follows the
-   * compaction), its first steps there are its filing turn and Claude Code's
-   * `/compact`, before the carry-on and everything it is owed (server.ts
-   * `compactions`). Answers `kept` and why when it did not move: `row` is
-   * still on its account then.
+   * its next message, and its move waits for what it holds for later. `how`
+   * compacts it as its plan says ({@link MoveHow}; absent, whole): natively
+   * after the move, its first steps there its filing turn and its harness's
+   * `/compact`, before the carry-on and everything it is owed; natively
+   * before it, those steps on its account now and the move once they end;
+   * or from a summary, the same session going on in a fresh conversation
+   * there (server.ts `compactions`, `continueAsMove`). Answers `kept` and
+   * why when it did not move: `row` is still on its account then; `later`
+   * when the move goes once its compaction or summary is done, its lines
+   * written as that goes.
    */
   move: (
     row: LimitRow,
     accountId: string,
     carryOn: false | "limit" | "signin",
-    compact?: { line: string; move: AccountMove },
+    how?: MoveHow,
     laterSince?: number
-  ) => Promise<{ kept: Kept } | Carried>;
+  ) => Promise<{ kept: Kept } | Carried | { later: true }>;
+  /**
+   * Whether `row` is compacting or going on from a summary as its move now
+   * (server.ts `compactions`, `continueAsMove`): the move is under way, and
+   * nothing decides it again until that ends.
+   */
+  moving: (row: LimitRow) => boolean;
   /** `row` as a line names it: its title. */
   named: (row: LimitRow) => string;
   /**
@@ -1120,6 +1238,22 @@ export const stopInputOf = (
     })),
   };
 };
+
+/** What a move to `target` re-reads, as its line's cost says it: a percent of the window it is counted against; none when its cache carries, or it is unpriced or counted against no window. */
+export const costOf = (
+  target: StopTarget
+): { cost?: { pct: number; window: string } } =>
+  target.carries ||
+  target.moveUsd === null ||
+  target.usdPerPct === null ||
+  !target.window
+    ? {}
+    : {
+        cost: {
+          pct: target.moveUsd / target.usdPerPct,
+          window: windowWords(target.window),
+        },
+      };
 
 /** "1,003k tokens". */
 const kWords = (tokens: number): string => tokenWords(tokens);
@@ -1498,21 +1632,18 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const full = atLimit
       ? fullWindow(readingOf(current.id), row.model, now)
       : undefined;
-    const pct =
-      weighed.carries || weighed.moveUsd === null || weighed.usdPerPct === null
-        ? undefined
-        : weighed.moveUsd / weighed.usdPerPct;
     const accounts = db.accounts.list();
     return {
       kind: "moved",
       from: namedAccount(current, accounts),
       to: namedAccount(target, accounts),
       sameOrganization: weighed.carries,
-      ...(pct === undefined || !weighed.window
-        ? {}
-        : { cost: { pct, window: windowWords(weighed.window) } }),
+      ...costOf(weighed),
       ...(cause === "refused-credential"
         ? { because: { kind: "refused" as const } }
+        : {}),
+      ...(cause === "extra-usage"
+        ? { because: { kind: "extra-usage" as const } }
         : {}),
       tokens,
       window: full ? windowWords(full) : null,
@@ -1602,13 +1733,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
-   * Moves `row` whole onto `target`, its line written once it has: one that
-   * compacts once there gets its line first, which the compaction says
-   * again as it goes. A move off a refused sign-in is also said to whoever
+   * Moves `row` onto `target`, compacted as the decision's plan says
+   * ({@link compactionPlan}), its line written once it has moved whole or
+   * compacts there; a compaction before the move, or a summary, writes its
+   * own as it goes. A move off a refused sign-in is also said to whoever
    * hears its reports. A move that ended work its process held for later
    * says so. Answers why it did not move.
    */
-  const moveWhole = async (
+  const carryMove = async (
     row: LimitRow,
     current: Account,
     target: Account,
@@ -1619,11 +1751,18 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     laterSince: number | undefined
   ): Promise<Kept | undefined> => {
     const refused = cause === "refused-credential";
-    const moved: Extract<AccountMove, { kind: "moved" }> = {
-      ...movedNote(row, current, target, weighed, decision.tokens, now, cause),
-      ...(weighed.compact ? { compact: "filing" as const } : {}),
-    };
+    const { plan } = weighed;
+    const moved = compactedLine(
+      movedNote(row, current, target, weighed, decision.tokens, now, cause),
+      plan,
+      row.harness
+    );
     const line = crypto.randomUUID();
+    // Its announcement gives way to the move it announced.
+    const announced = db.atLimit.events([row.id]).at(-1);
+    if (announced?.move.kind === "moving") {
+      ports.unnote(row, announced.id);
+    }
     // A turn extra usage answered is over: the session waits there for its
     // next message, as a move between turns does.
     const carryOn = {
@@ -1635,27 +1774,110 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       row,
       target.id,
       carryOn[cause],
-      weighed.compact ? { line, move: moved } : undefined,
+      plan.method === "whole" ? undefined : { cause, line, move: moved, plan },
       laterSince
     );
     if ("kept" in done) {
       return done.kept;
     }
+    if ("later" in done) {
+      return undefined;
+    }
     const { ended } = done;
+    const said = done.move ?? moved;
     ports.note(
       row,
       ended && (ended.tasks.length > 0 || ended.wakeups > 0)
         ? {
-            ...moved,
+            ...said,
             ended: { tasks: ended.tasks.length, wakeups: ended.wakeups },
           }
-        : moved,
+        : said,
       line
     );
     if (refused) {
       ports.refusedMove(row, moved);
     }
     return undefined;
+  };
+
+  /** Timers that carry out an announced move whole at its moment, by session ({@link announce}). */
+  const notices = new Map<string, HubTimer>();
+
+  /**
+   * When `row`'s move whole to `target` goes: the moment its last line, an
+   * announcement of that move, names; undefined when none stands.
+   */
+  const announcedAt = (row: LimitRow, target: Account): number | undefined => {
+    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    return last?.kind === "moving" && last.to.id === target.id
+      ? last.at
+      : undefined;
+  };
+
+  /**
+   * A move whole the policy chose for a context it would otherwise compact
+   * ({@link CompactionPlan} `chosen`), announced in `row`'s transcript before
+   * it goes (core `AccountMove` `moving`): true while it waits its
+   * {@link WHOLE_MOVE_NOTICE_MS}, held there meanwhile at its limit, and
+   * looked at again at its moment; false once that has passed, when it goes.
+   * A person who stops the session meanwhile keeps it where it is.
+   */
+  const announce = (
+    row: LimitRow,
+    current: Account,
+    target: Account,
+    weighed: StopTarget,
+    tokens: number,
+    cause: Cause,
+    now: number
+  ): boolean => {
+    const was = announcedAt(row, target);
+    if (was !== undefined && was <= now) {
+      return false;
+    }
+    const at = was ?? now + WHOLE_MOVE_NOTICE_MS;
+    if (was === undefined) {
+      const accounts = db.accounts.list();
+      ports.note(row, {
+        kind: "moving",
+        from: namedAccount(current, accounts),
+        to: namedAccount(target, accounts),
+        at,
+        tokens,
+        ...costOf(weighed),
+      });
+      console.info(
+        `[at-limit] ${ports.named(row)} moves whole from ${accountNameAmong(current, accounts)} to ${accountNameAmong(target, accounts)} at ${clockWords(at)}, as its provider's policy says for a conversation this large; stopping it before then keeps it where it is.`
+      );
+    }
+    if (cause === "limit") {
+      db.atLimit.putHold({
+        instanceId: row.id,
+        accountId: current.id,
+        until: at,
+      });
+    } else if (cause === "refused-credential") {
+      holdRefused(row, current);
+    }
+    const pending = notices.get(row.id);
+    if (pending) {
+      lifetime.cancel(pending);
+    }
+    notices.set(
+      row.id,
+      lifetime.after(Math.max(0, at - now), () => {
+        notices.delete(row.id);
+        const fresh = rowOf(row.id);
+        if (!fresh || over(fresh)) {
+          return;
+        }
+        act(fresh, current, cause).catch((error: unknown) => {
+          console.error(failedWords(fresh, current, error));
+        });
+      })
+    );
+    return true;
   };
 
   /**
@@ -1731,6 +1953,17 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   ): Promise<void> => {
     if (acting.has(row.id) || over(row)) {
       return;
+    }
+    if (ports.moving(row)) {
+      // A compaction ahead of a move that its limit has now overtaken: what
+      // the limit decides replaces it. Any other is under way already.
+      if (cause === "extra-usage" || !db.atLimit.compaction(row.id)) {
+        return;
+      }
+      console.info(
+        `[at-limit] ${ports.named(row)} was compacting ahead of its move, and ${accountNameAmong(current, db.accounts.list())} refused a turn of it meanwhile, so that compaction ends and its limit decides now.`
+      );
+      ports.dropCompaction(row);
     }
     acting.add(row.id);
     try {
@@ -1946,6 +2179,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       input.session.presence === "watched" || cause !== "limit"
         ? undefined
         : (held?.since ?? now);
+    if (
+      weighed.plan.method === "whole" &&
+      weighed.plan.chosen &&
+      announce(row, current, target, weighed, decision.tokens, cause, now)
+    ) {
+      unreserve(row);
+      return;
+    }
     db.atLimit.dropHold(row.id);
     const accounts = db.accounts.list();
     const to = accountNameAmong(target, accounts);
@@ -1959,7 +2200,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         `[at-limit] ${ports.named(row)} ran its turn on ${named}'s extra usage, past its plan limit, and ${named} says to move to an account with plan room then, so it moves whole to ${to} now, between turns. It waits there for its next message.`
       );
     }
-    const kept = await moveWhole(
+    const kept = await carryMove(
       row,
       current,
       target,
@@ -2454,11 +2695,17 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return carryStall(name, carry, held.until);
     }
     const last = db.atLimit.events([held.instanceId]).at(-1)?.move;
+    const clock = clockWords(held.until);
+    if (last?.kind === "moving" && last.at === held.until) {
+      return {
+        words: words.movingAt(name, last.to.name, clock),
+        until: held.until,
+      };
+    }
     const frees =
       last?.kind === "waiting" && last.until === held.until
         ? last.frees
         : undefined;
-    const clock = clockWords(held.until);
     return {
       words: frees
         ? words.waitingOn(name, frees.name, clock)
@@ -2560,6 +2807,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       towards.delete(instanceId);
       later.delete(instanceId);
+      const notice = notices.get(instanceId);
+      if (notice) {
+        lifetime.cancel(notice);
+        notices.delete(instanceId);
+      }
       waitEnded(instanceId);
       extraUsageSaid.delete(instanceId);
       const held = db.atLimit.hold(instanceId);

@@ -13,9 +13,10 @@
  *   command, and a busy turn's calls ran to 200k characters of opening
  *   message ("clearing tool calls and results" is Anthropic's first example
  *   of superfluous context: anthropic.com/engineering/effective-context-engineering-for-ai-agents);
- * - the middle, every turn before the tail, with one line per tool call so
- *   the summariser can say what was done, which alone is summarised, in one
- *   pass.
+ * - the middle, every turn before the tail, which alone is summarised, in one
+ *   pass: every user turn, assistant text, tool call and tool result in
+ *   order, each call and result clipped to its head and tail
+ *   ({@link TOOL_CHARS}), nothing hidden.
  * The artifact index (files changed and read, commands run) is built from the
  * WHOLE transcript by code, so identifiers are copied, never paraphrased, and
  * what a compaction forgot about files is still there.
@@ -100,6 +101,8 @@ const TAIL_USER_TURNS = 6;
 /** …and only as many of them as fit here, newest first; the newest always goes. */
 const TAIL_CHARS = 16_000;
 const ERROR_CHARS = 300;
+/** A tool call's input, and its result, as the summariser reads them: at most this many characters, half from each end. */
+const TOOL_CHARS = 4000;
 const TOOL_ARGUMENT_CHARS = 300;
 const FILES_CHANGED_SHOWN = 30;
 const FILES_READ_SHOWN = 30;
@@ -115,19 +118,6 @@ const READ_TOOLS = toolNamesOf("read");
 const SHELL_TOOLS = toolNamesOf("bash");
 /** Where each harness's file tools put the path. */
 const PATH_ARGUMENTS = ["file_path", "filePath", "notebook_path", "path"];
-/** The input fields that name what a tool call acted on, most telling first. */
-const MAIN_ARGUMENTS = [
-  ...PATH_ARGUMENTS,
-  "command",
-  "pattern",
-  "url",
-  "query",
-  "skill",
-  "target",
-  "subject",
-  "description",
-  "prompt",
-];
 /** The files an apply-patch body names (`*** Update File: path`). */
 const PATCH_FILE = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gmu;
 const WHITESPACE = /\s+/gu;
@@ -165,6 +155,15 @@ const clip = (text: string, limit: number): string =>
 
 const oneLine = (text: string, limit: number): string =>
   clip(text.trim().replace(WHITESPACE, " "), limit);
+
+/** `text` cut to its head and tail when it runs past `limit`: what was cut is counted between them. */
+const clipEnds = (text: string, limit: number): string => {
+  if (text.length <= limit) {
+    return text;
+  }
+  const half = Math.floor(limit / 2);
+  return `${text.slice(0, half)}\n… [${text.length - 2 * half} chars cut] …\n${text.slice(-half)}`;
+};
 
 /** What a user entry says in words — empty for a tool-result-only entry. */
 const userText = (entry: SessionMessage): string =>
@@ -215,11 +214,6 @@ const changedPaths = (call: ToolUse): string[] => {
   return patch
     ? [...patch.matchAll(PATCH_FILE)].map((match) => match[1].trim())
     : [];
-};
-
-const mainArgument = (input: Record<string, unknown>): string => {
-  const value = stringField(input, MAIN_ARGUMENTS);
-  return value ? oneLine(value, TOOL_ARGUMENT_CHARS) : "";
 };
 
 /** The newest assistant turn's model, for a session whose row never recorded one. */
@@ -336,22 +330,23 @@ const COMPACTED_LABEL =
   "## Earlier in this session (compacted by the source session)";
 
 /**
- * One tool call as a reader of the transcript sees it: one line naming what
- * it acted on, and the head of its error if it failed. Never its output.
+ * One tool call as the summariser reads it: its name and input, then its
+ * result (`✗` when it failed), each clipped to its head and tail.
  */
 function callLines(call: ToolUse, result: ToolResult | undefined): string[] {
-  const argument = mainArgument(call.input);
   return [
-    `→ ${call.name}${argument ? `: ${argument}` : ""}`,
-    ...(result?.is_error
-      ? [`✗ ${oneLine(resultText(result.content), ERROR_CHARS)}`]
+    `→ ${call.name} ${clipEnds(JSON.stringify(call.input), TOOL_CHARS)}`,
+    ...(result
+      ? [
+          `${result.is_error ? "✗" : "←"} ${clipEnds(resultText(result.content).trim(), TOOL_CHARS)}`,
+        ]
       : []),
   ];
 }
 
 /**
- * What one assistant entry said, as lines — and, with `calls`, what it did,
- * one line per tool call.
+ * What one assistant entry said, as lines — and, with `calls`, what it did:
+ * each tool call and its result ({@link callLines}).
  */
 const assistantLines = (
   entry: SessionMessage,

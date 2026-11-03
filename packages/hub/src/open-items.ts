@@ -57,11 +57,17 @@ export const filingPrompt = (then: "compacted" | "continued"): string =>
   ].join("\n");
 
 /**
- * The focus the hub's `/compact` carries: what Claude Code's summary keeps.
- * The open items themselves come back from the records after it.
+ * What the hub's `/compact` asks its summary to keep, for a harness that
+ * lists no open items after it (pi).
  */
-export const COMPACT_FOCUS =
-  "Keep, word for word where short: what the person asked, decided, ruled out or set as a constraint, with their reasons; what was tried and why it was set aside; where the work stands; the names, numbers, paths, commands, ids and links in play. Open questions, promises and next steps are listed again after this from the session's records.";
+export const COMPACT_KEEP =
+  "Keep, word for word where short: what the person asked, decided, ruled out or set as a constraint, with their reasons; what was tried and why it was set aside; where the work stands; the names, numbers, paths, commands, ids and links in play.";
+
+/**
+ * The focus the hub's `/compact` carries for Claude Code: what its summary
+ * keeps. The open items themselves come back from the records after it.
+ */
+export const COMPACT_FOCUS = `${COMPACT_KEEP} Open questions, promises and next steps are listed again after this from the session's records.`;
 
 /** The heading every Open items section opens with. */
 const OPEN_ITEMS_HEADING =

@@ -22,12 +22,15 @@ import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { NEXT_TURN_ALLOWANCE_USD, usdWords } from "./admission";
 import {
   type AtLimitPorts,
+  compactedLine,
+  costOf,
   decideStop,
   type LimitRow,
   moveSideWords,
   type StopDecision,
   type StopTarget,
   stopInputOf,
+  WHOLE_MOVE_NOTICE_MS,
 } from "./at-limit";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
@@ -426,6 +429,7 @@ export interface RebalancerDeps {
     | "idle"
     | "machineName"
     | "move"
+    | "moving"
     | "named"
     | "note"
     | "noticed"
@@ -532,7 +536,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       ports.owed().has(row.id) ||
       acting.has(row.id) ||
       db.atLimit.hold(row.id) ||
-      db.atLimit.compaction(row.id) ||
+      ports.moving(fresh) ||
       ports.admission.admittedHere(fresh)
     ) {
       return undefined;
@@ -556,11 +560,10 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     warm: boolean
   ): Promise<"owed" | "skip" | "moved"> => {
     const { from, stress } = source;
-    const pct =
-      weighed.carries || weighed.moveUsd === null || weighed.usdPerPct === null
-        ? undefined
-        : weighed.moveUsd / weighed.usdPerPct;
-    const move: AccountMove = {
+    const { plan } = weighed;
+    // Owed to its turn's end, it is weighed again then (server.ts
+    // `takeUpOwedMove`): its line says how it was compacted once it is.
+    const whole: Extract<AccountMove, { kind: "moved" }> = {
       kind: "moved",
       from: namedAccount(from, source.forecast.accounts),
       to: namedAccount(target, source.forecast.accounts),
@@ -571,10 +574,9 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       because: warm
         ? { kind: "forecast", runsOutAt: stress.runsOutAt }
         : { kind: "cold", wake: false },
-      ...(pct === undefined || !weighed.window
-        ? {}
-        : { cost: { pct, window: windowWords(weighed.window) } }),
+      ...costOf(weighed),
     };
+    const move = compactedLine(whole, plan, row.harness);
     const going = (): void => {
       source.out.to = target;
       source.out.cacheKept = weighed.carries;
@@ -583,7 +585,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       ports.owe(
         row,
         target.id,
-        move,
+        whole,
         "it is inside a turn, and a session moves only between turns"
       );
       going();
@@ -591,14 +593,26 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     }
     acting.add(row.id);
     let done: Awaited<ReturnType<AtLimitPorts["move"]>>;
+    const line = crypto.randomUUID();
     try {
-      done = await ports.move(row, target.id, false);
+      done = await ports.move(
+        row,
+        target.id,
+        false,
+        plan.method === "whole"
+          ? undefined
+          : { cause: "forecast", line, move, plan }
+      );
     } finally {
       acting.delete(row.id);
     }
+    if ("later" in done) {
+      going();
+      return "moved";
+    }
     const why = "kept" in done ? done.kept : undefined;
     if (why?.running) {
-      ports.owe(row, target.id, move, why.why);
+      ports.owe(row, target.id, whole, why.why);
       going();
       return "owed";
     }
@@ -611,9 +625,55 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       );
       return "skip";
     }
-    ports.note(row, move);
+    ports.note(row, move, line);
     going();
     return "moved";
+  };
+
+  /** Why a session moves ahead of its account's run-out, as the journal says it. */
+  const goWords = (
+    weighed: StopTarget,
+    warm: boolean,
+    tokens: number,
+    policy: { moveWholeUnderK: number }
+  ): string => {
+    if (weighed.carries) {
+      return "one organization and its cache warm, so its cache carries";
+    }
+    if (weighed.plan.method !== "whole") {
+      return `its provider's policy makes it small first (${weighed.plan.method === "native" ? "its own /compact, here, while its cache is warm" : "a summary it goes on from there"}), so the move re-reads little`;
+    }
+    return warm
+      ? `a person waits on it, and re-reading ${tokenWords(tokens)} cold is under the ${policy.moveWholeUnderK}k floor`
+      : "its cache is cold, so moving re-reads nothing waiting wouldn't";
+  };
+
+  /**
+   * Whether `row`'s move whole to `target` is still announced, not gone: its
+   * line announcing it is written now when none stands (core `AccountMove`
+   * `moving`), and true until its moment has passed ({@link
+   * WHOLE_MOVE_NOTICE_MS}); false then, when it goes.
+   */
+  const announced = (
+    row: LimitRow,
+    from: Account,
+    target: Account,
+    tokens: number,
+    now: number
+  ): boolean => {
+    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    if (last?.kind === "moving" && last.to.id === target.id) {
+      return last.at > now;
+    }
+    const accounts = db.accounts.list();
+    ports.note(row, {
+      kind: "moving",
+      from: namedAccount(from, accounts),
+      to: namedAccount(target, accounts),
+      at: now + WHOLE_MOVE_NOTICE_MS,
+      tokens,
+    });
+    return true;
   };
 
   /** Why a session stays where it is ahead of its account's run-out, as the decision says it (`why`), for the journal. */
@@ -628,7 +688,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       case "free":
         return `its cache outlasts ${from}'s run-out, so staying costs nothing; its limit decides again`;
       case "warm":
-        return `its cache is warm, and moving to another organization now would re-read ${tokenWords(decision.tokens)} cold for ${usdWords(decision.coldUsd)}; it moves at its limit instead, and is compacted there when large`;
+        return `its cache is warm, and moving it whole to another organization now would re-read ${tokenWords(decision.tokens)} cold for ${usdWords(decision.coldUsd)}; it moves at its limit instead, compacted there as its provider's policy says`;
       case "full":
         return `no other account can take it now: ${heldList(decision)}`;
       case "fork":
@@ -706,13 +766,18 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       return "skip";
     }
     const targetName = accountNameAmong(target, forecast.accounts);
-    const warm = input.session.cacheExpiresAt !== null;
-    let why = "its cache is cold, so moving re-reads nothing waiting wouldn't";
-    if (weighed.carries) {
-      why = "one organization and its cache warm, so its cache carries";
-    } else if (warm) {
-      why = `a person waits on it, and re-reading ${tokenWords(decision.tokens)} cold is under the ${input.policy.moveWholeUnderK}k floor`;
+    if (
+      weighed.plan.method === "whole" &&
+      weighed.plan.chosen &&
+      announced(fresh, from, target, decision.tokens, now)
+    ) {
+      console.info(
+        `${head}. It moves whole to ${targetName}, as its provider's policy says for a conversation this large, once its announcement's ${WHOLE_MOVE_NOTICE_MS / 60_000} minutes have passed; stopping it before then keeps it on ${fromName}.`
+      );
+      return "skip";
     }
+    const warm = input.session.cacheExpiresAt !== null;
+    const why = goWords(weighed, warm, decision.tokens, input.policy);
     // Charged now, before any await, so the next decision counts it.
     ports.admission.charge(
       fresh,

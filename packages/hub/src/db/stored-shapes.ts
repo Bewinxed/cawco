@@ -4,6 +4,7 @@
  * output is proved below to be its type exactly.
  */
 import {
+  AccountMoveSchema,
   EffortLevelShape,
   ExtractedShape,
   HarnessKindShape,
@@ -147,6 +148,17 @@ const ContinuationAskerShape = z.union([
   z.object({ kind: z.literal("person") }),
   z.object({ kind: z.literal("session"), id: z.string() }),
   z.object({ kind: z.literal("task"), id: z.string() }),
+  z.object({
+    kind: z.literal("move"),
+    line: z.string(),
+    move: AccountMoveSchema,
+    stopped: z.union([
+      z.literal(false),
+      z.literal("limit"),
+      z.literal("signin"),
+    ]),
+    to: z.string(),
+  }),
 ]);
 export const ContinuationAskerSchema: z.ZodType<ContinuationAskerType> =
   ContinuationAskerShape;

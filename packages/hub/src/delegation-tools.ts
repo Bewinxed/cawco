@@ -768,7 +768,9 @@ export function handoffTools(deps: HandoffDeps) {
         summarizer_harness: z
           .enum(HARNESSES)
           .optional()
-          .describe("The harness that writes the summary."),
+          .describe(
+            "The harness that writes the summary. Absent: the summariser its account's routing names."
+          ),
         summarizer_model: z
           .string()
           .min(1)
