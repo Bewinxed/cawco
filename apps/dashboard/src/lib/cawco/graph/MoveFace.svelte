@@ -20,10 +20,13 @@
    * its bar in the second, the ruler at the head of the second.
    *
    * One scale for all of it: the lane runs from the move's start to its
-   * end (to the ruler's next 100 ms), and the ruler, every bar and the
+   * end (to the ruler's next mark), and the ruler, every bar and the
    * playhead are placed on that one lane, each cell the same width with
    * the same inset, so a mark, a bar's end and the playhead at one time
-   * stand on one line. The ruler's figures thin to the lane's width. The
+   * stand on one line. The ruler's marks stand every 100 ms, or every
+   * step of 1, 2 and 5 past it that keeps them `--space-2` apart, so a move
+   * of minutes draws as few marks as one of a second; its figures thin to
+   * the lane's width, grouped as the page's language groups them. The
    * playhead is the ruler's handle (bits-ui's Slider), a pill with its
    * time; its hairline runs down the lane alone. A scrub during play pauses
    * it and plays on from where it is let go (DialKit's rule).
@@ -45,6 +48,7 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
     Tabs,
@@ -59,6 +63,7 @@
   import { browser } from "$app/env";
   import ClipBar from "./ClipBar.svelte";
   import ClipEditor from "./ClipEditor.svelte";
+  import { figureOf, inkWidth } from "./figures";
   import {
     type Clip,
     lengthOf,
@@ -82,6 +87,8 @@
     onretime,
     onreset,
     onlight,
+    onretry,
+    lang,
   }: {
     move: MoveState;
     /** The playhead, ms into the move. */
@@ -103,6 +110,10 @@
     onreset: (ids: string[]) => void;
     /** The thing a row names, rested on (null: none). */
     onlight: (thing: Element | null) => void;
+    /** A move whose play threw, played again from its from state. */
+    onretry: () => void;
+    /** The page's language, for the figures. */
+    lang: string | undefined;
   } = $props();
 
   const clips = $derived(move.kind === "ready" ? move.clips : []);
@@ -120,20 +131,62 @@
     )
   );
   const length = $derived(Math.max(1, lengthOf(shown)));
-  const STEP = 100;
-  /** The lane's end: the move's end, to the ruler's next mark. */
-  const scale = $derived(Math.max(STEP, Math.ceil(length / STEP) * STEP));
-  const adHoc = $derived(shown.filter((clip) => clip.adHoc).length);
-  /** The ruler's marks: every 100 ms. */
-  const marks = $derived(
-    Array.from({ length: Math.floor(scale / STEP) + 1 }, (_, at) => at * STEP)
-  );
-  /** The lane's width, px: the ruler's figures thin to it. */
+  /** The ruler's finest mark, ms. */
+  const FINEST = 100;
+  /** The marks a ruler draws before its lane is measured, at most. */
+  const MARKS_UNMEASURED = 50;
+  /** The lane's width, px: the ruler's marks and figures thin to it. */
   let lane = $state(0);
+  /** The ruler's lane, in its figures' type. */
+  let ruler = $state<HTMLElement | null>(null);
+  /**
+   * The ruler's step: 100 ms, else the least of 200, 500, 1000, 2000,
+   * 5000… whose marks stand `--space-2` apart on the lane. A mark every
+   * 100 ms drew 18,000 of them for a move of 30 minutes.
+   */
+  const step = $derived.by(() => {
+    const apart = browser ? numberOf("--space-2") : 1;
+    const most = Math.max(
+      1,
+      lane > 0 ? Math.floor(lane / apart) : MARKS_UNMEASURED
+    );
+    const ladder = [1, 2, 5].map((one) => one * FINEST);
+    let at = 0;
+    let found = FINEST;
+    // Up the ladder until the marks fit; a length no figure holds (never
+    // read: an endless animation is its state's own, never a clip) stops
+    // at the finest.
+    while (Number.isFinite(length) && Math.ceil(length / found) > most) {
+      at += 1;
+      found = (ladder[at % 3] as number) * 10 ** Math.floor(at / 3);
+    }
+    return found;
+  });
+  /** The lane's end: the move's end, to the ruler's next mark. */
+  const scale = $derived(Math.max(step, Math.ceil(length / step) * step));
+  const adHoc = $derived(shown.filter((clip) => clip.adHoc).length);
+  /** The ruler's marks, a step apart. */
+  const marks = $derived(
+    Array.from({ length: Math.floor(scale / step) + 1 }, (_, at) => at * step)
+  );
+  /**
+   * A figure's room on the ruler: the widest figure (the lane's end) as it
+   * draws in the ruler's type, half as much again (the last figure stands
+   * back from its mark by its whole width, not half), and `--space-3`
+   * past it; `--space-8`, four figures' room, until the ruler is drawn. A
+   * room of `--space-8` alone ran "1,200,000" into the figures beside it.
+   */
+  const FIGURE_GAP = browser ? numberOf("--space-3") : 0;
+  const FOUR_FIGURES = browser ? numberOf("--space-8") : 0;
+  const figureRoom = $derived(
+    ruler
+      ? 1.5 * inkWidth(figureOf(scale, lang), ruler) + FIGURE_GAP
+      : FOUR_FIGURES
+  );
   /** A figure on every mark that stands a figure's room past the last: every mark, every second, every fourth… */
   const figureEvery = $derived.by(() => {
-    const apart = lane > 0 ? (lane * STEP) / scale : 0;
-    const room = browser ? numberOf("--space-8") : 0;
+    const apart = lane > 0 ? (lane * step) / scale : 0;
+    const room = figureRoom;
     return apart <= 0
       ? 1
       : Math.max(1, 2 ** Math.ceil(Math.log2(Math.max(1, room / apart))));
@@ -197,7 +250,7 @@
   const handle = $derived(Math.round(Math.min(playhead, length)));
   /** Page Up and Page Down step the playhead a ruler's mark, as a slider's large step does (WAI-ARIA APG, Slider). */
   const pageKey = (event: KeyboardEvent) => {
-    const by = { PageUp: STEP, PageDown: -STEP }[event.key];
+    const by = { PageUp: step, PageDown: -step }[event.key];
     if (by !== undefined) {
       event.preventDefault();
       onseek(Math.max(0, Math.min(length, handle + by)));
@@ -310,9 +363,16 @@
     {#if move.kind === "reading"}
       <p class="m-0 type-meta text-ink-muted" role="status">{words.reading}</p>
     {:else if move.kind === "failed"}
-      <p class="m-0 type-body text-status-fail-ink wrap-anywhere" role="alert">
-        {words.moveFailed(move.why)}
-      </p>
+      <!-- Why it didn't play, and the way back: Try again plays it once
+           more from its from state, as it played on arrival. -->
+      <div class="flex min-w-0 flex-col items-start gap-space-3" role="alert">
+        <p class="m-0 type-body text-status-fail-ink wrap-anywhere">
+          {words.moveFailed(move.why)}
+        </p>
+        <Button onclick={onretry} size="sm" variant="outline"
+          >{words.tryAgain}</Button
+        >
+      </div>
     {:else if clips.length === 0}
       <p class="m-0 type-body text-ink-muted text-pretty">
         {words.nothingAnimated(move.from, move.to)}
@@ -357,28 +417,35 @@
               index={0}
               onkeydown={pageKey}
             >
-              {handle}
+              {figureOf(handle, lang)}
             </Slider.Thumb>
           </Slider.Root>
           <div
-            class="relative h-space-5"
+            bind:this={ruler}
+            class="relative h-space-5 type-meta num"
             aria-hidden="true"
             {@attach frameSize((node: HTMLElement) => {
               lane = node.clientWidth;
             })}
           >
+            <!-- The first figure stands from its mark and the last back to
+                 it, so neither leaves the lane; the rest centre on theirs. -->
             {#each marks as mark, at (mark)}
               <span
                 class={[
                   "absolute start-(--at) top-0 flex flex-col type-meta text-ink-muted num",
-                  at === 0
-                    ? "items-start"
-                    : "-translate-x-1/2 items-center rtl:translate-x-1/2",
+                  at === 0 && "items-start",
+                  at > 0 &&
+                    at === marks.length - 1 &&
+                    "-translate-x-full items-end rtl:translate-x-full",
+                  at > 0 &&
+                    at < marks.length - 1 &&
+                    "-translate-x-1/2 items-center rtl:translate-x-1/2",
                 ]}
                 style:--at={pct(mark)}
               >
                 <span class="h-space-1 w-px bg-border-control"></span>
-                {#if at % figureEvery === 0}{mark}{/if}
+                {#if at % figureEvery === 0}{figureOf(mark, lang)}{/if}
               </span>
             {/each}
           </div>
