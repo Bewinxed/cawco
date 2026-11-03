@@ -20,9 +20,9 @@
    * `FIT`), and fits again in place as the cards' measured heights lay it
    * out anew or the room changes size, while the view is still a fit
    * (FlowAutoFit). The Fit tool frames the same way, so a view he has not
-   * moved is already its frame. No zoom figure. The kept card wears the list's
-   * on-stage face. One press keeps a state, or, while comparing, compares
-   * with it; resting on a card changes nothing.
+   * moved is already its frame. No zoom figure. The kept card wears the
+   * chosen card's coral edge (WholeCard). One press keeps a state, or,
+   * while comparing, compares with it; resting on a card changes nothing.
    *
    * In a pane under 640px the map is a list (WholeList), as DESIGN.md's
    * Map mode draws a narrow map: fitted whole there, its words drew at
@@ -55,7 +55,10 @@
   import MachineNode from "./MachineNode.svelte";
   import { holesOf, type Review } from "./model";
   import RouteEdge, { type RouteData } from "./RouteEdge.svelte";
-  import StateNode, { type StateCard } from "./StateNode.svelte";
+  import StateNode, {
+    type StateCard,
+    type StateMark,
+  } from "./StateNode.svelte";
   import WholeList from "./WholeList.svelte";
   import WholeMeasure from "./WholeMeasure.svelte";
 
@@ -112,6 +115,12 @@
   );
 
   const press = (state: string) => onpress(state, null);
+  /** A mark from its sentence: its word the sentence's head, before its colon ("Unreachable", "Dead end"; "Error state" whole). */
+  const markOf = (tone: StateMark["tone"], said: string): StateMark => ({
+    tone,
+    said,
+    word: said.split(":")[0] ?? said,
+  });
   const cardOf = (id: string): StateCard | null => {
     const state = review.states[id];
     if (!state) {
@@ -122,12 +131,10 @@
       id,
       name: state.name,
       note: state.note,
-      failure: state.failure,
-      holed: !(holes.reaches && holes.leaves),
       marks: [
-        state.failure ? words.errorState : null,
-        holes.reaches ? null : words.nothingReaches,
-        holes.leaves ? null : words.nothingLeaves,
+        state.failure ? markOf("fail", words.errorState) : null,
+        holes.reaches ? null : markOf("attn", words.nothingReaches),
+        holes.leaves ? null : markOf("attn", words.nothingLeaves),
       ].filter((mark) => mark !== null),
       kept: id === kept,
       against: id === against,

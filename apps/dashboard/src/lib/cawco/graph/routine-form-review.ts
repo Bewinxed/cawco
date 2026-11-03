@@ -25,9 +25,13 @@ export const routineForm: ReviewInput = {
     FilledInPhone: "FilledIn",
     RunsAnOrchestrator: FILLING,
     RunsAnOrchestratorPhone: "RunsAnOrchestrator",
-    LongestName: FILLING,
+    // The hardening cases are Filled in with edge-case words, no step of
+    // the flow: variants of Filled in (one of its chips), so no arrow is
+    // missing to them. The longest name at 390 is that variant at the
+    // phone width; its own phone story draws on the form's canvas alone.
+    LongestName: "FilledIn",
     LongestNamePhone: "LongestName",
-    ShortestText: FILLING,
+    ShortestText: "FilledIn",
     EveryWeek: WHEN,
     EveryWeekPhone: "EveryWeek",
     EveryHour: WHEN,

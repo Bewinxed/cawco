@@ -705,13 +705,31 @@ function houseRead(args: InPageArgs): InPageRead {
   if (!skip.has("coral")) {
     // Coral DESIGN.md:596 spends beside the act: checked controls, the
     // selected nav row and the chosen option, each said by its state.
+    // A card that is one control's surface (that control reaching over
+    // it: a map's card, DESIGN.md Map mode, "the chosen card … takes the
+    // coral edge, as a chosen chip") is chosen when that control says so.
+    const chosenCard = (el: Element) => {
+      // Controls a person reaches only: a graph's connection handles
+      // (Svelte Flow's, `role="button"` out of the tab order) are no press
+      // of the card's.
+      const own = [...el.querySelectorAll(CONTROL)].filter(
+        (one) => one.getAttribute("tabindex") !== "-1"
+      );
+      return (
+        own.length === 1 &&
+        (own[0] as Element).matches(
+          '[aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"]'
+        )
+      );
+    };
     const sanctioned = (el: Element) =>
       Boolean(
         el.closest(
           '[role="checkbox"][aria-checked="true"], [role="switch"][aria-checked="true"], [role="radio"][aria-checked="true"], input:checked, [aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"]'
         ) ||
         el.closest("label")?.querySelector("input:checked") ||
-        el.querySelector('input:checked, [aria-checked="true"]')
+        el.querySelector('input:checked, [aria-checked="true"]') ||
+        chosenCard(el)
       );
     const views = args.views
       ? [...scope.querySelectorAll(args.views)].filter(shown)
