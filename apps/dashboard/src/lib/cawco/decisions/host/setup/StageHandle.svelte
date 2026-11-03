@@ -27,7 +27,7 @@
 <button
   aria-label={words.place(label, index - first + 1, last - first + 1)}
   aria-roledescription={words.draggable}
-  class="inline-flex size-c-btn-h-sm cursor-grab touch-none items-center justify-center rounded-sm border-none bg-transparent p-0 select-none hover:bg-surface-hover in-data-held:cursor-grabbing focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+  class="inline-flex size-c-btn-h-sm cursor-grab touch-none touch-hit items-center justify-center rounded-sm border-none bg-transparent p-0 select-none hover:bg-surface-hover in-data-held:cursor-grabbing focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
   data-box
   data-slot="handle"
   onkeydown={(event) => held.nudge(event, index, first, last)}

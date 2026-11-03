@@ -44,7 +44,7 @@
     {...trigger}
     class={iconTileVariants({
       class:
-        "press-tint border-0 p-0 text-(--stage-hue) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)",
+        "press-tint touch-hit border-0 p-0 text-(--stage-hue) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)",
     })}
     data-box
     style:--stage-hue={hue}

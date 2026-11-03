@@ -14,12 +14,14 @@
     Lists and tables) opening the house menu of its kind, its glyph and
     colour and what its hooks do (Reminders' List Info:
     mobbin.com/screens/a5698f3c-db13-4f59-acf2-de0d2d5c4743), and the
-    reorder handle. Add a stage is the list's last row.
+    reorder handle. Add a stage is the list's last row; the new stage
+    stands before the first closed one, its name taking the caret.
   - `notion`, as Notion draws a status property's options
     (mobbin.com/screens/2bf06d40-1b37-44ed-bfc0-f4d42216bc83): a head for
     each kind in the kinds' fixed order, each with its own add button, as
     Notion's To-do, In progress and Complete; each stage its reorder
-    handle, its mark and name, and an open button holding the menu
+    handle, its mark and name, and the house's More (where Notion draws a
+    chevron, which the HIG keeps for drilling in) holding the menu
     Notion's option opens (mobbin.com/screens/83e2d66a-d836-406f-b72d-d5bc20e1d16f):
     Rename (the name turns into its field where it stands), the kind
     (Notion's Group), the glyph and colour, what its hooks do, and Remove.
@@ -32,19 +34,14 @@
 -->
 <script lang="ts">
   import type { StageKind } from "@cawco/core/views";
-  import { STAGE_KINDS } from "@cawco/core/views";
+  import { CLOSED_STAGE_KINDS, STAGE_KINDS } from "@cawco/core/views";
   import { setupPageWords as words } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import {
-    IconChevronRight,
-    IconMinus,
-    IconPlus,
-    IconUnfold,
-  } from "#lib/icons.js";
+  import { IconMinus, IconMore, IconPlus, IconUnfold } from "#lib/icons.js";
   import type { SetupLook } from "../setup-look";
   import { HeldRow } from "./held-row.svelte.js";
   import StageHandle from "./StageHandle.svelte";
@@ -104,6 +101,29 @@
     asking = asking === index ? null : index;
     await tick();
     part(index, asking === null ? "remove" : "remove-now")?.focus();
+  }
+
+  /** Reminders: the stage goes, and the focus to the row that takes its place (the one before, at the list's end). */
+  async function drop(index: number): Promise<void> {
+    asking = null;
+    onchange(rows.filter((_, i) => i !== index));
+    await tick();
+    part(Math.min(index, rows.length - 1), "remove")?.focus();
+  }
+
+  /** Reminders: a new stage, Active, before the first closed one (Done, Dropped), where work still moves; its name takes the caret. */
+  async function addActive(): Promise<void> {
+    const closed = rows.findIndex((one) =>
+      CLOSED_STAGE_KINDS.some((kind) => kind === one.kind)
+    );
+    const place = closed === -1 ? rows.length : closed;
+    const next = [...rows];
+    next.splice(place, 0, { name: "", kind: "active" });
+    onchange(next);
+    await tick();
+    list
+      ?.querySelector<HTMLInputElement>(`[data-row="${place}"] input`)
+      ?.focus();
   }
 
   /** Notion: the stage whose name is a field, after Rename or Add. */
@@ -205,11 +225,11 @@
             {/if}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger
-                aria-label={words.editFor(label)}
+                aria-label={words.moreFor(label)}
                 size="icon-sm"
                 variant="ghost"
               >
-                <IconChevronRight />
+                <IconMore />
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end" width="regular">
                 <DropdownMenu.Item onSelect={() => rename(index)}>
@@ -217,7 +237,7 @@
                 </DropdownMenu.Item>
                 <DropdownMenu.Sub>
                   <DropdownMenu.SubTrigger
-                    ><span>{words.kind}</span></DropdownMenu.SubTrigger
+                    ><span>{words.kindItem}</span></DropdownMenu.SubTrigger
                   >
                   <DropdownMenu.SubContent>
                     <StageKindItems
@@ -243,7 +263,7 @@
     {/each}
   </StageList>
 {:else}
-  <StageList bind:ref={list} cols={REMINDERS_COLS}>
+  <StageList bind:ref={list} cols={REMINDERS_COLS} narrow={NOTION_COLS}>
     {#each rows as stage, index (index)}
       {@const label = stage.name || words.newStage}
       <!-- mark-line: StageRow draws the recipe on its own li. -->
@@ -269,80 +289,86 @@
             <StageLookItems onlook={(patch) => at(index, patch)} {stage} />
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-        <Input
-          aria-label={words.stageName(index + 1)}
-          data-slot="setup-stage-name"
-          look="inline"
-          oninput={(event: Event) =>
-            onchange(
-              patched(rows, index, {
-                name: (event.currentTarget as HTMLInputElement).value,
-              }),
-              false
-            )}
-          placeholder={words.newStage}
-          text="label"
-          value={stage.name}
-        />
-        {#if asking === index}
-          <span class="col-span-2 flex justify-end">
-            <Button
-              data-part="remove-now"
-              onclick={() => {
-                asking = null;
-                onchange(rows.filter((_, i) => i !== index));
-              }}
-              onkeydown={(event: KeyboardEvent) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  ask(index);
-                }
-              }}
-              size="sm"
-              variant="destructive">{words.removeNow}</Button
-            >
-          </span>
-        {:else}
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger aria-label={words.kindOf(label)}>
-              {#snippet child({ props: trigger })}
-                <Button
-                  {...trigger}
-                  align="trigger"
-                  pad="none"
-                  size="sm"
-                  tone="muted"
-                  variant="ghost"
-                >
-                  <span
-                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                    >{words.kinds[stage.kind]}</span
-                  >
-                  <IconUnfold data-icon="inline-end" />
-                </Button>
-              {/snippet}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end" width="regular">
-              <DropdownMenu.Group>
-                <DropdownMenu.GroupHeading
-                  >{words.kind}</DropdownMenu.GroupHeading
-                >
-                <StageKindItems
-                  kind={stage.kind}
-                  line={stage.line}
-                  onkind={(kind) => at(index, { kind })}
-                />
-              </DropdownMenu.Group>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-          <StageHandle
-            first={0}
-            {held}
-            {index}
-            {label}
-            last={rows.length - 1}
+        <!-- The name and its kind: on the list's two columns, or the kind
+             under the name where the list is too narrow for both. -->
+        <span
+          class="col-span-2 grid min-w-0 grid-cols-subgrid items-center @max-setup-stages-line:col-span-1 @max-setup-stages-line:grid-cols-1 @max-setup-stages-line:py-space-1"
+        >
+          <Input
+            aria-label={words.stageName(index + 1)}
+            data-slot="setup-stage-name"
+            look="inline"
+            oninput={(event: Event) =>
+              onchange(
+                patched(rows, index, {
+                  name: (event.currentTarget as HTMLInputElement).value,
+                }),
+                false
+              )}
+            placeholder={words.newStage}
+            text="label"
+            value={stage.name}
           />
-        {/if}
+          {#if asking === index}
+            <span
+              class="grid min-w-0 justify-items-end @max-setup-stages-line:flex"
+            >
+              <Button
+                data-part="remove-now"
+                onclick={() => {
+                  drop(index);
+                }}
+                onkeydown={(event: KeyboardEvent) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    ask(index);
+                  }
+                }}
+                size="sm"
+                variant="destructive">{words.removeNow}</Button
+              >
+            </span>
+          {:else}
+            <span
+              class="grid min-w-0 @max-setup-stages-line:-ms-space-2 @max-setup-stages-line:flex"
+            >
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger aria-label={words.kindOf(label)}>
+                  {#snippet child({ props: trigger })}
+                    <Button
+                      {...trigger}
+                      align="trigger"
+                      pad="more"
+                      size="sm"
+                      style="--more-px: var(--space-2)"
+                      tone="muted"
+                      variant="ghost"
+                    >
+                      <span
+                        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                        >{words.kinds[stage.kind]}</span
+                      >
+                      <IconUnfold data-icon="inline-end" />
+                    </Button>
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" width="regular">
+                  <DropdownMenu.Group>
+                    <DropdownMenu.GroupHeading
+                      >{words.kind}</DropdownMenu.GroupHeading
+                    >
+                    <StageKindItems
+                      kind={stage.kind}
+                      line={stage.line}
+                      onkind={(kind) => at(index, { kind })}
+                    />
+                  </DropdownMenu.Group>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </span>
+          {/if}
+        </span>
+        <StageHandle first={0} {held} {index} {label} last={rows.length - 1} />
       </StageRow>
     {/each}
     <li
@@ -351,7 +377,7 @@
       <button
         class="col-start-2 -col-end-1 -mx-space-1 flex min-h-c-row-h items-center gap-space-2 rounded-md border-none bg-transparent px-space-1 text-start type-label text-ink-muted mark-line hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
         data-slot="setup-add-stage"
-        onclick={() => onchange([...rows, { name: "", kind: "active" }])}
+        onclick={() => addActive()}
         type="button"
       >
         <span class={iconTileVariants({ empty: true })} data-box
