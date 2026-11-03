@@ -591,7 +591,7 @@ public enum Size {
     public static let cSigninPopW: Double = 340
     /// Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters; shorter where the room under his seat is less.
     public static let cCawPanelH: Double = 640
-    /// The floor of a project's board before it is set up (SetupScene): Caw's flock stands on it (CawFlock), his rig at 72 with the room a raised wing takes, and the scene's middle stands clear of it.
+    /// The floor of a project's board before it is set up (SetupScene): Caw's flock stands on it (CawFlock), his rests as pictures, the tallest at 64, and the scene's middle stands clear of it.
     public static let cFlockH: Double = 120
     /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.
     public static let cTopBarH: Double = 44
@@ -1353,9 +1353,6 @@ public enum Motion {
     /// Between one letter of a typed example and the next: New project's placeholder typing its examples once, then resting (decision page onboarding-design, card describe-hint, the person's pick); it erases at half this.
     /// In seconds.
     public static let durType: TimeInterval = 0.05
-    /// One pose of Caw's rig into the next, on ease-in-out (caw-rig/rig.ts BLEND_MS): a step of his flock's walk takes this, so his travel and his waddle land together (CawFlock).
-    /// In seconds.
-    public static let durCawBlend: TimeInterval = 0.64
     /// The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together.
     /// In seconds.
     public static let durCascade: TimeInterval = 0.48

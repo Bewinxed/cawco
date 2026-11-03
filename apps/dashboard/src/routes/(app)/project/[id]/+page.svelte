@@ -86,6 +86,7 @@
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import FolderFile from "#lib/cawco/project/FolderFile.svelte";
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
+  import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -171,6 +172,7 @@
     IconArtifactSheet,
     IconColumns,
     IconFileTable,
+    IconFolder,
     IconLayers,
     IconMore,
     IconPlus,
@@ -2053,10 +2055,10 @@
       act={setupAction}
       asks={asksOnBoard ? setupAsks : []}
       onanswer={answerAsk}
-      seat={canTalk && !lead.inPanel ? setupSeat : undefined}
+      seat={canTalk ? setupSeat : undefined}
     >
       {#snippet floor()}
-        <CawFlock busy={setupProgress !== null} count={phone ? 2 : 3} />
+        <CawFlock count={phone ? 2 : 4} />
       {/snippet}
     </SetupScene>
   {:else if empty && !adding}
@@ -2177,80 +2179,48 @@
     </p>
   </div>
 {:else}
-  <!-- The page and Caw's panel docked beside it (CawFloat): beside the page
-       where it has the room for both, under it where it has not; the page
-       yields the panel its room, so it never covers a column or the head.
-       On a phone the panel is the bottom sheet, and the page keeps it all. -->
-  <!-- The side column (`@project-dock`, the panel and the page at their
-       narrowest) stands from the width where both fit: the panel with its
-       end margin, the pane's inline padding and two board columns with the
-       gap between. -->
-  <div class="@container flex h-full min-h-0 min-w-0 flex-1 flex-col">
-    <!-- Open where the page has no room beside it: a row of its own under
-         the page, at most half the height (from 640px; a phone's panel is
-         the bottom sheet). With room for the board beside it: a column of
-         its own at the page's end, a conversation's width. On his Preview
-         tab (CawLead `tab`) the panel widens for what he shows: its column
-         takes two conversations' widths while a board column still stands
-         beside it, its row three quarters of the height; the grid tweens
-         to it on the drawer curve, and lands at once with less motion. -->
-    <div
-      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) motion-safe:transition-[grid-template-columns,grid-template-rows] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @project-dock:data-caw-open:grid-areas-(--docked-areas-side) @project-dock:data-caw-open:grid-cols-(--docked-cols-side) @project-dock:data-caw-open:grid-rows-(--docked-rows)"
-      data-caw-open={docked || undefined}
-      data-caw-preview={(docked && lead.tab === "preview") || undefined}
-      style:--docked-areas={'"page"'}
-      style:--docked-areas-row={'"page" "dock"'}
-      style:--docked-areas-side={'"page dock"'}
-      style:--docked-cols="minmax(0, 1fr)"
-      style:--docked-cols-side={lead.tab === "preview"
-        ? "minmax(0, 1fr) min(calc(2 * var(--c-panel-w) + var(--space-6)), calc(100% - var(--c-board-col-min) - var(--space-7)))"
-        : "minmax(0, 1fr) calc(var(--c-panel-w) + var(--space-6))"}
-      style:--docked-rows="minmax(0, 1fr)"
-      style:--docked-rows-row={lead.tab === "preview"
-        ? "minmax(0, 1fr) 75%"
-        : "minmax(0, 1fr) min(var(--c-caw-panel-h), 50%)"}
-    >
-      <div class="grid-area-page flex min-h-0 min-w-0 flex-col">
-        {#if phone && openFile}
-          <!-- A phone: the folder's file is its own page, with Back to the view. -->
-          <div
-            data-slot="project-page"
-            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
-          >
-            {#key openFile}
-              <FolderFile
-                backLabel={project.name}
-                onclose={closeFile}
-                page
-                path={openFile}
-                {projectId}
-              />
-            {/key}
-          </div>
-        {:else if phone && openTask && stages}
-          <!-- A phone: the task is its own page, with Back to the view. -->
-          <div
-            data-slot="project-page"
-            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
-          >
-            <TaskPane
-              {allowedFrom}
+  <ProjectDock {docked} preview={lead.tab === "preview"}>
+    {#snippet page()}
+      {#if phone && openFile}
+        <!-- A phone: the folder's file is its own page, with Back to the view. -->
+        <div
+          data-slot="project-page"
+          class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
+        >
+          {#key openFile}
+            <FolderFile
               backLabel={project.name}
-              onchanged={changed}
-              onclose={closeTask}
-              onmove={(id, stage) => move(id, stage)}
-              onopen={openOne}
+              onclose={closeFile}
               page
+              path={openFile}
               {projectId}
-              {stages}
-              taskId={openTask}
-              {tasks}
             />
-          </div>
-        {:else}
-          <!-- The frame the phone's views bar docks in, over the page's foot. -->
-          <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
-            <!-- A phone: the page is the one scroller, so iOS never chains two. The
+          {/key}
+        </div>
+      {:else if phone && openTask && stages}
+        <!-- A phone: the task is its own page, with Back to the view. -->
+        <div
+          data-slot="project-page"
+          class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
+        >
+          <TaskPane
+            {allowedFrom}
+            backLabel={project.name}
+            onchanged={changed}
+            onclose={closeTask}
+            onmove={(id, stage) => move(id, stage)}
+            onopen={openOne}
+            page
+            {projectId}
+            {stages}
+            taskId={openTask}
+            {tasks}
+          />
+        </div>
+      {:else}
+        <!-- The frame the phone's views bar docks in, over the page's foot. -->
+        <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
+          <!-- A phone: the page is the one scroller, so iOS never chains two. The
            foot's edge fade ends at the bar's top edge, a step of air under
            the reach. What it reveals (a scrollIntoView here, or one in a
            decision page's frame, which carries up into it) lands in the part
@@ -2259,143 +2229,144 @@
            foot's fade: at least the run the fade covers there
            (edge-fade.css `--fade-foot`, --bar-fade-inset + its length;
            0px while the page wears no fade). -->
-            <div
-              data-slot="project-page"
-              class={[
-                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
-                fadeOn === "page" && "kit-edge-fade-block",
-              ]}
-              style:--reveal-foot={`max(${docked ? "var(--c-sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
-              style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
-              style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
-            >
-              <ProjectHead
-                {lead}
-                {machine}
-                onask={canTalk ? ask : null}
-                onfilter={(anchor) => {
-                  filterAnchor = anchor;
-                  filterOpen = true;
-                }}
-                onnewtask={() => {
-                  choose("board");
-                  adding = true;
-                }}
-                setup={setupAct}
-                {project}
-                seated={!standing}
-              />
+          <div
+            data-slot="project-page"
+            class={[
+              "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
+              fadeOn === "page" && "kit-edge-fade-block",
+            ]}
+            style:--reveal-foot={`max(${docked ? "var(--c-sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
+            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
+            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+          >
+            <ProjectHead
+              {lead}
+              {machine}
+              onask={canTalk ? ask : null}
+              onfilter={(anchor) => {
+                filterAnchor = anchor;
+                filterOpen = true;
+              }}
+              onnewtask={() => {
+                choose("board");
+                adding = true;
+              }}
+              setup={setupAct}
+              {project}
+              seated={!standing}
+            />
 
-              {#if lead.problem}
-                <Alert
-                  data-id-page-notice
-                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
-                  variant="warning"
-                >
-                  <AlertDescription>{lead.problem}</AlertDescription>
-                </Alert>
-              {/if}
-              {#if stages && stages.problems.length > 0}
-                <Alert
-                  data-id-page-notice
-                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
-                  variant="warning"
-                >
-                  <AlertDescription>{unreadStages}</AlertDescription>
-                </Alert>
-              {/if}
-              {#if list && list.problems.length > 0}
-                <Alert
-                  data-id-page-notice
-                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
-                  variant="warning"
-                >
-                  <AlertDescription>{list.problems.join(" ")}</AlertDescription>
-                </Alert>
-              {/if}
-              {#if unread && !paneSaysUnread}
-                <!-- The tasks stand, but the stages or the views didn't come: said
-                 once, here, with its Retry. -->
-                <Alert
-                  data-id-page-notice
-                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
-                  variant="warning"
-                >
-                  <AlertDescription>{unread}</AlertDescription>
-                  <AlertAction>
-                    <Button
-                      label="Retry"
-                      onclick={readAgain}
-                      pending={rereading}
-                      pendingLabel="Retrying…"
-                      size="sm"
-                      variant="outline"
-                    />
-                  </AlertAction>
-                </Alert>
-              {/if}
-
-              {#if !hosted}
-                <!-- Under the head from 640px; a phone's views are its bar's. -->
-                <div class="contents max-phone:hidden">
-                  {@render strip(false)}
-                </div>
-              {/if}
-
-              {#if phone}
-                <!-- Under 900px a task is its own page: the view stands alone,
-                 the page's one scroller on a phone. -->
-                {@render viewPane()}
-              {:else}
-                <Split
-                  backLabel="Back to {viewWord}"
-                  defaultWidth={40}
-                  keys={{
-                    width: `cawco.task.width.${projectId}`,
-                    expanded: `cawco.task.expanded.${projectId}`,
-                  }}
-                  main={viewPane}
-                  open={!!openFile || (!!openTask && !!stages)}
-                  side={sideCard}
-                />
-              {/if}
-            </div>
-            {#if !hosted}
-              <ViewBar
-                {current}
-                needs={needsYou.length}
-                needsOn={filtering}
-                onchoose={choose}
-                onnewsession={() => lead.newConversation()}
-                ontoggleneeds={() => {
-                  needsOnly = !filtering;
-                }}
-                views={barViews}
+            {#if lead.problem}
+              <Alert
+                data-id-page-notice
+                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                variant="warning"
               >
-                {#snippet tools()}
-                  <!-- As the strip draws it on a narrow screen: its glyph and count
-                 while a filter stands; the head's ⋯ opens it. -->
-                  {#if filterHere && narrowed > 0}
-                    <TaskFilterPopover
-                      compact
-                      {filter}
-                      look="in-bar"
-                      {find}
-                      onchange={setFilter}
-                      tasks={[...tasks, ...archived]}
-                    />
-                  {/if}
-                {/snippet}
-              </ViewBar>
+                <AlertDescription>{lead.problem}</AlertDescription>
+              </Alert>
             {/if}
-            <!-- Outside the scroller, whose edge fade would mask it where it
-           floats: a fixed box is drawn under its ancestors' masks. -->
-            {#if shown === "board" || shown === "table"}
-              {@render bulkBar()}
+            {#if stages && stages.problems.length > 0}
+              <Alert
+                data-id-page-notice
+                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                variant="warning"
+              >
+                <AlertDescription>{unreadStages}</AlertDescription>
+              </Alert>
+            {/if}
+            {#if list && list.problems.length > 0}
+              <Alert
+                data-id-page-notice
+                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                variant="warning"
+              >
+                <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+              </Alert>
+            {/if}
+            {#if unread && !paneSaysUnread}
+              <!-- The tasks stand, but the stages or the views didn't come: said
+                 once, here, with its Retry. -->
+              <Alert
+                data-id-page-notice
+                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                variant="warning"
+              >
+                <AlertDescription>{unread}</AlertDescription>
+                <AlertAction>
+                  <Button
+                    label="Retry"
+                    onclick={readAgain}
+                    pending={rereading}
+                    pendingLabel="Retrying…"
+                    size="sm"
+                    variant="outline"
+                  />
+                </AlertAction>
+              </Alert>
+            {/if}
+
+            {#if !hosted}
+              <!-- Under the head from 640px; a phone's views are its bar's. -->
+              <div class="contents max-phone:hidden">
+                {@render strip(false)}
+              </div>
+            {/if}
+
+            {#if phone}
+              <!-- Under 900px a task is its own page: the view stands alone,
+                 the page's one scroller on a phone. -->
+              {@render viewPane()}
+            {:else}
+              <Split
+                backLabel="Back to {viewWord}"
+                defaultWidth={40}
+                keys={{
+                  width: `cawco.task.width.${projectId}`,
+                  expanded: `cawco.task.expanded.${projectId}`,
+                }}
+                main={viewPane}
+                open={!!openFile || (!!openTask && !!stages)}
+                side={sideCard}
+              />
             {/if}
           </div>
-        {/if}
-      </div>
+          {#if !hosted}
+            <ViewBar
+              {current}
+              needs={needsYou.length}
+              needsOn={filtering}
+              onchoose={choose}
+              onnewsession={() => lead.newConversation()}
+              ontoggleneeds={() => {
+                needsOnly = !filtering;
+              }}
+              views={barViews}
+            >
+              {#snippet tools()}
+                <!-- As the strip draws it on a narrow screen: its glyph and count
+                 while a filter stands; the head's ⋯ opens it. -->
+                {#if filterHere && narrowed > 0}
+                  <TaskFilterPopover
+                    compact
+                    {filter}
+                    look="in-bar"
+                    {find}
+                    onchange={setFilter}
+                    tasks={[...tasks, ...archived]}
+                  />
+                {/if}
+              {/snippet}
+            </ViewBar>
+          {/if}
+          <!-- Outside the scroller, whose edge fade would mask it where it
+           floats: a fixed box is drawn under its ancestors' masks. -->
+          {#if shown === "board" || shown === "table"}
+            {@render bulkBar()}
+          {/if}
+        </div>
+      {/if}
+    {/snippet}
+    {#snippet dock()}
       <CawFloat
         {asksElsewhere}
         {lead}
@@ -2403,8 +2374,8 @@
         projectName={project?.name ?? ""}
         setup={setupProgress}
       />
-    </div>
-  </div>
+    {/snippet}
+  </ProjectDock>
 {/if}
 
 <!-- His seat over the setup scene, the same seat the empty board stands
@@ -2416,7 +2387,13 @@
     data-share="caw:{projectId}"
     out:sitDown|global
   >
-    <CawSeat {lead} {projectId} projectName={project?.name ?? ""} size={80} />
+    <CawSeat
+      {lead}
+      {projectId}
+      projectName={project?.name ?? ""}
+      size={80}
+      standIn={IconFolder}
+    />
   </div>
 {/snippet}
 

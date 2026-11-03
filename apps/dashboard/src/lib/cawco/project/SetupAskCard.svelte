@@ -115,12 +115,7 @@
   const owns = $derived(Object.keys(other).length > 0);
 </script>
 
-<article
-  aria-labelledby="{id}-q0"
-  data-slot="setup-ask"
-  class="flex w-full flex-col gap-space-3 rounded-lg bg-surface-raised p-space-4 shadow-overlay"
-  data-blocks={blocks || undefined}
->
+{#snippet stanceRow()}
   <!-- mark-line: the Needs-you dot leads its stance words as one pair. -->
   <span
     class={[
@@ -146,6 +141,14 @@
       >
     {/if}
   </span>
+{/snippet}
+
+<article
+  aria-labelledby="{id}-q0"
+  data-slot="setup-ask"
+  class="flex w-full flex-col gap-space-3 rounded-lg bg-surface-raised p-space-4 shadow-overlay"
+  data-blocks={blocks || undefined}
+>
   {#each questions as question, qi (question.question)}
     <fieldset
       class="m-0 flex min-w-0 flex-col gap-space-2 border-0 p-0"
@@ -153,9 +156,12 @@
     >
       <legend
         id="{id}-q{qi}"
-        class="mb-space-2 p-0 type-label text-ink-strong wrap-anywhere"
+        class="mb-space-1 p-0 type-label text-ink-strong wrap-anywhere"
         >{question.question}</legend
       >
+      {#if qi === 0}
+        {@render stanceRow()}
+      {/if}
       <div class={chipsVariants()}>
         {#each question.options as option (option.label)}
           <button

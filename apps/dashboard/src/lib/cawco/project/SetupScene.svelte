@@ -16,10 +16,12 @@
    *   board already says nothing is set up.
    * - **Its live Caw** (`seat`, CawSeat at 80) stands over the middle while
    *   he is here; while he drafts in his panel (`lead.inPanel`) the seat
-   *   is his panel's and the middle takes the folder glyph instead.
+   *   shows the folder glyph instead (CawSeat `standIn`). With no seat (no
+   *   machine for him), the folder glyph alone.
    * - **Its floor** (`floor`) is his flock: his drawn self walking and
    *   pecking about the board's foot (CawFlock), decoration a screen reader
-   *   does not hear.
+   *   does not hear. It stands under the middle, never over it: on a short
+   *   board the scene grows past it and the page scrolls.
    *
    * On a phone his sheet stands over the board, and his questions are his
    * composer's there (one at a time, "1 of 3"); the scene keeps the claim.
@@ -65,24 +67,28 @@
 
 <!-- The claim's one action, as the setup stands. -->
 {#snippet doing()}
-  {#if act.kind === "page"}
-    <Button label={setupWords.openPage} onclick={act.open} variant="outline" />
-  {:else if act.kind === "drafting"}
-    <div class="flex flex-col items-center gap-space-1">
+  <div class="flex flex-col items-center gap-space-1">
+    {#if act.kind === "page"}
+      <Button
+        label={setupWords.openPage}
+        onclick={act.open}
+        variant="outline"
+      />
+    {:else if act.kind === "drafting"}
       <span class="type-meta text-ink-muted">{setupWords.drafting}</span>
       <Button disabled label={setupWords.openPage} variant="outline" />
-    </div>
-  {:else if act.kind === "ask"}
-    <Button label={setupWords.askSetup} onclick={act.ask} variant="outline" />
-  {/if}
+    {:else if act.kind === "ask"}
+      <Button label={setupWords.askSetup} onclick={act.ask} variant="outline" />
+    {/if}
+  </div>
 {/snippet}
 
 <div
   data-slot="setup-scene"
-  class="relative isolate flex h-full min-h-c-caw-panel-h w-full flex-col items-center overflow-hidden"
+  class="relative isolate flex h-full min-h-0 w-full flex-auto flex-col items-center"
 >
   <div
-    class="flex w-full flex-auto flex-col items-center justify-center gap-space-4 px-space-5 pt-space-6 pb-c-flock-h"
+    class="flex w-full flex-auto flex-col items-center justify-center gap-space-4 px-space-5 pt-space-6 pb-space-4"
   >
     {#if seat && asks.length > 0}
       <div class="grid justify-items-center">{@render seat()}</div>
@@ -139,7 +145,7 @@
   {#if floor}
     <div
       aria-hidden="true"
-      class="pointer-events-none absolute inset-x-0 bottom-0 h-c-flock-h"
+      class="pointer-events-none relative h-c-flock-h w-full flex-none overflow-hidden"
       data-slot="floor"
     >
       {@render floor()}

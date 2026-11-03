@@ -14,6 +14,7 @@ design-previews/address/assets/
 design-previews/address/index.html
 packages/hub/skills/decision-page/kit/vendor/
 packages/hub/skills/decision-page/kit/page.html
+packages/hub/skills/decision-page/kit/setup.html
 apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json
 apps/apple/targets.json
 apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Resources/Icons.xcassets/
@@ -32,3 +33,4 @@ scripts/probe-kit/fixtures/
 *.yml
 *.yaml
 *.toml
+packages/hub/skills/decision-page/kit/stage-glyphs.js
