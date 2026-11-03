@@ -38,6 +38,7 @@
   import type { TransitionConfig } from "svelte/transition";
   import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -1705,9 +1706,12 @@
           {@attach morph({ rows: true })}
           out:popOut={{ side: "top" }}
         >
+          <!-- One row with no ground (DESIGN.md, The Title Bars Follow
+               Liquid Glass Rule): what the shelf holds, then Close, a bare
+               symbol in its glass group. -->
           <header
             data-slot="shead"
-            class="flex items-center gap-space-2 py-space-2 pe-space-2 ps-space-4 border-b border-b-border-hairline"
+            class="flex h-c-top-bar-h items-center gap-space-2 pe-space-2 ps-space-4"
           >
             <h2
               class="flex-auto min-w-0 m-0 text-size-label font-medium text-ink-strong"
@@ -1722,13 +1726,13 @@
                   : `${hidden.length} more delegates`}
               {/if}
             </h2>
-            <Button
-              aria-label="Close"
-              class="touch-hit"
-              onclick={() => closeShelf(true)}
-              size="icon-sm"
-              variant="ghost"><IconClose /></Button
-            >
+            <BarGlass form="group">
+              <BarItem
+                icon={IconClose}
+                label="Close"
+                onclick={() => closeShelf(true)}
+              />
+            </BarGlass>
           </header>
           <ul
             data-slot="slist"
