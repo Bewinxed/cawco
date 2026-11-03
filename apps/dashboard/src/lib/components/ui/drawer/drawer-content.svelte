@@ -65,6 +65,7 @@
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
   import { mirror } from "#lib/cawco/page-marks.js";
   import { visible } from "#lib/cawco/visible-viewport.svelte.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconClose } from "#lib/icons.js";
@@ -264,13 +265,17 @@
       >
       <div class="ms-auto flex flex-none items-center gap-space-2">
         {@render actions?.()}
-        <DrawerPrimitive.Close
-          aria-label="Close"
-          class={head.close()}
-          title="Close"
-        >
-          <IconClose aria-hidden="true" />
-        </DrawerPrimitive.Close>
+        <!-- Close, a bare symbol in a glass group of its own (DESIGN.md,
+             The Title Bars Follow Liquid Glass Rule; HIG, Toolbars: "Group
+             … critical actions like Done, Close, or Save in dedicated …
+             sections"). -->
+        <BarGlass form="group">
+          <DrawerPrimitive.Close>
+            {#snippet child({ props })}
+              <BarItem icon={IconClose} label="Close" {props} />
+            {/snippet}
+          </DrawerPrimitive.Close>
+        </BarGlass>
       </div>
     </div>
   {/if}

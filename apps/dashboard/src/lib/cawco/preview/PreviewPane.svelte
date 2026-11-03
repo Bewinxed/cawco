@@ -1225,7 +1225,8 @@
     }
   });
   /**
-   * The head's line under the name (DESIGN.md, Artifact panel): the ask the
+   * The artifact's line, its menu's first row and its name's tooltip
+   * (DESIGN.md, Artifact panel): the ask the
    * session gave it, carried by the panel's frame, so it stands from the
    * first frame in every state from on its way to failed; once the person's
    * Send is in and the session has not changed the artifact or its ask since
@@ -1237,8 +1238,6 @@
       ? artifactWords.sentTo(ownerName)
       : (artifact?.ask ?? "")
   );
-  /** Whether the head has room for its line under the name (SideSurface's rule); else the menu says it first. */
-  let lineStands = $state(true);
   /*
    * A sheet's stage (live components): the project's own dev toolchain
    * (Vite, Astro or Nuxt), which the
@@ -4025,8 +4024,6 @@
       {instanceId}
       held={preview?.artifacts}
       line={headLine}
-      lineDropped={!lineStands}
-      lineId={`${paneId}-line`}
       onrefused={(reason, chosen) => {
         refusals.set(actKey, {
           reason,
@@ -4160,14 +4157,11 @@
     items={headItems}
     label="Preview"
     onclose={ownTab ? backToSession : close}
-    subtitle={headLine}
-    subtitleId={`${paneId}-line`}
     {switcher}
     titleControl={artifact ? artifactTitle : undefined}
     above={changesBar}
     beside={railBeside}
     bind:section
-    bind:subtitleStands={lineStands}
     bind:well
   >
     {@render framed()}

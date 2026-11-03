@@ -31,6 +31,7 @@
    * read between them, not two.
    */
   import { untrack } from "svelte";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -40,6 +41,7 @@
     IconExternal,
     IconFolder,
     IconFork,
+    IconMaximize,
     IconStop,
     IconTick,
   } from "#lib/icons.js";
@@ -323,52 +325,46 @@
 <div data-slot="peek" class="flex min-h-0 flex-1 flex-col overflow-hidden">
   <ContextMenu.Root>
     <ContextMenu.Trigger box="none">
-      <header class="flex items-start gap-2 px-4 py-3">
-        <div class="min-w-0 flex-1">
-          <h2
-            class="mark-line flex min-w-0 items-center gap-2 text-body font-medium"
-          >
-            <!-- The directory's hue, the same one its row wears: the peek
-                 belongs to a project. -->
-            {#if cwd}
-              <IconFolder
-                class="identity-ink size-icon-md shrink-0"
-                style="--identity-h: {folderPrefs.hue(cwd)}"
-              />
-            {/if}
-            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{target.title}</span
-            >
-          </h2>
-          <p class="flex items-baseline gap-2 text-meta text-ink-muted">
-            <span class="mark-line flex shrink-0 items-center gap-1.5">
-              {#if machine}
-                <OsMark class="size-space-4" os={machine.os} />
-              {/if}
-              <span>{host}</span>
-            </span>
-            {#if cwd}
-              <!-- Truncated from the left, as every path in the app is: the
-                   leaf is what tells two checkouts apart. -->
-              <span
-                data-slot="cwd"
-                class="dir-rtl min-w-0 truncate font-(family-name:--font-mono)"
-                title={cwd}
-              >
-                <bdi>{cwd}</bdi>
-              </span>
-            {/if}
-          </p>
-        </div>
-        <Button
-          class="shrink-0"
-          href={target.href}
-          margin="ghost-end"
-          size="sm"
-          variant="ghost"
+      <!-- One row (DESIGN.md, Peek; The Title Bars Follow Liquid Glass
+           Rule): the session's title by its project's folder in the
+           project's hue, then its machine's OS mark, the machine named in
+           its tooltip; no path. At the trailing edge Open, the maximize
+           symbol in its glass group, which dives, and Close in one of its
+           own. -->
+      <header
+        data-slot="bar"
+        class="flex h-c-top-bar-h items-center gap-space-2 ps-space-4 pe-space-2"
+      >
+        <h2
+          class="mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 text-body font-medium"
         >
-          Open
-        </Button>
+          <!-- The directory's hue, the same one its row wears: the peek
+               belongs to a project. -->
+          {#if cwd}
+            <IconFolder
+              class="identity-ink size-icon-md shrink-0"
+              style="--identity-h: {folderPrefs.hue(cwd)}"
+            />
+          {/if}
+          <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+            >{target.title}</span
+          >
+          {#if machine}
+            <span
+              data-box
+              class="inline-flex flex-none text-ink-muted"
+              aria-label={host}
+              role="img"
+              title={host}><OsMark class="size-space-4" os={machine.os} /></span
+            >
+          {/if}
+        </h2>
+        <BarGlass form="group">
+          <BarItem href={target.href} icon={IconMaximize} label="Open" />
+        </BarGlass>
+        <BarGlass form="group">
+          <BarItem icon={IconClose} label="Close peek" onclick={onclose} />
+        </BarGlass>
       </header>
     </ContextMenu.Trigger>
 

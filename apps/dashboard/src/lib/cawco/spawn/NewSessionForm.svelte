@@ -37,7 +37,7 @@
     AlertDescription,
     AlertTitle,
   } from "#lib/components/ui/alert/index.js";
-  import { Button, pressVariants } from "#lib/components/ui/button/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -64,7 +64,6 @@
    */
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconBolt as Bolt,
     IconBook2 as Book,
@@ -2198,10 +2197,15 @@
 {#if sheet}
   {#if moveStep}
     <div data-slot="back" class="flex flex-none pb-space-2" inert={busy}>
-      <Button data-vaul-no-drag onclick={back} size="sm" variant="ghost">
-        <IconChevronLeft />
-        <span>{spawnWords.form.back}</span>
-      </Button>
+      <BarGlass form="group">
+        <BarItem
+          data-vaul-no-drag
+          icon={IconChevronLeft}
+          keys="Esc"
+          label={spawnWords.form.back}
+          onclick={back}
+        />
+      </BarGlass>
     </div>
   {/if}
 {:else}
@@ -2217,23 +2221,15 @@
         <!-- Step 2's way back to the form leads the head, where the form's
            mark stands; Esc goes back too. Close keeps the trailing edge
            (DESIGN.md, Dialog and Drawer: the title, then Close). -->
-        <Tip keys="Esc" label={spawnWords.form.back}>
-          {#snippet children(tip)}
-            <button
-              {...tip}
-              aria-label={spawnWords.form.back}
-              class={pressVariants({
-                press: "scale",
-                class: ["select-none", sheetHead.close()],
-              })}
-              data-vaul-no-drag
-              onclick={back}
-              type="button"
-            >
-              <IconChevronLeft />
-            </button>
-          {/snippet}
-        </Tip>
+        <BarGlass form="group">
+          <BarItem
+            data-vaul-no-drag
+            icon={IconChevronLeft}
+            keys="Esc"
+            label={spawnWords.form.back}
+            onclick={back}
+          />
+        </BarGlass>
       {:else}
         <span
           class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink"
@@ -2253,23 +2249,15 @@
         <MorphText text={headTitle} wrap={moveStep} />
       </h2>
     </div>
-    <Tip keys={moveStep ? undefined : "Esc"} label={spawnWords.form.close}>
-      {#snippet children(tip)}
-        <button
-          {...tip}
-          aria-label={spawnWords.form.close}
-          class={pressVariants({
-            press: "scale",
-            class: ["select-none", sheetHead.close()],
-          })}
-          data-vaul-no-drag
-          onclick={() => close()}
-          type="button"
-        >
-          <X />
-        </button>
-      {/snippet}
-    </Tip>
+    <BarGlass form="group">
+      <BarItem
+        data-vaul-no-drag
+        icon={X}
+        keys={moveStep ? undefined : "Esc"}
+        label={spawnWords.form.close}
+        onclick={() => close()}
+      />
+    </BarGlass>
   </div>
 {/if}
 <!-- Step 2 (the owner's revision of C) is the same form with only what a
@@ -2281,7 +2269,7 @@
        what says the form runs on past it. -->
 <div
   data-slot="body"
-  class="fai-scroll kit-sheet-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-space-6 max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pt-space-3 max-phone:pb-space-4"
+  class="fai-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-space-6 max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pt-space-3 max-phone:pb-space-4"
   data-stepped={moveStep || undefined}
   data-vaul-no-drag
   inert={busy}

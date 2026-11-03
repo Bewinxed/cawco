@@ -28,6 +28,7 @@
   import type { ComponentProps, Snippet } from "svelte";
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
   import { mirror } from "#lib/cawco/page-marks.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconClose } from "#lib/icons.js";
@@ -144,7 +145,7 @@
           class={cn(
             head.head(),
             "px-4 pt-4",
-            titleHidden && "absolute end-0 top-0 z-1 p-4"
+            titleHidden && "absolute end-0 top-0 z-1 p-space-2"
           )}
           data-slot="sheet-header"
         >
@@ -153,14 +154,22 @@
             data-slot="sheet-title"
             ><MorphText text={title} wrap /></SheetPrimitive.Title
           >
-          <SheetPrimitive.Close
-            aria-label="Close"
-            class={cn(head.close(), "ms-auto")}
-            data-slot="sheet-close"
-            title="Close"
-          >
-            <IconClose aria-hidden="true" />
-          </SheetPrimitive.Close>
+          <!-- Close, a bare symbol in a glass group of its own (DESIGN.md,
+               The Title Bars Follow Liquid Glass Rule). -->
+          <div class="ms-auto flex flex-none">
+            <BarGlass form="group">
+              <SheetPrimitive.Close>
+                {#snippet child({ props })}
+                  <BarItem
+                    data-slot="sheet-close"
+                    icon={IconClose}
+                    label="Close"
+                    {props}
+                  />
+                {/snippet}
+              </SheetPrimitive.Close>
+            </BarGlass>
+          </div>
         </div>
         {@render children?.()}
       </SheetFrame>

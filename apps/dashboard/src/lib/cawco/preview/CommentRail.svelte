@@ -10,8 +10,10 @@
    * of it. It closes only by its Close or by Comments, never by a press
    * outside or Esc.
    *
-   * Its head (44px): Comments, then Sort, a comment on the whole page and
-   * Close, each the `sm` ghost glyph. Under it the search field (Find's
+   * Its bar (44px) carries no title, since Comments, pressed, names it
+   * (DESIGN.md, The Title Bars Follow Liquid Glass Rule): Sort, a comment on
+   * the whole page and Close float at its trailing edge as one glass group
+   * of bare symbols (BarGlass `form="group"`). Under it the search field (Find's
    * engine, core find-match, over each comment's number, words, place and
    * state; `/` focuses it, Esc clears it), and Open and Resolved, the
    * segmented filter, each count only above 0. Then the rows, newest first
@@ -42,6 +44,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -502,58 +505,37 @@
   data-layout={layout}
   class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:w-full data-[layout=sheet]:max-h-full data-[layout=sheet]:border-t data-[layout=sheet]:border-border-hairline data-[layout=sheet]:rounded-ss-lg data-[layout=sheet]:rounded-se-lg data-[layout=sheet]:shadow-drawer"
 >
-  <header
-    data-slot="head"
-    class="flex flex-none items-center gap-space-1 h-c-sheet-inspector-head-h ps-space-4 pe-space-2"
+  <div
+    data-slot="bar"
+    class="flex flex-none items-center justify-end h-c-top-bar-h px-space-2"
   >
-    <h2
-      data-slot="title"
-      class="flex-1 min-w-0 m-0 truncate text-ink-strong type-label"
-    >
-      {said.comments}
-    </h2>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger
-        aria-label={said.sort}
-        size="icon-sm"
-        title={said.sort}
-        variant="ghost"
-      >
-        <IconSort />
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
-        <DropdownMenu.RadioGroup
-          onValueChange={(next) => {
-            sort = next === "top" ? "top" : "newest";
-          }}
-          value={sort}
-        >
-          <DropdownMenu.RadioItem value="newest"
-            >{said.newestFirst}</DropdownMenu.RadioItem
+    <BarGlass form="group">
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <BarItem icon={IconSort} label={said.sort} {props} />
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.RadioGroup
+            onValueChange={(next) => {
+              sort = next === "top" ? "top" : "newest";
+            }}
+            value={sort}
           >
-          <DropdownMenu.RadioItem value="top"
-            >{said.topOfPageFirst}</DropdownMenu.RadioItem
-          >
-        </DropdownMenu.RadioGroup>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
-    <Button
-      aria-label={said.onWholePage}
-      icon={IconPlus}
-      onclick={onpage}
-      size="icon-sm"
-      title={said.onWholePage}
-      variant="ghost"
-    />
-    <Button
-      aria-label={said.closeComments}
-      icon={IconClose}
-      onclick={onclose}
-      size="icon-sm"
-      title={said.closeComments}
-      variant="ghost"
-    />
-  </header>
+            <DropdownMenu.RadioItem value="newest"
+              >{said.newestFirst}</DropdownMenu.RadioItem
+            >
+            <DropdownMenu.RadioItem value="top"
+              >{said.topOfPageFirst}</DropdownMenu.RadioItem
+            >
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+      <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
+      <BarItem icon={IconClose} label={said.closeComments} onclick={onclose} />
+    </BarGlass>
+  </div>
   <div class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-2">
     <InputGroup.Root>
       <InputGroup.Addon><IconSearch /></InputGroup.Addon>

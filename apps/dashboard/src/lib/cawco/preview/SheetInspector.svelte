@@ -31,6 +31,11 @@
    * page's foot on a phone.
    */
   import { artifactWords as words } from "@cawco/core/words/artifacts";
+  import {
+    BarFloat,
+    BarGlass,
+    BarItem,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
@@ -183,32 +188,29 @@
 <aside
   data-sheet={layout === "sheet" || undefined}
   aria-label="Inspector"
-  class="absolute inset-y-0 end-0 z-2 flex flex-col w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-(--keyboard-lift,0px) data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-over-keyboard-60 data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
+  class="absolute inset-y-0 end-0 z-2 flex flex-col timeline-scope-transcript-head w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-(--keyboard-lift,0px) data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-over-keyboard-60 data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
   data-inspector={layout}
   style:--foot-pb="calc(var(--space-2) + env(safe-area-inset-bottom, 0px))"
   in:sheetSlide={{ axis: axis(), leaving: false }}
   out:sheetSlide={{ axis: axis(), leaving: true }}
 >
-  <header
-    data-slot="head"
-    class="flex flex-none items-center gap-space-2 min-h-c-sheet-inspector-head-h ps-space-4 pe-space-2 border-b border-b-border-hairline"
-  >
-    <h2 data-slot="title" class="flex-1 m-0 text-ink-strong type-label">
-      {words.inspect}
-    </h2>
-    <Button
-      aria-label={words.closeInspector}
-      class="touch-hit"
-      icon={IconClose}
-      onclick={onclose}
-      size="icon-sm"
-      title={words.closeInspector}
-      variant="ghost"
-    />
-  </header>
+  <!-- No title, since Inspect, pressed, names it, and no ground (DESIGN.md,
+       The Title Bars Follow Liquid Glass Rule): Close floats at the trailing
+       edge, a bare symbol in its glass group, and the props run under it. -->
+  <BarFloat tint="bg-surface-raised">
+    {#snippet trailing()}
+      <BarGlass form="group">
+        <BarItem
+          icon={IconClose}
+          label={words.closeInspector}
+          onclick={onclose}
+        />
+      </BarGlass>
+    {/snippet}
+  </BarFloat>
 
   <div
-    class="grid content-box-start gap-space-3 flex-1 min-h-0 overflow-auto px-space-4 py-space-3"
+    class="grid content-box-start gap-space-3 flex-1 min-h-0 overflow-auto scroll-timeline-transcript-head px-space-4 pt-c-top-bar-h pb-space-3"
   >
     {#if !sheet}
       <!-- The rows' own size while the page reads the sheet's props. -->

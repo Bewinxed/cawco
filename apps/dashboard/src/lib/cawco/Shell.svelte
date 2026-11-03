@@ -29,7 +29,7 @@
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
   import { keepPrefs } from "#lib/cawco/prefs.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
@@ -1234,15 +1234,18 @@
                bar doesn't say its name twice. -->
           {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
-               leads back to it. -->
-            <a
-              data-slot="crumb"
-              class="mark-line pressable inline-flex items-center gap-space-row min-h-c-btn-h-lg ps-space-1 pe-space-2 rounded-sm type-label text-ink-strong no-underline"
-              href="/config"
-              in:riseIn
-              out:crossOut
-              ><IconChevronLeft class="size-icon-md" /><span>Configure</span></a
-            >
+               leads back to it: Back, the chevron alone in its glass group,
+               named by where it goes (DESIGN.md, The Title Bars Follow
+               Liquid Glass Rule: "Back and Close are symbols"). -->
+            <div data-slot="crumb" class="flex" in:riseIn out:crossOut>
+              <BarGlass form="group">
+                <BarItem
+                  href="/config"
+                  icon={IconChevronLeft}
+                  label="Back to Configure"
+                />
+              </BarGlass>
+            </div>
           {:else}
             <!-- Padding, not margin: the crumb leaving is pinned where its
                  border box stands (crossOut), and a margin would carry it

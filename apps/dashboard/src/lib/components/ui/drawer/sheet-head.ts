@@ -1,19 +1,17 @@
 import { tv } from "#lib/utils.js";
 
 /**
- * A sheet's one header, drawn by the kit from the sheet's `title` (Drawer
- * and Sheet Content): DESIGN.md, Drawer: "one header: the title in the
- * title role and Close at the trailing edge (a 28px ghost with a 16px
- * glyph, 44px under a finger), with a seam under it that comes in over the
- * first 11px of the content's scroll". Its hairline is drawn transparent
- * and comes in on the sheet's scroll (`sheet-seam`, design.css), inside a
- * sheet only. A mouse never drags a sheet: Close and Escape put it away.
+ * A sheet's one bar, drawn by the kit from the sheet's `title` (Drawer and
+ * Sheet Content): the title in the title role and Close at the trailing
+ * edge, a bare symbol in its glass group (BarItem). It draws no ground: no
+ * fill, hairline or shadow of its own (DESIGN.md, The Title Bars Follow
+ * Liquid Glass Rule); what scrolls under it fades at the scroller's own
+ * edge (`kit-edge-fade-block`). A mouse never drags a sheet: Close and
+ * Escape put it away.
  */
 export const sheetHeadVariants = tv({
   slots: {
-    head: "flex flex-none items-center justify-between gap-space-2 border-b border-b-transparent pb-space-3 in-data-[slot=drawer-content]:sheet-seam",
+    head: "flex flex-none items-center justify-between gap-space-2 pb-space-3",
     title: "min-w-0 text-title text-balance text-ink-strong",
-    close:
-      "touch-hit inline-flex size-7 flex-none items-center justify-center rounded-sm border border-transparent bg-transparent text-ink-muted [--hit-edge:1px] transition-control hover:bg-surface-hover hover:text-ink-strong [&_svg]:size-icon-md",
   },
 });

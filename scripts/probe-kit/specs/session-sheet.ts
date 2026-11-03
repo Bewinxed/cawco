@@ -916,13 +916,15 @@ async function describedOf(page: Page) {
     .evaluate((pane, name) => {
       const card = (pane.closest('[data-slot="side-card"]') ??
         pane) as HTMLElement;
-      const line = card.querySelector<HTMLElement>('[data-slot="subtitle"]');
+      // The ask is the name's tooltip (DESIGN.md, Artifact panel): the
+      // name's control is what says it, never a line under it.
+      const line = card.querySelector<HTMLElement>("[data-artifact-trigger]");
       const box = line?.getBoundingClientRect();
       const edge = card.getBoundingClientRect();
       // What is drawn, not what is hidden (a control in More, a band's hidden name).
       const text = card.innerText;
       return {
-        line: line?.textContent ?? null,
+        line: line?.title ?? null,
         tooltip: line?.title ?? null,
         inside:
           !!box && box.left >= edge.left - 0.5 && box.right <= edge.right + 0.5,
