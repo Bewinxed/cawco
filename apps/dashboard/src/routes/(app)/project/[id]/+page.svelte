@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
   import {
     BLOCK_PAGE_TITLES,
     type ShownBlockPage as BlockPageId,
@@ -39,10 +40,13 @@
   import { blocksWords } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
   import { madeWords } from "@cawco/core/words/made";
+  import { setupWords } from "@cawco/core/words/onboarding";
+  import { projectWords } from "@cawco/core/words/project";
   import { viewsWords } from "@cawco/core/words/views";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { showArtifact } from "#lib/cawco/artifact-api.js";
   import { barStrip } from "#lib/cawco/bar-strip.svelte.js";
   import {
     isBlockPage,
@@ -51,7 +55,13 @@
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
-  import { cawco, requestView } from "#lib/cawco/client.svelte.js";
+  import {
+    type BlockedRequest,
+    cawco,
+    type PendingPermission,
+    requestView,
+    submitCommand,
+  } from "#lib/cawco/client.svelte.js";
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
@@ -71,12 +81,18 @@
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
+  import CawFlock from "#lib/cawco/project/CawFlock.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import FolderFile from "#lib/cawco/project/FolderFile.svelte";
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
+  import SetupScene from "#lib/cawco/project/SetupScene.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
+  import {
+    SETUP_PAGE,
+    setupProgressOf,
+  } from "#lib/cawco/project/setup-progress.js";
   import ViewBar from "#lib/cawco/project/ViewBar.svelte";
   import ViewTabs from "#lib/cawco/project/ViewTabs.svelte";
   import {
@@ -102,7 +118,6 @@
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
-  import StagesControl from "#lib/cawco/tasks/StagesControl.svelte";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import TaskFilterPopover from "#lib/cawco/tasks/TaskFilterPopover.svelte";
   import TaskPane from "#lib/cawco/tasks/TaskPane.svelte";
@@ -929,15 +944,6 @@
       : null;
   };
 
-  /**
-   * The project has stages of its own now. Tasks the set lacks were named
-   * before it was chosen (StagesControl); they stand in Other stages.
-   */
-  function applied(next: StagesView) {
-    stages = next;
-    detach(refresh(), "refresh");
-  }
-
   async function create(title: string, stage: string) {
     const task = await createTask(projectId, { title, stage });
     changed(task);
@@ -1248,8 +1254,6 @@
 
   // --- Ask Caw for a view -------------------------------------------------------
 
-  let stagesOpen = $state(false);
-  let stagesAnchor = $state<HTMLElement | null>(null);
   let askOpen = $state(false);
   let askAnchor = $state<HTMLElement | null>(null);
   /** The ask's words, in the session Composer the popover holds. */
@@ -1490,6 +1494,125 @@
       canTalk ||
       (filterHere && (hosted || narrowed > 0))
   );
+  // --- before setup -------------------------------------------------------------
+
+  /**
+   * The project is not set up yet (hub tasks.ts `stagesOf`, source `none`):
+   * no stages.md and no template. Its board is the setup scene (SetupScene)
+   * until the setup page is sent and Caw writes its stages.
+   */
+  const notSetUp = $derived(stages?.source === "none");
+  /** The setup page, once Caw has opened it (the project-setup skill's `decisions/setup/`). */
+  const setupPage = $derived(
+    decisions.list?.pages.find((one) => one.name === SETUP_PAGE) ?? null
+  );
+  /** A parked ask that is a question of his (his `ask` call), not a permission. */
+  const isQuestion = (request: PendingPermission): boolean =>
+    request.toolName === ASK_USER_QUESTION;
+  /** His questions on the setup, oldest first, while the project is not set up. */
+  const setupAsks = $derived<BlockedRequest[]>(
+    notSetUp ? lead.asks.filter((one) => isQuestion(one.request)) : []
+  );
+  /**
+   * The board draws his questions (a desk's scene; on a phone his sheet
+   * stands over the board, and his composer has them, one at a time).
+   */
+  const asksOnBoard = $derived(notSetUp && !phone);
+  const asksElsewhere = (request: PendingPermission): boolean =>
+    asksOnBoard && isQuestion(request);
+  /**
+   * How far he has got, while he drafts the setup in his conversation: his
+   * setup element in his panel (SetupWell) reads it; none once the page is
+   * open, or while nothing of his runs on it.
+   */
+  const setupProgress = $derived.by(() => {
+    const id = lead.conversationId;
+    if (!(notSetUp && id && project)) {
+      return null;
+    }
+    const progress = setupProgressOf({
+      messages: cawco.session(id)?.messages ?? [],
+      name: project.name,
+      named: project.name !== projectWords.placeholderName,
+      open: setupAsks.map((one) => ({
+        blocks: (one.request.input as { blocks?: unknown }).blocks === true,
+      })),
+      page: setupPage !== null,
+    });
+    const going =
+      lead.status === "working" ||
+      lead.status === "needs-you" ||
+      setupAsks.length > 0;
+    return progress.phase === "page" || going ? progress : null;
+  });
+  /** The setup page, opened where Caw showed it: his panel's Preview, else its place in Decisions. */
+  async function openSetupPage() {
+    const artifactId = setupPage?.artifactId;
+    const writer = setupPage?.writer?.instanceId;
+    if (artifactId && writer && writer === lead.conversationId) {
+      try {
+        await showArtifact(writer, artifactId);
+        lead.open = true;
+        lead.tab = "preview";
+        return;
+      } catch {
+        // Its place in Decisions still holds it.
+      }
+    }
+    await goto(hrefOf(null, "decisions", { page: SETUP_PAGE }));
+  }
+  /** The scene's one action, as the setup stands. */
+  const setupAction = $derived.by(() => {
+    if (setupPage?.artifactId) {
+      return {
+        kind: "page" as const,
+        open: () => detach(openSetupPage(), "open the setup page"),
+      };
+    }
+    if (setupProgress) {
+      return { kind: "drafting" as const };
+    }
+    return canTalk
+      ? {
+          kind: "ask" as const,
+          ask: () => lead.ask(setupWords.askSetupWords, "board"),
+        }
+      : { kind: "none" as const };
+  });
+  /** The head's ⋯: finish the setup, or change how a set-up project runs, through the same page. */
+  const setupAct = $derived.by(() => {
+    if (!(canTalk && stages)) {
+      return null;
+    }
+    if (notSetUp) {
+      return {
+        label: setupWords.finishSetup,
+        run: () =>
+          setupPage?.artifactId
+            ? detach(openSetupPage(), "open the setup page")
+            : lead.ask(setupWords.askSetupWords, "board"),
+      };
+    }
+    return {
+      label: setupWords.changeSetup,
+      run: () => lead.ask(setupWords.changeSetupWords, "board"),
+    };
+  });
+  /** An answer to one of his questions on the board, as his composer would send it. */
+  const answerAsk = (
+    asked: BlockedRequest,
+    result: Parameters<typeof submitCommand<"permission.answer">>[3]["result"]
+  ): string | null =>
+    submitCommand(
+      asked.request.instanceId,
+      asked.machineId,
+      "permission.answer",
+      {
+        requestId: asked.request.requestId,
+        result,
+      }
+    );
+
   /**
    * Caw stands over the empty board while he can start; elsewhere he sits
    * in the head, and the board is drawn — its columns and the new task's
@@ -1925,6 +2048,17 @@
         {/snippet}
       </EmptyState>
     </div>
+  {:else if notSetUp && !adding}
+    <SetupScene
+      act={setupAction}
+      asks={asksOnBoard ? setupAsks : []}
+      onanswer={answerAsk}
+      seat={canTalk && !lead.inPanel ? setupSeat : undefined}
+    >
+      {#snippet floor()}
+        <CawFlock busy={setupProgress !== null} count={phone ? 2 : 3} />
+      {/snippet}
+    </SetupScene>
   {:else if empty && !adding}
     {#if !lead.project}
       <div class="w-full" out:revealOut>
@@ -2055,17 +2189,26 @@
     <!-- Open where the page has no room beside it: a row of its own under
          the page, at most half the height (from 640px; a phone's panel is
          the bottom sheet). With room for the board beside it: a column of
-         its own at the page's end, a conversation's width. -->
+         its own at the page's end, a conversation's width. On his Preview
+         tab (CawLead `tab`) the panel widens for what he shows: its column
+         takes two conversations' widths while a board column still stands
+         beside it, its row three quarters of the height; the grid tweens
+         to it on the drawer curve, and lands at once with less motion. -->
     <div
-      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @project-dock:data-caw-open:grid-areas-(--docked-areas-side) @project-dock:data-caw-open:grid-cols-(--docked-cols-side) @project-dock:data-caw-open:grid-rows-(--docked-rows)"
+      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) motion-safe:transition-[grid-template-columns,grid-template-rows] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @project-dock:data-caw-open:grid-areas-(--docked-areas-side) @project-dock:data-caw-open:grid-cols-(--docked-cols-side) @project-dock:data-caw-open:grid-rows-(--docked-rows)"
       data-caw-open={docked || undefined}
+      data-caw-preview={(docked && lead.tab === "preview") || undefined}
       style:--docked-areas={'"page"'}
       style:--docked-areas-row={'"page" "dock"'}
       style:--docked-areas-side={'"page dock"'}
       style:--docked-cols="minmax(0, 1fr)"
-      style:--docked-cols-side={"minmax(0, 1fr) calc(var(--c-panel-w) + var(--space-6))"}
+      style:--docked-cols-side={lead.tab === "preview"
+        ? "minmax(0, 1fr) min(calc(2 * var(--c-panel-w) + var(--space-6)), calc(100% - var(--c-board-col-min) - var(--space-7)))"
+        : "minmax(0, 1fr) calc(var(--c-panel-w) + var(--space-6))"}
       style:--docked-rows="minmax(0, 1fr)"
-      style:--docked-rows-row="minmax(0, 1fr) min(var(--c-caw-panel-h), 50%)"
+      style:--docked-rows-row={lead.tab === "preview"
+        ? "minmax(0, 1fr) 75%"
+        : "minmax(0, 1fr) min(var(--c-caw-panel-h), 50%)"}
     >
       <div class="grid-area-page flex min-h-0 min-w-0 flex-col">
         {#if phone && openFile}
@@ -2138,12 +2281,7 @@
                   choose("board");
                   adding = true;
                 }}
-                onstages={stages?.source === "template"
-                  ? (anchor) => {
-                      stagesAnchor = anchor;
-                      stagesOpen = true;
-                    }
-                  : null}
+                setup={setupAct}
                 {project}
                 seated={!standing}
               />
@@ -2258,10 +2396,29 @@
           </div>
         {/if}
       </div>
-      <CawFloat {lead} {projectId} projectName={project?.name ?? ""} />
+      <CawFloat
+        {asksElsewhere}
+        {lead}
+        {projectId}
+        projectName={project?.name ?? ""}
+        setup={setupProgress}
+      />
     </div>
   </div>
 {/if}
+
+<!-- His seat over the setup scene, the same seat the empty board stands
+     him on (CawSeat at 80): a press opens his panel beside the page. -->
+{#snippet setupSeat()}
+  <div
+    data-slot="caw-80"
+    class="grid justify-items-center"
+    data-share="caw:{projectId}"
+    out:sitDown|global
+  >
+    <CawSeat {lead} {projectId} projectName={project?.name ?? ""} size={80} />
+  </div>
+{/snippet}
 
 {#snippet sideCard()}
   {#if sideHeld && "file" in sideHeld}
@@ -2401,12 +2558,4 @@
       bind:open={filterOpen}
     />
   {/if}
-
-  <StagesControl
-    anchor={stagesAnchor}
-    onapplied={applied}
-    {projectId}
-    tasks={list?.tasks ?? []}
-    bind:open={stagesOpen}
-  />
 {/if}

@@ -37,6 +37,8 @@
   } from "#lib/cawco/client.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
+  import FirstRunHere from "#lib/cawco/home/FirstRunHere.svelte";
+  import { firstRunSteps } from "#lib/cawco/home/first-run.svelte.js";
   import Home from "#lib/cawco/home/Home.svelte";
   import {
     endedUnseen,
@@ -168,11 +170,19 @@
   const machineless = $derived(
     fleetHome.machines === "none" || fleetHome.machines === "offline"
   );
+  /**
+   * A fleet with no project yet: the detail area is the first-run row
+   * (FirstRunHere), the steps to a first project, in place of the machines
+   * guide and Caw's line.
+   */
+  const firstRunning = $derived(
+    detailEmpty && atRest && nothingToOpen && firstRunSteps() !== null
+  );
   /** The fleet state it shows: from the moment it is wanted until it has gone. */
   let machinesThere = $state<"none" | "offline" | null>(null);
 
   const cawShown = $derived(
-    !machinesThere &&
+    !(machinesThere || firstRunning) &&
       (entering ||
         waitShown ||
         (detailEmpty && atRest && nothingToOpen && !machineless))
@@ -187,7 +197,12 @@
   });
 
   const machinesShown = $derived(
-    detailEmpty && atRest && nothingToOpen && machineless && !cawThere
+    detailEmpty &&
+      atRest &&
+      nothingToOpen &&
+      machineless &&
+      !cawThere &&
+      !firstRunning
   );
   $effect(() => {
     const fleet = fleetHome.machines;
@@ -586,6 +601,15 @@
         class="relative flex flex-auto items-center justify-center bg-surface-recess type-body text-ink-muted transition-[background-color] duration-(--dur-fade) ease-out data-over:pointer-events-none data-over:absolute data-over:inset-0 data-over:z-1 data-over:bg-transparent"
         data-over={!detailShown || undefined}
       >
+        {#if firstRunning && !machinesThere && !cawThere}
+          <div
+            class="max-h-full w-full self-start overflow-y-auto px-space-6 pt-(--pad-top) pb-space-8"
+            style:--pad-top="calc(var(--space-8) * 2)"
+            in:crossIn
+          >
+            <FirstRunHere />
+          </div>
+        {/if}
         {#if machinesThere}
           <div
             class="max-h-full w-full self-start overflow-y-auto px-space-6 pt-(--pad-top) pb-space-8"

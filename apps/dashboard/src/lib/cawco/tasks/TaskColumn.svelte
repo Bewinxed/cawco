@@ -6,9 +6,12 @@
    * nothing to drop. A `you` column stands on the same band as the rest:
    * its head carries the Needs-you glyph and its kind word the attn ink,
    * so the status reads glyph, then word, then hue, and coral stays the
-   * action's (DESIGN.md, The Coral Is Where You Act Rule).
+   * action's (DESIGN.md, The Coral Is Where You Act Rule). A stage with a
+   * look of its own (stages.md `icon:`, `color:`) leads its name with that
+   * glyph in its section hue (stage-look.ts); a `you` stage keeps the
+   * Needs-you glyph, its status.
    */
-  import type { StageKind } from "@cawco/core/views";
+  import type { StageColor, StageIcon, StageKind } from "@cawco/core/views";
   import { type Snippet, tick } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
@@ -23,11 +26,14 @@
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconNeedsYou } from "#lib/icons.js";
+  import { STAGE_GLYPHS, STAGE_HUES } from "./stage-look";
   import TaskCard from "./TaskCard.svelte";
 
   let {
     label,
     kind,
+    color,
+    icon,
     cards,
     hrefOf,
     dateOf = () => null,
@@ -53,6 +59,10 @@
     picking?: boolean;
     label: string;
     kind: StageKind | null;
+    /** Its mark's hue (stages.md `color:`); none: the muted ink. */
+    color?: StageColor;
+    /** Its mark's glyph (stages.md `icon:`); none: no mark. */
+    icon?: StageIcon;
     cards: TaskSummary[];
     hrefOf: (id: string) => string;
     dateOf?: (id: string) => string | null;
@@ -125,6 +135,16 @@
           aria-hidden="true"
           class="-me-space-1 size-icon-md flex-none text-status-attn-glyph"
         />
+      {:else if icon}
+        {@const Glyph = STAGE_GLYPHS[icon]}
+        <span
+          aria-hidden="true"
+          class="-me-space-1 grid flex-none place-items-center text-(--stage-hue)"
+          data-box
+          data-slot="stage-mark"
+          style:--stage-hue={color ? STAGE_HUES[color] : "var(--ink-muted)"}
+          ><Glyph class="size-icon-md" /></span
+        >
       {/if}
       <h3
         data-slot="name"

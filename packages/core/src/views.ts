@@ -31,6 +31,65 @@ export const STAGES_TEMPLATES = [
 ] as const;
 export type StagesTemplate = (typeof STAGES_TEMPLATES)[number];
 
+/**
+ * The templates a project is offered, the one list New project's cards and
+ * `project_setup` read (hub setup.ts), in that order: every stages template
+ * but outreach, which a project may still have and is no longer offered.
+ */
+export const OFFERED_TEMPLATES = [
+  "code",
+  "launch",
+  "seo",
+  "brand",
+  "design",
+  "social",
+] as const satisfies readonly StagesTemplate[];
+export type OfferedTemplate = (typeof OFFERED_TEMPLATES)[number];
+
+/**
+ * The colours a stage's mark may take (stages.md `color:`): the section hues
+ * DESIGN.md gives an icon tile's glyph (Identity, section hues), never a
+ * status hue. A stage without one draws its glyph in the muted ink.
+ */
+export const STAGE_COLORS = ["cyan", "amber", "orange", "green"] as const;
+export type StageColor = (typeof STAGE_COLORS)[number];
+
+/**
+ * The glyphs a stage's mark may take (stages.md `icon:`), each a Solar
+ * duotone glyph of the house set by a plain word (the dashboard's
+ * `stage-look.ts` maps each to its glyph).
+ */
+export const STAGE_ICONS = [
+  "inbox",
+  "idea",
+  "search",
+  "pen",
+  "chat",
+  "eye",
+  "clock",
+  "hourglass",
+  "calendar",
+  "send",
+  "rocket",
+  "code",
+  "palette",
+  "graph",
+  "user",
+  "globe",
+  "book",
+  "pin",
+  "bolt",
+  "list",
+  "lab",
+  "map",
+  "phone",
+  "money",
+  "done",
+  "archive",
+  "trash",
+] as const;
+export type StageIcon = (typeof STAGE_ICONS)[number];
+
 /** Who moves a task (stages.md): you, a session, an approved action, a routine. */
 export const MOVERS = ["you", "session", "action", "routine"] as const;
 export type Mover = (typeof MOVERS)[number];

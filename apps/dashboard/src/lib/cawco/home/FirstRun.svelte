@@ -103,13 +103,16 @@
             : firstRunWords.harnessNote(machineName || "it"),
         act:
           online && !signedIn
-            ? { label: "Sign in", run: () => onsignin() }
+            ? { label: firstRunWords.signIn, run: () => onsignin() }
             : undefined,
       },
       {
         id: "relay",
         done: steps.relay !== "todo",
-        label: firstRunWords.relay,
+        label:
+          steps.relay === "done"
+            ? firstRunWords.relayLive
+            : firstRunWords.relay,
         note:
           steps.relay === "later"
             ? firstRunWords.relayAnswered

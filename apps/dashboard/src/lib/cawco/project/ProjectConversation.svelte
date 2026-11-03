@@ -15,18 +15,36 @@
    *   New conversation and the way to open it as a tab. His name opens the
    *   session's card (SessionDetails); on the conversation the project's
    *   events reach, its harness and model are the project's (ModelSection).
+   * - Its two tabs (decision page `onboarding-design`, card `artifact-open`):
+   *   Assistant, the conversation; Preview, what the conversation shows (a
+   *   preview, a canvas, a component, a page: PreviewPane, the same pane a
+   *   session's split holds). The switch stands at the head's trailing end
+   *   while there is something to show; Caw showing something brings it to
+   *   the front, and the panel widens as Preview opens (the page's grid reads
+   *   `lead.tab`, CawFloat). On Preview the pane's own head is the panel's one
+   *   bar, the switch at its end (The Title Bars Follow Liquid Glass Rule).
+   *   The conversation stays mounted under it, so going back loses nothing.
+   * - While Caw sets the project up, his setup element stands at the
+   *   transcript's end (`setup`, SetupWell), and the questions the board
+   *   draws are not lent to the composer (`asksElsewhere`).
    */
   import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
   import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
+  import { cawPanelWords } from "@cawco/core/words/onboarding";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { cawco, type SendExtras } from "#lib/cawco/client.svelte.js";
+  import {
+    cawco,
+    type PendingPermission,
+    type SendExtras,
+  } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import CawFace from "#lib/cawco/home/CawFace.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
+  import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
     type ProjectStarter,
     readStages,
@@ -37,6 +55,7 @@
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
+  import TranscriptSkeleton from "#lib/cawco/transcript/TranscriptSkeleton.svelte";
   import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
   import { sessionStatusOf } from "#lib/cawco/workspace/session-status.js";
   import {
@@ -47,19 +66,28 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconClose, IconMaximize, IconPlus } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { startConversation } from "./conversation";
+  import SetupWell from "./SetupWell.svelte";
   import StarterCards from "./StarterCards.svelte";
+  import type { SetupProgress } from "./setup-progress";
 
   let {
     lead,
     projectId,
     projectName,
     sheet = false,
+    setup = null,
+    asksElsewhere,
   }: {
     lead: CawLead;
     projectId: string;
@@ -69,6 +97,10 @@
      * header, so it carries the sheet's Close at its trailing edge.
      */
     sheet?: boolean;
+    /** How far he has got setting the project up, while he drafts it in this conversation (SetupWell); null otherwise. */
+    setup?: SetupProgress | null;
+    /** The asks the board draws instead of the composer (SessionPane `asksElsewhere`). */
+    asksElsewhere?: (request: PendingPermission) => boolean;
   } = $props();
 
   // --- the conversation on show -------------------------------------------------
@@ -98,6 +130,48 @@
         newConversation();
       });
     }
+  });
+
+  // --- Assistant and Preview ----------------------------------------------------
+
+  /** The conversation on show has something to show: Preview stands beside Assistant. */
+  const previewOpen = $derived(
+    shown !== null && cawco.previews[shown]?.state === "open"
+  );
+  // Caw showing something brings it to the front, as a session's split does
+  // (SideSplit); with nothing left to show the panel is his conversation.
+  let previewWas = untrack(() => previewOpen);
+  $effect(() => {
+    const now = previewOpen;
+    if (now && !previewWas) {
+      lead.tab = "preview";
+    } else if (!now) {
+      lead.tab = "assistant";
+    }
+    previewWas = now;
+  });
+  // A card of his pressed in the transcript asks for its preview again
+  // (client `revealPreview`): Preview comes to the front.
+  let askedWas = untrack(() => (shown ? cawco.previewRequests[shown] : 0));
+  $effect(() => {
+    const asked = shown ? cawco.previewRequests[shown] : 0;
+    if (asked && asked !== askedWas && previewOpen) {
+      lead.tab = "preview";
+    }
+    askedWas = asked;
+  });
+  const onPreview = $derived(previewOpen && lead.tab === "preview");
+
+  // --- the setup element -----------------------------------------------------------
+
+  // He is drawn in his setup element while it stands with the panel open:
+  // the seat stands empty meanwhile, and he goes back to it as it goes.
+  $effect(() => {
+    const here = setup !== null && setup.phase !== "page" && lead.open;
+    lead.inPanel = here;
+    return () => {
+      lead.inPanel = false;
+    };
   });
 
   // --- what his line says -------------------------------------------------------
@@ -264,11 +338,33 @@
     "calc(var(--space-4) + var(--safe-bottom) + var(--c-composer-panel) + var(--c-tray-row) + var(--space-2))";
 </script>
 
-<div class="flex h-full min-h-0 flex-auto flex-col" data-caw-panel>
+<!-- Assistant and Preview: the switch at the trailing end of whichever bar
+     heads the panel, his on Assistant, the preview's own on Preview. -->
+{#snippet switcher()}
+  <Tabs
+    onValueChange={(next) => {
+      lead.tab = next === "preview" ? "preview" : "assistant";
+    }}
+    size="compact"
+    value={onPreview ? "preview" : "assistant"}
+  >
+    <TabsList aria-label={cawPanelWords.tabs}>
+      <TabItem label={cawPanelWords.assistant} value="assistant" />
+      <TabItem label={cawPanelWords.preview} value="preview" />
+    </TabsList>
+  </Tabs>
+{/snippet}
+
+<div
+  class="flex h-full min-h-0 flex-auto flex-col"
+  data-caw-panel
+  data-caw-tab={onPreview ? "preview" : "assistant"}
+>
   <div
     data-slot="head"
     class="flex min-h-c-btn-h-sm flex-none items-center gap-space-2 border-b border-b-border-hairline pt-space-2 pr-space-2 pb-space-2 pl-space-4"
     data-caw-head
+    hidden={onPreview}
   >
     <CawFace size={18} status={lead.status} />
     <div class="flex min-w-0 flex-auto flex-col items-start">
@@ -306,7 +402,10 @@
         >{said}</span
       >
     </div>
-    <div class="flex flex-none gap-space-1">
+    <div class="flex flex-none items-center gap-space-1">
+      {#if previewOpen}
+        {@render switcher()}
+      {/if}
       {#if shown}
         <Tip label={conversationWords.newConversation}>
           {#snippet children(tip)}
@@ -353,119 +452,162 @@
       {/if}
     </div>
   </div>
-  <div data-slot="well" class="flex min-h-0 flex-auto flex-col">
+  <div data-slot="well" class="relative flex min-h-0 flex-auto flex-col">
     {#if shown}
-      {#key shown}
-        <!-- The conversation is the transcript being read over the page:
-             focused, so its rows follow every message as it lands and it
-             rides the tail (Transcript `focused`). -->
-        <SessionPane
-          active
-          browsing={null}
-          browsingCwd=""
-          browsingHarness={undefined}
-          docked={{ draft: lead.draft }}
-          focused
-          viewId={shown}
-          visible
-        />
-      {/key}
-    {:else}
+      <!-- The conversation stays laid out under Preview, so going back to it
+           finds it as it was; only the tab on show takes the pointer. -->
       <div
-        data-slot="pane"
-        class="@container relative flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess pb-(--reserved)"
-        style:--composer-clearance="var(--space-4)"
-        style:--reserved={reserved}
+        class={["flex min-h-0 flex-auto flex-col", onPreview && "invisible"]}
+        inert={onPreview}
       >
-        <!-- The hero: the empty board's (project page `.caw-empty`), from the
+        {#key shown}
+          <!-- The conversation is the transcript being read over the page:
+               focused, so its rows follow every message as it lands and it
+               rides the tail (Transcript `focused`). -->
+          <SessionPane
+            active
+            {asksElsewhere}
+            browsing={null}
+            browsingCwd=""
+            browsingHarness={undefined}
+            docked={{ draft: lead.draft }}
+            focused={!onPreview}
+            afterRows={setup && setup.phase !== "page" ? setupTail : undefined}
+            viewId={shown}
+            visible={!onPreview}
+          />
+        {/key}
+      </div>
+      {#if previewOpen}
+        <div
+          data-slot="preview"
+          class={[
+            "absolute inset-0 flex min-h-0 flex-col bg-surface-raised",
+            !onPreview && "invisible",
+          ]}
+          inert={!onPreview}
+        >
+          <PreviewPane
+            instanceId={shown}
+            onScreen={onPreview}
+            {sheet}
+            {switcher}
+          />
+        </div>
+      {/if}
+    {:else if !(fresh || cawco.liveRead)}
+      <!-- The fleet's first snapshot is not in: whether the project has a
+           conversation is not known yet, so nothing claims it has none. -->
+      <TranscriptSkeleton />
+    {:else}
+      <!-- The hero's own block: what fades out in it (its foot fade, its
+           composer's parts) plays only when it is put away by its own
+           condition, never as the conversation takes its place, so two
+           composers never stand at once in the panel (the docked panel drew
+           "Message Caw…" over the conversation's composer while they faded). -->
+      {#if !shown}
+        <div
+          data-slot="pane"
+          class="@container relative flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess pb-(--reserved)"
+          style:--composer-clearance="var(--space-4)"
+          style:--reserved={reserved}
+        >
+          <!-- The hero: the empty board's (project page `.caw-empty`), from the
              room's top, its inline padding the composer's own column, so Caw,
              the title, the line and the starters share the composer's start
              edge (--space-3 where the composer goes edge to edge, under
              900px). It clears the composer as a transcript does. -->
-        <div
-          class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto px-(--hero-px) pb-(--composer-clearance) max-desk:px-space-3"
-          data-slot="conversation-hero"
-          style:--hero-px="calc((100% - var(--c-composer-w)) / 2)"
-          in:crossIn
-        >
-          <EmptyState
-            actionWidth="fill"
-            axis
-            line={off
-              ? "Caw is off, so he acts only when you write to him."
-              : undefined}
-            title="What’s next for {projectName}?"
-          >
-            {#snippet mark()}
-              <div
-                data-slot="caw-80"
-                class="mb-space-3 grid justify-items-center"
-                data-share={`caw:${projectId}`}
-              >
-                <Caw size={80} status="ready" />
-              </div>
-            {/snippet}
-            {#snippet action()}
-              {#if starters.length > 0}
-                <StarterCards onpick={pick} rows {starters} />
-              {/if}
-            {/snippet}
-          </EmptyState>
-        </div>
-        <FootFade />
-        {#if lead.canTalk}
-          <!-- No conversation lends this panel a composer yet: it draws its
-               own, where a conversation's stands, over the pane, taking no
-               press but the composer's own. -->
           <div
-            data-slot="composer-dock"
-            class="pointer-events-none absolute inset-0 z-1"
-          >
-            <RegionBoundary face="composer" part="composer">
-              <Composer
-                fleet={composerFleet}
-                agentName="Caw"
-                draft={lead.draft}
-                onstop={() => undefined}
-                onsubmit={(text, extras) => {
-                  start(text, extras);
-                }}
-                paneVisible
-                placeholder="Message Caw…"
-                sendError={startError}
-                sending={starting}
-              />
-            </RegionBoundary>
-          </div>
-        {:else if lead.project}
-          <!-- No composer: no conversation can start to read it. What is
-               true, and the one thing that changes it, the machines, where
-               the composer stands when there is one. -->
-          <div
-            class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) mx-auto w-c-composer-w"
-            data-safe-bottom
-            style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
+            class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto px-(--hero-px) pb-(--composer-clearance) max-desk:px-space-3"
+            data-slot="conversation-hero"
+            style:--hero-px="calc((100% - var(--c-composer-w)) / 2)"
             in:crossIn
           >
-            <Alert layout="row" role="status" surface="card">
-              <AlertDescription>{CAW_NO_MACHINE}</AlertDescription>
-              <AlertAction>
-                <Button
-                  label="Check machines"
-                  onclick={() => {
-                    barGlass.open = "machines";
-                  }}
-                  size="sm"
-                  variant="outline"
-                />
-              </AlertAction>
-            </Alert>
+            <EmptyState
+              actionWidth="fill"
+              axis
+              line={off
+                ? "Caw is off, so he acts only when you write to him."
+                : undefined}
+              title="What’s next for {projectName}?"
+            >
+              {#snippet mark()}
+                <div
+                  data-slot="caw-80"
+                  class="mb-space-3 grid justify-items-center"
+                  data-share={`caw:${projectId}`}
+                >
+                  <Caw size={80} status="ready" />
+                </div>
+              {/snippet}
+              {#snippet action()}
+                {#if starters.length > 0}
+                  <StarterCards onpick={pick} rows {starters} />
+                {/if}
+              {/snippet}
+            </EmptyState>
           </div>
-        {/if}
-      </div>
+          <FootFade />
+          {#if lead.canTalk}
+            <!-- No conversation lends this panel a composer yet: it draws its
+               own, where a conversation's stands, over the pane, taking no
+               press but the composer's own. -->
+            <div
+              data-slot="composer-dock"
+              class="pointer-events-none absolute inset-0 z-1"
+            >
+              <RegionBoundary face="composer" part="composer">
+                <Composer
+                  fleet={composerFleet}
+                  agentName="Caw"
+                  draft={lead.draft}
+                  onstop={() => undefined}
+                  onsubmit={(text, extras) => {
+                    start(text, extras);
+                  }}
+                  paneVisible
+                  placeholder="Message Caw…"
+                  sendError={startError}
+                  sending={starting}
+                />
+              </RegionBoundary>
+            </div>
+          {:else if lead.project}
+            <!-- No composer: no conversation can start to read it. What is
+               true, and the one thing that changes it, the machines, where
+               the composer stands when there is one. -->
+            <div
+              class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) mx-auto w-c-composer-w"
+              data-safe-bottom
+              style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
+              in:crossIn
+            >
+              <Alert layout="row" role="status" surface="card">
+                <AlertDescription>{CAW_NO_MACHINE}</AlertDescription>
+                <AlertAction>
+                  <Button
+                    label="Check machines"
+                    onclick={() => {
+                      barGlass.open = "machines";
+                    }}
+                    size="sm"
+                    variant="outline"
+                  />
+                </AlertAction>
+              </Alert>
+            </div>
+          {/if}
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
+
+{#snippet setupTail()}
+  {#if setup}
+    <SetupWell progress={setup} status={lead.status} />
+  {/if}
+{/snippet}
 
 {#if shown}
   <Popover.Root

@@ -1,11 +1,11 @@
 /**
- * New project's placeholder typing its examples (decision page
- * `onboarding-design`, card `describe-hint`): each example types in a
- * letter every `--dur-type`, holds for one `--breath`, and erases at half
- * the pace (exits run faster than entrances), then the next types in.
- * `loop` goes round for as long as it runs; `once` goes through them once,
- * then types the resting placeholder and lands there: nothing moves after
- * (DESIGN.md: "Nothing moves after it has landed unless it is live work").
+ * New project's placeholder typing its examples once, then resting
+ * (decision page `onboarding-design`, card `describe-hint`, the person's
+ * pick): each example types in a letter every `--dur-type`, holds for one
+ * `--breath`, and erases at half the pace (exits run faster than
+ * entrances), then the next types in; after the last it types the resting
+ * placeholder and lands there, and nothing moves after (DESIGN.md: "Nothing
+ * moves after it has landed unless it is live work").
  *
  * It runs only while `running()` holds (the field empty, the tab shown,
  * motion allowed); stopped, the placeholder is the resting words at once,
@@ -24,22 +24,16 @@ export class TypedExamples {
   text = $state("");
   /** The tab is in view: a hidden tab types nothing. */
   #shown = $state(true);
-  /** `once` has gone through every example: it rests from now on. */
+  /** It has gone through every example: it rests from now on. */
   #landed = false;
   /** The example the next run starts at. */
   #next = 0;
   readonly #examples: readonly string[];
   readonly #rest: string;
-  readonly #mode: "loop" | "once";
 
-  constructor(
-    examples: readonly string[],
-    rest: string,
-    mode: "loop" | "once"
-  ) {
+  constructor(examples: readonly string[], rest: string) {
     this.#examples = examples;
     this.#rest = rest;
-    this.#mode = mode;
     this.text = rest;
   }
 
@@ -85,12 +79,12 @@ export class TypedExamples {
       timer = setTimeout(() => erase(then), letter / 2);
     };
     const step = () => {
-      if (this.#mode === "once" && this.#next >= this.#examples.length) {
+      if (this.#next >= this.#examples.length) {
         this.#landed = true;
         type(this.#rest, () => undefined);
         return;
       }
-      const words = this.#examples[this.#next % this.#examples.length];
+      const words = this.#examples[this.#next];
       this.#next += 1;
       type(words, () => erase(step));
     };

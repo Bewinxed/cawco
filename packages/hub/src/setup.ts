@@ -16,7 +16,8 @@
 
 import {
   type ChoiceEntry,
-  STAGES_TEMPLATES,
+  OFFERED_TEMPLATES,
+  type OfferedTemplate,
   type StagesTemplate,
 } from "@cawco/core";
 import { templateStages } from "./stages";
@@ -117,9 +118,9 @@ const stageLine = (template: StagesTemplate): string =>
     })
     .join(", ");
 
-/** Every shipped template, read from the hub's own tables. */
+/** Every template a project is offered (core `OFFERED_TEMPLATES`, New project's six), read from the hub's own tables. */
 export const shippedTemplates = (): ShippedTemplate[] =>
-  STAGES_TEMPLATES.map((name) => ({
+  OFFERED_TEMPLATES.map((name) => ({
     name,
     stages: stageLine(name),
     types: templateTypes(name),
@@ -207,10 +208,10 @@ const nameOf = (state: Record<string, ChoiceEntry>): string | undefined => {
 
 const shapeOf = (
   state: Record<string, ChoiceEntry>
-): StagesTemplate | undefined => {
+): OfferedTemplate | undefined => {
   const entry: ChoiceEntry | undefined = state.shape;
-  const [option] = entry?.options ?? [];
-  return STAGES_TEMPLATES.find((name) => name === option);
+  const picked = entry?.value ?? entry?.options?.[0];
+  return OFFERED_TEMPLATES.find((name) => name === picked);
 };
 
 /**

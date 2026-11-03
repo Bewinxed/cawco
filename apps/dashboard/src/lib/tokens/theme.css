@@ -329,6 +329,7 @@
   --spacing-c-panel-w: var(--c-panel-w);
   --spacing-c-signin-pop-w: var(--c-signin-pop-w);
   --spacing-c-caw-panel-h: var(--c-caw-panel-h);
+  --spacing-c-flock-h: var(--c-flock-h);
   --spacing-c-top-bar-h: var(--c-top-bar-h);
   --spacing-c-bar-toggle-glyph: var(--c-bar-toggle-glyph);
   --spacing-c-bar-phone-edge: var(--c-bar-phone-edge);
@@ -627,6 +628,7 @@
 
   --duration-stagger: var(--dur-stagger);
   --duration-type: var(--dur-type);
+  --duration-caw-blend: var(--dur-caw-blend);
   --duration-cascade: var(--dur-cascade);
   --duration-ghost: var(--dur-ghost);
   --duration-control: var(--dur-control);

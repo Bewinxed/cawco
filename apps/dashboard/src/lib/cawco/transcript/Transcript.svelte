@@ -44,7 +44,14 @@
    * genuine arrivals — and blocked-on-you — through a dedicated live region
    * beside the log, never through the virtualized container itself.
    */
-  import { flushSync, onDestroy, setContext, tick, untrack } from "svelte";
+  import {
+    flushSync,
+    onDestroy,
+    type Snippet,
+    setContext,
+    tick,
+    untrack,
+  } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { track } from "#lib/cawco/track.js";
@@ -133,6 +140,7 @@
     firstScreen = false,
     parkedHeight = 0,
     latestInset,
+    afterRows,
 
     /**
      * Whether this transcript is on screen at all. Governs how OFTEN rows are
@@ -166,6 +174,8 @@
      * place (`servedRows`).
      */
     firstScreen?: boolean;
+    /** What stands after the last row, in the list's flow (a project's setup element, SetupWell). */
+    afterRows?: Snippet;
     /**
      * How far what rises past the composer lent to this conversation (an
      * ask it grows into, an offer on its tray row) stands over the foot, px.
@@ -4968,6 +4978,9 @@
       {/snippet}
     </Virtualizer>
   </div>
+  {#if afterRows && shown}
+    <div class="isolate" data-slot="after-rows">{@render afterRows()}</div>
+  {/if}
   <!-- Room past the end for what rises past the composer (the ask it grows
        into, an offer on its tray row), which stands over the transcript's
        foot and never pushes it (owner, a7443251: "it

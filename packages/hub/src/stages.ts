@@ -39,9 +39,15 @@
  *   `routine`. A move is allowed when a line covers it and the stage it goes
  *   to has no `by:` naming someone else. A file without `moves` lets you and
  *   a session make any move.
+ * - **Its look**, beside the hooks: `color: <hue>` and `icon: <glyph>` give
+ *   the stage's mark on the board, a glyph by a plain word in a section hue
+ *   (core `STAGE_COLORS`, `STAGE_ICONS`). Neither is required; a stage with
+ *   neither draws no mark but its kind's.
  * - **Views** are a name and, optionally, `by <field>`.
  *
- * A project without stages.md uses the code template. "Needs you" is not a
+ * A project without stages.md that was set up as the code template reads
+ * the code template; one with neither is not set up yet and has no stages
+ * (tasks.ts `stagesOf`). "Needs you" is not a
  * stage: it is every task whose stage is of kind `you`, worked out on read.
  */
 
@@ -49,7 +55,11 @@ import {
   STAGE_KINDS as KINDS,
   MOVERS,
   type Mover,
+  STAGE_COLORS,
+  STAGE_ICONS,
   STAGES_TEMPLATES,
+  type StageColor,
+  type StageIcon,
   type StageKind,
   type StagesTemplate,
 } from "@cawco/core";
@@ -103,6 +113,13 @@ const isKind = (word: string): word is StageKind =>
   (KINDS as readonly string[]).includes(word);
 const isMover = (word: string): word is Mover =>
   (MOVERS as readonly string[]).includes(word);
+const isColor = (word: string): word is StageColor =>
+  (STAGE_COLORS as readonly string[]).includes(word);
+const isIcon = (word: string): word is StageIcon =>
+  (STAGE_ICONS as readonly string[]).includes(word);
+
+/** What a stage line takes beside its name and kind. */
+const STAGE_KEYS = "runs:, until:, after:, by:, color: and icon:";
 
 /** `a, b or c`. */
 const listed = (words: string[], joiner = "or"): string =>
@@ -183,7 +200,34 @@ const readHook = (
     }
   } else {
     reader.problems.push(
-      `${at}: “${key}:” is not a hook; a stage takes runs:, until:, after: and by:.`
+      `${at}: “${key}:” is not a hook; a stage takes ${STAGE_KEYS}.`
+    );
+  }
+};
+
+/** A stage's look: `color:` a section hue, `icon:` a glyph's word; a problem when it is neither. */
+const readLook = (
+  reader: Reader,
+  at: string,
+  stage: Stage,
+  key: "color" | "icon",
+  value: string
+): void => {
+  if (stage[key] !== undefined) {
+    reader.problems.push(`${at}: ${stage.name} names ${key}: twice.`);
+  } else if (key === "color") {
+    if (isColor(value)) {
+      stage.color = value;
+    } else {
+      reader.problems.push(
+        `${at}: color: is one of ${listed([...STAGE_COLORS])}; “${value}” is not one.`
+      );
+    }
+  } else if (isIcon(value)) {
+    stage.icon = value;
+  } else {
+    reader.problems.push(
+      `${at}: icon: is one of ${listed([...STAGE_ICONS])}; “${value}” is not one.`
     );
   }
 };
@@ -216,12 +260,16 @@ const readStage = (reader: Reader, at: string, text: string): void => {
   }
   const stage: Stage = { name, kind, hooks: {} };
   for (const [, key, value] of rest.matchAll(HOOK)) {
-    readHook(reader, at, stage, key, value);
+    if (key === "color" || key === "icon") {
+      readLook(reader, at, stage, key, value);
+    } else {
+      readHook(reader, at, stage, key, value);
+    }
   }
   const left = rest.replace(HOOK, "").trim();
   if (left) {
     reader.problems.push(
-      `${at}: “${left}” is not a hook; a stage takes runs:, until:, after: and by:.`
+      `${at}: “${left}” is not a hook; a stage takes ${STAGE_KEYS}.`
     );
   }
   reader.stages.push(stage);
