@@ -258,8 +258,6 @@
   let clock = 0;
   const replays = new Replays();
 
-  /** The components whose kept region has been brought into view, once, as each opened. */
-  const opened = new Set<string>();
   /** What the move changed on the stage: each moving thing. */
   const regionOf = (clips: readonly Clip[]): Element[] =>
     clips.flatMap((clip) => (clip.thing ? [clip.thing] : []));
@@ -335,7 +333,6 @@
     try {
       if (onStage?.review !== on.name && !(await openFor(on, pick, played))) {
         move = mine === run ? none : move;
-        opened.add(on.name);
         return;
       }
       await pressOn(on, pick, played, mine);
@@ -377,14 +374,11 @@
     if (mine !== run) {
       return;
     }
+    // The stage's scroll stays where it stands: on open, at the drawing's
+    // top, its head whole at every width (a reveal of the region the move
+    // changed, at the form's foot, scrolled its top out of view under
+    // 1200px); after that, where he left it.
     move = from ? { kind: "ready", from, to, clips } : none;
-    // On open, once: the region the move changed brought into view with
-    // room for its ring, the state's own evidence. A press after that
-    // keeps the stage's scroll where he left it.
-    if (!opened.has(on.name)) {
-      opened.add(on.name);
-      await stage?.reveal(regionOf(clips));
-    }
   };
   // Each kept state is reached on the one live instance; a width or a
   // scheme picked lays it out anew and moves nothing.
@@ -635,14 +629,27 @@
     const here = typeof snap === "number" ? SNAPS.indexOf(snap) : -1;
     snap = SNAPS[(here + 1) % SNAPS.length] ?? head;
   };
-  // At each stop the region he is judging stays in view above the drawer:
-  // the first difference while comparing, else what the move changed.
+  /** The drawer's stop the stage was last brought to; null until the drawer stands at its first. */
+  let stopShown: number | string | null = null;
+  // At each stop he moves the drawer to, the region he is judging stays in
+  // view above it: the first difference while comparing, else what the
+  // move changed. The stop the drawer opens at moves nothing (the stage
+  // opens at its drawing's top), and nor does a press, a retime or a play:
+  // only the stop changing does.
   $effect(() => {
-    if (desk || snap === null) {
+    const standing = snap;
+    if (desk || standing === null) {
+      stopShown = null;
       return;
     }
-    const clips = clipsNow();
     untrack(() => {
+      const opening = stopShown === null;
+      if (opening || stopShown === standing) {
+        stopShown = standing;
+        return;
+      }
+      stopShown = standing;
+      const clips = clipsNow();
       requestAnimationFrame(() => stage?.reveal(regionOf(clips)));
     });
   });
