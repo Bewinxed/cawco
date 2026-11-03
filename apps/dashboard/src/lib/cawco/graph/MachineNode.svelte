@@ -19,7 +19,7 @@
   class="size-full rounded-lg border border-border-control bg-surface-recess"
 >
   <h3
-    class="m-0 truncate px-space-3 pt-space-2 type-label text-ink-muted"
+    class="m-0 truncate px-space-3 pt-space-2 type-label text-ink-muted group-data-tiny/whole:invisible"
     title={name}
   >
     {name}

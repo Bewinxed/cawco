@@ -97,13 +97,15 @@
   import { type Clip, lengthOf, Replays, tunedRecord, untune } from "./motion";
   import Stage, { type Shown } from "./Stage.svelte";
   import Stepper from "./Stepper.svelte";
-  import WholeSet from "./WholeSet.svelte";
+  import WholeSet, { type PhoneMap } from "./WholeSet.svelte";
 
   let {
     inputs,
     ask = {},
     stale = false,
     lang = pageLang(),
+    phoneMap = null,
+    opensAt = "head",
   }: {
     /** The components under review, each its states file and the agent's spec. */
     inputs: ReviewInput[];
@@ -112,6 +114,10 @@
     stale?: boolean;
     /** The page's language, which every figure is written in (figures.ts); the document's when not given. */
     lang?: string;
+    /** How the map reads at a phone's width, under the owner's decision (WholeSet `phoneMap`); none, the map as it stands. */
+    phoneMap?: PhoneMap | null;
+    /** The phone drawer's stop it opens at: its head, as the spec opens it, unless a states file's state stands it taller. */
+    opensAt?: "head" | "half" | "whole";
   } = $props();
 
   /** `n` as a figure in the page's language. */
@@ -173,6 +179,8 @@
   let reduce = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
+  /** A phone's width and under (DESIGN.md's 640px line). */
+  const PHONE_LINE = 640;
   /**
    * The divider's width (the kit handle's `w-px`): paneforge shares what is
    * left of the group beside it between the panes, so every share is of
@@ -632,6 +640,16 @@
   $effect(() => {
     if (snap === null) {
       snap = head;
+      // A taller stop once the sheet stands at its head: vaul places a
+      // sheet's first stop itself as it opens, and a stop asked for before
+      // its node is drawn moves nothing (use-snap-points.svelte.js
+      // `snapToPoint` sets the style of a node not there yet).
+      const taller = SNAPS[["head", "half", "whole"].indexOf(opensAt)];
+      if (taller !== undefined && taller !== head) {
+        setTimeout(() => {
+          snap = taller;
+        });
+      }
     }
   });
   /** How much of the window the drawer stands over at a stop (a share as vaul takes it), px: the stage's scroller ends at its top. */
@@ -765,6 +783,7 @@
       against={comparing ? against : null}
       kept={kept.state}
       onpress={press}
+      phoneMap={surface > 0 && surface < PHONE_LINE ? phoneMap : null}
       {review}
     />
   {:else}
