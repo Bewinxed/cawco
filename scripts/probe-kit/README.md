@@ -99,6 +99,7 @@ bun scripts/probe-kit/house-rules.ts <url> --width 1540x800 --width 390x844 [--s
 | `clipped-glyph` | own code | an svg draws inside its viewBox, past half its stroke, and no box that clips without scrolling cuts it (The Solar Duotone Rule) |
 | `mixed-icons` | own code | no outlined mark beside a filled one in a bar, nav or list; an open stroke (chevron, arrow, Close, Plus, Tick, Minus) is a glyph (The Solar Duotone Rule) |
 | `small-text` | own code | under a 600px screen, words drawn at 10px or more, through any scale; one or two letters are a mark |
+| `text-overlap` | own code | no two drawn text runs cross by 2px sideways and a third of the shorter's height, a reader's or not (an `aria-hidden` ruler's figures too); a run wrapping is one run; a layer over the page and a pinned bar over what scrolls under it are their own plane |
 | `anchor-drift` | own code, over reads | an open popover, menu or listbox whose height changed between two reads of one page holds its top or its foot (The Nothing Jumps Rule); one read says so as unread |
 
 Cut by the crop is `overflow` and `hidden-cue`, and spills its slot is
