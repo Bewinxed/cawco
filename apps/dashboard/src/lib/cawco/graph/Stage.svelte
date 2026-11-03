@@ -54,6 +54,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconError } from "#lib/icons.js";
   import { type Difference, differences, LINES_SHOWN } from "./diff";
+  import { figureOf } from "./figures";
   import type { PlayContext, Review } from "./model";
   import { type Clip, clipOf } from "./motion";
   import { nameOf } from "./names";
@@ -66,6 +67,7 @@
     scheme,
     stale = false,
     lit = null,
+    lang,
     fits = $bindable(false),
   }: {
     review: Review;
@@ -80,6 +82,8 @@
     stale?: boolean;
     /** What a row rested on names: ringed on the stage, nothing else changed. */
     lit?: Element | null;
+    /** The page's language, for its figures. */
+    lang: string | undefined;
     /** The drawing stands narrower than its room: the stage is its own width, and its column takes no more. */
     fits?: boolean;
   } = $props();
@@ -645,7 +649,7 @@
       {/each}
       {#if found.length > LINES_SHOWN}
         <li class="flex items-center px-space-1 type-meta text-ink-muted num">
-          +{found.length - LINES_SHOWN}
+          +{figureOf(found.length - LINES_SHOWN, lang)}
         </li>
       {/if}
     </ul>
@@ -708,6 +712,7 @@
               againstTall = node.offsetHeight;
             })}
             aria-hidden="true"
+            data-stage-drawing
             inert
             class="pointer-events-none invisible absolute inset-x-0 top-0"
           >
@@ -721,6 +726,7 @@
         <div
           bind:this={frame}
           {@attach relaid}
+          data-stage-drawing
           data-cawco-story={shown.story}
           data-cawco-source={shown.line
             ? `${review.file}:${shown.line}:1`
