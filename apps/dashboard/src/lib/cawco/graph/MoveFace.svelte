@@ -494,7 +494,9 @@
       <!-- The timeline: one grid, the ruler's row then a row per thing,
            each a subgrid of the timeline's two columns, so every lane is
            one column of one width with one inset. -->
-      <div class="min-h-0 min-w-0 overflow-y-auto">
+      <!-- Under a finger the last end's 44px reaches past the lane's inset:
+           the scroller keeps room for it, so it never scrolls sideways. -->
+      <div class="min-h-0 min-w-0 overflow-y-auto coarse:pe-space-4">
         <div
           data-slot="timeline"
           class="relative grid min-w-0 grid-cols-(--cols) grid-rows-(--rows) gap-x-space-3"
