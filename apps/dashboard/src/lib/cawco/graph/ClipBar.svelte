@@ -24,6 +24,7 @@
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
   import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { figureOf } from "./figures";
   import { type ClipKind, snapLength, type Track } from "./motion";
 
   let {
@@ -34,6 +35,7 @@
     disabled = false,
     onretime,
     onhold,
+    lang,
   }: {
     track: Track;
     /** The row as a person says it, for each handle's name. */
@@ -48,6 +50,8 @@
     onretime: (from: number, to: number) => void;
     /** The stretch a drag holds, as it moves (null: let go), so the row's words follow it. */
     onhold: (span: { from: number; to: number } | null) => void;
+    /** The page's language, for the figures. */
+    lang: string | undefined;
   } = $props();
 
   const STEP = 10;
@@ -215,16 +219,16 @@
     </span>
     <!-- The moment the move set it off: no handle passes it. -->
     <span
-      aria-label={words.triggeredAt(Math.round(track.setOff))}
+      aria-label={words.triggeredAt(figureOf(Math.round(track.setOff), lang))}
       class="absolute inset-y-space-2 start-(--at) w-px bg-ink-muted"
       role="img"
       style:--at={pct(track.setOff)}
-      title={words.triggeredAt(Math.round(track.setOff))}
+      title={words.triggeredAt(figureOf(Math.round(track.setOff), lang))}
     ></span>
     {#each thumbItems as { index } (index)}
       <Slider.Thumb
         aria-label={index === 0 ? words.clipStarts(name) : words.clipEnds(name)}
-        aria-valuetext={words.ms(value[index] ?? 0)}
+        aria-valuetext={words.ms(figureOf(value[index] ?? 0, lang))}
         class="pointer-hit touch-hit block h-space-4 w-space-1 cursor-ew-resize rounded-pill bg-ink-strong transition-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 can-hover:hover:scale-y-125"
         style="--hit-gap-x: {apart}px"
         {index}

@@ -29,7 +29,7 @@
 
 <svelte:head><title>Design graph</title></svelte:head>
 
-<div class="h-dvh" lang={story?.lang}>
+<div class="h-dvh">
   <DesignGraph
     ask={{
       ...(story?.ask ?? {
@@ -39,6 +39,7 @@
       face,
     }}
     {inputs}
+    lang={story?.lang}
     stale={said.get("link") === "lost" || story?.stale === true}
   />
 </div>
