@@ -21,6 +21,7 @@ import { decisionHostFile } from "@cawco/core/decision-host";
 import { detach } from "@cawco/core/detach";
 import { passDomainRefusal } from "@cawco/core/pass-domain";
 import {
+  asksUpgrade,
   cachePreview,
   causeOf,
   compressed,
@@ -33,6 +34,7 @@ import {
   IMMUTABLE,
   injectOverlay,
   keyOverlay,
+  notUpYet,
   OVERLAY_KEY,
   overlayResponse,
   PREVIEW_SERVED_HEADER,
@@ -983,8 +985,31 @@ async function serveSession(
     );
     return downResponse("closed", 404);
   }
-  // It waits on the machine: a listener started, its stage's wake, the
-  // server's first answer.
+  return serveMachine(request, server, instanceId, target, deps, direct);
+}
+
+/**
+ * A machine's preview, on its artifact's own origin: relayed to the
+ * machine's listener, which is started when none serves it. A page's
+ * request waits for it (and for its stage's wake beyond, on the machine); a
+ * socket is refused at once until it serves (core `notUpYet`).
+ */
+async function serveMachine(
+  request: Request,
+  server: Server<ListenerSocket>,
+  instanceId: string,
+  target: PreviewTarget,
+  deps: PreviewListenerDeps,
+  direct: boolean
+): Promise<Response | undefined> {
+  // A socket before the machine's listener serves it is refused at once,
+  // the listener started and not waited on (core `notUpYet`).
+  if (asksUpgrade(request) && !target.upstream) {
+    deps.reach(instanceId).catch(() => undefined);
+    return notUpYet();
+  }
+  // A page's request waits on the machine: a listener started, its stage's
+  // wake, the server's first answer.
   heldWhileServed(server, request);
   // No listener serves it now (its machine restarted, or the last start
   // failed): started here, or the hop that failed says why.

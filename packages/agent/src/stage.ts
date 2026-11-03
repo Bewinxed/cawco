@@ -1844,6 +1844,16 @@ export async function wakeSource(
   }
 }
 
+/**
+ * Whether what a preview source names answers now: its stage live, or no
+ * stage serves it. A socket through one that isn't is refused at once
+ * while it wakes (core `notUpYet`), never held through the wake.
+ */
+export function sourceUp(source: PreviewSource): boolean {
+  const key = keyOf(source);
+  return key === null || stages.get(key)?.status === "live";
+}
+
 /** A viewer opened a socket through a preview of a stage: it stays awake until the answer's release. */
 export function sourceViewer(source: PreviewSource): () => void {
   const key = keyOf(source);

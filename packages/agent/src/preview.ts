@@ -9,6 +9,7 @@ import {
   isBrowserKey,
 } from "@cawco/core/browser";
 import {
+  asksUpgrade,
   cachePreview,
   causeOf,
   decodedHeaders,
@@ -21,6 +22,7 @@ import {
   IMMUTABLE,
   injectOverlay,
   isFolderGone,
+  notUpYet,
   PREVIEW_SERVED_HEADER,
   type PreviewSocket,
   previewFailed,
@@ -42,7 +44,7 @@ import {
   WorkspaceDown,
   workspaceGone,
 } from "./preview-bridge";
-import { networkOf, sourceViewer, wakeSource } from "./stage";
+import { networkOf, sourceUp, sourceViewer, wakeSource } from "./stage";
 
 /**
  * The listeners this process serves, with the source each was asked for and
@@ -849,7 +851,14 @@ async function start(
           }
         }
         headers.set("accept-encoding", "identity");
-        // It waits on the stage's wake and the server's first answer.
+        // A socket into a stage that isn't live is refused at once, its
+        // wake started and not waited on: held, it held every socket of
+        // the tab to the same address (core `notUpYet`).
+        if (asksUpgrade(request) && !sourceUp(source)) {
+          staged(request).catch(() => undefined);
+          return notUpYet();
+        }
+        // A page's request waits on the stage's wake and the server's first answer.
         heldWhileServed(server, request);
         const asleep = await staged(request);
         if (asleep) {

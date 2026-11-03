@@ -872,6 +872,37 @@ export const heldWhileServed = (
   request: Request
 ): void => server.timeout(request, 0);
 
+/** Whether `request` asks to open a WebSocket. */
+export const asksUpgrade = (request: Request): boolean =>
+  request.headers.get("upgrade")?.toLowerCase() === "websocket";
+
+/**
+ * The answer to a WebSocket upgrade whose preview isn't up yet (its
+ * machine's listener not started, its stage asleep, starting or waking):
+ * refused at once while the wake goes on, never held through it as a
+ * page's load is ({@link heldWhileServed}). A browser opens one WebSocket
+ * handshake at a time per address ("There MUST be no more than one
+ * connection in a CONNECTING state", RFC 6455 §4.1.2, which Chromium's
+ * WebSocketEndpointLockManager keeps until the upgrade answers), and every
+ * preview origin under host mode's domain shares the proxy's addresses: one
+ * upgrade held through a wake held every other socket in the tab with it,
+ * a decision page's doc socket among them. The client tries again on its
+ * own: Vite's client pings its server's socket each second until it
+ * opens, then reloads; y-websocket backs off up to 2.5 s.
+ */
+export const notUpYet = (): Response =>
+  new Response(
+    "The preview's server isn't up yet: it is starting now. Open the socket again in a moment.",
+    {
+      status: 503,
+      headers: {
+        "cache-control": "no-store",
+        "content-type": "text/plain; charset=utf-8",
+        "retry-after": "1",
+      },
+    }
+  );
+
 /**
  * The machine's listener marks an answer that came from the preview's own
  * port (its stage or server), never one of its own (`downResponse`, a
