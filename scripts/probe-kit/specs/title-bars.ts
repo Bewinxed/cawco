@@ -34,7 +34,7 @@ const respond = (request: Seen): Reply => {
     return { everyMs: 5, words: ["Glass bars"] };
   }
   return request.last.includes(SLOW)
-    ? { everyMs: 400, words: [...ANSWER, ...ANSWER, ...ANSWER] }
+    ? { everyMs: 1500, words: Array.from({ length: 6 }, () => ANSWER).flat() }
     : { everyMs: 2, words: ANSWER };
 };
 
@@ -240,23 +240,30 @@ const run = async (kit: Kit) => {
   );
 
   // The peek, from the rail's Working row (wide layouts only), of a
-  // session still at work.
+  // session still at work, beside a conversation (SessionSurface holds it).
   const busy = await fleet.spawn("claude", "Peek me", src, {
     projectId: project.id,
   });
   await fleet.send(busy, SLOW);
   await surface(
     "peek",
-    at,
+    `${base}/session/${talk}`,
     "[data-session-row-peek]",
     WIDE,
     async (tab) => {
-      await tab.locator("[data-session-row-peek]").first().click({
-        force: true,
-      });
+      // Peek rises at the row's end under a resting pointer.
+      const peek = tab.locator("[data-session-row-peek]").first();
+      const box = await peek.boundingBox();
+      if (box) {
+        await tab.mouse.move(box.x - 120, box.y + box.height / 2);
+        await tab.waitForTimeout(400);
+      }
+      await peek.click();
       await tab.waitForSelector('[data-peek-sheet] [data-slot="peek"]', {
         timeout: 30_000,
       });
+      // The session mark's working echo plays its three loops, then stills.
+      await tab.waitForTimeout(7500);
     },
     "[data-peek-sheet]"
   );
