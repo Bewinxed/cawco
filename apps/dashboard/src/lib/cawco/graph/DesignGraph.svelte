@@ -280,6 +280,12 @@
     return timings === "original" ? move.clips.map(untune) : move.clips;
   };
 
+  /**
+   * The stage is on its way to the kept state (mounting it, or playing and
+   * reading the move into it); the surface says so as `data-arriving`, so
+   * a read of the page (the probe kit's `--wait-for`) waits for its rest.
+   */
+  let arriving = $state(true);
   /** The state the live instance stands in, by component, and the pick it was reached for. */
   let onStage: { key: string; review: string; state: string } | null = null;
   const keyOf = (on: Review, pick: Pick) =>
@@ -333,6 +339,7 @@
     const into = pick.variant === null ? moveInto(on, pick.state) : null;
     const played = into && on.states[pick.state]?.play ? into : null;
     const none: MoveState = { kind: "none", state: to };
+    arriving = true;
     try {
       if (onStage?.review !== on.name && !(await openFor(on, pick, played))) {
         move = mine === run ? none : move;
@@ -349,6 +356,10 @@
           to: move.to,
           why: error instanceof Error ? error.message : String(error),
         };
+      }
+    } finally {
+      if (mine === run) {
+        arriving = false;
       }
     }
   };
@@ -616,6 +627,8 @@
   );
   const SNAPS = $derived([head, shareOf(windowHeight / 2), 1]);
   let snap = $state<number | string | null>(null);
+  /** The drawer stands at its head stop: the faces and the steps, no face's body. */
+  const atHead = $derived(snap === null || snap === head);
   $effect(() => {
     if (snap === null) {
       snap = head;
@@ -850,6 +863,7 @@
   <div
     data-slot="design-graph"
     class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
+    data-arriving={arriving || undefined}
     {lang}
     {@attach frameSize((node: HTMLElement) => {
       surface = node.clientWidth;
@@ -1246,13 +1260,21 @@
                 variant="ghost"
               />
             </div>
+            <!-- At the head stop the drawer holds its head alone, the faces
+                 and the steps: a face's body drawn into its sliver ran the
+                 map at a fit of 1.8px words with its tools cut, and the
+                 animation's lines past the screen's foot. -->
             {#if face === "move"}
-              {@render moveFace()}
+              {#if !atHead}
+                {@render moveFace()}
+              {/if}
             {:else}
               {#if !single && face === "states"}
                 {@render stepper()}
               {/if}
-              {@render statesFace(false)}
+              {#if single || !atHead}
+                {@render statesFace(false)}
+              {/if}
             {/if}
           </div>
         </Drawer.Content>
