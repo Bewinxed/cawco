@@ -748,7 +748,7 @@
                        under their words: no one line runs down a column. -->
                   <span
                     aria-hidden="true"
-                    class="pointer-events-none absolute -inset-y-space-1 start-(--at) w-px -translate-x-1/2 bg-ink-strong @timeline:hidden rtl:translate-x-1/2"
+                    class="pointer-events-none absolute inset-y-0 start-(--at) w-px -translate-x-1/2 bg-ink-strong @timeline:hidden rtl:translate-x-1/2"
                     style:--at={pct(Math.min(playhead, length))}
                   ></span>
                 </div>
