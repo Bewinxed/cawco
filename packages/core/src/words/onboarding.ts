@@ -6,7 +6,7 @@
  * first-run row on the fleet board. The person's picks on the decision
  * page `onboarding-design` set each.
  */
-import type { StageColor, StageIcon } from "../views";
+import type { StageColor, StageIcon, StageKind } from "../views";
 
 export const onboardingWords = {
   /** New project's one question, over the field. */
@@ -87,6 +87,43 @@ export const setupWords = {
   questionAt: (at: number, of: number) => `${at} of ${of}`,
   /** An answer on its way. */
   answering: "Answering…",
+} as const;
+
+/**
+ * A project's setup page (the decision library's `Setup`, drawn by the
+ * decision host): its parts' names, said or read, as a product names them.
+ */
+export const setupPageWords = {
+  /** The name's field, for a screen reader: the title stands with no label. */
+  name: "Project name",
+  /** The description's field, for a screen reader: under the title it needs no label. */
+  aim: "What it's for",
+  stages: "Stages",
+  stageName: (at: number) => `Stage ${at} name`,
+  addStage: "Add a stage",
+  newStage: "New stage",
+  kinds: {
+    todo: "To do",
+    active: "Active",
+    waiting: "Waiting",
+    you: "Needs you",
+    done: "Done",
+    dropped: "Dropped",
+  } satisfies Record<StageKind, string>,
+  kindOf: (name: string) => `Kind of ${name}`,
+  lookOf: (name: string) => `Look of ${name}`,
+  glyph: "Glyph",
+  color: "Colour",
+  noColor: "No colour",
+  moreFor: (name: string) => `More for ${name}`,
+  earlier: "Move earlier",
+  later: "Move later",
+  remove: (name: string) => `Remove ${name}`,
+  delegates: "Delegate types",
+  removed: "Removed",
+  addBack: "Add back",
+  /** The page's Send: what it does, to the project by name. */
+  send: (name: string) => `Set up ${name}`,
 } as const;
 
 /**

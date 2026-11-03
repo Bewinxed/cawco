@@ -3,7 +3,8 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks, each as they drew it: the mono face, a text size, a
-      tall editor's least height, the page's fill, and a note written
+      tall editor's least height, the page's fill, a paragraph edited in
+      place (`prose`), and a note written
       straight into a composer (no field of its own: the composer's shell is
       the field, DESIGN.md Inputs and fields, Field frame). A phone's 16px
       floor is the base layer's, for every field. */
@@ -21,6 +22,9 @@
       resize: { block: "resize-y" },
       fill: { page: "bg-surface-page" },
       look: {
+        /** A paragraph edited where it stands (a setup page's description): text at rest, its edge only while it has focus. */
+        prose:
+          "-mx-space-2 min-h-0 border-transparent bg-transparent px-space-2 py-space-1 shadow-none hover:bg-surface-hover",
         note: "max-h-c-textarea-max-h min-h-c-composer-field min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
       },
     },
