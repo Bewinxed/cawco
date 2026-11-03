@@ -7,22 +7,24 @@
 export const onboardingWords = {
   /** New project's one question, over the field. */
   ask: "What are we working on?",
-  /** The field's placeholder. */
-  placeholder: "A repo, a launch, a brand…",
-  /** `describe-hint` option `title`: the line under the question. */
-  hintTitle:
-    "Describe it in your own words and Caw drafts the stages. Templates are optional.",
-  /** `describe-hint` option `head`: the head over the cards. */
-  hintHead: "Or start from a template",
-  /** `describe-hint` option `head`: the line under that head. */
-  hintHeadLine: "Without one, Caw drafts the stages from what you wrote.",
-  /** `describe-hint` option `caption`: the caption under the cards (addendum 4's words). */
-  hintCaption: "Pick one, or just describe it and Caw proposes the stages.",
+  /** The field's placeholder at rest, and where `once` lands. */
+  placeholder: "A repo, a launch, a job hunt…",
+  /**
+   * The examples the placeholder types (card `describe-hint`), spanning the
+   * work CawCo takes: code, a launch, posts, and work no template holds.
+   */
+  examples: [
+    "A personal PR team for my job hunt",
+    "Land the open pull requests on cockpit",
+    "Visa renewal and the move to Lisbon",
+    "Plan the app's launch for March",
+    "Grant applications for a small lab",
+    "Three posts a week on X",
+  ],
   /** No machine registered: Caw's conversation runs on a machine. */
-  noMachine:
-    "No machine has joined yet, so Caw can't start. Your words stay here.",
+  noMachine: "No machine has joined yet, so Caw can't start.",
   /** Machines registered, none online. */
-  noneOnline: "No machine is online, so Caw can't start. Your words stay here.",
+  noneOnline: "No machine is online, so Caw can't start.",
   addMachine: "Add machine",
   checkMachines: "Check machines",
 } as const;
@@ -41,21 +43,18 @@ export const firstRunWords = {
   machineNote: "Caw and every session run on a machine you add.",
   machineOnline: (name: string) => `${name} is online`,
   machineOffline: (name: string) =>
-    `${name} joined and is offline. Start its agent, then it ticks here.`,
+    `${name} is offline. Start its agent there.`,
   harness: "Sign in to a harness on it",
-  harnessNote: (name: string) =>
-    `Claude Code, OpenCode or pi on ${name}. One is enough to start.`,
+  harnessNote: (name: string) => `Claude Code, OpenCode or pi on ${name}.`,
   harnessDone: (harness: string, name: string) =>
     `${harness} is signed in on ${name}`,
   relay: "Watch a project's browser from your phone",
   relayNote:
-    "The stream relay carries a project's Chrome to your phone when you're off the tailnet. Later keeps it in Settings › Browsers.",
+    "The stream relay carries a project's Chrome to your phone when you're off the tailnet.",
   relayLater: "Later",
   relaySetUp: "Set up",
   relayAnswered: "Kept for later in Settings › Browsers",
   project: "Make your first project",
-  projectNote:
-    "Describe the work in your own words. Caw names it and drafts how it runs.",
   newProject: "New project",
   /** Caw's line when the first machine registers (his arrival). */
   arrived: (name: string) => `${name} joined. Caw runs here now.`,

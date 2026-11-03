@@ -1348,6 +1348,9 @@ public enum Motion {
     /// Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger.
     /// In seconds.
     public static let durStagger: TimeInterval = 0.06
+    /// Between one letter of a typed example and the next: New project's placeholder typing its examples (decision page onboarding-design, card describe-hint); it erases at half this.
+    /// In seconds.
+    public static let durType: TimeInterval = 0.05
     /// The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together.
     /// In seconds.
     public static let durCascade: TimeInterval = 0.48
