@@ -48,6 +48,8 @@ const WIDTHS: { view: View; label: string }[] = [
   { view: "desk2529", label: "2529" },
 ];
 const THEMES = ["light", "dark"] as const;
+/** Comments as More lists it, its open count after it. */
+const COMMENTS_ITEM = /^Comments/u;
 
 const shot = async (kit: Kit, page: Page, name: string) => {
   const dir = join(kit.out, "shots");
@@ -295,15 +297,36 @@ const run = async (kit: Kit) => {
   const SESSION = `${base}/session/${talk}`;
   /** The rail opened from the panel's head. */
   const railOpen = async (tab: Page): Promise<void> => {
-    // Comments on the head, or in More where the head has no room for it.
-    const toggle = tab
-      .locator('[data-slot="side-head"] [data-slot="comments"]')
-      .filter({ visible: true });
-    if ((await toggle.count()) > 0) {
-      await toggle.first().click();
-    } else {
-      await tab.locator('[data-slot="side-head"] [data-slot="more"]').click();
-      await tab.getByRole("menuitem", { name: /^Comments/u }).click();
+    // Comments on the head, or in More where the head has no room for it:
+    // the head refits as the count arrives, so each press is tried again.
+    for (let tries = 0; tries < 5; tries += 1) {
+      if ((await tab.locator(RAIL).count()) > 0) {
+        break;
+      }
+      const toggle = tab
+        .locator('[data-slot="side-head"] [data-slot="comments"]')
+        .filter({ visible: true });
+      const pressed =
+        (await toggle.count()) > 0
+          ? await toggle
+              .first()
+              .click({ timeout: 3000 })
+              .then(() => true)
+              .catch(() => false)
+          : await tab
+              .locator('[data-slot="side-head"] [data-slot="more"]')
+              .click({ timeout: 3000 })
+              .then(() =>
+                tab
+                  .getByRole("menuitem", { name: COMMENTS_ITEM })
+                  .click({ timeout: 3000 })
+              )
+              .then(() => true)
+              .catch(() => false);
+      if (!pressed) {
+        await tab.keyboard.press("Escape");
+      }
+      await tab.waitForTimeout(800);
     }
     await tab.waitForSelector(RAIL, { timeout: 30_000 });
   };

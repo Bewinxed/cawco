@@ -21,6 +21,7 @@
    */
   import { commentWords } from "@cawco/core/words/comments";
   import { planWords } from "@cawco/core/words/plan";
+  import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     TabItem,
@@ -232,13 +233,39 @@
             </DropdownMenu.Trigger>
           </DropdownMenu.Root>
           <span class="flex-1"></span>
+          <!-- The head's own controls: the kit's ghost buttons in its glass. -->
           <BarGlass form="group">
-            <BarItem icon={IconChat} label="Comments" onclick={noop} />
-            <BarItem icon={IconRefresh} label="Reload" onclick={noop} />
-            <BarItem icon={IconMaximize} label="Expand" onclick={noop} />
+            <Button
+              aria-label="Comments"
+              onclick={noop}
+              size="icon-sm"
+              title="Comments"
+              variant="ghost"><IconChat /></Button
+            >
+            <Button
+              aria-label="Reload"
+              onclick={noop}
+              size="icon-sm"
+              title="Reload"
+              variant="ghost"><IconRefresh /></Button
+            >
+            <Button
+              aria-label="Expand"
+              onclick={noop}
+              size="icon-sm"
+              title="Expand"
+              variant="ghost"><IconMaximize /></Button
+            >
           </BarGlass>
           <BarGlass form="group">
-            <BarItem icon={IconClose} label="Close" onclick={noop} />
+            <Button
+              aria-label="Close"
+              icon={IconClose}
+              onclick={noop}
+              size="icon-sm"
+              title="Close"
+              variant="ghost"
+            />
           </BarGlass>
         </header>
         <ul
