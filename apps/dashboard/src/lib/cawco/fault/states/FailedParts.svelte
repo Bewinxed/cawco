@@ -134,11 +134,9 @@
       </div>
     </div>
   {:else if place === "page"}
-    <header
-      class="flex h-c-top-bar-h flex-none items-center px-space-3 text-ink-strong type-label"
-    >
-      Sessions
-    </header>
+    <!-- The bar's room, as the app's bar stands over a page: it names no
+         section (DESIGN.md, The Title Bars Follow Liquid Glass Rule). -->
+    <div aria-hidden="true" class="h-c-top-bar-h flex-none"></div>
     <div class="flex min-h-0 flex-1 flex-col">
       <RegionBoundary face="page" part="workspace">
         <Throws {builds} {stuck}>{@render stand()}</Throws>
