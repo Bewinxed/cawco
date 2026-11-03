@@ -120,9 +120,9 @@ export const setupPageWords = {
   /** A stage's remove button, and the button it turns into that removes it (Reminders' minus, then Delete). */
   removeAsk: (name: string) => `Remove ${name}…`,
   removeNow: "Remove",
-  /** The Notion list's open button and its rename item. */
-  editFor: (name: string) => `Change ${name}`,
+  /** The Notion list's rename item, and its kind submenu. */
   rename: "Rename",
+  kindItem: "Kind",
   /** A kind's head's add button (Notion's + on a group). */
   addTo: (kind: string) => `Add a stage to ${kind}`,
   lookOf: (name: string) => `Look of ${name}`,
