@@ -154,6 +154,8 @@ export {
   default as IconAgent,
   default as IconGhost,
 } from "~icons/solar/ghost-smile-bold-duotone";
+/** What differs between two states: Compare (bare: the scale stands on a tile, The Solar Duotone Rule). */
+export { default as IconCompare } from "~icons/solar/git-diff-bold-duotone";
 /** Fork, Spin off: a session forked from another (the bare cut, no enclosure). */
 export { default as IconFork } from "~icons/solar/git-fork-bold-duotone";
 export {
@@ -258,11 +260,8 @@ export { default as IconHook } from "~icons/solar/routing-2-bold-duotone";
 /** A tab split under it (its menu's Split down). */
 export { default as IconSplitDown } from "~icons/solar/rows-2-bold-duotone";
 export { default as IconRulerPen } from "~icons/solar/ruler-cross-pen-bold-duotone";
-/** Two things weighed against each other: Compare. */
-export {
-  default as IconJev,
-  default as IconCompare,
-} from "~icons/solar/scale-bold-duotone";
+/** Two things weighed against each other: Jev. */
+export { default as IconJev } from "~icons/solar/scale-bold-duotone";
 export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
 export { default as IconServerAlt } from "~icons/solar/server-bold-duotone";
 export { default as IconServerSquare } from "~icons/solar/server-square-bold-duotone";
