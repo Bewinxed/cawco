@@ -18,7 +18,6 @@
 </script>
 
 <script lang="ts">
-  import { graphWords as words } from "@cawco/core/words/graph";
   /**
    * A state on the whole set's map: one card, `c-graph-node-w` wide on the
    * raised surface with the control edge, all of it inside the node, so a
@@ -36,12 +35,10 @@
    * in components").
    */
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconError, IconEye, IconWarningTriangle } from "#lib/icons.js";
+  import StateHead from "./StateHead.svelte";
 
   let { data }: NodeProps = $props();
   const card = $derived(data as unknown as StateCard);
-  const uid = $props.id();
 </script>
 
 <div
@@ -59,64 +56,11 @@
   style:--xy-handle-border-color="transparent"
 >
   <Handle isConnectable={false} position={Position.Top} type="target" />
-  <div class="mark-line flex min-w-0 items-center gap-space-2">
-    <!-- The name's button reaches over the whole card (its ::before), so a
-         press anywhere on it keeps the state, and a pin on it is named by
-         the name. -->
-    <button
-      type="button"
-      aria-current={card.kept ? "true" : undefined}
-      aria-describedby={card.marks.length > 0 ? `${uid}-marks` : undefined}
-      class={[
-        "min-w-0 flex-1 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 before:rounded-md focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
-        card.kept ? "text-selected-ink" : "text-ink-row",
-      ]}
-      onclick={() => card.onpress(card.id)}
-    >
-      {card.name}
-    </button>
-    {#if card.kept}
-      <span
-        class="mark-line flex flex-none items-center gap-space-1 type-meta text-selected-ink"
-        data-box
-      >
-        <IconEye aria-hidden="true" class="size-icon-sm" data-box />
-        <span>{words.onStage}</span>
-      </span>
-    {/if}
-    {#if card.marks.length > 0}
-      <Tip label={card.marks.join(". ")} side="top">
-        {#snippet children(tip)}
-          <span
-            {...tip}
-            id={`${uid}-marks`}
-            class="relative z-1 flex flex-none items-center gap-space-1"
-            data-box
-          >
-            <span class="sr-only">{card.marks.join(". ")}</span>
-            {#if card.failure}
-              <IconError
-                aria-hidden="true"
-                class="size-icon-sm text-status-fail-glyph"
-                data-box
-              />
-            {/if}
-            {#if card.holed}
-              <IconWarningTriangle
-                aria-hidden="true"
-                class="size-icon-sm text-status-attn-glyph"
-                data-box
-              />
-            {/if}
-          </span>
-        {/snippet}
-      </Tip>
-    {/if}
-  </div>
+  <StateHead {card} />
   {#if card.note}
     <span
       class={[
-        "line-clamp-2 min-w-0 type-meta text-pretty wrap-anywhere",
+        "line-clamp-2 min-w-0 type-meta text-pretty wrap-anywhere group-data-tiny/whole:invisible",
         card.kept ? "text-selected-ink" : "text-ink-muted",
       ]}>{card.note}</span
     >
