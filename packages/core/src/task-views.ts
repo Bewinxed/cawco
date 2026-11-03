@@ -10,7 +10,14 @@ import type { LandsMode } from "./injected";
 import type { ProjectStarter } from "./starters";
 import type { TASK_FILE_STATES, TaskHistoryKind } from "./task-history";
 import type { Tracker } from "./trackers";
-import type { Mover, StageKind, StagesTemplate, TaskMover } from "./views";
+import type {
+  Mover,
+  StageColor,
+  StageIcon,
+  StageKind,
+  StagesTemplate,
+  TaskMover,
+} from "./views";
 import type { WaitKind } from "./wait-targets";
 import type { taskLinkWords } from "./words/task-links";
 import type { WorkItemState } from "./work-items";
@@ -33,7 +40,11 @@ interface StageHooks {
 }
 
 export interface Stage {
+  /** Its mark's colour (stages.md `color:`); none: the muted ink. */
+  color?: StageColor;
   hooks: StageHooks;
+  /** Its mark's glyph (stages.md `icon:`); none: no mark but its kind's. */
+  icon?: StageIcon;
   kind: StageKind;
   name: string;
 }
@@ -50,6 +61,9 @@ export interface StageView {
   by: string | null;
   name: string;
 }
+
+/** Where a project's stages come from (StagesView `source`). */
+export type StagesSource = "file" | "template" | "none";
 
 /** A project's stages as the dashboard reads them. */
 export interface StagesView {
@@ -68,8 +82,12 @@ export interface StagesView {
    * none while Jev is off.
    */
   routineStarters: ProjectStarter[];
-  /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
-  source: "file" | "template";
+  /**
+   * `file`: the project's stages.md; `template`: it has none and was set up
+   * as the code template, which the hub reads in its place; `none`: it is
+   * not set up yet (no stages.md, no template), and it has no stages.
+   */
+  source: StagesSource;
   stages: Stage[];
   /**
    * What an empty board and Caw's panel offer to say to him: written for the

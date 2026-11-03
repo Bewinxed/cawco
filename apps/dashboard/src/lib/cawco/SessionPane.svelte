@@ -128,6 +128,8 @@
     focused,
     serverTail = null,
     docked,
+    afterRows,
+    asksElsewhere,
 
     /** Whether this pane is on screen at all — governs row building. */
     /**
@@ -156,6 +158,14 @@
      * the panel being put away.
      */
     docked?: { draft: ComposerDraft };
+    /** What stands at the transcript's end, after its last row (a project's setup element, SetupWell). */
+    afterRows?: Snippet;
+    /**
+     * Asks another surface on the page draws and answers (a project's
+     * questions on its board before setup, SetupScene): the composer does
+     * not grow into them while it does.
+     */
+    asksElsewhere?: (request: PendingPermission) => boolean;
   } = $props();
 
   /**
@@ -949,10 +959,12 @@
   const parked = $derived<
     { machine: string | undefined; request: PendingPermission }[]
   >([
-    ...parkedAsks(session?.pending ?? []).map((request) => ({
-      request,
-      machine: machineId || undefined,
-    })),
+    ...parkedAsks(session?.pending ?? [])
+      .filter((request) => !asksElsewhere?.(request))
+      .map((request) => ({
+        request,
+        machine: machineId || undefined,
+      })),
     ...cawco.blocked
       .filter((row) => row.request.originInstanceId === viewId)
       .map((row) => ({ request: row.request, machine: row.machineId })),
@@ -1361,6 +1373,7 @@
               }}
               parkedHeight={writable ? parkedRoom : 0}
               session={held}
+              {afterRows}
               {visible}
             />
           </RegionBoundary>

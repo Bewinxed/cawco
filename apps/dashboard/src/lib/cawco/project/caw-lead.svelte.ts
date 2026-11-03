@@ -143,6 +143,19 @@ export class CawLead {
   }
   anchor = $state<HTMLElement | null>(null);
   /**
+   * His panel's tab (decision page `onboarding-design`, card
+   * `artifact-open`): his conversation, or what it shows (a preview, a
+   * canvas, a component, a page), which widens the panel as it opens
+   * (ProjectConversation's Assistant and Preview; the page's grid reads it).
+   */
+  tab = $state<"assistant" | "preview">("assistant");
+  /**
+   * The page's one live Caw stands in his panel's setup element
+   * (SetupWell) while he drafts a project's setup: the seat over the board
+   * or in the head stands empty meanwhile (The Caw Stands On The Axis Rule).
+   */
+  inPanel = $state(false);
+  /**
    * A new conversation asked for (the head's Ask Caw, the views bar's "+"):
    * his panel shows the hero, its composer taking the caret, and clears it
    * (ProjectConversation).

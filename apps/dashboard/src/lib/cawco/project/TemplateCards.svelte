@@ -45,7 +45,6 @@
     peekSize,
     peekShare,
     action,
-    hues = "section",
   }: {
     cards: readonly TemplateCard[];
     /** The tapped card, or null. */
@@ -69,24 +68,7 @@
      * card is a radio button, and a button holds no button.
      */
     action?: { template: TemplateName; label: string; onclick: () => void };
-    /**
-     * What colours a card's glyph (onboarding-design#card-hues, open):
-     * `section` its template's section hue (today), `ink` the muted ink on
-     * every card, `picked` the muted ink with the tapped card's glyph in the
-     * selected icon's coral.
-     */
-    hues?: "section" | "ink" | "picked";
   } = $props();
-
-  /** A card's glyph colour under `hues`. */
-  function hueOf(card: TemplateCard): string {
-    if (hues === "section") {
-      return card.hue;
-    }
-    return hues === "picked" && selected === card.template
-      ? "var(--selected-icon)"
-      : "var(--ink-muted)";
-  }
 
   /**
    * The side of a card's pose picture, his whole artboard, px. The poses
@@ -213,7 +195,7 @@
           value={card.template}
         >
           <CardFace
-            hue={hueOf(card)}
+            hue={card.hue}
             icon={card.icon}
             meta={metaOf(card)}
             name={card.name}

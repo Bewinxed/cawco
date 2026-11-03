@@ -4,7 +4,7 @@
  * picks a card). The project takes no name from the words: Caw names it.
  */
 
-import type { StagesTemplate } from "@cawco/core/views";
+import { OFFERED_TEMPLATES, type OfferedTemplate } from "@cawco/core/views";
 import type { Component } from "svelte";
 import {
   IconChat,
@@ -15,11 +15,11 @@ import {
   IconToolCode,
 } from "#lib/icons.js";
 
-/** A template New project offers: every stages template but outreach. */
-export type TemplateName = Exclude<StagesTemplate, "outreach">;
+/** A template New project offers: core's one list, which `project_setup` lists too. */
+export type TemplateName = OfferedTemplate;
 
 export interface TemplateCard {
-  /** The tile glyph's section hue. */
+  /** The tile glyph's section hue (decision page `onboarding-design`, card `card-hues`: each card's own). */
   hue: string;
   /** Its glyph on the card's icon tile (Solar duotone). */
   icon: Component;
@@ -29,50 +29,50 @@ export interface TemplateCard {
   template: TemplateName;
 }
 
-export const TEMPLATE_CARDS: readonly TemplateCard[] = [
-  {
-    template: "code",
+/** Each offered template's card, by name: a template added to core's list is a type error here until it has one. */
+const CARDS: Record<TemplateName, Omit<TemplateCard, "template">> = {
+  code: {
     icon: IconToolCode,
     hue: "var(--hue-cyan-500)",
     name: "Code",
     meta: "Tasks worked on, reviewed by you, then landed",
   },
-  {
-    template: "launch",
+  launch: {
     icon: IconRocket,
     hue: "var(--hue-orange-500)",
     name: "Launch campaign",
     meta: "Pieces planned, made, reviewed and sent live",
   },
-  {
-    template: "seo",
+  seo: {
     icon: IconSearch,
     hue: "var(--hue-green-500)",
     name: "SEO program",
     meta: "Topics briefed, drafted, published and measured",
   },
-  {
-    template: "brand",
+  brand: {
     icon: IconPalette,
     hue: "var(--hue-amber-500)",
     name: "Brand kit",
     meta: "Voice, colour and type drawn from a source",
   },
-  {
-    template: "design",
+  design: {
     icon: IconPenLine,
     hue: "var(--hue-cyan-400)",
     name: "Design",
     meta: "Variants explored, one picked and built",
   },
-  {
-    template: "social",
+  social: {
     icon: IconChat,
     hue: "var(--hue-green-600)",
     name: "Social",
     meta: "Posts drafted, reviewed, scheduled and measured",
   },
-];
+};
+
+/** The cards New project shows, in core's order. */
+export const TEMPLATE_CARDS: readonly TemplateCard[] = OFFERED_TEMPLATES.map(
+  (template) => ({ template, ...CARDS[template] })
+);
 
 /** The starter chips: a press puts its words in the field. */
 export const STARTERS = [

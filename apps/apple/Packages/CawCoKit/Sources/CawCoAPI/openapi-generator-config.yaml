@@ -186,12 +186,14 @@ typeOverrides:
     SigninState: OpenEnums.SigninState
     SlashCommandKind: OpenEnums.SlashCommandKind
     SshJoinJobState: OpenEnums.SshJoinJobState
+    StageColor: OpenEnums.StageColor
     StageHooksBy: OpenEnums.StageHooksBy
+    StageIcon: OpenEnums.StageIcon
     StageKind: OpenEnums.StageKind
     StageStatus: OpenEnums.StageStatus
     StageToolchain: OpenEnums.StageToolchain
+    StagesSource: OpenEnums.StagesSource
     StagesTemplate: OpenEnums.StagesTemplate
-    StagesViewSource: OpenEnums.StagesViewSource
     StarterGlyph: OpenEnums.StarterGlyph
     StarterPlace: OpenEnums.StarterPlace
     StarterSourceKind: OpenEnums.StarterSourceKind

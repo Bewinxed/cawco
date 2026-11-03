@@ -1091,6 +1091,8 @@ const state = $state({
    */
   moves: [] as MoveJob[],
   projects: [] as ProjectRow[],
+  /** `/api/projects` has answered this page once: an empty list then means none (home FirstRun). */
+  projectsRead: false,
   /**
    * How many times each project's tasks have changed since this page
    * connected, by project id (`tasks.changed` frames): what shows its tasks
@@ -7080,6 +7082,7 @@ function keepProjects(projects: ProjectRow[], asked: ProjectsAsked): void {
       : row;
   });
   state.projects = reconcileRows(state.projects, answered, (row) => row.id);
+  state.projectsRead = true;
 }
 
 /**
@@ -9255,6 +9258,10 @@ export const cawco = {
     (catalog[machineId] ?? []).some(listedInHistory),
   get projects() {
     return state.projects;
+  },
+  /** The projects have been read once: an empty list is a fleet with none. */
+  get projectsRead() {
+    return state.projectsRead;
   },
   projectsOn: (machineId: string): ProjectRow[] =>
     state.projects.filter((project) => placedOn(project, machineId)),

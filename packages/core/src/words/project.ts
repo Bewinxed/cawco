@@ -31,13 +31,9 @@ export const projectWords = {
   details: "Project details",
   /** The head's place's tooltip while the project's one place is its folder on the hub. */
   hubFolder: "Its folder on the hub",
-  /** The head's ⋯. */
-  pickStages: "Pick stages…",
   projectDetails: "Project details…",
   cawSettings: "Caw settings…",
   forgetProject: "Forget project…",
-  /** The stages control on a project that keeps none of its own. */
-  noStages: "This project has no stages of its own yet",
   /** A task card whose attempt the hub couldn't start. */
   cantStart: "Can't start",
   /** Project details' row of the checks the hub runs before it merges work (gate.md). */

@@ -17,8 +17,10 @@
    *
    * Its state arrives as props, so every state stands in a story
    * (NewProject.stories.ts): where the fleet stands (`fleet`, read from the
-   * home's `machines`: nothing is claimed while it is read), and the design
-   * options the page `onboarding-design` asks about (`examples`, `hues`).
+   * home's `machines`: nothing is claimed while it is read). The field's
+   * placeholder types its examples once and rests (TypedExamples), and the
+   * cards' glyphs keep their sections' hues (decision page
+   * `onboarding-design`, cards `describe-hint` and `card-hues`).
    */
   import { detach } from "@cawco/core/detach";
   import { onboardingWords } from "@cawco/core/words/onboarding";
@@ -54,9 +56,7 @@
     create,
     onmade,
     onmachines,
-    examples,
     still = false,
-    hues = "section",
     words: firstWords = "",
     tapped: firstTapped = null,
     refusal,
@@ -73,16 +73,8 @@
     onmade: (id: string) => Promise<unknown> | undefined;
     /** No machine online: Add machine, or Check machines, from what asked. */
     onmachines: (anchor: HTMLElement, fleet: "none" | "offline") => void;
-    /**
-     * The placeholder typing examples of the work (onboarding-design
-     * #describe-hint, open): round and round, or once and then at rest;
-     * a still placeholder today.
-     */
-    examples?: "loop" | "once";
     /** Stands still as with reduced motion (a story of that state). */
     still?: boolean;
-    /** The cards' glyph colours (onboarding-design#card-hues, open). */
-    hues?: "section" | "ink" | "picked";
     /** Words already in the field (a draft kept, a story). */
     words?: string;
     /** The card already tapped (a story). */
@@ -107,14 +99,11 @@
    * shown and motion allowed (typed-examples.svelte.ts); focus does not stop
    * it, a first letter does, and an emptied field starts it again.
    */
-  const typed = examples
-    ? new TypedExamples(
-        onboardingWords.examples,
-        onboardingWords.placeholder,
-        examples
-      )
-    : null;
-  $effect(() => typed?.run(words.length === 0 && !still));
+  const typed = new TypedExamples(
+    onboardingWords.examples,
+    onboardingWords.placeholder
+  );
+  $effect(() => typed.run(words.length === 0 && !still));
   let fit = $state<TemplateName | null>(fitOf(firstWords));
   /**
    * The card the person tapped, the one pick: the frame stands on it and
@@ -253,7 +242,7 @@
           detach(start(text, id), "start");
         }}
         label={onboardingWords.ask.replace(/\?$/u, "")}
-        placeholder={typed ? typed.text : onboardingWords.placeholder}
+        placeholder={typed.text}
         sendAgain={again}
         sendError={refused}
         sending={starting}
@@ -314,7 +303,6 @@
     <TemplateCards
       cards={TEMPLATE_CARDS}
       {fit}
-      {hues}
       metaOf={(card) => card.meta}
       onpeekgone={gone}
       peek={caw === "peek"}
