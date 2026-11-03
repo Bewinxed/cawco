@@ -1,3 +1,8 @@
+<script lang="ts" module>
+  /** How the map reads at a phone's width (WholeSet `phoneMap`). */
+  export type PhoneMap = "floor" | "shapes" | "list";
+</script>
+
 <script lang="ts">
   /**
    * The whole set (spec, The whole set): every state of every machine and
@@ -52,6 +57,7 @@
   import { holesOf, type Review } from "./model";
   import RouteEdge, { type RouteData } from "./RouteEdge.svelte";
   import StateNode, { type StateCard } from "./StateNode.svelte";
+  import WholeList from "./WholeList.svelte";
   import WholeMeasure from "./WholeMeasure.svelte";
 
   let {
@@ -59,11 +65,21 @@
     kept,
     against,
     onpress,
+    phoneMap = null,
   }: {
     review: Review;
     kept: string;
     against: string | null;
     onpress: (state: string, variant: string | null) => void;
+    /**
+     * How the map reads at a phone's width, the owner's look to pick (its
+     * decision page, design-graph-phone-map): fitted whole, its words fall
+     * under the size that reads. `floor`: no fit draws a word under it, and
+     * the map pans; `shapes`: the fit stands, and its words go while they
+     * draw under it; `list`: the states and their moves as a list. Null at
+     * a desk's width.
+     */
+    phoneMap?: PhoneMap | null;
   } = $props();
 
   const nodeTypes = { state: StateNode, machine: MachineNode };
@@ -87,6 +103,16 @@
   );
   /** A hidden line in the label's own type, at its widest: what an act's label takes. */
   let ruler = $state<HTMLElement>();
+  /** The least a word draws at and still reads (the house rules' small-text: 10px under a 600px screen). */
+  const READABLE_PX = 10;
+  /** The map's smallest words, px: an act's label and a card's note, in the meta role, as the label's ruler draws them. */
+  const smallest = $derived(
+    ruler ? Number.parseFloat(getComputedStyle(ruler).fontSize) : 0
+  );
+  /** The zoom that draws the smallest words at READABLE_PX, rounded up to a hundredth so no word draws a fraction under it. */
+  const readableZoom = $derived(
+    smallest > 0 ? Math.ceil((READABLE_PX / smallest) * 100) / 100 : undefined
+  );
   const labelSize = (label: string) => {
     if (!ruler) {
       return { width: lengths.label, height: lengths.labelLine };
@@ -223,74 +249,91 @@
       .join(";")
   );
   let zoom = $state(1);
+  /**
+   * `shapes`, and the map drawn so small its words would not read: its
+   * words go (each card's, group's and act's own `group-data-tiny/whole`)
+   * and its shapes stay.
+   */
+  const tiny = $derived(
+    phoneMap === "shapes" && smallest > 0 && zoom * smallest < READABLE_PX
+  );
 </script>
 
-<div
-  data-slot="whole-set"
-  class="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border-hairline bg-surface-raised"
-  style:--xy-edge-stroke="var(--border-contrast)"
-  style:--xy-edge-stroke-width="var(--c-graph-edge)"
->
-  <SvelteFlow
-    aria-label={words.wholeMap(review.name)}
-    colorMode={theme.current}
-    deleteKey={null}
-    elementsSelectable={false}
-    {edgeTypes}
-    fitView
-    fitViewOptions={FIT}
-    {...ZOOM}
-    nodesConnectable={false}
-    nodesDraggable={false}
-    nodesFocusable={false}
-    {nodeTypes}
-    onmovestart={(event) => {
-      if (event) {
-        held = true;
-      }
-    }}
-    panOnDrag
-    proOptions={{ hideAttribution: true }}
-    zoomOnDoubleClick={false}
-    bind:edges
-    bind:nodes
+{#if phoneMap === "list"}
+  <WholeList {cardOf} {review} />
+{:else}
+  <div
+    data-slot="whole-set"
+    data-tiny={tiny || undefined}
+    class="group/whole relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border-hairline bg-surface-raised"
+    style:--xy-edge-stroke="var(--border-contrast)"
+    style:--xy-edge-stroke-width="var(--c-graph-edge)"
   >
-    <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
-    <FlowZoomTracker
-      onZoomChange={(value) => {
-        zoom = value;
-      }}
-    />
-    <FlowAutoFit
-      bind:this={fit}
-      {held}
-      layout={placed}
-      nodeCount={nodes.length}
-    />
-    <WholeMeasure
-      {heights}
-      onheights={(next) => {
-        heights = next;
-      }}
-    />
-    <Panel position="bottom-center">
-      <FlowCanvasTools
-        figure={false}
-        fit={() => fit?.fit()}
-        onfit={() => {
-          held = false;
-        }}
-        onzoom={() => {
+    <SvelteFlow
+      aria-label={words.wholeMap(review.name)}
+      colorMode={theme.current}
+      deleteKey={null}
+      elementsSelectable={false}
+      {edgeTypes}
+      fitView
+      fitViewOptions={FIT}
+      {...ZOOM}
+      minZoom={phoneMap === "floor" && readableZoom
+        ? readableZoom
+        : ZOOM.minZoom}
+      nodesConnectable={false}
+      nodesDraggable={false}
+      nodesFocusable={false}
+      {nodeTypes}
+      onmovestart={(event) => {
+        if (event) {
           held = true;
+        }
+      }}
+      panOnDrag
+      proOptions={{ hideAttribution: true }}
+      zoomOnDoubleClick={false}
+      bind:edges
+      bind:nodes
+    >
+      <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
+      <FlowZoomTracker
+        onZoomChange={(value) => {
+          zoom = value;
         }}
-        {zoom}
       />
-    </Panel>
-  </SvelteFlow>
-  <!-- An act's label measured in its own type, at its widest. -->
-  <span
-    bind:this={ruler}
-    aria-hidden="true"
-    class="pointer-events-none invisible absolute start-0 top-0 max-w-c-graph-label border px-space-1 type-meta"
-  ></span>
-</div>
+      <FlowAutoFit
+        bind:this={fit}
+        {held}
+        layout={placed}
+        minZoom={phoneMap === "floor" ? readableZoom : undefined}
+        nodeCount={nodes.length}
+      />
+      <WholeMeasure
+        {heights}
+        onheights={(next) => {
+          heights = next;
+        }}
+      />
+      <Panel position="bottom-center">
+        <FlowCanvasTools
+          figure={false}
+          fit={() => fit?.fit()}
+          onfit={() => {
+            held = false;
+          }}
+          onzoom={() => {
+            held = true;
+          }}
+          {zoom}
+        />
+      </Panel>
+    </SvelteFlow>
+    <!-- An act's label measured in its own type, at its widest. -->
+    <span
+      bind:this={ruler}
+      aria-hidden="true"
+      class="pointer-events-none invisible absolute start-0 top-0 max-w-c-graph-label border px-space-1 type-meta"
+    ></span>
+  </div>
+{/if}

@@ -40,6 +40,8 @@
     }}
     {inputs}
     lang={story?.lang}
+    opensAt={story?.opensAt}
+    phoneMap={story?.phoneMap}
     stale={said.get("link") === "lost" || story?.stale === true}
   />
 </div>
