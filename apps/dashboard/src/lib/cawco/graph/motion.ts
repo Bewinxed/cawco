@@ -123,8 +123,21 @@ const KINDS: Record<string, ClipKind> = {
   filter: "effect",
   "box-shadow": "effect",
 };
-/** A property's kind: its family of change. */
-const kindOf = (property: string): ClipKind => KINDS[property] ?? "other";
+/**
+ * A row's kind: the family of its most telling property over all its clips,
+ * in the order the words name how a thing moves (`words.how`), so a row
+ * whose clips animate "height, opacity", or a custom property and opacity,
+ * takes the kind a person sees (size; fade), and only a row of custom
+ * properties alone is "other". Read off the joined property string, every
+ * row fell through to "other" and drew grey.
+ */
+const kindOf = (clips: readonly Clip[]): ClipKind => {
+  const properties = new Set(
+    clips.flatMap((clip) => clip.property.split(",").map((one) => one.trim()))
+  );
+  const telling = Object.keys(words.how).find((one) => properties.has(one));
+  return (telling && KINDS[telling]) || "other";
+};
 
 /** One timing as the component canvas's `tuned` record says it (stage-host canvas chrome.ts `openMove`): the agent writes it into the CSS or the motion call. */
 export interface TunedRecord {
@@ -133,6 +146,8 @@ export interface TunedRecord {
   duration: number;
   easing: string;
   move: string;
+  /** Its length or its curve is none of the design system's tokens: the agent's note, never shown on the face. */
+  offTokens: boolean;
 }
 
 /** The clips the person tuned, as the canvas's `tuned` record: the move, the animation by its element and property, its begin from the move's start, its length and its curve. */
@@ -145,6 +160,7 @@ export const tunedRecord = (move: string, clips: readonly Clip[]) =>
       delay: Math.round(clip.start + clip.delay),
       duration: Math.round(clip.duration),
       easing: clip.easing,
+      offTokens: clip.adHoc,
     }));
 
 /** The token whose curve is `easing`, when one is; `linear` is its own. */
@@ -287,11 +303,10 @@ export class Replays {
   }
 
   /** Every clip played from `t`, at `rate` (1, or a quarter); each lets its element go as it ends. */
-  play(clips: readonly Clip[], t: number, rate: number): void {
+  play(clips: readonly Clip[], t: number): void {
     for (const clip of clips) {
       const replay = this.#of(clip);
       if (replay) {
-        replay.playbackRate = rate;
         replay.currentTime = t - clip.start;
         replay.onfinish = () => this.#let(clip.id, replay);
         replay.play();
@@ -433,7 +448,7 @@ export function tracksOf(clips: readonly Clip[]): Track[] {
         thing: first.thing,
         name: first.element,
         how: howOf(sorted),
-        kind: kindOf(first.property),
+        kind: kindOf(sorted),
         setOff: Math.min(...sorted.map((clip) => clip.start)),
         sprung: sorted.some((clip) => clip.spring !== null),
         begins: beginOf(first),

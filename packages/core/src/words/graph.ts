@@ -65,18 +65,12 @@ export const graphWords = {
   noMove: (state: string) => `${state} has no animation.`,
   play: "Play",
   pause: "Pause",
-  playQuarter: "Play at quarter speed",
-  /** The playhead's time over the move's length, tabular figures. */
-  playhead: (at: Figure, of: Figure) => `${at} / ${of} ms`,
+  /** The playhead's time over the move's length, tabular figures; a narrow corner breaks it after the slash, never between a figure and its unit. */
+  playhead: (at: Figure, of: Figure) => `${at}\u00a0/ ${of}\u00a0ms`,
   scrub: "Time",
   /** A clip's two handles on its bar. */
   clipStarts: (clip: string) => `Start of ${clip}`,
   clipEnds: (clip: string) => `End of ${clip}`,
-  /** Clips outside DESIGN.md's tokens, flagged once at the move's head. */
-  adHoc: (n: number) =>
-    n === 1
-      ? "1 timing is not from the design system"
-      : `${n} timings are not from the design system`,
   /** While the move is read off the stage. */
   reading: "Reading the animation…",
   /** The move played but the engine saw nothing animate. */
@@ -161,8 +155,6 @@ export const graphWords = {
   resetCurve: (curve: string) => `Reset curve to ${curve}`,
   /** The start chip's value is its delay; 0 when the agent set none. */
   resetDelay: (ms: Figure) => `Reset delay to ${ms} ms`,
-  /** The head's count once anything is edited. */
-  edits: (n: number, said: Figure) => (n === 1 ? "1 edit" : `${said} edits`),
   /** Reset, every value back: the visible word is `reset`; a reader hears its object. */
   resetAll: "Reset all edits",
   /** The start chip, shown only when the clip starts after the move sets it off. */
@@ -176,12 +168,6 @@ export const graphWords = {
   propertyOf: (name: string, from: Figure, to: Figure, unit: string) =>
     `${name} from ${from} to ${to} ${unit}`,
 
-  /** The head's switch once there are edits: the animation as read, or as changed; its name for a reader. */
-  timings: "Timings",
-  original: "Original",
-  edited: "Edited",
-  /** The moment a row's animation was started, before any delay: its mark on the lane. */
-  triggeredAt: (ms: Figure) => `Triggered at ${ms} ms`,
   /** A row with several animations, opened into one row each. */
   showClips: (n: number) => `Show ${n} animations`,
   hideClips: (n: number) => `Hide ${n} animations`,
