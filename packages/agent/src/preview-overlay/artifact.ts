@@ -35,6 +35,7 @@ import {
   MADE_ARTIFACT_KINDS,
   type MadeArtifactKind,
 } from "@cawco/core/artifact-kinds";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   CHOICE_LIMITS,
   type ChoiceChange,
@@ -57,6 +58,7 @@ import {
 } from "@cawco/core/comments";
 import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
 import type { MapDoc } from "@cawco/core/doc-maps";
+import { commentWords } from "@cawco/core/words/comments";
 import { here } from "./boot";
 import type { DeviceCopy, FromWorker, ToWorker } from "./doc-wire";
 import { Mirror } from "./mirror";
@@ -182,6 +184,32 @@ let worker: Worker | null = null;
 /** The page may start no worker here (its policy refused one): it keeps no doc. */
 let workerless = false;
 const tell = (message: ToWorker) => worker?.postMessage(message);
+
+/** How long a Send waits for its answer, the page's writes asked of the worker and the hub's reply both, ms. Our call: a Send is answered in a second or two. */
+const SEND_WITHIN_MS = 15_000;
+
+/** The worker's answers to the page's asks for its own writes (`writes`), by ask. */
+const writesAsked = new Map<number, (update: Uint8Array) => void>();
+let lastAsk = 0;
+/** What the page's own client wrote to the doc, as one Yjs update the worker encodes. */
+const ownWrites = (): Promise<Uint8Array> =>
+  new Promise((resolve) => {
+    lastAsk += 1;
+    writesAsked.set(lastAsk, resolve);
+    tell({ type: "writes", id: lastAsk });
+  });
+
+/** Bytes one `String.fromCharCode` spreads at most: well under any engine's argument limit. Our call. */
+const CHUNK = 32_768;
+
+/** Bytes as base64, a chunk at a time. */
+const toBase64 = (bytes: Uint8Array): string => {
+  let binary = "";
+  for (let at = 0; at < bytes.length; at += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + CHUNK));
+  }
+  return btoa(binary);
+};
 
 const mirror = new Mirror((ops, seq) => tell({ type: "write", ops, seq }));
 let watchers: Watchers | null = null;
@@ -503,6 +531,10 @@ const heard = (message: FromWorker) => {
       restart(message.generation);
       watchers?.refused(message.reason);
       return;
+    case "writes":
+      writesAsked.get(message.id)?.(message.update);
+      writesAsked.delete(message.id);
+      return;
     case "replica":
       for (const replica of replicas) {
         replica(message.generation, message.update);
@@ -813,27 +845,51 @@ export const artifact = {
    * The person sends (`cawco.send`): the session hears it has new
    * responses to read, `text` kept with them, through the listener's send
    * beside the doc's socket, with the control the page says was pressed
-   * (core `SEND_CONTROLS`; the hub's journal names it). Waits for the doc to
-   * hold the hub's state first, so what this page wrote is on the hub
-   * before the hub reads it.
+   * (core `SEND_CONTROLS`; the hub's journal names it). The send carries
+   * everything this page wrote to the doc (core `SendBody.writes`), which
+   * the hub applies before it reads the picks, so what the page counts is
+   * what is sent whether or not the doc's socket is open. Answered within
+   * {@link SEND_WITHIN_MS}, else it fails in the error formula and the
+   * picks stay on the page for Send again.
    */
   send: async (text?: string, control?: unknown): Promise<void> => {
     if (!syncPath) {
       throw new Error(NO_ARTIFACT);
     }
-    await syncedOnce;
-    const response = await fetch(`${syncPath}/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...(text ? { text } : {}),
-        ...(isSendControl(control) ? { control } : {}),
-      }),
-    });
-    if (!response.ok) {
+    const path = `${syncPath}/send`;
+    let read: Bounded<string | null>;
+    try {
+      read = await readWithin(SEND_WITHIN_MS, async (signal) => {
+        const writes = await ownWrites();
+        const response = await fetch(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...(text ? { text } : {}),
+            ...(isSendControl(control) ? { control } : {}),
+            writes: toBase64(writes),
+          }),
+          signal,
+        });
+        if (response.ok) {
+          return null;
+        }
+        const said = await response.text().catch(() => "");
+        return said.slice(0, 300) || "The hub refused the send.";
+      });
+    } catch (error) {
       throw new Error(
-        (await response.text()).slice(0, 300) || "The hub refused the send."
+        commentWords.sendUnreached(
+          error instanceof Error ? error.message : String(error)
+        ),
+        { cause: error }
       );
+    }
+    if (read.kind === "unanswered") {
+      throw new Error(commentWords.sendUnanswered(SEND_WITHIN_MS / 1000));
+    }
+    if (read.value !== null) {
+      throw new Error(read.value);
     }
   },
 

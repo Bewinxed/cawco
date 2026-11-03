@@ -15600,7 +15600,7 @@ export const createServer = (
     unreachable: previewUnreachable,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     pictures: artifactPictures(artifacts.pictures),
-    send: artifactSend(artifacts.send),
+    send: artifactSend(artifacts.send, artifactDocs),
     socket: artifactSocket(artifactDocs),
     seed: artifactDocs.seed,
     program: (artifactId, reachedAt) => {

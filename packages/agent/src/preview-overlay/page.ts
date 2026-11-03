@@ -1204,6 +1204,8 @@ Object.defineProperty(window, "cawco", {
     send: async (text = "", control?: string) => {
       try {
         await artifact.send(text.trim(), control);
+        // A Send that went takes down the host's line for one that didn't.
+        post("cawco:resolved", { of: "send" });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         failed("send", message);

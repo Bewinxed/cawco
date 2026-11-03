@@ -41,6 +41,7 @@ import {
   type MarkPictures,
   pinsProblem,
   SEND_CONTROLS,
+  SEND_WRITES_MAX,
   type SendBody,
   seenProblem,
 } from "@cawco/core/comments";
@@ -463,8 +464,8 @@ const holdClaims = (docs: ArtifactDocs, artifactId: string) => {
   });
 };
 
-/** The longest send body read: its text at its bound, as JSON. */
-const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note + 4096;
+/** The longest send body read: its text and the page's writes at their bounds, as JSON. */
+const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note + SEND_WRITES_MAX + 4096;
 
 /** The longest pictures body read: its pictures and its address at their bounds, as JSON. */
 const PICTURES_BODY_MAX =
@@ -477,7 +478,9 @@ const MARK_ID_MAX = 100;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/u;
 
-const SEND_SHAPE = "Send takes JSON: { text?, pins?, control? }.";
+const SEND_SHAPE = "Send takes JSON: { text?, pins?, control?, writes? }.";
+
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/u;
 
 const PICTURES_SHAPE = "Pictures take JSON: { pictures, url? }.";
 
@@ -514,6 +517,17 @@ const sendBodyProblem = (body: unknown): string | null => {
   }
   if (!ids(body.again)) {
     return `again is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
+  }
+  const { writes } = body;
+  if (
+    writes !== undefined &&
+    !(
+      typeof writes === "string" &&
+      writes.length <= SEND_WRITES_MAX &&
+      BASE64.test(writes)
+    )
+  ) {
+    return `writes is a base64 Yjs update of at most ${SEND_WRITES_MAX.toLocaleString()} characters.`;
   }
   return null;
 };
@@ -611,7 +625,46 @@ const sentBody = ({ text, pins, again, control }: SendBody): SendBody => ({
 });
 
 /**
- * The person sends their picks (`cawco.send`): what the send applies first
+ * One update from a person's client, applied to artifact `artifactId`'s
+ * doc as `origin`'s within the bounds (see the top): from its socket, or
+ * carried by its Send. Why it isn't, or null once it is.
+ */
+const takeUpdate = (
+  docs: ArtifactDocs,
+  artifactId: string,
+  update: Uint8Array,
+  origin: { client: ArtifactClient } | undefined
+): string | null => {
+  const doc = docs.doc(artifactId);
+  const problem = updateProblem(doc, update);
+  if (problem) {
+    return problem;
+  }
+  applyUpdate(doc, update, origin);
+  if (doc.getMap("meta").get("kind") === "canvas") {
+    holdClaims(docs, artifactId);
+  }
+  return null;
+};
+
+/**
+ * A Send's carried writes as one person's change: a client no socket
+ * holds, so every joined client hears the update, the page's own socket
+ * among them, which already holds it.
+ */
+const sendOrigin = (): { client: ArtifactClient } => ({
+  client: {
+    beat: () => undefined,
+    close: () => undefined,
+    screen: false,
+    send: () => undefined,
+  },
+});
+
+/**
+ * The person sends their picks (`cawco.send`): the page's own writes it
+ * carries applied first, as its socket's would be ({@link takeUpdate}), so
+ * the picks the page counts are the ones read; then what the send applies
  * (a project's setup page: its fleet choices and place), then the session
  * hears it has new responses to read (service.ts `send`). `instanceId`
  * already owns `artifactId` (the listener checked).
@@ -623,7 +676,8 @@ export const artifactSend =
       artifactId: string,
       body: SendBody,
       route: string
-    ) => Promise<ArtifactChoices>
+    ) => Promise<ArtifactChoices>,
+    docs: ArtifactDocs
   ) =>
   async (
     request: Request,
@@ -652,6 +706,18 @@ export const artifactSend =
     const problem = sendBodyProblem(body);
     if (problem) {
       return new Response(problem, { status: 400 });
+    }
+    const { writes } = body as SendBody;
+    if (writes) {
+      const refused = takeUpdate(
+        docs,
+        artifactId,
+        new Uint8Array(Buffer.from(writes, "base64")),
+        sendOrigin()
+      );
+      if (refused) {
+        return new Response(refused, { status: 422 });
+      }
     }
     try {
       return Response.json(
@@ -709,16 +775,15 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
     ) {
       return;
     }
-    const update = readVarUint8Array(decoder);
-    const problem = updateProblem(doc, update);
+    const problem = takeUpdate(
+      docs,
+      artifactId,
+      readVarUint8Array(decoder),
+      origin
+    );
     if (problem) {
       socket.data.refused = true;
       socket.send(refusal(problem));
-      return;
-    }
-    applyUpdate(doc, update, origin);
-    if (doc.getMap("meta").get("kind") === "canvas") {
-      holdClaims(docs, artifactId);
     }
   },
   close(socket: ServerWebSocket<ArtifactSocket>) {

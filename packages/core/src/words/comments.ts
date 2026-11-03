@@ -70,6 +70,12 @@ export const commentWords = {
   notSentHead: NOT_SENT,
   notSent: (why: string) => `${NOT_SENT} ${why.replace(FINAL_STOP, "")}.`,
   notOnHub: "it hasn't reached the hub yet, and is kept on this device",
+  /** The page's Send that the hub didn't answer within its bound, `seconds`. */
+  sendUnanswered: (seconds: number) =>
+    `${NOT_SENT} the hub didn't answer within ${seconds} seconds (timeout). Your picks are kept on this page. Press Send again.`,
+  /** The page's Send that never reached the hub: the browser's reason. */
+  sendUnreached: (cause: string) =>
+    `${NOT_SENT} the hub couldn't be reached (${cause.replace(FINAL_STOP, "")}). Your picks are kept on this page. Press Send again.`,
   // Changed since you looked: the tag over the page, and what a screen reader hears.
   changedSince: (n: number) => `${n} changed since you looked`,
   changeOf: (k: number, n: number) => `${k} of ${n}`,

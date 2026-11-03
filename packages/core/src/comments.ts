@@ -125,10 +125,10 @@ export interface MarkPictures {
 
 /**
  * What a Send carries beside the doc: the person's note (the page's
- * `cawco.send(text)`) with their picks, and the control pressed; or,
- * for a comment's Try again after a delivery no one took, that comment
- * alone by its pin's id. The person's comments are never a Send's: they go
- * by themselves.
+ * `cawco.send(text)`) with their picks, the page's own writes to the doc
+ * (`writes`), and the control pressed; or, for a comment's Try again after
+ * a delivery no one took, that comment alone by its pin's id. The person's
+ * comments are never a Send's: they go by themselves.
  */
 export interface SendBody {
   /** The person's Ask again: these comments, changed under with no answer, go to the session again, whole. */
@@ -137,7 +137,17 @@ export interface SendBody {
   control?: SendControl;
   pins?: string[];
   text?: string;
+  /**
+   * Everything the page's own Yjs client wrote to the doc, as one base64
+   * update: the hub applies it, under the same check as the doc's socket,
+   * before it reads the picks, so a Send carries the picks it counts
+   * whether or not that socket has carried them yet.
+   */
+  writes?: string;
 }
+
+/** The longest `writes` a Send carries, in base64 characters. Our call: a page's own picks, pins and ink are a few KB. */
+export const SEND_WRITES_MAX = 4 * 1024 * 1024;
 
 /**
  * The controls that send a page, each as the journal names it: the page's

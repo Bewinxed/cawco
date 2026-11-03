@@ -24,6 +24,7 @@
   import { pageVisible } from "#lib/cawco/page-visible.svelte.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
+  import { previewError, previewErrorOf } from "#lib/cawco/preview/wire.js";
   import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -56,6 +57,12 @@
   let problem = $state<string | null>(null);
   /** The page said it is ready (`cawco:ready`): its overlay joined it. */
   let connected = $state(false);
+  /**
+   * Why the page's last Send didn't go, in the error formula, as the page
+   * said it (`cawco:error` of a send); its own Send goes again, and the
+   * line stands until a Send goes (`cawco:resolved`) or the page loads again.
+   */
+  let notSent = $state<string | null>(null);
   let turnedAway = 0;
   /**
    * When the frame last stood without the pass it may hold now
@@ -115,6 +122,7 @@
     problem = null;
     src = null;
     connected = false;
+    notSent = null;
     turnedAway = 0;
     pageSource({ project }, wanted).then((found) => {
       if (!live) {
@@ -205,8 +213,17 @@
       )) {
         return;
       }
-      const type = (event.data as { type?: unknown } | null)?.type;
-      if (type === "cawco:ready") {
+      const told = event.data as {
+        message?: unknown;
+        of?: unknown;
+        type?: unknown;
+      } | null;
+      const type = told?.type;
+      if (type === "cawco:error" && previewErrorOf(told?.of) === "send") {
+        notSent = previewError(told?.message);
+      } else if (type === "cawco:resolved") {
+        notSent = null;
+      } else if (type === "cawco:ready") {
         connected = true;
         turnedAway = 0;
         since = performance.now();
@@ -241,6 +258,17 @@
     <EmptyState action={again} icon={IconDocument} line={problem} {title} />
   </div>
 {:else if src}
+  {#if notSent}
+    <!-- The page's Send that didn't go: said over the page, never over its
+         Send, which goes again from where it stands. -->
+    <p
+      class="m-0 flex-none px-space-3 py-space-2 bg-surface-raised border-b border-border-hairline text-data-bad text-size-body text-pretty wrap-anywhere"
+      role="alert"
+      in:reveal
+    >
+      {notSent}
+    </p>
+  {/if}
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
   <!-- biome-ignore lint/security/useIframeSandbox: a page CawCo serves itself under /__cawco, which needs scripts and its own origin to run, and with both a sandbox holds nothing back. -->
   <iframe

@@ -35,7 +35,9 @@ import {
   AbstractType,
   applyUpdate,
   Doc,
+  decodeStateVector,
   encodeStateAsUpdate,
+  encodeStateVector,
   type Transaction,
   type Map as YMap,
 } from "yjs";
@@ -371,6 +373,19 @@ const refused = (reason: string) => {
     });
 };
 
+/**
+ * What this doc's own client wrote, as one update: every item of its
+ * clientID and the doc's deletions (Yjs encodes a delete set whole), the
+ * rest left out by naming every other client at the clock the doc holds.
+ * The page's write batches reach the worker before the ask does, so the
+ * update holds every pick the page counts.
+ */
+const ownWrites = (): Uint8Array => {
+  const others = decodeStateVector(encodeStateVector(doc));
+  others.delete(doc.clientID);
+  return encodeStateAsUpdate(doc, encodeStateVector(others));
+};
+
 /** The page's writes, in one transaction, as plain values. */
 const write = (ops: WriteOp[]) => {
   doc.transact(() => {
@@ -409,6 +424,9 @@ worker.addEventListener("message", ({ data: message }) => {
     case "reconnect":
       provider?.disconnect();
       provider?.connect();
+      return;
+    case "writes":
+      post({ type: "writes", id: message.id, update: ownWrites() });
       return;
     case "shown":
       shown.visibilityState = message.visible ? "visible" : "hidden";
