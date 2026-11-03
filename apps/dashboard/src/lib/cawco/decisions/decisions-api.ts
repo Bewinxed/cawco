@@ -9,6 +9,7 @@ import type {
   DecisionsList,
 } from "@cawco/core/decisions";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { openPageWrites } from "#lib/cawco/preview/open-pages.js";
 
 const base = (projectId: string) =>
   `/api/projects/${encodeURIComponent(projectId)}/decisions`;
@@ -35,17 +36,29 @@ export async function readDecision(
   );
 }
 
-/** I'm done picking (no words), the page's Send; or a note (words), said to its session as the person's words, never a Send: its session hears it, or Caw. */
+/**
+ * I'm done picking (no words), the page's Send, carrying what a frame open
+ * on page `artifactId` in this tab shows that the hub isn't known to hold
+ * (open-pages.ts; with none open, the hub's doc is what goes); or a note
+ * (words), said to its session as the person's words, never a Send: its
+ * session hears it, or Caw.
+ */
 export async function sendDecision(
   projectId: string,
   name: string,
+  artifactId: string | null,
   text?: string
 ): Promise<DecisionSent> {
+  const writes =
+    text || !artifactId ? undefined : await openPageWrites(artifactId);
   return answered(
     await fetch(`${base(projectId)}/${encodeURIComponent(name)}/send`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(text ? { text } : {}),
+      body: JSON.stringify({
+        ...(text ? { text } : {}),
+        ...(writes ? { writes } : {}),
+      }),
     })
   );
 }

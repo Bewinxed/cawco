@@ -51,6 +51,7 @@ import type {
   ProjectOfferSummary,
   ProjectStopFrame,
 } from "@cawco/core/frames";
+import { servedAsPreview } from "@cawco/core/frames";
 import type {
   EffortLevel,
   HarnessCapabilities,
@@ -5872,8 +5873,19 @@ function dropDeadSocket(socket: WebSocket): void {
 /** The sends an earlier load kept were sent again: once per load of the page. */
 let keptSendsResumed = false;
 
-/** What routes call on mount: the socket is app-scoped, not page-scoped. */
+/**
+ * What routes call on mount: the socket is app-scoped, not page-scoped. A
+ * document the hub's preview proxy served (core `servedAsPreview`: the
+ * dashboard run as a workspace's preview, embedded in a decision page or
+ * shown in a panel, on an artifact's own origin) holds no dashboard socket:
+ * that origin is no dashboard's, its `/ws/dashboard` is refused, and every
+ * retry's handshake queues with the page's other sockets to the same
+ * address (a browser opens one at a time per address, RFC 6455 §4.1).
+ */
 export function ensureConnected(): void {
+  if (servedAsPreview(document)) {
+    return;
+  }
   globalThis.__cawcoHubAsked = true;
   if (!keptSendsResumed) {
     keptSendsResumed = true;

@@ -3259,6 +3259,15 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:pins-shown": (message) => pins.show(message.shown !== false),
     // The host's Try again on a lost link: the doc's socket opened again now.
     "cawco:reconnect": () => artifact.reconnect(),
+    // A Send the host makes (its head's, a Needs you row's, the Decisions
+    // tab's) carries what this page shows that the hub isn't known to hold.
+    "cawco:writes": async (message) => {
+      const { id } = message;
+      if (typeof id !== "number") {
+        return;
+      }
+      post("cawco:writes", { id, writes: await artifact.writes() });
+    },
     "cawco:focus-pin": (message) =>
       pins.focus(
         idOf(message),

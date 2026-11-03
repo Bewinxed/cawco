@@ -35,6 +35,7 @@ import {
   MADE_ARTIFACT_KINDS,
   type MadeArtifactKind,
 } from "@cawco/core/artifact-kinds";
+import { base64ToBytes, bytesToBase64 } from "@cawco/core/base64";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   CHOICE_LIMITS,
@@ -191,25 +192,13 @@ const SEND_WITHIN_MS = 15_000;
 /** The worker's answers to the page's asks for its own writes (`writes`), by ask. */
 const writesAsked = new Map<number, (update: Uint8Array) => void>();
 let lastAsk = 0;
-/** What the page's own client wrote to the doc, as one Yjs update the worker encodes. */
-const ownWrites = (): Promise<Uint8Array> =>
+/** What the doc holds that the hub isn't known to (the page's writes, the device's copy's), as one Yjs update the worker encodes. */
+const unheardWrites = (): Promise<Uint8Array> =>
   new Promise((resolve) => {
     lastAsk += 1;
     writesAsked.set(lastAsk, resolve);
     tell({ type: "writes", id: lastAsk });
   });
-
-/** Bytes one `String.fromCharCode` spreads at most: well under any engine's argument limit. Our call. */
-const CHUNK = 32_768;
-
-/** Bytes as base64, a chunk at a time. */
-const toBase64 = (bytes: Uint8Array): string => {
-  let binary = "";
-  for (let at = 0; at < bytes.length; at += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(at, at + CHUNK));
-  }
-  return btoa(binary);
-};
 
 const mirror = new Mirror((ops, seq) => tell({ type: "write", ops, seq }));
 let watchers: Watchers | null = null;
@@ -606,14 +595,6 @@ const deviceCopy = (id: string): DeviceCopy => {
   return deviceDocName(id);
 };
 
-const decode = (base64: string): Uint8Array | null => {
-  try {
-    return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-  } catch {
-    return null;
-  }
-};
-
 /** The mirror filled from the hub's embedded maps, as the worker's doc will hold them once seeded. */
 const fill = (maps: string) => {
   let parsed: unknown;
@@ -651,7 +632,7 @@ export const artifact = {
     kind: string | undefined,
     maps: string | undefined
   ) => {
-    const update = decode(state);
+    const update = base64ToBytes(state);
     if (!(update && started())) {
       return;
     }
@@ -846,9 +827,10 @@ export const artifact = {
    * responses to read, `text` kept with them, through the listener's send
    * beside the doc's socket, with the control the page says was pressed
    * (core `SEND_CONTROLS`; the hub's journal names it). The send carries
-   * everything this page wrote to the doc (core `SendBody.writes`), which
-   * the hub applies before it reads the picks, so what the page counts is
-   * what is sent whether or not the doc's socket is open. Answered within
+   * what the doc holds that the hub isn't known to ({@link artifact.writes},
+   * core `SendBody.writes`), which the hub applies before it reads the
+   * picks, so what the page shows is what is sent whether or not the doc's
+   * socket is open. Answered within
    * {@link SEND_WITHIN_MS}, else it fails in the error formula and the
    * picks stay on the page for Send again.
    */
@@ -860,14 +842,14 @@ export const artifact = {
     let read: Bounded<string | null>;
     try {
       read = await readWithin(SEND_WITHIN_MS, async (signal) => {
-        const writes = await ownWrites();
+        const writes = bytesToBase64(await unheardWrites());
         const response = await fetch(path, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             ...(text ? { text } : {}),
             ...(isSendControl(control) ? { control } : {}),
-            writes: toBase64(writes),
+            writes,
           }),
           signal,
         });
@@ -892,6 +874,16 @@ export const artifact = {
       throw new Error(read.value);
     }
   },
+
+  /**
+   * What the doc holds that the hub isn't known to: the person's picks and
+   * marks made here, and those the device's copy gave back, as one base64
+   * Yjs update (core `SendBody.writes`), for a Send to carry, the page's
+   * own or one its host makes (`cawco:writes`); null when this page joined
+   * no doc.
+   */
+  writes: async (): Promise<string | null> =>
+    syncPath ? bytesToBase64(await unheardWrites()) : null,
 
   /**
    * This page's pictures of the person's marks it holds unheard, to the hub

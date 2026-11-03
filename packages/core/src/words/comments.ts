@@ -73,6 +73,9 @@ export const commentWords = {
   /** The page's Send that the hub didn't answer within its bound, `seconds`. */
   sendUnanswered: (seconds: number) =>
     `${NOT_SENT} the hub didn't answer within ${seconds} seconds (timeout). Your picks are kept on this page. Press Send again.`,
+  /** A Send the dashboard makes whose open page didn't hand over its picks within `seconds`. */
+  sendPageSilent: (seconds: number) =>
+    `${NOT_SENT} the page open here didn't hand over its picks within ${seconds} seconds (timeout). Your picks are kept on the page. Press Send again.`,
   /** The page's Send that never reached the hub: the browser's reason. */
   sendUnreached: (cause: string) =>
     `${NOT_SENT} the hub couldn't be reached (${cause.replace(FINAL_STOP, "")}). Your picks are kept on this page. Press Send again.`,

@@ -18,6 +18,7 @@
     "./css-target": "./src/css-target.ts",
     "./css-layers": "./src/css-layers.ts",
     "./at-most": "./src/at-most.ts",
+    "./base64": "./src/base64.ts",
     "./bounded": "./src/bounded.ts",
     "./time": "./src/time.ts",
     "./unhandled": "./src/unhandled.ts",

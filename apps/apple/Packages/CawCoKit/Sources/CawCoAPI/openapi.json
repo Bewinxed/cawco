@@ -9262,6 +9262,11 @@
                   "text": {
                     "maxLength": 2000,
                     "type": "string"
+                  },
+                  "writes": {
+                    "maxLength": 4194304,
+                    "description": "What the page open in the person's tab shows that the hub isn't known to hold: one base64 Yjs update, applied before the picks are read.",
+                    "type": "string"
                   }
                 }
               }

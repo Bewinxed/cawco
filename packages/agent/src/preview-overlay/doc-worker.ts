@@ -38,6 +38,7 @@ import {
   decodeStateVector,
   encodeStateAsUpdate,
   encodeStateVector,
+  encodeStateVectorFromUpdate,
   type Transaction,
   type Map as YMap,
 } from "yjs";
@@ -152,6 +153,25 @@ let quiet: StallWatch | null = null;
 let kept: IndexeddbPersistence | null = null;
 let joined: Extract<ToWorker, { type: "join" }> | null = null;
 let replicating = false;
+/**
+ * What of the doc the hub is known to hold, as a state vector: the copy it
+ * embedded in the page (`seed`) and every update it sent on the socket,
+ * each client's clock the furthest either reached (the hub's doc holds
+ * each client's updates in clock order, so it holds all below). The page's
+ * own writes and the device's copy are never counted: the hub may lack them.
+ */
+let hubHolds = new Map<number, number>();
+
+/** Update `update` came from the hub: what it holds reaches at least as far as it does. */
+const heardFromHub = (update: Uint8Array) => {
+  for (const [client, clock] of decodeStateVector(
+    encodeStateVectorFromUpdate(update)
+  )) {
+    if (clock > (hubHolds.get(client) ?? 0)) {
+      hubHolds.set(client, clock);
+    }
+  }
+};
 
 const originOf = (transaction: Transaction): ChangeOrigin => {
   const { origin } = transaction;
@@ -229,6 +249,13 @@ const watch = (own: Doc, at: number) => {
     }
   });
   own.on("update", (update: Uint8Array, origin: unknown) => {
+    // y-websocket applies what the hub sends with its provider as the origin.
+    if (
+      own === doc &&
+      (origin === SEED || origin instanceof WebsocketProvider)
+    ) {
+      heardFromHub(update);
+    }
     if (replicating && own === doc && origin !== REPLICA) {
       post({ type: "replica", generation: at, update });
     }
@@ -271,6 +298,7 @@ const replaceDoc = (next: number) => {
   // Its device copy lets go with it (y-indexeddb destroys on the doc's destroy).
   doc.destroy();
   doc = new Doc();
+  hubHolds = new Map();
   generation = next;
   watch(doc, generation);
   handReplica();
@@ -374,17 +402,14 @@ const refused = (reason: string) => {
 };
 
 /**
- * What this doc's own client wrote, as one update: every item of its
- * clientID and the doc's deletions (Yjs encodes a delete set whole), the
- * rest left out by naming every other client at the clock the doc holds.
- * The page's write batches reach the worker before the ask does, so the
- * update holds every pick the page counts.
+ * What the doc holds that the hub isn't known to ({@link hubHolds}), as one
+ * update: the page's own writes, those the device's copy gave back, and the
+ * doc's deletions (Yjs encodes a delete set whole). The page's write
+ * batches reach the worker before the ask does, so the update holds every
+ * pick the page shows.
  */
-const ownWrites = (): Uint8Array => {
-  const others = decodeStateVector(encodeStateVector(doc));
-  others.delete(doc.clientID);
-  return encodeStateAsUpdate(doc, encodeStateVector(others));
-};
+const unheardWrites = (): Uint8Array =>
+  encodeStateAsUpdate(doc, encodeStateVector(hubHolds));
 
 /** The page's writes, in one transaction, as plain values. */
 const write = (ops: WriteOp[]) => {
@@ -426,7 +451,7 @@ worker.addEventListener("message", ({ data: message }) => {
       provider?.connect();
       return;
     case "writes":
-      post({ type: "writes", id: message.id, update: ownWrites() });
+      post({ type: "writes", id: message.id, update: unheardWrites() });
       return;
     case "shown":
       shown.visibilityState = message.visible ? "visible" : "hidden";

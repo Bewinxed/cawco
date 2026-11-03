@@ -518,18 +518,7 @@ const sendBodyProblem = (body: unknown): string | null => {
   if (!ids(body.again)) {
     return `again is a list of 1 to ${COMMENT_LIMITS.pins} pin ids.`;
   }
-  const { writes } = body;
-  if (
-    writes !== undefined &&
-    !(
-      typeof writes === "string" &&
-      writes.length <= SEND_WRITES_MAX &&
-      BASE64.test(writes)
-    )
-  ) {
-    return `writes is a base64 Yjs update of at most ${SEND_WRITES_MAX.toLocaleString()} characters.`;
-  }
-  return null;
+  return sentWritesProblem(body.writes);
 };
 
 /** Why a pictures post's body is not one, or its fields; null when it is. */
@@ -648,18 +637,36 @@ const takeUpdate = (
 };
 
 /**
- * A Send's carried writes as one person's change: a client no socket
- * holds, so every joined client hears the update, the page's own socket
- * among them, which already holds it.
+ * A Send's carried writes (core `SendBody.writes`, base64) applied to
+ * artifact `artifactId`'s doc as the socket's would be ({@link takeUpdate}),
+ * one person's change by a client no socket holds, so every joined client
+ * hears the update, the page's own socket among them, which may already
+ * hold it. Why they aren't, or null once they are: every Send's route
+ * (the page's, the panel's, the Decisions tab's) applies them before it
+ * reads the picks.
  */
-const sendOrigin = (): { client: ArtifactClient } => ({
-  client: {
-    beat: () => undefined,
-    close: () => undefined,
-    screen: false,
-    send: () => undefined,
-  },
-});
+export const takeSentWrites = (
+  docs: ArtifactDocs,
+  artifactId: string,
+  writes: string
+): string | null =>
+  takeUpdate(docs, artifactId, new Uint8Array(Buffer.from(writes, "base64")), {
+    client: {
+      beat: () => undefined,
+      close: () => undefined,
+      screen: false,
+      send: () => undefined,
+    },
+  });
+
+/** Why `writes` is not a Send's carried writes (core `SendBody.writes`), or null. */
+const sentWritesProblem = (writes: unknown): string | null =>
+  writes === undefined ||
+  (typeof writes === "string" &&
+    writes.length <= SEND_WRITES_MAX &&
+    BASE64.test(writes))
+    ? null
+    : `writes is a base64 Yjs update of at most ${SEND_WRITES_MAX.toLocaleString()} characters.`;
 
 /**
  * The person sends their picks (`cawco.send`): the page's own writes it
@@ -709,12 +716,7 @@ export const artifactSend =
     }
     const { writes } = body as SendBody;
     if (writes) {
-      const refused = takeUpdate(
-        docs,
-        artifactId,
-        new Uint8Array(Buffer.from(writes, "base64")),
-        sendOrigin()
-      );
+      const refused = takeSentWrites(docs, artifactId, writes);
       if (refused) {
         return new Response(refused, { status: 422 });
       }

@@ -180,6 +180,7 @@
   } from "./comment-rows";
   import { loadedPanes } from "./loaded.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
+  import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
   import { markFace, markState } from "./PinMark.svelte";
   import PlacePick from "./PlacePick.svelte";
@@ -833,6 +834,22 @@
    * it. The new page's ready says everything again.
    */
   let readyFrom = "";
+  // While its page stands ready here, a Send the dashboard makes elsewhere
+  // (the head's, a Needs you row's) carries what this page shows
+  // (open-pages.ts).
+  $effect(() => {
+    const id = connected ? artifact?.id : undefined;
+    if (!id) {
+      return;
+    }
+    return holdOpen(
+      id,
+      frameHand(
+        () => iframe,
+        () => (readyFrom === paneOrigin ? paneOrigin : null)
+      )
+    );
+  });
   /** To the page, on its own origin alone, once that origin's page said it is ready (`hello`, the answer to it, goes at once). */
   function post(message: object, hello = false) {
     if (paneOrigin && (hello || readyFrom === paneOrigin)) {

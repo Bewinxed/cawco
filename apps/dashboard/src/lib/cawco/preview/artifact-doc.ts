@@ -33,6 +33,7 @@ import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { openPageWrites } from "./open-pages";
 
 /**
  * The pane's hold on an artifact's live document (Projects spec §5.10): the
@@ -172,7 +173,7 @@ export const artifactSyncPath = (artifactId: string): string =>
 async function postSend(
   instanceId: string,
   artifactId: string,
-  body: Pick<SendBody, "again" | "control" | "pins">,
+  body: Pick<SendBody, "again" | "control" | "pins" | "writes">,
   again: string
 ): Promise<void> {
   const response = await fetch(
@@ -188,13 +189,25 @@ async function postSend(
   }
 }
 
-/** The person's Send (the head's, a Needs you row's, named by `control`): the page's picks go to the session. Their comments go by themselves. */
-export const sendArtifact = (
+/**
+ * The person's Send (the head's, a Needs you row's, named by `control`):
+ * the page's picks go to the session, carrying what a frame open on it in
+ * this tab shows that the hub isn't known to hold (open-pages.ts); with
+ * none open, the hub's doc is what goes. Their comments go by themselves.
+ */
+export const sendArtifact = async (
   instanceId: string,
   artifactId: string,
   control: "needs-you" | "panel-head" | "panel-more"
-): Promise<void> =>
-  postSend(instanceId, artifactId, { control }, commentWords.notSentThen);
+): Promise<void> => {
+  const writes = await openPageWrites(artifactId);
+  await postSend(
+    instanceId,
+    artifactId,
+    { control, ...(writes ? { writes } : {}) },
+    commentWords.notSentThen
+  );
+};
 
 /** A comment's Try again, after a delivery no one took: it goes to the session now. */
 export const retryComment = (

@@ -44,7 +44,7 @@ export type ToWorker =
   | { ops: WriteOp[]; seq: number; type: "write" }
   /** The socket closed and opened again now (the host's Try again). */
   | { type: "reconnect" }
-  /** What the page's own client wrote to the doc, for a Send to carry; answered as `writes` with the same `id`. */
+  /** What the doc holds that the hub isn't known to, for a Send to carry; answered as `writes` with the same `id`. */
   | { id: number; type: "writes" }
   /** Whether the page is shown: the silence watch rests while it is hidden. */
   | { type: "shown"; visible: boolean }
@@ -98,7 +98,7 @@ export type FromWorker =
     }
   /** Doc `generation`'s whole state, or one change to it, for the page's replica. */
   | { generation: number; type: "replica"; update: Uint8Array }
-  /** Everything the worker's own client wrote to the doc, and the deletions it holds, as one update: the answer to ask `id`. */
+  /** What the doc holds that the hub isn't known to (the page's writes, the device's), and its deletions, as one update: the answer to ask `id`. */
   | { id: number; type: "writes"; update: Uint8Array }
   /** Open a socket on the page, numbered `id`. */
   | { id: number; protocols: string[]; type: "socket-new"; url: string }

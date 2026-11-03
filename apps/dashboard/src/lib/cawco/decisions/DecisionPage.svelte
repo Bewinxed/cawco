@@ -192,7 +192,7 @@
     refusal = null;
     try {
       if (which === "send") {
-        await sendDecision(projectId, name);
+        await sendDecision(projectId, name, read?.artifactId ?? null);
       } else {
         read = await makeDecisionTasks(projectId, name);
       }
@@ -213,7 +213,7 @@
     sendingNote = true;
     refusal = null;
     try {
-      await sendDecision(projectId, name, said);
+      await sendDecision(projectId, name, null, said);
       note = "";
       await load(name);
     } catch (error) {

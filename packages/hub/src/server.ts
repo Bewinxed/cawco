@@ -584,6 +584,7 @@ import {
   artifactPictures,
   artifactSend,
   artifactSocket,
+  takeSentWrites,
 } from "./artifacts/sync";
 import {
   answeredWithOriginal,
@@ -25978,6 +25979,8 @@ export const createServer = (
         );
       }
     },
+    takeWrites: (artifactId, writes) =>
+      takeSentWrites(artifactDocs, artifactId, writes),
     stampSent: (artifactId) => {
       console.log(
         artifactToolWords.pageSent(

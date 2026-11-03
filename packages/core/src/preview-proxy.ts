@@ -4,6 +4,7 @@ import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { dataUrlBytes, deskCaptures } from "./captures";
+import { OVERLAY_PATH } from "./frames";
 import { HOP_BY_HOP_HEADERS } from "./hop-headers";
 import {
   PREVIEW_DOWN_META,
@@ -13,8 +14,6 @@ import {
 } from "./index";
 import { embeddedFile, standalone } from "./runtime";
 
-/** Where every previewed page loads the overlay from, on its own origin. */
-export const OVERLAY_PATH = "/__cawco/overlay.js";
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/iu;
 const HTML_OPEN = /<html(\s[^>]*)?\s*>/iu;
 const DOCTYPE = /^\s*<!doctype[^>]*>/iu;

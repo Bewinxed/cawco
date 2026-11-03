@@ -7,6 +7,7 @@
  */
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { PICTURES_TAG, type PictureSize } from "@cawco/core/decisions-library";
+import { OVERLAY_PATH } from "@cawco/core/frames";
 import type { CanvasShapes } from "@cawco/core/stage";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { getContext } from "svelte";
@@ -194,7 +195,7 @@ export const bridge = (): Bridge | null =>
 /** This page's artifact id and the overlay's served hash, from the overlay's tag. */
 export const overlayTag = (): { artifact: string | null; hash: string } => {
   const tag = document.querySelector<HTMLScriptElement>(
-    'script[src^="/__cawco/overlay.js"]'
+    `script[src^="${OVERLAY_PATH}"]`
   );
   return {
     artifact: tag?.dataset.artifact ?? null,

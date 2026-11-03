@@ -22,6 +22,7 @@
   import { artifactReached } from "#lib/cawco/files/reached.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { pageVisible } from "#lib/cawco/page-visible.svelte.js";
+  import { frameHand, holdOpen } from "#lib/cawco/preview/open-pages.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
   import { previewError, previewErrorOf } from "#lib/cawco/preview/wire.js";
@@ -138,6 +139,21 @@
     return () => {
       live = false;
     };
+  });
+
+  // While the page stands ready here, I'm done picking and every other Send
+  // the dashboard makes carries what it shows (open-pages.ts).
+  $effect(() => {
+    if (!connected) {
+      return;
+    }
+    return holdOpen(
+      artifactId,
+      frameHand(
+        () => frame,
+        () => origin
+      )
+    );
   });
 
   function post(message: object) {

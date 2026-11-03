@@ -14,10 +14,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildStageHost } from "../../packages/agent/src/stage-host/build";
 import { decisionHostFile } from "../../packages/core/src/decision-host";
+import { OVERLAY_PATH } from "../../packages/core/src/frames";
 import {
   injectOverlay,
   OVERLAY_KEY,
-  OVERLAY_PATH,
   overlayResponse,
 } from "../../packages/core/src/preview-proxy";
 import { type EmbedShape, storiesKey } from "../../packages/core/src/stage";

@@ -47,6 +47,7 @@ import {
   ENDED_STATUSES,
   type InstanceRow,
 } from "@cawco/core";
+import { SEND_WRITES_MAX } from "@cawco/core/comments";
 import {
   type AfterLinks,
   cardRef,
@@ -387,6 +388,8 @@ export interface DecisionsDeps {
   sendInFlight: (uuid: string) => boolean;
   /** Stamps a page's send when Caw took it in place of its ended session. */
   stampSent: (artifactId: string) => void;
+  /** A Send's carried writes (core `SendBody.writes`) applied to the artifact's doc (artifacts/sync.ts `takeSentWrites`): why not, or null. */
+  takeWrites: (artifactId: string, writes: string) => string | null;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
   tasks: (projectId: string) => Promise<DecidedTask[]>;
   /** The person's words or act to a session ({@link PersonsSend}), through the one send path, as the send `uuid`. */
@@ -1087,7 +1090,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
     async send(
       projectId: string,
       name: string,
-      text: string | undefined
+      text: string | undefined,
+      writes?: string
     ): Promise<DecisionSent> {
       const { read } = await find(projectId, name);
       if (!read.artifactId) {
@@ -1095,6 +1099,14 @@ export const createDecisions = (deps: DecisionsDeps) => {
           409,
           `${read.title} has no artifact on this hub to send on; its session can publish it again.`
         );
+      }
+      // What the page open in the person's tab shows goes in first, so the
+      // picks read are the ones they see (open-pages.ts).
+      if (writes) {
+        const refused = deps.takeWrites(read.artifactId, writes);
+        if (refused) {
+          throw new DecisionRefusal(422, refused);
+        }
       }
       const words = text?.trim() || undefined;
       const to = heardBy(read);
@@ -1358,11 +1370,23 @@ export const decisionRoutes = (decisions: Decisions) =>
       {
         body: t.Object({
           text: t.Optional(t.String({ maxLength: 2000 })),
+          writes: t.Optional(
+            t.String({
+              maxLength: SEND_WRITES_MAX,
+              description:
+                "What the page open in the person's tab shows that the hub isn't known to hold: one base64 Yjs update, applied before the picks are read.",
+            })
+          ),
         }),
       },
       async ({ params, body }) => {
         try {
-          return await decisions.send(params.id, params.name, body.text);
+          return await decisions.send(
+            params.id,
+            params.name,
+            body.text,
+            body.writes
+          );
         } catch (error) {
           return refused(error);
         }
