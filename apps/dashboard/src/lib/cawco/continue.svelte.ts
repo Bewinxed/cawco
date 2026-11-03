@@ -51,6 +51,8 @@ export interface SessionDraft {
   harness: HarnessKind;
   machineIds: string[];
   model: string;
+  /** The checkout a move takes, by place id, as its Move from choice picked it; absent: none picked. */
+  moveFrom?: string;
   /** None for a harness with no modes (pi), the one thing it may be. */
   permissionMode: PermissionMode | null;
   projectId: string | undefined;

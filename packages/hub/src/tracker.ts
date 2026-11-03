@@ -141,9 +141,7 @@ export interface TrackersDeps {
     | "refusedBy"
   >;
   readonly db: {
-    readonly project: (
-      id: string
-    ) => { id: string; remote: string | null } | undefined;
+    readonly project: (id: string) => { id: string } | undefined;
     readonly taskLinks: Pick<TaskLinksDb, "byItem" | "comments" | "putComment">;
     readonly trackers: TrackersDb;
   };

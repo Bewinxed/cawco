@@ -94,7 +94,8 @@ interface IngressRead {
     connection: string | null;
     polled: boolean;
     polledAt: number | null;
-    repo: string | null;
+    /** Every GitHub repository the project links, `owner/repo`. */
+    repos: string[];
     state: string;
   };
   routes: Omit<EventRoute, "service">[];
@@ -145,7 +146,7 @@ export async function readRoutinesPage(
       id: "github",
       service: "github",
       tool: null,
-      what: github.repo ?? routinesWords.theRepository,
+      what: github.repos.join(", ") || routinesWords.theRepository,
       everyS: null,
       polledAt: github.polledAt,
       failure: github.polled ? null : github.state,

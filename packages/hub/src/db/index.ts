@@ -228,6 +228,7 @@ import {
   presenceDevices,
   presenceSettings,
   projectAccounts,
+  projectLinks,
   projectNotes,
   projectOffers,
   projectPlaces,
@@ -422,6 +423,8 @@ export type ProjectRow = Omit<
 > & {
   /** The accounts its sessions may run on (`project_accounts`); null: every account. */
   accounts: string[] | null;
+  /** Its links (`project_links`), one per repository, oldest first. */
+  links: string[];
   places: PlaceRow[];
 };
 /** One task file as a project's task index holds it (tasks.ts). */
@@ -654,6 +657,16 @@ export interface DbShape {
         }
   ) => { place: PlaceRow; added: boolean };
   /**
+   * Links a repository (normalised remote) to a project, as the published
+   * copy of hub repository `publishedFrom` when one is named: whether it was
+   * not linked before.
+   */
+  readonly addProjectLink: (
+    id: string,
+    remote: string,
+    publishedFrom?: string
+  ) => boolean;
+  /**
    * A session continued in a new session (`to`) hands it its live work, in
    * one transaction: its delegates that have not ended, and the sessions of
    * its live items, become `to`'s; so do its live work items, every item of
@@ -731,6 +744,10 @@ export interface DbShape {
     lastTurnAt: number | null;
     threads: number;
   };
+  /** Every project's checkouts on `machineId`, oldest first: each one's `origin` is a link to read. */
+  readonly checkoutsOn: (
+    machineId: string
+  ) => { projectId: string; path: string }[];
   /** The gate workspaces, still with their checkout, that run a workspace's landing gate steps (the iOS build) on other machines. */
   readonly checkWorkspacesOf: (workspaceId: string) => WorkspaceRow[];
   /**
@@ -1637,7 +1654,7 @@ export interface DbShape {
    * first (dispatch.ts).
    */
   readonly projectAttempts: (projectId: string) => WorkItemRow[];
-  /** The oldest project whose checkouts are of `remote` (normalised). */
+  /** The oldest project that links `remote` (normalised). */
   readonly projectByRemote: (remote: string) => ProjectRow | undefined;
   /**
    * The project whose place on `machineId` holds `cwd` most closely (core
@@ -1647,6 +1664,11 @@ export interface DbShape {
   readonly projectHolding: (
     machineId: string,
     cwd: string
+  ) => string | undefined;
+  /** The link a project published hub repository `segment` as, if it has. */
+  readonly projectLinkPublishedFrom: (
+    projectId: string,
+    segment: string
   ) => string | undefined;
   /**
    * The hub's notes to the person about a project (caw.ts `notice`): `add`
@@ -1707,13 +1729,6 @@ export interface DbShape {
    * turns and every other session's reported usage. What its cap counts.
    */
   readonly projectSpentSince: (projectId: string, since: number) => number;
-  /**
-   * Projects whose remote is not known yet, each with a checkout on
-   * `machineId` to read it from.
-   */
-  readonly projectsWithoutRemote: (
-    machineId: string
-  ) => { projectId: string; path: string }[];
   /**
    * The projects with a work item on `machineId`: in a workspace there,
    * whatever checkout the project has there. The machine is sent their rows
@@ -2200,8 +2215,6 @@ export interface DbShape {
   ) => void;
   /** A move's "Don't move", remembered on its project; null forgets it. */
   readonly setProjectMoveDeclined: (id: string, at: Date | null) => void;
-  /** The repository a project's checkouts are of, once a machine has read it. */
-  readonly setProjectRemote: (id: string, remote: string) => void;
   /** The stage template a project last had applied: its starter skills follow it. */
   readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
@@ -2899,8 +2912,13 @@ const hubPlacePath = (projectId: string): HubFolder => `projects/${projectId}`;
 const withPlaces = (
   rows: (typeof projects.$inferSelect)[],
   places: PlaceRow[],
-  allowed: { accountId: string; projectId: string }[]
+  allowed: { accountId: string; projectId: string }[],
+  links: { projectId: string; remote: string }[]
 ): ProjectRow[] => {
+  const linksOf = new Map<string, string[]>();
+  for (const { projectId, remote } of links) {
+    linksOf.set(projectId, [...(linksOf.get(projectId) ?? []), remote]);
+  }
   const byProject = new Map<string, PlaceRow[]>();
   for (const place of places) {
     const listed = byProject.get(place.projectId);
@@ -2920,6 +2938,7 @@ const withPlaces = (
   return rows.map(({ accountsLimited, ...project }) => ({
     ...project,
     accounts: accountsLimited ? (accountsOf.get(project.id) ?? []) : null,
+    links: linksOf.get(project.id) ?? [],
     places: (byProject.get(project.id) ?? []).sort(
       (a, b) =>
         placeRank(a) - placeRank(b) ||
@@ -3517,6 +3536,12 @@ const make = async (path: string): Promise<DbShape> => {
             .from(projectAccounts)
             .where(eq(projectAccounts.projectId, id))
             .orderBy(sql`rowid`)
+            .all(),
+          from
+            .select()
+            .from(projectLinks)
+            .where(eq(projectLinks.projectId, id))
+            .orderBy(asc(projectLinks.createdAt), sql`rowid`)
             .all()
         )[0]
       : undefined;
@@ -7707,6 +7732,11 @@ const make = async (path: string): Promise<DbShape> => {
           .select()
           .from(projectAccounts)
           .orderBy(sql`rowid`)
+          .all(),
+        db
+          .select()
+          .from(projectLinks)
+          .orderBy(asc(projectLinks.createdAt), sql`rowid`)
           .all()
       ),
     project: (id) => projectOf(db, id),
@@ -7749,40 +7779,48 @@ const make = async (path: string): Promise<DbShape> => {
     },
     projectByRemote: (remote) => {
       const [oldest] = db
-        .select()
-        .from(projects)
-        .where(eq(projects.remote, remote))
+        .select({ id: projects.id })
+        .from(projectLinks)
+        .innerJoin(projects, eq(projects.id, projectLinks.projectId))
+        .where(eq(projectLinks.remote, remote))
         .orderBy(asc(projects.createdAt), asc(projects.id))
         .limit(1)
         .all();
       return oldest && projectOf(db, oldest.id);
     },
-    projectsWithoutRemote: (machineId) => {
-      const rows = db
-        .select({ projectId: projects.id, path: projectPlaces.path })
-        .from(projects)
-        .innerJoin(projectPlaces, eq(projectPlaces.projectId, projects.id))
+    checkoutsOn: (machineId) =>
+      db
+        .select({
+          projectId: projectPlaces.projectId,
+          path: projectPlaces.path,
+        })
+        .from(projectPlaces)
         .where(
           and(
-            isNull(projects.remote),
             eq(projectPlaces.machineId, machineId),
             eq(projectPlaces.kind, "checkout")
           )
         )
         .orderBy(asc(projectPlaces.createdAt))
-        .all();
-      // One read per project: its first checkout on the machine answers it.
-      const first = new Map<string, (typeof rows)[number]>();
-      for (const row of rows) {
-        if (!first.has(row.projectId)) {
-          first.set(row.projectId, row);
-        }
-      }
-      return [...first.values()];
-    },
-    setProjectRemote: (id, remote) => {
-      db.update(projects).set({ remote }).where(eq(projects.id, id)).run();
-    },
+        .all(),
+    addProjectLink: (id, remote, publishedFrom) =>
+      db
+        .insert(projectLinks)
+        .values({ projectId: id, remote, publishedFrom: publishedFrom ?? null })
+        .onConflictDoNothing()
+        .returning({ remote: projectLinks.remote })
+        .all().length > 0,
+    projectLinkPublishedFrom: (projectId, segment) =>
+      db
+        .select({ remote: projectLinks.remote })
+        .from(projectLinks)
+        .where(
+          and(
+            eq(projectLinks.projectId, projectId),
+            eq(projectLinks.publishedFrom, segment)
+          )
+        )
+        .get()?.remote,
     setProjectDetails: (id, change) => {
       db.update(projects).set(change).where(eq(projects.id, id)).run();
     },
@@ -8483,11 +8521,13 @@ const make = async (path: string): Promise<DbShape> => {
           .values({
             id,
             name,
-            remote,
             eventsOn: caw,
             tapped: tapped ?? null,
           })
           .run();
+        if (remote) {
+          tx.insert(projectLinks).values({ projectId: id, remote }).run();
+        }
         tx.insert(projectPlaces)
           .values({
             id: crypto.randomUUID(),
@@ -8770,6 +8810,17 @@ const make = async (path: string): Promise<DbShape> => {
             })
             .run();
           places += 1;
+        }
+        // Its links: each repository it linked, the kept project's too.
+        for (const link of tx
+          .select()
+          .from(projectLinks)
+          .where(eq(projectLinks.projectId, dupId))
+          .all()) {
+          tx.insert(projectLinks)
+            .values({ ...link, projectId: keepId })
+            .onConflictDoNothing()
+            .run();
         }
         // Its repository on a machine where the kept project records none.
         const machines = new Set(

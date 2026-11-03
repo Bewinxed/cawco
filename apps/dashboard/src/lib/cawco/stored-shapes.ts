@@ -771,6 +771,7 @@ const SessionDraftShape = z.object({
   harness: HarnessKindShape,
   machineIds: z.array(z.string()),
   model: z.string(),
+  moveFrom: z.string().optional(),
   permissionMode: PermissionModeShape.nullable(),
   projectId: z.string().or(z.undefined()),
   prompt: z.string(),

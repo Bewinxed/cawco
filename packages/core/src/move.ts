@@ -152,8 +152,9 @@ export interface MoveJob {
 }
 
 /**
- * What the New session modal reads when a machine without the project is
- * picked: `GET /api/projects/:id/move-estimate?machine=<target>[&path=]`.
+ * What the New session modal reads when a machine without the folder it
+ * moves is picked:
+ * `GET /api/projects/:id/move-estimate?machine=<target>[&from=<place>][&path=]`.
  */
 export interface MoveEstimate {
   /** What "Move it" does, for New session's step 2; set when a move is needed and can run. */
@@ -164,7 +165,7 @@ export interface MoveEstimate {
   display: string;
   /** Bytes of large files after the clone. */
   lfsBytes: number;
-  /** Whether a move is needed: false when the target already has a checkout place. */
+  /** Whether a move is needed: false when the target already has a checkout of the folder's repository. */
   needed: boolean;
   /** Whether `approval` is a step: no repository yet, or files over 50 MB would go raw. */
   needsApproval: boolean;
@@ -190,6 +191,13 @@ export interface MoveRequest {
   approved?: string;
   /** The first message's attachments, as a send carries them. */
   attachments?: import("./attachments").SendAttachment[];
+  /**
+   * The checkout it moves, by its place id: the folder New session was
+   * opened on (a session's or a folder's), or the one picked in its Move
+   * from choice. Absent from the shipped apps, which name none: their move
+   * takes the project's primary checkout, as their estimate read it.
+   */
+  from?: string;
   images?: { data: string; mediaType: string }[];
   /** The target machine. */
   machineId: string;

@@ -123,7 +123,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
       ? {
           label: project.name,
           state: null,
-          peek: [project.remote ?? ""].filter(Boolean),
+          peek: project.links,
           place: { href: projectHref(id) },
         }
       : null;

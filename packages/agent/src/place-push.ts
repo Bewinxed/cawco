@@ -7,7 +7,8 @@
  * (workspace.ts `hubRepoOf`), and the push names that repository; one whose
  * origin is anywhere else is refused, so nothing goes where the person did
  * not point it. A dry run reads the branch, the commit and its tree's files
- * and bytes, and pushes nothing.
+ * and bytes, and the hub repository its origin names when it has one, and
+ * pushes nothing.
  */
 import { type PlacePush, WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
 import { hubRepoOfUrl } from "@cawco/core/hub-repo";
@@ -85,7 +86,10 @@ export const placePush = async (
     );
   }
   if (dryRun === true) {
-    return { ...read, pushed: false };
+    // An origin of the hub's names its repository now; one with none is
+    // given its repository only by the push, which claims it.
+    const named = origin ? hubRepoOfUrl(origin) : undefined;
+    return { ...read, pushed: false, ...(named ? { hub: named } : {}) };
   }
   const hub = origin
     ? hubRepoOfUrl(origin)

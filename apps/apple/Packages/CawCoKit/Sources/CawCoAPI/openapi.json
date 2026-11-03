@@ -15706,6 +15706,12 @@
                       "generic"
                     ]
                   },
+                  "repo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "connection": {
                     "type": [
                       "string",
@@ -15828,6 +15834,12 @@
                       "github",
                       "stripe",
                       "generic"
+                    ]
+                  },
+                  "repo": {
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "connection": {
@@ -20304,6 +20316,15 @@
               "pattern": "^(/|~/)",
               "type": "string"
             }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
           }
         ],
         "operationId": "getApiProjectsByIdMoveEstimate",
@@ -20386,6 +20407,10 @@
                 "type": "object",
                 "properties": {
                   "approved": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "from": {
                     "minLength": 1,
                     "type": "string"
                   },
@@ -31682,6 +31707,13 @@
                 "string"
               ]
             },
+            "links": {
+              "description": "Its links (`project_links`), one per repository, oldest first.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "maxAttempts": {
               "type": "number"
             },
@@ -31784,6 +31816,7 @@
             "lands",
             "lfsConnection",
             "lfsUrl",
+            "links",
             "maxAttempts",
             "name",
             "places",
@@ -31869,6 +31902,13 @@
               "null",
               "string"
             ]
+          },
+          "links": {
+            "description": "Its links (`project_links`), one per repository, oldest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "maxAttempts": {
             "type": "number"
@@ -32011,6 +32051,7 @@
           "lands",
           "lfsConnection",
           "lfsUrl",
+          "links",
           "maxAttempts",
           "name",
           "place",
@@ -32123,6 +32164,13 @@
               "string"
             ]
           },
+          "links": {
+            "description": "Its links (`project_links`), one per repository, oldest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "maxAttempts": {
             "type": "number"
           },
@@ -32225,6 +32273,7 @@
           "lands",
           "lfsConnection",
           "lfsUrl",
+          "links",
           "maxAttempts",
           "name",
           "places",
@@ -32317,6 +32366,13 @@
               "null",
               "string"
             ]
+          },
+          "links": {
+            "description": "Its links (`project_links`), one per repository, oldest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "maxAttempts": {
             "type": "number"
@@ -32459,6 +32515,7 @@
           "lands",
           "lfsConnection",
           "lfsUrl",
+          "links",
           "maxAttempts",
           "name",
           "place",
@@ -32542,6 +32599,13 @@
               "null",
               "string"
             ]
+          },
+          "links": {
+            "description": "Its links (`project_links`), one per repository, oldest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "maxAttempts": {
             "type": "number"
@@ -32645,6 +32709,7 @@
           "lands",
           "lfsConnection",
           "lfsUrl",
+          "links",
           "maxAttempts",
           "name",
           "places",
@@ -44438,12 +44503,21 @@
                 ]
               },
               "repo": {
+                "description": "Read by nothing here: {@link repos} as one line, for the shipped apps\nthat show it (TestFlight builds before 2026-11-03); it goes once none\nis installable.",
                 "type": [
                   "null",
                   "string"
                 ]
               },
+              "repos": {
+                "description": "The GitHub repositories it polls, `owner/repo`: every one the project links.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "resources": {
+                "description": "Read by nothing: kept empty for the shipped apps that declare it; it goes with {@link repo}.",
                 "type": "object",
                 "properties": {
                   "comments": {
@@ -44479,6 +44553,7 @@
               "polled",
               "polledAt",
               "repo",
+              "repos",
               "resources",
               "resumeAt",
               "state"
@@ -44803,6 +44878,13 @@
             "description": "Whether GitHub's webhook was registered by the hub (and is deleted with the relay).",
             "type": "boolean"
           },
+          "repo": {
+            "description": "GitHub: the repository, `owner/repo`, whose webhook it is; null for other providers.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "state": {
             "$ref": "#/components/schemas/RelayState"
           },
@@ -44828,6 +44910,7 @@
           "publicUrl",
           "reason",
           "registered",
+          "repo",
           "state",
           "testedAt"
         ]
@@ -48105,7 +48188,7 @@
         ]
       },
       "MoveEstimate": {
-        "description": "What the New session modal reads when a machine without the project is\npicked: `GET /api/projects/:id/move-estimate?machine=<target>[&path=]`.",
+        "description": "What the New session modal reads when a machine without the folder it\nmoves is picked:\n`GET /api/projects/:id/move-estimate?machine=<target>[&from=<place>][&path=]`.",
         "type": "object",
         "properties": {
           "ask": {
@@ -48125,7 +48208,7 @@
             "type": "number"
           },
           "needed": {
-            "description": "Whether a move is needed: false when the target already has a checkout place.",
+            "description": "Whether a move is needed: false when the target already has a checkout of the folder's repository.",
             "type": "boolean"
           },
           "needsApproval": {

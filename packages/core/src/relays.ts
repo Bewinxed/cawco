@@ -37,6 +37,8 @@ export interface RelayView {
   reason: string | null;
   /** Whether GitHub's webhook was registered by the hub (and is deleted with the relay). */
   registered: boolean;
+  /** GitHub: the repository, `owner/repo`, whose webhook it is; null for other providers. */
+  repo: string | null;
   state: RelayState;
   /** When the provider's test delivery arrived. */
   testedAt: number | null;

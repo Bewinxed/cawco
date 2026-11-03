@@ -322,12 +322,12 @@ export interface ProjectRow {
   lfsConnection: string | null;
   /** Where its large files live, an LFS endpoint; null: each repository's origin's own LFS. */
   lfsUrl: string | null;
+  /** Its links, one per repository, `host/owner/repo`, oldest first. */
+  links: string[];
   name: string;
   places: ProjectPlace[];
   /** Its primary checkout's id; null while it has none (a New project before its place is picked). */
   primaryPlaceId: string | null;
-  /** The repository its checkouts are of, `host/owner/repo`; null when unknown. */
-  remote: string | null;
   /** Review before done: only you move a task to done, and landed work waits in review. */
   review: boolean;
 }

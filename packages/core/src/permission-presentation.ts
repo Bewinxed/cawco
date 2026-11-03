@@ -1303,6 +1303,11 @@ export type ProjectSettingChange =
       bytes: number;
       connection: string;
       files: number;
+      /**
+       * The checkout published, absolute on its machine. Absent on an ask
+       * stored before a publish named its folder: the project's only one.
+       */
+      folder?: string;
       kind: "create_repo";
       /** What CawCo's first commit of the place left out, and why (agent place-repo.ts). */
       leftOut: { path: string; why: string }[];
@@ -1328,7 +1333,7 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
     case "link_repo":
       return `Link this project to github.com/${change.github}`;
     case "create_repo":
-      return `Publish this project to a ${change.private ? "private" : "public"} GitHub repository, ${change.account ? `${change.account}/` : ""}${change.name}`;
+      return `Publish ${change.folder ?? "this project"} to a ${change.private ? "private" : "public"} GitHub repository, ${change.account ? `${change.account}/` : ""}${change.name}`;
     case "set_runs_on":
       return change.runsOn
         ? `Run this project's attempts only on ${change.runsOn}`
@@ -1393,8 +1398,7 @@ function projectSettings(input: Record<string, unknown>): Presented {
   if (published) {
     detail = publishedWords(published);
   } else if (linked) {
-    detail =
-      "Linking sets the repository GitHub events and pull requests use; no file in the project changes.";
+    detail = "Its GitHub events and pull requests reach the project.";
   }
   return {
     summary:

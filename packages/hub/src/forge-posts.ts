@@ -21,8 +21,8 @@ type ForgeCall =
 export interface ForgePostsDeps {
   /** Has `machineId` make the write (agent `CONTROL_FORGE_POST`). */
   readonly call: (machineId: string, ask: ForgeAsk) => Promise<ForgeCall>;
-  /** The project's own repository, `host/owner/repo`, when it has one. */
-  readonly remoteOf: (projectId: string | null) => string | undefined;
+  /** The project's links, `host/owner/repo`, one per repository: none without a project. */
+  readonly linksOf: (projectId: string | null) => readonly string[];
 }
 
 /** What the session reads, and whether the write went. */
@@ -32,16 +32,20 @@ export interface ForgeAnswer {
 }
 
 export const createForgePosts = (deps: ForgePostsDeps) => ({
-  /** `actor`'s write on `repo` (its project's own when none), as the session hears it. */
+  /** `actor`'s write on `repo` (its project's only one when none), as the session hears it. */
   async post(
     actor: InstanceRow,
     asked: { repo?: string; write: ForgeWrite }
   ): Promise<ForgeAnswer> {
-    const repo = asked.repo ?? deps.remoteOf(actor.projectId ?? null);
+    const links = deps.linksOf(actor.projectId ?? null);
+    const repo = asked.repo ?? (links.length === 1 ? links[0] : undefined);
     if (!repo) {
       return {
         ok: false,
-        text: "cawco: nothing was posted: this session's project has no repository of its own, so name one with repo.",
+        text:
+          links.length === 0
+            ? "cawco: nothing was posted: this session's project has no repository of its own, so name one with repo."
+            : `cawco: nothing was posted. This session's project has several repositories, so pass one as repo: ${links.join(", ")}.`,
       };
     }
     const called = await deps.call(actor.machineId, {

@@ -35,13 +35,13 @@ export interface SettingsRead {
   /** The tasks dispatch would start next, in order. */
   frontier: string[];
   lands: string;
+  /** Its links, one per repository, like github.com/owner/name. */
+  links: string[];
   live: number;
   maxAttempts: number;
   name: string;
   /** Why dispatch starts nothing now; null when it would. */
   paused: string | null;
-  /** Its repository, like github.com/owner/name; null when none is linked. */
-  remote: string | null;
   review: boolean;
   /** Tasks waiting in review now. */
   reviewing: number;
@@ -62,7 +62,7 @@ export const projectSettingsWords = {
       `- Work lands on: ${now.lands} (set_lands)`,
       `- Attempts run on: ${now.runsOn ?? "any machine with a checkout"} (set_runs_on)`,
       `- Review before done: ${onOff(now.review)} (set_review)`,
-      `- Repository: ${now.remote ?? "none linked"} (link_repo, create_repo)`,
+      `- Repositories: ${now.links.length > 0 ? now.links.join(", ") : "none linked"} (link_repo, create_repo with folder)`,
       `- Connections granted: ${now.connections.length > 0 ? now.connections.join(", ") : "none"} (grant_connection)`,
       "",
       `Now: ${now.live} ${now.live === 1 ? "attempt is" : "attempts are"} live and ${now.reviewing} ${now.reviewing === 1 ? "task waits" : "tasks wait"} for review. ${

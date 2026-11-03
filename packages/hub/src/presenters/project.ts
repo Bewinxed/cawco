@@ -286,7 +286,7 @@ export const actionWords = (action: ApprovedActionView): string =>
   actionLine(action, Date.now()).replace(LIST_MARK, "Action ");
 
 const relayLine = (relay: RelayView, now: number): string =>
-  `- ${handle(relay.id)} · ${relay.provider} · ${relay.state}${relay.reason ? `: ${relay.reason}` : ""} · ${relay.publicUrl ?? "no public URL yet"}${relay.registered ? " · registered" : ""} · ${relay.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(relay.lastDeliveryAt, now)}`}`;
+  `- ${handle(relay.id)} · ${relay.provider}${relay.repo ? ` ${relay.repo}` : ""} · ${relay.state}${relay.reason ? `: ${relay.reason}` : ""} · ${relay.publicUrl ?? "no public URL yet"}${relay.registered ? " · registered" : ""} · ${relay.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(relay.lastDeliveryAt, now)}`}`;
 
 /** `relay_list`. */
 export const relayListWords = (relays: RelayView[]): string => {

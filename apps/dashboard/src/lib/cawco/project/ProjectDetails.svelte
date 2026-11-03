@@ -14,7 +14,8 @@
    *   the hub say they can't be removed. A held workspace is its delegating
    *   session's to continue or discard, never yours (hub work-items.ts
    *   `heldNotice`).
-   * - Repository: read from the folder's remote, said so.
+   * - Repositories: the project's links, each read from a folder's remote
+   *   or published from one, said so.
    * - Large files: each origin's own LFS, or where the project declared
    *   they live, bound to a connection with a key (hub project-edit.ts).
    * - Work lands: where its attempts land when their task says nothing.
@@ -280,16 +281,18 @@
         return;
       }
       targets = read;
-      const own = project.remote?.startsWith("github.com/")
-        ? project.remote.slice("github.com/".length).toLowerCase()
-        : undefined;
+      const own = project.links.flatMap((link) =>
+        link.startsWith("github.com/")
+          ? [link.slice("github.com/".length).toLowerCase()]
+          : []
+      );
       const bound =
         tracker?.binding?.provider === picking
           ? tracker.binding.target
           : undefined;
       pickTarget =
         read.find((each) => each.id === bound)?.id ??
-        read.find((each) => each.id.toLowerCase() === own)?.id ??
+        read.find((each) => own.includes(each.id.toLowerCase()))?.id ??
         read[0]?.id ??
         "";
     } catch (error) {
@@ -866,25 +869,24 @@
         data-slot="project-details-label"
         class="type-label pt-space-1 text-ink-muted"
       >
-        Repository
+        {project.links.length > 1 ? "Repositories" : "Repository"}
       </p>
       <div
         data-slot="value"
         class="flex min-w-0 flex-col gap-space-1 pt-space-1"
       >
-        {#if project.remote}
-          <p
-            class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
-          >
-            <bdi>{project.remote}</bdi>
-          </p>
-          <p data-slot="note" class="type-meta text-ink-muted">
-            From the folder's remote.
-          </p>
+        {#if project.links.length > 0}
+          {#each project.links as link (link)}
+            <p
+              class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
+            >
+              <bdi>{link}</bdi>
+            </p>
+          {/each}
         {:else}
           <p data-slot="note" class="type-meta text-ink-muted">
-            No remote on the folder yet. Add one in the folder and it shows
-            here.
+            Each folder's GitHub repository shows here. Add a remote to a folder
+            to link one.
           </p>
         {/if}
       </div>

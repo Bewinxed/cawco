@@ -1,9 +1,10 @@
 /**
  * One repository is one project (Projects spec §5.1, D1). A folder added
- * later joins the project that has its remote (server.ts
+ * later joins the project that links its remote (server.ts
  * `createOrJoinProject`); projects made before the hub matched remotes
- * (migration 0078), and a project that learns its remote after another one
- * already has it, are folded here: each remote's projects into its oldest.
+ * (migration 0078), and a project that links a repository another one
+ * already links, are folded here: projects joined by shared links into
+ * their oldest.
  *
  * A duplicate's tasks are taken in under the kept project's next numbers
  * (tasks.ts `adopt`, one commit), its folder's other files the kept project
@@ -15,7 +16,7 @@
  * its folder is trashed. A duplicate that could not
  * be read whole or whose tasks did not move is left as it is, said in the
  * log, and tried again at the next start: only an emptied duplicate is
- * removed. Run once at hub start and whenever a project learns its remote;
+ * removed. Run once at hub start and whenever a project gains a link;
  * with nothing to fold it does nothing.
  */
 import { join } from "node:path";
@@ -48,29 +49,73 @@ export interface MergeDeps {
 
 const log = (line: string): void => console.log(`[project-merge] ${line}`);
 
-/** Each remote's projects, oldest first, for the remotes more than one project has. */
+/** A duplicate to fold, with the link it shares with another of its group. */
+interface Duplicate {
+  dup: ProjectRow;
+  shared: string;
+}
+
+/** Oldest first: the order a group keeps its first by. */
+const byAge = (a: ProjectRow, b: ProjectRow): number =>
+  new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+  a.id.localeCompare(b.id);
+
+/**
+ * Every project `first` reaches through shared links, each with the link it
+ * was reached by; each one reached is added to `grouped`.
+ */
+const reachedFrom = (
+  first: ProjectRow,
+  byLink: ReadonlyMap<string, ProjectRow[]>,
+  grouped: Set<string>
+): Duplicate[] => {
+  const dups: Duplicate[] = [];
+  const reach = [first];
+  for (const one of reach) {
+    for (const link of one.links) {
+      for (const other of byLink.get(link) ?? []) {
+        if (!grouped.has(other.id)) {
+          grouped.add(other.id);
+          reach.push(other);
+          dups.push({ dup: other, shared: link });
+        }
+      }
+    }
+  }
+  return dups;
+};
+
+/**
+ * The projects that share a link, each group with its oldest first (the one
+ * kept) and the rest each with a link it shares: projects joined through a
+ * chain of shared links are one group (only `remote`'s group, when named).
+ */
 const duplicates = (
   projects: ProjectRow[],
   remote?: string
-): ProjectRow[][] => {
-  const byRemote = new Map<string, ProjectRow[]>();
+): { keep: ProjectRow; dups: Duplicate[] }[] => {
+  const byLink = new Map<string, ProjectRow[]>();
   for (const project of projects) {
-    if (project.remote && (!remote || project.remote === remote)) {
-      byRemote.set(project.remote, [
-        ...(byRemote.get(project.remote) ?? []),
-        project,
-      ]);
+    for (const link of project.links) {
+      byLink.set(link, [...(byLink.get(link) ?? []), project]);
     }
   }
-  return [...byRemote.values()]
-    .filter((group) => group.length > 1)
-    .map((group) =>
-      [...group].sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
-          a.id.localeCompare(b.id)
-      )
+  const grouped = new Set<string>();
+  const groups: { keep: ProjectRow; dups: Duplicate[] }[] = [];
+  for (const keep of [...projects].sort(byAge)) {
+    if (grouped.has(keep.id)) {
+      continue;
+    }
+    grouped.add(keep.id);
+    const dups = reachedFrom(keep, byLink, grouped);
+    const linked = [keep, ...dups.map(({ dup }) => dup)].flatMap(
+      (one) => one.links
     );
+    if (dups.length > 0 && (!remote || linked.includes(remote))) {
+      groups.push({ keep, dups });
+    }
+  }
+  return groups;
 };
 
 /**
@@ -165,19 +210,19 @@ const copyOthers = async (
 const fold = async (
   deps: MergeDeps,
   keep: ProjectRow,
-  dup: ProjectRow
+  { dup, shared }: Duplicate
 ): Promise<boolean> => {
   const folder = await readWhole(dup);
   if (!folder) {
     log(
-      `${dup.name} (${dup.id}) shares ${keep.remote} with ${keep.name}, but its folder is too large to read whole; it is left as it is.`
+      `${dup.name} (${dup.id}) shares ${shared} with ${keep.name}'s projects, but its folder is too large to read whole; it is left as it is.`
     );
     return false;
   }
   const ids = await deps.tasks.adopt(
     keep.id,
     folder.tasks,
-    hubActor(`${dup.name} shares ${keep.remote} with this project`),
+    hubActor(`${dup.name} shares ${shared} with this project`),
     dup.name
   );
   await copyOthers(keep, dup, folder.others);
@@ -206,7 +251,7 @@ const fold = async (
     deps.folderMoved();
   }
   log(
-    `${dup.name} (${dup.id}) folded into ${keep.name} (${keep.id}), one repository ${keep.remote}: ${ids.size} task(s), ${folder.others.length} other file(s), ${moved.places} place(s), ${moved.sessions} session(s), ${moved.workItems} work item(s).`
+    `${dup.name} (${dup.id}) folded into ${keep.name} (${keep.id}), one repository ${shared}: ${ids.size} task(s), ${folder.others.length} other file(s), ${moved.places} place(s), ${moved.sessions} session(s), ${moved.workItems} work item(s).`
   );
   for (const machineId of new Set(
     dup.places
@@ -219,8 +264,8 @@ const fold = async (
 };
 
 /**
- * Folds every remote's duplicate projects into its oldest (only `remote`'s,
- * when named). Each duplicate is its own step: one that fails is said in the
+ * Folds every group of projects that share links into its oldest (only
+ * `remote`'s, when named). Each duplicate is its own step: one that fails is said in the
  * log and left, the rest go on.
  */
 export const mergeSameRemote = async (
@@ -228,13 +273,13 @@ export const mergeSameRemote = async (
   remote?: string
 ): Promise<void> => {
   let changed = false;
-  for (const [keep, ...dups] of duplicates(deps.db.listProjects(), remote)) {
-    for (const dup of dups) {
+  for (const { keep, dups } of duplicates(deps.db.listProjects(), remote)) {
+    for (const one of dups) {
       try {
-        changed = (await fold(deps, keep as ProjectRow, dup)) || changed;
+        changed = (await fold(deps, keep, one)) || changed;
       } catch (error) {
         log(
-          `${dup.name} (${dup.id}) was not folded into ${keep?.name}: ${error instanceof Error ? error.message : String(error)}. It is left as it is; the next start tries again.`
+          `${one.dup.name} (${one.dup.id}) was not folded into ${keep.name}: ${error instanceof Error ? error.message : String(error)}. It is left as it is; the next start tries again.`
         );
       }
     }

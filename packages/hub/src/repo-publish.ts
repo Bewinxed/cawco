@@ -1,10 +1,12 @@
 /**
- * A project's place published to a new GitHub repository (`project_settings`
+ * A project's folder published to a new GitHub repository (`project_settings`
  * `create_repo`, always behind the person's Approve). THE INVARIANT: the
- * GitHub connection's token never leaves the hub.
+ * GitHub connection's token never leaves the hub. Any of a project's
+ * repositories is published this way, each once: the folder is named, and
+ * its repository's link records which hub repository it is the copy of.
  *
- * - **Read**, before the card: the project's primary checkout is made a git
- *   repository when it is a plain folder (place-repo.ts `ensure`: what is
+ * - **Read**, before the card: the checkout named (`folder`, the project's
+ *   only one when left out) is made a git repository when it is a plain folder (place-repo.ts `ensure`: what is
  *   private, secret, large or generated stays out, and the project's
  *   conversation is told),
  *   then its branch, commit, files and bytes, and every path the rules keep
@@ -18,7 +20,7 @@
  *   (`repos.createForAuthenticatedUser`, private as asked) and pushes that
  *   branch from that repository's bare one with the token in
  *   an `http.extraHeader` given through git's environment, never argv; the
- *   project is then linked to it, as `link_repo` links one.
+ *   project then links it as that repository's published copy.
  */
 import {
   CONTROL_PLACE_PUSH,
@@ -26,12 +28,12 @@ import {
   type ProjectSettingChange,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
-import type { HubRepoKey } from "@cawco/core/hub-repo";
+import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { unhandled } from "@cawco/core/unhandled";
 import { startedPath } from "@cawco/core/workspace-needs";
 import type { Connections } from "./connections";
-import type { ProjectRow } from "./db";
+import type { DbShape, PlaceRow, ProjectRow } from "./db";
 import type { PlaceRepos } from "./place-repo";
 
 /** GitHub's rule for a repository's name. */
@@ -53,8 +55,17 @@ export interface RepoPublishDeps {
     args: unknown[]
   ) => Promise<unknown>;
   readonly connections: Pick<Connections, "githubClient" | "list">;
+  readonly db: Pick<DbShape, "projectLinkPublishedFrom">;
   readonly places: Pick<PlaceRepos, "ensure">;
 }
+
+/** A publish done: the repository made, `owner/name`, and the hub repository it is the copy of. */
+export interface Published {
+  readonly from: HubRepoKey;
+  readonly full: string;
+}
+
+const TRAILING_SLASHES = /\/+$/u;
 
 const refuse = (message: string): never => {
   throw new Error(message);
@@ -64,14 +75,48 @@ export const createRepoPublish = ({
   bare,
   call,
   connections,
+  db,
   places,
 }: RepoPublishDeps) => {
-  /** The project's primary checkout: the place a publish reads and pushes. */
-  const placeOf = (project: ProjectRow) =>
-    project.places.find((place) => place.kind === "checkout") ??
-    refuse(
-      "This project has no checkout on a machine to publish: its only place is its folder on the hub."
+  /** The checkout a publish reads and pushes: the one named, else the project's only one. */
+  const placeOf = (
+    project: ProjectRow,
+    folder: string | undefined
+  ): PlaceRow => {
+    const checkouts = project.places.filter(
+      (place) => place.kind === "checkout"
     );
+    const named = folder?.trim().replace(TRAILING_SLASHES, "");
+    const [only, ...others] = checkouts;
+    const sole = others.length === 0 ? only : undefined;
+    const found = named
+      ? checkouts.find((place) => place.path === named)
+      : sole;
+    if (found) {
+      return found;
+    }
+    if (checkouts.length === 0) {
+      return refuse(
+        "This project has no checkout on a machine to publish: its only place is its folder on the hub."
+      );
+    }
+    const listed = checkouts.map((place) => place.path).join(", ");
+    return refuse(
+      named
+        ? `${named} isn't one of this project's folders. Pass one as folder: ${listed}.`
+        : `Name the folder to publish (folder): ${listed}.`
+    );
+  };
+
+  /** Refused when the hub repository `key` is published already: its link names where. */
+  const unpublished = (project: ProjectRow, key: HubRepoKey | undefined) => {
+    const linked = key
+      ? db.projectLinkPublishedFrom(project.id, hubRepoSegment(key))
+      : undefined;
+    if (linked) {
+      refuse(`This folder's repository is already published, as ${linked}.`);
+    }
+  };
 
   /** The GitHub connection to create it with: the one named, else the project's one, else the fleet's one. */
   const connectionOf = (project: ProjectRow, named: string | undefined) => {
@@ -114,11 +159,13 @@ export const createRepoPublish = ({
   /** What the card says: the place made a repository if it is a folder, then what would go. */
   const read = async (
     project: ProjectRow,
-    asked: { connection?: string; name?: string; private?: boolean }
-  ): Promise<CreateRepo> => {
-    if (project.remote) {
-      refuse(`This project is linked to ${project.remote} already.`);
+    asked: {
+      connection?: string;
+      folder?: string;
+      name?: string;
+      private?: boolean;
     }
+  ): Promise<CreateRepo> => {
     const name = asked.name?.trim() ?? "";
     if (!REPO_NAME.test(name)) {
       refuse(
@@ -126,7 +173,7 @@ export const createRepoPublish = ({
       );
     }
     const connection = connectionOf(project, asked.connection);
-    const place = placeOf(project);
+    const place = placeOf(project, asked.folder);
     const made = await places.ensure({
       projectId: project.id,
       machineId: place.machineId,
@@ -137,8 +184,10 @@ export const createRepoPublish = ({
       project.id,
       true,
     ])) as PlacePush;
+    unpublished(project, tree.hub);
     return {
       kind: "create_repo",
+      folder: place.path,
       name,
       private: asked.private ?? true,
       connection: connection.name,
@@ -216,12 +265,12 @@ export const createRepoPublish = ({
     }
   };
 
-  /** Approved: pushed to the hub, created on GitHub, pushed there; answers `owner/name`. */
+  /** Approved: pushed to the hub, created on GitHub, pushed there; answers what it made, from where. */
   const publish = async (
     project: ProjectRow,
     change: CreateRepo
-  ): Promise<string> => {
-    const place = placeOf(project);
+  ): Promise<Published> => {
+    const place = placeOf(project, change.folder);
     const pushed = (await call(place.machineId, CONTROL_PLACE_PUSH, [
       place.path,
       project.id,
@@ -232,6 +281,7 @@ export const createRepoPublish = ({
       refuse(
         `${place.path} answered its push without naming the hub repository it went to.`
       );
+    unpublished(project, hub);
     const octokit = connections.githubClient(change.connection);
     const asked = await readWithin(API_MS, async (signal) => {
       try {
@@ -274,9 +324,9 @@ export const createRepoPublish = ({
     const { token } = (await octokit.auth()) as { token: string };
     await pushFromHub(hub, pushed.branch, made.clone_url, token);
     console.log(
-      `[repo-publish] ${project.name}: ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.full_name}`
+      `[repo-publish] ${project.name}: ${place.path}'s ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.full_name}`
     );
-    return made.full_name;
+    return { full: made.full_name, from: hub };
   };
 
   return { read, publish };

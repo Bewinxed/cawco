@@ -545,13 +545,17 @@ const READERS: Record<GitHubKind, (payload: unknown) => InboundEvent[]> = {
   },
 };
 
-/** `owner/repo` of a project whose normalised remote is on github.com, else nothing. */
-export const githubRepoOf = (remote: string | null): string | undefined => {
+/** `owner/repo` of a normalised remote on github.com, else nothing. */
+const githubRepoOf = (remote: string | null): string | undefined => {
   const [host, owner, repo, ...rest] = (remote ?? "").split("/");
   return host === "github.com" && owner && repo && rest.length === 0
     ? `${owner}/${repo}`
     : undefined;
 };
+
+/** The GitHub repositories, `owner/repo`, among a project's links, oldest first. */
+export const githubReposOf = (links: readonly string[]): string[] =>
+  links.flatMap((link) => githubRepoOf(link) ?? []);
 
 /** What one poll of a repository came to. */
 export interface RepoPoll {

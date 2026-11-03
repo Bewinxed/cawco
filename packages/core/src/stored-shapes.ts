@@ -1120,6 +1120,7 @@ const RelayViewShape = z.object({
   publicUrl: z.string().nullable(),
   reason: z.string().nullable(),
   registered: z.boolean(),
+  repo: z.string().nullable(),
   state: RelayStateShape,
   testedAt: z.number().nullable(),
 });
@@ -1637,6 +1638,7 @@ export const SendAttachmentShape = z.union([
 const MoveRequestShape = z.object({
   approved: z.string().optional(),
   attachments: z.array(SendAttachmentShape).optional(),
+  from: z.string().optional(),
   images: z
     .array(z.object({ data: z.string(), mediaType: z.string() }))
     .optional(),

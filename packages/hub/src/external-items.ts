@@ -640,11 +640,11 @@ export const createExternalItems = ({
     };
   };
 
-  /** The tasks linking an item (`task_read`'s `link`): its URL, or `#12` in the project's repository; a refusal in words. */
+  /** The tasks linking an item (`task_read`'s `link`): its URL, or `#12` in any of the project's GitHub repositories; a refusal in words. */
   const linked = (
     projectId: string,
     link: string,
-    repo: string | undefined
+    repos: readonly string[]
   ): string[] | string => {
     const item = refOfUrl(link);
     const number = item ? item.number : Number(link.replace(HASH, ""));
@@ -659,22 +659,24 @@ export const createExternalItems = ({
       ];
     }
     if (!(number && Number.isInteger(number))) {
-      return `“${link}” names no external item: give its URL, or #12 for an issue or pull request of the project's repository.`;
+      return `“${link}” names no external item: give its URL, or #12 for an issue or pull request of the project's repositories.`;
     }
-    const container = item?.container ?? repo;
-    if (!container) {
-      return `#${number} names no repository: this project's checkout is not on GitHub, so give the item's URL.`;
+    const containers = item?.container ? [item.container] : repos;
+    if (containers.length === 0) {
+      return `#${number} names no repository: this project links none on GitHub, so give the item's URL.`;
     }
     return [
       ...new Set(
-        db.taskLinks
-          .byItem(projectId, {
-            source: "github",
-            ...(item ? { kind: item.kind } : {}),
-            number,
-            container,
-          })
-          .map((row) => row.taskId)
+        containers.flatMap((container) =>
+          db.taskLinks
+            .byItem(projectId, {
+              source: "github",
+              ...(item ? { kind: item.kind } : {}),
+              number,
+              container,
+            })
+            .map((row) => row.taskId)
+        )
       ),
     ];
   };

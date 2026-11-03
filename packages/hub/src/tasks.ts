@@ -398,8 +398,6 @@ export interface TaskStore {
         /** It starts attempts on its own (dispatch.ts), while its events are on. */
         dispatch: boolean;
         id: string;
-        /** Its checkout's normalised origin (`github.com/acme/app`); null when it has none. */
-        remote: string | null;
         /** Review before done: only you move a task to a done stage (stages.ts `ruledStages`). */
         review: boolean;
         template: StagesTemplate | null;

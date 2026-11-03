@@ -130,14 +130,14 @@ export const spawnWords = {
     forkNeedsMode: "Choose a permission mode for the fork.",
     moveChanged:
       "The move changed before it started. Open it and start it again.",
-    /** A move's reading: what Move & start does first. */
-    moveReading: (
-      project: string,
-      machine: string,
-      work: string,
-      size: string
-    ) =>
-      `${project} isn't on ${machine} yet. ${spawnWords.moveAndStart} clones it there first${work}${size}.`,
+    /** A move's reading: what Move & start does first, to the project or (several) the folder it takes. */
+    moveReading: (what: string, machine: string, work: string, size: string) =>
+      `${what} isn't on ${machine} yet. ${spawnWords.moveAndStart} clones it there first${work}${size}.`,
+    /** The choice of which of the project's folders a move takes, when it has several. */
+    moveFrom: "Move from",
+    /** One folder of the Move from choice. */
+    moveFromFolder: (folder: string, machine: string) =>
+      `${folder} on ${machine}`,
     moveWork: (machine: string) => `, with your uncommitted work on ${machine}`,
     /** A continuation's project, named rather than picked. */
     startsIn: (project: string) => `Starts in ${project}`,

@@ -305,6 +305,15 @@
   /** The machine the form last started a session on, read as it opens (spawnPrefs `rememberedMachine`). */
   let remembered = $state<string | null>(null);
   let cwd = $state("");
+  /**
+   * The folder the form was opened on (a session's or a folder's), or the
+   * one picked in the project chip: the folder a move takes. Null when it
+   * names none (opened from the project), and a move's Move from choice
+   * picks it.
+   */
+  let namedFolder = $state<{ machineId: string; path: string } | null>(null);
+  /** The checkout Move from picked, by place id. */
+  let moveFromPick = $state<string>();
   let repo = $state<string>();
   let harness = $state<HarnessKind>(spawnPrefs.harness);
   let model = $state("");
@@ -680,19 +689,53 @@
       !editing
     ) && repo === undefined
   );
+  /** The project's checkouts: each a folder a move can take. */
+  const checkouts = $derived(
+    project?.places.filter((place) => place.kind === "checkout") ?? []
+  );
+  /** The checkout the folder the form names is, or holds. */
+  const namedPlace = $derived(
+    namedFolder
+      ? checkouts.find(
+          (place) =>
+            place.machineId === namedFolder?.machineId &&
+            (namedFolder.path === place.path ||
+              namedFolder.path.startsWith(`${place.path}/`))
+        )
+      : undefined
+  );
   /**
-   * The project moves to the machine first (Projects §5.1; the design's
-   * §1b): a project is chosen, one machine, and the project has no checkout
-   * there. A continuation and a repository's clone never move.
+   * A project's folder moves to the machine first (Projects §5.1; the
+   * design's §1b): a project is chosen, one machine, and the folder the form
+   * names is on another machine; the hub's estimate says when that machine
+   * has its repository already. Naming none, the project moves only to a
+   * machine with no checkout of it. A continuation and a repository's clone
+   * never move.
    */
-  const moveTo = $derived(
-    project &&
-      machineIds.length === 1 &&
-      !continueFrom &&
-      repo === undefined &&
-      !checkoutOn(project, machineIds[0])
-      ? machineIds[0]
-      : null
+  const moveTo = $derived.by(() => {
+    const [target] = machineIds;
+    if (
+      !(project && target) ||
+      machineIds.length !== 1 ||
+      continueFrom ||
+      repo !== undefined
+    ) {
+      return null;
+    }
+    const away = namedPlace
+      ? namedPlace.machineId !== target
+      : !checkoutOn(project, target);
+    return away ? target : null;
+  });
+  /** Move from's folders: offered when the form names none and the project has several. */
+  const moveFromChoice = $derived(
+    moveTo && !namedPlace && checkouts.length > 1 ? checkouts : []
+  );
+  /** The checkout a move takes: the folder named, else Move from's pick, else the project's primary. */
+  const moveFrom = $derived(
+    namedPlace ??
+      checkouts.find((place) => place.id === moveFromPick) ??
+      (project ? checkoutOf(project) : undefined)
   );
   /** A folder there the person typed instead of the hub's (the destination was taken). */
   let moveAt = $state<string>();
@@ -701,17 +744,23 @@
   /** The machines a move reads from and to, online or not: a change reads it again. */
   const moveMachinesOnline = $derived(
     project && moveTo
-      ? [moveTo, checkoutOf(project)?.machineId ?? ""].map(
+      ? [moveTo, moveFrom?.machineId ?? ""].map(
           (id) =>
             cawco.machines.find((row) => row.machineId === id)?.status ===
             "online"
         )
       : []
   );
-  /** What the estimate below is asked about: the project, the machine, the folder. */
+  /** What the estimate below is asked about: the project, the folder it takes, the machine, the folder there. */
   const moveFor = $derived(
-    project && moveTo
-      ? JSON.stringify([project.id, moveTo, moveAt ?? "", moveMachinesOnline])
+    project && moveTo && moveFrom
+      ? JSON.stringify([
+          project.id,
+          moveFrom.id,
+          moveTo,
+          moveAt ?? "",
+          moveMachinesOnline,
+        ])
       : ""
   );
   /** The hub's estimate of the move, or why it couldn't read one, for what `moveFor` names. */
@@ -756,7 +805,8 @@
     const key = moveFor;
     const id = project?.id;
     const target = moveTo;
-    if (!(open && key && id && target) || cawco.hub !== "connected") {
+    const from = moveFrom?.id;
+    if (!(open && key && id && target && from) || cawco.hub !== "connected") {
       return;
     }
     if (untrack(() => moveRead?.for === key)) {
@@ -765,7 +815,7 @@
     const at = untrack(() => moveAt);
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      moveEstimate(id, target, at, controller.signal).then(
+      moveEstimate(id, target, { from, path: at }, controller.signal).then(
         (read) => {
           moveRead = { for: key, estimate: read };
         },
@@ -942,7 +992,7 @@
     const there =
       cawco.machines.find((row) => row.machineId === moveTo)?.hostname ??
       moveTo;
-    const from = checkoutOf(project)?.machineId;
+    const from = moveFrom?.machineId;
     const source =
       cawco.machines.find((row) => row.machineId === from)?.hostname ?? from;
     // One size, history and large files together: step 2 splits them.
@@ -951,7 +1001,10 @@
       bytes + lfsBytes > 0 ? ` (${sizeWords(bytes + lfsBytes)})` : "";
     const work =
       uncommittedFiles > 0 ? spawnWords.form.moveWork(source ?? "") : "";
-    return spawnWords.form.moveReading(project.name, there, work, size);
+    // A project of several folders names the one it moves.
+    const what =
+      checkouts.length > 1 && moveFrom ? tilde(moveFrom.path) : project.name;
+    return spawnWords.form.moveReading(what, there, work, size);
   });
   const reading = $derived.by(() => {
     if (cawco.hub !== "connected") {
@@ -1181,6 +1234,7 @@
   /** The form as it was left, or as a start was submitted with: its picks over what it opened with. */
   function applyPicks(kept: SessionDraft): void {
     ({ repo, projectId, harness, effort } = kept);
+    moveFromPick = kept.moveFrom;
     modePick = kept.permissionMode;
     pickedHere = false;
     ({ harness: summarizerHarness, model: summarizerModel } = kept.summarizer);
@@ -1211,6 +1265,11 @@
       machinesTouched = false;
       remembered = rememberedMachine();
       cwd = continueFrom?.cwd || prefill?.cwd || "";
+      namedFolder =
+        prefill?.machineId && prefill.cwd
+          ? { machineId: prefill.machineId, path: prefill.cwd }
+          : null;
+      moveFromPick = undefined;
       harness = openingHarness();
       modePick = null;
       pickedHere = false;
@@ -1547,6 +1606,8 @@
       machineIds = [row.machineId, ...machineIds];
     }
     cwd = row.path;
+    namedFolder = { machineId: row.machineId, path: row.path };
+    moveFromPick = undefined;
     repo = undefined;
     editing = false;
     popover = null;
@@ -1554,6 +1615,8 @@
   function clearProject() {
     projectId = undefined;
     cwd = "";
+    namedFolder = null;
+    moveFromPick = undefined;
     editing = true;
     popover = null;
   }
@@ -1854,6 +1917,7 @@
       // The person's own pick; "" when they left the harness's default.
       usedModel: model,
       ...(accountTool && account ? { account } : {}),
+      ...(moveFromPick ? { moveFrom: moveFromPick } : {}),
       extras: {},
     };
   }
@@ -1959,7 +2023,8 @@
     const ask = moveEstimated?.ask;
     const target = moveTo;
     const moved = projectId;
-    if (!(ask && target && moved)) {
+    const from = moveFrom?.id;
+    if (!(ask && target && moved && from)) {
       failStart(id, spawnWords.form.moveChanged);
       return;
     }
@@ -1968,6 +2033,7 @@
     let started: Awaited<ReturnType<typeof startMove>>;
     try {
       started = await startMove(moved, {
+        from,
         machineId: target,
         ...(moveAt ? { path: moveAt } : {}),
         ...(ask.key ? { approved: ask.key } : {}),
@@ -2390,6 +2456,25 @@
       data-slot="stack"
       class="mt-space-5 grid gap-space-5 group-data-stepped:hidden"
     >
+      {#if moveFromChoice.length > 0 && moveFrom}
+        <div in:unfold|global out:unfold>
+          <Segmented
+            items={moveFromChoice.map((place) => ({
+              value: place.id,
+              label: spawnWords.form.moveFromFolder(
+                tilde(place.path),
+                cawco.machines.find((row) => row.machineId === place.machineId)
+                  ?.hostname ?? place.machineId
+              ),
+            }))}
+            label={spawnWords.form.moveFrom}
+            onchange={(value) => {
+              moveFromPick = value;
+            }}
+            value={moveFrom.id}
+          />
+        </div>
+      {/if}
       {#if continueFrom}
         <div
           class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2"

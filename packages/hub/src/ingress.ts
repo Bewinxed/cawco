@@ -81,12 +81,13 @@ import type {
   ConnectorPollRow,
   Delivery,
   EventRouteRow,
+  GitHubCursors,
   InboundEventRow,
 } from "./db/ingress";
-import type { GitHubCursor, GitHubResource, InboundVia } from "./db/schema";
+import type { InboundVia } from "./db/schema";
 import type { Dispatcher } from "./dispatch";
 import type { ExternalItems } from "./external-items";
-import { githubRepoOf, pollRepo, readRunWait } from "./github";
+import { githubReposOf, pollRepo, readRunWait } from "./github";
 import { byHandle } from "./handles";
 import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_CONVERSATION } from "./jev-placement";
@@ -125,6 +126,28 @@ export interface InboundEvent {
   title: string | null;
   url: string | null;
 }
+
+/** What the poller says of a project that links no GitHub repository. */
+const NO_GITHUB_LINK =
+  "Nothing is polled: the project links no repository on github.com.";
+
+/** One repository's poll within a project's: what it read, and how many events were new. */
+interface RepoPolled {
+  landed: number;
+  polled: Awaited<ReturnType<typeof pollRepo>>;
+  repo: string;
+}
+
+/** What a poll's repositories' problems come to, each named when there are several; null: none. */
+const pollProblem = (polls: readonly RepoPolled[]): string | null => {
+  const problems = polls.flatMap(({ repo, polled }) => {
+    if (polled.problem === null) {
+      return [];
+    }
+    return [polls.length > 1 ? `${repo}: ${polled.problem}` : polled.problem];
+  });
+  return problems.length > 0 ? problems.join(" ") : null;
+};
 
 /** GitHub every 60 s (§5.5). */
 const GITHUB_EVERY_MS = 60_000;
@@ -428,8 +451,16 @@ export interface IngressView {
     connection: string | null;
     polled: boolean;
     polledAt: number | null;
+    /**
+     * Read by nothing here: {@link repos} as one line, for the shipped apps
+     * that show it (TestFlight builds before 2026-11-03); it goes once none
+     * is installable.
+     */
     repo: string | null;
-    resources: Partial<Record<GitHubResource, GitHubCursor>>;
+    /** The GitHub repositories it polls, `owner/repo`: every one the project links. */
+    repos: string[];
+    /** Read by nothing: kept empty for the shipped apps that declare it; it goes with {@link repo}. */
+    resources: GitHubCursors;
     resumeAt: number | null;
     /** What is true of it, in a sentence: polled, or why not. */
     state: string;
@@ -788,18 +819,21 @@ export const createIngress = ({
 
   // --- GitHub -------------------------------------------------------------------
 
-  /** One poll of a project's repository: its events ingested, then its cursors kept. */
+  /**
+   * One poll of every GitHub repository the project links: each one's
+   * events ingested, then every cursor kept.
+   */
   const pollGitHub = async (projectId: string): Promise<void> => {
     const poller = store.githubPoller(projectId);
     const project = db.project(projectId);
     if (!(poller && project)) {
       return;
     }
-    const repo = githubRepoOf(project.remote);
+    const repos = githubReposOf(project.links);
     const now = Date.now();
-    if (!repo) {
+    if (repos.length === 0) {
       store.updateGitHubPoller(projectId, {
-        reason: "The project's checkout has no origin on github.com.",
+        reason: NO_GITHUB_LINK,
         polledAt: new Date(now),
       });
       return;
@@ -814,23 +848,26 @@ export const createIngress = ({
       });
       return;
     }
-    const cursors = poller.repo === repo ? poller.cursors : {};
-    const polled = await pollRepo({
-      connection: poller.connection,
-      cursors,
-      now,
-      octokit,
-      repo,
-    });
+    const polls: RepoPolled[] = [];
+    for (const repo of repos) {
+      const polled = await pollRepo({
+        connection: poller.connection,
+        cursors: poller.cursors[repo] ?? {},
+        now,
+        octokit,
+        repo,
+      });
+      const source = `github:${repo.toLowerCase()}`;
+      const landed = polled.events
+        .filter((event) => event.source === source)
+        .sort((a, b) => a.at - b.at)
+        .map((event) => ingest(event, "poll", projectId))
+        .filter(Boolean).length;
+      polls.push({ repo, polled, landed });
+    }
     await readWaits(projectId, octokit);
     await externalItems.readLinks(projectId, octokit);
-    const source = `github:${repo.toLowerCase()}`;
-    const landed = polled.events
-      .filter((event) => event.source === source)
-      .sort((a, b) => a.at - b.at)
-      .map((event) => ingest(event, "poll", projectId))
-      .filter(Boolean).length;
-    keepGitHubPoll(projectId, repo, now, poller.reason, polled, landed);
+    keepGitHubPoll(projectId, now, poller.reason, polls);
   };
 
   /**
@@ -880,42 +917,49 @@ export const createIngress = ({
   };
 
   /**
-   * The cursors a poll moved, each over its own; another repository's are
-   * dropped as `repo` changes. A request GitHub did not answer in time
-   * leaves the poller's reason and wait as they were, and says so here.
+   * The cursors each repository's poll moved, each over its own. The
+   * poller's reason is every repository's problem, each named when it links
+   * several, and its wait the latest any rate limit asks. A request GitHub
+   * did not answer in time leaves the poller's reason and wait as they
+   * were, and says so here.
    */
   const keepGitHubPoll = (
     projectId: string,
-    repo: string,
     now: number,
     before: string | null,
-    polled: Awaited<ReturnType<typeof pollRepo>>,
-    landed: number
+    polls: readonly RepoPolled[]
   ): void => {
-    if (polled.unanswered !== null) {
+    const unanswered = polls.flatMap(({ repo, polled }) =>
+      polled.unanswered === null ? [] : [{ repo, after: polled.unanswered }]
+    );
+    for (const { repo, after } of unanswered) {
       console.log(
-        `[ingress] polled ${repo}: GitHub did not answer within ${Math.round(polled.unanswered / 1000)} s; the poller's state stands`
+        `[ingress] polled ${repo}: GitHub did not answer within ${Math.round(after / 1000)} s; the poller's state stands`
       );
     }
+    const reason = pollProblem(polls);
+    const resumeAt = Math.max(
+      0,
+      ...polls.map(({ polled }) => polled.resumeAt ?? 0)
+    );
     store.updateGitHubPoller(projectId, {
-      repo,
-      cursors: polled.cursors,
-      ...(polled.unanswered === null
-        ? {
-            reason: polled.problem,
-            resumeAt:
-              polled.resumeAt === null ? null : new Date(polled.resumeAt),
-          }
+      cursors: Object.fromEntries(
+        polls.map(({ repo, polled }) => [repo, polled.cursors])
+      ),
+      ...(unanswered.length === 0
+        ? { reason, resumeAt: resumeAt === 0 ? null : new Date(resumeAt) }
         : {}),
       polledAt: new Date(now),
     });
-    if (
-      landed > 0 ||
-      (polled.unanswered === null && polled.problem !== before)
-    ) {
-      console.log(
-        `[ingress] polled ${repo}: ${landed} new${polled.problem ? `; ${polled.problem}` : ""}`
-      );
+    for (const { repo, polled, landed } of polls) {
+      if (
+        landed > 0 ||
+        (unanswered.length === 0 && reason !== before && polled.problem)
+      ) {
+        console.log(
+          `[ingress] polled ${repo}: ${landed} new${polled.problem ? `; ${polled.problem}` : ""}`
+        );
+      }
     }
   };
 
@@ -1148,26 +1192,27 @@ export const createIngress = ({
 
   const githubOf = (projectId: string): IngressView["github"] => {
     const project = projectOf(projectId);
-    const repo = githubRepoOf(project.remote) ?? null;
+    const repos = githubReposOf(project.links);
     const poller = store.githubPoller(projectId);
     const connection = poller?.connection ?? null;
+    const named = repos.join(", ");
     let state: string;
-    if (!repo) {
-      state =
-        "Nothing is polled: the project's checkout has no origin on github.com.";
+    if (repos.length === 0) {
+      state = NO_GITHUB_LINK;
     } else if (!connection) {
-      state = `Its repository ${repo} isn't polled: grant the project a GitHub connection in ${configurePage("connections")}.`;
+      state = `${named} ${repos.length > 1 ? "aren't" : "isn't"} polled: grant the project a GitHub connection in ${configurePage("connections")}.`;
     } else if (poller?.reason) {
-      state = `Polling ${repo} with ${connection}; its last poll stopped: ${poller.reason}`;
+      state = `Polling ${named} with ${connection}; its last poll stopped: ${poller.reason}`;
     } else {
-      state = `Polling ${repo} every 60 s with ${connection}.`;
+      state = `Polling ${named} every 60 s with ${connection}.`;
     }
     return {
-      repo,
+      repos,
+      repo: repos.length > 0 ? named : null,
       connection,
-      polled: Boolean(repo && connection),
+      polled: Boolean(repos.length > 0 && connection),
       state,
-      resources: poller && poller.repo === repo ? poller.cursors : {},
+      resources: {},
       polledAt: poller?.polledAt?.getTime() ?? null,
       resumeAt: poller?.resumeAt?.getTime() ?? null,
     };

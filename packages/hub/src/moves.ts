@@ -62,7 +62,13 @@ import {
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
-import { checkoutOf, type DbShape, type MoveRow, type ProjectRow } from "./db";
+import {
+  checkoutOf,
+  type DbShape,
+  type MoveRow,
+  type PlaceRow,
+  type ProjectRow,
+} from "./db";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
@@ -203,6 +209,11 @@ export class MoveRefused extends Error {
     this.status = status;
   }
 }
+
+/** Throws a {@link MoveRefused}: for a refusal where a value is wanted. */
+const refuseMove = (status: 400 | 404 | 409, message: string): never => {
+  throw new MoveRefused(status, message);
+};
 
 /** How long a step may take before the hub stops waiting on its answer. */
 const STEP_TIMEOUT_MS = DAY_MS;
@@ -600,12 +611,35 @@ export const createMoves = (deps: MovesDeps) => {
     },
   });
 
+  /**
+   * The checkout a move takes: the one New session names (`from`, a place
+   * id), else the project's primary, as the shipped apps that name none
+   * read it. Refused when `from` names none of the project's checkouts.
+   */
+  const sourceOf = (
+    project: ProjectRow,
+    from: string | undefined
+  ): PlaceRow | undefined => {
+    if (from === undefined) {
+      return checkoutOf(project);
+    }
+    return (
+      project.places.find(
+        (place) => place.id === from && place.kind === "checkout"
+      ) ??
+      refuseMove(
+        404,
+        `That folder is no longer in ${project.name}. Pick another under Move from.`
+      )
+    );
+  };
+
   /** Why a project can't be read for a move at all: no source, or a machine away. */
   const sourceRefusal = (
     project: ProjectRow,
+    sourcePlace: PlaceRow | undefined,
     targetMachineId: string
   ): string | undefined => {
-    const sourcePlace = checkoutOf(project);
     if (!sourcePlace) {
       return `${project.name} has no checkout to move from.`;
     }
@@ -653,46 +687,49 @@ export const createMoves = (deps: MovesDeps) => {
     };
   };
 
+  /** No move: the project's checkout `there` on the target is the source's repository already. */
+  const alreadyThere = (project: ProjectRow, there: PlaceRow): Plan => ({
+    project,
+    estimate: {
+      needed: false,
+      bytes: 0,
+      lfsBytes: 0,
+      uncommittedFiles: 0,
+      needsApproval: false,
+      path: there.path,
+      display: there.path,
+    },
+  });
+
   /**
-   * What moving `projectId` to `targetMachineId` takes: whether it is needed,
-   * where it goes, what it fetches, and why it can't, as the New session
-   * modal's reading line says it.
+   * What moving the project's checkout `asked.from` (its primary when none
+   * is named) to `targetMachineId` takes: whether it is needed, where it
+   * goes, what it fetches, and why it can't, as the New session modal's
+   * reading line says it. A checkout of the project on the target that is
+   * the source's repository (the same root commit) needs no move; one of
+   * another of its repositories is no reason not to move.
    */
   const plan = async (
     projectId: string,
     targetMachineId: string,
-    asked?: string
+    asked: { from?: string; path?: string }
   ): Promise<Plan> => {
     const project = db.project(projectId);
     if (!project) {
       throw new MoveRefused(404, `There is no project ${projectId}.`);
     }
-    const there = project.places.find(
+    const sourcePlace = sourceOf(project, asked.from);
+    const theres = project.places.filter(
       (place) =>
         place.machineId === targetMachineId && place.kind === "checkout"
     );
-    if (there && !asked) {
-      return {
-        project,
-        estimate: {
-          needed: false,
-          bytes: 0,
-          lfsBytes: 0,
-          uncommittedFiles: 0,
-          needsApproval: false,
-          path: there.path,
-          display: there.path,
-        },
-      };
-    }
-    const refused = sourceRefusal(project, targetMachineId);
-    const sourcePlace = checkoutOf(project);
+    const refused = sourceRefusal(project, sourcePlace, targetMachineId);
     if (refused || !sourcePlace) {
-      return refusedPlan(project, asked ?? "", refused ?? "");
+      return refusedPlan(project, asked.path ?? "", refused ?? "");
     }
     const targetPath = db.machinePathOn(
       targetMachineId,
-      asked ?? `~/${posix.basename(sourcePlace.path)}`
+      asked.path ?? `~/${posix.basename(sourcePlace.path)}`
     );
     if (targetPath instanceof MachinePathRefused) {
       throw new MoveRefused(400, targetPath.message, { cause: targetPath });
@@ -700,10 +737,23 @@ export const createMoves = (deps: MovesDeps) => {
     // A plain folder being made a repository is read once it is one (or
     // stayed a folder): what the move asks never depends on which finished first.
     await deps.settled(sourcePlace.machineId, sourcePlace.path);
-    const [sourceInspection, targetInspection] = await Promise.all([
-      inspect(sourcePlace.machineId, sourcePlace.path),
-      inspect(targetMachineId, targetPath),
-    ]);
+    const [sourceInspection, targetInspection, ...checkouts] =
+      await Promise.all([
+        inspect(sourcePlace.machineId, sourcePlace.path),
+        inspect(targetMachineId, targetPath),
+        ...(asked.path
+          ? []
+          : theres.map((place) => inspect(targetMachineId, place.path))),
+      ]);
+    const same = theres.find((_, at) => {
+      const checkout = checkouts[at];
+      return (
+        checkout !== undefined && sameRepository(sourceInspection, checkout)
+      );
+    });
+    if (same) {
+      return alreadyThere(project, same);
+    }
     const source = {
       machineId: sourcePlace.machineId,
       inspection: sourceInspection,
@@ -926,9 +976,9 @@ export const createMoves = (deps: MovesDeps) => {
   const estimate = async (
     projectId: string,
     targetMachineId: string,
-    path?: string
+    asked: { from?: string; path?: string }
   ): Promise<MoveEstimate> => {
-    const planned = await plan(projectId, targetMachineId, path);
+    const planned = await plan(projectId, targetMachineId, asked);
     const { estimate: estimated, source, target } = planned;
     if (!(estimated.needed && source && target) || estimated.refused) {
       return estimated;
@@ -1035,7 +1085,10 @@ export const createMoves = (deps: MovesDeps) => {
       spawn: { ...asked.spawn, harness },
     };
     const planned = movable(
-      await plan(projectId, request.machineId, request.path),
+      await plan(projectId, request.machineId, {
+        ...(request.from === undefined ? {} : { from: request.from }),
+        ...(request.path === undefined ? {} : { path: request.path }),
+      }),
       request
     );
     const { project, source, target } = planned;
@@ -1053,12 +1106,14 @@ export const createMoves = (deps: MovesDeps) => {
         `What moving ${project.name} does changed since you looked. Check it again.`
       );
     }
-    // A project with no outside remote has the hub as its remote.
+    // The repository moved is linked by its origin: the target's clone,
+    // whose origin it is, is known as the project by it. One with no origin
+    // is linked once its snapshot names its hub repository.
     const identity = source.inspection.origin
       ? normaliseRemote(source.inspection.origin)
-      : hubRemoteIdentity({ projectId: project.id });
-    if (identity && !project.remote) {
-      db.setProjectRemote(project.id, identity);
+      : null;
+    if (identity) {
+      db.addProjectLink(project.id, identity);
     }
     const row = db.insertMove({
       id: crypto.randomUUID(),
@@ -1124,6 +1179,10 @@ export const createMoves = (deps: MovesDeps) => {
           ],
           STEP_TIMEOUT_MS
         )) as MoveSnapshotResult;
+        // A repository with no origin has the hub's as its remote from here.
+        if (snapshot.hub) {
+          db.addProjectLink(row.projectId, hubRemoteIdentity(snapshot.hub));
+        }
         return { snapshot };
       }
       case "clone": {

@@ -68,10 +68,10 @@ import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
-import type { DbShape } from "./db";
+import type { DbShape, ProjectRow } from "./db";
 import type { RelayPatch, RelayRow } from "./db/relays";
 import { createFunnel, type Funnel, type FunnelState } from "./funnel";
-import { type GitHubKind, githubRepoOf, normalizeGitHub } from "./github";
+import { type GitHubKind, githubReposOf, normalizeGitHub } from "./github";
 import { byHandle } from "./handles";
 import { type Ingress, valueAt } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -133,6 +133,8 @@ export interface RelayInput {
   idPath?: string | null;
   projectId: string;
   provider: RelayProvider;
+  /** GitHub: the repository, `owner/repo`, of the project's links; its only one when left out. */
+  repo?: string | null;
   /** generic: the header with the hex HMAC-SHA256. */
   signatureHeader?: string | null;
   /** generic: a header with the Unix time the signature covers. */
@@ -575,8 +577,7 @@ export const createRelay = ({
     return { owner, repo: name };
   };
 
-  const repoOf = (row: RelayRow): string | undefined =>
-    githubRepoOf(db.project(row.projectId)?.remote ?? null);
+  const repoOf = (row: RelayRow): string | undefined => row.repo ?? undefined;
 
   /** The step when the hub can't register the webhook: what to paste where. */
   const pasteStep = (row: RelayRow, url: string, why: string): string =>
@@ -595,7 +596,7 @@ export const createRelay = ({
         reason: pasteStep(
           row,
           url,
-          "The hub can't register this webhook: the project has no GitHub repository, connection or secret."
+          "The hub can't register this webhook: no GitHub repository, connection or secret is set for it."
         ),
       };
     }
@@ -885,6 +886,7 @@ export const createRelay = ({
     projectId: row.projectId,
     provider: row.provider,
     connection: row.connection,
+    repo: row.repo,
     host: row.host,
     publicUrl: row.publicUrl,
     state: row.state,
@@ -912,19 +914,41 @@ export const createRelay = ({
 
   // --- create, remove, secret ------------------------------------------------------------
 
-  /** The input as it will be made, or the refusal: everything checked before anyone is asked. */
-  /** A GitHub relay's connection: one that holds a token, for a project on github.com with no relay yet. */
-  const githubConnection = (
-    projectId: string,
-    remote: string | null,
+  /** A GitHub relay's repository: the one named among the project's links, else its only one. */
+  const githubRepoFor = (
+    project: ProjectRow,
     named: string | null | undefined
   ): string => {
-    const repo =
-      githubRepoOf(remote) ??
-      refuse(
-        400,
-        "The project's checkout has no origin on github.com, so there is no repository to register a webhook on."
+    const repos = githubReposOf(project.links);
+    const asked = named?.trim();
+    if (asked) {
+      return (
+        repos.find((one) => one.toLowerCase() === asked.toLowerCase()) ??
+        refuse(
+          400,
+          repos.length > 0
+            ? `${asked} isn't one of the project's GitHub repositories. Pass one as repo: ${repos.join(", ")}.`
+            : `${asked} isn't one of the project's GitHub repositories: it links none.`
+        )
       );
+    }
+    if (repos.length === 1 && repos[0]) {
+      return repos[0];
+    }
+    return refuse(
+      400,
+      repos.length === 0
+        ? "The project links no repository on github.com, so there is none to register a webhook on."
+        : `Name the repository to register the webhook on (repo): ${repos.join(", ")}.`
+    );
+  };
+
+  /** A GitHub relay's connection: one that holds a token, for a repository with no relay yet. */
+  const githubConnection = (
+    projectId: string,
+    repo: string,
+    named: string | null | undefined
+  ): string => {
     const connection =
       named?.trim() ||
       db.ingress.githubPoller(projectId)?.connection ||
@@ -939,7 +963,12 @@ export const createRelay = ({
     }
     const live = store
       .ofProject(projectId)
-      .find((row) => row.provider === "github" && row.state !== "off");
+      .find(
+        (row) =>
+          row.provider === "github" &&
+          row.state !== "off" &&
+          row.repo?.toLowerCase() === repo.toLowerCase()
+      );
     if (live) {
       refuse(
         409,
@@ -971,13 +1000,15 @@ export const createRelay = ({
     if (!RELAY_PROVIDERS.includes(input.provider)) {
       refuse(400, `provider is one of ${RELAY_PROVIDERS.join(", ")}.`);
     }
+    const repo =
+      input.provider === "github" ? githubRepoFor(project, input.repo) : null;
     return {
       projectId: project.id,
       provider: input.provider,
-      connection:
-        input.provider === "github"
-          ? githubConnection(project.id, project.remote, input.connection)
-          : null,
+      repo,
+      connection: repo
+        ? githubConnection(project.id, repo, input.connection)
+        : null,
       ...(input.provider === "generic"
         ? genericHeaders(input)
         : { signatureHeader: null, timestampHeader: null }),
@@ -988,10 +1019,9 @@ export const createRelay = ({
   /** The sentence the owner approves: what goes public. */
   const publicText = (input: Required<RelayInput>): string => {
     const project = projectOf(input.projectId);
-    const repo = githubRepoOf(project.remote);
     const registers =
       input.provider === "github"
-        ? ` The hub then registers a webhook on ${repo} through ${input.connection}, with a secret it makes, for pull requests, issues and issue comments.`
+        ? ` The hub then registers a webhook on ${input.repo} through ${input.connection}, with a secret it makes, for pull requests, issues and issue comments.`
         : "";
     return `Approving opens one public HTTPS path on the hub's machine (${tailscale().host}) through Tailscale Funnel, port 10000: https://<its tailnet name>:10000/hooks/<a new random id>. The internet can POST ${input.provider}-signed deliveries for project “${project.name}” there; it answers nothing back, and nothing else of the hub is reachable through it.${registers}`;
   };
@@ -1042,6 +1072,7 @@ export const createRelay = ({
       secret: minted ? randomBytes(32).toString("hex") : null,
       secretFrom: minted ? "minted" : null,
       connection: made.connection,
+      repo: made.repo,
       hookId: null,
       signatureHeader: made.signatureHeader,
       timestampHeader: made.timestampHeader,
@@ -1125,12 +1156,14 @@ export const createRelay = ({
       connection?: string | null;
       id_path?: string | null;
       provider?: RelayProvider;
+      repo?: string | null;
       signature_header?: string | null;
       timestamp_header?: string | null;
     }
   ): RelayInput => ({
     projectId,
     provider: words.provider ?? "github",
+    repo: words.repo ?? null,
     connection: words.connection ?? null,
     signatureHeader: words.signature_header ?? null,
     timestampHeader: words.timestamp_header ?? null,
@@ -1140,6 +1173,7 @@ export const createRelay = ({
   const approvedAsk = z.object({
     project: z.string(),
     provider: z.enum(RELAY_PROVIDERS),
+    repo: z.string().nullish(),
     connection: z.string().nullish(),
     signature_header: z.string().nullish(),
     timestamp_header: z.string().nullish(),
@@ -1171,6 +1205,7 @@ export const createRelay = ({
       project: made.projectId,
       project_name: projectOf(made.projectId).name,
       provider: made.provider,
+      repo: made.repo,
       connection: made.connection,
       signature_header: made.signatureHeader,
       timestamp_header: made.timestampHeader,
@@ -1207,6 +1242,10 @@ export const createRelay = ({
         "Open a public webhook path for your project (Tailscale Funnel) once the owner approves; GitHub's webhook is registered for you.",
         {
           provider: z.enum(RELAY_PROVIDERS).optional(),
+          repo: z
+            .string()
+            .optional()
+            .describe("github: owner/name, when the project links several"),
           connection: z.string().optional().describe("github"),
           signature_header: z.string().optional().describe("generic"),
           timestamp_header: z.string().optional().describe("generic"),
@@ -1283,6 +1322,7 @@ const attempt = refusalAttempt(RelayRefusal);
 /** What a relay is made of, as the owner sends it to preview or make one. */
 const RELAY_FIELDS = t.Object({
   provider: t.Union(RELAY_PROVIDERS.map((one) => t.Literal(one))),
+  repo: t.Optional(t.Nullable(t.String())),
   connection: t.Optional(t.Nullable(t.String())),
   signatureHeader: t.Optional(t.Nullable(t.String())),
   timestampHeader: t.Optional(t.Nullable(t.String())),

@@ -419,13 +419,6 @@ export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   /**
-   * The checkout's `origin`, normalised to `host/owner/repo` (projects.ts
-   * `normaliseRemote`): how a checkout of the same repository on another
-   * machine is known as this project. Null until a place's machine has
-   * answered, and for a folder with no remote.
-   */
-  remote: text("remote"),
-  /**
    * Where the project's tasks live (§5.2 of the Projects spec): CawCo's own
    * files in the project folder, alone or with GitHub Issues or Linear as
    * the record of each task's issue fields (tracker.ts, `tracker_bindings`).
@@ -780,6 +773,35 @@ export const projectPlaces = sqliteTable(
       table.path
     ),
     index("project_places_machine").on(table.machineId, table.path),
+  ]
+);
+
+/**
+ * A project's links: one per repository of it, its remote normalised to
+ * `host/owner/repo` (projects.ts `normaliseRemote`), or the hub's own
+ * (`cawco/<project>[/<root>]`). Each is read from a checkout's `origin`
+ * (server.ts `learnRemote`), set by `link_repo`, or made by publishing a
+ * folder (`create_repo`). A checkout of a linked repository on any machine
+ * is known as the project by it, and GitHub events and pull requests of
+ * every linked repository reach the project (ingress.ts, relay.ts).
+ */
+export const projectLinks = sqliteTable(
+  "project_links",
+  {
+    projectId: projectKey(),
+    remote: text("remote").notNull(),
+    /**
+     * The hub repository this link is the published copy of, by its path
+     * segment (core hub-repo.ts `hubRepoSegment`): a folder whose origin is
+     * that repository is published already. Null: a link read from a
+     * checkout's origin, or one `link_repo` set, which no publish made.
+     */
+    publishedFrom: text("published_from"),
+    createdAt: stampedNow("created_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.remote] }),
+    index("project_links_remote").on(table.remote),
   ]
 );
 
@@ -4967,9 +4989,9 @@ export type GitHubResource =
 
 /**
  * A project's GitHub poller (ingress.ts, github.ts): the connection whose
- * token it polls with, the repository it last polled, and each resource's
- * cursor (`github_poll_cursors`), so a hub restart neither re-delivers nor
- * misses.
+ * token it polls every GitHub repository the project links with, and each
+ * repository's cursor per resource (`github_poll_cursors`), so a hub
+ * restart neither re-delivers nor misses.
  */
 export const githubPollers = sqliteTable("github_pollers", {
   projectId: text("project_id")
@@ -4977,8 +4999,6 @@ export const githubPollers = sqliteTable("github_pollers", {
     .references(() => projects.id, { onDelete: "cascade" }),
   /** The connection (service `github`, one that reads GitHub's API: core `readsGitHubApi`) it polls with. */
   connection: text("connection").notNull(),
-  /** `owner/repo` the cursors are for; another repository starts them afresh. */
-  repo: text("repo"),
   /** Why its last poll failed, or null. */
   reason: text("reason"),
   /** GitHub's rate limit holds polls back until then. */
@@ -4986,13 +5006,15 @@ export const githubPollers = sqliteTable("github_pollers", {
   polledAt: timestamp("polled_at"),
 });
 
-/** One resource's cursor in a project's GitHub poller ({@link GitHubCursor}). */
+/** One resource's cursor of one repository in a project's GitHub poller ({@link GitHubCursor}). */
 export const githubPollCursors = sqliteTable(
   "github_poll_cursors",
   {
     projectId: text("project_id")
       .notNull()
       .references(() => githubPollers.projectId, { onDelete: "cascade" }),
+    /** `owner/repo`, one of the project's links. */
+    repo: text("repo").notNull(),
     resource: text("resource").$type<GitHubResource>().notNull(),
     etag: text("etag"),
     /** The newest `updated_at` taken in, ms. */
@@ -5000,7 +5022,9 @@ export const githubPollCursors = sqliteTable(
     polls: integer("polls").notNull(),
     notModified: integer("not_modified").notNull(),
   },
-  (table) => [primaryKey({ columns: [table.projectId, table.resource] })]
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.repo, table.resource] }),
+  ]
 );
 
 /**
@@ -5342,6 +5366,8 @@ export const relays = sqliteTable(
     secretFrom: text("secret_from").$type<"minted" | "owner">(),
     /** The connection the webhook is registered through (GitHub). */
     connection: text("connection"),
+    /** GitHub: the repository, `owner/repo`, one of the project's links, whose webhook it is. */
+    repo: text("repo"),
     /** GitHub's id for the webhook the hub registered, so removing the relay deletes it. */
     hookId: text("hook_id"),
     /** generic: the header carrying the hex HMAC-SHA256, and an optional timestamp header. */

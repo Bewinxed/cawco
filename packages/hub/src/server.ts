@@ -744,7 +744,7 @@ import { accountForecasts, carrySequence, historyPoints } from "./forecast";
 import { createForgePosts } from "./forge-posts";
 import { gateRoutes } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
-import { githubRepoOf } from "./github";
+import { githubReposOf } from "./github";
 import { createHandedInputs } from "./handed-inputs";
 import { handleId, isHandle } from "./handles";
 import { hidden } from "./hidden";
@@ -1816,6 +1816,9 @@ const continueBody = t.Object({
 /** `POST /api/projects/:id/moves`: core `MoveRequest`. */
 const moveBody = t.Object({
   approved: t.Optional(t.String({ minLength: 1 })),
+  // The checkout it moves, by place id; optional on the wire for the shipped
+  // apps, which name none: their move takes the primary (moves.ts `sourceOf`).
+  from: t.Optional(t.String({ minLength: 1 })),
   machineId: t.String({ minLength: 1 }),
   path: t.Optional(t.String({ pattern: "^(/|~/)" })),
   spawn: t.Object({
@@ -3839,8 +3842,8 @@ export const createServer = (
   // A session's forge_post (forge-posts.ts): made on its machine with the
   // machine's own sign-in.
   const forgePosts = createForgePosts({
-    remoteOf: (projectId) =>
-      (projectId ? db.project(projectId)?.remote : undefined) ?? undefined,
+    linksOf: (projectId) =>
+      (projectId ? db.project(projectId)?.links : undefined) ?? [],
     call: async (machineId, ask) => {
       const answer = await callAgent(
         machineId,
@@ -13621,9 +13624,8 @@ export const createServer = (
     // A plain folder stays one: a workspace is a private copy of any folder
     // (agent layer.ts), a move makes it a repository with the person's yes
     // (moves.ts `askFor`), and a publish as it reads it (repo-publish.ts).
-    if (!project.remote) {
-      await learnRemote(project.id, machineId, path);
-    }
+    // Its repository, a project's second among them, is linked by its origin.
+    await learnRemote(project.id, machineId, path);
     return {
       ...projectOut(db.project(project.id) ?? project),
       place,
@@ -24359,10 +24361,10 @@ export const createServer = (
   };
 
   /**
-   * A project's remote, read from one of its checkouts. Nothing read (the
-   * machine away, no `origin`) leaves it unknown for the next chance. A
-   * remote another project already has makes the two one project
-   * (project-merge.ts).
+   * A project's link to the repository one of its checkouts is, read from
+   * its `origin`. Nothing read (the machine away, no `origin`) leaves it
+   * for the next chance. A link another project already has makes the two
+   * one project (project-merge.ts).
    */
   const learnRemote = async (
     projectId: string,
@@ -24370,8 +24372,7 @@ export const createServer = (
     path: string
   ): Promise<void> => {
     const remote = await readRemote(runOnMachine, machineId, path);
-    if (remote) {
-      db.setProjectRemote(projectId, remote);
+    if (remote && db.addProjectLink(projectId, remote)) {
       await mergeSameRemote(merging, remote);
     }
   };
@@ -24596,6 +24597,10 @@ export const createServer = (
     // gate.md (gate-file.ts). Kept for the shipped apps that require it
     // (TestFlight 20261015.3 to 20261018); it goes once none is installable.
     appleGate: false as boolean,
+    // Read by nothing: a project links a repository each (`links`). Kept
+    // for the shipped apps that require it (every TestFlight build before
+    // 2026-11-03), as their one link; it goes once none is installable.
+    remote: (project.links[0] ?? null) as string | null,
   });
 
   // Each project's spend cap: what holds its attempts and its Caw back (project-caps.ts).
@@ -25024,7 +25029,7 @@ export const createServer = (
       externalItems.linked(
         projectId,
         link,
-        githubRepoOf(db.project(projectId)?.remote ?? null)
+        githubReposOf(db.project(projectId)?.links ?? [])
       ),
     starters: (projectId, place) => projectStarters.read(projectId, place),
     // The template's starter skills go to the project's places, and the old one's leave.
@@ -26597,6 +26602,7 @@ export const createServer = (
       bare: (key) => bareRepoPath(GIT_ROOT, key),
       call: callMachine,
       connections,
+      db,
       places: placeRepos,
     }),
     note: (actor, note) => {
@@ -30573,11 +30579,15 @@ export const createServer = (
           query: t.Object({
             machine: t.String({ minLength: 1 }),
             path: t.Optional(t.String({ pattern: "^(/|~/)" })),
+            from: t.Optional(t.String({ minLength: 1 })),
           }),
         },
         async ({ params, query, status }) => {
           try {
-            return await moves.estimate(params.id, query.machine, query.path);
+            return await moves.estimate(params.id, query.machine, {
+              ...(query.from === undefined ? {} : { from: query.from }),
+              ...(query.path === undefined ? {} : { path: query.path }),
+            });
           } catch (error) {
             return error instanceof MoveRefused
               ? status(error.status, error.message)
@@ -35116,11 +35126,11 @@ export const createServer = (
               dispatcher.machineOnline(message.machineId);
               // A delegate that waited for owned files may start on it now.
               workItems.resumeQueued();
-              // Projects that do not know their repository yet read it from
-              // their checkouts here, now that the machine can run git.
+              // Each checkout's repository is linked to its project from
+              // its origin here, now that the machine can run git.
               Promise.all(
                 db
-                  .projectsWithoutRemote(message.machineId)
+                  .checkoutsOn(message.machineId)
                   .map(({ projectId, path }) =>
                     learnRemote(projectId, message.machineId, path)
                   )

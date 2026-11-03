@@ -14,20 +14,21 @@
  * - `grant_connection`: a connection that exists joins the project's
  *   connections, as Settings › Connections' `projects` does
  *   (connections.ts `update`): every session of the project may use it.
- * - `link_repo`: the project's repository, the `remote` a checkout's
- *   `origin` would give it (server.ts `learnRemote`), set to
- *   `github.com/<owner>/<name>`: what GitHub events and pull requests read.
- *   No file in any place of the project changes; a project with a
- *   repository already, or one another project has, is refused.
+ * - `link_repo`: a link to a GitHub repository, `github.com/<owner>/<name>`,
+ *   beside the ones its checkouts' origins give it (server.ts
+ *   `learnRemote`): its GitHub events and pull requests reach the project.
+ *   No file in any place of the project changes; a link it has, or one
+ *   another project has, is refused.
  * - `set_lands`: where the project's attempts land when their task says
  *   nothing, through the person's own edit (project-edit.ts), which writes
  *   it with the dispatch settings (dispatch.ts `configure`).
  * - `set_runs_on`: where the project's attempts run when their task says
  *   nothing (runs-on.ts): a machine or a capability like `apple`, or null
  *   for any machine; through the same dispatch settings.
- * - `create_repo`: the project's place published to a new GitHub
- *   repository, then linked (repo-publish.ts). It reaches outside, so it is
- *   always asked, `ask` or not.
+ * - `create_repo`: one of the project's folders (`folder`; its only one when
+ *   left out) published to a new GitHub repository, then linked as that
+ *   repository's copy (repo-publish.ts). Each repository is published once.
+ *   It reaches outside, so it is always asked, `ask` or not.
  * - `rename`: the project's name, checked and written as the person's own
  *   edit is (project-edit.ts). A name is a label the person can change back
  *   in a click, so it applies at once like the others.
@@ -59,6 +60,7 @@ import {
   publishedWords,
 } from "@cawco/core";
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
+import { hubRepoSegment } from "@cawco/core/hub-repo";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import type { Connections } from "./connections";
@@ -116,6 +118,10 @@ const ASKED_CHANGE = z.object({
   kind: z.enum(PROJECT_SETTING_KINDS),
   connection: z.string().optional(),
   github: z.string().optional().describe("owner/name"),
+  folder: z
+    .string()
+    .optional()
+    .describe("create_repo: the folder's path, when the project has several"),
   lands: z.enum(PROJECT_LANDS).optional(),
   runs_on: z.string().nullable().optional(),
   name: z.string().optional(),
@@ -154,7 +160,12 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
     case "set_runs_on":
       return { kind: change.kind, runs_on: change.runsOn };
     case "create_repo":
-      return { kind: change.kind, name: change.name, private: change.private };
+      return {
+        kind: change.kind,
+        name: change.name,
+        private: change.private,
+        ...(change.folder ? { folder: change.folder } : {}),
+      };
     case "rename":
       return { kind: change.kind, name: change.name };
     case "set_review":
@@ -276,7 +287,7 @@ export interface ProjectSettingsDeps {
   readonly connections: Pick<Connections, "get" | "list" | "update">;
   readonly db: Pick<
     DbShape,
-    "listAgents" | "project" | "projectByRemote" | "setProjectRemote"
+    "addProjectLink" | "listAgents" | "project" | "projectByRemote"
   >;
   /**
    * Changes the project's dispatch settings, and reads them with what the
@@ -342,13 +353,8 @@ export const createProjectSettings = ({
 
   /** A repository link, checked against the project as it stands. */
   const linkable = (project: ProjectRow, remote: string): void => {
-    if (project.remote === remote) {
+    if (project.links.includes(remote)) {
       refuse(`This project is linked to ${remote} already.`);
-    }
-    if (project.remote) {
-      refuse(
-        `This project's repository is ${project.remote}, read from its checkout; it is not changed here.`
-      );
     }
     const other = db.projectByRemote(remote);
     if (other && other.id !== project.id) {
@@ -500,7 +506,7 @@ export const createProjectSettings = ({
         break;
       }
       case "link_repo":
-        db.setProjectRemote(project.id, `github.com/${change.github}`);
+        db.addProjectLink(project.id, `github.com/${change.github}`);
         break;
       case "rename":
         await edit(project.id, { name: change.name });
@@ -509,13 +515,17 @@ export const createProjectSettings = ({
         await edit(project.id, { review: change.review });
         break;
       case "create_repo": {
-        // A publish links what it made.
-        const full = await publish.publish(project, change);
+        // A publish links what it made, as its repository's copy.
+        const { full, from } = await publish.publish(project, change);
         linkable(project, `github.com/${full}`);
-        db.setProjectRemote(project.id, `github.com/${full}`);
+        db.addProjectLink(
+          project.id,
+          `github.com/${full}`,
+          hubRepoSegment(from)
+        );
         return [
           projectSettingWords(change),
-          `Link this project to github.com/${full}`,
+          projectSettingWords({ kind: "link_repo", github: full }),
         ];
       }
       case "set_runs_on":
@@ -613,7 +623,7 @@ export const createProjectSettings = ({
       lands: now.lands,
       runsOn: now.runsOn,
       review: project.review,
-      remote: project.remote,
+      links: project.links,
       connections: connections
         .list()
         .filter((view) => view.projects.includes(project.id))

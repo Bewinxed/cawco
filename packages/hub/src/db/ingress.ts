@@ -31,8 +31,11 @@ export type EventRouteRow = typeof eventRoutes.$inferSelect & {
   kinds: string[];
 };
 /** A project's GitHub poller with its resources' cursors (`github_poll_cursors`). */
+/** One repository's cursors, each resource's. */
+export type GitHubCursors = Partial<Record<GitHubResource, GitHubCursor>>;
 type GitHubPollerRow = typeof githubPollers.$inferSelect & {
-  cursors: Partial<Record<GitHubResource, GitHubCursor>>;
+  /** Each polled repository's cursors, by `owner/repo`. */
+  cursors: Record<string, GitHubCursors>;
 };
 /** A connector poll with how many items its last call kept; null until it has looked. */
 export type ConnectorPollRow = typeof connectorPolls.$inferSelect & {
@@ -108,9 +111,10 @@ export interface IngressDb {
     patch: Partial<Omit<ConnectorPollRow, "id" | "createdAt" | "seen">>
   ) => ConnectorPollRow | undefined;
   /**
-   * Keeps a poll's outcome: the row's fields named, and each cursor in
-   * `cursors` over the one it had, in one transaction. A repository other
-   * than the one kept starts its cursors afresh.
+   * Keeps a poll's outcome: the row's fields named, and each cursor of each
+   * repository in `cursors` over the one it had, in one transaction. A
+   * repository the project no longer links keeps its cursors until the
+   * poller goes.
    */
   readonly updateGitHubPoller: (
     projectId: string,
@@ -164,7 +168,7 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
   ): GitHubPollerRow[] => {
     const cursors = new Map<string, GitHubPollerRow["cursors"]>();
     if (rows.length > 0) {
-      for (const { projectId, resource, ...cursor } of db
+      for (const { projectId, repo, resource, ...cursor } of db
         .select()
         .from(githubPollCursors)
         .where(
@@ -174,10 +178,9 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
           )
         )
         .all()) {
-        cursors.set(projectId, {
-          ...cursors.get(projectId),
-          [resource]: cursor,
-        });
+        const kept = cursors.get(projectId) ?? {};
+        kept[repo] = { ...kept[repo], [resource]: cursor };
+        cursors.set(projectId, kept);
       }
     }
     return rows.map((row) => ({
@@ -333,7 +336,7 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         return;
       }
       db.insert(githubPollers)
-        .values({ projectId, connection, repo: null })
+        .values({ projectId, connection })
         .onConflictDoUpdate({
           target: githubPollers.projectId,
           set: { connection, reason: null, resumeAt: null },
@@ -343,18 +346,12 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     updateGitHubPoller: (projectId, { cursors, ...patch }) => {
       db.transaction((tx) => {
         const stored = tx
-          .select({ repo: githubPollers.repo })
+          .select({ projectId: githubPollers.projectId })
           .from(githubPollers)
           .where(eq(githubPollers.projectId, projectId))
           .get();
         if (!stored) {
           return;
-        }
-        // Another repository starts its cursors afresh.
-        if (patch.repo !== undefined && patch.repo !== stored.repo) {
-          tx.delete(githubPollCursors)
-            .where(eq(githubPollCursors.projectId, projectId))
-            .run();
         }
         if (Object.keys(patch).length > 0) {
           tx.update(githubPollers)
@@ -362,22 +359,26 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
             .where(eq(githubPollers.projectId, projectId))
             .run();
         }
-        for (const [resource, cursor] of Object.entries(cursors ?? {})) {
-          if (cursor) {
-            tx.insert(githubPollCursors)
-              .values({
-                projectId,
-                resource: resource as GitHubResource,
-                ...cursor,
-              })
-              .onConflictDoUpdate({
-                target: [
-                  githubPollCursors.projectId,
-                  githubPollCursors.resource,
-                ],
-                set: cursor,
-              })
-              .run();
+        for (const [repo, ofRepo] of Object.entries(cursors ?? {})) {
+          for (const [resource, cursor] of Object.entries(ofRepo)) {
+            if (cursor) {
+              tx.insert(githubPollCursors)
+                .values({
+                  projectId,
+                  repo,
+                  resource: resource as GitHubResource,
+                  ...cursor,
+                })
+                .onConflictDoUpdate({
+                  target: [
+                    githubPollCursors.projectId,
+                    githubPollCursors.repo,
+                    githubPollCursors.resource,
+                  ],
+                  set: cursor,
+                })
+                .run();
+            }
           }
         }
       });

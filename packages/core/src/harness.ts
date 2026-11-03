@@ -2366,7 +2366,10 @@ export interface PlacePush {
   bytes: number;
   commit: string;
   files: number;
-  /** The hub repository it went to (hub-repo.ts); absent on a dry run, which pushes nothing. */
+  /**
+   * The hub repository it went to (hub-repo.ts); on a dry run, which pushes
+   * nothing, the one its origin names, absent for a place with no origin.
+   */
   hub?: HubRepoKey;
   /** What stays out: every uncommitted path in the place the first commit's rules keep out, with why. */
   leftOut: PlaceLeftOut[];

@@ -1,5 +1,6 @@
 /**
- * Moving a project to a machine that has no checkout of it (core move.ts;
+ * Moving a project's folder to a machine that has no checkout of its
+ * repository (core move.ts;
  * the design in `.design-foundations/plans/2026-10-09-project-move.md`). The
  * hub owns each move as a job; this tab reads what one would take, starts
  * it, and asks the hub to stop or retry it. What a job is doing reaches
@@ -13,18 +14,20 @@ import { hubRefusal } from "./hub-read";
 const refusal = (response: Response): Promise<Error> => hubRefusal(response);
 
 /**
- * What moving `projectId` to `machineId` takes: whether it is needed, where
- * it goes, what it fetches, why it can't, and what "Move it" does.
+ * What moving the project's checkout `from` (a place id) to `machineId`
+ * takes: whether it is needed, where it goes, what it fetches, why it
+ * can't, and what "Move it" does.
  */
 export async function moveEstimate(
   projectId: string,
   machineId: string,
-  path?: string,
+  asked: { from: string; path?: string | undefined },
   signal?: AbortSignal
 ): Promise<MoveEstimate> {
   const query = new URLSearchParams({
     machine: machineId,
-    ...(path ? { path } : {}),
+    from: asked.from,
+    ...(asked.path ? { path: asked.path } : {}),
   });
   const response = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/move-estimate?${query}`,
