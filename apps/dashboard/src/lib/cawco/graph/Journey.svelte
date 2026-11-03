@@ -14,6 +14,7 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
+  import { placeOpen } from "./list-place";
   import { pathOf, type Review } from "./model";
   import StateItem from "./StateItem.svelte";
   import Stepper from "./Stepper.svelte";
@@ -47,28 +48,6 @@
   let list = $state<HTMLElement>();
   /** He has scrolled or pressed in the list: its place is his from then on. */
   let touched = false;
-  /**
-   * The list's place on open: at its top when the kept row stands in view
-   * there; else its machine's head at the top, whole, when that shows the
-   * row; else the row by the least it takes. Placed again as the list lays
-   * itself out anew (the room beside a stage that took its own width)
-   * until he scrolls or presses in it.
-   */
-  const placeOpen = (scroller: HTMLElement, row: HTMLElement) => {
-    const { top } = scroller.getBoundingClientRect();
-    const fold = scroller.clientHeight;
-    const rowFoot =
-      row.getBoundingClientRect().bottom - top + scroller.scrollTop;
-    if (rowFoot <= fold) {
-      scroller.scrollTop = 0;
-      return;
-    }
-    const head = row.closest("section");
-    const headAt = head
-      ? head.getBoundingClientRect().top - top + scroller.scrollTop
-      : 0;
-    scroller.scrollTop = rowFoot - headAt <= fold ? headAt : rowFoot - fold;
-  };
   const rowOf = (scroller: HTMLElement, id: string) =>
     scroller.querySelector<HTMLElement>(`[data-state-id="${CSS.escape(id)}"]`);
   let placedFor: string | null = null;
