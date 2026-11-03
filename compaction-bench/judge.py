@@ -170,7 +170,7 @@ def anchors_for(cut):
         # priced, not made: the judgments that need anchors are sized with ten anchors of a typical length
         O.estimate.append({"key": f"judge/{cut['id']}/anchors", "model": common.OPUS, "kind": "anchors",
                            "system_chars": len(ANCHOR_SYSTEM), "user_chars": len(text) + len(ANCHOR_ASK) + 26})
-        return {"kept": [{"id": f"F{k:02d}", "gold": "x" * 160, "key": "\0"} for k in range(10)], "estimate": True}
+        return {"kept": [{"id": f"F{k:02d}", "question": "x" * 80, "gold": "x" * 160, "must": [], "key": "\0"} for k in range(10)], "estimate": True}
     if O.budget is not None and O.spent >= O.budget:
         stopped(f"{cut['id']}/anchors", f"budget: ${O.spent:.2f} spent by this judging, the limit is ${O.budget:.2f}")
         return None

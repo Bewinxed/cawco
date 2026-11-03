@@ -1,0 +1,9 @@
+## What it says
+
+- **Native `/compact` keeps the most.** Its quality ties whole (Opus median 3.00 against 3.00; pairwise against whole 25 wins, 6 ties, 26 losses), and no summary arm beats it.
+- **Warm, same organization: native `/compact` is the default.** It ranks first over all 19 cuts ($9.26 against $16.41 for whole, next 20 turns), and first in every band but 600k+, where the three cuts whole could be judged at put every arm within $0.75 of each other.
+- **Cold or cross-organization, with the source account still warm: compact first, then move** (A1cf). It is the cheapest arm within the floor ($9.26 against $20.11 for moving whole and $12.55 for compacting cold on the target), at both horizons and in every band but 600k+.
+- **Limit gone early (nothing can run on the old account): a Sonnet summary of the full clipped transcript.** A5 (Claude Code's prompt) ranks first at 20 turns ($9.54) and A4 (CawCo's prompt, same input) first over the whole horizon ($32.57). Their difference is not actionable (report §1, E4). A4 is the only summary arm that is never outside the floor in any band or horizon. Native `/compact` run cold on the target stays within the floor but costs $12.55.
+- **Today's CawCo summary input (A2, the extract that hides tool output) loses quality beyond the noise floor** against the best arm in every case over all cuts, at both horizons (Opus −0.75, 95 % CI −1.03 to −0.25; Sonnet −0.25), and in the 100-300k and 300-600k bands; only at 600k+ (3 cuts) is it within. It costs the same as native. Haiku (A3) is within the floor over all cuts but outside it at 100-300k.
+- **Chained cuts (2 cuts, a second compaction):** every compacting arm loses about 1 point against whole. The Factory merge (A6) is the weakest, and two cuts settle nothing.
+- **Not run:** OpenCode (A7d: its account's key expired) and pi (A7g: the ChatGPT account's Codex usage limit was reached on every probe).

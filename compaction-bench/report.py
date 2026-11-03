@@ -181,21 +181,10 @@ def choose(d, arms_, floor, cuts):
     return ok[0][1], f"best quality {best:.2f}; within the floor: {', '.join(a for _, a in ok)}", cand
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--cuts")
-    ap.add_argument("--eval-report", default=os.path.join(common.EVAL_DIR, "out", "report.md"))
-    ap.add_argument("--paper", help="PAPER.md whose Results section (between the results markers) is rewritten from out/")
-    a = ap.parse_args(argv)
-    out = os.path.abspath(a.out)
-    d = Data(out, a.cuts)
-    arms_present = sorted({k[1] for k in d.results}, key=lambda x: common.ALL_ARMS.index(x))
-    single = {c for c, v in d.cuts.items() if not v.get("chained")}
-    chained = {c for c, v in d.cuts.items() if v.get("chained")}
-    bands = {b: {c for c in single if d.cuts[c]["band"] == b} for b, _, _ in common.BANDS}
-
-    # ---- noise floor
+def noise_floor(d):
+    """(floor, p95, spreads, floor_pairs, floor_cuts): the larger of Nous's 0.3 and the 95th percentile of A0 run 1's Opus
+    0-5 distance to A0's other runs, at every cut where A0 has a judged repeat; the pairwise floor verdicts with it."""
+    out = d.out
     # every cut where A0 has a judged repeat: the floor cuts' five runs, and the three runs of any other cut (the drawn
     # floor cuts never got their five runs on 2026-10-25)
     floor_cuts = sorted(c for c in d.cuts if any((c, "A0", r, "opus") in d.q for r in range(2, 6))
@@ -214,6 +203,25 @@ def main(argv=None):
                     floor_pairs.append((c, run, j, {p["outcome"] for p in ps}))
     p95 = sorted(spreads)[int(0.95 * (len(spreads) - 1))] if spreads else None
     floor = max(NOUS_FLOOR, p95 or 0)
+    return floor, p95, spreads, floor_pairs, floor_cuts
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--cuts")
+    ap.add_argument("--eval-report", default=os.path.join(common.EVAL_DIR, "out", "report.md"))
+    ap.add_argument("--paper", help="PAPER.md whose Results section (between the results markers) is rewritten from out/")
+    a = ap.parse_args(argv)
+    out = os.path.abspath(a.out)
+    d = Data(out, a.cuts)
+    arms_present = sorted({k[1] for k in d.results}, key=lambda x: common.ALL_ARMS.index(x))
+    single = {c for c, v in d.cuts.items() if not v.get("chained")}
+    chained = {c for c, v in d.cuts.items() if v.get("chained")}
+    bands = {b: {c for c in single if d.cuts[c]["band"] == b} for b, _, _ in common.BANDS}
+
+    # ---- noise floor
+    floor, p95, spreads, floor_pairs, floor_cuts = noise_floor(d)
 
     L = [f"# Compaction benchmark{' (DRY RUN: every model reply simulated)' if any(r.get('dry') for r in d.results.values()) else ''}", "",
          f"Written {common.now_iso()}. Cuts: {len(d.cuts)} ({len(chained)} chained). Runs: "

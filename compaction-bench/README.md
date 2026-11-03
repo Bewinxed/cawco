@@ -23,6 +23,7 @@ compaction-bench/              beside ../infinite-chat-eval (imported, never cop
   e5.py          warm-compaction window cost from the DB (no model calls)
   arith.py       the cost of whole, native /compact and a Sonnet summary per situation and band, by arithmetic
   report.py      out/report.md, and with --paper the Results section of PAPER.md
+  rank.py        out/ranking.md and out/ranking-<case>.png: every arm ranked per cache case (warm, cold, limit)
   PAPER.md       the paper draft: method, related work, the sandbox, threats, decisions log; Results from report.py
   tools_dump.py  the stand-in's tool list from `cawco tools`
   sim.py         the dry run's model
@@ -268,6 +269,7 @@ systemd-run --user --same-dir --unit bench-pace -E PATH="$PATH" python3 -I pace.
 python3 -I cost.py --runs out/runs --cockpit-root $COCKPIT --db out/cawco.db
 python3 -I arith.py --out out --cockpit-root $COCKPIT          # no model call: every situation × band × method
 python3 -I report.py --out out --paper PAPER.md --eval-report <the eval's out/report.md>
+python3 -I rank.py --out out                                   # no model call; reads out/ranking-reading.md if present
 ```
 
 `arith.py` prices whole, native `/compact` and a Sonnet summary for every drawn cut in the three situations from

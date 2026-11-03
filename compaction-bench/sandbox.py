@@ -233,8 +233,12 @@ class Sandbox:
             common.git(["rev-parse", ref], top).strip()
         subprocess.run(["git", "clone", "--quiet", "--shared", "--no-checkout", top, self.wt], check=True,
                        capture_output=True, text=True)
-        branch = re.sub(r"[^A-Za-z0-9._/-]", "-", self.branch) or "bench"
-        common.git(["checkout", "--quiet", "-B", branch, self.commit], self.wt)
+        # a session on a detached HEAD records its branch as "HEAD", which is no branch name: it is detached here too
+        if self.branch == "HEAD":
+            common.git(["checkout", "--quiet", "--detach", self.commit], self.wt)
+        else:
+            branch = re.sub(r"[^A-Za-z0-9._/-]", "-", self.branch) or "bench"
+            common.git(["checkout", "--quiet", "-B", branch, self.commit], self.wt)
         for remote in common.git(["remote"], self.wt).split():
             common.git(["remote", "remove", remote], self.wt)
         common.git(["config", "core.hooksPath", self.hooks], self.wt)
