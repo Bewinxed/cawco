@@ -361,9 +361,10 @@ const CONTAINERS = {
   // holds a stage's kind beside its name from here: the list's and the
   // row's insets (4 × space-1), the remove, mark, kind (101.7px, "Needs
   // you" with its glyph) and handle columns and their four space-2 gaps
-  // (232px) leave the name 7.5rem (120px), "Waiting on reply" at a phone's
-  // 16px with its field's pads. Narrower, the kind stands under the name.
-  "setup-stages-line": "352px",
+  // (232px) leave the name 7rem (112px), "Waiting on reply" in the label
+  // role with its field's pads (a phone's 16px floor has 14px more: its
+  // page pads 14px, not 21). Narrower, the kind stands under the name.
+  "setup-stages-line": "344px",
   // A connect record row that lapsed (transcript/ConnectRow.svelte) keeps
   // Reconnect's word from here: the glyph (icon-md, 16px), "Connected to
   // Linear as bewinxed" (195px), "· signed out" (68px) and Reconnect (97px)
