@@ -2713,7 +2713,7 @@ export class RenderedChecks {
 /** Below this width a page is read as a phone's: touch and a coarse pointer (DESIGN.md's 640px line). */
 const PHONE_LINE = 640;
 const USAGE =
-  "bun scripts/probe-kit/rendered-checks.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]";
+  "bun scripts/probe-kit/rendered-checks.ts <url> [--width 1540] [--width 390x844] [--scope <selector>] [--scheme light|dark]";
 
 /** One width a page is read at, from `--width 1540` or `--width 390x844`. */
 const sizeOf = (said: string): { height: number; width: number } => {
@@ -2728,6 +2728,7 @@ const sizeOf = (said: string): { height: number; width: number } => {
 const askedOf = (
   args: string[]
 ): {
+  scheme: "light" | "dark";
   scope: string | undefined;
   sizes: { height: number; width: number }[];
   url: string | undefined;
@@ -2738,7 +2739,12 @@ const askedOf = (
     );
   const widths = valuesOf("--width");
   const [scope] = valuesOf("--scope");
+  const [scheme] = valuesOf("--scheme");
+  if (scheme !== undefined && scheme !== "light" && scheme !== "dark") {
+    throw new Error(`--scheme takes light or dark: not "${scheme}".`);
+  }
   return {
+    scheme: scheme ?? "light",
     url: args.find(
       (one, i) => !(one.startsWith("--") || args[i - 1]?.startsWith("--"))
     ),
@@ -2783,7 +2789,7 @@ const sayRead = (read: CheckRead): number => {
  * on it as in a spec). Exits 1 when any rule found something.
  */
 async function main(args: string[]): Promise<number> {
-  const { url, sizes, scope } = askedOf(args);
+  const { url, sizes, scope, scheme } = askedOf(args);
   if (!url) {
     console.log(USAGE);
     return 2;
@@ -2796,6 +2802,7 @@ async function main(args: string[]): Promise<number> {
       const phone = size.width < PHONE_LINE;
       const context = await browser.newContext({
         viewport: size,
+        colorScheme: scheme,
         deviceScaleFactor: 2,
         hasTouch: phone,
         isMobile: phone,
@@ -2807,7 +2814,7 @@ async function main(args: string[]): Promise<number> {
         await settle(page);
         const read = await renderedChecks(page, scope ? { scope } : {});
         console.log(
-          `\n${size.width}×${size.height}${phone ? " touch" : ""}: ${page.url()}`
+          `\n${size.width}×${size.height}${phone ? " touch" : ""} ${scheme}: ${page.url()}`
         );
         found += sayRead(read);
       } finally {
