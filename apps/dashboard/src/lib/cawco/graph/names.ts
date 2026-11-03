@@ -2,8 +2,10 @@
  * An element on the stage in words a person would say ("Form failure",
  * "Button “Create routine”"), for a clip's row and a difference's line:
  * its `data-slot` (the house's name for a part), else its accessible name
- * with its kind, else its kind with its first words. Tailwind's classes
- * name nothing, so no class is read.
+ * with its kind, else its kind with its first words, else the part it
+ * stands in, never one of the stage's own round the drawing
+ * (`data-stage-drawing`). Tailwind's classes name nothing, so no class is
+ * read.
  */
 import { FORM_CONTROLS } from "@cawco/core/pin-name";
 import { graphWords as words } from "@cawco/core/words/graph";
@@ -88,6 +90,10 @@ export function nameOf(el: Element): string {
   if (text) {
     return kind ? `${kind} ${quoted(text)}` : quoted(text);
   }
-  const holder = el.parentElement?.closest("[data-slot]");
-  return holder ? nameOf(holder) : (kind ?? words.element);
+  // The part it stands in, inside the drawing: the stage's own parts
+  // round the drawing (its frame, its page) are no part of the component.
+  const holder = el.parentElement?.closest("[data-slot], [data-stage-drawing]");
+  return holder && !holder.hasAttribute("data-stage-drawing")
+    ? nameOf(holder)
+    : (kind ?? words.element);
 }

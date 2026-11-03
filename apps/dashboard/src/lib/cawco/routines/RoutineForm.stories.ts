@@ -113,6 +113,20 @@ const refusing = hub({
     ),
 });
 
+/** A hub that refuses the first read of the types, as one that didn't answer, and answers the next: a fresh one each time it is asked for. */
+const refusingTypesOnce = (): RoutineFormHub => {
+  let asked = 0;
+  const answering = hub();
+  return hub({
+    types: (id) => {
+      asked += 1;
+      return asked === 1
+        ? Promise.reject(new Error("The hub didn't answer (502)."))
+        : answering.types(id);
+    },
+  });
+};
+
 /** What a flow's `play` is handed on the canvas (core stage-play.ts). */
 interface Play {
   canvas: CanvasQueries;
@@ -130,6 +144,9 @@ const pressCreate = async ({ canvas, userEvent }: Play) => {
 /** A prompt three times the usual length, in one paragraph, for the narrow frames. */
 const LONG_PROMPT =
   "Read every issue opened or reopened in the northwind-logistics/customer-onboarding-portal repository since the last run, including the ones filed by the support bot from the shared inbox, label each one with its area (billing, onboarding, notifications, admin, infrastructure) and its severity, close the exact duplicates with a link to the issue they repeat, and end with a short list of the ones that need me today, each with one sentence on why and a link: https://github.com/northwind-logistics/customer-onboarding-portal/issues?q=is%3Aopen+label%3Aneeds-triage+sort%3Acreated-desc";
+
+/** The longest name the hub takes (its `SESSION_TITLE_MAX`, 48), as a person writes one. */
+const LONGEST_NAME = "Weekly triage of each onboarding portal's issues";
 
 const filled = {
   name: "Triage new onboarding issues",
@@ -280,6 +297,39 @@ export const TypesUnread = {
     hub: hub({
       types: () => Promise.reject(new Error("The hub didn't answer (502).")),
     }),
+  },
+  parameters: { viewport: 1440 },
+};
+
+/** The hub answering again: Retry under the types it couldn't read reads them, and medium's line comes back. */
+export const TypesReadAgain = {
+  name: "Types read again",
+  args: { draft: filled },
+  parameters: { viewport: 1440 },
+  from: "TypesUnread",
+  play: async ({ canvas, update, userEvent }: Play) => {
+    await update({ hub: refusingTypesOnce() });
+    await userEvent.click(
+      canvas.getByRole("button", { name: routinesWords.retry })
+    );
+  },
+};
+
+/** The longest name the hub takes (48 characters), with the long prompt. */
+export const LongestName = {
+  args: { draft: { ...filled, name: LONGEST_NAME } },
+  parameters: { viewport: 1440 },
+};
+
+export const LongestNamePhone = {
+  args: { draft: { ...filled, name: LONGEST_NAME } },
+  parameters: { viewport: 390 },
+};
+
+/** The shortest a routine is written: a word for its name, a sentence for what it does. */
+export const ShortestText = {
+  args: {
+    draft: { ...filled, name: "Triage", prompt: "Triage new issues." },
   },
   parameters: { viewport: 1440 },
 };

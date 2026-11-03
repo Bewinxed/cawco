@@ -17,7 +17,8 @@
    * its week. A custom schedule the hub can't read says so in the form's
    * own sentence; the hub's words are for agents. A refused create keeps
    * every word where it was written, and says why and what to do over the
-   * commit row.
+   * commit row. A read of the project's delegate types the hub refused
+   * says why under the type, with Retry, which reads them again.
    *
    * The hub is a prop (`hub`), and so is the state it stands in (`draft`,
    * `saving`, `failure`, `attempted`), so its states file draws each state
@@ -128,8 +129,13 @@
 
   let types = $state<TypeChoice[]>([]);
   let typesProblem = $state<string | null>(null);
+  /** Retry pressed under a read the hub refused: the types are read again. */
+  let typesAsked = $state(0);
   $effect(() => {
     const id = projectId;
+    if (typesAsked < 0) {
+      return;
+    }
     let live = true;
     hub.types(id).then(
       (catalog) => {
@@ -505,7 +511,7 @@
   </Field>
 
   <Field
-    hint={typesProblem ?? chosenType?.description}
+    hint={typesProblem ? typesUnread : chosenType?.description}
     id="routine-type"
     label={words.typeLabel}
   >
@@ -520,11 +526,33 @@
       }
     >
       <NativeSelectOption value="">{words.typeHubPick}</NativeSelectOption>
+      <!-- The type the draft names, while the hub's read hasn't named it
+           (refused, or not back yet): kept as chosen, never shown blank. -->
+      {#if draft.delegateType && !chosenType}
+        <NativeSelectOption value={draft.delegateType}
+          >{draft.delegateType}</NativeSelectOption
+        >
+      {/if}
       {#each types as type (type.name)}
         <NativeSelectOption value={type.name}>{type.name}</NativeSelectOption>
       {/each}
     </NativeSelect>
   </Field>
+
+  {#snippet typesUnread()}
+    <!-- Why the types couldn't be read, and the way back: Retry reads
+         them again. -->
+    {typesProblem}
+    <Button
+      onclick={() => {
+        typesAsked += 1;
+      }}
+      pad="none"
+      size="xs"
+      type="button"
+      variant="link">{words.retry}</Button
+    >
+  {/snippet}
 
   <!-- The commit row: what creating it does at once, in plain words; why
        a create was refused and what to do; then Cancel and Create. -->

@@ -10,6 +10,14 @@
  */
 import { menu } from "./menu-review";
 import DesignGraphFrame from "./preview/DesignGraphFrame.svelte";
+import {
+  relay,
+  routineFormOneMachine,
+  routineFormStalePlay,
+  runBudget,
+  suggestions,
+  who,
+} from "./preview/harden-review";
 import { unmountable } from "./preview/unmountable-review";
 
 export default {
@@ -65,3 +73,68 @@ export const MountFailed = {
 
 /** Opened at 2529 with the conversation beside it: the stage at the form's own width, the room beside it. */
 export const Wide = { parameters: { viewport: 1280 } };
+
+// --- Hardening (impeccable's harden.md): real text at its longest and
+// shortest, one machine and thirty states, figures in the millions and in
+// another language, a failed load and its way back. ---
+
+/** The longest real text: the stream relay journey, its longest note (143 characters) on the state it opens at. */
+export const LongestText = {
+  args: { alone: relay, ask: { state: "CertificateToken" } },
+  parameters: { viewport: 1440 },
+};
+
+/** The longest real text on a phone: the stage's head, the drawer's rows and the bar under 390. */
+export const LongestTextPhone = {
+  args: { alone: relay, ask: { state: "CertificateToken" } },
+  parameters: { viewport: 390 },
+};
+
+/** The shortest real text: Who's sheet, a word a state, no notes, named by its file. */
+export const ShortestText = {
+  args: { alone: who, ask: {} },
+  parameters: { viewport: 1440 },
+};
+
+/** One machine: the routine form opened with no machine named, every state under its own name. */
+export const OneMachine = {
+  args: { alone: routineFormOneMachine, ask: { state: "FailedSave" } },
+  parameters: { viewport: 1440 },
+};
+
+/** Thirty states in one machine: Suggestions, opened at its last. */
+export const ThirtyStates = {
+  args: { alone: suggestions, ask: { state: "RowPhone" } },
+  parameters: { viewport: 1440 },
+};
+
+/** Thirty states on a phone: the list in the drawer at its half stop's room. */
+export const ThirtyStatesPhone = {
+  args: { alone: suggestions, ask: { state: "RowPhone" } },
+  parameters: { viewport: 390 },
+};
+
+/** Figures in the millions: a run's budget filling over 30 minutes, its move 1,800,000 ms on the ruler. */
+export const MillionsOfMs = {
+  args: { alone: runBudget, ask: { state: "Running", face: "move" } },
+  parameters: { viewport: 1440 },
+};
+
+/** The same move in German: its figures grouped as German groups them, 1.800.000. */
+export const LocaleFormats = {
+  args: {
+    alone: runBudget,
+    ask: { state: "Running", face: "move" },
+    lang: "de-DE",
+  },
+  parameters: { viewport: 1440 },
+};
+
+/** A move that failed to play: its play presses a button the form no longer has; why, and Try again. */
+export const MoveFailed = {
+  args: {
+    alone: routineFormStalePlay,
+    ask: { state: "FailedSave", face: "move" },
+  },
+  parameters: { viewport: 1440 },
+};
