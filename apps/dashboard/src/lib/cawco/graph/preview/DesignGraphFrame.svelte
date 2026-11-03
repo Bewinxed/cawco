@@ -22,11 +22,7 @@
     alone = null,
     lang,
     opensAt,
-    phoneMap,
-  }: Pick<
-    ComponentProps<typeof DesignGraph>,
-    "ask" | "stale" | "opensAt" | "phoneMap"
-  > & {
+  }: Pick<ComponentProps<typeof DesignGraph>, "ask" | "stale" | "opensAt"> & {
     /** Whether the ask names the roster beside the routine form. */
     withRoster?: boolean;
     /** The one component under review in place of the routine form. */
@@ -66,5 +62,5 @@
     tall = screenHeight(node.clientWidth);
   })}
 >
-  <DesignGraph {ask} {inputs} {lang} {opensAt} {phoneMap} {stale} />
+  <DesignGraph {ask} {inputs} {lang} {opensAt} {stale} />
 </div>
