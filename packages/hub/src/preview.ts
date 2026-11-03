@@ -946,7 +946,11 @@ async function serveSession(
   }
   const target = deps.target(instanceId);
   if (!target) {
-    previewFailed(HOP, instanceId, "its session shows no preview");
+    previewFailed(
+      HOP,
+      instanceId,
+      `its session shows no preview at ${pathname}`
+    );
     return downResponse("closed", 404);
   }
   if (target.artifact.kind === "browser") {
@@ -1332,7 +1336,7 @@ export function createPreviewListeners(
     route: (request: Request) => string | undefined,
     lock: PassLock
   ): Listener => {
-    const fetch = async (
+    const serve = async (
       request: Request,
       server: Server<ListenerSocket>
     ): Promise<Response | undefined> => {
@@ -1383,6 +1387,30 @@ export function createPreviewListeners(
           `${instanceId} ${request.url}`
         ))
       );
+    };
+    /**
+     * Each request's answer, and a socket refused said in the hub's log: a
+     * browser reports any refused upgrade as a close with code 1006 and no
+     * status, so the page's "closed (code 1006)" says nothing of which door
+     * turned it away (the lock's 401, `joinArtifact`'s 404 or 409, a failed
+     * upgrade's 400). The line names the origin, the path and the status.
+     */
+    const fetch = async (
+      request: Request,
+      server: Server<ListenerSocket>
+    ): Promise<Response | undefined> => {
+      const answered = await serve(request, server);
+      if (
+        answered &&
+        request.headers.get("upgrade")?.toLowerCase() === "websocket"
+      ) {
+        previewFailed(
+          HOP,
+          route(request),
+          `its socket at ${new URL(request.url).pathname} was refused (${answered.status})`
+        );
+      }
+      return answered;
     };
     const plain = Bun.serve<ListenerSocket>({
       hostname,
