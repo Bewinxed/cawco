@@ -77,6 +77,9 @@
 />
 <!-- Under a finger the cluster opens its gap (DESIGN.md, The 44 Touch
      Rule), so each control's 44px area stands clear of its neighbours'.
+     The group is the ground (the tool rail's recipe: floating groups in
+     their own surface); its glyph buttons stand bare in it, ghosts, as a
+     lone glyph sits on nothing.
      The bar stands over the canvas, not in its zoom: its areas take no
      --hit-scale from the canvas it floats on. -->
 <div
@@ -102,7 +105,7 @@
         onclick={() => zoomBy(zoomOut)}
         size="icon"
         type="button"
-        variant="outline"
+        variant="ghost"
       >
         <IconMinus class="size-icon-md" />
       </Button>
@@ -117,7 +120,7 @@
         onclick={() => zoomBy(zoomIn)}
         size="icon"
         type="button"
-        variant="outline"
+        variant="ghost"
       >
         <IconPlus class="size-icon-md" />
       </Button>
@@ -131,7 +134,7 @@
         onclick={fit}
         size="icon"
         type="button"
-        variant="outline"
+        variant="ghost"
       >
         <IconMaximize class="size-icon-md" />
       </Button>
@@ -147,7 +150,7 @@
           onclick={undo}
           size="icon"
           type="button"
-          variant="outline"
+          variant="ghost"
         >
           <IconReset class="size-icon-md" />
         </Button>
@@ -161,7 +164,7 @@
           onclick={redo}
           size="icon"
           type="button"
-          variant="outline"
+          variant="ghost"
         >
           <IconReset class="size-icon-md rotate-180" />
         </Button>

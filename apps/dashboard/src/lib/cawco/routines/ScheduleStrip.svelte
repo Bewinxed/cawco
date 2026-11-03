@@ -53,6 +53,8 @@
    * face; "now" at its start. The words are its accessible name and tooltip.
    */
   import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { barPlace } from "#lib/cawco/usage/bar-place.js";
 
   let {
@@ -110,6 +112,44 @@
     }
     return out;
   });
+
+  /** The marks' row, and its width as drawn. */
+  let markRow = $state<HTMLElement>();
+  let rowWidth = $state(0);
+  /**
+   * The marks whose label would stand on the one before it, by their time:
+   * each label held where it draws (centred on its time, flush inside
+   * either edge), and kept only `--space-1` or more past the last label
+   * kept. The twentieth of the strip a day keeps from "now" is a share:
+   * at a phone's width "now" and "Wed" ran into each other inside it. Its
+   * hairline stays; the label stands hidden.
+   */
+  let crowded = $state<ReadonlySet<number>>(new Set());
+  $effect(() => {
+    const row = markRow;
+    const width = rowWidth;
+    const all = marks;
+    const span = schedule?.span ?? 0;
+    if (!row || width <= 0 || span <= 0) {
+      crowded = new Set();
+      return;
+    }
+    const labels = [...row.querySelectorAll<HTMLElement>("[data-mark-label]")];
+    const gap = numberOf("--space-1");
+    const out = new Set<number>();
+    let lastRight = Number.NEGATIVE_INFINITY;
+    all.forEach((mark, i) => {
+      const w = labels[i]?.offsetWidth ?? 0;
+      const centre = Math.min(1, mark.at / span) * width;
+      const left = Math.min(Math.max(centre - w / 2, 0), width - w);
+      if (left < lastRight + gap) {
+        out.add(mark.at);
+      } else {
+        lastRight = left + w;
+      }
+    });
+    crowded = out;
+  });
 </script>
 
 {#if schedule}
@@ -148,6 +188,10 @@
            and a weekday near either end never poke past the strip or get
            cut, at any width. -->
       <span
+        bind:this={markRow}
+        {@attach frameSize((node: HTMLElement) => {
+          rowWidth = node.clientWidth;
+        })}
         aria-hidden="true"
         class="@container relative block h-(--marks-h) type-meta num text-ink-subtle"
         style:--marks-h={"calc(var(--space-1) + var(--text-meta) * var(--leading-meta))"}
@@ -164,8 +208,11 @@
               class="absolute top-0 start-0 h-space-1 w-px translate-x-(--keep) bg-ink-subtle"
             ></span>
             <span
-              class="absolute bottom-0 start-0 mono-figure whitespace-nowrap translate-x-(--keep)"
-              >{mark.text}</span
+              data-mark-label
+              class={[
+                "absolute bottom-0 start-0 mono-figure whitespace-nowrap translate-x-(--keep)",
+                crowded.has(mark.at) && "invisible",
+              ]}>{mark.text}</span
             >
           </span>
         {/each}
