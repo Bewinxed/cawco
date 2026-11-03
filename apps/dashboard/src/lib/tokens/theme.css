@@ -15,6 +15,7 @@
   --container-wide: 1025px;
   --container-field-group: 28rem;
   --container-details: 30rem;
+  --container-timeline: 30rem;
   --container-table-34rem: 34rem;
   --container-task-frame: 56rem;
   --container-table-400px: 400px;
@@ -170,6 +171,12 @@
   --color-c-clip-tint: var(--c-clip-tint);
   --color-c-clip-effect: var(--c-clip-effect);
   --color-c-clip-other: var(--c-clip-other);
+  --color-c-clip-size-wash: var(--c-clip-size-wash);
+  --color-c-clip-move-wash: var(--c-clip-move-wash);
+  --color-c-clip-fade-wash: var(--c-clip-fade-wash);
+  --color-c-clip-tint-wash: var(--c-clip-tint-wash);
+  --color-c-clip-effect-wash: var(--c-clip-effect-wash);
+  --color-c-clip-other-wash: var(--c-clip-other-wash);
   --color-c-change-ring: var(--c-change-ring);
   --color-brand-ink: var(--brand-ink);
   --color-brand-ink-strong: var(--brand-ink-strong);

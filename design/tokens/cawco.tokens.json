@@ -1004,6 +1004,90 @@
       "$value": "{color.ink-muted}",
       "$description": "The design graph's Animation timeline: the bar and glyph of a clip whose property is none of the kinds (a custom property's). One hue per clip kind, from the identity marks, so the kinds tell apart at a glance."
     },
+    "c-clip-size-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.51, -0.044654, -0.132688],
+        "alpha": 0.22
+      },
+      "$description": "The design graph's Animation timeline: the fill of a size clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-size).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-size} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-move-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.51, 0.057403, -0.138582],
+        "alpha": 0.22
+      },
+      "$description": "The design graph's Animation timeline: the fill of a move clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-move).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-move} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-fade-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.5, 0.006419, 0.114821],
+        "alpha": 0.22
+      },
+      "$description": "The design graph's Animation timeline: the fill of a fade clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-fade).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-fade} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-tint-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.51, 0.162392, -0.029219],
+        "alpha": 0.22
+      },
+      "$description": "The design graph's Animation timeline: the fill of a tint clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-tint).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-tint} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-effect-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.51, -0.092365, -0.01085],
+        "alpha": 0.22
+      },
+      "$description": "The design graph's Animation timeline: the fill of a effect clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-effect).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-effect} 22%, transparent)"
+        }
+      }
+    },
+    "c-clip-other-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.495, 0.003859, 0.013458],
+        "alpha": 0.22
+      },
+      "$description": "The design graph's Animation timeline: the fill of a other clip's bar, its kind's hue washed over whatever the lane stands on; the bar's edge is the kind's own hue (c-clip-other).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.c-clip-other} 22%, transparent)"
+        }
+      }
+    },
     "c-change-ring": {
       "$type": "color",
       "$value": "{color.status-done-glyph}",

@@ -306,6 +306,10 @@ const KEYFRAMES: Record<string, string> = {
 const CONTAINERS = {
   "field-group": "28rem",
   details: "30rem",
+  // The design graph's Animation timeline: its rows' words beside their bars
+  // once the names' column (a name and its chips, 12rem) and a lane of
+  // 18rem fit; under it each row's bar stands under its words.
+  timeline: "30rem",
   "table-34rem": "34rem",
   "task-frame": "56rem",
   "table-400px": "400px",

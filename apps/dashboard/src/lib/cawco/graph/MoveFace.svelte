@@ -14,10 +14,23 @@
   /**
    * The animation into the kept state (spec, The move), as an improved port
    * of interface-craft's DialKit timeline (the owner's October decision;
-   * the advisor's map, timeline.md §4) on the house's controls: one row per
-   * thing that moves on the stage (motion `tracksOf`), named as he sees it
-   * ("Form failure unfolds, 260 ms"), the row's words in the first column,
-   * its bar in the second, the ruler at the head of the second.
+   * the advisor's map, timeline.md §4) on the house's controls, dressed as
+   * round 29 dressed it (the owner's pin 26): one row per thing that moves
+   * on the stage (motion `tracksOf`), its words in the first column, its
+   * bar in the second, the ruler at the head of the second. Under a
+   * timeline narrower than `--container-timeline` each row's bar stands
+   * under its words.
+   *
+   * A row is its kind's dot, what moves and how ("Form failure unfolds"),
+   * a press that opens its editor under it (the owner's pick); under that
+   * its timing as small chips: the length's figure with the design
+   * system's name for it when it is one, the curve drawn with its name,
+   * the delay when it has one, and what changes when that is one plain
+   * number. A value he changed takes the changed look on its own chip
+   * (coral, a dashed edge), its tooltip saying what it was; pressing the
+   * chip puts that one value back (motion `restore`), sent to the agent as
+   * an edit is. The head holds Original | Edited, the count of edits and
+   * Reset once there are any.
    *
    * One scale for all of it: the lane runs from the move's start to its
    * end (to the ruler's next mark), and the ruler, every bar and the
@@ -25,20 +38,17 @@
    * the same inset, so a mark, a bar's end and the playhead at one time
    * stand on one line. The ruler's marks stand every 100 ms, or every
    * step of 1, 2 and 5 past it that keeps them `--space-2` apart, so a move
-   * of minutes draws as few marks as one of a second; its figures thin to
-   * the lane's width, grouped as the page's language groups them. The
-   * playhead is the ruler's handle (bits-ui's Slider), a pill with its
-   * time; its hairline runs down the lane alone. A scrub during play pauses
-   * it and plays on from where it is let go (DialKit's rule).
+   * of minutes draws as few marks as one of a second; its mono figures thin
+   * to the lane's width, grouped as the page's language groups them. The
+   * ruler is the playhead's slider (bits-ui's Slider): a press anywhere on
+   * it scrubs, its handle a dot on its foot, one hairline down the lane
+   * from there; the time stands beside Play. A scrub during play pauses it
+   * and plays on from where it is let go (DialKit's rule).
    *
-   * Each row carries its duration chip: the figure and the design system's
-   * name when its length is on the ladder, dashed when it is off it; a
-   * spring's figure is `~`, its true end where it settles. A row whose
+   * A spring's figure is `~`, its true end where it settles. A row whose
    * thing moves more than once opens into one row per animation, each
-   * retimed alone (DialKit's composite bar). A row's controls open in the
-   * row, under its bar (the owner's pick). Once he has changed one, the
-   * head's Original | Edited switch plays the animation as read or as
-   * changed; under Edited the original bars stand as outlines.
+   * retimed alone (DialKit's composite bar). Under Edited the original
+   * bars stand as outlines.
    *
    * Resting on a row, or focusing in it, rings the thing it names on the
    * stage (DesignGraph `lit`); nothing else on the stage changes.
@@ -48,26 +58,27 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { badgeVariants } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import {
-    IconChevronDown,
-    IconPause,
-    IconPlay,
-    IconTuning,
-  } from "#lib/icons.js";
+  import { IconChevronDown, IconPause, IconPlay } from "#lib/icons.js";
   import { browser } from "$app/env";
   import ClipBar from "./ClipBar.svelte";
   import ClipEditor from "./ClipEditor.svelte";
   import { figureOf, inkWidth } from "./figures";
   import {
     type Clip,
+    curveGlyph,
+    deltaOf,
+    editsOf,
     lengthOf,
+    restore,
     retime,
+    type Timing,
     type Track,
     tracksOf,
     untune,
@@ -131,6 +142,8 @@
     )
   );
   const length = $derived(Math.max(1, lengthOf(shown)));
+  /** A bar's drag step, ms (ClipBar's). */
+  const STEP = 10;
   /** The ruler's finest mark, ms. */
   const FINEST = 100;
   /** The marks a ruler draws before its lane is measured, at most. */
@@ -198,68 +211,136 @@
   let holding = $state<{ from: number; id: string; to: number } | null>(null);
   /** `n` as a figure in the page's language. */
   const figure = (n: number) => figureOf(n, lang);
-  /** A row as a person says it: one length when its stretches share one, else its whole stretch; while its bar is held, the held one. */
-  const nameOf = (track: Track) => {
-    const held = holding?.id === track.id ? holding : null;
-    if (held) {
-      return track.spans.length === 1
-        ? words.clipName(track.name, track.how, figure(held.to - held.from))
-        : words.clipSpan(
-            track.name,
-            track.how,
-            figure(held.from),
-            figure(held.to)
-          );
-    }
-    return track.length === null
-      ? words.clipSpan(
-          track.name,
-          track.how,
-          figure(track.begins),
-          figure(track.ends)
-        )
-      : words.clipName(track.name, track.how, figure(track.length));
-  };
-  /** Before and after, when he changed it. */
-  const tunedOf = (track: Track) => {
-    const [first] = track.clips;
-    return first?.was
-      ? words.tuned(
-          words.ms(figure(first.was.duration)),
-          words.ms(figure(first.duration))
-        )
-      : null;
-  };
-  /** The row's duration chip: its figure, and the design system's name when it is one; a spring's figure is where it settles. */
-  const chipOf = (track: Track) => {
+  /** A row as a person says it: what moves and how; its timing is in its chips. */
+  const nameOf = (track: Track) => words.clipName(track.name, track.how);
+
+  /** A chip of a row's timing: its mono words, what a reader hears, and once he changed it, the press that puts it back. */
+  interface Chip {
+    /** The design system's name for it, as a badge: "pop". */
+    badge: string | null;
+    /** A curve's glyph, before its name. */
+    glyph: string | null;
+    key: Timing | "delta";
+    /** He changed it: the press's name, saying what it goes back to. */
+    reset: string | null;
+    /** Its tooltip and a reader's name for it; null: its words say it. */
+    said: string | null;
+    /** Mono: "260 ms", "~412 ms", "+80 ms", "height 0 → 120 px". */
+    text: string;
+  }
+  const bare = { badge: null, glyph: null, reset: null, said: null };
+  /** A curve's name: its token's, a spring's, or its own. */
+  const curveWord = (clip: Clip) =>
+    clip.spring ? words.shapes.spring : clip.curve || words.ownCurve;
+  /** The clip as the engine ran it, when he changed the row. */
+  const wasOf = (track: Track) =>
+    track.clips.find((clip) => clip.was)?.was ?? null;
+  /** The length's chip: its figure, and the design system's name for it when it is one; a spring's is where it settles. */
+  const lengthChip = (track: Track, edited: boolean): Chip => {
     const [first] = track.clips;
     const held = holding?.id === track.id ? holding : null;
     const ms = Math.round(
       held ? held.to - held.from : (track.length ?? track.ends - track.begins)
     );
+    const was = edited ? wasOf(track) : null;
+    const reset = was
+      ? words.resetLength(figure(Math.round(was.duration)))
+      : null;
     if (track.sprung) {
       return {
+        ...bare,
+        key: "length",
         text: words.springFigure(figure(ms)),
         said: words.springSettles(figure(ms)),
-        free: false,
+        reset,
       };
     }
     const token =
-      !held && track.length !== null && first?.token
+      // A row of several stretches names a token only when its one length is its clips'.
+      !held && first?.token && track.length === first.duration
         ? first.token.replace("--dur-", "")
         : null;
-    return token
-      ? {
-          text: words.durationChip(figure(ms), token),
-          said: words.durationOf(figure(ms), token),
-          free: false,
-        }
-      : {
-          text: words.ms(figure(ms)),
-          said: words.freeOf(figure(ms)),
-          free: true,
-        };
+    return {
+      ...bare,
+      key: "length",
+      text: words.ms(figure(ms)),
+      badge: token,
+      said: token ? null : words.freeOf,
+      reset,
+    };
   };
+  /** The curve's chip: drawn, with its name. */
+  const curveChip = (first: Clip, was: Clip | null): Chip => ({
+    ...bare,
+    key: "curve",
+    text: curveWord(first),
+    glyph: curveGlyph(first.easing),
+    said: words.curveOf(curveWord(first)),
+    reset: was
+      ? words.resetCurve(was.framed ? words.ownCurve : curveWord(was))
+      : null,
+  });
+  /** When the row begins, ms: a drag's start once it has moved a step, else its own (a held end leaves it where it is). */
+  const beginsOf = (track: Track) => {
+    const held = holding?.id === track.id ? holding : null;
+    return held && Math.abs(held.from - track.begins) >= STEP
+      ? held.from
+      : track.begins;
+  };
+  /** The delay's chip, after the moment the move set it off. */
+  const startChip = (track: Track, edited: boolean): Chip => {
+    const delay = Math.round(beginsOf(track) - track.setOff);
+    const wasDelay = Math.round(
+      Math.min(
+        ...track.clips.map((clip) => untune(clip).start + untune(clip).delay)
+      ) - track.setOff
+    );
+    return {
+      ...bare,
+      key: "start",
+      text: words.startsAt(figure(delay)),
+      said: words.startsAfter(figure(delay)),
+      reset: edited ? words.resetDelay(figure(wasDelay)) : null,
+    };
+  };
+  /** What the clip changes, when it is one plain number. */
+  const deltaChip = (clip: Clip): Chip | null => {
+    const delta = deltaOf(clip);
+    if (!delta) {
+      return null;
+    }
+    const [from, to] = [figure(delta.from), figure(delta.to)];
+    return {
+      ...bare,
+      key: "delta",
+      text: words.property(delta.property, from, to, delta.unit),
+      said: words.propertyOf(delta.property, from, to, delta.unit),
+    };
+  };
+  /** The row's chips, as round 29 lays them: length, curve, delay, then what changes. */
+  const chipsOf = (track: Track): Chip[] => {
+    const [first] = track.clips;
+    if (!first) {
+      return [];
+    }
+    const edits = editsOf(track);
+    return [
+      lengthChip(track, edits.has("length")),
+      // A curve drawn into its frames has no name of its own, until he picks one.
+      !first.framed || edits.has("curve")
+        ? curveChip(first, edits.has("curve") ? wasOf(track) : null)
+        : null,
+      // An edited delay keeps its chip at +0 ms, so its reset stays.
+      Math.round(beginsOf(track) - track.setOff) > 0 || edits.has("start")
+        ? startChip(track, edits.has("start"))
+        : null,
+      track.clips.length === 1 ? deltaChip(first) : null,
+    ].filter((chip): chip is Chip => chip !== null);
+  };
+  /** The values he changed, over every row: the head's count. */
+  const editCount = $derived(
+    tracksOf(clips).reduce((n, track) => n + editsOf(track).size, 0)
+  );
   const pct = (t: number) => `${(t / scale) * 100}%`;
   /**
    * The playhead as the ruler's handle holds it: on its 1 ms steps, since
@@ -306,18 +387,17 @@
       ];
     })
   );
-  /** Each line's grid row; an open editor takes the row under its line. */
-  const placed = $derived.by(() => {
-    let row = 2;
-    return lines.map((line) => {
-      const at = row;
-      row += editing === line.key ? 2 : 1;
-      return { ...line, row: at };
-    });
-  });
-  const rows = $derived(
-    1 + lines.length + (lines.some((line) => line.key === editing) ? 1 : 0)
-  );
+  /** Each line's grid row, under the ruler's; an open editor stands in its line. */
+  const placed = $derived(lines.map((line, at) => ({ ...line, row: at + 2 })));
+  /** Each kind's dot, before the row's words: the colour of its bar. */
+  const DOT: Record<Track["kind"], string> = {
+    size: "bg-c-clip-size",
+    move: "bg-c-clip-move",
+    fade: "bg-c-clip-fade",
+    tint: "bg-c-clip-tint",
+    effect: "bg-c-clip-effect",
+    other: "bg-c-clip-other",
+  };
   const toggle =
     "pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong";
 </script>
@@ -328,6 +408,8 @@
       {words.noMove(move.state)}
     </p>
   {:else}
+    <!-- The head: the move, then once he changed it Original | Edited, the
+         count and Reset, then Play, ¼× and the time, at its trailing end. -->
     <header
       class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1"
     >
@@ -335,46 +417,74 @@
         <span class="block truncate">{words.move(move.from, move.to)}</span>
       </h3>
       {#if move.kind === "ready" && changed}
-        <Tabs
-          onValueChange={(next) =>
-            ontimings(next === "original" ? "original" : "edited")}
-          size="compact"
-          value={timings}
-        >
-          <TabsList aria-label={words.timings}>
-            <TabItem label={words.original} value="original" />
-            <TabItem label={words.edited} value="edited" />
-          </TabsList>
-        </Tabs>
+        <div class="flex min-w-0 items-center gap-space-2">
+          <Tabs
+            onValueChange={(next) =>
+              ontimings(next === "original" ? "original" : "edited")}
+            size="compact"
+            value={timings}
+          >
+            <TabsList aria-label={words.timings}>
+              <TabItem label={words.original} value="original" />
+              <TabItem label={words.edited} value="edited" />
+            </TabsList>
+          </Tabs>
+          <span
+            class={badgeVariants({ kind: "meta", figures: "tabular" })}
+            data-slot="edits">{words.edits(editCount, figure(editCount))}</span
+          >
+          <button
+            type="button"
+            aria-label={words.resetAll}
+            class="pointer-hit touch-hit h-c-btn-h-sm rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
+            onclick={() =>
+              onreset(clips.filter((clip) => clip.was).map((clip) => clip.id))}
+            title={words.resetAll}
+          >
+            {words.reset}
+          </button>
+        </div>
       {/if}
       {#if move.kind === "ready"}
-        <!-- mark-line: two buttons side by side, each a box of its own -->
-        <div class="flex items-center gap-space-1 coarse:gap-space-3">
-          <button
-            type="button"
-            data-box
-            aria-label={playing ? words.pause : words.play}
-            title={playing ? words.pause : words.play}
-            class="pointer-hit touch-hit grid size-c-btn-h-sm place-items-center rounded-md text-ink-strong transition-control can-hover:hover:bg-surface-hover"
-            onclick={() => (playing ? onpause() : onplay(1))}
-          >
-            {#if playing}
-              <IconPause aria-hidden="true" class="size-icon-md" />
-            {:else}
-              <IconPlay aria-hidden="true" class="size-icon-md" />
-            {/if}
-          </button>
-          <button
-            type="button"
-            data-box
-            aria-label={words.playQuarter}
-            title={words.playQuarter}
-            class="pointer-hit touch-hit h-c-btn-h-sm rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover num"
-            disabled={still}
-            onclick={() => onplay(0.25)}
-          >
-            ¼×
-          </button>
+        <div class="flex items-center gap-space-2">
+          <!-- mark-line: two buttons side by side, each a box of its own -->
+          <div class="flex items-center gap-space-1 coarse:gap-space-3">
+            <button
+              type="button"
+              data-box
+              aria-label={playing ? words.pause : words.play}
+              title={playing ? words.pause : words.play}
+              class="pointer-hit touch-hit grid size-c-btn-h-sm place-items-center rounded-md text-ink-strong transition-control can-hover:hover:bg-surface-hover"
+              onclick={() => (playing ? onpause() : onplay(1))}
+            >
+              {#if playing}
+                <IconPause aria-hidden="true" class="size-icon-md" />
+              {:else}
+                <IconPlay aria-hidden="true" class="size-icon-md" />
+              {/if}
+            </button>
+            <button
+              type="button"
+              data-box
+              aria-label={words.playQuarter}
+              title={words.playQuarter}
+              class="pointer-hit touch-hit h-c-btn-h-sm rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover num"
+              disabled={still}
+              onclick={() => onplay(0.25)}
+            >
+              ¼×
+            </button>
+          </div>
+          {#if clips.length > 0}
+            <span
+              class="type-code whitespace-nowrap text-ink-muted num"
+              data-slot="time"
+              >{words.playhead(
+                figure(handle),
+                figure(Math.round(length))
+              )}</span
+            >
+          {/if}
         </div>
       {/if}
     </header>
@@ -401,204 +511,266 @@
         <p class="m-0 type-meta text-status-attn-ink">{words.adHoc(adHoc)}</p>
       {/if}
 
-      <!-- The timeline: one grid, every cell its own child placed on its
-           row, so every lane cell is one column of one width; each lane
-           insets its content by --space-5, half the playhead's pill, so the
-           pill stands whole at 0 and at the end, and the ruler, the bars
-           and the hairline share one box. A row's controls take a row of
-           their own under it, across both columns. -->
-      <div
-        data-slot="timeline"
-        class="relative grid min-h-0 grid-cols-5 grid-rows-(--rows) gap-x-space-3 gap-y-space-2 overflow-y-auto"
-        style:--rows="repeat({rows}, auto)"
-      >
-        <span
-          class="col-span-2 col-start-1 row-start-1 self-start pt-space-1 text-end type-meta text-ink-muted"
-          aria-hidden="true">{words.msUnit}</span
+      <!-- The timeline: one grid; the ruler, then a line per row, each a
+           subgrid of the timeline's columns, so every lane cell is one
+           column of one width. Each lane insets its content by --space-2,
+           half the playhead's dot and more, so the dot stands whole at 0
+           and at the end, and the ruler, the bars and the hairline share
+           one box. Narrower than --container-timeline a line's bar stands
+           under its words, across the timeline. -->
+      <div class="@container min-h-0 min-w-0 overflow-y-auto">
+        <div
+          data-slot="timeline"
+          class="relative grid min-w-0 grid-cols-1 grid-rows-(--rows) gap-y-space-3 @timeline:grid-cols-5 @timeline:gap-x-space-3"
+          style:--rows="repeat({lines.length + 1}, auto)"
         >
-        <div class="col-span-3 col-start-3 row-start-1 min-w-0 px-space-5">
-          <Slider.Root
-            class="relative flex h-c-btn-h-sm w-full touch-none items-center select-none"
-            max={scale}
-            min={0}
-            onValueChange={(next: number) => onseek(Math.min(next, length))}
-            onValueCommit={onseekend}
-            step={1}
-            thumbPositioning="exact"
-            type="single"
-            value={handle}
+          <div
+            class="sticky top-0 z-1 col-span-full row-start-1 min-w-0 bg-surface-raised px-space-2 @timeline:col-span-3 @timeline:col-start-3"
           >
-            <span class="h-px w-full bg-border-control"></span>
-            <Slider.Thumb
-              aria-label={words.scrub}
-              aria-valuetext={words.playhead(
-                figure(handle),
-                figure(Math.round(length))
-              )}
-              class="pointer-hit touch-hit flex h-space-5 min-w-space-8 cursor-ew-resize items-center justify-center rounded-pill bg-ink-strong px-space-1 type-meta text-surface-raised shadow-xs num focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2"
-              index={0}
-              onkeydown={pageKey}
+            <Slider.Root
+              class="relative block h-space-6 w-full cursor-ew-resize touch-none select-none"
+              max={scale}
+              min={0}
+              onValueChange={(next: number) => onseek(Math.min(next, length))}
+              onValueCommit={onseekend}
+              step={1}
+              thumbPositioning="exact"
+              type="single"
+              value={handle}
             >
-              {figure(handle)}
-            </Slider.Thumb>
-          </Slider.Root>
-          <div
-            bind:this={ruler}
-            class="relative h-space-5 type-meta num"
-            aria-hidden="true"
-            {@attach frameSize((node: HTMLElement) => {
-              lane = node.clientWidth;
-            })}
-          >
-            <!-- The first figure stands from its mark and the last back to
-                 it, so neither leaves the lane; the rest centre on theirs. -->
-            {#each marks as mark, at (mark)}
-              <span
-                class={[
-                  "absolute start-(--at) top-0 flex flex-col type-meta text-ink-muted num",
-                  at === 0 && "items-start",
-                  at > 0 &&
-                    at === marks.length - 1 &&
-                    "-translate-x-full items-end rtl:translate-x-full",
-                  at > 0 &&
-                    at < marks.length - 1 &&
-                    "-translate-x-1/2 items-center rtl:translate-x-1/2",
-                ]}
-                style:--at={pct(mark)}
+              <div
+                bind:this={ruler}
+                class="absolute inset-0 type-code leading-none num"
+                aria-hidden="true"
+                {@attach frameSize((node: HTMLElement) => {
+                  lane = node.clientWidth;
+                })}
               >
-                <span class="h-space-1 w-px bg-border-control"></span>
-                {#if at % figureEvery === 0}{figure(mark)}{/if}
-              </span>
-            {/each}
+                <!-- The first figure stands from its mark and the last back
+                     to it, so neither leaves the lane; the rest centre on
+                     theirs. Each mark's tick stands on the ruler's foot. -->
+                {#each marks as mark, at (mark)}
+                  <span
+                    class="absolute start-(--at) bottom-0 h-space-1 w-px bg-border-control"
+                    style:--at={pct(mark)}
+                  ></span>
+                  {#if at % figureEvery === 0}
+                    <span
+                      class={[
+                        "absolute start-(--at) top-0 text-ink-muted",
+                        at > 0 &&
+                          at === marks.length - 1 &&
+                          "-translate-x-full rtl:translate-x-full",
+                        at > 0 &&
+                          at < marks.length - 1 &&
+                          "-translate-x-1/2 rtl:translate-x-1/2",
+                      ]}
+                      style:--at={pct(mark)}>{figure(mark)}</span
+                    >
+                  {/if}
+                {/each}
+              </div>
+              <Slider.Thumb
+                aria-label={words.scrub}
+                aria-valuetext={words.playhead(
+                  figure(handle),
+                  figure(Math.round(length))
+                )}
+                class="pointer-hit touch-hit bottom-0 block size-space-2 cursor-ew-resize rounded-pill bg-ink-strong focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+                index={0}
+                onkeydown={pageKey}
+              />
+            </Slider.Root>
           </div>
-        </div>
 
-        {#each placed as line (line.key)}
-          {@const track = line.track}
-          {@const name = nameOf(track)}
-          {@const tuned = tunedOf(track)}
-          {@const chip = chipOf(track)}
-          {@const many = !line.part && track.clips.length > 1}
-          <!-- A row is one thing that moves, one comment target named by
-               its first words, as a person says it. -->
-          <div
-            data-slot="clip"
-            class={[
-              "col-span-2 col-start-1 row-start-(--row) flex min-w-0 items-start gap-space-1",
-              line.part && "ps-space-4",
-            ]}
-            style:--row={line.row}
-            {...lights(track)}
-          >
-            <div class="flex min-w-0 flex-1 flex-col gap-space-row">
-              <span class="type-label text-ink-row wrap-anywhere num"
-                >{name}</span
-              >
-              <span
-                aria-label={chip.said}
+          {#each placed as line (line.key)}
+            {@const track = line.track}
+            {@const name = nameOf(track)}
+            {@const chips = chipsOf(track)}
+            {@const many = !line.part && track.clips.length > 1}
+            {@const open = editing === line.key && !original}
+            <!-- A row is one thing that moves, one comment target named by
+                 its first words, as a person says it. -->
+            <div
+              data-slot="clip"
+              class="col-span-full row-start-(--row) grid min-w-0 grid-cols-subgrid gap-y-space-2"
+              style:--row={line.row}
+              {...lights(track)}
+            >
+              <div
                 class={[
-                  "self-start rounded-xs border px-space-1 type-meta text-ink-muted num",
-                  chip.free
-                    ? "border-dashed border-ink-muted"
-                    : "border-border-control",
+                  "col-span-full flex min-w-0 items-start gap-space-1 @timeline:col-span-2",
+                  line.part && "ps-space-4",
                 ]}
-                role="img"
-                title={chip.said}>{chip.text}</span
               >
-              {#if tuned && !original}
-                <span class="type-meta text-selected-ink num wrap-anywhere"
-                  >{tuned}</span
-                >
+                <div class="flex min-w-0 flex-1 flex-col gap-space-1">
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    class={[
+                      "pointer-hit touch-hit -ms-space-1 flex min-h-c-pill-h min-w-0 items-center gap-space-2 self-start rounded-sm px-space-1 text-start type-label transition-control can-hover:hover:bg-surface-hover disabled:cursor-default",
+                      open && "bg-surface-hover",
+                    ]}
+                    disabled={original}
+                    onclick={() => {
+                      editing = editing === line.key ? null : line.key;
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      class={[
+                        "size-space-2 flex-none rounded-pill",
+                        DOT[track.kind],
+                      ]}
+                    ></span>
+                    <span class="min-w-0 text-ink-strong wrap-anywhere"
+                      >{name}</span
+                    >
+                  </button>
+                  <div
+                    class="flex min-w-0 flex-wrap items-center gap-space-1"
+                    data-slot="chips"
+                  >
+                    {#each chips as chip (chip.key)}
+                      {#snippet face()}
+                        {#if chip.glyph}
+                          <svg
+                            aria-hidden="true"
+                            class="size-icon-sm flex-none"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-linecap="round"
+                            stroke-width="2"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d={chip.glyph} />
+                          </svg>
+                        {/if}
+                        <span class="whitespace-nowrap">{chip.text}</span>
+                      {/snippet}
+                      {#if chip.reset}
+                        <!-- Changed: its own chip marked; a press puts it back. -->
+                        <button
+                          type="button"
+                          aria-label={chip.reset}
+                          class="pointer-hit touch-hit inline-flex h-c-badge-h min-w-0 items-center gap-space-1 rounded-xs border border-dashed border-selected-ink bg-selected-bg px-space-1 type-code leading-none text-selected-ink transition-control num can-hover:hover:bg-surface-hover"
+                          data-edited
+                          onclick={() =>
+                            onretime(restore(track, chip.key as Timing))}
+                          title={chip.reset}
+                        >
+                          {@render face()}
+                        </button>
+                      {:else}
+                        {#if chip.said}
+                          <span
+                            aria-label={chip.said}
+                            class="inline-flex h-c-badge-h min-w-0 items-center gap-space-1 px-space-1 type-code leading-none text-ink-muted num"
+                            role="img"
+                            title={chip.key === "curve" ? undefined : chip.said}
+                          >
+                            {@render face()}
+                          </span>
+                        {:else}
+                          <span
+                            class="inline-flex h-c-badge-h min-w-0 items-center gap-space-1 px-space-1 type-code leading-none text-ink-muted num"
+                          >
+                            {@render face()}
+                          </span>
+                        {/if}
+                      {/if}
+                      {#if chip.badge}
+                        <span
+                          aria-label={words.durationOf(chip.badge)}
+                          class={[
+                            badgeVariants({ kind: "meta" }),
+                            "h-c-badge-h type-code leading-none",
+                          ]}
+                          role="img"
+                          title={words.durationOf(chip.badge)}
+                          >{chip.badge}</span
+                        >
+                      {/if}
+                    {/each}
+                  </div>
+                </div>
+                {#if many}
+                  {@const said = opened[track.id]
+                    ? words.hideClips(track.clips.length)
+                    : words.showClips(track.clips.length)}
+                  <button
+                    type="button"
+                    aria-expanded={opened[track.id] ?? false}
+                    aria-label={said}
+                    class={toggle}
+                    onclick={() => {
+                      opened = { ...opened, [track.id]: !opened[track.id] };
+                    }}
+                    title={said}
+                  >
+                    <IconChevronDown
+                      aria-hidden="true"
+                      class={[
+                        "size-icon-md transition-transform duration-(--dur-control) ease-out",
+                        opened[track.id] && "rotate-180",
+                      ]}
+                    />
+                  </button>
+                {/if}
+              </div>
+              <div
+                class="col-span-full min-w-0 self-start px-space-2 @timeline:col-span-3 @timeline:col-start-3"
+              >
+                <div class="relative">
+                  <ClipBar
+                    disabled={original}
+                    {lang}
+                    {name}
+                    onhold={(span) => {
+                      holding = span ? { id: track.id, ...span } : null;
+                    }}
+                    onretime={(from, to) => onretime(retime(track, from, to))}
+                    original={!original && track.clips.some((clip) => clip.was)
+                      ? (read.get(track.thing ?? track.id) ?? null)
+                      : null}
+                    {scale}
+                    {track}
+                  />
+                  <!-- The playhead down this lane, while the bars stand
+                       under their words: no one line runs down a column. -->
+                  <span
+                    aria-hidden="true"
+                    class="pointer-events-none absolute -inset-y-space-1 start-(--at) w-px -translate-x-1/2 bg-ink-strong @timeline:hidden rtl:translate-x-1/2"
+                    style:--at={pct(Math.min(playhead, length))}
+                  ></span>
+                </div>
+              </div>
+              {#if open}
+                <div class="col-span-full min-w-0" in:unfold out:unfold>
+                  <ClipEditor
+                    {name}
+                    onreset={() => onreset(track.clips.map((clip) => clip.id))}
+                    {onretime}
+                    {track}
+                  />
+                </div>
               {/if}
             </div>
-            {#if many}
-              {@const said = opened[track.id]
-                ? words.hideClips(track.clips.length)
-                : words.showClips(track.clips.length)}
-              <button
-                type="button"
-                aria-expanded={opened[track.id] ?? false}
-                aria-label={said}
-                class={toggle}
-                onclick={() => {
-                  opened = { ...opened, [track.id]: !opened[track.id] };
-                }}
-                title={said}
-              >
-                <IconChevronDown
-                  aria-hidden="true"
-                  class={[
-                    "size-icon-md transition-transform duration-(--dur-control) ease-out",
-                    opened[track.id] && "rotate-180",
-                  ]}
-                />
-              </button>
-            {/if}
-            <button
-              type="button"
-              aria-expanded={editing === line.key}
-              aria-label={words.edit(name)}
-              class={[
-                toggle,
-                editing === line.key && "bg-selected-bg text-selected-ink",
-              ]}
-              disabled={original}
-              onclick={() => {
-                editing = editing === line.key ? null : line.key;
-              }}
-              title={words.edit(name)}
-            >
-              <IconTuning aria-hidden="true" class="size-icon-md" />
-            </button>
-          </div>
-          <div
-            class="col-span-3 col-start-3 row-start-(--row) min-w-0 self-center px-space-5"
-            style:--row={line.row}
-            {...lights(track)}
-          >
-            <ClipBar
-              disabled={original}
-              {lang}
-              {name}
-              onhold={(span) => {
-                holding = span ? { id: track.id, ...span } : null;
-              }}
-              onretime={(from, to) => onretime(retime(track, from, to))}
-              original={!original && track.clips.some((clip) => clip.was)
-                ? (read.get(track.thing ?? track.id) ?? null)
-                : null}
-              {scale}
-              {track}
-            />
-          </div>
-          {#if editing === line.key && !original}
-            <div
-              class="col-span-5 col-start-1 row-start-(--row) min-w-0"
-              style:--row={line.row + 1}
-              in:unfold
-              out:unfold
-            >
-              <ClipEditor
-                {name}
-                onreset={() => onreset(track.clips.map((clip) => clip.id))}
-                {onretime}
-                {track}
-              />
-            </div>
-          {/if}
-        {/each}
+          {/each}
 
-        <!-- The playhead's hairline, down the lane alone, under the ruler's
-             handle to the last row. -->
-        <div
-          aria-hidden="true"
-          class="pointer-events-none relative col-span-3 col-start-3 row-span-full row-start-1 px-space-5"
-        >
-          <div class="relative size-full">
-            <span
-              class="absolute top-c-btn-h-sm bottom-0 start-(--at) w-px -translate-x-1/2 bg-ink-strong rtl:translate-x-1/2"
-              style:--at={pct(Math.min(playhead, length))}
-            ></span>
+          <!-- The playhead's hairline, down the lane alone, from the
+               ruler's foot to the last row, while bars stand beside their
+               words. -->
+          <div
+            aria-hidden="true"
+            class="pointer-events-none relative col-span-3 col-start-3 row-span-full row-start-1 hidden px-space-2 @timeline:block"
+          >
+            <div class="relative size-full">
+              <span
+                class="absolute top-space-6 bottom-0 start-(--at) w-px -translate-x-1/2 bg-ink-strong rtl:translate-x-1/2"
+                style:--at={pct(Math.min(playhead, length))}
+              ></span>
+            </div>
           </div>
         </div>
       </div>
