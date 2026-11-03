@@ -657,3 +657,183 @@ export const springOf = (seconds: number, bounce: number): Spring => ({
   stiffness: Number(((2 * Math.PI) / seconds) ** 2),
   damping: (4 * Math.PI * (1 - bounce)) / seconds,
 });
+
+/** A value of a row's timing he may change, and put back alone: when it begins, how long it runs, its curve. */
+export type Timing = "start" | "length" | "curve";
+
+/** Whether two clips run on one curve: one easing, both drawn in their frames or neither, one spring. */
+const sameCurve = (a: Clip, b: Clip): boolean =>
+  a.easing === b.easing && a.framed === b.framed && a.spring === b.spring;
+
+/** The values of the row he changed, read off each clip against the clip as the engine ran it. */
+export function editsOf(track: Track): Set<Timing> {
+  const edits = new Set<Timing>();
+  for (const clip of track.clips) {
+    const { was } = clip;
+    if (was) {
+      if (clip.delay !== was.delay) {
+        edits.add("start");
+      }
+      if (clip.duration !== was.duration) {
+        edits.add("length");
+      }
+      if (!sameCurve(clip, was)) {
+        edits.add("curve");
+      }
+    }
+  }
+  return edits;
+}
+
+/**
+ * The row with one value put back as the engine ran it, the others as he
+ * left them; a clip with nothing left changed is the engine's own again.
+ * A spring sets its own length, so a spring's length and its curve go back
+ * together.
+ */
+export function restore(track: Track, value: Timing): Clip[] {
+  return track.clips.map((clip) => {
+    const { was } = clip;
+    if (!was) {
+      return clip;
+    }
+    const sprung = clip.spring !== was.spring;
+    const curveBack =
+      value === "curve" ||
+      (sprung && value === "length") ||
+      sameCurve(clip, was);
+    const delay = value === "start" ? was.delay : clip.delay;
+    const duration =
+      value === "length" || (sprung && value === "curve")
+        ? was.duration
+        : clip.duration;
+    if (curveBack && delay === was.delay && duration === was.duration) {
+      return was;
+    }
+    // The curve put back is the engine's: its easing, its frames, no spring.
+    const base = curveBack ? was : clip;
+    const token = tokenOf(duration);
+    return {
+      ...base,
+      delay,
+      duration,
+      token,
+      adHoc:
+        token === null || (!base.framed && curveTokenOf(base.easing) === null),
+      was,
+    };
+  });
+}
+
+/**
+ * A curve drawn as a glyph, from its start (bottom left) to its end (top
+ * right) in a 24-unit box: a cubic curve as its bezier, a spring's or any
+ * `linear(…)` as its points, `linear` as a line. Null for a curve drawn
+ * into its frames, or steps: nothing to draw.
+ */
+export function curveGlyph(easing: string): string | null {
+  const said = easing.trim();
+  const x = (t: number) => (2 + 20 * t).toFixed(1);
+  const y = (p: number) => (22 - 20 * p).toFixed(1);
+  if (said.startsWith("linear(")) {
+    // Its points alone, evenly apart (a spring's); one with stops (`30%`) is not drawn.
+    const points = said.includes("%")
+      ? []
+      : (said.slice("linear(".length, -1).match(NUMBERS) ?? []).map(Number);
+    return points.length < 2
+      ? null
+      : points
+          .map(
+            (p, i) =>
+              `${i === 0 ? "M" : "L"}${x(i / (points.length - 1))} ${(22 - 16 * p).toFixed(1)}`
+          )
+          .join(" ");
+  }
+  const bezier = bezierOf(said);
+  if (!bezier) {
+    return null;
+  }
+  const [x1 = 0, y1 = 0, x2 = 1, y2 = 1] = bezier;
+  return `M2 22 C${x(x1)} ${y(y1)} ${x(x2)} ${y(y2)} 22 2`;
+}
+
+/** What a clip changes, when it is one property between two plain numbers: its name, from, to and unit. */
+export interface Delta {
+  from: number;
+  property: string;
+  to: number;
+  unit: string;
+}
+
+const PLAIN = /^(-?\d*\.?\d+)([a-z%]*)$/u;
+/** A transform that only moves: `matrix(1, 0, 0, 1, x, y)`, or a `translate`. */
+const MATRIX = /^matrix\(([^)]*)\)$/u;
+
+/** A frame's value as plain numbers by axis: `120px` → {"": [120, "px"]}; a moving matrix → x and y in px. */
+function plainOf(value: string): Map<string, [number, string]> | null {
+  const said = value.trim();
+  const plain = said.match(PLAIN);
+  if (plain) {
+    return new Map([["", [Number(plain[1]), plain[2] ?? ""]]]);
+  }
+  if (said === "none") {
+    return new Map([
+      ["x", [0, "px"]],
+      ["y", [0, "px"]],
+    ]);
+  }
+  const matrix = said.match(MATRIX);
+  const n = (matrix?.[1] ?? "").split(",").map(Number);
+  if (n.length === 6 && n[0] === 1 && n[1] === 0 && n[2] === 0 && n[3] === 1) {
+    return new Map([
+      ["x", [n[4] ?? 0, "px"]],
+      ["y", [n[5] ?? 0, "px"]],
+    ]);
+  }
+  return null;
+}
+
+/**
+ * What a clip of one property changes, as its first and last frames say
+ * it, when both are plain numbers in one unit (`height 0 → 120 px`,
+ * `opacity 0 → 1`); a transform that only moves is said by the axis that
+ * moves (`y 16 → 0 px`). Null for anything else: the row says how it moves.
+ */
+export function deltaOf(clip: Clip): Delta | null {
+  if (clip.property.includes(",")) {
+    return null;
+  }
+  const key = clip.property.replace(/-([a-z])/gu, (_, c: string) =>
+    c.toUpperCase()
+  );
+  const first = clip.frames[0]?.[key];
+  const last = clip.frames.at(-1)?.[key];
+  if (typeof first !== "string" || typeof last !== "string") {
+    return null;
+  }
+  const a = plainOf(first);
+  const b = plainOf(last);
+  if (!(a && b)) {
+    return null;
+  }
+  const moved = [...a.keys()].filter(
+    (one) => b.has(one) && a.get(one)?.[0] !== b.get(one)?.[0]
+  );
+  const [axis] = moved;
+  if (moved.length !== 1 || axis === undefined) {
+    return null;
+  }
+  const [from, unit] = a.get(axis) as [number, string];
+  const [to, toUnit] = b.get(axis) as [number, string];
+  // 0 is written bare in either unit.
+  if (unit !== toUnit && from !== 0 && to !== 0) {
+    return null;
+  }
+  const round = (v: number) => Math.round(v * 100) / 100;
+  return {
+    property: axis === "" ? clip.property : axis,
+    from: round(from),
+    to: round(to),
+    unit: unit || toUnit,
+  };
+}
