@@ -2,11 +2,13 @@
  * The task tools on the `cawco` MCP server (§5.3: one server, a toolset per
  * role; new tools named group first). Every session reads its project's
  * tasks and writes to-dos; filing and changing tasks belongs to the roles
- * that have those tools (roles.ts: a session you started, and the project's
- * Caw), and a delegate proposes them through handoff. A session's project is its instance row's
+ * that have those tools (roles.ts: a session you started and the project's
+ * Caw file and change them, a delegate that orchestrates changes them), and
+ * a leaf proposes them through handoff. A session's project is its instance row's
  * `projectId`; a delegate's is its parent's. `task_start` starts an attempt
- * at a task (dispatch.ts) that reports to the session calling it;
- * `task_retry` starts a fresh one in the failed attempt's workspace.
+ * at a task (dispatch.ts) that reports to the session calling it, as
+ * `delegate` with a `task` does; `task_retry` starts a fresh one in the
+ * failed attempt's workspace.
  * `todo_write` also writes the calling session's own plan (plans.ts): its
  * steps and its spec, with or without a project or task.
  */
@@ -67,6 +69,8 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set(TASK_TOOL_NAMES);
 
 export interface TaskToolContext {
   actor: InstanceRow;
+  /** It changes tasks (roles.ts `changesAnyTask`): its todo_write and task_comment name any task, not only its own work item's. */
+  anyTask: boolean;
   /** The whole id of the artifact the actor names by its name, handle or id (artifacts/service.ts `named`). */
   artifactNamed?: (asked: string) => string;
   /**
@@ -89,8 +93,6 @@ export interface TaskToolContext {
    * from; null when neither.
    */
   foundIn?: string | null;
-  /** Its role files tasks (roles.ts): it may name any task's to-dos, not only its own work item's. */
-  mainline: boolean;
   /** The project's own `runs_on` (dispatch settings): a task filed under one is not told to set its own. */
   projectRunsOn?: (projectId: string) => string | null;
   /** Retries a task whose last attempt failed, reporting to `parent` (dispatch.ts); without it task_retry refuses. */
@@ -352,13 +354,13 @@ export function taskTools(context: TaskToolContext | undefined) {
     };
   };
 
-  /** The task todo_write or task_comment may change: the work item's own, or any one a mainline session names. */
+  /** The task todo_write or task_comment may change: the work item's own, or any one a session that changes tasks names. */
   const ownTask = (
     name: "todo_write" | "task_comment",
     asked: string | undefined
   ): string => {
     const own = context?.workItemTask ?? null;
-    if (context?.mainline) {
+    if (context?.anyTask) {
       const named = asked ?? own;
       if (!named) {
         throw new Error(`Name the task: ${name}({ task: "tsk-12", … }).`);
@@ -631,7 +633,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Your plan: `steps` replaces your step list (`depth` nests), `spec` your spec (what you build, how and why). Or a task's to-dos: tick, untick, add or reword by id (td-3, what ends its link) or position (2.1), on your work item's task (an operator's session names any); all land together. Every compaction lists them.",
+      "Your plan: `steps` replaces your step list (`depth` nests), `spec` your spec (what you build, how and why). Or a task's to-dos: tick, untick, add or reword by id (td-3, what ends its link) or position (2.1), on your work item's task (an orchestrator names any); all land together. Every compaction lists them.",
       {
         steps: z.array(stepParameter()).optional(),
         spec: z.string().optional(),
@@ -688,7 +690,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_comment",
-      "Comment on your work item's task (a session the operator started names any): an entry with your name and the time, never changed.",
+      "Comment on your work item's task (an orchestrator names any): an entry with your name and the time, never changed.",
       { task: z.string().optional(), text: z.string() },
       async ({ task, text }) => {
         const { projectId, tasks, actor } = scope();

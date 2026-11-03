@@ -581,6 +581,12 @@ export const queuedTaskStarts = sqliteTable(
      * that waited is still yours (work_items.by_person). Null: its parent's.
      */
     origin: text("origin").$type<Origin>(),
+    /**
+     * What the `delegate` call that named the task asked over its task file
+     * (dispatch.ts `AttemptAsk`: its brief, its name and how it runs), read
+     * whole as it starts. Null: a task_start, a hook's or the dispatcher's.
+     */
+    asked: storedJson(z.unknown())("asked"),
     queuedAt: stampedNow("queued_at"),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.taskId] })]

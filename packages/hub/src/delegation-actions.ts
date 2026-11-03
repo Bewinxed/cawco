@@ -892,6 +892,12 @@ export interface HandoffActions {
       owns?: string[];
       /** What it may spend before the hub stops it. */
       budget?: WorkBudget;
+      /**
+       * The task of this session's project it is for (`tsk-12`): it is an
+       * attempt at that task, briefed with `prompt` above the task file,
+       * and its landing moves the task (hub dispatch.ts `AttemptAsk`).
+       */
+      task?: string;
     }
   ) => Promise<DelegateResult>;
   /**
@@ -1025,7 +1031,31 @@ export type DelegateResult =
       state: "queued";
       text: string;
       title: string;
+    }
+  | {
+      /** A `delegate` naming its task, whose attempt waits for owned files (hub dispatch.ts): the task's start is queued. */
+      projectId: string;
+      state: "queued-task";
+      task: string;
+      text: string;
+      title: string;
     };
+
+/** What a `delegate` call started, as a cut of the call stops it (call-cuts.ts). */
+const startedOf = (started: DelegateResult): Started => {
+  switch (started.state) {
+    case "started":
+      return { kind: "session", instanceId: started.instanceId };
+    case "queued":
+      return { kind: "queued-delegate", queued: started.queued };
+    case "queued-task":
+      return {
+        kind: "queued-task",
+        projectId: started.projectId,
+        taskId: started.task,
+      };
+  }
+};
 
 /** A work item as the hub answers for it (`GET /api/work-items/:id`). */
 interface WorkItemView {
@@ -1924,11 +1954,7 @@ export const handoffActions = ({
         throw new Error(await response.text());
       }
       const started = (await response.json()) as DelegateResult;
-      startedBy?.(
-        started.state === "started"
-          ? { kind: "session", instanceId: started.instanceId }
-          : { kind: "queued-delegate", queued: started.queued }
-      );
+      startedBy?.(startedOf(started));
       return target
         ? {
             ...started,

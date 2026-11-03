@@ -11,9 +11,11 @@
  *   (an `admin_*_write` is your ask, run once you approve it, asks.ts;
  *   in Full Send it runs at once).
  * - **delegate**: a delegated session or work item: the session tools, reads
- *   of its project's tasks, folder and its own task's to-dos; changes to tasks and
- *   fleet settings go to its parent through handoff. A coordinator (an
- *   attempt at a whole) starts its parts with task_start.
+ *   of its project's tasks, folder and its own task's to-dos; filing tasks
+ *   and changing fleet settings go to its parent through handoff. One that
+ *   orchestrates ({@link orchestrates}, a coordinator among them) also
+ *   changes, comments on and starts attempts at any of its project's tasks
+ *   ({@link ORCHESTRATOR_TASKS}).
  * - **overseer**: fleet-watch triage (fleet-watch.ts): it reads the fleet
  *   and the session's task, and decides once with `triage_decide` (nudge the
  *   session's parent, interrupt, stop, tell you, or leave it), which the hub carries
@@ -145,6 +147,20 @@ export const TRIAGE_TOOLS = ["triage_decide"] as const;
 /** A memory curator run's own (memory.ts): never a worker's. */
 const CURATOR_OWN = ["memory_read", "memory_classify"] as const;
 
+/**
+ * The task tools a delegate lists only when it orchestrates
+ * ({@link orchestrates}): it changes any of its project's tasks, and starts
+ * and retries attempts that report to it (dispatch.ts `parentProblem`).
+ * With them its todo_write and task_comment name any task
+ * ({@link changesAnyTask}).
+ */
+const ORCHESTRATOR_TASKS = [
+  "task_update",
+  "task_start",
+  "task_retry",
+] as const satisfies readonly TaskTool[];
+const ORCHESTRATORS_ONLY: ReadonlySet<string> = new Set(ORCHESTRATOR_TASKS);
+
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
   "generate_image",
@@ -175,9 +191,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...TASK_READ,
     // An attempt at a task hands in its result (task-tools.ts).
     "task_result",
-    // A coordinator, an attempt at a whole, starts its parts (dispatch.ts
-    // `coordinates`); any other delegate's start is refused there.
-    "task_start",
+    ...ORCHESTRATOR_TASKS,
     "memory_note",
     // Anything said or made, as the dashboard's Find finds it (find-tool.ts).
     "find",
@@ -225,6 +239,16 @@ const listed = (role: SessionRole, name: string): boolean =>
   role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
 
 /**
+ * Whether the session orchestrates: its role's toolset has `delegate` and
+ * it may start any type (core `MayStart`). A worker does, and so does a
+ * delegate briefed with `may_start: ["any"]` (a coordinator's attempt
+ * among them); a leaf, one that may start a few named types included, does
+ * not.
+ */
+export const orchestrates = (row: InstanceRow): boolean =>
+  startsAny(sessionMayStart(row)) && listed(roleOf(row), "delegate");
+
+/**
  * Whether the session talks with the person: it has no work item, which
  * answers its parent and ends on finish_item, and is no triage run, which
  * nobody reads. Only such a session hears of the person (server.ts
@@ -249,8 +273,19 @@ export const allows = (row: InstanceRow, name: string): boolean => {
   if (PROJECT_TOOLS.has(name) && !closed(role)) {
     return !!row.projectId;
   }
+  if (role === "delegate" && ORCHESTRATORS_ONLY.has(name)) {
+    return orchestrates(row);
+  }
   return listed(role, name);
 };
+
+/**
+ * Whether the session's todo_write and task_comment may name any of its
+ * project's tasks, not only its own work item's: it changes tasks
+ * (task_update), as a worker and an orchestrating delegate do.
+ */
+export const changesAnyTask = (row: InstanceRow): boolean =>
+  allows(row, "task_update");
 
 /**
  * Which role-scoped memory a session loads (core fleet.ts `MemoryRole`): an
@@ -259,9 +294,7 @@ export const allows = (row: InstanceRow, name: string): boolean => {
  * types included.
  */
 export const memoryRoleOf = (row: InstanceRow): MemoryRole =>
-  startsAny(sessionMayStart(row)) && listed(roleOf(row), "delegate")
-    ? "orchestrator"
-    : "leaf";
+  orchestrates(row) ? "orchestrator" : "leaf";
 
 /**
  * Which of a granted connection's tools (connections.ts) a role gets: a
@@ -293,7 +326,9 @@ export const refusal = (row: InstanceRow, name: string): string => {
     case "overseer":
       return `${name} isn't available to fleet-watch triage: it reads the fleet and decides once with triage_decide.`;
     case "delegate":
-      return `${name} isn't available here: a delegate or work item files, changes or starts no tasks and changes no fleet settings. Hand the change to the session that started it.`;
+      return ORCHESTRATORS_ONLY.has(name)
+        ? `${name} isn't available here: only a delegate that may start any type changes tasks or starts attempts, and this one is a leaf. Hand the change to the session that started it.`
+        : `${name} isn't available here: a delegate or work item files no tasks and changes no fleet settings. Hand the change to the session that started it.`;
     case "curator":
       return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
     case "worker":

@@ -9154,6 +9154,16 @@ export const createWorkItems = ({
     },
 
     /**
+     * The fleet's briefing guidance a `delegate` call's caller has yet to
+     * read for its delegate ({@link briefingOf}), recorded as handed: what
+     * a `delegate` naming its task, which starts on the dispatcher's path
+     * (dispatch.ts `AttemptAsk`), is refused with first, as any is here.
+     */
+    briefing(request: WorkItemRequest): string | undefined {
+      return briefingOf(request);
+    },
+
+    /**
      * `delegate`: {@link start}, or, while a live item owns files this one
      * owns too, the request queued until no live item overlaps it, a chip in
      * its parent's tray from now on under the ids its item and session take

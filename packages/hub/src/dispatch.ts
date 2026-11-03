@@ -12,9 +12,10 @@
  *   dispatcher asks"; {@link typeOf}). Starting one moves the task to its
  *   active stage (the stage that runs it, else the first of kind
  *   `active`), as `hub`.
- * - **Who it reports to.** A work item needs a parent session. `task_start`
- *   from any session of the project but a delegate (`parentProblem`) makes
- *   that session the parent; the
+ * - **Who it reports to.** A work item needs a parent session. `task_start`,
+ *   or `delegate` naming the task, from any session of the project that
+ *   orchestrates (`parentProblem`: a worker, or a delegate that may start
+ *   any type) makes that session the parent; the
  *   project's conversation, Caw (caw.ts), takes the reports of every attempt
  *   nobody asked for, its session started for the first one while Caw is
  *   on. With Caw off there is no conversation to take them: such an attempt
@@ -70,12 +71,17 @@
  *   delegate type says, else as the project does: `main`, `branch`, `pr` or
  *   `none` (work-items.ts). Its task's `outputs` are collected into the
  *   project's folder.
+ * - **Briefed by a session.** `delegate` naming a task (`AttemptAsk`) is an
+ *   attempt like any: its brief is the caller's words above the task file,
+ *   its settings go over the task's, and it starts, queues, moves its task
+ *   and lands as task_start's does.
  * - **The landing result.** An attempt that ends done (landed, or nothing to
  *   land) moves its task to the first `done` stage, or, when it opened a pull
  *   request, to the first `you` stage (staying put without one) until the
  *   pull request merges ({@link Dispatcher.pullRequestMerged}); one that
  *   fails or is cancelled sends it back to the first `todo` stage, marked as
- *   failed or stopped (tasks.ts `TaskFlags`).
+ *   failed or stopped (tasks.ts `TaskFlags`). The move names the commit its
+ *   work landed as (`landedAs`), so the task's history shows it.
  * - **A retry** of a task whose last attempt failed or was stopped runs a fresh session in
  *   that attempt's workspace when its clone is still there (else a new one),
  *   briefed with the failure and the to-dos as they stand; the failed
@@ -146,7 +152,7 @@ import {
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
-import { roleOf } from "./roles";
+import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
 import { waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
@@ -173,6 +179,13 @@ import {
 
 /** What the dispatcher needs of the hub. */
 export interface DispatchDeps {
+  /**
+   * The fleet's briefing guidance the session that wrote an attempt's
+   * brief (a `delegate` naming the task) has yet to read for the delegate
+   * it starts, recorded as handed (work-items.ts `briefing`); nothing when
+   * it has read it.
+   */
+  readonly briefing: (request: WorkItemRequest) => string | undefined;
   /**
    * The brief's project context for an attempt at `task` (memory.ts
    * `contextFor`): AGENTS.md and the knowledge files it needs, or "".
@@ -251,6 +264,45 @@ export interface DispatchDeps {
   ) => LandsMode | undefined;
 }
 
+/**
+ * What a `delegate` call that names its task asks of the attempt over the
+ * task file: its brief, which the attempt's brief carries above the task
+ * file, its name, and how it runs. Where the attempt runs is the task's
+ * (`runs_on`, the project's checkouts), so it names no machine, folder or
+ * workspace.
+ */
+export type AttemptAsk = Pick<
+  WorkItemRequest,
+  | "prompt"
+  | "title"
+  | "account"
+  | "budget"
+  | "fork"
+  | "from"
+  | "group"
+  | "harness"
+  | "inputs"
+  | "lands"
+  | "mayStart"
+  | "model"
+  | "outputs"
+  | "owns"
+  | "skills"
+  | "type"
+>;
+
+/** How an attempt starts ({@link Dispatcher.startAttempt}); each left out, as a plain task_start. */
+export interface AttemptHow {
+  /** What a `delegate` naming the task asked over its task file. */
+  asked?: AttemptAsk;
+  /** Whose work it is (work-items `origin`); left out, its parent's. */
+  origin?: Origin;
+  /** A retry of its failed or stopped last attempt. */
+  retry?: boolean;
+  /** The active stage a hook started it from. */
+  stage?: Stage;
+}
+
 /** A project's dispatch: its settings, and what the dispatcher would do now. */
 export interface DispatchView {
   /** What an attempt may spend where its task and its delegate call say nothing; null: no limit. */
@@ -305,7 +357,7 @@ const HOOK_ORIGIN: Record<TaskMover, Origin | undefined> = {
 };
 
 const NO_LEAD =
-  "Turn the project's events on so its conversation takes the report, name a session of the project that is no delegate, or start it with task_start from one.";
+  "Turn the project's events on so its conversation takes the report, name a session of the project that orchestrates, or start it with task_start from one.";
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
@@ -316,6 +368,22 @@ const refuse = (code: FolderRefusalStatus, message: string): never => {
 };
 
 const short = (id: string): string => id.slice(0, 8);
+
+/** How long a commit is named in a task's history: git's own short form for a large repository. */
+const SHA_SHOWN = 9;
+
+/**
+ * The commit an attempt's work landed as, as its task's move names it: on
+ * its base branch, or pushed to a branch of its own; "" when nothing of it
+ * landed (work_items.landed).
+ */
+const landedAs = (item: Pick<WorkItemRow, "landed">): string => {
+  if (!item.landed) {
+    return "";
+  }
+  const sha = item.landed.sha.slice(0, SHA_SHOWN);
+  return item.landed.onto ? `; landed ${sha}` : `; pushed ${sha}`;
+};
 
 /**
  * What an attempt's acceptance criteria are judged over: its finish_item
@@ -355,13 +423,12 @@ const named = (row: InstanceRow): string =>
 
 /**
  * The one rule for who takes a project's reports: why `row` cannot take an
- * attempt's for `projectId` (as its conversation, as the session starting it,
- * or as the session that moved its task in), or undefined when it can. It
- * must be a worker (roles.ts `roleOf`) of that project, and not a delegate's
- * work: `origin` stays `delegate` on a session that goes on from one, whose
- * row names no work item. A worker's parent says nothing here: a session
- * another session started is one the person talks to like any other, and a
- * `/clear` or a continuation keeps its row's parent.
+ * attempt's for `projectId` (as its conversation, as the session starting it
+ * with task_start or `delegate` naming the task, or as the session that
+ * moved its task in), or undefined when it can. It must be a session of that
+ * project that orchestrates (roles.ts `orchestrates`): a worker, or a
+ * delegate that may start any type, a coordinator's attempt among them. A
+ * leaf's reports go to the session that started it, and it takes none.
  */
 const parentProblem = (
   row: InstanceRow | undefined,
@@ -374,8 +441,8 @@ const parentProblem = (
   if (row.projectId !== projectId) {
     return `${named(row)} is not a session of this project.`;
   }
-  if (row.origin === "delegate" || roleOf(row) !== "worker") {
-    return `${named(row)} is a delegate or a work item, so its reports go to the session that started it; it takes none of a project's.`;
+  if (!orchestrates(row)) {
+    return `${named(row)} is a leaf (it may not start a delegate of any type), so its reports go to the session that started it; it starts no attempt and takes none of a project's reports.`;
   }
 };
 
@@ -426,6 +493,34 @@ const taskLimits = (
 });
 
 /**
+ * How an attempt runs, over what its work item's request names besides: the
+ * task's limits ({@link taskLimits}) and a whole's coordinating, under what
+ * a `delegate` naming the task asked where it asked.
+ */
+const runsAs = (
+  task: TaskView,
+  asked: AttemptAsk | undefined
+): Omit<AttemptAsk, "lands" | "prompt" | "title" | "type"> => {
+  const limits = taskLimits(task);
+  return {
+    // A whole's attempt coordinates its parts: it delegates.
+    mayStart:
+      asked?.mayStart ?? (task.parts.length > 0 ? [ANY_TYPE] : undefined),
+    outputs: asked?.outputs ?? limits.outputs,
+    group: asked?.group ?? limits.group,
+    owns: asked?.owns ?? limits.owns,
+    budget: asked?.budget ?? limits.budget,
+    account: asked?.account,
+    fork: asked?.fork,
+    from: asked?.from,
+    harness: asked?.harness,
+    inputs: asked?.inputs,
+    model: asked?.model,
+    skills: asked?.skills,
+  };
+};
+
+/**
  * The type an attempt runs before any is judged: the task's own `type:`,
  * else the `runs:` of the active stage it runs in (spec §5.1).
  */
@@ -471,23 +566,36 @@ const titleOf = (task: TaskView): string => {
 };
 
 /**
- * The brief: the task file as it stands, the open to-dos to start the plan
+ * The brief: the words of the `delegate` call that named the task when one
+ * did, then the task file as it stands, the open to-dos to start the plan
  * from (with their ids), the task's checks for the attempt to run and quote,
  * what finish_item does, where the task sits among its edges, the project's
  * context (memory.ts `contextFor`), and its design system when the task
  * needs it (`design`, read from the attempt's clone: design-system.ts
  * `designSection`).
  */
-const briefOf = (
-  project: ProjectRow,
-  task: TaskView,
-  all: TaskSummary[],
-  lands: LandsMode,
-  comments: TaskComment[],
-  context: string,
-  design: string,
-  retry?: RetryContext
-): string => {
+const briefOf = ({
+  project,
+  task,
+  all,
+  lands,
+  comments,
+  context,
+  design,
+  retry,
+  asked,
+}: {
+  all: TaskSummary[];
+  /** The brief of the `delegate` call that named the task, above the task file. */
+  asked?: string;
+  comments: TaskComment[];
+  context: string;
+  design: string;
+  lands: LandsMode;
+  project: ProjectRow;
+  retry?: RetryContext;
+  task: TaskView;
+}): string => {
   const byId = new Map(all.map((each) => [each.id, each]));
   const line = (id: string): string => {
     const other = byId.get(id);
@@ -531,7 +639,8 @@ const briefOf = (
       : []),
   ];
   return [
-    `Your work item is an attempt at ${taskLink(project.id, task.id, task.title)}, a task of the project ${project.name}. This brief is its task file as it stands. Name it, its to-dos and the tasks below to the person by their links.`,
+    `Your work item is an attempt at ${taskLink(project.id, task.id, task.title)}, a task of the project ${project.name}. ${asked ? "This brief is the words of the session that started you, then the task file as it stands." : "This brief is its task file as it stands."} Name it, its to-dos and the tasks below to the person by their links.`,
+    ...(asked ? [`## From the session that started you\n\n${asked}`] : []),
     ...(task.description ? [`## Description\n\n${task.description}`] : []),
     ...(task.acceptance
       ? [`## Acceptance criteria\n\n${task.acceptance}`]
@@ -679,6 +788,17 @@ const columnsOf = ({
   ...(runsOn === undefined ? {} : { runsOn }),
 });
 
+/**
+ * An attempt a session briefed, held until it reads the fleet's briefing
+ * guidance for its delegate (briefings.ts): the call answers with the
+ * guide, and the same call made again goes out.
+ */
+class GuidanceFirst extends WorkItemRefusal {
+  constructor(guide: string) {
+    super(409, guide);
+  }
+}
+
 /** A failure to start, as the words a caller reads and the status a route answers. */
 const failure = (
   error: unknown
@@ -698,6 +818,7 @@ const failure = (
 type AttemptLanding = Extract<StageKind, "done" | "todo" | "you">;
 
 export const createDispatcher = ({
+  briefing,
   context,
   db,
   designSection,
@@ -850,38 +971,6 @@ export const createDispatcher = ({
   ): void => {
     problems.set(keyOf(projectId, task.id), { hash: task.hash, message });
     console.warn(`[dispatch] ${task.id} in project ${projectId}: ${message}`);
-  };
-
-  /**
-   * Whether `parent` is a coordinator of `task`: its work item is the live
-   * attempt at one of the task's `part_of` ancestors, so it starts and
-   * steers the task as a part of its whole.
-   */
-  const coordinates = async (
-    projectId: string,
-    parent: InstanceRow,
-    task: TaskView
-  ): Promise<boolean> => {
-    const item = parent.workItemId
-      ? liveAttempts(projectId).find((each) => each.id === parent.workItemId)
-      : undefined;
-    if (!item?.taskId) {
-      return false;
-    }
-    const { tasks: all } = await tasks.list(projectId);
-    const byId = new Map(all.map((each) => [each.id, each]));
-    const seen = new Set([task.id]);
-    for (
-      let at = task.partOf;
-      at && !seen.has(at);
-      at = byId.get(at)?.partOf ?? null
-    ) {
-      if (at === item.taskId) {
-        return true;
-      }
-      seen.add(at);
-    }
-    return false;
   };
 
   /** Refuses an attempt at a task that has a live one, or is done or dropped. */
@@ -1126,21 +1215,17 @@ export const createDispatcher = ({
   };
 
   /**
-   * Files and spawns the attempt's work item; a failure is remembered on the
-   * task. A retry names the attempt before it, whose workspace it runs in
-   * again when that clone is still there. `origin` is whose work it is
-   * (work-items `origin`); left out, its parent's.
+   * The attempt's brief as its clone gives it its design section
+   * ({@link briefOf}): the task as it stands, with the comments left since
+   * its newest attempt started, a retry's last attempt, and the brief of
+   * the `delegate` naming it (`asked`).
    */
-  const launch = async (
+  const briefFor = async (
     project: ProjectRow,
     task: TaskView,
-    parent: InstanceRow,
-    active: Stage | undefined,
-    { origin, previous }: { origin?: Origin; previous?: WorkItemRow }
-  ): Promise<WorkItemStart> => {
-    const placed = placementOf(project, task, parent, previous);
-    const type = typeOf(task, active) ?? (await chosenType(project, task));
-    const lands = landsOf(project, task, type);
+    lands: LandsMode,
+    { asked, previous }: { asked?: string; previous?: WorkItemRow }
+  ): Promise<(design: string) => string> => {
     const { tasks: all } = await tasks.list(project.id);
     const retry = previous
       ? {
@@ -1158,11 +1243,50 @@ export const createDispatcher = ({
           (comment) => comment.at >= last.createdAt.getTime()
         )
       : [];
+    const known = await context(project.id, task);
+    return (design) =>
+      briefOf({
+        project,
+        task,
+        all,
+        lands,
+        comments,
+        context: known,
+        design,
+        retry,
+        ...(asked ? { asked } : {}),
+      });
+  };
+
+  /**
+   * Files and spawns the attempt's work item; a failure is remembered on the
+   * task. A retry names the attempt before it, whose workspace it runs in
+   * again when that clone is still there. `origin` is whose work it is
+   * (work-items `origin`); left out, its parent's. What a `delegate` naming
+   * the task `asked` goes over the task's own: its brief above the task
+   * file, and each setting it gives.
+   */
+  const launch = async (
+    project: ProjectRow,
+    task: TaskView,
+    parent: InstanceRow,
+    active: Stage | undefined,
+    {
+      asked,
+      origin,
+      previous,
+    }: { asked?: AttemptAsk; origin?: Origin; previous?: WorkItemRow }
+  ): Promise<WorkItemStart> => {
+    const placed = placementOf(project, task, parent, previous);
+    const type =
+      asked?.type ?? typeOf(task, active) ?? (await chosenType(project, task));
+    const lands = asked?.lands ?? landsOf(project, task, type);
     try {
-      const known = await context(project.id, task);
-      const brief = (design: string): string =>
-        briefOf(project, task, all, lands, comments, known, design, retry);
-      const started = await start({
+      const brief = await briefFor(project, task, lands, {
+        asked: asked?.prompt,
+        previous,
+      });
+      const request: WorkItemRequest = {
         parentInstanceId: parent.id,
         prompt: brief(""),
         // The project's design system, as the attempt's clone holds it, for
@@ -1173,24 +1297,31 @@ export const createDispatcher = ({
                 brief(await designSection(clone)),
             }
           : {}),
-        title: titleOf(task),
+        title: asked?.title ?? titleOf(task),
         type,
         lands,
-        // A whole's attempt coordinates its parts: it delegates.
-        ...(task.parts.length > 0 ? { mayStart: [ANY_TYPE] } : {}),
         waitedOn: witnessesOf(task),
-        ...taskLimits(task),
+        ...runsAs(task, asked),
         ...placed,
         ...(origin ? { origin } : {}),
         // Only a start a person asked for names `you` here: his dashboard
         // start or retry, or his own move into a `runs:` stage.
         byPerson: origin === "you",
         task: { id: task.id, projectId: project.id },
-      });
+      };
+      // A brief a session wrote waits for the guidance it has yet to read,
+      // as any delegate's does; no problem of the task's.
+      const guide = asked ? briefing(request) : undefined;
+      if (guide) {
+        throw new GuidanceFirst(guide);
+      }
+      const started = await start(request);
       problems.delete(keyOf(project.id, task.id));
       return started;
     } catch (error) {
-      note(project.id, task, failure(error).message);
+      if (!(error instanceof GuidanceFirst)) {
+        note(project.id, task, failure(error).message);
+      }
       throw error;
     }
   };
@@ -1222,27 +1353,26 @@ export const createDispatcher = ({
   };
 
   /**
-   * Starts an attempt at a task, reporting to `parent`. `stage` is the active
-   * stage a hook started it from; without one the task moves to the stage it
-   * is active in, or the first of kind `active`. Refused while the task has a
-   * live attempt, is done or dropped, or no checkout is online; a start the
-   * machine or the fleet turns down is remembered on the task until it
-   * changes.
+   * Starts an attempt at a task, reporting to `parent`: task_start's, a
+   * `delegate` naming the task's (`asked`), a hook's and the dispatcher's
+   * one path. `stage` is the active stage a hook started it from; without
+   * one the task moves to the stage it is active in, or the first of kind
+   * `active`. Refused while the task has a live attempt, is done or dropped,
+   * or no checkout is online; a start the machine or the fleet turns down is
+   * remembered on the task until it changes.
    */
   const startAttempt = async (
     projectId: string,
     ref: string,
     parent: InstanceRow,
-    stage?: Stage,
-    retry = false,
-    origin?: Origin
+    { stage, retry = false, origin, asked }: AttemptHow = {}
   ): Promise<AttemptStart> => {
     const project = projectOf(projectId);
-    const task = await tasks.get(projectId, ref);
     const unfit = parentProblem(parent, projectId, parent.id);
-    if (unfit && !(await coordinates(projectId, parent, task))) {
+    if (unfit) {
       refuse(403, unfit);
     }
+    const task = await tasks.get(projectId, ref);
     const key = keyOf(projectId, task.id);
     if (starting.has(key)) {
       refuse(409, "An attempt at this task is starting already.");
@@ -1256,6 +1386,7 @@ export const createDispatcher = ({
       let started: WorkItemStart;
       try {
         started = await launch(project, task, parent, active, {
+          asked,
           origin,
           previous,
         });
@@ -1264,6 +1395,7 @@ export const createDispatcher = ({
           throw error;
         }
         return queuedForOwns(project, task, parent, stage, error, {
+          asked,
           retry,
           origin,
         });
@@ -1300,7 +1432,8 @@ export const createDispatcher = ({
    * under the stage the task is in (a hook's own), to start as items end
    * ({@link drainQueued}) while it is still there; the task stays put. A
    * retry stays a retry: it starts as one, in the last attempt's workspace;
-   * and a start keeps whose it is (`origin`), so yours that waited is yours.
+   * a start keeps whose it is (`origin`), so yours that waited is yours; and
+   * a `delegate`'s keeps what it asked.
    */
   const queuedForOwns = (
     project: ProjectRow,
@@ -1308,7 +1441,15 @@ export const createDispatcher = ({
     parent: InstanceRow,
     active: Stage | undefined,
     overlap: OwnsOverlap,
-    { retry, origin }: { origin: Origin | undefined; retry: boolean }
+    {
+      asked,
+      retry,
+      origin,
+    }: {
+      asked: AttemptAsk | undefined;
+      origin: Origin | undefined;
+      retry: boolean;
+    }
   ): AttemptStart => {
     db.queueTaskStart({
       projectId: project.id,
@@ -1318,6 +1459,7 @@ export const createDispatcher = ({
       why: "owns",
       retry,
       origin: origin ?? null,
+      asked: asked ?? null,
     });
     console.log(
       `[dispatch] ${project.name}: ${task.id}${retry ? "'s retry" : ""} waits for owned files: ${overlap.message}`
@@ -1326,8 +1468,8 @@ export const createDispatcher = ({
       task: task.id,
       stage: task.stage,
       queued: true,
-      type: typeOf(task, active) ?? null,
-      lands: landsOf(project, task, typeOf(task, active)),
+      type: asked?.type ?? typeOf(task, active) ?? null,
+      lands: asked?.lands ?? landsOf(project, task, typeOf(task, active)),
       workItemId: null,
       workspaceId: null,
       instanceId: null,
@@ -1452,14 +1594,9 @@ export const createDispatcher = ({
         break;
       }
       try {
-        const started = await startAttempt(
-          projectId,
-          id,
-          reportsTo,
-          undefined,
-          false,
-          "event"
-        );
+        const started = await startAttempt(projectId, id, reportsTo, {
+          origin: "event",
+        });
         // One queued for owned files took no slot.
         if (!started.queued) {
           slots -= 1;
@@ -1574,14 +1711,13 @@ export const createDispatcher = ({
     if (!parent) {
       return;
     }
-    await startAttempt(
-      project.id,
-      task.id,
-      parent,
-      stage?.kind === "active" ? stage : undefined,
-      queued.retry,
-      queued.origin ?? undefined
-    );
+    await startAttempt(project.id, task.id, parent, {
+      ...(stage?.kind === "active" ? { stage } : {}),
+      retry: queued.retry,
+      ...(queued.origin ? { origin: queued.origin } : {}),
+      // Written by queuedForOwns from an AttemptAsk alone.
+      ...(queued.asked ? { asked: queued.asked as AttemptAsk } : {}),
+    });
   };
 
   /**
@@ -1679,14 +1815,11 @@ export const createDispatcher = ({
     }
     try {
       // A move or filing in is someone's ask: not capped.
-      await startAttempt(
-        project.id,
-        task.id,
-        parent,
+      const origin = HOOK_ORIGIN[actor.mover];
+      await startAttempt(project.id, task.id, parent, {
         stage,
-        false,
-        HOOK_ORIGIN[actor.mover]
-      );
+        ...(origin ? { origin } : {}),
+      });
     } catch (error) {
       const why = failure(error).message;
       console.warn(
@@ -1892,7 +2025,7 @@ export const createDispatcher = ({
       target.name,
       hubActor(
         closed
-          ? `its coordinator ${short(item.id)} reported and every part is done`
+          ? `its coordinator ${short(item.id)} reported and every part is done${landedAs(item)}`
           : `its coordinator ${short(item.id)} ${item.state}`
       )
     );
@@ -1928,9 +2061,18 @@ export const createDispatcher = ({
   /**
    * Why the hub moved a task after its attempt ended, as its commit says:
    * `judged` is where its attempt sent it, `kind` where it went (review, for
-   * a done in a project that reviews before done).
+   * a done in a project that reviews before done), and the commit its work
+   * landed as ({@link landedAs}).
    */
   const movedBecause = (
+    item: WorkItemRow,
+    judged: AttemptLanding,
+    kind: AttemptLanding,
+    criteria: number
+  ): string => `${movedFor(item, judged, kind, criteria)}${landedAs(item)}`;
+
+  /** {@link movedBecause} but the commit. */
+  const movedFor = (
     item: WorkItemRow,
     judged: AttemptLanding,
     kind: AttemptLanding,
@@ -2124,7 +2266,7 @@ export const createDispatcher = ({
       ref: string,
       parent: InstanceRow
     ): Promise<AttemptStart> {
-      return startAttempt(projectId, ref, parent, undefined, true);
+      return startAttempt(projectId, ref, parent, { retry: true });
     },
 
     /** A retry you start from the dashboard: it reports to the session named, or the project's Caw. */
@@ -2137,9 +2279,7 @@ export const createDispatcher = ({
         projectId,
         ref,
         await reporter(projectId, parentInstanceId),
-        undefined,
-        true,
-        "you"
+        { retry: true, origin: "you" }
       );
     },
 
@@ -2259,9 +2399,7 @@ export const createDispatcher = ({
         projectId,
         ref,
         await reporter(projectId, parentInstanceId),
-        undefined,
-        false,
-        "you"
+        { origin: "you" }
       );
     },
 

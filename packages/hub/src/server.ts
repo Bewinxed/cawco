@@ -729,7 +729,7 @@ import {
 } from "./design-offers";
 import { createDesignSystem, designSection } from "./design-system";
 import { createDesignVerify } from "./design-verify";
-import { createDispatcher, dispatchRoutes } from "./dispatch";
+import { type AttemptAsk, createDispatcher, dispatchRoutes } from "./dispatch";
 import { createExternalItems } from "./external-items";
 import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_QUERY } from "./find";
@@ -1020,6 +1020,7 @@ import {
   type Unlanded,
   WAIT_ITEM_LIMIT,
   WorkItemRefusal,
+  type WorkItemRequest,
   type WorkItemStart,
 } from "./work-items";
 import { createWorkspaceRetire } from "./workspace-retire";
@@ -25607,6 +25608,8 @@ export const createServer = (
     tell: async (projectId, event) => (await caw.tell(projectId, event)).woke,
   });
   const dispatcher = createDispatcher({
+    // A brief a session wrote waits for the fleet's guidance, as a delegate's does.
+    briefing: (request) => workItems.briefing(request),
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
     context: (projectId, task) => projectMemory.contextFor(projectId, task),
     // Its design system, read in the attempt's clone inside its boundary.
@@ -26310,6 +26313,69 @@ export const createServer = (
       }
       throw error;
     }
+  };
+  /**
+   * `delegate` naming its task: an attempt at it on the dispatcher's one
+   * path (dispatch.ts `AttemptAsk`), reporting to the caller, briefed with
+   * its prompt above the task file and run where the task runs.
+   */
+  const delegatedAttempt = async ({
+    task,
+    parentInstanceId,
+    cwd,
+    machineId,
+    workspace,
+    host,
+    ...asked
+  }: AttemptAsk &
+    Pick<
+      WorkItemRequest,
+      "cwd" | "host" | "machineId" | "parentInstanceId" | "workspace"
+    > & { task: string }): Promise<DelegateResult> => {
+    const placed = [
+      ...(workspace ? ["workspace"] : []),
+      ...(host ? ["host"] : []),
+      ...(cwd ? ["cwd"] : []),
+      ...(machineId ? ["machine"] : []),
+    ];
+    if (placed.length > 0) {
+      throw new WorkItemRefusal(
+        400,
+        `An attempt at ${task} runs where the task runs (its runs_on, on a checkout of its project), so it takes no ${placed.join(", ")}. Leave ${placed.length === 1 ? "it" : "them"} out, or delegate without task.`
+      );
+    }
+    const [parent] = db.getInstancesByIds([parentInstanceId]);
+    if (!parent?.projectId) {
+      throw new WorkItemRefusal(
+        400,
+        `This session belongs to no project, so it has no task ${task}. Delegate without task.`
+      );
+    }
+    const started = await dispatcher.startAttempt(
+      parent.projectId,
+      task,
+      parent,
+      { asked }
+    );
+    const { instanceId, workItemId, workspaceId } = started;
+    // An attempt with no session yet waits for owned files.
+    if (!(instanceId && workItemId && workspaceId)) {
+      return {
+        state: "queued-task",
+        projectId: parent.projectId,
+        task: started.task,
+        title: asked.title.trim(),
+        text: started.text,
+      };
+    }
+    return {
+      state: "started",
+      instanceId,
+      workItemId,
+      workspaceId,
+      title: asked.title.trim(),
+      text: started.text,
+    };
   };
   /** What follows a workspace's archive: its sessions' pending sends and routed asks, and the dashboards. */
   const workspaceArchived = (workspace: WorkspaceRow): void => {
@@ -33820,6 +33886,8 @@ export const createServer = (
             group: t.Optional(t.String()),
             owns: t.Optional(t.Array(t.String())),
             budget: t.Optional(BUDGET),
+            // The task of the caller's project it is an attempt at (dispatch.ts `AttemptAsk`).
+            task: t.Optional(t.String({ minLength: 1 })),
           }),
           // A 400 that says which field is missing or malformed, in words:
           // a delegate without a title is refused, never named from its brief.
@@ -33869,18 +33937,24 @@ export const createServer = (
             );
           }
           try {
+            const { task, ...plain } = body;
+            if (task) {
+              return await delegatedAttempt({ ...plain, task });
+            }
             const started = await workItems.delegate({
-              ...body,
-              ...(await delegateTypeFor(body)),
+              ...plain,
+              ...(await delegateTypeFor(plain)),
             });
-            return delegated(started, body.title);
+            return delegated(started, plain.title);
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
             // Anything that is not the hub's own refusal is the machine's:
             // offline, or git turning the checkout down.
             return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
+              error instanceof WorkItemRefusal || error instanceof FolderRefusal
+                ? error.status
+                : 502,
               message
             );
           }

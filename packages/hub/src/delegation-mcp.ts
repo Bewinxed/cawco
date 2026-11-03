@@ -65,6 +65,7 @@ import { admitToolCall } from "./restart-holds";
 import {
   allows,
   CAW_TOOLS,
+  changesAnyTask,
   memoryRoleOf,
   refusal,
   TRIAGE_TOOLS,
@@ -720,14 +721,11 @@ export function createDelegationMcp(options: {
     cut?: AbortSignal
   ): Promise<CallToolResult> => {
     const started = startedBy(actor, name, cut);
-    // A session whose role files tasks names any task's to-dos; one that
-    // does not writes only its own work item's.
-    const mainline = allows(actor, "task_create");
     const entry =
       options.tasks &&
       taskTools({
         actor,
-        mainline,
+        anyTask: changesAnyTask(actor),
         designBuild: options.designBuild,
         duplicates: options.duplicates,
         projectRunsOn: options.projectRunsOn,

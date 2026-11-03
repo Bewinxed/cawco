@@ -590,6 +590,14 @@ export function handoffTools(deps: HandoffDeps) {
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
         budget: budgetParameter().optional(),
+        task: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe(
+            "The task it does, like tsk-12: an attempt at it, your prompt above its task file, run where the task runs; landing moves it on. Not with workspace, host, cwd or machine."
+          ),
       },
       ({
         prompt,
@@ -612,6 +620,7 @@ export function handoffTools(deps: HandoffDeps) {
         group,
         owns,
         budget,
+        task,
       }) =>
         actions.delegate(prompt, {
           title,
@@ -633,6 +642,7 @@ export function handoffTools(deps: HandoffDeps) {
           group,
           owns,
           budget,
+          task,
         }),
       delegateWords
     ),

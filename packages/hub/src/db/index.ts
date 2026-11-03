@@ -1886,7 +1886,8 @@ export interface DbShape {
   readonly queuedWorkItems: () => QueuedWorkItemRow[];
   /** Queues a hook's start, or replaces the one its task already had. */
   readonly queueTaskStart: (
-    row: Omit<QueuedTaskStartRow, "queuedAt" | "retry" | "why"> & {
+    row: Omit<QueuedTaskStartRow, "asked" | "queuedAt" | "retry" | "why"> & {
+      asked?: QueuedTaskStartRow["asked"];
       retry?: boolean;
       why?: QueuedTaskStartRow["why"];
     }
@@ -8333,6 +8334,7 @@ const make = async (path: string): Promise<DbShape> => {
             why: row.why ?? "cap",
             retry: row.retry ?? false,
             origin: row.origin,
+            asked: row.asked ?? null,
             queuedAt: new Date(),
           },
         })
