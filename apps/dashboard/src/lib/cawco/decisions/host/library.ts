@@ -10,6 +10,7 @@ import type { OpenUIComponent } from "../../views/openui/OpenUiRenderer.svelte";
 import Badge from "./Badge.svelte";
 import Canvas from "./Canvas.svelte";
 import Column from "./Column.svelte";
+import Data from "./Data.svelte";
 import Decision from "./Decision.svelte";
 import Decisions from "./Decisions.svelte";
 import Diagram from "./Diagram.svelte";
@@ -19,6 +20,7 @@ import Option from "./Option.svelte";
 import Preview from "./Preview.svelte";
 import Row from "./Row.svelte";
 import Section from "./Section.svelte";
+import Setup from "./Setup.svelte";
 import Text from "./Text.svelte";
 
 export const DECISION_LIBRARY = decisionLibrary<OpenUIComponent>({
@@ -35,4 +37,7 @@ export const DECISION_LIBRARY = decisionLibrary<OpenUIComponent>({
   Badge,
   Row,
   Column,
+  Setup,
+  Stage: Data,
+  Delegate: Data,
 });

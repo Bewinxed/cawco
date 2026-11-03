@@ -14,7 +14,10 @@
     "Text",
     "Badge",
     "Row",
-    "Column"
+    "Column",
+    "Setup",
+    "Stage",
+    "Delegate"
   ],
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -58,6 +61,15 @@
       },
       "Column": {
         "$ref": "#/$defs/Column"
+      },
+      "Setup": {
+        "$ref": "#/$defs/Setup"
+      },
+      "Stage": {
+        "$ref": "#/$defs/Stage"
+      },
+      "Delegate": {
+        "$ref": "#/$defs/Delegate"
       }
     },
     "required": [
@@ -73,7 +85,10 @@
       "Text",
       "Badge",
       "Row",
-      "Column"
+      "Column",
+      "Setup",
+      "Stage",
+      "Delegate"
     ],
     "additionalProperties": false,
     "$defs": {
@@ -97,6 +112,9 @@
                   "$ref": "#/$defs/Dials"
                 },
                 {
+                  "$ref": "#/$defs/Setup"
+                },
+                {
                   "$ref": "#/$defs/__schema0"
                 }
               ]
@@ -108,7 +126,7 @@
           "children"
         ],
         "additionalProperties": false,
-        "description": "The page: its title, Caw, the count picked, Send picks. The root."
+        "description": "The page: its title, Caw, the count picked, Send picks. The root. A setup page holds one Setup, and its Send sets the project up."
       },
       "Section": {
         "type": "object",
@@ -462,6 +480,141 @@
         ],
         "additionalProperties": false,
         "description": "Controls for values the person tunes rather than picks: a DialKit panel at the page's foot. artifact_read answers them as the dials entry's value, by panel name and path."
+      },
+      "Setup": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "aim": {
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Stage"
+            }
+          },
+          "delegates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Delegate"
+            }
+          },
+          "shape": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "aim",
+          "stages"
+        ],
+        "additionalProperties": false,
+        "description": "A project's setup (the project-setup skill), its one input: its name and what it is for as an editable title and description, its stages as a strip the person renames, re-kinds, restyles, reorders, adds to and removes from, and its delegates, each removable. The page's Send sets it up."
+      },
+      "Stage": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "active",
+              "waiting",
+              "you",
+              "done",
+              "dropped"
+            ]
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "inbox",
+              "idea",
+              "search",
+              "pen",
+              "chat",
+              "eye",
+              "clock",
+              "hourglass",
+              "calendar",
+              "send",
+              "rocket",
+              "code",
+              "palette",
+              "graph",
+              "user",
+              "globe",
+              "book",
+              "pin",
+              "bolt",
+              "list",
+              "lab",
+              "map",
+              "phone",
+              "money",
+              "done",
+              "archive",
+              "trash"
+            ]
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "cyan",
+              "amber",
+              "orange",
+              "green"
+            ]
+          },
+          "hooks": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "line": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "description": "One stage of a project's setup: what the board calls it, its kind, its look, and what it hooks."
+      },
+      "Delegate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "brief": {
+            "type": "string"
+          },
+          "runs": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brief"
+        ],
+        "additionalProperties": false,
+        "description": "One delegate type the project's stages run: kept unless the person removes it."
       }
     }
   }
