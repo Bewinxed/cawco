@@ -158,6 +158,7 @@
     planRing,
     onfoot,
     placeholder,
+    label,
     suggest,
     recallOf,
     switchDir = 0,
@@ -249,6 +250,12 @@
      * width holds on one line.
      */
     placeholder?: string | { full: string; short: string };
+    /**
+     * What the field is called, read out, where its placeholder is not its
+     * name (New project's placeholder types examples): by default the hint
+     * without its trailing ellipsis.
+     */
+    label?: string;
     /**
      * The session's skills and MCP servers, and its last reply, for the
      * suggestion chips. Absent on surfaces with no session behind them.
@@ -362,7 +369,7 @@
       : (placeholder?.short ?? "Message the agent…")
   );
   /** What the field is called, read out: its hint without the trailing ellipsis. */
-  const FIELD_LABEL = $derived(HINT_SHORT.replace(/…$/u, ""));
+  const FIELD_LABEL = $derived(label ?? HINT_SHORT.replace(/…$/u, ""));
   /**
    * The hint the field shows: in full wherever the field's own width holds
    * it on one line, else its first part. The server draws the short one,
