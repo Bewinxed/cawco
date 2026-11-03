@@ -300,6 +300,31 @@ const run = async (kit: Kit) => {
     '[data-slot="comment-rail"]'
   );
 
+  // The artifact panel's head (the mode centred, the trailing glass, Close
+  // in its own) beside the conversation, read whole: the top bar's shelf and
+  // its session tabs with it.
+  await surface(
+    "artifact head",
+    `${base}/session/${talk}`,
+    '[data-slot="side-head"]',
+    WIDTHS
+  );
+
+  // Pages with no head of their own under the bar.
+  await surface(
+    "configure models",
+    `${base}/config/models`,
+    '[data-slot="lead"]',
+    WIDTHS
+  );
+  await surface("usage", `${base}/usage`, '[data-slot="col"]', WIDTHS);
+  await surface(
+    "who decides",
+    `${base}/project/${project.id}/decides`,
+    '[data-slot="page-head"]',
+    WIDTHS
+  );
+
   house.report();
 };
 
